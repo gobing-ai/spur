@@ -77,7 +77,7 @@ interface StateMachineDef {
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..');
 const FSM_YAML = parseYaml(
-    readFileSync(join(REPO_ROOT, '.spur', 'workflows', 'feature-lifecycle.yaml'), 'utf-8'),
+    readFileSync(join(REPO_ROOT, 'config', 'workflows', 'feature-lifecycle.yaml'), 'utf-8'),
 ) as StateMachineDef;
 
 /** Legal outbound targets per status, derived from the FSM authority. */

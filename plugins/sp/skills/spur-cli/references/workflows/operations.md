@@ -29,7 +29,7 @@ Authored workflows default to a project-local directory, grouped by purpose:
 
 A `--file <path>` argument overrides the default. Keep one workflow per file, named for what it does
 (`approval.yaml`, `import-file.yaml`), not for its mode. The canonical example
-(`.spur/workflows/basic.yaml`) lives here; copy real schema shapes from it rather than from a
+(`basic.yaml`) lives here; copy real schema shapes from it rather than from a
 half-remembered snippet.
 
 ## Sub-procedure: mode-selection gate

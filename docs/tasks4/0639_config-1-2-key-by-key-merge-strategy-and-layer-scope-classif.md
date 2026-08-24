@@ -4,7 +4,7 @@ name: "Config 1.2: key-by-key merge strategy and layer-scope classification"
 status: done
 template: brainstorm
 created_at: 2026-08-23T20:51:10.444Z
-updated_at: "2026-08-23T22:13:37.890Z"
+updated_at: "2026-08-24T18:14:29.785Z"
 feature_id: A4
 ---
 
@@ -214,17 +214,17 @@ Both are arrays of search paths scanned for YAML - not named records - so the `m
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Solution classification table `docs/tasks4/0639_config-1-2-key-by-key-merge-strategy-and-layer-scope-classif.md:135-195`: all 11 JSON-schema top-level keys + zod-only `workflow` + full `bootstrap` block, leaf-level. Schema sources verified: `packages/config/src/index.ts:671-745` (`spurConfigSchema`), `apps/cli/schemas/spur-config.schema.json:20` (bootstrap) - member/team leaf fields confirmed against TeamMemberConfigSchema/TeamConfigSchema in the same file |
-| R2 | MET | every strategy cell carries exactly one of the five vocabulary tokens; identity fields (`executors[].name`, `members[].id`) use `scalar-replace` with matched-not-merged note; zero TBD/unclassified cells |
-| R3 | MET | all seven required keys flagged PROJECT-RELATIVE with `no` in global-legal: `name` (:139), `tasks.active` (:144), `tasks.folders.*` (:140-142), `features.dir` (:148), `rules.paths` (:181), `bootstrap.database.url` (:192), `bootstrap.logging.filePath` (:190); plus extras `workflows.paths`, `agent.team.<id>.work_dir`, `members[].workspace` |
-| R4 | MET | each flagged row states concrete merged behavior + footgun verdict with severity: `bootstrap.database.url` "worst in table, severe" (:192); `tasks.active` "real, high severity" (:144); `name` "real but cosmetic (mild)" (:139); `work_dir`/`filePath`/`folders.*` each carry behavior + verdict |
-| R5 | MET | Decision brief :197-205: Option A (concat) and Option B (replace) consequences, explicit recommendation `array-concat` with reasoning (:205), collision convention pinned (project wins id collisions, order does not decide precedence); deferred default recorded, operator ruling preserved as open |
+| R1 | MET | Fresh document audit parsed 56 leaf rows from the Solution classification table and covered the zod schema plus bootstrap. |
+| R2 | MET | The same audit found zero rows outside scalar-replace, object-deep-merge, array-replace, array-concat, and merge-by-key strategies, and zero TBD markers. |
+| R3 | MET | Command audit found all seven required project-relative hazards: name, tasks.active, tasks.folders, features.dir, rules.paths, bootstrap.database.url, and bootstrap.logging.filePath. |
+| R4 | MET | Manual review confirmed every flagged row states concrete merged behavior and a footgun verdict with reasoning. |
+| R5 | MET | The Solution compares concat and replace consequences and records the reasoned array-concat recommendation. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 - Every schema leaf carries a merge verdict | MET | command | `grep -cE '^\| \`[^\`]+\` \| [^ |
-| AC2 - Project-relative keys identified as global-layer hazards | MET | command | `grep -c 'PROJECT-RELATIVE' docs/tasks4/0639_*.md` -> 10 flags; the seven required keys each flagged with concrete merged behavior + footgun verdict at :139, :140-142, :144, :148, :181, :190, :192 |
-| AC3 - The path-array question reaches the operator as a brief | MET | command | `grep -n 'Decision brief (R5)' docs/tasks4/0639_*.md` -> :197; `grep -c 'Recommendation: \`array-concat\`' docs/tasks4/0639_*.md` -> 1 at :205 with consequences + reasoning for both options |
+| Scenario: Every schema leaf carries a merge verdict | MET | command | Fresh Bun document audit returned 56 classified rows, zero invalid strategies, and zero TBD markers. |
+| Scenario: Project-relative keys are identified as global-layer hazards | MET | command | Fresh Bun document audit found all seven required hazard keys; manual review confirmed behavior and footgun reasoning. |
+| Scenario: The path-array question reaches the operator as a brief | MET | command | Fresh Bun document audit found both option consequences and the explicit array-concat recommendation. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)

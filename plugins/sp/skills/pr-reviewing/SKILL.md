@@ -39,7 +39,7 @@ that review effort happens on the PR, through Codex — not in the local session
 sp:pr-reviewing (this skill — mode routing, triage, fix, rules)
       │  deterministic spine, state order + guards:
       ▼
-.spur/workflows/pr-review.yaml ← workflow SSOT (seeded by spur init; project-tunable)
+pr-review.yaml ← workflow SSOT (seeded by spur init; project-tunable)
       │  every state resolves with `superskill script path` and shells out to:
       ▼
 staged pr-reviewing.ts         ← Bun entrypoint for the tested git/gh core
@@ -280,7 +280,7 @@ or review requests.
 
 ## Additional Resources
 
-- **Workflow SSOT:** `.spur/workflows/pr-review.yaml` (seeded by `spur init`; tune per project —
+- **Workflow SSOT:** `pr-review.yaml` (seeded by `spur init`; tune per project —
   wait budget, `preReviewCmd`, dedupe policy)
 - **Script source:** [scripts/pr-reviewing.ts](../../scripts/pr-reviewing.ts) — subcommand CLI
 - **Tests:** [tests/pr-reviewing.test.ts](../../tests/pr-reviewing.test.ts) — stubbed git/gh suites

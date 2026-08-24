@@ -2,11 +2,11 @@
 schema_version: 1
 id: F
 name: Planning
-status: active
+status: verifying
 priority: P2
 tags: [group, rd3-migration]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: 2026-06-12T23:45:00.000Z
+updated_at: "2026-08-24T17:41:12.266Z"
 ---
 
 # F: Planning
@@ -44,3 +44,4 @@ Authoritative design: `docs/design/rd3-migration-design.md` (Accepted 2026-06-12
 ## History
 
 - 2026-06-12 — created (rd3-migration feature finalizing)
+- 2026-08-24T17:41:12.266Z active → verifying (system)

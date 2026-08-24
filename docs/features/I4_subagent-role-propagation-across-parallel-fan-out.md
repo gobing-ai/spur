@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I4"
 name: "Subagent role propagation across parallel fan-out"
-status: backlog
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-14T00:47:16.086Z"
-updated_at: "2026-08-14T00:48:39.497Z"
+updated_at: "2026-08-24T17:41:07.650Z"
 ---
 
 # I4: Subagent role propagation across parallel fan-out
@@ -90,3 +90,5 @@ visibility exists.
 Needs feature B2's `--agent <role>` (task 0536) to exist before a role can propagate, and pairs
 naturally with feature J6 task 0545, which records whatever this feature makes correct.
 ## History
+- 2026-08-24T17:41:07.309Z backlog → active (system)
+- 2026-08-24T17:41:07.650Z active → verifying (system)

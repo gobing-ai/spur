@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Card, CardBody, Loading } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
-import { formatDuration, parseHistoryResponse, type SystemEventRow } from './SystemEventsTab';
+import { timeRangeSince } from './ObservabilityFilters';
+import { formatDuration, historyUrl, parseHistoryResponse, type SystemEventRow } from './SystemEventsTab';
+import type { ObservabilityTabProps } from './tabs';
 
 interface JobStats {
     pending: number;
@@ -21,7 +23,6 @@ interface JobsState {
 
 const API_URL = resolveApiUrl();
 const JOB_STATS_URL = `${API_URL}/jobs/stats`;
-const HISTORY_URL = `${API_URL}/events/history`;
 const JOB_HISTORY_LIMIT = 50;
 
 function parseStatsResponse(value: unknown): StatsResponse | null {
@@ -235,23 +236,39 @@ function jobThreadDurationMs(events: SystemEventRow[]): number | null {
 }
 
 /** Jobs tab: queue status cards plus recent queue/scheduler events. */
-export default function JobsTab() {
+export default function JobsTab({ timeRange = 'all' }: ObservabilityTabProps = {}) {
     const [state, setState] = useState<JobsState | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const fetchIdRef = useRef(0);
 
     useEffect(() => {
         const controller = new AbortController();
+        const fetchId = ++fetchIdRef.current;
+        setError(null);
+        setState(null);
         (async () => {
             try {
+                const since = timeRangeSince(timeRange);
+                const queueRequestUrl = historyUrl({
+                    prefix: 'queue',
+                    limit: JOB_HISTORY_LIMIT,
+                    ...(since ? { since } : {}),
+                });
+                const schedulerRequestUrl = historyUrl({
+                    prefix: 'scheduler',
+                    limit: JOB_HISTORY_LIMIT,
+                    ...(since ? { since } : {}),
+                });
+
                 const [statsRes, queueRes, schedulerRes] = await Promise.all([
                     fetchWithTimeout(new Request(JOB_STATS_URL, { signal: controller.signal })),
                     fetchWithTimeout(
-                        new Request(`${HISTORY_URL}?prefix=queue&limit=${JOB_HISTORY_LIMIT}`, {
+                        new Request(queueRequestUrl, {
                             signal: controller.signal,
                         }),
                     ),
                     fetchWithTimeout(
-                        new Request(`${HISTORY_URL}?prefix=scheduler&limit=${JOB_HISTORY_LIMIT}`, {
+                        new Request(schedulerRequestUrl, {
                             signal: controller.signal,
                         }),
                     ),
@@ -266,14 +283,15 @@ export default function JobsTab() {
                 if (!queueBody) throw new Error('queue history response failed schema validation');
                 if (!schedulerBody) throw new Error('scheduler history response failed schema validation');
                 const events = mergeByOccurredAtDesc(queueBody.events, schedulerBody.events);
+                if (controller.signal.aborted || fetchId !== fetchIdRef.current) return;
                 setState({ stats: statsBody.stats, events });
             } catch (err) {
-                if (controller.signal.aborted) return;
+                if (controller.signal.aborted || fetchId !== fetchIdRef.current) return;
                 setError(err instanceof Error ? err.message : String(err));
             }
         })();
         return () => controller.abort();
-    }, []);
+    }, [timeRange]);
 
     if (error) {
         return (
@@ -299,26 +317,49 @@ export default function JobsTab() {
 
     return (
         <div className="flex flex-col h-full overflow-hidden" data-jobs-tab>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 p-3 border-b border-spur-border bg-base-200 shrink-0">
-                {stats.map(([label, value, color]) => (
-                    <Card key={label} variant="compact" className="bg-base-100 border border-spur-border">
-                        <CardBody className="p-3 gap-1">
-                            <span className="text-[10px] uppercase text-spur-text-muted font-semibold">{label}</span>
-                            <span className={`text-xl font-semibold tabular-nums ${color}`}>{value}</span>
-                        </CardBody>
-                    </Card>
-                ))}
+            {/* Current Queue State (Live Aggregate) */}
+            <div className="p-3 border-b border-spur-border bg-base-200 shrink-0 space-y-2">
+                <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">
+                        Current Queue State
+                    </span>
+                    <span className="text-[11px] text-spur-text-muted">Live aggregate counters from queue engine</span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {stats.map(([label, value, color]) => (
+                        <Card key={label} variant="compact" className="bg-base-100 border border-spur-border shadow-xs">
+                            <CardBody className="p-3 gap-1">
+                                <span className="text-[10px] uppercase text-spur-text-muted font-semibold tracking-wider">
+                                    {label}
+                                </span>
+                                <span className={`text-xl font-semibold tabular-nums font-mono ${color}`}>{value}</span>
+                            </CardBody>
+                        </Card>
+                    ))}
+                </div>
             </div>
-            <div className="px-4 py-2 border-b border-spur-border bg-base-200 shrink-0">
-                <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">Recent Job Events</span>
-                <span className="ml-2 text-xs text-spur-text-muted">{state.events.length} event(s)</span>
+
+            {/* Recent Job Events Section Header */}
+            <div className="px-4 py-2.5 border-b border-spur-border bg-base-200 shrink-0 flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">
+                        Recent Job Events
+                    </span>
+                    <Badge variant="outline" size="xs" className="font-mono">
+                        {timeRange === 'all' ? 'All time' : `Last ${timeRange}`}
+                    </Badge>
+                </div>
+                <span className="text-xs text-spur-text-muted font-mono">{state.events.length} event(s)</span>
             </div>
+
+            {/* Event List or Range-Aware Empty State */}
             {state.events.length === 0 ? (
-                <div className="p-4 text-sm text-spur-text-muted italic" data-jobs-empty>
-                    No job events yet - the queue has not processed any jobs.
+                <div className="p-8 text-center text-sm text-spur-text-muted italic" data-jobs-empty>
+                    No job events {timeRange === 'all' ? 'recorded yet' : `in the last ${timeRange}`} — queue and
+                    scheduler have not processed events in this window.
                 </div>
             ) : (
-                <ul className="flex-1 overflow-y-auto p-2 space-y-2">
+                <ul className="flex-1 overflow-y-auto p-3 space-y-2">
                     {groupJobEvents(state.events).map((item) =>
                         item.kind === 'thread' ? (
                             <JobThreadCard key={`thread-${item.jobId}`} item={item} />

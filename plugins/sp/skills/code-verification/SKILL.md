@@ -521,7 +521,7 @@ Do **not** use this skill for:
   rubric.
 - `plugins/sp/references/roles.md` — the Layer-1 role→tier table; this skill's verify/review modes
   run under the `reviewer` role (0538 R4: this file points at roles.md, it does not restate tiers).
-- `.spur/workflows/task-pipeline.yaml` — the `verify → record` gate that consumes the verdict.
+- `task-pipeline.yaml` — the `verify → record` gate that consumes the verdict.
 - **`sp:spur-dev`** — the execution-half umbrella that drives the pipeline this skill gates.
 - [references/code-improvement.md](references/code-improvement.md) — architecture-improvement lens
   for module depth, seam placement, locality, coupling, and testability.

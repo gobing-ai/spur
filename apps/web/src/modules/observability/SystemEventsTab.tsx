@@ -1,7 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Input, Loading } from '@/ui';
+import { Loading } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
+import ColumnCustomizer, {
+    ALL_COLUMNS,
+    DEFAULT_VISIBLE_COLUMNS,
+    type EventColumnKey,
+    loadVisibleColumns,
+    saveVisibleColumns,
+} from './ColumnCustomizer';
+import ObservabilityFilters, {
+    type ObservabilityFilterValues,
+    TIME_RANGE_MS,
+    timeRangeSince,
+} from './ObservabilityFilters';
+import type { ObservabilityTabProps, ObservabilityTimeRange } from './tabs';
+
+export type { ObservabilityFilterValues as FilterState };
+export {
+    ALL_COLUMNS,
+    DEFAULT_VISIBLE_COLUMNS,
+    type EventColumnKey,
+    loadVisibleColumns,
+    saveVisibleColumns,
+    TIME_RANGE_MS,
+    timeRangeSince,
+};
 
 type SystemEventSeverity = 'info' | 'warning' | 'error';
 
@@ -173,22 +197,12 @@ interface ActiveFilter {
     since?: string;
 }
 
-/** UI filter state - the raw controls before debounce/serialization. */
-interface FilterState {
-    selectedPrefixes: Set<string>;
-    searchQuery: string;
-    searchScope: 'all' | 'name' | 'actor' | 'payload';
-    tierFilter: 'all' | 'default' | 'diagnostic';
-    timeWindow: 'all' | '30s' | '5m';
-    runId: string;
-}
-
-const DEFAULT_FILTER: FilterState = {
+export const DEFAULT_FILTER: ObservabilityFilterValues = {
     selectedPrefixes: new Set(),
     searchQuery: '',
     searchScope: 'all',
+    severity: 'all',
     tierFilter: 'all',
-    timeWindow: 'all',
     runId: '',
 };
 
@@ -557,25 +571,25 @@ export function displayValue(value: string | null | undefined): string {
 }
 
 /** Serialize UI filter state into the server-side query params. */
-export function serializeFilter(filter: FilterState): ActiveFilter {
+export function serializeFilter(
+    filter: Partial<ObservabilityFilterValues> & { timeWindow?: string },
+    timeRange: ObservabilityTimeRange = 'all',
+): ActiveFilter {
     const out: ActiveFilter = {};
-    // Prefix: when exactly one prefix is selected, send it as a server param.
-    // Multiple selected prefixes cannot be expressed as a single `prefix=` param,
-    // so they fall back to client-side post-filter on the returned page.
-    if (filter.selectedPrefixes.size === 1) {
+    if (filter.selectedPrefixes && filter.selectedPrefixes.size === 1) {
         out.prefix = [...filter.selectedPrefixes][0];
     }
-    // The history endpoint's name and actor filters are exact-match. Preserve the
-    // broader client-side substring behavior for "all"/"payload", but route the
-    // exact field scopes through SQL so older matching rows remain pageable.
-    const query = filter.searchQuery.trim();
+    const query = filter.searchQuery?.trim() ?? '';
     if (query !== '' && filter.searchScope === 'name') out.names = query;
     if (query !== '' && filter.searchScope === 'actor') out.actor = query;
-    if (filter.runId.trim() !== '') out.runId = filter.runId.trim();
-    if (filter.timeWindow !== 'all') {
-        const ms = filter.timeWindow === '30s' ? 30_000 : 5 * 60_000;
-        out.since = new Date(Date.now() - ms).toISOString();
-    }
+    if (filter.runId && filter.runId.trim() !== '') out.runId = filter.runId.trim();
+
+    // Support both timeRange and legacy timeWindow
+    const effectiveRange: ObservabilityTimeRange =
+        filter.timeWindow && filter.timeWindow !== 'all' ? (filter.timeWindow as ObservabilityTimeRange) : timeRange;
+    const since = timeRangeSince(effectiveRange);
+    if (since) out.since = since;
+
     return out;
 }
 
@@ -594,13 +608,14 @@ function matchesClientFilter(
         actor: string | null;
         prefix?: string;
         payload?: Record<string, unknown> | null;
+        view?: SystemEventView;
         runId?: string | null;
     },
-    filter: FilterState,
+    filter: ObservabilityFilterValues,
     tierByName: Map<string, string>,
+    timeRange: ObservabilityTimeRange = 'all',
 ): boolean {
-    // Prefix: when any prefixes are selected, filter client-side for immediate
-    // UX. Single prefix also goes to the server; multi-prefix is client-only.
+    // Prefix: when any prefixes are selected, filter client-side for immediate UX.
     if (filter.selectedPrefixes.size >= 1) {
         const prefix = evt.prefix ?? evt.eventName.split('.')[0] ?? evt.eventName;
         if (!filter.selectedPrefixes.has(prefix)) return false;
@@ -610,6 +625,10 @@ function matchesClientFilter(
         if (entryTier !== filter.tierFilter) {
             if (!(filter.tierFilter === 'default' && entryTier === undefined)) return false;
         }
+    }
+    if (filter.severity !== 'all') {
+        const view = evt.view ?? parseSystemEventView(evt.eventName, evt.payload ?? null);
+        if (view.severity !== filter.severity) return false;
     }
     // Search: client-side substring match, scoped to the selected field(s).
     if (filter.searchQuery.trim() !== '') {
@@ -626,18 +645,126 @@ function matchesClientFilter(
         }
         if (!matches) return false;
     }
-    // Time-window: client-side filter for immediate UX (also sent to server).
-    if (filter.timeWindow !== 'all') {
-        const ms = filter.timeWindow === '30s' ? 30_000 : 5 * 60_000;
-        const cutoff = Date.now() - ms;
-        const eventTime = new Date(evt.occurredAt).getTime();
-        if (Number.isNaN(eventTime) || eventTime < cutoff) return false;
+    // Time-range: client-side filter for immediate UX (also sent to server).
+    if (timeRange !== 'all') {
+        const ms = TIME_RANGE_MS[timeRange];
+        if (ms !== null && ms !== undefined) {
+            const cutoff = Date.now() - ms;
+            const eventTime = new Date(evt.occurredAt).getTime();
+            if (Number.isNaN(eventTime) || eventTime < cutoff) return false;
+        }
     }
     // Run ID: client-side filter for immediate UX (also sent to server).
     if (filter.runId.trim() !== '') {
         if (evt.runId !== filter.runId.trim()) return false;
     }
     return true;
+}
+
+export interface EventSortState {
+    key: EventColumnKey;
+    direction: 'asc' | 'desc';
+}
+
+export const DEFAULT_SORT_STATE: EventSortState = {
+    key: 'time',
+    direction: 'desc',
+};
+
+export function sortEventRows(rows: SystemEventRow[], sort: EventSortState = DEFAULT_SORT_STATE): SystemEventRow[] {
+    const indexed = rows.map((row, idx) => ({ row, idx }));
+    indexed.sort((a, b) => {
+        let cmp = 0;
+        const viewA = a.row.view ?? parseSystemEventView(a.row.eventName, a.row.payload ?? null);
+        const viewB = b.row.view ?? parseSystemEventView(b.row.eventName, b.row.payload ?? null);
+
+        switch (sort.key) {
+            case 'time': {
+                const timeA = Date.parse(a.row.occurredAt);
+                const timeB = Date.parse(b.row.occurredAt);
+                const valA = Number.isNaN(timeA) ? -Infinity : timeA;
+                const valB = Number.isNaN(timeB) ? -Infinity : timeB;
+                cmp = valA - valB;
+                break;
+            }
+            case 'severity': {
+                const rank = (sev: SystemEventSeverity) => (sev === 'info' ? 0 : sev === 'warning' ? 1 : 2);
+                cmp = rank(viewA.severity) - rank(viewB.severity);
+                break;
+            }
+            case 'event': {
+                cmp = a.row.eventName.localeCompare(b.row.eventName);
+                break;
+            }
+            case 'summary': {
+                cmp = (viewA.summary ?? '').localeCompare(viewB.summary ?? '');
+                break;
+            }
+            case 'correlation': {
+                cmp = (viewA.correlation ?? '').localeCompare(viewB.correlation ?? '');
+                break;
+            }
+            case 'agent': {
+                cmp = (viewA.agent ?? '').localeCompare(viewB.agent ?? '');
+                break;
+            }
+            case 'outcome': {
+                cmp = (viewA.outcome ?? '').localeCompare(viewB.outcome ?? '');
+                break;
+            }
+            default:
+                cmp = 0;
+        }
+
+        if (cmp !== 0) {
+            return sort.direction === 'asc' ? cmp : -cmp;
+        }
+        // Stable tie-breaker: keep original index
+        return a.idx - b.idx;
+    });
+
+    return indexed.map((item) => item.row);
+}
+
+export function CopyValueButton({ value, label }: { value: string; label: string }) {
+    const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
+
+    const handleCopy = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+            if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(value);
+                setStatus('copied');
+                setTimeout(() => setStatus('idle'), 1500);
+            } else {
+                setStatus('failed');
+                setTimeout(() => setStatus('idle'), 2000);
+            }
+        } catch {
+            setStatus('failed');
+            setTimeout(() => setStatus('idle'), 2000);
+        }
+    };
+
+    if (!value || value === '-' || value === 'unavailable') return null;
+
+    return (
+        <button
+            type="button"
+            onClick={handleCopy}
+            className="inline-flex items-center justify-center p-0.5 rounded text-base-content/40 hover:text-base-content hover:bg-base-content/10 transition-colors cursor-pointer shrink-0 text-[10px] focus:outline-none focus:ring-1 focus:ring-primary/40"
+            title={status === 'copied' ? 'Copied' : status === 'failed' ? 'Copy failed' : `Copy ${label}`}
+            aria-label={
+                status === 'copied' ? `Copied ${label}` : status === 'failed' ? `Copy ${label} failed` : `Copy ${label}`
+            }
+        >
+            <span aria-hidden="true">{status === 'copied' ? '✓' : status === 'failed' ? '!' : '📋'}</span>
+            <span className="sr-only" aria-live="polite">
+                {status === 'copied' ? `${label} copied` : status === 'failed' ? `${label} copy failed` : ''}
+            </span>
+        </button>
+    );
 }
 
 /**
@@ -653,7 +780,28 @@ function matchesClientFilter(
  * ledger will fit in memory. Filter changes are debounced (≥250ms) so the
  * input does not fire a request per keystroke.
  */
-export default function SystemEventsTab() {
+export default function SystemEventsTab({
+    onLivenessChange,
+    timeRange: propTimeRange,
+    onTimeRangeChange: propOnTimeRangeChange,
+}: ObservabilityTabProps = {}) {
+    const [localTimeRange, setLocalTimeRange] = useState<ObservabilityTimeRange>('all');
+    const timeRange = propTimeRange ?? localTimeRange;
+    const onTimeRangeChange = propOnTimeRangeChange ?? setLocalTimeRange;
+
+    const [visibleColumns, setVisibleColumns] = useState<EventColumnKey[]>(() => loadVisibleColumns());
+    const [sortState, setSortState] = useState<EventSortState>(DEFAULT_SORT_STATE);
+
+    const handleSort = useCallback((key: EventColumnKey) => {
+        setSortState((prev) => {
+            if (prev.key === key) {
+                return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+            }
+            return { key, direction: 'asc' };
+        });
+    }, []);
+
+    const [liveEnabled, setLiveEnabled] = useState(true);
     const [page, setPage] = useState<SystemEventRow[]>([]);
     const [catalog, setCatalog] = useState<EventCatalogEntry[]>([]);
     const [queryStatus, setQueryStatus] = useState<QueryStatus>('idle');
@@ -662,14 +810,23 @@ export default function SystemEventsTab() {
     const [hasMore, setHasMore] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
 
-    const [filter, setFilter] = useState<FilterState>(DEFAULT_FILTER);
+    const [filter, setFilter] = useState<ObservabilityFilterValues>(DEFAULT_FILTER);
     // Debounced filter - the actual server query driver.
-    const [debouncedFilter, setDebouncedFilter] = useState<FilterState>(DEFAULT_FILTER);
+    const [debouncedFilter, setDebouncedFilter] = useState<ObservabilityFilterValues>(DEFAULT_FILTER);
 
     // Liveness strip state (task 0222). `sseStatus` is tri-state so the
     // indicator can render connecting/live/errored distinctly.
     const [sseStatus, setSseStatus] = useState<SseStatus>('connecting');
     const { rate, recordEvent } = useRollingEventRate();
+
+    // Report liveness state changes to shell (J92 R4/R6).
+    useEffect(() => {
+        onLivenessChange?.({
+            status: !liveEnabled ? 'paused' : sseStatus,
+            rate,
+            lastEventAt: page[0]?.occurredAt ?? null,
+        });
+    }, [liveEnabled, sseStatus, rate, page, onLivenessChange]);
 
     // Tier lookup map for client-side tier post-filter + SSE gate.
     const tierByName = useMemo(() => {
@@ -689,7 +846,7 @@ export default function SystemEventsTab() {
         return () => window.clearTimeout(handle);
     }, [filter]);
 
-    const activeFilter = useMemo(() => serializeFilter(debouncedFilter), [debouncedFilter]);
+    const activeFilter = useMemo(() => serializeFilter(debouncedFilter, timeRange), [debouncedFilter, timeRange]);
 
     // Initial + filter-change fetch (resets the page to the newest page).
     const fetchIdRef = useRef(0);
@@ -761,13 +918,18 @@ export default function SystemEventsTab() {
     }, [hasMore, loadingMore, nextCursor, activeFilter]);
 
     // Live tail via SSE - prepends each new event to the top of the list,
-    // but only if it passes the active filter (R5).
+    // but only if it passes the active filter (R5) and live tail is enabled (J92 R4).
     const filterRef = useRef(filter);
     filterRef.current = filter;
     const tierRef = useRef(tierByName);
     tierRef.current = tierByName;
+    const timeRangeRef = useRef(timeRange);
+    timeRangeRef.current = timeRange;
+
     useEffect(() => {
+        if (!liveEnabled) return;
         if (typeof EventSource === 'undefined') return;
+        setSseStatus('connecting');
         const es = new EventSource(sseUrl());
         es.onopen = () => {
             setSseStatus('live');
@@ -787,6 +949,7 @@ export default function SystemEventsTab() {
                 // frame does not pollute the filtered view.
                 const currentFilter = filterRef.current;
                 const currentTier = tierRef.current;
+                const currentRange = timeRangeRef.current;
                 if (
                     !matchesClientFilter(
                         {
@@ -795,10 +958,12 @@ export default function SystemEventsTab() {
                             actor: envelope.actor,
                             ...(envelope.prefix ? { prefix: envelope.prefix } : {}),
                             payload: envelope.payload,
+                            view: envelope.view,
                             ...(envelope.runId !== undefined ? { runId: envelope.runId } : {}),
                         },
                         currentFilter,
                         currentTier,
+                        currentRange,
                     )
                 ) {
                     return;
@@ -822,7 +987,7 @@ export default function SystemEventsTab() {
             }
         };
         return () => es.close();
-    }, [recordEvent]);
+    }, [liveEnabled, recordEvent]);
 
     const prefixOptions = useMemo(
         () =>
@@ -835,27 +1000,17 @@ export default function SystemEventsTab() {
         [catalog, page],
     );
 
-    // R6: clear-filters is visible iff at least one filter deviates from default.
-    const filtersActive =
-        filter.selectedPrefixes.size > 0 ||
-        filter.searchQuery.trim() !== '' ||
-        filter.searchScope !== 'all' ||
-        filter.tierFilter !== 'all' ||
-        filter.timeWindow !== 'all' ||
-        filter.runId.trim() !== '';
-
     const clearFilters = useCallback(() => {
         setFilter(DEFAULT_FILTER);
     }, []);
 
-    const togglePrefix = useCallback((prefix: string) => {
-        setFilter((prev) => {
-            const next = new Set(prev.selectedPrefixes);
-            if (next.has(prefix)) next.delete(prefix);
-            else next.add(prefix);
-            return { ...prev, selectedPrefixes: next };
-        });
-    }, []);
+    // Client-side post-filter for immediate UX. The debounced filter drives
+    // the server query; the immediate filter drives the visible rows.
+    const visiblePage = useMemo(
+        () => page.filter((evt) => matchesClientFilter(evt, filter, tierByName, timeRange)),
+        [page, filter, tierByName, timeRange],
+    );
+    const sortedPage = useMemo(() => sortEventRows(visiblePage, sortState), [visiblePage, sortState]);
 
     if (queryStatus === 'error') {
         return (
@@ -872,148 +1027,40 @@ export default function SystemEventsTab() {
         );
     }
 
-    // Client-side post-filter for immediate UX. The debounced filter drives
-    // the server query; the immediate filter drives the visible rows.
-    const visiblePage = page.filter((evt) => matchesClientFilter(evt, filter, tierByName));
-
     return (
         <div className="flex flex-col h-full overflow-hidden">
-            <div className="px-4 py-2 border-b border-spur-border bg-base-200 shrink-0 flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">System Events</span>
-                    <span className="text-xs text-spur-text-muted">newest first · live tail</span>
-                </div>
-                {/* Liveness status strip (task 0222). Stays on the same header row so the
-                    existing layout is not pushed below the fold (R4). R1: tri-state indicator
-                    with color + text label (R6). R7: the rolling rate + count live in a polite
-                    aria-live region so screen readers announce updates without interrupting. */}
-                <LivenessStrip
-                    status={sseStatus}
-                    rate={rate}
-                    shown={visiblePage.length}
-                    total={page.length}
-                    hasMore={hasMore}
-                />
-            </div>
+            {/* Filter Bar (J92 R2/R3/R4) */}
+            <ObservabilityFilters
+                timeRange={timeRange}
+                onTimeRangeChange={onTimeRangeChange}
+                filters={filter}
+                onFiltersChange={setFilter}
+                onClearFilters={clearFilters}
+                prefixOptions={prefixOptions}
+                getPrefixColor={getPrefixColor}
+                liveEnabled={liveEnabled}
+                onToggleLive={() => setLiveEnabled((prev) => !prev)}
+                shownCount={visiblePage.length}
+                totalCount={page.length}
+                actions={
+                    <ColumnCustomizer visibleColumns={visibleColumns} onVisibleColumnsChange={setVisibleColumns} />
+                }
+            />
 
-            {/* Filter bar (task 0224). Three rows: prefix pill chips (R1/R2),
-                tier segmented toggle + time-window segmented toggle (R3/R5),
-                search input + scope toggle + runId input + clear + inline count (R4/R6/R7). */}
-            <div className="px-4 py-2 border-b border-spur-border bg-base-100 shrink-0 flex flex-col gap-2">
-                {/* R1/R2: prefix pill chips - multi-select, colored to match the table. */}
-                <fieldset
-                    className="flex flex-wrap items-center gap-1.5 border-0 p-0 m-0"
-                    aria-label="Filter by prefix"
-                >
-                    <legend className="sr-only">Filter by prefix</legend>
-                    {prefixOptions.map((prefix) => {
-                        const active = filter.selectedPrefixes.has(prefix);
-                        const colorClass = getPrefixColor(prefix);
-                        return (
-                            <button
-                                key={prefix}
-                                type="button"
-                                role="switch"
-                                aria-checked={active}
-                                aria-label={`Prefix ${prefix}${active ? ' (selected)' : ''}`}
-                                onClick={() => togglePrefix(prefix)}
-                                className={`px-2 py-0.5 rounded-full text-[11px] font-mono border transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-spur-text/40 ${
-                                    active
-                                        ? `${colorClass} border-current bg-base-200`
-                                        : 'text-spur-text-muted border-spur-border/40 hover:bg-base-200/60'
-                                }`}
-                            >
-                                {prefix}.*
-                            </button>
-                        );
-                    })}
-                </fieldset>
-                <div className="flex flex-wrap items-center gap-2">
-                    {/* R3: tier segmented toggle. */}
-                    <SegmentedToggle
-                        label="Tier"
-                        value={filter.tierFilter}
-                        onChange={(v) => setFilter((prev) => ({ ...prev, tierFilter: v }))}
-                        options={[
-                            { value: 'all', label: 'All' },
-                            { value: 'default', label: 'Default' },
-                            { value: 'diagnostic', label: 'Diagnostic' },
-                        ]}
-                    />
-                    {/* R5: time-window quick filter. */}
-                    <SegmentedToggle
-                        label="Window"
-                        value={filter.timeWindow}
-                        onChange={(v) => setFilter((prev) => ({ ...prev, timeWindow: v }))}
-                        options={[
-                            { value: 'all', label: 'All' },
-                            { value: '30s', label: '30s' },
-                            { value: '5m', label: '5m' },
-                        ]}
-                    />
-                    {/* R4: search input with inline scope selector. */}
-                    <div className="flex items-center gap-1 flex-1 min-w-[220px]">
-                        <select
-                            value={filter.searchScope}
-                            onChange={(e) =>
-                                setFilter((prev) => ({
-                                    ...prev,
-                                    searchScope: e.target.value as FilterState['searchScope'],
-                                }))
-                            }
-                            className="bg-base-200 border border-spur-border rounded px-1.5 py-0.5 text-[11px] text-spur-text focus:outline-none focus:ring-2 focus:ring-spur-text/40 cursor-pointer"
-                            aria-label="Search scope"
-                        >
-                            <option value="all">all</option>
-                            <option value="name">name</option>
-                            <option value="actor">actor</option>
-                            <option value="payload">payload</option>
-                        </select>
-                        <Input
-                            size="sm"
-                            variant="bordered"
-                            placeholder="Search…"
-                            value={filter.searchQuery}
-                            onChange={(e) => setFilter((prev) => ({ ...prev, searchQuery: e.target.value }))}
-                            className="flex-1 min-w-[120px] input-sm"
-                            aria-label={`Search ${filter.searchScope}`}
-                        />
-                    </div>
-                    {/* Run ID filter - server-side param (task 0375 R1). */}
-                    <Input
-                        size="sm"
-                        variant="bordered"
-                        placeholder="run id…"
-                        value={filter.runId}
-                        onChange={(e) => setFilter((prev) => ({ ...prev, runId: e.target.value }))}
-                        className="w-32 input-sm"
-                        aria-label="Filter by run id"
-                    />
-                    {/* R6: clear-filters button (visible iff filters active). */}
-                    {filtersActive && (
-                        <button
-                            type="button"
-                            onClick={clearFilters}
-                            className="text-[11px] text-spur-text-muted hover:text-error px-2 py-0.5 rounded border border-spur-border/40 hover:border-error/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-spur-text/40"
-                            aria-label="Clear all filters"
-                        >
-                            Clear
-                        </button>
-                    )}
-                    {/* R7: inline result count. */}
-                    <span aria-live="polite" className="text-[11px] font-mono text-spur-text-muted whitespace-nowrap">
-                        {visiblePage.length} of {page.length}
-                    </span>
-                </div>
-            </div>
-            {visiblePage.length === 0 ? (
+            {sortedPage.length === 0 ? (
                 <div className="p-4 text-sm text-spur-text-muted italic flex-1 overflow-y-auto">
                     {page.length === 0
                         ? 'No system events yet. New events from the planning bus will appear here in real time.'
                         : 'No events match the active filters.'}
                 </div>
             ) : (
-                <SystemEventsTable rows={visiblePage} catalog={catalog} />
+                <SystemEventsTable
+                    rows={sortedPage}
+                    catalog={catalog}
+                    visibleColumns={visibleColumns}
+                    sortState={sortState}
+                    onSortChange={handleSort}
+                />
             )}
             {/* Load older affordance - advances the opaque keyset cursor (R1). */}
             {hasMore && (
@@ -1034,74 +1081,11 @@ export default function SystemEventsTab() {
 }
 
 /**
- * Liveness strip rendered in the System Events header (task 0222).
- *
- * Shows three pieces of operational telemetry in a single horizontal strip:
- *   - SSE connection status (R1): a colored dot + text label. Color is
- *     redundant with the label so a colorblind operator or screen-reader user
- *     still gets the signal (R6).
- *   - Rolling rate (R2): "N events / 60s" reflecting the trailing window.
- *   - Filtered count (R3): "N of M shown" where M is the loaded page total,
- *     plus a "· more available" hint when the server has older pages (R1).
- *
- * The indicator dot is `role="status"` (live status, not a control), and the
- * numeric values sit in an `aria-live="polite"` region so screen readers
- * announce rate / count updates without interrupting (R7).
- */
-function LivenessStrip({
-    status,
-    rate,
-    shown,
-    total,
-    hasMore,
-}: {
-    status: SseStatus;
-    rate: number;
-    shown: number;
-    total: number;
-    hasMore: boolean;
-}) {
-    const dotClass = useMemo(() => {
-        switch (status) {
-            case 'live':
-                return 'bg-success';
-            case 'connecting':
-                return 'bg-spur-text-muted';
-            case 'errored':
-                return 'bg-error';
-        }
-    }, [status]);
-
-    // Pulse keyframe only on the "live" dot - the connecting and errored
-    // states use a static dot to avoid implying healthy liveness.
-    const dotStyle = status === 'live' ? ({ animation: 'spur-pulse 1.6s ease-in-out infinite' } as const) : undefined;
-
-    return (
-        <div className="flex items-center gap-3 text-[11px] text-spur-text-muted font-mono whitespace-nowrap">
-            <span role="status" aria-label={`SSE connection ${status}`} className="inline-flex items-center gap-1.5">
-                <span aria-hidden="true" className={`inline-block w-2 h-2 rounded-full ${dotClass}`} style={dotStyle} />
-                <span className="text-spur-text uppercase tracking-wide">{status}</span>
-            </span>
-            <span aria-live="polite" aria-atomic="true">
-                {rate} events / 60s
-            </span>
-            <span aria-live="polite" aria-atomic="true">
-                {shown} of {total} shown{hasMore ? ' · more available' : ''}
-            </span>
-        </div>
-    );
-}
-
-/**
  * useMediaQuery - narrow-viewport detection for the responsive table
  * collapse (task 0225 R1). SSR-safe: defaults to `false` so the server
  * render and the first client render match; updates after mount.
  */
 function useMediaQuery(query: string): boolean {
-    // useSyncExternalStore is not available - fall back to a state+listener
-    // pair. React 18's useSyncExternalStore would be ideal, but this module
-    // doesn't pull it in. Instead we use a manual subscription that updates
-    // state on query changes.
     const [matches, setMatches] = useState(() => {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
         return window.matchMedia(query).matches;
@@ -1117,19 +1101,21 @@ function useMediaQuery(query: string): boolean {
 }
 
 /**
- * Dense table view (task 0223) replacing the previous card list.
- *
- * Layout: 8 columns (Time | Severity | Event | Summary | Producer |
- * Correlation | Outcome | Action)
- * with a sticky `<thead>` (R3) and compact rows (~28px) so at least 20 rows are
- * visible on a standard viewport (R2). Each row is a keyboard-toggleable
- * detail target (R4) that expands a panel below showing the full redacted
- * envelope - no duplication of detail rendering (R9).
- *
- * The container is the vertical scroll host; sticky positioning is on the
- * `<thead>` so the column labels stay visible regardless of scroll position.
+ * Dense table view (task 0223 / 0653) with customizable columns and value sorting.
  */
-function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog: EventCatalogEntry[] }) {
+function SystemEventsTable({
+    rows,
+    catalog,
+    visibleColumns = DEFAULT_VISIBLE_COLUMNS as EventColumnKey[],
+    sortState = DEFAULT_SORT_STATE,
+    onSortChange = () => {},
+}: {
+    rows: SystemEventRow[];
+    catalog: EventCatalogEntry[];
+    visibleColumns?: EventColumnKey[];
+    sortState?: EventSortState;
+    onSortChange?: (key: EventColumnKey) => void;
+}) {
     const tierByName = useMemo(() => {
         const map = new Map<string, string>();
         for (const entry of catalog) {
@@ -1138,76 +1124,79 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
         return map;
     }, [catalog]);
 
-    // Under 640px the table collapses to Time + Event. The semantic fields stack
-    // inside Event so the compact surface loses no diagnostic information.
-    // Project is omitted from the table: it is composition-root context and is
-    // constant for this Board view. It remains in the tooltip and expanded detail.
     const isCompact = useMediaQuery('(max-width: 639px)');
+    const columnMap = useMemo(() => new Map(ALL_COLUMNS.map((c) => [c.key, c])), []);
 
     return (
         <section className="flex-1 overflow-y-auto min-w-0" data-system-events-tab aria-label="System events">
-            {/*
-              table-fixed + min-w-0 keeps columns from shoving neighbors when a long
-              jobId/runId appears. Run/Outcome are wider than the original w-28 so
-              correlators truncate cleanly instead of wrapping into the next cell.
-            */}
             <table
-                className={`w-full ${isCompact ? 'min-w-0' : 'min-w-[1180px]'} text-xs border-separate border-spacing-0 table-fixed`}
+                className={`w-full ${isCompact ? 'min-w-0' : 'min-w-[1000px]'} text-xs border-separate border-spacing-0 table-fixed`}
             >
                 <colgroup>
-                    <col className={isCompact ? 'w-24' : 'w-36'} />
-                    {!isCompact && <col className="w-24" />}
-                    <col className="w-[15%]" />
-                    {!isCompact && <col className="w-[20%]" />}
-                    {!isCompact && <col className="w-[16%]" />}
-                    {!isCompact && <col className="w-[16%]" />}
-                    {!isCompact && <col className="w-28" />}
-                    {!isCompact && <col className="w-28" />}
-                    {!isCompact && <col className="w-[15%]" />}
+                    {isCompact ? (
+                        <>
+                            <col className="w-24" />
+                            <col className="w-full" />
+                        </>
+                    ) : (
+                        visibleColumns.map((colKey) => (
+                            <col key={colKey} className={columnMap.get(colKey)?.colWidth ?? 'w-24'} />
+                        ))
+                    )}
                 </colgroup>
-                {/* R6 SystemEventsTab columns: Time Severity Event Summary Producer Correlation Agent Outcome Action */}
                 <thead className="sticky top-0 z-10 bg-base-200">
                     <tr className="text-left text-spur-text-muted uppercase tracking-wide text-[10px]">
-                        <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
-                            Time
-                        </th>
-                        {!isCompact && (
-                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
-                                Severity
-                            </th>
-                        )}
-                        <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
-                            Event
-                        </th>
-                        {!isCompact && (
-                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
-                                Summary
-                            </th>
-                        )}
-                        {!isCompact && (
-                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
-                                Producer
-                            </th>
-                        )}
-                        {!isCompact && (
-                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
-                                Correlation
-                            </th>
-                        )}
-                        {!isCompact && (
-                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
-                                Agent
-                            </th>
-                        )}
-                        {!isCompact && (
-                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
-                                Outcome
-                            </th>
-                        )}
-                        {!isCompact && (
-                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
-                                Action
-                            </th>
+                        {isCompact ? (
+                            <>
+                                <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
+                                    Time
+                                </th>
+                                <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
+                                    Event
+                                </th>
+                            </>
+                        ) : (
+                            visibleColumns.map((colKey) => {
+                                const def = columnMap.get(colKey);
+                                if (!def) return null;
+                                const isSorted = sortState.key === colKey;
+                                const sortIcon = isSorted ? (sortState.direction === 'asc' ? ' ▲' : ' ▼') : '';
+                                const ariaSort = isSorted
+                                    ? sortState.direction === 'asc'
+                                        ? 'ascending'
+                                        : 'descending'
+                                    : 'none';
+
+                                if (def.sortable) {
+                                    return (
+                                        <th
+                                            key={colKey}
+                                            scope="col"
+                                            aria-sort={ariaSort}
+                                            className="font-semibold px-3 py-1.5 border-b border-spur-border select-none"
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() => onSortChange(colKey)}
+                                                className="flex items-center gap-1 uppercase tracking-wide text-[10px] font-semibold text-spur-text-muted hover:text-spur-text transition-colors cursor-pointer bg-transparent border-0 p-0 focus:outline-none focus:ring-1 focus:ring-primary/40 rounded"
+                                            >
+                                                <span>{def.label}</span>
+                                                {sortIcon && <span aria-hidden="true">{sortIcon}</span>}
+                                            </button>
+                                        </th>
+                                    );
+                                }
+
+                                return (
+                                    <th
+                                        key={colKey}
+                                        scope="col"
+                                        className="font-semibold px-3 py-1.5 border-b border-spur-border"
+                                    >
+                                        {def.label}
+                                    </th>
+                                );
+                            })
                         )}
                     </tr>
                 </thead>
@@ -1218,6 +1207,7 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
                             event={evt}
                             tier={tierByName.get(evt.eventName) ?? 'default'}
                             compact={isCompact}
+                            visibleColumns={visibleColumns}
                         />
                     ))}
                 </tbody>
@@ -1228,53 +1218,54 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
 
 /**
  * Event table row with a persistent, keyboard-reachable detail panel (R4).
- *
- * Payload tip interaction (pin-to-copy):
- * 1. Hover event name → ephemeral preview under the name
- * 2. Click event name (or Enter/Space) → pin fixed tip so select/copy works
- * 3. Esc / outside click / close → unlock
- *
- * Click-the-name is the pin trigger (not “click outside while hovering”), because
- * leaving the name to click elsewhere hides the hover tip first.
  */
-/** Cross-row event so only one payload tooltip stays pinned at a time. */
 const PAYLOAD_TOOLTIP_PIN_EVENT = 'system-events-payload-tooltip-pin';
 
-const SEVERITY_PRESENTATION: Record<SystemEventSeverity, { icon: string; className: string }> = {
-    info: { icon: '●', className: 'text-spur-text-muted' },
-    warning: { icon: '▲', className: 'text-warning' },
-    error: { icon: '✕', className: 'text-error' },
-};
+export function SeverityLabel({ severity }: { severity: SystemEventSeverity }) {
+    const config = useMemo(() => {
+        switch (severity) {
+            case 'error':
+                return { icon: '✕', badgeClass: 'bg-error/15 text-error border-error/30' };
+            case 'warning':
+                return { icon: '▲', badgeClass: 'bg-warning/15 text-warning border-warning/30' };
+            default:
+                return { icon: '●', badgeClass: 'bg-base-content/10 text-base-content/70 border-base-content/20' };
+        }
+    }, [severity]);
 
-function SeverityLabel({ severity }: { severity: SystemEventSeverity }) {
-    const presentation = SEVERITY_PRESENTATION[severity];
     return (
-        <span className={`inline-flex items-center gap-1 whitespace-nowrap ${presentation.className}`}>
-            <span aria-hidden="true">{presentation.icon}</span>
+        <span
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${config.badgeClass} whitespace-nowrap`}
+        >
+            <span aria-hidden="true">{config.icon}</span>
             <span>{severity}</span>
         </span>
     );
 }
 
-function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: string; compact: boolean }) {
+function EventTableRow({
+    event,
+    tier,
+    compact,
+    visibleColumns = DEFAULT_VISIBLE_COLUMNS as EventColumnKey[],
+}: {
+    event: SystemEventRow;
+    tier: string;
+    compact: boolean;
+    visibleColumns?: EventColumnKey[];
+}) {
     const prefix = event.prefix ?? event.eventName.split('.')[0] ?? event.eventName;
     const view = useMemo(
-        () => event.view ?? parseSystemEventView(event.eventName, event.payload),
+        () => event.view ?? parseSystemEventView(event.eventName, event.payload ?? null),
         [event.eventName, event.payload, event.view],
     );
     const colorClass = getPrefixColor(prefix);
     const [expanded, setExpanded] = useState(false);
-    /** Hover preview — kept briefly after leave so the pointer can reach a pin control. */
     const [hoveringName, setHoveringName] = useState(false);
-    /**
-     * Locked tooltip: click the event name pins a fixed, interactive bubble so the
-     * user can select/copy. Esc or a later outside click unlocks.
-     */
     const [pinned, setPinned] = useState(false);
     const [pinPos, setPinPos] = useState<{ x: number; y: number } | null>(null);
     const tooltipRef = useRef<HTMLDivElement>(null);
     const nameBtnRef = useRef<HTMLButtonElement>(null);
-    /** Ignore unlock for a short window after pin so the pin click cannot dismiss. */
     const ignoreUnlockUntilRef = useRef(0);
     const hoverLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1295,12 +1286,10 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
 
     const pinTooltipAt = useCallback(
         (clientX: number, clientY: number) => {
-            // Guard against the pin click / subsequent bubble phase unlocking immediately.
             ignoreUnlockUntilRef.current = performance.now() + 400;
             setPinned(true);
             setHoveringName(false);
             clearHoverLeaveTimer();
-            // Prefer stable coords under the name when cursor coords are missing (keyboard).
             const x = Number.isFinite(clientX) && clientX > 0 ? clientX : 8;
             const y = Number.isFinite(clientY) && clientY > 0 ? clientY : 8;
             setPinPos({ x, y });
@@ -1329,13 +1318,12 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
         return () => window.removeEventListener(PAYLOAD_TOOLTIP_PIN_EVENT, onOtherPin);
     }, [event.id, unlockTooltip]);
 
-    // While pinned: outside click or Escape unlocks. Clicks inside the tip (select/copy) keep it open.
+    // While pinned: outside click or Escape unlocks.
     useEffect(() => {
         if (!pinned) return;
         const onPointerDown = (e: PointerEvent) => {
             if (performance.now() < ignoreUnlockUntilRef.current) return;
             if (tooltipRef.current?.contains(e.target as Node)) return;
-            // Re-clicking this event name should keep the tip pinned (not flash off).
             if (nameBtnRef.current?.contains(e.target as Node)) return;
             unlockTooltip();
         };
@@ -1386,12 +1374,10 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
             className={
                 pinned
                     ? 'pointer-events-auto fixed z-50 rounded shadow-lg p-2.5 text-[11px] min-w-[min(400px,90vw)] max-w-[min(840px,95vw)] whitespace-normal border border-[#30363d] bg-[#0d1117] text-[#c9d1d9] select-text cursor-text'
-                    : // Hover preview: interactive enough to hit "Pin" without leaving the name first.
-                      'pointer-events-auto absolute left-0 top-full mt-1 z-30 rounded shadow-lg p-2.5 text-[11px] min-w-[min(400px,90vw)] max-w-[min(840px,95vw)] whitespace-normal border border-[#30363d] bg-[#0d1117] text-[#c9d1d9]'
+                    : 'pointer-events-auto absolute left-0 top-full mt-1 z-30 rounded shadow-lg p-2.5 text-[11px] min-w-[min(400px,90vw)] max-w-[min(840px,95vw)] whitespace-normal border border-[#30363d] bg-[#0d1117] text-[#c9d1d9]'
             }
             style={pinned && pinPos ? { top: pinPos.y, left: pinPos.x } : undefined}
             onMouseEnter={() => {
-                // Keep hover open while the pointer is over the tip (bridge from the name).
                 clearHoverLeaveTimer();
                 setHoveringName(true);
             }}
@@ -1405,7 +1391,6 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                 if (!pinned && !e.currentTarget.contains(e.relatedTarget as Node | null)) setHoveringName(false);
             }}
             onPointerDown={(e) => {
-                // Keep select/copy clicks inside the bubble from unlocking.
                 if (pinned) e.stopPropagation();
             }}
         >
@@ -1500,19 +1485,26 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
         </div>
     ) : null;
 
-    return (
-        <>
-            <tr className="group hover:bg-base-200/60 transition-colors" style={{ height: compact ? undefined : 28 }}>
-                <td className="px-3 py-1 border-b border-spur-border/40 font-mono text-spur-text-muted whitespace-nowrap align-middle">
-                    {formatLocalTime(event.occurredAt)}
-                </td>
-                {!compact && (
-                    <td className="px-3 py-1 border-b border-spur-border/40 align-middle text-[10px]">
+    const renderCell = (colKey: EventColumnKey) => {
+        switch (colKey) {
+            case 'time':
+                return (
+                    <td
+                        key="time"
+                        className="px-3 py-1 border-b border-spur-border/40 font-mono text-spur-text-muted whitespace-nowrap align-middle"
+                    >
+                        {formatLocalTime(event.occurredAt)}
+                    </td>
+                );
+            case 'severity':
+                return (
+                    <td key="severity" className="px-3 py-1 border-b border-spur-border/40 align-middle text-[10px]">
                         <SeverityLabel severity={view.severity} />
                     </td>
-                )}
-                <td className="px-3 py-1 border-b border-spur-border/40 relative align-middle min-w-0">
-                    <div className="flex flex-col gap-0.5 min-w-0">
+                );
+            case 'event':
+                return (
+                    <td key="event" className="px-3 py-1 border-b border-spur-border/40 relative align-middle min-w-0">
                         <div className="flex items-center gap-1.5 min-w-0">
                             <button
                                 type="button"
@@ -1525,12 +1517,7 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                             >
                                 {expanded ? '▾' : '▸'}
                             </button>
-                            {/*
-                              Hover → preview tip (with Pin control).
-                              Click event name / Pin → lock tip for select & copy.
-                              Esc or outside click → unlock.
-                            */}
-                            <div className="relative min-w-0 max-w-full">
+                            <div className="relative min-w-0 max-w-full flex items-center gap-1">
                                 <button
                                     ref={nameBtnRef}
                                     type="button"
@@ -1552,7 +1539,6 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                                         }
                                     }}
                                     onMouseLeave={() => {
-                                        // Delay hide so the user can move into the tip / hit Pin.
                                         clearHoverLeaveTimer();
                                         hoverLeaveTimerRef.current = setTimeout(() => {
                                             if (!pinned) setHoveringName(false);
@@ -1574,87 +1560,199 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                                 >
                                     {event.eventName}
                                 </button>
-                                {/* Absolute under the name while hovering (not pinned). */}
+                                <CopyValueButton value={event.eventName} label="event name" />
                                 {!pinned && tooltipNode}
                             </div>
                         </div>
-                        {compact && (
-                            <div className="flex flex-col gap-0.5 text-[10px] text-spur-text-muted min-w-0">
-                                <SeverityLabel severity={view.severity} />
-                                <span className="truncate text-spur-text" title={displayValue(view.summary)}>
-                                    {displayValue(view.summary)}
-                                </span>
-                                <span className="truncate" title={displayValue(view.producer)}>
-                                    {displayValue(view.producer)}
-                                </span>
-                                <span className="truncate" title={displayValue(view.correlation)}>
-                                    {displayValue(view.correlation)}
-                                </span>
-                                {view.agent && (
-                                    <span className="truncate font-mono" title={view.agent}>
-                                        agent: {view.agent}
-                                    </span>
-                                )}
-                                <span className="truncate">outcome: {displayValue(view.outcome)}</span>
-                                <span className="truncate" title={displayValue(view.actionLabel)}>
-                                    action: {displayValue(view.actionLabel)}
-                                </span>
-                            </div>
-                        )}
-                    </div>
-                </td>
-                {!compact && (
+                    </td>
+                );
+            case 'summary':
+                return (
                     <td
+                        key="summary"
                         className="px-3 py-1 border-b border-spur-border/40 text-spur-text align-middle truncate"
                         title={displayValue(view.summary)}
                     >
                         {displayValue(view.summary)}
                     </td>
-                )}
-                {!compact && (
+                );
+            case 'correlation':
+                return (
                     <td
-                        className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
-                        title={displayValue(view.producer)}
+                        key="correlation"
+                        className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle"
                     >
-                        {displayValue(view.producer)}
+                        <div className="flex items-center gap-1 min-w-0">
+                            <span className="truncate" title={displayValue(view.correlation)}>
+                                {displayValue(view.correlation)}
+                            </span>
+                            {view.correlation && view.correlation !== 'unavailable' && (
+                                <CopyValueButton value={view.correlation} label="correlation" />
+                            )}
+                        </div>
                     </td>
-                )}
-                {!compact && (
+                );
+            case 'outcome':
+                return (
                     <td
-                        className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
-                        title={displayValue(view.correlation)}
-                    >
-                        {displayValue(view.correlation)}
-                    </td>
-                )}
-                {!compact && (
-                    <td
-                        className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
-                        title={view.agent ?? ''}
-                    >
-                        {view.agent ?? ''}
-                    </td>
-                )}
-                {!compact && (
-                    <td
+                        key="outcome"
                         className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
                         title={displayValue(view.outcome)}
                     >
                         {displayValue(view.outcome)}
                     </td>
-                )}
-                {!compact && (
+                );
+            case 'agent':
+                return (
                     <td
+                        key="agent"
+                        className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
+                        title={view.agent ?? ''}
+                    >
+                        {view.agent ?? ''}
+                    </td>
+                );
+            case 'producer':
+                return (
+                    <td
+                        key="producer"
+                        className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
+                        title={displayValue(view.producer)}
+                    >
+                        {displayValue(view.producer)}
+                    </td>
+                );
+            case 'action':
+                return (
+                    <td
+                        key="action"
                         className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
                         title={displayValue(view.actionLabel)}
                     >
                         {displayValue(view.actionLabel)}
                     </td>
+                );
+            case 'actor':
+                return (
+                    <td
+                        key="actor"
+                        className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
+                        title={actorLabel}
+                    >
+                        {actorLabel}
+                    </td>
+                );
+        }
+    };
+
+    return (
+        <>
+            <tr className="group hover:bg-base-200/60 transition-colors" style={{ height: compact ? undefined : 28 }}>
+                {compact ? (
+                    <>
+                        <td className="px-3 py-1 border-b border-spur-border/40 font-mono text-spur-text-muted whitespace-nowrap align-middle">
+                            {formatLocalTime(event.occurredAt)}
+                        </td>
+                        <td className="px-3 py-1 border-b border-spur-border/40 relative align-middle min-w-0">
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                    <button
+                                        type="button"
+                                        aria-expanded={expanded}
+                                        aria-controls={`detail-${event.id}`}
+                                        aria-label={`${expanded ? 'Collapse' : 'Expand'} detail for ${event.eventName}`}
+                                        onClick={onToggle}
+                                        onKeyDown={onKeyDown}
+                                        className="inline-flex items-center justify-center w-4 h-4 text-spur-text-muted hover:text-spur-text text-[10px] transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-spur-text/40 shrink-0"
+                                    >
+                                        {expanded ? '▾' : '▸'}
+                                    </button>
+                                    <div className="relative min-w-0 max-w-full flex items-center gap-1">
+                                        <button
+                                            ref={nameBtnRef}
+                                            type="button"
+                                            className={`font-mono font-semibold truncate block max-w-full text-left cursor-pointer bg-transparent border-0 p-0 ${colorClass}`}
+                                            data-testid="system-event-name"
+                                            aria-label={`Context for ${event.eventName}. Hover to preview; click to pin for select and copy.`}
+                                            aria-describedby={
+                                                tooltipOpen ? `system-event-tooltip-${event.id}` : undefined
+                                            }
+                                            onMouseEnter={() => {
+                                                clearHoverLeaveTimer();
+                                                setHoveringName(true);
+                                            }}
+                                            onFocus={() => {
+                                                clearHoverLeaveTimer();
+                                                setHoveringName(true);
+                                            }}
+                                            onBlur={(e) => {
+                                                if (
+                                                    !pinned &&
+                                                    !tooltipRef.current?.contains(e.relatedTarget as Node | null)
+                                                ) {
+                                                    setHoveringName(false);
+                                                }
+                                            }}
+                                            onMouseLeave={() => {
+                                                clearHoverLeaveTimer();
+                                                hoverLeaveTimerRef.current = setTimeout(() => {
+                                                    if (!pinned) setHoveringName(false);
+                                                }, 200);
+                                            }}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                if (pinned) return;
+                                                pinFromNameElement(e.currentTarget, e.clientX, e.clientY);
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
+                                                    if (pinned) return;
+                                                    pinFromNameElement(e.currentTarget);
+                                                }
+                                            }}
+                                        >
+                                            {event.eventName}
+                                        </button>
+                                        <CopyValueButton value={event.eventName} label="event name" />
+                                        {!pinned && tooltipNode}
+                                    </div>
+                                </div>
+                                <div className="flex flex-col gap-0.5 text-[10px] text-spur-text-muted min-w-0">
+                                    <SeverityLabel severity={view.severity} />
+                                    <span className="truncate text-spur-text" title={displayValue(view.summary)}>
+                                        {displayValue(view.summary)}
+                                    </span>
+                                    <span className="truncate" title={displayValue(view.producer)}>
+                                        {displayValue(view.producer)}
+                                    </span>
+                                    <span className="truncate" title={displayValue(view.correlation)}>
+                                        {displayValue(view.correlation)}
+                                    </span>
+                                    {view.agent && (
+                                        <span className="truncate font-mono" title={view.agent}>
+                                            agent: {view.agent}
+                                        </span>
+                                    )}
+                                    <span className="truncate">outcome: {displayValue(view.outcome)}</span>
+                                    <span className="truncate" title={displayValue(view.actionLabel)}>
+                                        action: {displayValue(view.actionLabel)}
+                                    </span>
+                                </div>
+                            </div>
+                        </td>
+                    </>
+                ) : (
+                    visibleColumns.map((colKey) => renderCell(colKey))
                 )}
             </tr>
             {expanded && (
                 <tr>
-                    <td colSpan={compact ? 2 : 9} className="px-3 py-2 border-b border-spur-border/40 bg-base-300/40">
+                    <td
+                        colSpan={compact ? 2 : visibleColumns.length}
+                        className="px-3 py-2 border-b border-spur-border/40 bg-base-300/40"
+                    >
                         <section
                             id={`detail-${event.id}`}
                             aria-label={`Detail for ${event.eventName}`}
@@ -1679,6 +1777,12 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                                     <span className="text-spur-text-muted">correlation:</span>{' '}
                                     {displayValue(view.correlation)}
                                 </span>
+                                {event.runId && (
+                                    <span className="inline-flex items-center gap-1">
+                                        <span className="text-spur-text-muted">runId:</span> {event.runId}{' '}
+                                        <CopyValueButton value={event.runId} label="run ID" />
+                                    </span>
+                                )}
                                 <span>
                                     <span className="text-spur-text-muted">agent:</span> {view.agent || '-'}
                                 </span>
@@ -1727,56 +1831,5 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
             {/* Pinned tip is position:fixed — portal to body so <tbody> doesn't clip/invalidate markup. */}
             {pinned && tooltipNode && typeof document !== 'undefined' ? createPortal(tooltipNode, document.body) : null}
         </>
-    );
-}
-
-/**
- * Three-button segmented toggle (task 0224 R3 / R5). Used twice in the
- * filter bar: tier filter (All | Default | Diagnostic) and time-window
- * filter (All | 30s | 5m).
- *
- * Built as a `role="group"` with a visually-hidden label and three
- * `<input type="radio">` children - keyboard users can tab to
- * the group and arrow between options.
- */
-function SegmentedToggle<V extends string>({
-    label,
-    value,
-    onChange,
-    options,
-}: {
-    label: string;
-    value: V;
-    onChange: (next: V) => void;
-    options: { value: V; label: string }[];
-}) {
-    return (
-        <fieldset
-            aria-label={label}
-            className="inline-flex rounded border border-spur-border/40 overflow-hidden text-[11px] border-0 p-0 m-0"
-        >
-            <legend className="sr-only">{label}</legend>
-            {options.map((opt) => {
-                const active = opt.value === value;
-                return (
-                    <label
-                        key={opt.value}
-                        className={`px-2 py-0.5 font-mono cursor-pointer focus-within:ring-2 focus-within:ring-spur-text/40 transition-colors ${
-                            active ? 'bg-spur-text/15 text-spur-text' : 'text-spur-text-muted hover:bg-base-200/60'
-                        }`}
-                    >
-                        <input
-                            type="radio"
-                            name={label}
-                            value={opt.value}
-                            checked={active}
-                            onChange={() => onChange(opt.value)}
-                            className="sr-only"
-                        />
-                        {opt.label}
-                    </label>
-                );
-            })}
-        </fieldset>
     );
 }

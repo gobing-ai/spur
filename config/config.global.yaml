@@ -18,9 +18,8 @@
 
 $schema: "@gobing-ai/spur/schemas/spur-config.schema.json"
 
-# Inert label (task 0649 R6 ruling): nothing branches on `version` today,
-# so the label no longer needs to gate anything. Reunified at "1.2" across
-# every shipped artifact (init stamp, JSON Schema description).
+# Inert label (task 0649 R6 ruling): nothing branches on `version` today.
+# Reunified at "1.2" across every shipped artifact (init stamp, JSON Schema).
 version: "1.2"
 
 agent:

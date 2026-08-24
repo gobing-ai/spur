@@ -21,24 +21,20 @@ async function isolatedOptions(cwd: string) {
 }
 
 describe('spur init template copy', () => {
-    test('templates are copied to .spur/templates/task/ and .spur/templates/', async () => {
+    test('task templates are remapped under .spur/tasks without creating .spur/templates', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
         expect(await main(['init'], options)).toBe(0);
 
-        // Task templates under .spur/templates/task/
+        // Task templates under .spur/tasks/templates/
         const tasksBase = join(cwd, '.spur', 'tasks', 'templates');
         expect(existsSync(join(tasksBase, 'standard.md'))).toBe(true);
         expect(existsSync(join(tasksBase, 'feature-impl.md'))).toBe(true);
         expect(existsSync(join(tasksBase, 'issue.md'))).toBe(true);
         expect(existsSync(join(tasksBase, 'review.md'))).toBe(true);
         expect(existsSync(join(tasksBase, 'meta.md'))).toBe(true);
-        // Feature and BDD templates under .spur/templates/
-        const templatesBase = join(cwd, '.spur', 'templates');
-        expect(existsSync(join(templatesBase, 'feature', 'default.md'))).toBe(true);
-        expect(existsSync(join(templatesBase, 'bdd', 'gherkin.md'))).toBe(true);
-        expect(existsSync(join(templatesBase, 'bdd', 'checklist.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'templates'))).toBe(false);
     });
 
     test('bundled template files exist at source', async () => {
@@ -108,19 +104,14 @@ describe('spur init template copy', () => {
         expect(content).toContain('variants:');
     });
 
-    test('workflow lifecycle and pipeline YAMLs are copied to .spur/workflows/', async () => {
+    test('workflow lifecycle and pipeline YAMLs remain bundled instead of project-copied', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
         expect(await main(['init'], options)).toBe(0);
 
         const wfDir = join(cwd, '.spur', 'workflows');
-        expect(existsSync(join(wfDir, 'task-lifecycle.yaml'))).toBe(true);
-        expect(existsSync(join(wfDir, 'feature-lifecycle.yaml'))).toBe(true);
-        expect(existsSync(join(wfDir, 'task-pipeline.yaml'))).toBe(true);
-        expect(existsSync(join(wfDir, 'idea-pipeline.yaml'))).toBe(true);
-        // ADR-072 accepted: planning is retired, so a fresh project has no planning graph.
-        expect(existsSync(join(wfDir, 'planning-pipeline.yaml'))).toBe(false);
+        expect(existsSync(wfDir)).toBe(false);
     });
 
     test('docs scaffolds are copied to project-root docs/ (R1 — task 0088)', async () => {
@@ -161,29 +152,16 @@ describe('spur init template copy', () => {
         expect(content).toBe('CUSTOM CONTENT — must survive re-init');
     });
 
-    test('doc templates are also copied to .spur/templates/docs/', async () => {
+    test('doc templates render at project root without a project template copy', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
         expect(await main(['init'], options)).toBe(0);
 
-        const tmplDir = join(cwd, '.spur', 'templates', 'docs');
-        expect(existsSync(join(tmplDir, '99_PROJECT_CONSTITUTION.md'))).toBe(true);
-        expect(existsSync(join(tmplDir, '00_ADR.md'))).toBe(true);
-        expect(existsSync(join(tmplDir, '05_FEATURES.md'))).toBe(true);
-        for (const doc of [
-            '00_ADR.md',
-            '01_PRD.md',
-            '02_ROADMAP.md',
-            '03_ARCHITECTURE.md',
-            '04_DESIGN.md',
-            '05_FEATURES.md',
-            '99_PROJECT_CONSTITUTION.md',
-        ]) {
-            const content = readFileSync(join(tmplDir, doc), 'utf-8');
-            expect(content).not.toContain('{{init-date}}');
-            expect(content).toMatch(/updated_at:\s*\d{4}-\d{2}-\d{2}/);
-        }
+        expect(existsSync(join(cwd, '.spur', 'templates'))).toBe(false);
+        const content = readFileSync(join(cwd, 'docs', '04_DESIGN.md'), 'utf-8');
+        expect(content).not.toContain('{{init-date}}');
+        expect(content).toMatch(/updated_at:\s*\d{4}-\d{2}-\d{2}/);
     });
 
     test('AGENTS.md scaffold is copied to project root with indexed-context block (task 0232)', async () => {

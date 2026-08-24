@@ -4,7 +4,7 @@ name: "Config 1.2: layered loader prototype (two-file load, deep merge, post-mer
 status: done
 template: brainstorm
 created_at: 2026-08-23T20:51:10.785Z
-updated_at: "2026-08-23T22:50:40.409Z"
+updated_at: "2026-08-24T18:14:36.847Z"
 feature_id: A4
 dependencies: ["0639"]
 ---
@@ -173,13 +173,29 @@ change (0641's drop set) and the role-SSOT read path (0642) — this task does n
 
 **Diff files:** packages/config/src/loader.ts, apps/cli/schemas/spur-config.schema.json, packages/config/tests/loader-layers.test.ts.
 ### Testing
-**Quality gate (2026-08-23).** `bun run spur-check` PASS end to end: link-check, transition-shim-check, script-contract-check, biome lint, test-pre-check, full test suite (repo-wide), test-post-check (rule sweep: all rules passed, no violations).
+**Pipeline verify results**
 
-**Test evidence.** `cd packages/config && bun test` — 161 pass / 0 fail across 10 files. New coverage: packages/config/tests/loader-layers.test.ts — 18 tests (12 hermetic subprocess layering scenarios + 6 in-process merge-machinery unit tests). Coverage: 100% functions / 97.62% lines aggregate (bun --coverage).
+- Verdict: PASS (from verdict artifact)
 
-**Typecheck.** `bunx tsc --noEmit` in packages/config — clean.
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/config layered-loader tests cover both paths, project-only mode, global fallback, and unchanged single-layer behavior. |
+| R2 | MET | mergeSpurConfigLayers implements project-over-global deep merge; tests cover executor fragments, team members, path concat, array replacement, and same-layer duplicate rejection. |
+| R3 | MET | loadMergedConfig validates the merged object once; the fragment-composition JSON Schema test passes. |
+| R4 | MET | The cache key includes both paths and mtimes; the global-edit invalidation test passes. |
+| R5 | MET | SPUR_SKIP_GLOBAL_CONFIG=true is exercised as project-only mode. |
+| R6 | MET | Top-level required fields are absent from the JSON Schema while item-level validation remains enforced; version labels 1, 1.1, and 1.2 parse. |
+| R7 | MET | Zod and JSON Schema failure tests name the responsible layer and executor identity. |
+| R8 | MET | The root quality gate compiled every workspace and passed all 6332 tests. |
 
-**Commands (repro):** `bun run spur-check`; `cd packages/config && bun test --coverage`.
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: A project fragment overrides one field of a global executor | MET | test | loader-layers executor fragment merge test passes. |
+| Scenario: A fragment that never gains a required field still fails load | MET | test | loader-layers missing executor field test passes with identity and provenance. |
+| Scenario: Editing the global file invalidates the cache | MET | test | loader-layers global cache invalidation test passes. |
+| Scenario: Project-only mode ignores the global layer | MET | test | loader-layers SPUR_SKIP_GLOBAL_CONFIG test passes. |
+| Scenario: Only one layer present behaves as it does today | MET | test | loader-layers project-only and loader global-fallback tests pass. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECUA self-review (inline review stage, 2026-08-23).**
 

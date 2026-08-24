@@ -95,6 +95,8 @@ export default function FeatureDetail({
      * another in-flight `beginLoad` that never clears the spinner.
      */
     const paintedIdRef = useRef<string | null>(null);
+    const modeRef = useRef<BodyMode>(mode);
+    modeRef.current = mode;
 
     // Escape closes the metadata panel — non-modal inspector; pane behind stays interactive.
     // Guarded on the z-50 modals so one Escape press closes the modal first, not both (0644 review P3).
@@ -192,8 +194,12 @@ export default function FeatureDetail({
         // Full-body spinner only when this id is not yet painted. SSE refreshKey bumps
         // and post-action reloads must keep showing the current body — otherwise a race
         // with reloadFeature's beginLoad leaves "Loading body…" stuck forever.
-        const needsSpinner = paintedIdRef.current !== targetId;
-        if (needsSpinner) setLoadingBody(true);
+        const isSameFeature = paintedIdRef.current === targetId;
+        const isEditingSame = isSameFeature && modeRef.current === 'edit';
+        if (!isSameFeature) {
+            setMode('preview');
+            setLoadingBody(true);
+        }
         setError(null);
         // Uses the token directly rather than fetchGuarded so that a superseded load
         // also declines to clear the spinner or report an error — the newer load owns
@@ -203,7 +209,7 @@ export default function FeatureDetail({
             try {
                 const fresh = await loadFeatureShow(targetId);
                 if (!isCurrentLoad(seq)) return;
-                applyFeature(fresh);
+                applyFeature(fresh, { body: !isEditingSame });
             } catch (err: unknown) {
                 if (!isCurrentLoad(seq)) return;
                 setError(err instanceof Error ? err.message : 'Failed to load feature');
@@ -549,6 +555,40 @@ export default function FeatureDetail({
                             ))}
                         </div>
                     )}
+                    {mode === 'preview' ? (
+                        <Button
+                            variant="ghost"
+                            size="xs"
+                            className="text-spur-text-muted hover:text-spur-accent"
+                            onClick={handleEdit}
+                            disabled={loadingBody}
+                            aria-label="Edit body"
+                        >
+                            Edit
+                        </Button>
+                    ) : (
+                        <>
+                            <Button
+                                variant="primary"
+                                size="xs"
+                                onClick={handleSave}
+                                disabled={saving}
+                                aria-label="Save body"
+                            >
+                                {saving ? 'Saving…' : 'Save'}
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="xs"
+                                className="text-spur-text-muted hover:text-spur-accent"
+                                onClick={handleCancel}
+                                disabled={saving}
+                                aria-label="Cancel edit"
+                            >
+                                Cancel
+                            </Button>
+                        </>
+                    )}
                     <Button
                         variant="ghost"
                         size="xs"
@@ -590,52 +630,15 @@ export default function FeatureDetail({
                 </div>
             )}
 
-            {/* Body — MDEditor with edit/preview toggle */}
+            {/* Body — MDEditor with edit/preview toggle (F841 R2) */}
             <div className="flex-1 flex flex-col overflow-hidden p-3" data-testid="feature-body-section">
-                <div className="flex items-center justify-between mb-2 shrink-0">
-                    <span className="text-xs font-semibold text-spur-text-muted uppercase tracking-wide">Body</span>
-                    <div className="flex gap-1">
-                        {mode === 'preview' ? (
-                            <Button
-                                variant="ghost"
-                                size="xs"
-                                onClick={handleEdit}
-                                disabled={loadingBody}
-                                aria-label="Edit body"
-                            >
-                                Edit
-                            </Button>
-                        ) : (
-                            <>
-                                <Button
-                                    variant="primary"
-                                    size="xs"
-                                    onClick={handleSave}
-                                    disabled={saving}
-                                    aria-label="Save body"
-                                >
-                                    {saving ? 'Saving…' : 'Save'}
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="xs"
-                                    onClick={handleCancel}
-                                    disabled={saving}
-                                    aria-label="Cancel edit"
-                                >
-                                    Cancel
-                                </Button>
-                            </>
-                        )}
-                    </div>
-                </div>
                 {loadingBody ? (
                     <div className="flex items-center gap-2 text-sm text-spur-text-muted">
                         <Loading size="xs" className="text-spur-accent" />
                         Loading body…
                     </div>
                 ) : mode === 'edit' ? (
-                    <div className="flex-1 min-h-0 w-full max-w-4xl mx-auto" data-testid="body-editor">
+                    <div className="flex-1 min-h-0 w-full" data-testid="body-editor">
                         <MDEditor
                             value={draftBody}
                             onChange={(val) => setDraftBody(val ?? '')}
@@ -644,10 +647,8 @@ export default function FeatureDetail({
                         />
                     </div>
                 ) : (
-                    <div className="flex-1 overflow-y-auto" data-testid="body-preview">
-                        <div className="w-full max-w-4xl mx-auto">
-                            <MarkdownBody source={serverBody} />
-                        </div>
+                    <div className="flex-1 overflow-y-auto w-full" data-testid="body-preview">
+                        <MarkdownBody source={serverBody} />
                     </div>
                 )}
             </div>
@@ -853,118 +854,137 @@ export default function FeatureDetail({
                 data-testid="feature-metadata-panel"
                 aria-label="Feature metadata"
                 aria-hidden={!showMetadata}
-                className={`absolute inset-y-0 right-0 z-30 w-80 max-w-full overflow-y-auto border-l border-spur-border bg-base-200 shadow-xl transition-transform duration-200 ${
+                className={`absolute inset-y-0 right-0 z-30 w-80 max-w-full flex flex-col overflow-hidden border-l border-spur-border bg-base-200 shadow-xl transition-transform duration-200 ${
                     showMetadata ? 'translate-x-0' : 'translate-x-full'
                 }`}
             >
                 {showMetadata && (
-                    <div className="p-3 space-y-3">
-                        {/* Status */}
-                        <div>
-                            <span className="text-xs text-spur-text-muted block mb-1.5">Status</span>
-                            <span className="text-sm text-spur-text" data-testid="metadata-status">
-                                {data.status}
+                    <>
+                        <div className="flex items-center justify-between px-3 py-2 border-b border-spur-border bg-base-300/60 shrink-0">
+                            <span className="text-xs font-semibold text-spur-text flex items-center gap-1.5">
+                                <span>ℹ</span> Metadata
                             </span>
+                            <Button
+                                variant="ghost"
+                                size="xs"
+                                className="text-spur-text-muted hover:text-spur-accent h-5 w-5 p-0 text-xs flex items-center justify-center"
+                                onClick={() => setShowMetadata(false)}
+                                aria-label="Close metadata"
+                                title="Close metadata"
+                            >
+                                &#x2715;
+                            </Button>
                         </div>
-                        {/* Dates */}
-                        {(created || updated) && (
-                            <div className="space-y-1.5">
-                                <span className="text-xs text-spur-text-muted block">Dates</span>
-                                {created && (
-                                    <div className="flex items-center gap-1.5 text-xs">
-                                        <span className="text-spur-text-muted w-14 shrink-0">Created</span>
-                                        <span className="text-spur-text">{created}</span>
-                                        <span className="text-spur-text-muted">({createdRel})</span>
-                                    </div>
-                                )}
-                                {updated && (
-                                    <div className="flex items-center gap-1.5 text-xs">
-                                        <span className="text-spur-text-muted w-14 shrink-0">Updated</span>
-                                        <span className="text-spur-text">{updated}</span>
-                                        <span className="text-spur-text-muted">({updatedRel})</span>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                        {/* Tags */}
-                        {tags.length > 0 && (
+                        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                            {/* Status */}
                             <div>
-                                <span className="text-xs text-spur-text-muted block mb-1.5">Tags</span>
-                                <div className="flex flex-wrap gap-1">
-                                    {tags.map((t) => (
-                                        <Badge key={t} variant="outline" size="xs" className="text-spur-text-muted">
-                                            {t}
-                                        </Badge>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                        {/* File path */}
-                        <div className="flex items-center gap-1.5 text-xs">
-                            <span className="text-spur-text-muted w-14 shrink-0">File</span>
-                            <span className="text-spur-text font-mono truncate">{data.filePath}</span>
-                        </div>
-
-                        {/* Child features (task 0525) — direct children of the selected feature,
-                            derived client-side from the shell's unfiltered list. Rows navigate
-                            via the shell-owned selection callback. */}
-                        {childFeatures.length > 0 && (
-                            <div>
-                                <span className="text-xs text-spur-text-muted block mb-1.5">
-                                    Child features ({childFeatures.length})
+                                <span className="text-xs text-spur-text-muted block mb-1.5">Status</span>
+                                <span className="text-sm text-spur-text" data-testid="metadata-status">
+                                    {data.status}
                                 </span>
-                                <div className="space-y-1">
-                                    {childFeatures.map((child) => (
-                                        <button
-                                            key={child.id}
-                                            type="button"
-                                            onClick={() => onSelectFeature?.(child.id)}
-                                            className="flex items-center gap-2 w-full text-xs text-left hover:underline cursor-pointer"
-                                            aria-label={`Open child feature ${child.id}: ${child.name}`}
-                                        >
-                                            <span className="shrink-0 text-[13px]" title={child.status}>
-                                                <FeatureStatusIcon status={child.status} />
-                                            </span>
-                                            <span className="font-mono text-spur-accent shrink-0">{child.id}</span>
-                                            <span className="text-spur-text truncate flex-1 min-w-0">{child.name}</span>
-                                        </button>
-                                    ))}
-                                </div>
                             </div>
-                        )}
-
-                        {/* Linked Tasks */}
-                        <div>
-                            <span className="text-xs text-spur-text-muted block mb-1.5">
-                                Linked Tasks ({linkedTasks.length})
-                            </span>
-                            {linkedTasks.length === 0 ? (
-                                <span className="text-xs text-spur-text-muted italic">No linked tasks</span>
-                            ) : (
-                                <div className="space-y-1">
-                                    {linkedTasks.map((t: TaskSummary) => (
-                                        <div key={t.wbs} className="flex items-center gap-2 w-full text-xs">
-                                            <span className="shrink-0 text-[13px]" title={t.status}>
-                                                {taskStatusIcon(t.status)}
-                                            </span>
-                                            <button
-                                                type="button"
-                                                onClick={() => navigateToTask(t.wbs)}
-                                                className="flex items-center gap-2 flex-1 min-w-0 text-left hover:underline cursor-pointer"
-                                                aria-label={`Go to task ${t.wbs}: ${t.name}`}
-                                            >
-                                                <span className="font-mono text-spur-accent shrink-0">{t.wbs}</span>
-                                                <span className="text-spur-text truncate">{t.name}</span>
-                                            </button>
-                                            <span className="px-1.5 py-0.5 rounded-full border border-spur-border text-[10px] text-spur-text-muted shrink-0">
-                                                {t.status}
-                                            </span>
+                            {/* Dates */}
+                            {(created || updated) && (
+                                <div className="space-y-1.5">
+                                    <span className="text-xs text-spur-text-muted block">Dates</span>
+                                    {created && (
+                                        <div className="flex items-center gap-1.5 text-xs">
+                                            <span className="text-spur-text-muted w-14 shrink-0">Created</span>
+                                            <span className="text-spur-text">{created}</span>
+                                            <span className="text-spur-text-muted">({createdRel})</span>
                                         </div>
-                                    ))}
+                                    )}
+                                    {updated && (
+                                        <div className="flex items-center gap-1.5 text-xs">
+                                            <span className="text-spur-text-muted w-14 shrink-0">Updated</span>
+                                            <span className="text-spur-text">{updated}</span>
+                                            <span className="text-spur-text-muted">({updatedRel})</span>
+                                        </div>
+                                    )}
                                 </div>
                             )}
+                            {/* Tags */}
+                            {tags.length > 0 && (
+                                <div>
+                                    <span className="text-xs text-spur-text-muted block mb-1.5">Tags</span>
+                                    <div className="flex flex-wrap gap-1">
+                                        {tags.map((t) => (
+                                            <Badge key={t} variant="outline" size="xs" className="text-spur-text-muted">
+                                                {t}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {/* File path */}
+                            <div className="flex items-center gap-1.5 text-xs">
+                                <span className="text-spur-text-muted w-14 shrink-0">File</span>
+                                <span className="text-spur-text font-mono truncate">{data.filePath}</span>
+                            </div>
+
+                            {/* Child features (task 0525) — direct children of the selected feature,
+                            derived client-side from the shell's unfiltered list. Rows navigate
+                            via the shell-owned selection callback. */}
+                            {childFeatures.length > 0 && (
+                                <div>
+                                    <span className="text-xs text-spur-text-muted block mb-1.5">
+                                        Child features ({childFeatures.length})
+                                    </span>
+                                    <div className="space-y-1">
+                                        {childFeatures.map((child) => (
+                                            <button
+                                                key={child.id}
+                                                type="button"
+                                                onClick={() => onSelectFeature?.(child.id)}
+                                                className="flex items-center gap-2 w-full text-xs text-left hover:underline cursor-pointer"
+                                                aria-label={`Open child feature ${child.id}: ${child.name}`}
+                                            >
+                                                <span className="shrink-0 text-[13px]" title={child.status}>
+                                                    <FeatureStatusIcon status={child.status} />
+                                                </span>
+                                                <span className="font-mono text-spur-accent shrink-0">{child.id}</span>
+                                                <span className="text-spur-text truncate flex-1 min-w-0">
+                                                    {child.name}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Linked Tasks */}
+                            <div>
+                                <span className="text-xs text-spur-text-muted block mb-1.5">
+                                    Linked Tasks ({linkedTasks.length})
+                                </span>
+                                {linkedTasks.length === 0 ? (
+                                    <span className="text-xs text-spur-text-muted italic">No linked tasks</span>
+                                ) : (
+                                    <div className="space-y-1">
+                                        {linkedTasks.map((t: TaskSummary) => (
+                                            <div key={t.wbs} className="flex items-center gap-2 w-full text-xs">
+                                                <span className="shrink-0 text-[13px]" title={t.status}>
+                                                    {taskStatusIcon(t.status)}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigateToTask(t.wbs)}
+                                                    className="flex items-center gap-2 flex-1 min-w-0 text-left hover:underline cursor-pointer"
+                                                    aria-label={`Go to task ${t.wbs}: ${t.name}`}
+                                                >
+                                                    <span className="font-mono text-spur-accent shrink-0">{t.wbs}</span>
+                                                    <span className="text-spur-text truncate">{t.name}</span>
+                                                </button>
+                                                <span className="px-1.5 py-0.5 rounded-full border border-spur-border text-[10px] text-spur-text-muted shrink-0">
+                                                    {t.status}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    </>
                 )}
             </aside>
         </div>

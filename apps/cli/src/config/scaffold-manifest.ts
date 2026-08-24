@@ -40,37 +40,18 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     // Rule presets (ADR-015 — project-local rules stay at .spur/rules/)
     { source: 'rules/recommended-pre-check.yaml', target: 'rules/recommended-pre-check.yaml' },
     { source: 'rules/recommended-post-check.yaml', target: 'rules/recommended-post-check.yaml' },
-    // Workflows — lifecycle + pipeline definitions under .spur/workflows/ (where the runtime reads them)
-    { source: 'workflows/basic.yaml', target: 'workflows/basic.yaml' },
-    { source: 'workflows/task-lifecycle.yaml', target: 'workflows/task-lifecycle.yaml' },
-    { source: 'workflows/feature-lifecycle.yaml', target: 'workflows/feature-lifecycle.yaml' },
-    { source: 'workflows/feature-dev.yaml', target: 'workflows/feature-dev.yaml' },
-    { source: 'workflows/task-pipeline.yaml', target: 'workflows/task-pipeline.yaml' },
-    // Planning is absorbed into the idea pipeline + /sp:dev-plan (D5-K, ADR-072).
-    // planning-pipeline.yaml was deleted on ADR-072 acceptance (task 0606 R6).
-    // Idea + wrap-up pipelines (task 0167) — backing workflows for /sp:dev-idea, /sp:dev-wrap, /sp:dev-wrapall
-    { source: 'workflows/idea-pipeline.yaml', target: 'workflows/idea-pipeline.yaml' },
-    { source: 'workflows/wrapup-pipeline.yaml', target: 'workflows/wrapup-pipeline.yaml' },
-    // PR-review spine — backing workflow for /sp:dev-pr-review (skill sp:pr-reviewing)
-    { source: 'workflows/pr-review.yaml', target: 'workflows/pr-review.yaml' },
     // Section matrix under .spur/tasks/
     { source: 'tasks/section-matrix.yaml', target: 'tasks/section-matrix.yaml' },
-    // Task templates under .spur/templates/task/
+    // Task templates remapped under .spur/tasks/templates/
     { source: 'templates/task/standard.md', target: 'tasks/templates/standard.md' },
     { source: 'templates/task/feature-impl.md', target: 'tasks/templates/feature-impl.md' },
     { source: 'templates/task/issue.md', target: 'tasks/templates/issue.md' },
     { source: 'templates/task/review.md', target: 'tasks/templates/review.md' },
     { source: 'templates/task/brainstorm.md', target: 'tasks/templates/brainstorm.md' },
     { source: 'templates/task/meta.md', target: 'tasks/templates/meta.md' },
-    // Feature templates under .spur/templates/feature/
-    { source: 'templates/feature/default.md', target: 'templates/feature/default.md' },
-    // BDD snippets under .spur/templates/bdd/
-    { source: 'templates/bdd/gherkin.md', target: 'templates/bdd/gherkin.md' },
-    { source: 'templates/bdd/checklist.md', target: 'templates/bdd/checklist.md' },
     // Docs scaffolds at the project root (R1 — task 0088): constitution + numbered doc stubs.
     // Idempotent / never-overwrite (preserve) — a customized live doc is never clobbered, even
-    // by `spur init --force`. Only `docs/` copies are preserved; the `.spur/templates/docs/`
-    // copies below are regular templates and follow the normal --force behavior.
+    // by `spur init --force`.
     {
         source: 'templates/docs/99_PROJECT_CONSTITUTION.md',
         target: 'docs/99_PROJECT_CONSTITUTION.md',
@@ -83,14 +64,6 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     { source: 'templates/docs/03_ARCHITECTURE.md', target: 'docs/03_ARCHITECTURE.md', root: true, preserve: true },
     { source: 'templates/docs/04_DESIGN.md', target: 'docs/04_DESIGN.md', root: true, preserve: true },
     { source: 'templates/docs/05_FEATURES.md', target: 'docs/05_FEATURES.md', root: true, preserve: true },
-    // Doc templates under .spur/templates/docs/ (referenced by sp:doc-evolve and sp:spur-init)
-    { source: 'templates/docs/99_PROJECT_CONSTITUTION.md', target: 'templates/docs/99_PROJECT_CONSTITUTION.md' },
-    { source: 'templates/docs/00_ADR.md', target: 'templates/docs/00_ADR.md' },
-    { source: 'templates/docs/01_PRD.md', target: 'templates/docs/01_PRD.md' },
-    { source: 'templates/docs/02_ROADMAP.md', target: 'templates/docs/02_ROADMAP.md' },
-    { source: 'templates/docs/03_ARCHITECTURE.md', target: 'templates/docs/03_ARCHITECTURE.md' },
-    { source: 'templates/docs/04_DESIGN.md', target: 'templates/docs/04_DESIGN.md' },
-    { source: 'templates/docs/05_FEATURES.md', target: 'templates/docs/05_FEATURES.md' },
     // AGENTS.md — agent entry point with indexed-context activation block (task 0232).
     // Root-scoped and never overwritten — a customized AGENTS.md survives re-init.
     { source: 'templates/AGENTS.md', target: 'AGENTS.md', root: true, preserve: true },

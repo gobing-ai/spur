@@ -1,18 +1,30 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
+import ColumnCustomizer, {
+    ALL_COLUMNS,
+    DEFAULT_VISIBLE_COLUMNS,
+    type EventColumnKey,
+    loadVisibleColumns,
+    saveVisibleColumns,
+    validateColumnKeys,
+} from '../../../src/modules/observability/ColumnCustomizer';
 import JobsTab from '../../../src/modules/observability/JobsTab';
+import { timeRangeSince } from '../../../src/modules/observability/ObservabilityFilters';
 import ObservabilityShell from '../../../src/modules/observability/ObservabilityShell';
 import ProcessListTab from '../../../src/modules/observability/ProcessListTab';
 import SystemEventsTab, {
+    CopyValueButton,
     historyUrl,
+    SeverityLabel,
     type SystemEventRow,
     serializeFilter,
+    sortEventRows,
     tooltipTitle,
 } from '../../../src/modules/observability/SystemEventsTab';
 import TasksTab from '../../../src/modules/observability/TasksTab';
 import ToolUsingTab from '../../../src/modules/observability/ToolUsingTab';
-import { OBSERVABILITY_TABS } from '../../../src/modules/observability/tabs';
+import { OBSERVABILITY_TABS, type ObservabilityLiveness } from '../../../src/modules/observability/tabs';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 class FakeEventSource {
@@ -95,6 +107,7 @@ beforeAll(() => {
 
 beforeEach(() => {
     FakeEventSource.instances = [];
+    window.localStorage.clear();
     Object.defineProperty(globalThis, 'EventSource', {
         configurable: true,
         value: FakeEventSource,
@@ -233,26 +246,58 @@ function installObservabilityFetchMock(): string[] {
 }
 
 describe('observability components', () => {
-    test('shell renders tab data and switches from system events to jobs', async () => {
-        // 0254 migrated `inbox` and `process-list` out of Observability into
-        // the Teams module. The shell now switches among the telemetry-only
-        // tabs (system-events → jobs); the inbox tab-switching behavior is
-        // covered by the Teams module MessagesTab tests.
+    test('shell renders header, liveness chip, and switches from system events to jobs (J92 R1-R3, R6)', async () => {
         const calls = installObservabilityFetchMock();
-        const { getByRole, queryAllByText, getByText } = render(<ObservabilityShell />);
+        const { container, getByRole, queryAllByText, getByText, getByTestId } = render(<ObservabilityShell />);
+
+        // R2: Header title, subtitle, icon, and liveness chip
+        const shell = container.querySelector('[data-observability-shell]');
+        expect(shell?.className).toContain('max-w-[1600px]');
+        expect(shell?.className).toContain('mx-auto');
+        expect(getByText('📡')).toBeDefined();
+        expect(getByText('Observability')).toBeDefined();
+        expect(getByText('System event streams, queue execution telemetry, and routing attribution')).toBeDefined();
+        const chip = getByTestId('observability-liveness-chip');
+        expect(chip).toBeDefined();
+
+        const systemEventsTab = getByRole('tab', { name: 'System Events' });
+        expect(systemEventsTab.getAttribute('aria-selected')).toBe('true');
+        expect(systemEventsTab.getAttribute('aria-controls')).toBe('observability-tab-panel-system-events');
+        expect(getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('observability-tab-system-events');
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
         expect(calls.some((url) => url.includes('/events/history?limit=100'))).toBe(true);
+        await waitFor(() =>
+            expect(chip.querySelector('time')?.getAttribute('datetime')).toBe('2026-07-04T20:04:00.000Z'),
+        );
 
+        // One EventSource connection owned by SystemEventsTab, none by Shell
+        expect(FakeEventSource.instances).toHaveLength(1);
+        await act(async () => FakeEventSource.instances[0]?.onopen?.(new Event('open')));
+        await waitFor(() => expect(chip.textContent).toContain('live tail · 0 evt/60s'));
+        await act(async () => FakeEventSource.instances[0]?.onerror?.(new Event('error')));
+        await waitFor(() => expect(chip.textContent).toContain('stream error'));
+        expect(FakeEventSource.instances).toHaveLength(1);
+
+        // Switch to Jobs tab
         fireEvent.click(getByRole('tab', { name: 'Jobs' }));
+
+        // R6: Non-system-events tab displays honest idle state on the shell chip
+        expect(getByTestId('observability-liveness-chip').textContent).toContain('live tail idle');
+        expect(getByTestId('observability-liveness-chip').querySelector('time')).toBeNull();
+        expect(getByRole('tab', { name: 'Jobs' }).getAttribute('aria-selected')).toBe('true');
+        expect(getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('observability-tab-jobs');
 
         await waitFor(() => expect(queryAllByText('job-1').length).toBeGreaterThan(0));
         expect(getByText('Pending')).toBeDefined();
         expect(getByText('2')).toBeDefined();
         expect(calls.some((url) => url.includes('/jobs/stats'))).toBe(true);
-        // 0376: Jobs tab now fetches via server-side prefix filter (R9).
         expect(calls.some((url) => url.includes('prefix=queue'))).toBe(true);
         expect(calls.some((url) => url.includes('prefix=scheduler'))).toBe(true);
+
+        // Switch back to System Events
+        fireEvent.click(getByRole('tab', { name: 'System Events' }));
+        await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
     });
 
     test('system events tab fetches history and prepends live SSE events', async () => {
@@ -279,23 +324,28 @@ describe('observability components', () => {
         await waitFor(() => expect(queryAllByText('task.updated').length).toBeGreaterThan(0));
     });
 
-    test('system events tab renders the liveness strip (task 0222 R1/R3)', async () => {
+    test('system events tab reports liveness and renders result count (J92 R3/R6)', async () => {
         installObservabilityFetchMock();
-        const { queryAllByText, getByText } = render(<SystemEventsTab />);
+        const livenessEvents: ObservabilityLiveness[] = [];
+        const { queryAllByText, getByText } = render(
+            <SystemEventsTab onLivenessChange={(l) => livenessEvents.push(l)} />,
+        );
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
-        // R1: connection indicator starts in the "connecting" state and
-        // surfaces both a colored dot and a text label (R6 — color is never
-        // the only signal).
-        expect(getByText('connecting')).toBeDefined();
-        // R3: N of M shown reflects filtered count over total loaded count.
+        // R6: Liveness callback invoked with initial connecting state
+        expect(livenessEvents.length).toBeGreaterThan(0);
+        expect(livenessEvents[0]?.status).toBe('connecting');
+        // Result count reflects loaded count
         expect(getByText('2 of 2 shown')).toBeDefined();
     });
 
-    test('system events tab transitions liveness strip to live on SSE open (task 0222 R1)', async () => {
+    test('system events tab pauses and resumes exactly one live connection (J92 R4/R6)', async () => {
         installObservabilityFetchMock();
-        const { queryAllByText, getByText } = render(<SystemEventsTab />);
+        const livenessEvents: ObservabilityLiveness[] = [];
+        const { queryAllByText, getByRole } = render(
+            <SystemEventsTab onLivenessChange={(l) => livenessEvents.push(l)} />,
+        );
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
@@ -303,12 +353,29 @@ describe('observability components', () => {
             FakeEventSource.instances[0]?.onopen?.(new Event('open'));
         });
 
-        await waitFor(() => expect(getByText('live')).toBeDefined());
+        await waitFor(() => expect(livenessEvents.some((l) => l.status === 'live')).toBe(true));
+
+        // Pause live stream
+        const liveBtn = getByRole('button', { name: /Pause live event stream/ });
+        fireEvent.click(liveBtn);
+
+        await waitFor(() => expect(livenessEvents.some((l) => l.status === 'paused')).toBe(true));
+        expect(FakeEventSource.instances[0]?.closed).toBe(true);
+        expect(queryAllByText('task.created').length).toBeGreaterThan(0);
+
+        fireEvent.click(getByRole('button', { name: /Resume live event stream/ }));
+        await waitFor(() => expect(FakeEventSource.instances).toHaveLength(2));
+        await act(async () => FakeEventSource.instances[1]?.onopen?.(new Event('open')));
+        await waitFor(() => expect(livenessEvents.at(-1)?.status).toBe('live'));
+        expect(FakeEventSource.instances[1]?.closed).toBe(false);
     });
 
-    test('system events tab counts incoming SSE events in the rolling 60s rate (task 0222 R2)', async () => {
+    test('system events tab counts incoming SSE events in the rolling 60s rate (task 0222 R2; J92 R4)', async () => {
         installObservabilityFetchMock();
-        const { queryAllByText, getByText } = render(<SystemEventsTab />);
+        const livenessEvents: ObservabilityLiveness[] = [];
+        const { queryAllByText, getByText } = render(
+            <SystemEventsTab onLivenessChange={(l) => livenessEvents.push(l)} />,
+        );
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
@@ -324,12 +391,12 @@ describe('observability components', () => {
             });
         }
 
-        await waitFor(() => expect(getByText('2 events / 60s')).toBeDefined());
-        // R3: filtered count grows as live events arrive (no filter active).
+        await waitFor(() => expect(livenessEvents.some((l) => l.rate === 2)).toBe(true));
+        // Filtered count grows as live events arrive (no filter active).
         expect(getByText('4 of 4 shown')).toBeDefined();
     });
 
-    test('system events tab renders the nine actionable desktop columns', async () => {
+    test('system events tab renders the default visible desktop columns and customizer (J92 R1/R3)', async () => {
         installObservabilityFetchMock();
         const { container, queryAllByText } = render(<SystemEventsTab />);
 
@@ -341,17 +408,7 @@ describe('observability components', () => {
         expect(thead?.className).toContain('sticky');
         const headers = table?.querySelectorAll('thead th');
         const headerLabels = Array.from(headers ?? []).map((th) => th.textContent?.trim());
-        expect(headerLabels).toEqual([
-            'Time',
-            'Severity',
-            'Event',
-            'Summary',
-            'Producer',
-            'Correlation',
-            'Agent',
-            'Outcome',
-            'Action',
-        ]);
+        expect(headerLabels).toEqual(['Time ▼', 'Severity', 'Event', 'Summary', 'Correlation', 'Outcome']);
     });
 
     test('event names are colored by a stable prefix-to-color map (task 0223 R4/R5/R6)', async () => {
@@ -544,7 +601,7 @@ describe('observability components', () => {
         expect((scopeSelect as HTMLSelectElement).value).toBe('all');
     });
 
-    test('time-window segmented toggle restricts visible events to the trailing window (task 0224 R5)', async () => {
+    test('time-range presets restrict visible events to the trailing window (task 0224 R5; J92 R1/R3)', async () => {
         // Two events: one old (>5m ago), one recent. After picking 30s only
         // the recent one should remain.
         const now = Date.now();
@@ -579,26 +636,21 @@ describe('observability components', () => {
             }
             return new Response('not found', { status: 404 });
         }) as unknown as typeof fetch);
-        const { queryAllByText, container } = render(<SystemEventsTab />);
+        const { queryAllByText, getByRole } = render(<SystemEventsTab />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
         expect(queryAllByText('queue.job.completed').length).toBeGreaterThan(0);
 
-        // R5: the Window filter is a `<fieldset>` with three radio inputs.
-        // Scope the radio query to it because the Tier fieldset also has
-        // an "All" option.
-        const windowFieldset = container.querySelector('fieldset[aria-label="Window"]') as HTMLElement;
-        const windowRadios = Array.from(windowFieldset.querySelectorAll('input[type="radio"]')) as HTMLInputElement[];
-        const setWindow = (value: string) => {
-            const radio = windowRadios.find((r) => r.value === value);
-            if (radio) fireEvent.click(radio);
-        };
-        setWindow('30s');
-        expect(queryAllByText('task.created').length).toBeGreaterThan(0);
+        // Click the 30s preset button
+        const btn30s = getByRole('button', { name: '30s' });
+        fireEvent.click(btn30s);
+        await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
         expect(queryAllByText('queue.job.completed').length).toBe(0);
 
-        setWindow('all');
-        expect(queryAllByText('queue.job.completed').length).toBeGreaterThan(0);
+        // Click All to restore
+        const btnAll = getByRole('button', { name: 'All' });
+        fireEvent.click(btnAll);
+        await waitFor(() => expect(queryAllByText('queue.job.completed').length).toBeGreaterThan(0));
     });
 
     test('clear-filters button appears when filters are active and resets them (task 0224 R6)', async () => {
@@ -629,7 +681,7 @@ describe('observability components', () => {
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
         // R7: inline count format is "N of M".
-        expect(getByText('2 of 2')).toBeDefined();
+        expect(getByText(/2 of 2/)).toBeDefined();
     });
 
     test('table collapses to two columns under 640px and stacks actionable semantics under Event', async () => {
@@ -784,13 +836,11 @@ describe('observability components', () => {
         const row = view.getByText('workflow.action.done').closest('tr') as HTMLTableRowElement;
         expect(row.textContent).toContain('info');
         expect(row.textContent).toContain('Workflow action completed');
-        expect(row.textContent).toContain('spur / test');
         expect(row.textContent).not.toContain('spur-new');
         expect(row.textContent).toContain('idea-pipeline · verify');
         expect(row.textContent).not.toContain('run run-42');
         expect(row.textContent).not.toContain('spur workflow trace run-42');
         expect(row.textContent).toContain('success');
-        expect(row.textContent).toContain('agent.run');
         expect(row.textContent).not.toContain('Trace workflow run');
 
         fireEvent.click(row.querySelector('button[aria-expanded]') as HTMLButtonElement);
@@ -1018,7 +1068,6 @@ describe('observability components', () => {
         expect(row.textContent).toContain('system-events-prune');
         expect(row.textContent).toContain('Queue maintenance completed');
         expect(row.textContent).toContain('completed');
-        expect(row.textContent).toContain('Filter queue events');
     });
 
     test('filter bar controls are keyboard-focusable native elements (task 0225 R4)', async () => {
@@ -1419,7 +1468,7 @@ describe('observability components', () => {
             return new Response('not found', { status: 404 });
         }) as unknown as typeof fetch);
 
-        const { getByText, queryByText } = render(<JobsTab />);
+        const { container, getByText, queryByText } = render(<JobsTab />);
 
         // Job identity surfaces as a scannable field.
         await waitFor(() => expect(getByText('job-42')).toBeDefined());
@@ -1433,6 +1482,10 @@ describe('observability components', () => {
         expect(getByText('1.3s')).toBeDefined();
         // Queue story duration is derived from the oldest to newest correlated event.
         expect(getByText('60.0s')).toBeDefined();
+        const feedItems = container.querySelectorAll('[data-jobs-tab] > ul > li');
+        expect(feedItems).toHaveLength(2);
+        expect(feedItems[0]?.textContent).toContain('job-42');
+        expect(feedItems[1]?.textContent).toContain('cleanup');
         // Raw JSON blob should NOT be visible by default (collapsed in <details>).
         expect(queryByText('"jobId"')).toBeNull();
     });
@@ -1453,7 +1506,7 @@ describe('observability components', () => {
 
         const { getByText } = render(<JobsTab />);
 
-        await waitFor(() => expect(getByText(/No job events yet/)).toBeDefined());
+        await waitFor(() => expect(getByText(/No job events/)).toBeDefined());
         // Stats cards still render even with empty event list.
         expect(getByText('Pending')).toBeDefined();
     });
@@ -1479,6 +1532,123 @@ describe('observability components', () => {
         expect(getByText('3')).toBeDefined();
         expect(getByText('42')).toBeDefined();
         expect(getByText('2')).toBeDefined();
+    });
+
+    test('jobs tab queries include since parameter when timeRange is specified (J92 R3, R4)', async () => {
+        const calls: string[] = [];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            calls.push(url);
+            if (url.includes('/events/history')) {
+                return jsonResponse({ events: [], count: 0, catalog: [] });
+            }
+            if (url.includes('/jobs/stats')) {
+                return jsonResponse({ stats: { pending: 1, processing: 0, completed: 0, failed: 0 } });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const { getByText, rerender } = render(<JobsTab timeRange="1h" />);
+
+        await waitFor(() => expect(calls.some((u) => u.includes('prefix=queue') && u.includes('since='))).toBe(true));
+        expect(calls.some((u) => u.includes('prefix=scheduler') && u.includes('since='))).toBe(true);
+        const queueUrl = new URL(calls.find((u) => u.includes('prefix=queue')) ?? 'http://invalid');
+        const schedulerUrl = new URL(calls.find((u) => u.includes('prefix=scheduler')) ?? 'http://invalid');
+        expect(queueUrl.searchParams.get('limit')).toBe('50');
+        expect(schedulerUrl.searchParams.get('limit')).toBe('50');
+        expect(queueUrl.searchParams.get('since')).toBe(schedulerUrl.searchParams.get('since'));
+        expect(getByText('Current Queue State')).toBeDefined();
+        expect(getByText('Last 1h')).toBeDefined();
+
+        // Rerender with timeRange="all" -> omits since
+        calls.length = 0;
+        rerender(<JobsTab timeRange="all" />);
+        await waitFor(() => expect(calls.some((u) => u.includes('prefix=queue') && !u.includes('since='))).toBe(true));
+        expect(calls.some((u) => u.includes('prefix=scheduler') && !u.includes('since='))).toBe(true);
+        expect(getByText('All time')).toBeDefined();
+    });
+
+    test('jobs tab ignores a superseded range response even when fetch does not reject on abort (J92 R4)', async () => {
+        let releaseFirstStats!: (response: Response) => void;
+        const firstStats = new Promise<Response>((resolve) => {
+            releaseFirstStats = resolve;
+        });
+        const firstSignals: AbortSignal[] = [];
+        let statsCalls = 0;
+
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const request = input instanceof Request ? input : new Request(input);
+            const url = request.url;
+            if (url.includes('/jobs/stats')) {
+                statsCalls += 1;
+                if (statsCalls === 1) {
+                    firstSignals.push(request.signal);
+                    return firstStats;
+                }
+                return jsonResponse({ stats: { pending: 9, processing: 0, completed: 0, failed: 0 } });
+            }
+
+            const superseded = url.includes('since=');
+            if (superseded) firstSignals.push(request.signal);
+            if (url.includes('prefix=queue')) {
+                return jsonResponse({
+                    events: [
+                        {
+                            id: superseded ? 'old-event' : 'new-event',
+                            eventName: 'queue.job.completed',
+                            occurredAt: superseded ? '2026-07-04T20:00:00.000Z' : '2026-07-04T21:00:00.000Z',
+                            actor: null,
+                            payload: { jobId: superseded ? 'old-job' : 'new-job', type: 'test' },
+                        },
+                    ],
+                    count: 1,
+                    catalog: [],
+                });
+            }
+            if (url.includes('prefix=scheduler')) {
+                return jsonResponse({ events: [], count: 0, catalog: [] });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const view = render(<JobsTab timeRange="1h" />);
+        await waitFor(() => expect(firstSignals).toHaveLength(3));
+
+        view.rerender(<JobsTab timeRange="all" />);
+        await waitFor(() => expect(view.getByText('new-job')).toBeDefined());
+        expect(firstSignals.every((signal) => signal.aborted)).toBe(true);
+
+        await act(async () => {
+            releaseFirstStats(jsonResponse({ stats: { pending: 1, processing: 0, completed: 0, failed: 0 } }));
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+
+        expect(view.queryByText('old-job')).toBeNull();
+        expect(view.getByText('new-job')).toBeDefined();
+    });
+
+    test('jobs tab reports a request error and recovers on the next range selection (J92 R2/R4/R6)', async () => {
+        let failStats = true;
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/jobs/stats')) {
+                if (failStats) return new Response('unavailable', { status: 503 });
+                return jsonResponse({ stats: { pending: 4, processing: 0, completed: 0, failed: 0 } });
+            }
+            if (url.includes('/events/history')) {
+                return jsonResponse({ events: [], count: 0, catalog: [] });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const view = render(<JobsTab timeRange="1h" />);
+        await waitFor(() => expect(view.getByRole('alert').textContent).toContain('job stats fetch failed: 503'));
+
+        failStats = false;
+        view.rerender(<JobsTab timeRange="all" />);
+        await waitFor(() => expect(view.getByText('Current Queue State')).toBeDefined());
+        expect(view.queryByRole('alert')).toBeNull();
+        expect(view.getByText('4')).toBeDefined();
     });
 
     // -----------------------------------------------------------------------
@@ -1807,10 +1977,9 @@ describe('observability components', () => {
         await waitFor(() => expect(getByText(/No pipeline runs yet/)).toBeDefined());
     });
 
-    test('tasks tab is registered in OBSERVABILITY_TABS (R6)', () => {
+    test('legacy tasks tab is removed from OBSERVABILITY_TABS (J92 R4)', () => {
         const tasksTab = OBSERVABILITY_TABS.find((t) => t.id === 'tasks');
-        expect(tasksTab).toBeDefined();
-        expect(tasksTab?.label).toBe('Tasks');
+        expect(tasksTab).toBeUndefined();
     });
 });
 
@@ -1934,5 +2103,581 @@ describe('system event tooltip footer (R5, 0601)', () => {
         });
         const pinnedTip = document.querySelector('[data-testid="system-event-payload-tooltip"]') as HTMLElement;
         expect(pinnedTip.textContent).toContain('Select to copy · Esc or outside click to close');
+    });
+});
+
+describe('ObservabilityFilters and TimeRange (J92 R1-R7)', () => {
+    test('timeRangeSince computes deterministic ISO lower bounds for all presets (J92 R1/R6)', () => {
+        const fixedNow = 1700000000000;
+        expect(timeRangeSince('30s', fixedNow)).toBe(new Date(fixedNow - 30_000).toISOString());
+        expect(timeRangeSince('5m', fixedNow)).toBe(new Date(fixedNow - 300_000).toISOString());
+        expect(timeRangeSince('1h', fixedNow)).toBe(new Date(fixedNow - 3600_000).toISOString());
+        expect(timeRangeSince('24h', fixedNow)).toBe(new Date(fixedNow - 86400_000).toISOString());
+        expect(timeRangeSince('7d', fixedNow)).toBe(new Date(fixedNow - 604800_000).toISOString());
+        expect(timeRangeSince('all', fixedNow)).toBeUndefined();
+    });
+
+    test('filter bar exposes the exact responsive range and action contract (J92 R1-R4/R7)', async () => {
+        installObservabilityFetchMock();
+        const view = render(<SystemEventsTab />);
+
+        await waitFor(() => expect(view.queryAllByText('task.created').length).toBeGreaterThan(0));
+        const ranges = view.getByRole('group', { name: 'Time range presets' });
+        expect(Array.from(ranges.querySelectorAll('button')).map((button) => button.textContent)).toEqual([
+            '30s',
+            '5m',
+            '1h',
+            '24h',
+            '7d',
+            'All',
+        ]);
+        expect(view.getByRole('button', { name: 'All' }).getAttribute('aria-pressed')).toBe('true');
+        expect(ranges.parentElement?.className).toContain('flex-wrap');
+        expect(view.getByLabelText('Toggle filter panel')).toBeDefined();
+        expect(view.getByRole('button', { name: 'Pause live event stream' })).toBeDefined();
+        expect(view.getByLabelText('Customize visible columns')).toBeDefined();
+    });
+
+    test('SystemEventsTab filters by severity client-side (J92 R3/R6)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/events/history')) {
+                return jsonResponse({
+                    events: [
+                        {
+                            id: 'evt-info',
+                            eventName: 'task.created',
+                            occurredAt: '2026-07-04T20:00:00.000Z',
+                            actor: 'op',
+                            payload: eventEnvelope({ severity: 'info' }),
+                        },
+                        {
+                            id: 'evt-err',
+                            eventName: 'rule.eval.error',
+                            occurredAt: '2026-07-04T20:00:01.000Z',
+                            actor: 'op',
+                            payload: eventEnvelope({ severity: 'error' }),
+                        },
+                    ],
+                    count: 2,
+                    catalog: [
+                        { name: 'task.created', prefix: 'task', source: 'planning', renderer: 'planning' },
+                        { name: 'rule.eval.error', prefix: 'rule', source: 'rule', renderer: 'rule' },
+                    ],
+                });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const { queryAllByText, getByRole } = render(<SystemEventsTab />);
+        await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
+        expect(queryAllByText('rule.eval.error').length).toBeGreaterThan(0);
+
+        // Click severity error radio
+        const errorRadio = getByRole('radio', { name: 'Error' });
+        fireEvent.click(errorRadio);
+
+        expect(queryAllByText('rule.eval.error').length).toBeGreaterThan(0);
+        expect(queryAllByText('task.created').length).toBe(0);
+    });
+
+    test('ObservabilityShell persists selected timeRange across tab switching (J92 R5)', async () => {
+        installObservabilityFetchMock();
+        const { getByRole, queryAllByText, container } = render(<ObservabilityShell />);
+
+        await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
+
+        // Switch time range to 1h
+        const btn1h = getByRole('button', { name: '1h' });
+        fireEvent.click(btn1h);
+        expect(btn1h.getAttribute('aria-pressed')).toBe('true');
+
+        // Switch to Routing tab
+        fireEvent.click(getByRole('tab', { name: 'Routing' }));
+        await waitFor(() => expect(container.querySelector('#observability-tab-panel-routing')).not.toBeNull());
+
+        // Switch back to System Events
+        fireEvent.click(getByRole('tab', { name: 'System Events' }));
+        await waitFor(() => expect(container.querySelector('#observability-tab-panel-system-events')).not.toBeNull());
+
+        // Range button remains 1h pressed
+        expect(getByRole('button', { name: '1h' }).getAttribute('aria-pressed')).toBe('true');
+    });
+});
+
+describe('System Events customizable columns, sorting, and cell polish (J92 R1-R8)', () => {
+    test('selected columns drive headers, cells, detail span, copy affordances, and persisted remounts (R1-R3/R6/R8)', async () => {
+        const copied: string[] = [];
+        Object.defineProperty(navigator, 'clipboard', {
+            value: { writeText: async (value: string) => copied.push(value) },
+            configurable: true,
+            writable: true,
+        });
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/events/history')) {
+                return jsonResponse({
+                    events: [
+                        {
+                            id: 'event-columns',
+                            eventName: 'task.created',
+                            occurredAt: '2026-07-04T20:00:00.000Z',
+                            actor: 'operator',
+                            runId: 'run-1',
+                            payload: eventEnvelope({ summary: 'Custom summary', correlators: 'corr-1' }),
+                        },
+                    ],
+                    count: 1,
+                    catalog: [{ name: 'task.created', prefix: 'task', source: 'planning', renderer: 'planning' }],
+                });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const view = render(<SystemEventsTab />);
+        await waitFor(() => expect(view.queryAllByText('task.created').length).toBeGreaterThan(0));
+
+        const checkboxes = view.getAllByRole('checkbox') as HTMLInputElement[];
+        expect(checkboxes.map((checkbox) => checkbox.getAttribute('aria-label'))).toEqual(
+            ALL_COLUMNS.map((column) => column.label),
+        );
+        expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+        ]);
+
+        await act(async () => fireEvent.click(view.getByRole('button', { name: 'Copy event name' })));
+        await act(async () => fireEvent.click(view.getByRole('button', { name: 'Copy correlation' })));
+        expect(copied).toEqual(['task.created', 'corr-1']);
+
+        fireEvent.click(view.getByLabelText('Summary'));
+        const firstRow = view.container.querySelector('tbody > tr');
+        expect(firstRow?.querySelectorAll(':scope > td')).toHaveLength(5);
+        expect(firstRow?.textContent).not.toContain('Custom summary');
+        fireEvent.click(view.getByRole('button', { name: 'Expand detail for task.created' }));
+        const detail = view.container.querySelector('section[aria-label="Detail for task.created"]');
+        expect(detail?.closest('td')?.getAttribute('colspan')).toBe('5');
+        await act(async () => fireEvent.click(view.getByRole('button', { name: 'Copy run ID' })));
+        expect(copied).toEqual(['task.created', 'corr-1', 'run-1']);
+
+        fireEvent.click(view.getByLabelText('Producer'));
+        expect(view.getAllByText('spur / test').length).toBeGreaterThan(0);
+        expect(window.localStorage.getItem('spur:observability:columns:v1')).toBe(
+            JSON.stringify(['time', 'severity', 'event', 'correlation', 'outcome', 'producer']),
+        );
+        view.unmount();
+
+        const remount = render(<SystemEventsTab />);
+        await waitFor(() => expect(remount.queryAllByText('task.created').length).toBeGreaterThan(0));
+        expect(
+            Array.from(remount.container.querySelectorAll('[data-system-events-tab] thead th')).map((th) =>
+                th.textContent?.trim(),
+            ),
+        ).toEqual(['Time ▼', 'Severity', 'Event', 'Correlation', 'Outcome', 'Producer']);
+    });
+
+    test('validateColumnKeys and loadVisibleColumns validate and fallback properly (R1, R2)', () => {
+        // Valid subset in arbitrary order gets canonical order
+        const validSubset = ['outcome', 'time', 'agent'];
+        expect(validateColumnKeys(validSubset)).toEqual(['time', 'outcome', 'agent']);
+
+        // Empty array falls back to defaults
+        expect(validateColumnKeys([])).toEqual([...DEFAULT_VISIBLE_COLUMNS]);
+
+        // Unknown keys are discarded; if all unknown, fallback to defaults
+        expect(validateColumnKeys(['unknownKey1', 'unknownKey2'])).toEqual([...DEFAULT_VISIBLE_COLUMNS]);
+
+        // Non-array falls back to defaults
+        expect(validateColumnKeys(null)).toEqual([...DEFAULT_VISIBLE_COLUMNS]);
+        expect(validateColumnKeys({ foo: 'bar' })).toEqual([...DEFAULT_VISIBLE_COLUMNS]);
+
+        // In-memory mock storage
+        const mockStorage: Record<string, string> = {};
+        const fakeStore = {
+            getItem: (key: string) => mockStorage[key] ?? null,
+            setItem: (key: string, val: string) => {
+                mockStorage[key] = val;
+            },
+            removeItem: (key: string) => {
+                delete mockStorage[key];
+            },
+            clear: () => {},
+            key: () => null,
+            length: 0,
+        } as unknown as Storage;
+
+        // No item stored -> defaults
+        expect(loadVisibleColumns(fakeStore)).toEqual([...DEFAULT_VISIBLE_COLUMNS]);
+
+        // Save custom columns -> loads back normalized
+        saveVisibleColumns(['time', 'agent', 'producer'], fakeStore);
+        expect(loadVisibleColumns(fakeStore)).toEqual(['time', 'agent', 'producer']);
+
+        // Malformed JSON -> fallback
+        mockStorage['spur:observability:columns:v1'] = 'invalid{json';
+        expect(loadVisibleColumns(fakeStore)).toEqual([...DEFAULT_VISIBLE_COLUMNS]);
+    });
+
+    test('sortEventRows stably orders rows across all sortable dimensions (R4)', () => {
+        const rawEvents: SystemEventRow[] = [
+            {
+                id: 'evt-1',
+                eventName: 'task.created',
+                occurredAt: '2026-07-04T20:00:00.000Z',
+                actor: 'robin',
+                payload: { name: 'B-task' },
+                view: {
+                    summary: 'B task created',
+                    severity: 'info',
+                    producer: 'spur / cli',
+                    correlation: 'corr-2',
+                    agent: 'coder',
+                    outcome: 'pending',
+                    fields: [],
+                    correlationFields: [],
+                    description: '',
+                    projectName: 'test',
+                    projectRoot: '/test',
+                    action: null,
+                    actionLabel: '',
+                },
+            },
+            {
+                id: 'evt-2',
+                eventName: 'rule.eval.error',
+                occurredAt: '2026-07-04T20:05:00.000Z',
+                actor: 'robin',
+                payload: { name: 'A-rule' },
+                view: {
+                    summary: 'A rule failed',
+                    severity: 'error',
+                    producer: 'spur / rule',
+                    correlation: 'corr-1',
+                    agent: 'planner',
+                    outcome: 'failed',
+                    fields: [],
+                    correlationFields: [],
+                    description: '',
+                    projectName: 'test',
+                    projectRoot: '/test',
+                    action: null,
+                    actionLabel: '',
+                },
+            },
+            {
+                id: 'evt-3',
+                eventName: 'agent.invoked',
+                occurredAt: '2026-07-04T20:02:00.000Z',
+                actor: 'system',
+                payload: { name: 'C-agent' },
+                view: {
+                    summary: 'C agent running',
+                    severity: 'warning',
+                    producer: 'spur / runner',
+                    correlation: 'corr-3',
+                    agent: 'reviewer',
+                    outcome: 'success',
+                    fields: [],
+                    correlationFields: [],
+                    description: '',
+                    projectName: 'test',
+                    projectRoot: '/test',
+                    action: null,
+                    actionLabel: '',
+                },
+            },
+        ];
+
+        // 1. Time descending (default)
+        const sortedTimeDesc = sortEventRows(rawEvents, { key: 'time', direction: 'desc' });
+        expect(sortedTimeDesc.map((e) => e.id)).toEqual(['evt-2', 'evt-3', 'evt-1']);
+
+        // 2. Time ascending
+        const sortedTimeAsc = sortEventRows(rawEvents, { key: 'time', direction: 'asc' });
+        expect(sortedTimeAsc.map((e) => e.id)).toEqual(['evt-1', 'evt-3', 'evt-2']);
+
+        // 3. Severity ascending: info (0) < warning (1) < error (2)
+        const sortedSevAsc = sortEventRows(rawEvents, { key: 'severity', direction: 'asc' });
+        expect(sortedSevAsc.map((e) => e.id)).toEqual(['evt-1', 'evt-3', 'evt-2']);
+
+        // 4. Severity descending: error > warning > info
+        const sortedSevDesc = sortEventRows(rawEvents, { key: 'severity', direction: 'desc' });
+        expect(sortedSevDesc.map((e) => e.id)).toEqual(['evt-2', 'evt-3', 'evt-1']);
+
+        // 5. Event name ascending
+        const sortedEventAsc = sortEventRows(rawEvents, { key: 'event', direction: 'asc' });
+        expect(sortedEventAsc.map((e) => e.eventName)).toEqual(['agent.invoked', 'rule.eval.error', 'task.created']);
+
+        // 6. Summary ascending
+        const sortedSumAsc = sortEventRows(rawEvents, { key: 'summary', direction: 'asc' });
+        expect(sortedSumAsc.map((e) => e.view?.summary)).toEqual([
+            'A rule failed',
+            'B task created',
+            'C agent running',
+        ]);
+
+        // 7. Correlation ascending
+        const sortedCorrAsc = sortEventRows(rawEvents, { key: 'correlation', direction: 'asc' });
+        expect(sortedCorrAsc.map((e) => e.view?.correlation)).toEqual(['corr-1', 'corr-2', 'corr-3']);
+
+        // 8. Agent ascending
+        const sortedAgentAsc = sortEventRows(rawEvents, { key: 'agent', direction: 'asc' });
+        expect(sortedAgentAsc.map((e) => e.view?.agent)).toEqual(['coder', 'planner', 'reviewer']);
+
+        // 9. Outcome ascending
+        const sortedOutcomeAsc = sortEventRows(rawEvents, { key: 'outcome', direction: 'asc' });
+        expect(sortedOutcomeAsc.map((e) => e.view?.outcome)).toEqual(['failed', 'pending', 'success']);
+
+        // 10. Stable tie-breaker with identical values
+        const duplicateEvents: SystemEventRow[] = [
+            {
+                id: 'dup-1',
+                eventName: 'task.created',
+                occurredAt: '2026-07-04T20:00:00.000Z',
+                actor: 'robin',
+                payload: { name: 'B-task' },
+                view: rawEvents[0]?.view,
+            },
+            {
+                id: 'dup-2',
+                eventName: 'task.created',
+                occurredAt: '2026-07-04T20:00:00.000Z',
+                actor: 'robin',
+                payload: { name: 'B-task' },
+                view: rawEvents[0]?.view,
+            },
+            {
+                id: 'dup-3',
+                eventName: 'task.created',
+                occurredAt: '2026-07-04T20:00:00.000Z',
+                actor: 'robin',
+                payload: { name: 'B-task' },
+                view: rawEvents[0]?.view,
+            },
+        ];
+        const stableSort = sortEventRows(duplicateEvents, { key: 'event', direction: 'asc' });
+        expect(stableSort.map((e) => e.id)).toEqual(['dup-1', 'dup-2', 'dup-3']);
+    });
+
+    test('ColumnCustomizer toggles columns, resets defaults, and enforces at-least-one (R1, R2, R3)', () => {
+        let currentCols: EventColumnKey[] = ['time', 'severity'];
+        const { getByLabelText, getByRole, rerender } = render(
+            <ColumnCustomizer
+                visibleColumns={currentCols}
+                onVisibleColumnsChange={(next) => {
+                    currentCols = next;
+                }}
+            />,
+        );
+
+        // Toggle on 'summary'
+        const summaryCheckbox = getByLabelText('Summary') as HTMLInputElement;
+        expect(summaryCheckbox.checked).toBe(false);
+        fireEvent.click(summaryCheckbox);
+        expect(currentCols).toEqual(['time', 'severity', 'summary']);
+
+        rerender(
+            <ColumnCustomizer
+                visibleColumns={currentCols}
+                onVisibleColumnsChange={(next) => {
+                    currentCols = next;
+                }}
+            />,
+        );
+
+        // Click Reset defaults
+        const resetBtn = getByRole('button', { name: 'Reset columns to default' });
+        fireEvent.click(resetBtn);
+        expect(currentCols).toEqual([...DEFAULT_VISIBLE_COLUMNS]);
+
+        // When only 1 column is active, unchecking it is disabled
+        currentCols = ['time'];
+        rerender(
+            <ColumnCustomizer
+                visibleColumns={currentCols}
+                onVisibleColumnsChange={(next) => {
+                    currentCols = next;
+                }}
+            />,
+        );
+        const timeCheckbox = getByLabelText('Time') as HTMLInputElement;
+        expect(timeCheckbox.checked).toBe(true);
+        expect(timeCheckbox.disabled).toBe(true);
+    });
+
+    test('Header clicking toggles sort direction and updates aria-sort in SystemEventsTable (R4)', async () => {
+        installObservabilityFetchMock();
+        const { getByRole, queryAllByText } = render(<SystemEventsTab />);
+
+        await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
+
+        // Time header initial sort: descending
+        const timeHeader = getByRole('columnheader', { name: /Time/ });
+        expect(timeHeader.getAttribute('aria-sort')).toBe('descending');
+        expect(timeHeader.textContent).toContain('▼');
+
+        // Click Time header -> toggles to ascending
+        const timeSortBtn = getByRole('button', { name: /Time/ });
+        fireEvent.click(timeSortBtn);
+        expect(timeHeader.getAttribute('aria-sort')).toBe('ascending');
+        expect(timeHeader.textContent).toContain('▲');
+
+        // Click Summary header -> becomes active sort ascending
+        const summarySortBtn = getByRole('button', { name: /Summary/ });
+        fireEvent.click(summarySortBtn);
+        const summaryHeader = getByRole('columnheader', { name: /Summary/ });
+        expect(summaryHeader.getAttribute('aria-sort')).toBe('ascending');
+        expect(summaryHeader.textContent).toContain('▲');
+        expect(timeHeader.getAttribute('aria-sort')).toBe('none');
+    });
+
+    test('CopyValueButton copies value to clipboard with accessible feedback (R6)', async () => {
+        let copiedText = '';
+        Object.defineProperty(navigator, 'clipboard', {
+            value: {
+                writeText: async (text: string) => {
+                    copiedText = text;
+                },
+            },
+            configurable: true,
+            writable: true,
+        });
+
+        const { getByRole } = render(<CopyValueButton value="task.created.v1" label="event name" />);
+
+        const copyBtn = getByRole('button', { name: 'Copy event name' });
+        expect(copyBtn).toBeDefined();
+
+        await act(async () => {
+            fireEvent.click(copyBtn);
+        });
+
+        expect(copiedText).toBe('task.created.v1');
+
+        // Missing/unavailable value renders null
+        const { container: emptyContainer } = render(<CopyValueButton value="unavailable" label="missing" />);
+        expect(emptyContainer.firstChild).toBeNull();
+
+        Object.defineProperty(navigator, 'clipboard', {
+            value: { writeText: async () => Promise.reject(new Error('permission denied')) },
+            configurable: true,
+            writable: true,
+        });
+        const failed = render(<CopyValueButton value="corr-1" label="correlation" />);
+        await act(async () => fireEvent.click(failed.getByRole('button', { name: 'Copy correlation' })));
+        expect(failed.getByRole('button', { name: 'Copy correlation failed' })).toBeDefined();
+    });
+
+    test('SeverityLabel renders distinct icon and text for all severity levels (R5)', () => {
+        const { container: infoContainer } = render(<SeverityLabel severity="info" />);
+        expect(infoContainer.textContent).toContain('info');
+        expect(infoContainer.textContent).toContain('●');
+
+        const { container: warnContainer } = render(<SeverityLabel severity="warning" />);
+        expect(warnContainer.textContent).toContain('warning');
+        expect(warnContainer.textContent).toContain('▲');
+
+        const { container: errContainer } = render(<SeverityLabel severity="error" />);
+        expect(errContainer.textContent).toContain('error');
+        expect(errContainer.textContent).toContain('✕');
+    });
+});
+
+describe('J92 regression coverage', () => {
+    test('jobs tab hides prior range rows while the replacement request is pending (0654 R4)', async () => {
+        let statsCalls = 0;
+        let releaseSecondStats!: (response: Response) => void;
+        const secondStats = new Promise<Response>((resolve) => {
+            releaseSecondStats = resolve;
+        });
+
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/jobs/stats')) {
+                statsCalls += 1;
+                if (statsCalls === 2) return secondStats;
+                return jsonResponse({ stats: { pending: 1, processing: 0, completed: 0, failed: 0 } });
+            }
+            if (url.includes('prefix=queue')) {
+                const priorRange = url.includes('since=');
+                return jsonResponse({
+                    events: [
+                        {
+                            id: priorRange ? 'old-event' : 'new-event',
+                            eventName: 'queue.job.completed',
+                            occurredAt: priorRange ? '2026-07-04T20:00:00.000Z' : '2026-07-04T21:00:00.000Z',
+                            actor: null,
+                            payload: { jobId: priorRange ? 'old-job' : 'new-job', type: 'test' },
+                        },
+                    ],
+                    count: 1,
+                    catalog: [],
+                });
+            }
+            if (url.includes('prefix=scheduler')) {
+                return jsonResponse({ events: [], count: 0, catalog: [] });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const view = render(<JobsTab timeRange="1h" />);
+        await waitFor(() => expect(view.getByText('old-job')).toBeDefined());
+
+        view.rerender(<JobsTab timeRange="all" />);
+        await waitFor(() => expect(statsCalls).toBe(2));
+        expect(view.queryByText('old-job')).toBeNull();
+        expect(view.getByText(/Loading jobs/)).toBeDefined();
+
+        await act(async () => {
+            releaseSecondStats(jsonResponse({ stats: { pending: 2, processing: 0, completed: 0, failed: 0 } }));
+        });
+        await waitFor(() => expect(view.getByText('new-job')).toBeDefined());
+    });
+
+    test('optional Agent column leaves a missing executor blank (0653 R3)', async () => {
+        window.localStorage.setItem(
+            'spur:observability:columns:v1',
+            JSON.stringify([...DEFAULT_VISIBLE_COLUMNS, 'agent']),
+        );
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/events/history')) {
+                return jsonResponse({
+                    events: [
+                        {
+                            id: 'event-without-agent',
+                            eventName: 'task.created',
+                            occurredAt: '2026-07-04T20:00:00.000Z',
+                            actor: 'operator',
+                            payload: eventEnvelope({ summary: 'Created without an executor' }),
+                        },
+                    ],
+                    count: 1,
+                    catalog: [{ name: 'task.created', prefix: 'task', source: 'planning', renderer: 'planning' }],
+                });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const view = render(<SystemEventsTab />);
+        await waitFor(() => expect(view.queryAllByText('task.created').length).toBeGreaterThan(0));
+
+        const headers = Array.from(view.container.querySelectorAll('[data-system-events-tab] thead th'));
+        const agentIndex = headers.findIndex((header) => header.textContent?.trim() === 'Agent');
+        const cells = view.container.querySelector('tbody > tr')?.querySelectorAll(':scope > td');
+        expect(agentIndex).toBeGreaterThan(-1);
+        expect(cells?.[agentIndex]?.textContent).toBe('');
+    });
+
+    test('stored column validation discards duplicate keys (0653 R2)', () => {
+        expect(validateColumnKeys(['agent', 'time', 'agent'])).toEqual(['time', 'agent']);
     });
 });

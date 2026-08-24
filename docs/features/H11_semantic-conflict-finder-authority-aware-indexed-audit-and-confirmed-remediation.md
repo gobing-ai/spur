@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H11"
 name: "Semantic conflict finder: authority-aware indexed audit and confirmed remediation"
-status: backlog
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-09T03:34:12.390Z"
-updated_at: "2026-08-09T05:39:00.407Z"
+updated_at: "2026-08-24T17:40:58.172Z"
 ---
 
 # H11: Semantic conflict finder: authority-aware indexed audit and confirmed remediation
@@ -128,3 +128,5 @@ None at map level; 0486 owns the remaining design and implementation details.
 - Broad historical cleanup without evidence.
 
 ## History
+- 2026-08-24T17:40:57.802Z backlog → active (system)
+- 2026-08-24T17:40:58.172Z active → verifying (system)

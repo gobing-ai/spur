@@ -16,7 +16,7 @@ report shape.
 
 Single-task execution is documented in **[execution-workflow.md](execution-workflow.md)** — this file
 extends that procedure to the batch case. Read that file first for the single-task pipeline contract;
-everything here assumes a task runs through `.spur/workflows/task-pipeline.yaml` unchanged.
+everything here assumes a task runs through `task-pipeline.yaml` unchanged.
 
 **Zero engine code, zero schema changes (ADR-022).** The batch is orchestration over existing seams —
 the status vocabulary (`packages/domain/src/planning/schema.ts`), the `dependencies[]` frontmatter
@@ -232,7 +232,7 @@ invocation in its own subagent/worktree-safe context; synthesize outcomes; recov
 
 ### 3.1 Per-task execution reuses the pipeline verbatim (R4)
 
-Each task runs through the **standard single-task pipeline** — `.spur/workflows/task-pipeline.yaml`
+Each task runs through the **standard single-task pipeline** — `task-pipeline.yaml`
 — with no new FSM and no step edits. Interactive sequential omit/inline invokes the host
 [inline pipeline driver](inline-pipeline-driver.md), which interprets that file; explicit/parallel
 execution invokes the workflow engine. The batch loop inspects the result and never redefines a
@@ -242,7 +242,7 @@ step.
 `agent.run` stages runs for many minutes. Always use `--async` + `spur workflow trace` polling:
 
 ```bash
-RUN=$(spur workflow run .spur/workflows/task-pipeline.yaml \
+RUN=$(spur workflow run task-pipeline.yaml \
   --vars '{"wbs":"<wbs>","profile":"auto","agent":"claude"}' --async --json | jq -r '.runId')
 spur workflow trace "$RUN" --json | jq '{runId, status, terminalState}'   # poll until status is terminal (done/failed)
 ```

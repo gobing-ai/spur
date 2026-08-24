@@ -14,8 +14,9 @@ interactive `/sp:dev-run --mode full` or sequential `/sp:dev-runall` invocation 
 passes `--agent inline`. A named executor, `--agent auto`, parallel batch mode, `spur workflow run`,
 and `spur agent run` keep the existing subprocess path.
 
-The project runtime definition at `.spur/workflows/task-pipeline.yaml` remains the sole FSM definition.
-The driver MUST read that file
+The project runtime definition — `task-pipeline.yaml`, resolved through the two-tier
+project→bundled model (task 0648/0650, never an unbundled runtime path) — remains the sole
+FSM definition. The driver MUST read that file
 at invocation time. It must not copy the state list, actions, guards, or transition order into a
 command, skill, script, or second workflow.
 
@@ -134,12 +135,14 @@ tasks (0617, 0619) because the sections were hand-written **before** the verdict
    **overwrites** a hand-authored `## Testing` with an auto-generated "No requirements recorded" table,
    plus replaces `## Solution` with a bare auto change-map. Creating the artifact first (PASS, with
    requirement rows keyed by scenario title) makes `task record` the compliant path.
+
    ```bash
    # verdict artifact first (shape: {wbs, verdict, requirements:[{id,status,evidence}], checks:[], source})
    # then the record hop; then re-write Testing/Solution if record's backfill is thinner than intended.
    spur task update <wbs> wip --no-lifecycle
    spur task record <wbs> --solution-from-diff --transition testing
    ```
+
    The engine now preserves an already-authored Testing when the verdict is UNKNOWN (task-service
    `record` fallback-only, mirroring the Review 0593 precedent) — but the order above is still the
    contract for the standard pipeline.

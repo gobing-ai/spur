@@ -7,14 +7,7 @@ describe('scaffold-manifest', () => {
         // Rule presets
         expect(sources).toContain('rules/recommended-pre-check.yaml');
         expect(sources).toContain('rules/recommended-post-check.yaml');
-        // Workflows
-        expect(sources).toContain('workflows/basic.yaml');
-        expect(sources).toContain('workflows/task-lifecycle.yaml');
-        expect(sources).toContain('workflows/feature-lifecycle.yaml');
-        expect(sources).toContain('workflows/task-pipeline.yaml');
-        expect(sources).toContain('workflows/idea-pipeline.yaml');
-        expect(sources).toContain('workflows/wrapup-pipeline.yaml');
-        expect(sources).toContain('workflows/pr-review.yaml');
+        expect(sources.some((source) => source.startsWith('workflows/'))).toBe(false);
         // Section matrix
         expect(sources).toContain('tasks/section-matrix.yaml');
         // Task templates
@@ -24,15 +17,8 @@ describe('scaffold-manifest', () => {
         expect(sources).toContain('templates/task/review.md');
         expect(sources).toContain('templates/task/brainstorm.md');
         expect(sources).toContain('templates/task/meta.md');
-        // Feature template
-        expect(sources).toContain('templates/feature/default.md');
-        // BDD snippets
-        expect(sources).toContain('templates/bdd/gherkin.md');
-        expect(sources).toContain('templates/bdd/checklist.md');
         // Docs scaffolds (task 0088 — R1)
-        expect(sources).toContain('templates/docs/99_PROJECT_CONSTITUTION.md');
-        expect(sources).toContain('templates/docs/00_ADR.md');
-        expect(sources).toContain('templates/docs/05_FEATURES.md');
+        expect(SCAFFOLD_MANIFEST.some((entry) => entry.target.startsWith('templates/'))).toBe(false);
     });
 
     test('every entry has a non-empty source and target', () => {
@@ -43,10 +29,8 @@ describe('scaffold-manifest', () => {
     });
 
     test('has the expected entry count (updated when adding scaffolds)', () => {
-        // 16 original + 2 idea/wrapup pipelines + 7 docs (root) + 7 docs templates
-        // + 1 brainstorm task template + 1 AGENTS.md (root) + 1 pr-review workflow = 35
-        // (planning-pipeline dropped in D5-K — planning routes through idea/dev-plan)
-        expect(SCAFFOLD_MANIFEST.length).toBe(35);
+        // 2 rule presets + section matrix + 6 task templates + 7 root docs + AGENTS.md.
+        expect(SCAFFOLD_MANIFEST.length).toBe(17);
     });
 
     test('docs entries are root-scoped and preserve-marked (R1 — task 0088)', () => {

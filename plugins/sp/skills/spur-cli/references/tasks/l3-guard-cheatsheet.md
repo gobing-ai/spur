@@ -12,7 +12,7 @@ Read this before writing `Solution`, `Testing`, or `Review`. Section **writers**
 evidence section (F92 0593 R1): implement owns `Solution`, the review coordinator
 (`/sp:dev-review`) owns `Review`, and `spur task record` owns `Testing` (bare-`## Review`
 backfill is fallback-only). The owning implementations are
-`.spur/workflows/task-lifecycle.yaml`, `hasPopulatedPriorityTable()` in
+`task-lifecycle.yaml`, `hasPopulatedPriorityTable()` in
 `packages/app/src/services/task-check.ts`, the verdict normalizers in
 `packages/app/src/services/task-record.ts`, and `TASK_CANONICAL_SECTIONS` in
 `packages/domain/src/planning/markdown-document.ts`.

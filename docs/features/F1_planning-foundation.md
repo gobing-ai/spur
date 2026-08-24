@@ -2,11 +2,11 @@
 schema_version: 1
 id: F1
 name: Planning foundation
-status: active
+status: verifying
 priority: P0
 tags: [rd3-migration, wave-0]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: 2026-06-12T23:45:00.000Z
+updated_at: "2026-08-24T17:41:21.794Z"
 ---
 
 # F1: Planning foundation
@@ -74,3 +74,4 @@ ships (W2); statuses shown are at creation time.
 ## History
 
 - 2026-06-12 — created (rd3-migration feature finalizing); set active P0 as project goal
+- 2026-08-24T17:41:21.794Z active → verifying (system)

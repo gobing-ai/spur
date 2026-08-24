@@ -21,7 +21,7 @@ const DISPATCH_SURFACE = join(
     'references',
     'dispatch-surface.md',
 );
-const TASK_PIPELINE = join(ROOT, '.spur', 'workflows', 'task-pipeline.yaml');
+const TASK_PIPELINE = join(ROOT, 'config', 'workflows', 'task-pipeline.yaml');
 
 // Derive mode-aware commands dynamically: any command that applies the inline-default
 // execution-surface contract is mode-aware by definition. This self-documents scope —
@@ -140,7 +140,8 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
             expect(raw, `${command}: missing host driver route`).toContain('inline pipeline driver');
             expect(raw, `${command}: missing interactive omit/inline contract`).toContain('omit/`inline`');
         }
-        expect(driver).toContain('`.spur/workflows/task-pipeline.yaml` remains the sole FSM definition');
+        expect(driver).toContain('remains the sole');
+        expect(driver).toContain('project→bundled model');
         expect(driver).toContain('spur task run-link <wbs> --source inline-full');
         expect(driver).toContain('stage <id> executed inline in session <session-id>');
         expect(driver).toContain("execute the action's slash command, native-subagent-first");
@@ -164,9 +165,7 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
             expect(raw, `${command}: must name agent.default as the headless resolution`).toContain('agent.default');
 
             // Wrap remains workflow-backed — no inline driver, no Skill() substitution.
-            expect(raw, `${command}: must stay workflow-backed`).toContain(
-                'spur workflow run .spur/workflows/wrapup-pipeline.yaml',
-            );
+            expect(raw, `${command}: must stay workflow-backed`).toContain('spur workflow run wrapup-pipeline.yaml');
             expect(raw, `${command}: must not promise an inline wrap driver`).not.toContain('inline-wrapup-driver.md');
 
             // Pre-dispatch notice fields (R1): subprocess surface, trigger 3, agent.default resolution.

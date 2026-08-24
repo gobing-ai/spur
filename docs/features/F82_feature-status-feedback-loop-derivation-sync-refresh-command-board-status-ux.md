@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F82"
 name: "Feature status feedback loop: derivation sync, refresh command, Board status UX"
-status: active
+status: verifying
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-07-24T23:39:28.101Z"
-updated_at: "2026-07-28T00:31:39.627Z"
+updated_at: "2026-08-24T17:40:56.521Z"
 ---
 
 # R: Feature status feedback loop: derivation sync, refresh command, Board status UX
@@ -92,3 +92,4 @@ Graduated 2026-07-24 → feature R1 (derivation engine + `spur feature sync` ver
 ## History
 - 2026-07-25T19:33:13.775Z backlog → active (system)
 - 2026-07-28T00:31:39.627Z moved R → F82 (system)
+- 2026-08-24T17:40:56.521Z active → verifying (system)

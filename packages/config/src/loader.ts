@@ -429,19 +429,21 @@ function mergeByKeyIdentity(
     const indexByIdentity = new Map<string, number>();
     for (const item of globalItems) {
         const identity = identityOf(item);
-        if (identity === undefined || !indexByIdentity.has(identity)) {
-            if (identity !== undefined) indexByIdentity.set(identity, merged.length);
-            merged.push(item);
-        }
+        if (identity !== undefined && !indexByIdentity.has(identity)) indexByIdentity.set(identity, merged.length);
+        merged.push(item);
     }
+    const matchedProjectIdentities = new Set<string>();
     for (const item of projectItems) {
         const identity = identityOf(item);
-        const existing = identity === undefined ? undefined : indexByIdentity.get(identity);
+        const existing =
+            identity === undefined || matchedProjectIdentities.has(identity)
+                ? undefined
+                : indexByIdentity.get(identity);
         if (existing === undefined) {
-            if (identity !== undefined) indexByIdentity.set(identity, merged.length);
             merged.push(item);
             continue;
         }
+        if (identity !== undefined) matchedProjectIdentities.add(identity);
         const base = merged[existing];
         // A bare-string member re-declares wholesale; object forms merge per field.
         merged[existing] =

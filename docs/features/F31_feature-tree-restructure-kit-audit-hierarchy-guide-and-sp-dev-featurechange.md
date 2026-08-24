@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F31"
 name: "Feature tree restructure kit: audit, hierarchy guide, and /sp:dev-featurechange"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-27T23:59:30.558Z"
-updated_at: "2026-07-28T00:19:56.217Z"
+updated_at: "2026-08-24T17:40:55.605Z"
 ---
 
 # F31: Feature tree restructure kit: audit, hierarchy guide, and /sp:dev-featurechange
@@ -128,3 +128,4 @@ Ship a dogfood-ready restructure kit (audit map + hierarchy guide + `/sp:dev-fea
 ## History
 - 2026-07-28T00:00:44.344Z backlog → active (system)
 - 2026-07-28T00:10:09.694Z moved S → F31 (system)
+- 2026-08-24T17:40:55.605Z active → verifying (system)

@@ -2,11 +2,11 @@
 schema_version: 1
 id: "M"
 name: "Teams: declarative agent teams + Board module over existing message/drain/supervisor backbones"
-status: active
+status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-07-14T04:28:15.630Z"
-updated_at: "2026-07-25T19:33:19.292Z"
+updated_at: "2026-08-24T17:41:16.510Z"
 ---
 
 # M: Teams: declarative agent teams + Board module over existing message/drain/supervisor backbones
@@ -138,3 +138,5 @@ The earlier backend-impl gap is **now closed** by 0257 (schema) + 0258 (runtime)
 its service methods live in 0258 per ADR-021 (logic in `packages/app`, apps thin).
 ## History
 - 2026-07-25T19:33:19.292Z backlog → active (system)
+- 2026-08-24T17:41:16.135Z active → verifying (system)
+- 2026-08-24T17:41:16.510Z verifying → done (system)

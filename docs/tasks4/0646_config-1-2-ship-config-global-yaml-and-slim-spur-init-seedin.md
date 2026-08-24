@@ -4,7 +4,7 @@ name: "Config 1.2: ship config.global.yaml and slim spur init seeding"
 status: done
 template: feature-impl
 created_at: 2026-08-23T23:19:18.395Z
-updated_at: "2026-08-23T23:30:42.496Z"
+updated_at: "2026-08-24T18:14:38.019Z"
 feature_id: A4
 dependencies: ["0641", "0640"]
 ---
@@ -132,28 +132,26 @@ need the same follow-up — filed as fog on the A4 map rather than silently rewr
 `scripts/commands/bundle-config.ts`, `packages/config/tests/bundled-config.test.ts`,
 `apps/cli/tests/commands/init.test.ts`.
 ### Testing
-Authored directly (no pipeline verdict artifact — this task ran outside `spur workflow run`).
+**Pipeline verify results**
 
-| Gate | Command | Result |
-| --- | --- | --- |
-| Targeted suites | `bun test packages/config apps/cli/tests/commands/init.test.ts` | **175 pass / 0 fail**, 462 expect() calls |
-| Full monorepo | `bun run test` | **6270 pass / 0 fail** across 342 files, 68.6 s |
-| Lint + typecheck | `bun run lint` | clean; all 7 workspaces exit 0 |
+- Verdict: PASS (from verdict artifact)
 
-**New coverage.** `packages/config/tests/bundled-config.test.ts` — kept-set assertions
-(`rules/**`, `workflows/**`, `templates/bdd/**`), drop-set assertions (`templates/task/**`,
-`plugins/**`, top-level `*.json`, `config.global.yaml`), plus an over-reach guard proving a nested
-`.json` under a kept tree still seeds (only top-level baselines are dropped).
-`apps/cli/tests/commands/init.test.ts` — two new tests: dropped paths are absent from a fresh
-`.spur/`, and the written config literal carries `version: "1.2"`.
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | config/config.global.yaml ships the machine-wide agent and workflow defaults while project-shaped sections remain in config.example.yaml. |
+| R2 | MET | BUNDLED_GLOBAL_CONFIG and init seeding target config.global.yaml as the global source. |
+| R3 | MET | listBundledProjectSeedFiles tests enforce the safe-drop and retained-asset sets. |
+| R4 | MET | spur init emits version 1.2; the dedicated CLI test passes. |
+| R5 | MET | Config, bundled-config, init, and root suites all pass. |
 
-**Regression watch.** The pre-existing "full-tree seed" test was rewritten rather than deleted: it
-still asserts the full `rules/**` tree and the manifest-remapped `tasks/templates/standard.md`
-survive, so a future over-broad drop predicate fails here rather than silently shipping a project
-with no templates.
-
-**Not covered.** The removal of `config/config.example.yaml` from disk (sandbox denied the unlink) —
-no test asserts its absence, because the file is still present. Add the assertion with the `rm`.
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: The shipped global default exists and carries only machine-wide keys | MET | test | bundled-config and config-schema suites parse and validate the shipped global source. |
+| Scenario: The project seed drops assets no project resolves through .spur/ | MET | test | listBundledProjectSeedFiles safe-drop test passes. |
+| Scenario: The seed keeps assets whose only copy is the project one | MET | test | listBundledProjectSeedFiles retained-assets test passes. |
+| Scenario: The global default seeds to the user config directory, not the project | MET | test | init global-seeding tests pass. |
+| Scenario: New projects are stamped with the 1.2 config version | MET | test | init writes the 1.2 config version label test passes. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **Review (2026-08-23, inline — three-dimensional). No P1/P2 blockers to the code; one P2 housekeeping item needs an operator command.**
 

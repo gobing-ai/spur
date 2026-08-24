@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I"
 name: "sp plugin"
-status: active
+status: verifying
 priority: P2
 tags: ["group"]
 created_at: "2026-08-11T21:13:55.867Z"
-updated_at: "2026-08-11T21:14:58.855Z"
+updated_at: "2026-08-24T17:41:08.543Z"
 ---
 
 # I: sp plugin
@@ -56,3 +56,4 @@ Boundary approved 2026-08-11: B owns runtime agent execution, I owns the plugin 
 frozen historical structure pending a separate child-by-child audit.
 ## History
 - 2026-08-11T21:14:58.855Z backlog → active (system)
+- 2026-08-24T17:41:08.543Z active → verifying (system)

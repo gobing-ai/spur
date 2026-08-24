@@ -120,7 +120,7 @@ Wave C verification can emit the following additive `checks[]` rows:
 
 ## How the gate reads it
 
-`.spur/workflows/task-pipeline.yaml`, transition `verify → record`:
+`task-pipeline.yaml`, transition `verify → record`:
 
 ```yaml
 guard:

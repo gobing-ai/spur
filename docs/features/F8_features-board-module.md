@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F8"
 name: "Features board module"
-status: backlog
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:30.995Z"
-updated_at: "2026-07-03T23:31:26.207Z"
+updated_at: "2026-08-24T17:41:13.161Z"
 ---
 
 # F8: Features board module
@@ -66,3 +66,5 @@ Feature: Features board module
 ## Notes
 
 ## History
+- 2026-08-24T17:41:12.819Z backlog → active (system)
+- 2026-08-24T17:41:13.161Z active → verifying (system)

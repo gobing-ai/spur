@@ -64,13 +64,11 @@ states:
       - kind: shell
         options:
           command: "mkdir -p .spur/run/wayfinder && $spurBin task show $wbs --json > .spur/run/wayfinder/$wbs-input.json"
-      # `.spur/workflows/` is the runtime read path in every layout — a symlink to
-      # config/workflows/ inside the Spur monorepo, a real directory in a seeded
-      # project. The previous `config/workflows/…` literal only resolved in the
-      # monorepo and hard-failed `collect` anywhere else.
+      # `wayfinder-resolution.yaml` uses the project→bundled resolver (tasks 0648/0650):
+      # a bare name falls back to the bundled tree; an explicit project path wins.
       - kind: shell
         options:
-          command: "$spurBin workflow validate .spur/workflows/wayfinder-resolution.yaml > .spur/run/wayfinder/$wbs-workflow-check.txt"
+          command: "$spurBin workflow validate wayfinder-resolution.yaml > .spur/run/wayfinder/$wbs-workflow-check.txt"
       - kind: shell
         options:
           command: "$spurBin task check $wbs > .spur/run/wayfinder/$wbs-precheck.txt"
@@ -112,7 +110,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'rm -f .spur/run/wayfinder/$wbs-resolution-verdict.txt'
+          command: "rm -f .spur/run/wayfinder/$wbs-resolution-verdict.txt"
       - kind: agent.run
         options:
           agent: ${vars.agent}

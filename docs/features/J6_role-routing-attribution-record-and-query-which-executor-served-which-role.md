@@ -2,11 +2,11 @@
 schema_version: 1
 id: "J6"
 name: "Role routing attribution: record and query which executor served which role"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-14T00:18:07.003Z"
-updated_at: "2026-08-14T22:31:27.396Z"
+updated_at: "2026-08-24T17:41:17.284Z"
 ---
 
 # J6: Role routing attribution: record and query which executor served which role
@@ -180,3 +180,4 @@ rows reads as *unmeasured*, never as zero tokens. Fixing ingestion is E1's job, 
   implementation. It needs deciding before it can be attributed.
 ## History
 - 2026-08-14T22:31:27.396Z backlog → active (system)
+- 2026-08-24T17:41:17.284Z active → verifying (system)

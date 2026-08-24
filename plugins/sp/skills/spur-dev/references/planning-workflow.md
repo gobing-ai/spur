@@ -57,7 +57,7 @@ Gherkin template. Conventions:
 - **Scenario-title mapping:** the scenario title is the identity key for traceability edges
   to task files — keep them stable and unique.
 - Generate AC inline (current session) with the BDD template
-  (`.spur/templates/bdd/gherkin.md`), or escalate to `spur agent run` only when a
+  (`templates/bdd/gherkin.md`), or escalate to `spur agent run` only when a
   [subprocess trigger](cross-cutting.md#inline-default-execution-surface) applies. **Thread
   `--agent` through** when the command forwarded one. See the
   [inline-default execution-surface contract](cross-cutting.md#inline-default-execution-surface).
@@ -220,7 +220,7 @@ skip and why. Do not pause to ask; the operator reviews the satellite afterward.
 ## Step 5.6: Idea pipeline (sp:dev-idea) — planning handoff contracts
 
 `/sp:dev-idea` runs the same planning half through the idea-pipeline workflow definition
-(`.spur/workflows/idea-pipeline.yaml` — symlinked to the tracked SSOT). Two
+(`idea-pipeline.yaml` — resolved from an explicit project path or the bundled tree). Two
 artifacts are the contract between the workflow states and the operator:
 
 **Goal/Scope intent (feature-create).** The agent writes body-only intent files

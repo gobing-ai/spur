@@ -233,7 +233,7 @@ Also note **what worked well** so efficient patterns are preserved.
 1. **Fix description** — documentation, skill reference, pipeline comment, hook, etc.
 2. **Target location** — exact file path
    - Skill guidance: `skills/<skill-name>/SKILL.md` or `references/<name>.md`
-   - Pipeline comments: runtime workflow under `.spur/workflows/` (e.g. `task-pipeline.yaml`)
+   - Pipeline comments: runtime workflow resolves by bare name (`task-pipeline.yaml`)
    - CLI reference: `skills/spur-cli/references/tasks/…`
 3. **Proposed content** — text or code block to add
 4. **Expected impact** — estimated time saved per future run

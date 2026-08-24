@@ -4,7 +4,7 @@ name: "Config 1.2: idempotent spur self init and pre-A4 global config migration"
 status: done
 template: feature-impl
 created_at: 2026-08-24T04:33:27.418Z
-updated_at: "2026-08-24T16:44:13.723Z"
+updated_at: "2026-08-24T19:27:57.014Z"
 feature_id: A4
 dependencies: []
 ---
@@ -262,15 +262,15 @@ R6 resolved (operator ruling, 2026-08-24): `version` is an inert label reconcile
 ### Solution
 | file:line | Change |
 | --- | --- |
-| `packages/config/src/index.ts:712` | Add pure `misplacedGlobalKeys(parsed)` — classifies top-level keys against the 0641 project/global split and returns project-shaped keys present at the global layer (R4). |
+| `packages/config/src/index.ts:711` | Add pure `misplacedGlobalKeys(parsed)` — classifies top-level keys against the 0641 project/global split and returns project-shaped keys present at the global layer (R4). |
 | `packages/config/src/loader.ts:371` | Add `parseConfigYaml(text)` — single-YAML-string parse reusing the loader's `yaml` dep so callers avoid importing yaml directly (R4). |
 | `apps/cli/src/commands/init.ts:191` | Register `--adopt-global-config` option (R3 opt-in). |
 | `apps/cli/src/commands/init.ts:215` | R4 detection runs on every init: parse the global config and collect misplaced keys. |
 | `apps/cli/src/commands/init.ts:224` | Replace exit-1 re-init guard with the converge path: seed missing assets, write no config, report drift (R1/R2). |
-| `apps/cli/src/commands/init.ts:258` | R3 backup: before any opted-in global rewrite, write a timestamped `config.yaml.bak-<ISO>` copy. |
-| `config/config.global.yaml:138` | Add top-level `workflows: {}` key (R5) — the A4 goal names it among global defaults; empty because paths are project-relative. |
+| `apps/cli/src/commands/init.ts:257` | R3 backup: build `backupPath` from `globalConfigPath` with `toISOString()` before the opted-in global rewrite. |
+| `config/config.global.yaml:137` | Add top-level `workflows: {}` key (R5) — the A4 goal names it among global defaults; empty because paths are project-relative. |
 | `config/config.example.yaml:11` | R6 reconcile: stamp `version: "1.2"` (was "1.1"). |
-| `config/config.global.yaml:24` | R6 reconcile: add inert `version: "1.2"` label. |
+| `config/config.global.yaml:23` | R6 reconcile: add inert `version: "1.2"` label. |
 | `apps/cli/schemas/spur-config.schema.json:14` | R6 reconcile: JSON Schema `version` description recommends "1.2". |
 
 Notes: R6 ruling (2026-08-24) — `version` is an inert label reconciled to "1.2" across all four shipped artifacts (Background 9: nothing branches on it, so no gate is added and existing installs are unaffected). R1–R7 implemented and green.
@@ -281,27 +281,27 @@ Notes: R6 ruling (2026-08-24) — `version` is an inert label reconciled to "1.2
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | converge path replaces exit-1 guard (init.ts:224); init idempotency test updated green |
-| R2 | MET | converge writes no config; converge-reinit-leaves-config-untouched test |
-| R3 | MET | timestamped backup before adopted rewrite (init.ts:256); two backup-uniqueness tests |
-| R4 | MET | misplacedGlobalKeys() pure fn + detection on every run; positive/negative unit + CLI tests |
-| R5 | MET | config.global.yaml carries top-level workflows:{} key (line 133); R5 test |
-| R6 | UNMET | BLOCKED on operator version-label ruling (task Q&A); not implemented by design |
-| R7 | MET | 94 config + 18 init + 24 init-templates tests green; biome clean; tsc clean (spur-check only blocked by unrelated F841/J92 observability lint in apps/web) |
+| R1 | MET | A second init converges successfully and seeds missing assets; dedicated init tests pass. |
+| R2 | MET | Converge leaves both project and global config bytes untouched without explicit adoption. |
+| R3 | MET | Adoption writes a timestamped backup before rewrite, and repeated adoption retains the first backup. |
+| R4 | MET | misplacedGlobalKeys reports project-shaped keys on every run and stays silent for correctly shaped global config. |
+| R5 | MET | The shipped global source contains the workflows key and remains the bundled seed source. |
+| R6 | MET | Fresh command audit reconciled config.example.yaml, config.global.yaml, init output, and JSON Schema documentation to version 1.2. |
+| R7 | MET | Init/config tests and the root quality gate pass, including the converge, opt-in, backup, detection, and force paths. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| a second init converges instead of exiting | MET |  | re-init-converges init.test |
-| converge seeds an asset that was missing | MET |  | converge-seeds-missing-asset init.test |
-| converge leaves both config files untouched | MET |  | converge-reinit-leaves-config-untouched init.test |
-| the global config is backed up before an opted-in rewrite | MET |  | adopt-global-backs-up init.test |
-| a second adopt does not clobber the first backup | MET |  | second-adopt-keeps-first-backup init.test |
-| a pre-A4 global config is reported with its offending keys | MET |  | pre-A4-detection init.test |
-| a correctly shaped global config produces no finding | MET |  | well-shaped-no-finding init.test |
-| --force keeps its destructive meaning | MET |  | re-init-with-force-overwrites init.test/init-templates |
-| the shipped global default carries the workflows key | MET |  | R5 test reads config.global.yaml |
-| the version label is consistent across every shipped artifact | UNMET |  | R6 blocked on operator ruling |
-| the quality gate stays green | PARTIAL |  | all 0649 tests + biome + tsc green; spur-check blocked only by unrelated observability lint |
+| Scenario: a second init converges instead of exiting | MET | test | re-init convergence test passes. |
+| Scenario: converge seeds an asset that was missing | MET | test | converge missing-asset test passes. |
+| Scenario: converge leaves both config files untouched | MET | test | byte-identity converge test passes. |
+| Scenario: the global config is backed up before an opted-in rewrite | MET | test | adoption backup-before-rewrite test passes. |
+| Scenario: a second adopt does not clobber the first backup | MET | test | repeated-adoption backup retention test passes. |
+| Scenario: a pre-A4 global config is reported with its offending keys | MET | test | pre-A4 misplaced-key detection test passes. |
+| Scenario: a correctly shaped global config produces no finding | MET | test | correctly shaped global config test passes. |
+| Scenario: --force keeps its destructive meaning | MET | test | re-init force-overwrite tests pass. |
+| Scenario: the shipped global default carries the workflows key | MET | test | shipped global workflows-key test passes. |
+| Scenario: the version label is consistent across every shipped artifact | MET | command | Fresh version audit returned 1.2 for both YAML sources, init literal, and schema description. |
+| Scenario: the quality gate stays green | MET | command | bun run spur-check passed 6332 tests with zero failures. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)

@@ -334,6 +334,26 @@ describe('layer merge machinery (in-process unit coverage)', () => {
         expect(executors[1]).toEqual({ name: 'new', agent: 'n' });
     });
 
+    test('same-layer duplicate identities survive merge for schema rejection', () => {
+        const duplicateExecutors = {
+            agent: {
+                executors: [
+                    { name: 'dup', agent: 'a' },
+                    { name: 'dup', agent: 'b' },
+                ],
+            },
+        };
+        for (const [globalRaw, projectRaw] of [
+            [duplicateExecutors, {}],
+            [{}, duplicateExecutors],
+        ] as const) {
+            const merged = mergeSpurConfigLayers(globalRaw, projectRaw);
+            expect(() => parseMergedWithProvenance(merged, globalRaw, projectRaw, {})).toThrow(
+                'Duplicate executor name: dup',
+            );
+        }
+    });
+
     test('members merge by id ?? executor; bare strings replace/append wholesale', () => {
         const merged = mergeSpurConfigLayers(
             {

@@ -4,7 +4,7 @@ name: "Config 1.2: spur init seeding audit and config.global.yaml content"
 status: done
 template: brainstorm
 created_at: 2026-08-23T20:51:11.093Z
-updated_at: "2026-08-23T22:58:50.779Z"
+updated_at: "2026-08-24T19:27:47.779Z"
 feature_id: A4
 ---
 
@@ -134,7 +134,7 @@ verdict table, (b) the `config.global.yaml` content specification.
 
 ## R1 — Inventory: every path `spur init` writes into `.spur/`
 
-Sources: full-tree seed (`apps/cli/src/commands/init.ts:271` over `listBundledProjectSeedFiles()`, filter
+Sources: full-tree seed (`apps/cli/src/commands/init.ts:373` over `listBundledProjectSeedFiles()`, filter
 `PROJECT_SEED_FILTER = /\.(ya?ml|json|md|gitkeep)$/i`, skipping `templates/docs/**` which the
 manifest owns) and the `SCAFFOLD_MANIFEST` pass (`apps/cli/src/config/scaffold-manifest.ts:39`, remaps + root-scoped +
 preserve entries). Written via `writeIfNew` (never overwrites without `--force`).
@@ -150,10 +150,10 @@ preserve entries). Written via `writeIfNew` (never overwrites without `--force`)
 | `templates/bdd/{gherkin,checklist}.md` | bundled | manifest |
 | `corpus-baseline.json`, `pipeline-budgets.json`, `plugin-scripts.json`, `transition-shims.json`, `workflow-composition-baseline.json` | bundled top-level JSON | full-tree |
 | `plugins/**` (`.gitkeep` placeholders) | bundled `plugins/**` | full-tree |
-| `config.yaml` (project config literal) | `apps/cli/src/commands/init.ts:205-230` | direct write |
+| `config.yaml` (project config literal) | `apps/cli/src/commands/init.ts:307-334` | direct write |
 
 Not seeded: `launchd/**` (`.plist` fails the filter); `config.example.yaml` (explicitly excluded —
-it seeds `~/.config/spur/config.yaml` instead, `apps/cli/src/commands/init.ts:158-168`). Manifest entries with `root: true`
+it seeds `~/.config/spur/config.yaml` instead, `apps/cli/src/commands/init.ts:170-177`). Manifest entries with `root: true`
 (`docs/00–05`, `docs/99`, `AGENTS.md`) land **outside** `.spur/` — out of R1 scope, noted for
 completeness.
 
@@ -183,7 +183,7 @@ initialized projects keep their on-disk files. There is no break to surface.
 | --- | --- | --- |
 | `templates/task/**` natural-path copy (full-tree) | Nothing — zero readers; the manifest remap into `tasks/templates/` is the live copy | none |
 | `tasks/templates/**` manifest copies (fresh inits only) | Fresh init renders from bundled fallback (`apps/cli/src/commands/task.ts:1415-1435` tier 2). Breaks only for a compiled binary with **no** bundled tree — the manifest copy is that case's only local tier. Keep dropping contingent on binaries shipping a bundled root, or accept degraded template bodies there | resolver with fallback |
-| `workflows/**` copies | Nothing when bundled root exists (tier 1 wins — the copy is already shadowed). Without a bundled root, global tier `~/.config/spur/workflows/` (seeded by any `spur init`, `apps/cli/src/commands/init.ts:158-168` pass) covers it | resolver with fallback |
+| `workflows/**` copies | Nothing when bundled root exists (tier 1 wins — the copy is already shadowed). Without a bundled root, global tier `~/.config/spur/workflows/` (seeded by any `spur init`, `apps/cli/src/commands/init.ts:170-177` pass) covers it | resolver with fallback |
 | `tasks/section-matrix.yaml` copies | Fresh inits fall back to bundled `tasks/section-matrix.yaml` (`scripts/commands/corpus-check.ts`). Same binary-without-bundled-root caveat | resolver with fallback |
 | 5 top-level `.json` baselines | Nothing — no end-user consumer reads `.spur/<name>.json`; monorepo gates read repo-root `config/` | none |
 | `plugins/**` | Nothing — placeholders only | none |
@@ -201,7 +201,7 @@ only safety net is the copy are keep rows, not resolver work.
 ## R4 — `config/config.global.yaml` specification
 
 Repurpose `config.example.yaml` (already the seed source for `~/.config/spur/config.yaml`,
-`apps/cli/src/commands/init.ts:158-168`) — no third file. Top-level sections of `config.example.yaml` today: `$schema`,
+`apps/cli/src/commands/init.ts:170-177`) — no third file. Top-level sections of `config.example.yaml` today: `$schema`,
 `version`, `name`, `bootstrap`, `agent`, `rules`, `workflows`, `redaction`, `tasks`, `features`.
 
 | Section | Verdict | Rationale |
@@ -221,7 +221,7 @@ Repurpose `config.example.yaml` (already the seed source for `~/.config/spur/con
 
 ## R5 — Minimum `.spur/config.yaml` written by `spur init`
 
-Today (`apps/cli/src/commands/init.ts:205-230`): `$schema`, `version: "1.1"`, `name`, plus a full `bootstrap` block
+Today (`apps/cli/src/commands/init.ts:307-334`): `$schema`, `version: "1.1"`, `name`, plus a full `bootstrap` block
 (logging/database/telemetry/scheduler). Once the global layer carries defaults:
 
 ```yaml
@@ -243,14 +243,25 @@ edge already carried by the workflow global tier and better solved by shipping a
 binaries. `templates/bdd` keep rows are agent-side reads of project files and do not need a
 resolver tier.
 ### Testing
-**Docs-only task — no code changes.** Verification performed:
+**Pipeline verify results**
 
-- Resolver citations re-checked at the cited lines before writing: `task.ts:1421–1435` (project-first template resolution), `make-lifecycle-adapter.ts:25–56` (bundled → project → global workflow chain), `corpus-check.ts:105–128` (`resolveProjectRoot` walk-up + `loadTaskMatrix` candidates), `task-service.ts:416–427` (injected matrix, `no-matrix` exit), `plugins/sp/scripts/script-contract-check.ts` (repo-root `config/` manifest default).
-- Reader-sweep greps over `apps/cli/src`, `packages/*/src`, and `plugins/sp` for every seeded path class (task/feature/bdd templates, workflows, section-matrix, 5 JSON baselines, plugins placeholders). bdd keep verdict rests on the three plugin-skill hits; feature drop on zero hits repo-wide.
-- `spur task check 0641` — 0 errors before start; `bun run format` applied to the task file.
-- Regression gate `bun run spur-check` re-run green after section writes (tree also carries 0640's uncommitted code — gate covers both).
-- **Coverage: N/A** — documents-only task (no production code changed), so no line/function coverage figure applies. The monorepo per-file 90% gate is unaffected and stayed green in the full-suite run.
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Fresh document audit found the complete seeded-path inventory and its origin/pass columns. |
+| R2 | MET | The resolution-site table records each path's reader and whether a fallback exists. |
+| R3 | MET | The safe-drop table names concrete breakage and direct readers, with an explicit keep set. |
+| R4 | MET | The config.global.yaml specification classifies global and project-shaped sections with rationale. |
+| R5 | MET | The minimum project config is specified with schema, version, name, and the project-shaped bootstrap rationale. |
+| R6 | MET | The Solution explicitly concludes that no global templates tier is needed and explains the project-to-bundled model. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: Every seeded path carries a drop-or-keep verdict | MET | command | Fresh Bun document audit confirmed the inventory, resolution, safe-drop, and keep-set sections. |
+| Scenario: Dropping a copy is justified by an existing fallback | MET | command | Fresh Bun document audit confirmed each drop row carries breakage and direct-reader evidence. |
+| Scenario: The shipped global default is fully specified | MET | command | Fresh Bun document audit confirmed the section classification and minimum project config. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECUA review (docs-only task):**
 

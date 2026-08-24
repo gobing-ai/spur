@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A4"
 name: "Spur config 1.2: global + project layered configuration"
-status: verifying
+status: active
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-08-23T20:50:24.035Z"
-updated_at: "2026-08-23T23:04:25.768Z"
+updated_at: "2026-08-24T04:47:02.789Z"
 ---
 
 # A4: Spur config 1.2: global + project layered configuration
@@ -64,6 +64,9 @@ in each child task.
 | 0642 | Config 1.2: ADR superseding ADR-061 and the role-tier SSOT inversion blast radius | done |
 | 0646 | Config 1.2: ship config.global.yaml and slim spur init seeding | done |
 | 0647 | Config 1.2: implement ADR-078 role-tier SSOT inversion | done |
+| 0648 | Config 1.2: two-tier workflow resolution — project path then bundled root | done |
+| 0649 | Config 1.2: idempotent spur self init and pre-A4 global config migration | done |
+| 0650 | Config 1.2: retire .spur/workflows and .spur/templates from seed, symlinks and shipped surfaces | testing |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -188,3 +191,4 @@ All four tasks done; `bun run spur-check` green throughout.
 ## History
 - 2026-08-23T20:53:44.170Z backlog → active (system)
 - 2026-08-23T23:04:25.768Z active → verifying (system)
+- 2026-08-24T04:47:02.789Z verifying → active (system)

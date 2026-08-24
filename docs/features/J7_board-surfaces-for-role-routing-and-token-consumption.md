@@ -2,11 +2,11 @@
 schema_version: 1
 id: "J7"
 name: "Board surfaces for role routing and token consumption"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-14T00:47:16.292Z"
-updated_at: "2026-08-15T15:46:49.648Z"
+updated_at: "2026-08-24T17:41:06.291Z"
 ---
 
 # J7: Board surfaces for role routing and token consumption
@@ -102,3 +102,5 @@ Feature J4 (done) owns Board observability and Teams supervisor surfaces; M3 own
 feature extends what they established rather than adding a peer module.
 ## History
 - 2026-08-15T15:46:49.648Z backlog → active (system)
+- 2026-08-24T17:41:05.923Z active → verifying (system)
+- 2026-08-24T17:41:06.291Z verifying → done (system)

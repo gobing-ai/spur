@@ -281,15 +281,22 @@ function checkTargetResolution(cmd: ParsedCommand, skillsDir: string, root: stri
         }
     }
 
-    // Workflow file refs — patterns like .spur/workflows/<name>.yaml
-    const workflowRefs = [...implSection.matchAll(/\.spur\/workflows\/([^\s)"\]]+\.yaml)/g)];
+    // Workflow file refs — bare names (`spur workflow run <name>.yaml`, two-tier model
+    // 0648/0650) resolve against the bundled workflow-definition asset tree; legacy
+    // `.spur/workflows/<name>.yaml` paths are also caught as unification drift.
+    const wfDir = join(root, 'config', 'workflows');
+    const workflowRefs = [
+        ...[...implSection.matchAll(/\.spur\/workflows\/([^\s)"\]]+\.yaml)/g)],
+        ...[...implSection.matchAll(/spur workflow (?:run|validate) ([a-z0-9-]+\.yaml)/g)],
+    ];
     for (const ref of workflowRefs) {
-        const wfPath = join(root, '.spur', 'workflows', ref[1]);
+        const bare = (ref[1] ?? '').split('/').pop() ?? '';
+        const wfPath = join(wfDir, bare);
         if (!existsSync(wfPath)) {
             violations.push({
                 command: cmd.name,
                 gate: 'c',
-                message: `unresolved workflow file ${ref[0]} (missing ${wfPath})`,
+                message: `unresolved workflow file ${bare} (missing ${wfPath})`,
             });
         }
     }

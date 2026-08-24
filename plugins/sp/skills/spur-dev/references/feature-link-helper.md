@@ -44,10 +44,11 @@ When `/sp:dev-verify <wbs>` produces a `PASS` verdict:
    - Confirm with the operator before executing `spur feature sync <id>` (in `--auto` mode, apply forward-only proposals).
 
 2. **Task missing `feature_id`**:
-   - Check if `feature_link_declined: true` is set on the task frontmatter (`spur task show <wbs> --json`).
+   - Check the task content for the Q&A marker `feature_link_declined: true` (`spur task show <wbs> --json`).
    - If `feature_link_declined: true`: skip linking prompt — explicit operator deferral is preserved.
    - If unlinked and not declined: propose candidate existing features via single-task mode.
-   - If operator explicitly declines: record `feature_link_declined: true` via `spur task update <wbs> --field feature_link_declined --value true`.
+   - If operator explicitly declines: preserve the existing Q&A body, append the marker, and write it through
+     `spur task update <wbs> --section Q&A --from-file <body-file>`.
 
 ## Single-task mode
 

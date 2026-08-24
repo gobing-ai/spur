@@ -28,7 +28,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 ## Implementation
 
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
-- Wrap stays **workflow-backed** — `spur workflow run .spur/workflows/wrapup-pipeline.yaml` is the only implementation; there is no inline wrap driver.
+- Wrap stays **workflow-backed** — `spur workflow run wrapup-pipeline.yaml` is the only implementation; there is no inline wrap driver.
 - Resolve the executor **before** launching the workflow:
   - `--agent <name>` → pass the name unchanged into `vars.agent`.
   - `--agent auto` → tier-resolve a concrete executor first, then merge it into `vars.agent`.
@@ -42,7 +42,7 @@ AGENT=… # resolved above: agent.default for omitted, tier-resolved for auto, u
 echo "execution surface: subprocess; reason: trigger 3 — durable auditable run record required; requested agent: <inline|auto|name>; executor: $AGENT"
 VARS=$(jq -nc --arg tasks "[\"$WBS\"]" --arg agent "$AGENT" --arg profile "$PROFILE" --arg merge "$MERGE" \
   '{tasks:$tasks, agent:$agent, profile:$profile, merge:$merge}')
-spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars "$VARS" [--dry-run]
+spur workflow run wrapup-pipeline.yaml --vars "$VARS" [--dry-run]
 ```
 
 The executor resolution is described in the bullets above; the snippet's `AGENT` variable carries

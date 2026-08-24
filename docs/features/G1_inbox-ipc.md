@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G1"
 name: "Inbox IPC"
-status: backlog
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:33.480Z"
-updated_at: "2026-07-03T23:31:33.654Z"
+updated_at: "2026-08-24T17:41:20.415Z"
 ---
 
 # G1: Inbox IPC
@@ -72,3 +72,5 @@ Feature: Inbox IPC
 ## Notes
 
 ## History
+- 2026-08-24T17:41:20.040Z backlog → active (system)
+- 2026-08-24T17:41:20.415Z active → verifying (system)

@@ -482,9 +482,14 @@ Linear's depth is carried by surface ladder + hairline borders. The brand resist
 The System Events surface is a dense diagnostic table, not a marketing screenshot. It still uses
 the shared canvas/surface/hairline/type tokens above.
 
-- Desktop columns: Time, Severity, Event, Summary, Producer, Correlation, Outcome, Action.
-  The Producer header and cell show only package / subsystem. Project name/root are omitted
-  from the table and tooltip; they remain in expanded detail as forensic context.
+- J92 (built, 0651–0654): desktop defaults are Time, Severity, Event, Summary, Correlation, and
+  Outcome. Agent, Producer, Action, and Actor are optional through the Columns disclosure; the
+  ordered selection persists under `spur:observability:columns:v1`, invalid storage falls back to
+  defaults, and at least one column stays visible. Producer shows only package / subsystem.
+  Project name/root remain in expanded detail as forensic context.
+- Time, Severity, Event, Summary, Correlation, Outcome, and Agent are sortable over the loaded page.
+  Producer, Action, and Actor are visibility-only. Expanded detail spans the active desktop column
+  count; compact rendering remains fixed at two columns.
 - Missing or unusable projected fields render as `-`, not the word `unavailable`.
 - Severity uses icon + text; color is supplemental and limited to semantic state.
 - Event names use mono type. Summary is the primary prose cell and truncates to one line with the
@@ -495,9 +500,8 @@ the shared canvas/surface/hairline/type tokens above.
 - J9 (built): the tooltip title is `eventName · correlator`, using the best available
   entity/run/execution/action/job identity and falling back to the persisted history-row id.
   Copy/pin instructions live in a muted footer; hover and pinned modes use their own guidance.
-- J91 (built, 0605): Agent column after Correlation
-  (`Time | Severity | Event | Summary | Producer | Correlation | Agent | Outcome | Action`).
-  Agent is a single truncated identity string; a missing executor is a blank cell (not `-`).
+- J91 (built, 0605): Agent remains a single truncated identity string; a missing executor is a blank
+  cell (not `-`). J92 makes it optional after Outcome in the canonical customizable column order.
   Correlation, Action, and Agent truncate like Summary; complete values stay in the tooltip.
   Compact (≤639 px) stacks Summary, Correlation, Action, and Agent under the event name and still
   omits opaque ids from those stacked cells. Shapes: `docs/design/system-events-human-table.md`.

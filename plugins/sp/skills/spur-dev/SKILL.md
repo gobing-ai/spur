@@ -85,7 +85,7 @@ Full procedure: **[references/planning-workflow.md](references/planning-workflow
 ```
 pick task (spur task list --json)
   → interactive omit/inline: read task-pipeline.yaml → drive actions + guards in host session
-  → explicit/headless executor: spur workflow run .spur/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
+  → explicit/headless executor: spur workflow run task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
   → on HITL pause: surface to operator; resume the selected driver from the paused state
 ```
 
@@ -218,10 +218,10 @@ for "what's actually in file Y" or for resources that sit outside the step seque
 
 - `plugins/sp/references/roles.md` — the Layer-1 role→tier table (`scribe` / `coder` / `reviewer` /
   `planner`, one per tier); the role vocabulary this spine's operations route under.
-- `.spur/workflows/task-pipeline.yaml` — the execution pipeline definition.
-- `.spur/workflows/idea-pipeline.yaml` — the front-half state machine (absorbed the retired
+- `task-pipeline.yaml` — the execution pipeline definition.
+- `idea-pipeline.yaml` — the front-half state machine (absorbed the retired
   planning-pipeline in D5-K; `/sp:dev-plan` routes here, ADR-072).
-- `.spur/templates/bdd/gherkin.md` — the BDD scenario template.
+- `templates/bdd/gherkin.md` — the BDD scenario template.
 
 ## Platform Notes
 

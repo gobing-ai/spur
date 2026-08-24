@@ -1,116 +1,96 @@
 # Features Board Layout Refactor & UI Enhancement — Design
 
-**Feature:** F84 · **Date:** 2026-08-23 · **Status:** Draft / System Design
+**Feature:** F84 / F841 · **Date:** 2026-08-24 · **Status:** Implemented (F841 Refinement)
 
 ## 1. Context & Motivation
 
-The `Features` board module (`apps/web/src/modules/features/`) is functionally robust, supporting live SSE updates, hierarchical feature trees, status transitions, and MDEditor body editing. However, its layout retains a rigid two-column split (`w-72` fixed tree + full-width detail) that diverges from the modern Linear dark-canvas design system (`DESIGN.md`) and the layout conventions established in the `History` module (`HistoryShell.tsx`).
+The `Features` board module (`apps/web/src/modules/features/`) provides interactive feature hierarchy inspection, status transitions, planning event tailing, and Markdown editing.
 
-This design specifies:
-1. Alignment with `History` module shell layout (centered `max-w-[1600px]`, standard header with icon, title, description, and module action container).
-2. A collapsible, floating/dockable left sidebar for the Feature Tree hierarchy.
-3. Reading-optimized width constraints on the Markdown preview and edit canvases.
-4. A collapsible right-side drawer for feature metadata (folded by default).
-5. A refined visual hierarchy for the stage-based dynamic action buttons.
-6. A foldable floating glassmorphism prompt/agent bar at the bottom of the viewport (UI-only stub).
+Feature **F841** refines the layout and interactions:
+1. **Overlay panels**: Left Feature Tree and right Metadata panels operate as absolute non-modal overlays around a single full-width detail workspace. Opening/closing either panel never shifts or resizes the central workspace, header, preview, or editor.
+2. **Header-integrated editing**: Removed the in-body `BODY` row; `Edit` is positioned in the detail header immediately before `Metadata`; while editing, that slot substitutes `Save` followed by `Cancel`.
+3. **Full-width reading & editing**: Markdown preview and editor canvases span the full width of the detail container (`w-full`), aligned directly with the header boundaries without arbitrary `max-w-4xl` caps.
+4. **Wider, folded-by-default prompt bar**: `FloatingAgentBar` initializes folded to a compact spirit icon dock (`bottom-6 right-6`). When expanded, it centers with `w-[calc(100vw-2rem)] max-w-[84rem]`, preserving 1rem viewport gutters without horizontal overflow.
+5. **Recursive branch folding**: Parent nodes in `FeatureTree` feature dedicated accessible fold buttons (`Collapse|Expand <id>: <name>`) with `aria-expanded` and `aria-controls`. Branches start expanded; collapsing a branch removes its recursive descendants from the DOM while preserving nested and unrelated fold states.
+6. **Draft-safe refresh**: SSE background reloads during active edit mode update server metadata while protecting in-progress editor drafts from clobbering.
 
 ---
 
 ## 2. Component Hierarchy & Layout Anatomy
 
 ```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│ FeaturesShell (max-w-[1600px] mx-auto w-full p-4 flex flex-col gap-4)                  │
-│                                                                                        │
-│ ┌─ Module Header ────────────────────────────────────────────────────────────────────┐ │
-│ │ [ 🎯 Features ]   Hierarchical feature roadmap & AC      [ + New ] [ Filter ▾ ]   │ │
-│ └────────────────────────────────────────────────────────────────────────────────────┘ │
-│                                                                                        │
-│ ┌─ Main Work Area (relative flex-1 flex overflow-hidden min-h-[700px]) ───────────────┐ │
-│ │                                                                                    │ │
-│ │  ┌─ [Left Dock] ─┐   ┌─ Central Feature Detail View (max-w-4xl mx-auto) ────────┐  │ │
-│ │  │ [Toggle Icon] │   │                                                          │  │ │
-│ │  │ ───────────── │   │  ┌─ Detail Header & Refined Dynamic Action Bar ───────┐  │  │ │
-│ │  │ Feature Tree  │   │  │ [◍ F84] Title ...       [ Start ] [ + Task ▾ ] [⚙] │  │  │ │
-│ │  │ Hierarchy     │   │  └────────────────────────────────────────────────────┘  │  │ │
-│ │  │ (Slide-over/  │   │                                                          │  │ │
-│ │  │  Floating)    │   │  ┌─ Markdown Canvas (Preview / MDEditor) ─────────────┐  │  │ │
-│ │  │               │   │  │ Width-constrained, typography-optimized body       │  │  │ │
-│ │  │               │   │  └────────────────────────────────────────────────────┘  │  │ │
-│ │  └───────────────┘   └──────────────────────────────────────────────────────────┘  │ │
-│ │                                                                                    │ │
-│ │  ┌─ [Right Metadata Drawer] ─────────────────────────────────────────────────────┐ │ │
-│ │  │ [Folded by default, expands on trigger icon click]                            │ │ │
-│ │  │ Frontmatter, Timestamps, Linked Tasks, Child Features, File Path              │ │ │
-│ │  └───────────────────────────────────────────────────────────────────────────────┘ │ │
-│ └────────────────────────────────────────────────────────────────────────────────────┘ │
-│                                                                                        │
-│ ┌─ Floating Agent Bar (Bottom 75% width centered / Foldable to spirit icon) ─────────┐ │
-│ │ [ 💬 Ask coding agent to refine or implement...                   ] [ ✈ Send ]     │ │
-│ └────────────────────────────────────────────────────────────────────────────────────┘ │
-└────────────────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ FeaturesShell (w-full h-full p-4 flex justify-center items-stretch gap-3 overflow-hidden)             │
+│                                                                                                        │
+│  ┌─ [Docked Left Feature Tree] ─┐   ┌─ Central Container (max-w-[1600px] flex-1 flex flex-col gap-3) ┐  │
+│  │                              │   │                                                                │  │
+│  │ [🌳 Feature Tree]            │   │ ┌─ Module Header (w-full) ───────────────────────────────────┐ │  │
+│  │ [▶] F  Root                  │   │ │ [ 🎯 Features ]   Hierarchical roadmap   [ Filter ▾ ] [ + ]│ │  │
+│  │   [▼] F1 Child               │   │ └────────────────────────────────────────────────────────────┘ │  │
+│  │     F1A Grandchild           │   │                                                                │  │
+│  │                              │   │ ┌─ Main Detail Workspace (rounded-lg border bg-base-100) ────┐ │  │
+│  │ (w-72 / w-80 docked panel;   │   │ │ ┌─ Detail Header ────────────────────────────────────────┐ │ │  │
+│  │  positioned outside central  │   │ │ │ [◍ F84] Title ...                [Verify] [Edit] [ℹMeta]│ │ │ │
+│  │  container on the left;      │   │ │ └────────────────────────────────────────────────────────┘ │ │  │
+│  │  hidden when closed)         │   │ │                                                            │ │  │
+│  │                              │   │ │ ┌─ Full-Width Markdown Canvas ───────────────────────────┐ │ │  │
+│  │                              │   │ │ │ Preview / MDEditor spanning container                  │ │ │ │
+│  │                              │   │ │ └────────────────────────────────────────────────────────┘ │ │  │
+│  │                              │   │ └────────────────────────────────────────────────────────────┘ │ │  │
+│  │                              │   └────────────────────────────────────────────────────────────────┘  │
+│  └──────────────────────────────┘                                                                       │
+│                                                                                                        │
+│ ┌─ Floating Agent Bar (Folded by default to ✨ spirit dock at bottom-6 right-6) ────────┐               │
+│ │ [Expanded: w-[calc(100vw-2rem)] max-w-[84rem] glassmorphic prompt bar]              │               │
+│ └────────────────────────────────────────────────────────────────────────────────────┘               │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 3. Detailed Specifications
 
-### 3.1 Module Header & Action Container
-- **Location:** Top of `FeaturesShell`.
+### 3.1 Central Container & Module Header
+- **Container:** Dedicated central column (`flex flex-col h-full flex-1 max-w-[1600px] min-w-0 gap-3`) ensuring identical width constraint and horizontal alignment across both Module Header and Main Body, matching the standard `History` layout contract.
+- **Location:** Top of Central Container.
 - **Left:** Module emoji `🎯`, Title `Features`, Subtitle `Hierarchical feature roadmap, acceptance criteria, and lifecycle progression`.
-- **Right:** Module action container:
-  - `+` / `New Root Feature` button.
+- **Right:** Module action cluster:
+  - Tree overlay toggle button (`◧` / `▶`) with `aria-controls="feature-tree-dock"` and `aria-expanded`.
   - Status filter dropdown menu (All, Backlog, Active, Verifying, Done, Cancelled, Blocked).
-  - Refresh / Sync button.
+  - Add root feature button (`+`).
 
-### 3.2 Floating & Collapsible Feature Tree Panel
-- **Behavior:** Docked on the left side of the workspace.
-- **States:**
-  - Expanded: Width `w-72` (or `w-80`), displaying the nested feature tree with status icons and search/filter affordance.
-  - Collapsed: Collapses to a compact floating vertical dock / tab with a toggle icon (e.g. sidebar collapse icon `◀ / ▶` or `🗂️`), giving full canvas width to the detail view.
-- **Positioning:** Floating panel with subtle shadow (`shadow-lg`), hairline border (`border-spur-border`), and smooth CSS transition (`transition-all duration-200`).
+### 3.2 Docked Left Feature Tree with Branch Folding
+- **Docked behavior:** Outer card dock (`w-72 lg:w-80 h-full shrink-0 flex flex-col overflow-hidden rounded-lg border border-spur-border bg-base-200 shadow-xl`), positioned outside the central container and docked against its left side. It includes a dedicated panel header with title (`🌳 Feature Tree`) and is unclosable from the dock itself, toggling via the module header button with native `hidden={!isTreeOpen}` attribute.
+- **Branch folding:**
+  - `FeatureTree` manages root `collapsedIds: Set<string>` state (empty default = all expanded).
+  - Parent nodes render a dedicated fold button before the row button (`aria-label="Collapse|Expand <id>: <name>"`, `aria-expanded`, `aria-controls="feature-tree-children-<id>"`).
+  - Leaf nodes render a layout spacer with no fold control.
+  - Collapsing a parent omits its child `<ul>` from DOM and tab navigation. Reopening restores nested branch fold states.
 
-### 3.3 Constrained Markdown Reading Canvas
-- **Width:** `max-w-4xl mx-auto w-full` for both Markdown preview (`MarkdownBody`) and editor (`MDEditor`).
-- **Typography:** Conforms to `DESIGN.md` linear text tokens, preventing illegible long lines on ultra-wide monitors.
+### 3.3 Detail Header Action Cluster & Full-Width Canvas
+- **Header Actions Order:** Dynamic FSM primary/secondary actions → hazard actions → `Edit` (or `Save` then `Cancel` during edit mode) → `ℹ Metadata` toggle → close button (`✕`).
+- **Body Canvas:** Eliminates in-body `BODY` row and `max-w-4xl` limits. Both `MarkdownBody` and `MDEditor` expand across `w-full` of the detail workspace.
+- **Draft Precedence:** `refreshKey` SSE reloads during active editing preserve `draftBody` buffers, updating frontmatter/status while preventing draft replacement.
 
-### 3.4 Collapsible Right-Side Metadata Drawer
-- **Default State:** Folded / hidden.
-- **Trigger:** Docked icon button (`⚙` / `ℹ` / `📋 Metadata`) in the feature detail header or right edge.
-- **Content:**
-  - Status badge & frontmatter attributes.
-  - File path (`font-mono text-xs`).
-  - Child features list with direct navigation links.
-  - Linked tasks list with status badges and navigation to Kanban board.
-  - Timestamps (`created_at`, `updated_at`).
+### 3.4 Docked Right Metadata Inspector
+- **Docked behavior:** In-pane right inspector (`w-80 max-w-full flex flex-col overflow-hidden border-l border-spur-border bg-base-200 shadow-xl`), folded by default (`aria-hidden="true"`). Includes top-right close icon (`✕`) for easy dismissal.
+- **Controls:** Opened via header `ℹ Metadata` toggle; dismissible on `✕` close button or `Escape` (unless a nested modal is open).
 
-### 3.5 Refined Stage-Based Dynamic Action Bar
-- Re-architects `FEATURE_STATUS_ACTIONS` into a 3-tier visual hierarchy:
-  1. **Primary Stage Action (Prominent CTA):** e.g., `Start` (for `backlog`), `Verify` (for `active`), `Complete` (for `verifying`), `Unblock` (for `blocked`). Uses `Button variant="primary"` with accent background.
-  2. **Secondary Management Actions (Ghost / Outline Buttons):** `+ Child`, `+ Task`, `Link Task`, `Sync`.
-  3. **Hazards & Transitions (Discrete / Overflow):** `Block`, `Rework`, `Cancel`. Uses subtle ghost/error styling with modal confirmations.
-
-### 3.6 Floating Agent Prompt Bar (UI Stub)
-- **Position:** Fixed floating bar at the bottom center of the viewport.
-- **Expanded State:**
-  - Occupies ~75% of viewport width (`max-w-4xl`), centered horizontally.
-  - Glassmorphic styling: `backdrop-blur-md bg-base-100/80 border border-base-content/10 shadow-2xl rounded-2xl p-2.5`.
-  - Controls: Textarea for agent prompts, target model/agent badge, submit button (`Send`), and a collapse toggle button.
-- **Collapsed State:**
-  - Collapses into a floating circular/rounded spirit icon button docked in the bottom-right corner (`fixed bottom-6 right-6`).
-  - Clicking the spirit icon smoothly expands the prompt bar.
-- **Backend Coupling:** Purely frontend UI; no agent subprocess or backend API invocations at this stage.
+### 3.5 Floating Agent Prompt Bar
+- **Default State:** Folded into a floating circular spirit dock (`fixed bottom-6 right-6 z-30 h-12 w-12 rounded-full`).
+- **Expanded State:** Centers horizontally at `fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-[calc(100vw-2rem)] max-w-[84rem]`.
+- **Behavior:** Pure frontend UI stub; clears prompt on send and surfaces an honest informational notice.
 
 ---
 
 ## 4. Conformance to DESIGN.md
 
-| Element | Token / Value |
+| Element | Token / Class |
 |---------|---------------|
-| Canvas | `#010102` / `bg-base-100` |
-| Panels & Cards | `#0f1011` / `#141516` (`bg-base-200`) |
-| Borders | `#23252a` (`border-base-content/10` / `border-spur-border`) |
-| Primary Accent | `#5e6ad2` (`bg-primary` / `text-primary-content`) |
+| Canvas Background | `#010102` / `bg-base-100` |
+| Overlays & Panels | `#0f1011` / `#141516` (`bg-base-200`) |
+| Borders | `#23252a` (`border-spur-border`) |
+| Primary Accent | `#5e6ad2` (`bg-primary` / `bg-spur-accent`) |
 | Text Primary | `#f7f8f8` (`text-spur-text`) |
 | Text Muted | `#8a8f98` (`text-spur-text-muted`) |
-| Typography | Display / Linear Text font stack |
+| Typography | Standard Linear Text / JetBrains Mono font stack |

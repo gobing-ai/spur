@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { resolveWorkflowFile } from '@gobing-ai/spur-app';
 import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import { TASK_VARIANTS } from '@gobing-ai/spur-domain';
 import { SCAFFOLD_MANIFEST } from '../../src/config/scaffold-manifest';
@@ -22,7 +23,7 @@ async function isolatedOptions(cwd: string) {
 }
 
 describe('init command', () => {
-    test('scaffolds config, local rules, and an example workflow', async () => {
+    test('scaffolds config, local rules, and task assets without workflow/template shadows', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
@@ -31,32 +32,23 @@ describe('init command', () => {
         expect(existsSync(join(cwd, '.spur', 'config.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'rules', 'recommended-pre-check.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'rules', 'recommended-post-check.yaml'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'workflows', 'basic.yaml'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'workflows'))).toBe(false);
+        expect(existsSync(join(cwd, '.spur', 'templates'))).toBe(false);
         // Team-mode agent specs directory is tracked via .gitkeep.
         expect(existsSync(join(cwd, '.spur', 'agents', '.gitkeep'))).toBe(true);
 
-        // Task templates under .spur/templates/task/
+        // Task templates under .spur/tasks/templates/
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'standard.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'feature-impl.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'issue.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'review.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'meta.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'brainstorm.md'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'templates', 'feature', 'default.md'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'templates', 'bdd', 'gherkin.md'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'templates', 'bdd', 'checklist.md'))).toBe(true);
         // Section matrix under .spur/tasks/
         expect(existsSync(join(cwd, '.spur', 'tasks', 'section-matrix.yaml'))).toBe(true);
-        // Lifecycle + pipeline workflows under .spur/workflows/
-        expect(existsSync(join(cwd, '.spur', 'workflows', 'task-lifecycle.yaml'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'workflows', 'feature-lifecycle.yaml'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'workflows', 'task-pipeline.yaml'))).toBe(true);
     });
 
-    test('seed copies the full rules/workflows tree into .spur/, not just manifest presets', async () => {
-        // Monorepo convenience: .spur/{rules,workflows,…} may symlink into the repo-root
-        // SSOT tree. End-user projects must get real copies of the kept trees, not only
-        // SCAFFOLD_MANIFEST presets. What is deliberately NOT copied: the sibling test.
+    test('seed copies the full rules tree but leaves bundled workflows unshadowed', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
@@ -70,8 +62,27 @@ describe('init command', () => {
         // The remapped manifest path is the LIVE template copy — loadTemplateBodies
         // reads .spur/tasks/templates/, so this one is load-bearing.
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'standard.md'))).toBe(true);
-        // Extra workflows beyond the original curated subset
-        expect(existsSync(join(cwd, '.spur', 'workflows', 'docs-pipeline.yaml'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'workflows'))).toBe(false);
+    });
+
+    test('a fresh project validates the bundled task pipeline without a local workflow directory', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init'], options)).toBe(0);
+        expect(existsSync(join(cwd, '.spur', 'workflows'))).toBe(false);
+
+        const resolved = resolveWorkflowFile(cwd, '.spur/workflows/task-pipeline.yaml');
+        expect(resolved.path).not.toBeNull();
+        if (resolved.path !== null) expect(resolved.source).toBe('bundled');
+
+        const messages: string[] = [];
+        const exitCode = await main(['workflow', 'validate', '.spur/workflows/task-pipeline.yaml', '--json'], {
+            ...options,
+            output: { write: (message: string) => messages.push(message), error: () => {} },
+        });
+        expect(exitCode).toBe(0);
+        expect(JSON.parse(messages.at(-1) ?? '{}').valid).toBe(true);
     });
 
     test('init no longer seeds assets with no .spur/ reader (0646)', async () => {
@@ -82,6 +93,8 @@ describe('init command', () => {
 
         // Dead natural-path duplicate of the manifest remap above — zero readers.
         expect(existsSync(join(cwd, '.spur', 'templates', 'task', 'standard.md'))).toBe(false);
+        expect(existsSync(join(cwd, '.spur', 'templates'))).toBe(false);
+        expect(existsSync(join(cwd, '.spur', 'workflows'))).toBe(false);
         // Placeholder tree with no reader at all.
         expect(existsSync(join(cwd, '.spur', 'plugins', '.gitkeep'))).toBe(false);
         // Monorepo dev baselines — read from repo-root config/, never from .spur/.

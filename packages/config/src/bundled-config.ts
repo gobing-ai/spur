@@ -93,8 +93,8 @@ function walk(dir: string, relPrefix: string, filter: RegExp = /\.(ya?ml|json)$/
  * List the relative paths of every bundled template file (`.md` under the shipped `templates/`),
  * each as a `/`-joined path relative to {@link bundledConfigRoot}.
  *
- * Intended for `spur init` to copy task templates, feature templates, and BDD
- * snippets into `.spur/templates/` (task templates land in `.spur/templates/task/`).
+ * Used to inspect the shipped template inventory. `spur init` materializes only
+ * reviewed manifest targets; it does not seed the natural `templates/` tree.
  * Returns an empty array when no bundled directory is present.
  */
 export function listBundledTemplateFiles(): string[] {
@@ -106,8 +106,7 @@ export function listBundledTemplateFiles(): string[] {
 }
 
 /**
- * Extensions copied into a project's `.spur/` on `spur init` (full-tree seed).
- * Includes rule/workflow YAML, templates (`.md`), and plugin placeholders (`.gitkeep`).
+ * Extensions considered for a project's `.spur/` seed before the drop filter below.
  * Excludes the example config filename — that is seeded as project/global `config.yaml`
  * under a different name, never as a live `.example` file.
  */
@@ -121,27 +120,27 @@ const PROJECT_SEED_FILTER = /\.(ya?ml|json|md|gitkeep)$/i;
 export const BUNDLED_GLOBAL_CONFIG = 'config.global.yaml';
 
 /**
- * Paths the project seed deliberately skips (task 0646, from the 0641 audit).
- * Each has no reader that resolves through `.spur/`, so copying it into every
- * project was pure noise:
+ * Paths the project seed deliberately skips (tasks 0646 and 0650).
+ * Each either has no project reader or already resolves from the bundled tree,
+ * so copying it into every project would create a stale shadow:
  *
- * - `templates/task/**` — dead natural-path duplicate. The live copy is the
- *   manifest remap into `.spur/tasks/templates/`, which is the only path
- *   `loadTemplateBodies` (`apps/cli/src/commands/task.ts`) ever reads.
+ * - `templates/**` — task templates are remapped by the manifest into
+ *   `.spur/tasks/templates/`; docs are rendered at project root; BDD references
+ *   and the remaining templates use the bundled tree.
+ * - `workflows/**` — workflow commands resolve an explicit project path first,
+ *   then fall back to the bundled workflow tree.
  * - top-level `*.json` — the five monorepo dev baselines (corpus-baseline,
  *   pipeline-budgets, plugin-scripts, transition-shims, workflow-composition).
  *   Their consumers are repo gates reading repo-root `config/`, never `.spur/`.
  * - `plugins/**` — `.gitkeep` placeholders with no reader at all.
  *
  * Kept on purpose: `rules/**` (operator ruling — rules resolve against project
- * folder structure), `templates/bdd/**` (plugin skills read the project copies
- * directly, with no resolver to fall back on), `tasks/templates/**` and
- * `workflows/**` (their resolvers fall back to the bundled tree, which a
- * compiled binary may not have).
+ * folder structure) and `tasks/**` (section matrix and remapped task templates).
  */
 function isDroppedFromProjectSeed(rel: string): boolean {
     if (rel === BUNDLED_GLOBAL_CONFIG) return true;
-    if (rel.startsWith('templates/task/')) return true;
+    if (rel.startsWith('templates/')) return true;
+    if (rel.startsWith('workflows/')) return true;
     if (rel.startsWith('plugins/')) return true;
     return !rel.includes('/') && rel.endsWith('.json');
 }
@@ -150,9 +149,9 @@ function isDroppedFromProjectSeed(rel: string): boolean {
  * List every bundled asset that should land under a project's `.spur/` on init.
  *
  * Unlike {@link listBundledConfigFiles} (YAML/JSON only, for `~/.config/spur/`) this
- * includes markdown templates and `.gitkeep` placeholders. It is no longer a full
- * mirror of the monorepo `config/` tree — see {@link isDroppedFromProjectSeed} for
- * what a project does not need a copy of and why.
+ * applies the wider project-seed filter instead of mirroring the monorepo
+ * `config/` tree — see {@link isDroppedFromProjectSeed} for what a project does
+ * not need a copy of and why.
  */
 export function listBundledProjectSeedFiles(): string[] {
     const root = bundledConfigRoot();

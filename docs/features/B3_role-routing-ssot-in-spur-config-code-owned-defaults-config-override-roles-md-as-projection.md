@@ -2,11 +2,11 @@
 schema_version: 1
 id: "B3"
 name: "Role routing SSOT in spur config: code-owned defaults, config override, roles.md as projection"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-16T18:40:58.950Z"
-updated_at: "2026-08-16T22:33:54.207Z"
+updated_at: "2026-08-24T17:41:04.939Z"
 ---
 
 # B3: Role routing SSOT in spur config: code-owned defaults, config override, roles.md as projection
@@ -84,3 +84,4 @@ Feature: Role routing SSOT in spur config
 
 ## History
 - 2026-08-16T22:33:54.207Z backlog → active (system)
+- 2026-08-24T17:41:04.939Z active → verifying (system)

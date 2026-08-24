@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.48.0
+version: 1.49.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-23
+updated_at: 2026-08-24
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -64,6 +64,7 @@ When collaborating with the design team:
 | [`run-record-contract.md`](design/run-record-contract.md)                                               | Two-file run record (`<RUNID>.md` append-only + `<RUNID>.state.json` cache), `.spur/run` artifact-kind disposition, mid-run reader inventory, retention proposal, Observability read plane (feature I6, task 0598) | contract specified; build deferred                                                                                                                             |
 | [`board-module-boundaries.md`](design/board-module-boundaries.md)                                       | Workspace / Inbox / Teams responsibility boundary under the agent-role mechanism — overlap evidence, per-module disposition, target IA, `role`-noun recommendation (feature I6, task 0599)         | boundary spec; dispositions are recommendations                                                                                                                |
 | [`history-board-module.md`](design/history-board-module.md)                                             | History Board — six-procedure oRPC seam, live indexed reads, additive Summary/Sources telemetry, and five-tab module (feature E8 / 0626–0630, 0634–0638)                                            | built (0626–0630, 0634–0638)                                                                                                                                   |
+| [`observability-frontend-enhancement.md`](design/observability-frontend-enhancement.md)                 | Observability Board — unified History-aligned header, customizable/sortable event table, consolidated tabs, and refined cell ergonomics (feature J92 / 0651–0654)                                   | built (0651–0654)                                                                                                                                              |
 | [`harness-surface-governance.md`](design/harness-surface-governance.md)                                 | Composition measures, four-surface script placement, and dated ADR-051 consent applications (feature A3/0613; explicit feature-refresh breadth/0625)                                                 | authority landed; current through 0625                                                                                                                         |
 | [`features-board-layout-refactor.md`](design/features-board-layout-refactor.md)                         | Features Board — History layout alignment, collapsible tree/metadata panels, markdown width constraints, dynamic action bar, and floating agent prompt bar (feature F84)                           | design                                                                                                                                                         |
 
@@ -141,8 +142,9 @@ Adding a shared option: add the entry, spread it at every site — never re-decl
 > over the same command — identical flags, output, and exit codes; absent from `spur --help`.
 
 Scaffold a local Spur project. Writes `.spur/config.yaml` (§2.1) and records the config artifact. Unless
-`--minimal`, scaffolds `.spur/` from the default config assets (§2.3): `.spur/rules/` (with the
-`recommended-pre-check.yaml` + `recommended-post-check.yaml` presets) and `.spur/workflows/basic.yaml`.
+`--minimal`, materializes the project-owned assets from §2.3: `.spur/rules/`, `.spur/tasks/`, root docs,
+and `AGENTS.md`. Workflows and natural-path templates remain bundled; init creates neither
+`.spur/workflows/` nor `.spur/templates/`.
 The set of scaffolded files is an explicit reviewed manifest (`scaffold-manifest.ts`) — adding a default
 is a one-line manifest edit, not new control flow. Files are read from the resolved config source, not
 embedded as string literals. Always creates `.spur/agents/` (with a `.gitkeep`) for team-mode agent
@@ -157,7 +159,7 @@ clobbering a configured project. `--json` emits
 - **`spur init` owns file materialization.** Copies every `SCAFFOLD_MANIFEST` entry from
   `bundledConfigRoot()` to `.spur/` (and the `docs/` stubs to the project root). Idempotent;
   `--force` overwrites non-preserve entries, never overwrites preserve-marked docs; `--minimal`
-  skips `.spur/rules` + `.spur/workflows`. The manifest is pure data — adding a default is a
+  skips bundled project-asset materialization. The manifest is pure data — adding a default is a
   one-line edit, no control-flow change. **AGENTS.md** (`preserve: true`): when scaffolding a
   _new_ file from `config/templates/AGENTS.md`, init substitutes `{project-name}` (from `--name`
   or cwd basename) and `{project-description}` (stub: `local Spur project`) so fresh projects
@@ -1234,8 +1236,8 @@ config/
 | Build (`build:bundle`)     | Copy repo-root `./config` → package-root `apps/cli/config` via `bundle-config`; copy repo-root `plugins/` + `.claude-plugin/` → package-root `apps/cli/plugins` + `apps/cli/.claude-plugin` via `bundle-plugins`; both shipped via the package `files` array as top-level `config/`, `plugins/`, `.claude-plugin/`.                                                                                                                                                                                                         |
 | Install (`bun install -g`) | Package-root `config/` ships inside `@gobing-ai/spur` — no `postinstall` (unreliable for global installs). Legacy installs may still have `spur-cli/config/` (pre-0.3.9); `bundledConfigRoot()` accepts both.                                                                                                                                         |
 | First run / `spur init`    | `seedGlobalConfig()` copies bundled `config/{rules,workflows,tasks,…}` (YAML/JSON) → `~/.config/spur/` (never overwrites).                                                                                                                                                                                                                            |
-| `spur init` scaffold       | Full-tree seed of every bundled asset into project `.spur/` (natural paths: `rules/**`, `workflows/**`, `tasks/**`, `templates/**`, `plugins/**`), then the `scaffold-manifest.ts` pass for remaps (`templates/task` → `tasks/templates`), root-scoped `docs/` + `AGENTS.md`, and `preserve`-marked entries (never overwritten, even with `--force`). |
-| Runtime resolution         | `bundled` (package `config/` + ts-rule-engine demo rules) > global (`~/.config/spur`) > local (`.spur`).                                                                                                                                                                                                                                              |
+| `spur init` scaffold       | Seed only project-owned assets under `.spur/` (`rules/**`, `tasks/**`, and the `templates/task` → `tasks/templates` remap), plus root-scoped `docs/` + `AGENTS.md`. Workflows and natural-path templates stay bundled; no `.spur/workflows` or `.spur/templates` shadow is created. |
+| Workflow runtime resolution | Explicit project path first, then bundled `config/workflows/<basename>` fallback. Shipped workflows are invoked by bare name; the global workflow copy is not a runtime tier. |
 
 **Ownership split.** `@gobing-ai/ts-rule-engine` ships only generic demo rules (one per builtin
 evaluator) + a generic `example.yaml` preset for its own tests. Spur owns its presets and workflows
@@ -1251,12 +1253,11 @@ No symlinks participate in install or init — config propagates by copy-and-res
 
 | Path                                             | Role                                                       | Agent rule                                                                                                                      |
 | ------------------------------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `config/workflows/`                              | **Tracked SSOT** for this checkout                         | **Edit here** when changing pipeline/lifecycle YAML                                                                             |
-| `.spur/workflows/`                               | **Symlink → `config/workflows/`** in this monorepo         | Runtime / command examples (`.spur/workflows/task-pipeline.yaml`). Do **not** copy between `config/` and `.spur/` — same inodes |
+| `config/workflows/`                              | **Tracked SSOT and bundled fallback** for this checkout    | **Edit here** when changing pipeline/lifecycle YAML; invoke shipped definitions by bare name (for example, `task-pipeline.yaml`) |
 | `apps/cli/config/`                               | **`build:bundle` / `bundle-config` artifact** (gitignored) | Do **not** hand-`cp` or hand-edit. Regenerated on CLI package build for npm ship                                                |
 | `apps/cli/plugins/` + `apps/cli/.claude-plugin/` | **`build:bundle` / `bundle-plugins` artifact** (gitignored) | The `sp` plugin + marketplace manifest shipped in the npm tarball. Regenerated on `bundle-plugins`; never hand-edit              |
 
-Wrong pattern (0454/0455 waste): “keep `config/`, `.spur/`, and `apps/cli/config/` in sync” after every YAML edit. Right pattern: edit SSOT once; refresh the package tree only via `bun run --filter @gobing-ai/spur build:bundle` (or `spur-dev bundle-config`) when testing the **published** layout.
+Wrong pattern (0454/0455 waste): copy workflow YAML into project or package artifact trees after every edit. Right pattern: edit `config/workflows/` once; runtime uses the explicit-project-path → bundled fallback, and the package tree is refreshed only via `bun run --filter @gobing-ai/spur build:bundle` (or `spur-dev bundle-config`) when testing the **published** layout.
 
 ### 2.4 Config loader — single facade in `@gobing-ai/spur-config` (ADR-027)
 

@@ -23,7 +23,7 @@ Run each checklist as an actual command sequence, not a mental confirmation:
 
 ## Task lifecycle transitions
 
-SSOT: `.spur/workflows/task-lifecycle.yaml`.
+SSOT: `task-lifecycle.yaml`.
 
     backlog → todo → wip → testing → done
 

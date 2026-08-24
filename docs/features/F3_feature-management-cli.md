@@ -2,11 +2,11 @@
 schema_version: 1
 id: F3
 name: Feature management CLI
-status: backlog
+status: verifying
 priority: P1
 tags: [rd3-migration, wave-2]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: 2026-06-12T23:45:00.000Z
+updated_at: "2026-08-24T17:41:09.807Z"
 ---
 
 # F3: Feature management CLI
@@ -72,3 +72,5 @@ delivery doc + 04_DESIGN when built (task 0061).
 ## History
 
 - 2026-06-12 — created (rd3-migration feature finalizing)
+- 2026-08-24T17:41:09.471Z backlog → active (system)
+- 2026-08-24T17:41:09.807Z active → verifying (system)

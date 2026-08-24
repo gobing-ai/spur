@@ -1,9 +1,8 @@
 #!/usr/bin/env bun
 /**
  * surface-drift-inventory — re-runnable drift inventory for `plugins/sp` and
- * the tracked workflow-YAML SSOT tree (`.spur/workflows` symlink target)
- * against the live source-local `spur` CLI
- * (feature I3, task 0539 R1/R2).
+ * the tracked workflow-YAML SSOT tree against the live
+ * source-local `spur` CLI (feature I3, task 0539 R1/R2).
  *
  * Method (mechanical first, prose second — task 0539 Design):
  *   A. Plugin assertions: extract every `spur`-invocation (backticked spans, fenced
@@ -19,7 +18,7 @@
  *      in this repo — recorded unverified.
  *   D. Workflows: `spur workflow validate` (live engine, schema + semantic) and a
  *      `--dry-run` transition walk for all ten definitions; `.spur/workflows`
- *      symlink realpath vs its tracked SSOT target tree.
+ *      symlink is asserted absent (two-tier project→bundled model, task 0650).
  *
  * Output: markdown inventory on stdout-path via `--out`; exit 1 when any
  * CONFIRMED mismatch remains (ok after repair); unverified entries never fail.
@@ -35,7 +34,6 @@ import {
     mkdtempSync,
     readdirSync,
     readFileSync,
-    realpathSync,
     rmSync,
     writeFileSync,
 } from 'node:fs';
@@ -130,6 +128,7 @@ interface Parsed {
 }
 
 const PLACEHOLDER = /^([<[{($#"'`]|…|\.\.\.)/;
+const LEGACY_SELF_ALIASES = new Set(['init', 'migrate', 'serve', 'status']);
 
 /** Normalize an asserted invocation span into nouns / verbs / flags. Null when it asserts nothing. */
 export function parseInvocation(spanRaw: string): Parsed | null {
@@ -259,6 +258,32 @@ export function checkNounVerbFlags(
     const root = surface([]);
     for (const noun of nouns) {
         if (noun === 'help' || /^(foo|bar|baz)$/.test(noun)) continue;
+        if (LEGACY_SELF_ALIASES.has(noun)) {
+            const self = surface(['self']);
+            const command = surface(['self', noun]);
+            const present = self.commands.includes(noun);
+            record(
+                `spur ${noun}`,
+                'help-capture(spur self; hidden root alias)',
+                present ? 'ok' : 'mismatch',
+                present
+                    ? `legacy alias; canonical self/${noun} command is present`
+                    : `canonical self/${noun} command is absent`,
+                occ,
+            );
+            for (const f of flags) {
+                record(
+                    `spur ${noun} ${f}`,
+                    `help-capture(spur self ${noun}; hidden root alias)`,
+                    present && command.flags.includes(f) ? 'ok' : 'mismatch',
+                    command.flags.includes(f)
+                        ? 'flag present on canonical command'
+                        : `flag absent (${command.flags.join(', ')})`,
+                    occ,
+                );
+            }
+            continue;
+        }
         if (!root.commands.includes(noun)) {
             record(
                 `spur ${noun}`,
@@ -315,6 +340,10 @@ export function checkNounVerbFlags(
         }
     }
     for (const verb of verbs) {
+        if (nouns.length === 0 && LEGACY_SELF_ALIASES.has(verb)) {
+            checkNounVerbFlags([verb], [], flags, occ);
+            continue;
+        }
         if (nouns.length === 0 && root.commands.includes(verb)) {
             record(`spur ${verb}`, 'help-capture(root)', 'ok', 'root verb present', occ);
         }
@@ -383,7 +412,10 @@ export function sweepPluginTrees(root: string = PLUGIN_ROOT): void {
                     const cells = line.split('|').map((c) => c.trim());
                     const lastCell = cells[cells.length - 2] ?? line;
                     if (first && first !== 'Verb' && first !== 'spur') {
-                        if (rootCommands.includes(first)) {
+                        const nounCommands = surface([refNoun]).commands;
+                        if (nounCommands.includes(first)) {
+                            checkNounVerbFlags([refNoun], [first], flagNames(lastCell), occ);
+                        } else if (rootCommands.includes(first) || LEGACY_SELF_ALIASES.has(first)) {
                             checkNounVerbFlags([], [first], flagNames(lastCell), occ);
                         } else {
                             checkNounVerbFlags([refNoun], [first], flagNames(lastCell), occ);
@@ -611,7 +643,7 @@ const JSON_PROBES: string[][] = [
     ['agent', 'list', '--json'],
     ['agent', 'doctor', 'omp', '--json'],
     ['workflow', 'list', '--json'],
-    ['workflow', 'validate', '.spur/workflows/basic.yaml', '--json'],
+    ['workflow', 'validate', 'basic.yaml', '--json'],
     ['status', '--json'],
     ['team', 'status', '--json'],
     ['projects', 'list', '--json'],
@@ -758,18 +790,20 @@ export function sweepWorkflows(opts: { run?: CliRunner; wfDir?: string; link?: s
                 }
             });
     }
+    // Two-tier model (task 0648/0650): `.spur/workflows` is no longer a symlink and
+    // must not exist — the CLI resolves an explicit project path, then bundled fallback. Assert absence.
     const link = opts.link ?? join(REPO_ROOT, '.spur', 'workflows');
-    let status: Row['status'] = 'mismatch';
-    let actual = '';
+    let status: Row['status'] = 'ok';
+    let actual = 'absent (two-tier project→bundled model, task 0650)';
     try {
-        const rp = realpathSync(link);
-        const tracked = realpathSync(wfDir);
-        status = rp === tracked ? 'ok' : 'mismatch';
-        actual = `resolves to ${rel(rp)}${status === 'ok' ? ' (== tracked SSOT target)' : ` — expected ${rel(tracked)}`}`;
+        if (existsSync(link)) {
+            status = 'mismatch';
+            actual = 'still present — should be removed (task 0650 R3)';
+        }
     } catch (e) {
-        actual = `cannot resolve .spur/workflows: ${String(e).slice(0, 120)}`;
+        actual = `exists-check failed: ${String(e).slice(0, 120)}`;
     }
-    record('.spur/workflows symlink', 'symlink-realpath', status, actual, { file: '.spur/workflows', line: 1 });
+    record('.spur/workflows symlink', 'symlink-absent', status, actual, { file: '.spur/workflows', line: 1 });
 }
 
 // ─── Report ─────────────────────────────────────────────────────────────────
@@ -805,7 +839,7 @@ export function render(): string {
     L.push(
         "R1 scope: `plugins/sp/{commands,skills,scripts,hooks}` (tests/ and evals/ are the harness itself; agents/ prose is outside R1's named surface list).",
     );
-    L.push('R2 scope: all workflow YAML via the `.spur/workflows` runtime symlink (tracked SSOT tree).');
+    L.push('R2 scope: all workflow YAML via the bundled tree (two-tier project→bundled model since task 0648/0650).');
     L.push('');
     L.push('## Check methods');
     L.push('');
@@ -825,7 +859,7 @@ export function render(): string {
     L.push(
         '| `workflow-validate` / `workflow-dry-run` | Live engine: schema+semantic validate; `--dry-run` transition walk |',
     );
-    L.push('| `symlink-realpath` | realpath of `.spur/workflows` vs its tracked SSOT target |');
+    L.push('| `symlink-absent` | `.spur/workflows` is asserted absent (two-tier project→bundled model, task 0650) |');
     L.push('');
     for (const [method, list] of byMethod) {
         const mm = list.filter((r) => r.status === 'mismatch').length;

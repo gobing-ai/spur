@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G4"
 name: "Inter-agent control plane"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-13T04:47:58.316Z"
-updated_at: "2026-08-13T18:02:58.328Z"
+updated_at: "2026-08-24T17:41:02.584Z"
 ---
 
 # G4: Inter-agent control plane
@@ -118,3 +118,4 @@ G3 (Board un-merge) is a sibling feature, not this one.
 ## History
 
 - 2026-08-13T06:51:42.173Z backlog → active (system)
+- 2026-08-24T17:41:02.584Z active → verifying (system)

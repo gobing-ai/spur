@@ -226,7 +226,6 @@ export function registerInitCommand(program: Command, context: CliContext, optio
                 const configRoot = bundledConfigRoot();
                 if (configRoot !== null && !minimal) {
                     for (const relPath of listBundledProjectSeedFiles()) {
-                        if (relPath.startsWith('templates/docs/')) continue;
                         const sourcePath = join(configRoot, relPath);
                         if (!(await context.fs.exists(sourcePath))) continue;
                         const targetPath = join(context.cwd, CLI_CONFIG.configDir, relPath);
@@ -367,17 +366,11 @@ export function registerInitCommand(program: Command, context: CliContext, optio
                 // (e.g. compiled binary without sibling config/ directory).
                 const configRoot = bundledConfigRoot();
                 if (configRoot !== null) {
-                    // Full-tree seed: copy every bundled asset (rules/**, workflows/**,
-                    // tasks/**, templates/**, plugins/**) into `.spur/` at its natural
-                    // relative path. Mirrors the monorepo convention where `.spur/{rules,
-                    // workflows, …}` are symlinks into repo-root `config/` — end-user
-                    // projects get real copies instead of links (ADR-015: no symlinks in
-                    // install/init). Never overwrites without --force.
+                    // Project seed: copy only bundled assets with live project readers
+                    // (rules/** and tasks/**) into `.spur/`. Workflow and template
+                    // consumers resolve the bundled tree directly, so project copies
+                    // would be stale shadows (0650). Never overwrites without --force.
                     for (const relPath of listBundledProjectSeedFiles()) {
-                        // The manifest owns doc-template copies because they require init-time
-                        // token rendering. Seeding them here first would make the manifest pass
-                        // treat them as existing and leave `{{init-date}}` unresolved.
-                        if (relPath.startsWith('templates/docs/')) continue;
                         const sourcePath = join(configRoot, relPath);
                         if (!(await context.fs.exists(sourcePath))) continue;
                         const targetPath = join(context.cwd, CLI_CONFIG.configDir, relPath);

@@ -307,7 +307,7 @@ describe('roles — R8: stage-registry-adapter floors read from Layer 1 (0538 R4
     });
 });
 
-describe('roles — R9: roles.md is a projection of DEFAULT_AGENT_ROLES (0572)', () => {
+describe('roles — R9: roles.md projects config.global.yaml with fallback parity (0647)', () => {
     // The plugin tree cannot resolve @gobing-ai/spur-config (it installs into
     // foreign repos — same discipline as stage-registry-parity.test.ts), so the
     // SSOT constant is read as text and its Map literal parsed, exactly like the
@@ -396,7 +396,9 @@ describe('roles — R9: roles.md is a projection of DEFAULT_AGENT_ROLES (0572)',
         expect(drifted, 'mutated fixture must drift — parity assertion is vacuous otherwise').toBe(true);
     });
 
-    test('roles.md carries the projection banner naming the code SSOT', () => {
+    test('roles.md carries the projection banner naming the shipped SSOT and fallback', () => {
+        expect(rolesSource).toContain('config/config.global.yaml');
+        expect(rolesSource).toContain('ADR-078');
         expect(rolesSource).toContain('DEFAULT_AGENT_ROLES');
         expect(rolesSource).toContain('packages/config/src/index.ts');
         expect(rolesSource).toContain('generated view');

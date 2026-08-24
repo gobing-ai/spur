@@ -13,6 +13,7 @@ import {
 } from '../../src/workflow/composition-baseline';
 
 const PROJECT_ROOT = resolve(__dirname, '../../../..');
+const WORKFLOWS_DIR = resolve(PROJECT_ROOT, 'config', 'workflows');
 
 describe('Workflow Composition Baseline', () => {
     test('canonicalJsonStringify recursively sorts object keys while preserving array order', () => {
@@ -23,7 +24,7 @@ describe('Workflow Composition Baseline', () => {
     });
 
     test('computeDefinitionDigest produces stable sha256 hex digest', async () => {
-        const def = await loadWorkflowDef(resolve(PROJECT_ROOT, '.spur/workflows/task-pipeline.yaml'), {
+        const def = await loadWorkflowDef(resolve(WORKFLOWS_DIR, 'task-pipeline.yaml'), {
             validateSchema: false,
         });
         const digest1 = computeDefinitionDigest(def);
@@ -33,7 +34,7 @@ describe('Workflow Composition Baseline', () => {
     });
 
     test('extractResolvedWorkflowFacts extracts terminal states, model queries, and actions', async () => {
-        const def = await loadWorkflowDef(resolve(PROJECT_ROOT, '.spur/workflows/task-pipeline.yaml'), {
+        const def = await loadWorkflowDef(resolve(WORKFLOWS_DIR, 'task-pipeline.yaml'), {
             validateSchema: false,
         });
         const facts = extractResolvedWorkflowFacts(def);
@@ -55,7 +56,7 @@ describe('Workflow Composition Baseline', () => {
     });
 
     test('feature-transition runs the corpus gate when sync fails after a possible partial transition (0625 R1)', async () => {
-        const def = await loadWorkflowDef(resolve(PROJECT_ROOT, '.spur/workflows/wrapup-pipeline.yaml'), {
+        const def = await loadWorkflowDef(resolve(WORKFLOWS_DIR, 'wrapup-pipeline.yaml'), {
             validateSchema: false,
         });
         const command = extractResolvedWorkflowFacts(def).actions['feature-transition:onEnter:0']?.invocation;
@@ -346,7 +347,7 @@ describe('Workflow Composition Baseline', () => {
     // --spur-bin/--max-reqs/--max-plan-items/--executor and killed the 0487
     // size-vs-capability gate. A continuation line starting with `-` is always this bug.
     test('no live workflow shell command splits an argument list across lines', async () => {
-        const dir = resolve(PROJECT_ROOT, '.spur/workflows');
+        const dir = WORKFLOWS_DIR;
         const offenders: string[] = [];
         for (const file of Array.from(new Bun.Glob('*.yaml').scanSync(dir)).sort()) {
             const def = await loadWorkflowDef(resolve(dir, file), { validateSchema: false });

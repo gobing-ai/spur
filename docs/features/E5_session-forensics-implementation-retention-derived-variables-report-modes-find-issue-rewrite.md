@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E5"
 name: "Session forensics implementation: retention, derived variables, report modes, find-issue rewrite"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-14T01:03:25.438Z"
-updated_at: "2026-08-17T20:17:19.323Z"
+updated_at: "2026-08-24T17:40:53.956Z"
 ---
 
 # E5: Session forensics implementation: retention, derived variables, report modes, find-issue rewrite
@@ -124,7 +124,7 @@ Feature: Session forensics implementation
 | 0579 | Sanitize sentinel timestamps out of the time-decomposition span math | done |
 | 0580 | Mapper fidelity: codex roles, claude usage, tool_name pollution, epoch-0 sentinel | done |
 | 0581 | Per-step token/time and cache-efficiency sections in the analyze artifact | done |
-| 0624 | Close the 0622 history data-plane residue: per-response usage dedup, claude forensic blind spots, empty sources and ETL tables | todo |
+| 0624 | Close the 0622 history data-plane residue: per-response usage dedup, claude forensic blind spots, empty sources and ETL tables | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -189,3 +189,4 @@ not be replaced.
 - TTFT/generation split — deferred by 0491; the artifact carries no intra-call latency fields.
 ## History
 - 2026-08-17T19:05:22.219Z backlog → active (system)
+- 2026-08-24T17:40:53.956Z active → verifying (system)

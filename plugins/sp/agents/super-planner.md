@@ -78,7 +78,7 @@ You own the spaces **between** task runs:
 - **Preflight (Step 2.5 / 3.0)** - before each pipeline launch, evaluate TABLE A STOP rows
   (`batch-preflight.ts` or equivalent). Skip A2/A7/A8/A9; still **launch `task-pipeline.yaml`** for
   ready WBS (never substitute a `dev-next` loop for the happy path).
-- **Run each ready task** through `.spur/workflows/task-pipeline.yaml` via `spur workflow run --async`
+- **Run each ready task** through `task-pipeline.yaml` via `spur workflow run --async`
   (Step 3). The command/script layer polls `spur workflow trace` to terminal state - polling is
   transport, not planner reasoning (R3: the poll loop must not live in this agent's body; the planner
   inspects the terminal verdict, not the poll iterations). Follow the

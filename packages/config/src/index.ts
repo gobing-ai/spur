@@ -144,9 +144,9 @@ export const executorCapabilityTierSchema = z.preprocess((value) => {
 
 /**
  * Layer-1 role ids (task 0535) — the closed `--agent` role vocabulary (0536).
- * The role table's SSOT lives here too (`DEFAULT_AGENT_ROLES`, 0572/ADR-061);
- * `plugins/sp/references/roles.md` is a parity-gated projection
- * (`plugins/sp/tests/roles.test.ts` R9) so the two cannot drift. Kept as a
+ * The role table's SSOT is `agent.roles` in `config/config.global.yaml`
+ * (0647/ADR-078); `DEFAULT_AGENT_ROLES` and `plugins/sp/references/roles.md`
+ * are parity-gated projections (`plugins/sp/tests/roles.test.ts` R9). Kept as a
  * CF-safe literal so the config-load collision guard (0537 R4) can prove the
  * role / executor / spec-id selector namespaces pairwise disjoint.
  */
@@ -155,7 +155,7 @@ export const AGENT_ROLE_NAMES = ['scribe', 'coder', 'reviewer', 'planner'] as co
 /** A Layer-1 role id (`--agent` role selector vocabulary). */
 export type AgentRoleName = (typeof AGENT_ROLE_NAMES)[number];
 
-/** A role's tier + folded canonical stages — the Layer-1 SSOT row shape (0572). */
+/** A role's tier + folded canonical stages — the Layer-1 row shape (0572). */
 export interface AgentRoleSpec {
     tier: ExecutorCapabilityTier;
     stages: readonly string[];
@@ -168,10 +168,9 @@ export interface AgentRoleSpec {
  * only when no config layer supplies a table at all, which the CF-safe core
  * requires since it must resolve roles with no filesystem access. Its values
  * must stay BYTE-IDENTICAL to the shipped table — a fallback that differed
- * would turn a missing config file into a silent behavior change. Values are byte-identical to the pre-0572
- * `plugins/sp/references/roles.md` table (zero-behavior-change move), which
- * survives as a parity-gated projection — edit this constant, not the
- * markdown. `stages` is load-bearing: it is how a role-only dispatch reaches
+ * would turn a missing config file into a silent behavior change. The markdown
+ * table survives as a second parity-gated projection; edit the shipped config
+ * SSOT first, then update both projections. `stages` is load-bearing: it is how a role-only dispatch reaches
  * the stage registry's `model_policy` (`AgentService.resolveCanonicalStage`);
  * a role's `tier` must not sit below the highest `min_tier` among its folded
  * stages (enforced against the projection by `plugins/sp/tests/roles.test.ts` R4).
@@ -425,8 +424,8 @@ export const AgentOutputConfigSchema = z.object({
  *
  * - `default` — executor selector first, legacy direct agent name second.
  * - `executors` — named `{ name, agent, model? }` profiles; names must be unique.
- * - `roles` — optional per-role tier/stage overrides over `DEFAULT_AGENT_ROLES`
- *   (0572); keys are the closed role vocabulary, values merge per-field.
+ * - `roles` — optional per-role tier/stage values (0647/ADR-078); keys are the
+ *   closed role vocabulary, values merge per-field over the fallback.
  * - `team` — a `Record<teamId, TeamConfig>` map of declarative agent teams (feature M).
  * - `output` — per-run output-capture bounds for pipeline agent runs (task 0414).
  */
@@ -663,15 +662,15 @@ export function resolveHistoryRefreshTrigger(
 // ---- Unified Spur project config (top-level) ----
 
 /**
- * Zod schema for the top-level `.spur/config.yaml` — the single project configuration
- * surface (design §9). Merges BOTH the planning section (`tasks`/`features`) and the
+ * Zod schema shared by the global and project config layers (design §9). Merges BOTH
+ * the planning section (`tasks`/`features`) and the
  * app section (`agent`/`rules`/`workflows`/`workflow`/`redaction`) into one validated shape.
  *
  * All fields are optional — a missing key means "use the default" rather than "error",
  * preserving partial-config tolerance and forward-compatible additions. YAML keys are
  * preserved verbatim (R3 — no drift from the existing `.spur/config.yaml`).
  *
- * `version` is a **string** label (recommended `"1.1"`; `"1"` still accepted). There is
+ * `version` is a **string** label (recommended `"1.2"`; older strings remain accepted). There is
  * no hard migrator keyed on this field yet — unquoted YAML numbers fail validation.
  */
 export const spurConfigSchema = z.object({

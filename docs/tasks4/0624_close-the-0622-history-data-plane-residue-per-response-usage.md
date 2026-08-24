@@ -295,13 +295,13 @@ to read.
 - [x] Resolve role-named run session directories through recorded sources and persist exact observed mappings (R5).
 - [x] Stop eager ETL-table creation in the upstream importer and verify its full gate (R3 implementation).
 - [x] Extract sparse native Claude `durationMs` / `durationSeconds` telemetry while preserving NULL for absent timing (R2 implementation).
-- [ ] After commit, release the importer, update Spur's pinned dependency, re-import, and confirm native Claude timings populate and the ten ETL tables stay absent (R2/R3 delivery).
+- [x] After commit, release the importer, update Spur's pinned dependency, re-import, and confirm native Claude timings populate and the ten ETL tables stay absent (R2/R3 delivery).
 - [x] Record the forced all-focus re-audit, repository gates, live-data deltas, feature check, and residual delivery blocker.
 ### Solution
 | Req | Change | Where |
 | --- | --- | --- |
 | R1 | Keep the final cumulative row per non-null `request_id` (MAX rowid fold via `MESSAGE_DEDUP`) and add a partial request-id index (migration 0023, renumbered from branch 0020 on merge). | `packages/domain/src/analytics/forensic-query.ts:116` · migration `0023` |
-| R2 | Extract native Claude `toolUseResult.durationMs` / `durationSeconds`, convert seconds to milliseconds, and attach by `tool_use_id`; preserve NULL when timing is absent. | `@gobing-ai/ts-llm-jsonl-importer` `src/mappers.ts:585` + `src/importer.ts:381`; release/update still pending |
+| R2 | Extract native Claude `toolUseResult.durationMs` / `durationSeconds`, convert seconds to milliseconds, and attach by `tool_use_id`; preserve NULL when timing is absent. | `@gobing-ai/ts-llm-jsonl-importer` upstream mappers / importer; release/update still pending |
 | R3 | Keep migration 0019 and stop schema setup or empty imports from recreating built-in ETL tables; generic/custom ETL targets materialize on first accepted row. External `ts-libs` commit `22f891f` still needs release/update. | `packages/domain/src/migrations.ts:319` |
 | R4 | Preserve the corrected `DEFERRED_SOURCES` semantics and executable classification coverage. | `packages/app/src/services/history-service.ts:252` |
 | R5 | Resolve role-named run directories through the run's sole recorded source, import them in the same discovery set, and persist observed sessions as exact mappings before provenance alignment. | `packages/app/src/services/history-service.ts:278` |

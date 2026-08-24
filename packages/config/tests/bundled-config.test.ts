@@ -27,11 +27,10 @@ describe('bundled-config', () => {
         expect(files).toContain('workflows/task-pipeline.yaml');
     });
 
-    test('listBundledProjectSeedFiles includes the canonical pipelines', () => {
+    test('listBundledProjectSeedFiles excludes bundled workflows and templates (0650)', () => {
         const seeds = listBundledProjectSeedFiles();
-        // Sibling pipelines are still seeded — the retired planning graph is gone.
-        expect(seeds).toContain('workflows/idea-pipeline.yaml');
-        expect(seeds).toContain('workflows/task-pipeline.yaml');
+        expect(seeds.some((f) => f.startsWith('workflows/'))).toBe(false);
+        expect(seeds.some((f) => f.startsWith('templates/'))).toBe(false);
     });
 
     test('listBundledConfigFiles excludes non-YAML/JSON entries', () => {
@@ -83,9 +82,7 @@ describe('bundled-config', () => {
         // Rules stay per-project: they resolve against project folder structure.
         expect(files).toContain('rules/typescript/no-debugger.yaml');
         expect(files).toContain('rules/boundary/dao-boundary.yaml');
-        expect(files).toContain('workflows/basic.yaml');
-        // BDD templates have no resolver — plugin skills read the project copy directly.
-        expect(files).toContain('templates/bdd/gherkin.md');
+        expect(files).toContain('tasks/section-matrix.yaml');
     });
 
     test('listBundledProjectSeedFiles drops assets with no .spur/ reader (0646)', () => {
@@ -93,6 +90,8 @@ describe('bundled-config', () => {
         // Dead natural-path duplicate: loadTemplateBodies reads .spur/tasks/templates/,
         // never .spur/templates/task/. The manifest remap is the live copy.
         expect(files.some((f) => f.startsWith('templates/task/'))).toBe(false);
+        expect(files.some((f) => f.startsWith('templates/'))).toBe(false);
+        expect(files.some((f) => f.startsWith('workflows/'))).toBe(false);
         // Placeholders with no reader at all.
         expect(files.some((f) => f.startsWith('plugins/'))).toBe(false);
         // The five monorepo dev baselines are read from repo-root config/, not .spur/.

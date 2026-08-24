@@ -212,5 +212,5 @@ A6 → C5/C3 → unit first if verdict says so; else verify.
 - Dev operations map: `plugins/sp/skills/spur-dev/references/dev-operations.md:37-56`
 - `--next` chain on run: `plugins/sp/commands/dev-run.md:104-127`
 - Refine skip-gate sections: `plugins/sp/skills/spur-dev/references/dev-operations.md:114-128`
-- Task lifecycle wip→testing guard: `.spur/workflows/task-lifecycle.yaml:48-54`
+- Task lifecycle wip→testing guard: `task-lifecycle.yaml:48-54`
 - Decision-brief format: `plugins/sp/skills/spur-dev/references/decision-brief.md`

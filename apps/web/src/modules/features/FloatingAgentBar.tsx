@@ -10,7 +10,7 @@ import { Badge, Button, Textarea } from '@/ui';
  * is not wired yet. No props, no network — the bar owns its own state.
  */
 export default function FloatingAgentBar() {
-    const [isOpen, setIsOpen] = useState(true);
+    const [isOpen, setIsOpen] = useState(false);
     const [prompt, setPrompt] = useState('');
     const [notice, setNotice] = useState<string | null>(null);
 
@@ -37,7 +37,7 @@ export default function FloatingAgentBar() {
 
     return (
         <div
-            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-[75%] max-w-4xl backdrop-blur-md bg-base-100/80 border border-spur-border shadow-2xl rounded-2xl p-2.5 flex flex-col gap-2"
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-[calc(100vw-2rem)] max-w-[84rem] backdrop-blur-md bg-base-100/80 border border-spur-border shadow-2xl rounded-2xl p-2.5 flex flex-col gap-2"
             data-testid="agent-bar"
         >
             <div className="flex items-center gap-2">

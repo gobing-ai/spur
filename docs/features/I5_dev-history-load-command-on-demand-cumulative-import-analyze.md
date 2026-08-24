@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I5"
 name: "dev-history-load command: on-demand cumulative import + analyze"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-16T06:43:02.398Z"
-updated_at: "2026-08-16T23:34:01.251Z"
+updated_at: "2026-08-24T17:40:59.231Z"
 ---
 
 # I5: dev-history-load command: on-demand cumulative import + analyze
@@ -150,3 +150,4 @@ Feature: dev-history-load command: on-demand cumulative import + analyze
 
 - 2026-08-16T06:52:57.394Z moved L → I5 (system)
 - 2026-08-16T07:37:57.553Z backlog → active (system)
+- 2026-08-24T17:40:59.231Z active → verifying (system)

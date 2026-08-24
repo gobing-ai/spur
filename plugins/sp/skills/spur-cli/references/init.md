@@ -64,7 +64,7 @@ fails, STOP and report the gap rather than papering over it with customization:
 ```
 spur status
 spur task create "__probe__" --template standard   # confirms task template + matrix resolve
-spur workflow validate .spur/workflows/task-pipeline.yaml
+spur workflow validate task-pipeline.yaml
 ```
 
 ### Phase 1.6 — Rule glob adaptation (LLM-as-judge)

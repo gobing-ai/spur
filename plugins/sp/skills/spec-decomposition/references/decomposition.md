@@ -146,7 +146,7 @@ blank Design before implement (`/sp:dev-refine` / `dev-refineall`).
 
 The `template` field is the **single variant axis** (TASK_VARIANTS): it selects the section
 layout (the `section-matrix.yaml` variant), the scaffold body file
-(`.spur/templates/task/<variant>.md`), and is written to the task's `template:` frontmatter.
+(`.spur/tasks/templates/<variant>.md`), and is written to the task's `template:` frontmatter.
 Which sections actually appear is **status-driven** by the runtime matrix — query
 `spur task sections <wbs> list --json` rather than assuming a fixed list — pick the variant by
 *purpose*, not by a section checklist.

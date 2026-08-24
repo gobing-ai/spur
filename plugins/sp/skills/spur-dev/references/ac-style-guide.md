@@ -148,9 +148,9 @@ contract exists to prevent.
 > Before 0398 R7 this row was unusable: the tag was required to keep `MET`, but the tag also broke
 > title matching, so the scenario read as unverified. Both halves now hold at once.
 
-### What `--strict` advance requires
+### What a done advance requires
 
-`spur feature advance <id> --to done --strict` treats a scenario as verified only when **all** of
+`spur feature advance <id> --to done` treats a scenario as verified only when **all** of
 these hold:
 
 1. A task links to the feature (`feature_id`) and is status `done`.
@@ -169,7 +169,7 @@ Author one row per scenario declared in the task's own `### Acceptance Criteria`
 
 ## Gherkin template
 
-Use the canonical BDD template at `.spur/templates/bdd/gherkin.md`. Key rules:
+Use the canonical BDD template at `templates/bdd/gherkin.md`. Key rules:
 
 - **Given** establishes preconditions (state, setup).
 - **When** describes the single action under test.
@@ -210,7 +210,7 @@ Each resolved decision from a grilling interview (Phase 1) becomes one or more G
 | A **deferred branch** ("out of scope for now") | A `## Scope` **Out** bullet — *not* a scenario |
 
 Number scenarios `R1, R2, …` sequentially, stable forever (the title is the traceability identity
-key). Use the Gherkin template at `.spur/templates/bdd/gherkin.md`.
+key). Use the Gherkin template at `templates/bdd/gherkin.md`.
 
 ## AC altitude (task 0584 / ADR-062)
 

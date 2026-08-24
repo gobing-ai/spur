@@ -719,7 +719,7 @@
                 },
                 "collect:onEnter:1": {
                     "kind": "shell",
-                    "invocation": "$spurBin workflow validate .spur/workflows/wayfinder-resolution.yaml > .spur/run/wayfinder/$wbs-workflow-check.txt",
+                    "invocation": "$spurBin workflow validate wayfinder-resolution.yaml > .spur/run/wayfinder/$wbs-workflow-check.txt",
                     "stateEffect": "read",
                     "evidenceEffect": "write",
                     "disposition": "SIMPLE"

@@ -120,7 +120,7 @@ VARS=$(jq -nc --arg wbs "$WBS" --arg profile auto '{wbs:$wbs, profile:$profile}'
 # optional, when --agent <name|auto> is set:
 #   VARS=$(jq -nc --arg wbs "$WBS" --arg profile auto --arg agent "$AGENT" \
 #         '{wbs:$wbs, profile:$profile, agent:$agent}')
-RUN=$(spur workflow run .spur/workflows/task-pipeline.yaml --vars "$VARS" --async --json | jq -r '.runId')
+RUN=$(spur workflow run task-pipeline.yaml --vars "$VARS" --async --json | jq -r '.runId')
 spur workflow trace "$RUN" --follow --output   # streams the run; --output shows the agent log surface
 ```
 

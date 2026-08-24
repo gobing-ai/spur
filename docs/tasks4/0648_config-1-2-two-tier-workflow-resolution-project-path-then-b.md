@@ -4,7 +4,7 @@ name: "Config 1.2: two-tier workflow resolution — project path then bundled ro
 status: done
 template: feature-impl
 created_at: 2026-08-24T04:10:17.881Z
-updated_at: "2026-08-24T06:25:31.101Z"
+updated_at: "2026-08-24T18:14:38.784Z"
 feature_id: A4
 ---
 
@@ -261,21 +261,21 @@ paths" is testable without stderr capture.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | resolveWorkflowFile wired into run/validate/show; project-path-first precedence verified E2E and by unit test |
-| R2 | MET | bundledConfigRoot() used in resolveWorkflowFile (workflow-service.ts:1466); no hardcoded node_modules path |
-| R3 | MET | both-tiers-missing validate/show error names both probed paths; null bundled root returns not-found, no throw |
-| R4 | MET | global tier dropped from make-lifecycle-adapter.ts:24; ~/.config/spur/workflows/ no longer read; adapter test pins undefined |
-| R5 | MET | bun run spur-check green (6291 tests, 0 fail); new tests cover precedence, both-missing, null-root, adapter no-global |
+| R1 | MET | Workflow run and validate share resolveWorkflowFile; tests cover bundled fallback and project precedence, and a source-local CLI smoke validated task-pipeline from an unrelated empty cwd. |
+| R2 | MET | The fallback obtains its root through bundledConfigRoot and joins the workflows directory with the requested basename. |
+| R3 | MET | Tests cover both named probe paths and the null-bundled-root branch without throwing. |
+| R4 | MET | Lifecycle adapter tests confirm the global workflow tier is absent and project-to-bundled resolution is shared. |
+| R5 | MET | Root lint, typecheck, 6332 tests, and coverage gates pass. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| an unresolvable project path falls back to the bundled tree | MET | e2e | workflow validate .spur/workflows/basic.yaml from empty dir resolves bundled |
-| an existing project path wins over the bundled copy | MET | unit | resolveWorkflowFile precedence test |
-| the bundled root is resolved, not hardcoded | MET | unit | bundledConfigRoot() used; no hardcoded path |
-| a workflow missing from both tiers names both probed paths | MET | e2e | validate + show name both absolute paths |
-| a null bundled root degrades without throwing | MET | unit | null-root test returns not-found |
-| the lifecycle adapter no longer consults the global tree | MET | unit | make-lifecycle-adapter R4 test expects undefined with seeded global |
-| the quality gate stays green | MET | gate | bun run spur-check PASS |
+| Scenario: an unresolvable project path falls back to the bundled tree | MET | command | Source-local CLI validation from an unrelated empty cwd returned a valid bundled task-pipeline. |
+| Scenario: an existing project path wins over the bundled copy | MET | test | workflow-service project-precedence test passes. |
+| Scenario: the bundled root is resolved, not hardcoded | MET | test | workflow-service bundled-root resolution test passes. |
+| Scenario: a workflow missing from both tiers names both probed paths | MET | test | workflow-service not-found diagnostic test passes. |
+| Scenario: a null bundled root degrades without throwing | MET | test | resolveWorkflowFile null-root test passes. |
+| Scenario: the lifecycle adapter no longer consults the global tree | MET | test | make-lifecycle-adapter tests pass. |
+| Scenario: the quality gate stays green | MET | command | bun run spur-check passed 6332 tests with zero failures. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)

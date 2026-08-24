@@ -228,7 +228,7 @@ graph TB
     subgraph "Corpus Layer"
         CORPUS["docs/tasks/ + docs/features/<br/>Markdown planning corpus"]
         RULES[".spur/rules/<br/>YAML constraint rules"]
-        WFS[".spur/workflows/<br/>YAML workflow definitions"]
+        WFS["bundled workflows tree<br/>YAML workflow definitions"]
     end
 
     %% Command → Skill delegations
@@ -309,7 +309,7 @@ Tier 3 — Execution Layer (spur CLI + Guard Scripts)
 
 1. User types `/sp:dev-run 0090`
 2. **Command** delegates to `sp:spur-dev` skill (execution half)
-3. **Skill** reads the task, loads `.spur/workflows/task-pipeline.yaml`, and runs `spur workflow run` with HITL surfacing
+3. **Skill** reads the task, loads `task-pipeline.yaml`, and runs `spur workflow run` with HITL surfacing
 4. **CLI** executes the workflow engine (`@gobing-ai/ts-dual-workflow-engine`), pauses at HITL gates, persists run state
 5. Result: task driven through implement → check → fix → verify lifecycle
 
@@ -351,8 +351,9 @@ The **workflow** and **rule** engines have their own lifecycles (author → vali
 
 ## Workflow Pipelines
 
-The plugin ships workflow YAMLs under `.spur/workflows/`.
-Each pipeline owns one lifecycle phase:
+The plugin references workflow YAMLs by bare name; the CLI resolves them through the
+bundled tree (two-tier model, task 0648/0650) — a project-local override wins when
+present, otherwise the bundled copy is used. Each pipeline owns one lifecycle phase:
 
 | Workflow                 | Phase                             | Entry command                     | Status        |
 | ------------------------ | --------------------------------- | --------------------------------- | ------------- |

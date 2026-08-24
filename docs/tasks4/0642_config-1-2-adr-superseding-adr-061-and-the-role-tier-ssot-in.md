@@ -4,7 +4,7 @@ name: "Config 1.2: ADR superseding ADR-061 and the role-tier SSOT inversion blas
 status: done
 template: brainstorm
 created_at: 2026-08-23T20:51:11.446Z
-updated_at: "2026-08-23T23:03:16.887Z"
+updated_at: "2026-08-24T18:16:42.426Z"
 feature_id: A4
 dependencies: ["0639"]
 ---
@@ -152,12 +152,12 @@ four-role vocabulary, per-field override semantics, `roles.md` stays a non-runti
 
 | Consumer | Site | Change required |
 | --- | --- | --- |
-| `AGENT_ROLE_NAMES` (closed vocabulary) | `packages/config/src/index.ts:152` | Unchanged — vocabulary stays closed at four (0536); inversion never changes role count |
-| `AgentRoleSpec` (row shape) | `packages/config/src/index.ts:158` | Unchanged — tier + folded stages stays the row shape |
+| `AGENT_ROLE_NAMES` (closed vocabulary) | `packages/config/src/index.ts:153` | Unchanged — vocabulary stays closed at four (0536); inversion never changes role count |
+| `AgentRoleSpec` (row shape) | `packages/config/src/index.ts:159` | Unchanged — tier + folded stages stays the row shape |
 | `DEFAULT_AGENT_ROLES` | `packages/config/src/index.ts:178` | Demote SSOT → minimal hardcoded fallback, **byte-identical** to the shipped global default (all four roles, current tiers/stages) |
 | `AgentRoleOverride` | `packages/config/src/index.ts:192` | Unchanged semantics — per-field replace over the base, now config-sourced base |
 | `AgentRoleConfigSchema` | `packages/config/src/index.ts:226` | Unchanged — still shapes `agent.roles.<roleId>` values |
-| `agent.roles` key-closure `superRefine` | `packages/config/src/index.ts:435–455` (`AgentConfigSchema`) | Unchanged code; now validates the merged object whatever its provenance (0640 single merged validation) |
+| `agent.roles` key-closure `superRefine` | `packages/config/src/index.ts:445–457` (`AgentConfigSchema`) | Unchanged code; now validates the merged object whatever its provenance (0640 single merged validation) |
 | Executor/role namespace disjointness guard | same `superRefine` (`:456+`, executor-name loop) | Unchanged — R6 confirmed: rejects executors named after roles at schema load; provenance-independent |
 | `resolveAgentRoles` | `apps/cli/src/context.ts:52` | Merges config-sourced base (global file's `agent.roles` table) with project overrides instead of starting from the constant; signature fate deferred to implementation ticket (Q&A) |
 | Parity gate R1 (`AGENT_ROLE_NAMES` parity) | `plugins/sp/tests/roles.test.ts:123` | Unchanged — vocabulary constant stays authoritative |
@@ -195,21 +195,33 @@ worth catching; the gate's comparison target simply gains the real SSOT. The com
 
 ## R6 — Namespace disjointness under config-sourced roles
 
-Holds. The guard lives in `AgentConfigSchema`'s `superRefine` (`packages/config/src/index.ts:456+`
+Holds. The guard lives in `AgentConfigSchema`'s `superRefine` (`packages/config/src/index.ts:458+`
 executor loop), which validates the **merged object** (0640: single merged validation,
 provenance-labeled). Whether the role table came from the fallback constant, the global file, or
 the project file is invisible to the guard: an executor named after a closed-vocabulary role id is
 rejected at config load. No new guard is needed; no hole opens because role ids themselves remain
 the fixed `AGENT_ROLE_NAMES` four (closure enforced by the adjacent key-closure refine).
 ### Testing
-**Docs + ADR task — no product code changes.** Verification performed:
+**Pipeline verify results**
 
-- All blast-radius file:line citations re-read at the cited lines this session: `packages/config/src/index.ts:150–460` (AGENT_ROLE_NAMES, AgentRoleSpec, DEFAULT_AGENT_ROLES table values, AgentRoleOverride, AgentRoleConfigSchema, superRefine key closure + executor loop), `apps/cli/src/context.ts:49–75` (resolveAgentRoles per-field merge, stage validation, floor invariant), `plugins/sp/tests/roles.test.ts:305–320` (R9 text-parse comparison target), `docs/00_ADR.md:698` (ADR-061 original wording).
-- 0639 handoff row verified: `agent.roles` object-deep-merge / tier scalar-replace / stages array-replace — Solution §R4 quotes the classification verbatim.
-- ADR-078 appended; `grep -c "^## ADR-"` = 78 (next-number rule respected; nothing renumbered).
-- `spur task check 0642` — 0 errors; `bun run format` applied; full `bun run spur-check` re-run green after the ADR append + section writes.
-- **Coverage: N/A** — documents-only task (no production code changed), so no line/function coverage figure applies. The monorepo per-file 90% gate is unaffected and stayed green in the full-suite run.
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | docs/00_ADR.md contains dated ADR-078, explicitly superseding ADR-061 and recording the changed premise and surviving constraints. |
+| R2 | MET | The Solution blast-radius table covers the required config, CLI context, role projection, and parity-gate consumers with change dispositions. |
+| R3 | MET | The minimal fallback is the byte-identical four-role table and applies only when no config layer supplies agent.roles. |
+| R4 | MET | The documented merge is object-deep-merge for agent.roles, scalar replacement for tier, and whole-array replacement for stages. |
+| R5 | MET | The ADR and Solution retain roles.md as a projection and retarget R9 to three-way parity. |
+| R6 | MET | The namespace-disjointness argument is tied to AgentConfigSchema validation of the merged object. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: The superseding ADR is drafted | MET | command | Fresh ADR audit found ADR-078 with the date, supersession, premise change, and surviving constraints. |
+| Scenario: The blast radius is enumerated with evidence | MET | command | Fresh document audit confirmed the consumer/change table and required components. |
+| Scenario: The no-config case is defined | MET | command | Fresh document audit found the byte-identical fallback contents and activation condition. |
+| Scenario: The parity gate has a stated fate | MET | command | Fresh document audit found the three-way parity decision; the 22-test role gate passes. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECUA review (docs + ADR task):**
 

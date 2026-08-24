@@ -2,11 +2,11 @@
 schema_version: 1
 id: H1
 name: spur-dev umbrella skill
-status: active
+status: blocked
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-10T06:39:45.583Z"
+updated_at: "2026-08-24T17:41:22.436Z"
 ---
 
 # H1: spur-dev umbrella skill
@@ -537,3 +537,4 @@ decided per candidate by the ADR-016 test (task 0065).
 
 - 2026-06-12 — created (rd3-migration feature finalizing)
 - 2026-08-08T20:21:45.518Z backlog → active (system)
+- 2026-08-24T17:41:22.436Z active → blocked (system)

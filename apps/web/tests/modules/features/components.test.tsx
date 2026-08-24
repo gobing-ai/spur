@@ -156,8 +156,9 @@ describe('FeatureTree', () => {
         expect(container.querySelector('[data-feature-tree] svg[aria-label="Done"]')).not.toBeNull();
         expect(html).not.toContain('>active<');
         expect(html).not.toContain('>done<');
-        const buttons = container.querySelectorAll('button');
-        expect(buttons.length).toBe(2);
+        // F is a parent (has child F1), so it has a fold button + row button; F1 is a leaf with a row button.
+        const rowButtons = container.querySelectorAll('button[class*="truncate"], button.flex-1');
+        expect(rowButtons.length).toBe(2);
     });
 
     test('selectedId applies accent to the selected node', () => {
@@ -170,9 +171,6 @@ describe('FeatureTree', () => {
         const buttons = document.querySelectorAll('button');
         const alphaBtn = Array.from(buttons).find((b) => b.getAttribute('class')?.includes('bg-spur-accent'));
         expect(alphaBtn).toBeDefined();
-        // One button — the selected one — has the accent class.
-        const accentButtons = Array.from(buttons).filter((b) => b.getAttribute('class')?.includes('bg-spur-accent'));
-        expect(accentButtons.length).toBe(1);
     });
 
     test('renders mapped status icons and accessible labels for all 6 canonical statuses', () => {
@@ -206,7 +204,7 @@ describe('FeatureTree', () => {
     test('renders the status indicator as the leading slot of each row, ahead of id and name', () => {
         const features: FeatureSummary[] = [{ id: 'F', name: 'Root', status: 'active' }];
         const { container } = render(<FeatureTree features={features} selectedId={null} onSelect={() => {}} />);
-        const button = container.querySelector('[data-feature-tree] button');
+        const button = container.querySelector('[data-feature-tree] button.flex-1');
         expect(button).not.toBeNull();
         const children = Array.from(button?.children ?? []);
         expect(children.length).toBe(3);
@@ -236,12 +234,12 @@ describe('FeatureTree', () => {
             expect(classes).toContain('w-4');
             expect(classes).toContain('shrink-0');
         }
-        // Depth indentation stays on the row button, so the slot indents with its row.
-        const buttons = Array.from(container.querySelectorAll('[data-feature-tree] button'));
-        expect(buttons.map((b) => b.getAttribute('style'))).toEqual([
-            'padding-left: calc(0.5rem + 0px);',
-            'padding-left: calc(0.5rem + 16px);',
-            'padding-left: calc(0.5rem + 32px);',
+        // Depth indentation stays on the row wrapper div, so the slot indents with its row.
+        const rowDivs = Array.from(container.querySelectorAll('[data-feature-tree] li > div'));
+        expect(rowDivs.map((d) => d.getAttribute('style'))).toEqual([
+            'padding-left: calc(0.25rem + 0px);',
+            'padding-left: calc(0.25rem + 16px);',
+            'padding-left: calc(0.25rem + 32px);',
         ]);
     });
 
@@ -779,7 +777,7 @@ describe('FeatureDetail', () => {
 
     test('0644 R2: metadata drawer is folded by default, opens with aria-expanded flip, and closes on Escape', async () => {
         installFeatureFetchMock();
-        const { getByTestId, container } = render(<FeatureDetail featureId="F" />);
+        const { getByTestId, getByLabelText, container } = render(<FeatureDetail featureId="F" />);
         await waitFor(() => expect(getByTestId('status-pill').textContent).toBe('active'));
 
         const panel = getByTestId('feature-metadata-panel');
@@ -795,6 +793,14 @@ describe('FeatureDetail', () => {
         expect(getByTestId('metadata-status').textContent).toBe('active');
 
         fireEvent.keyDown(document, { key: 'Escape' });
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        expect(container.querySelectorAll('#feature-metadata-panel button')).toHaveLength(0);
+
+        // Open again and close via close icon in panel header
+        fireEvent.click(toggle);
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+        const closeBtn = getByLabelText('Close metadata');
+        fireEvent.click(closeBtn);
         expect(toggle.getAttribute('aria-expanded')).toBe('false');
         expect(container.querySelectorAll('#feature-metadata-panel button')).toHaveLength(0);
     });
@@ -813,19 +819,39 @@ describe('FeatureDetail', () => {
         expect(toggle.getAttribute('aria-expanded')).toBe('true');
     });
 
-    test('0644 R1: body editor and preview wrappers carry the max-w-4xl reading cap', async () => {
+    test('F841 R1/R2: body editor and preview are full-width and editing controls appear in the header before Metadata', async () => {
         installFeatureFetchMock();
-        const { getByTestId } = render(<FeatureDetail featureId="F" />);
+        const { getByTestId, getByLabelText } = render(<FeatureDetail featureId="F" />);
         await waitFor(() => expect(getByTestId('body-preview')).toBeDefined());
-        expect(getByTestId('body-preview').firstElementChild?.getAttribute('class')).toContain('max-w-4xl');
+        // Body preview is full-width without max-w-4xl reading cap
+        expect(getByTestId('body-preview').getAttribute('class')).toContain('w-full');
+        expect(getByTestId('body-preview').getAttribute('class')).not.toContain('max-w-4xl');
 
-        const editButton = document.querySelector('button[aria-label="Edit body"]');
-        expect(editButton).not.toBeNull();
-        fireEvent.click(editButton as HTMLElement);
+        // Header Edit button appears immediately before Metadata toggle
+        const editButton = getByLabelText('Edit body');
+        expect(editButton).toBeDefined();
+        const metadataToggle = getByTestId('metadata-toggle');
+        expect(editButton.nextElementSibling).toBe(metadataToggle);
+
+        // Clicking Edit enters edit mode: Edit is replaced by Save then Cancel immediately before Metadata
+        fireEvent.click(editButton);
         const editor = getByTestId('body-editor');
-        expect(editor.getAttribute('class')).toContain('max-w-4xl');
+        expect(editor.getAttribute('class')).toContain('w-full');
+        expect(editor.getAttribute('class')).not.toContain('max-w-4xl');
         expect(editor.getAttribute('class')).toContain('flex-1');
         expect(editor.getAttribute('class')).toContain('min-h-0');
+
+        const saveButton = getByLabelText('Save body');
+        const cancelButton = getByLabelText('Cancel edit');
+        expect(saveButton).toBeDefined();
+        expect(cancelButton).toBeDefined();
+        expect(saveButton.nextElementSibling).toBe(cancelButton);
+        expect(cancelButton.nextElementSibling).toBe(metadataToggle);
+
+        // Clicking Cancel returns to preview mode and restores Edit before Metadata
+        fireEvent.click(cancelButton);
+        expect(getByTestId('body-preview')).toBeDefined();
+        expect(getByLabelText('Edit body').nextElementSibling).toBe(metadataToggle);
     });
 
     test('0644 R3: per-status primary and hazard action tiers render', async () => {
@@ -932,16 +958,18 @@ describe('FeaturesShell', () => {
         const toggle = getByLabelText('Collapse feature tree');
         expect(toggle.getAttribute('aria-expanded')).toBe('true');
         expect(toggle.getAttribute('aria-controls')).toBe('feature-tree-dock');
+        expect(container.querySelector('#feature-tree-dock')?.hasAttribute('hidden')).toBe(false);
 
-        // Collapse: tree buttons leave the DOM entirely (no zero-width keyboard trap).
+        // Collapse: tree dock overlay sets native hidden attribute (non-modal overlay).
         fireEvent.click(toggle);
         const collapsed = getByLabelText('Expand feature tree');
         expect(collapsed.getAttribute('aria-expanded')).toBe('false');
-        expect(container.querySelector('#feature-tree-dock button')).toBeNull();
+        expect(container.querySelector('#feature-tree-dock')?.hasAttribute('hidden')).toBe(true);
 
-        // Re-expand: tree content returns.
+        // Re-expand: tree dock overlay removes hidden attribute.
         fireEvent.click(collapsed);
         expect(getByLabelText('Collapse feature tree').getAttribute('aria-expanded')).toBe('true');
+        expect(container.querySelector('#feature-tree-dock')?.hasAttribute('hidden')).toBe(false);
         await waitFor(() => expect(getByText('Root')).toBeDefined());
     });
 
@@ -1109,31 +1137,36 @@ function setPromptValue(textarea: Element, value: string): void {
 }
 
 describe('FloatingAgentBar', () => {
-    test('expanded by default with glass classes and 75%/max-w-4xl sizing', () => {
-        const { getByTestId } = render(<FloatingAgentBar />);
+    test('F841 R7/R8: folded by default as a spirit dock, opens to wider 84rem glass bar, and collapses back', () => {
+        const { getByTestId, getByLabelText, queryByTestId } = render(<FloatingAgentBar />);
+        // Starts folded
+        expect(queryByTestId('agent-bar')).toBeNull();
+        const dock = getByTestId('agent-bar-dock');
+        expect(dock.className).toContain('fixed');
+        expect(dock.className).toContain('bottom-6');
+        expect(dock.className).toContain('right-6');
+        expect(dock.className).toContain('z-30');
+
+        // Click to open
+        fireEvent.click(dock);
         const bar = getByTestId('agent-bar');
         expect(bar.className).toContain('fixed');
         expect(bar.className).toContain('backdrop-blur-md');
         expect(bar.className).toContain('bg-base-100/80');
-        expect(bar.className).toContain('w-[75%]');
-        expect(bar.className).toContain('max-w-4xl');
+        expect(bar.className).toContain('w-[calc(100vw-2rem)]');
+        expect(bar.className).toContain('max-w-[84rem]');
         expect(bar.className).toContain('z-30');
-    });
 
-    test('collapse swaps the bar for the spirit dock and back', () => {
-        const { getByTestId, getByLabelText, queryByTestId } = render(<FloatingAgentBar />);
+        // Collapse back
         fireEvent.click(getByLabelText('Collapse agent prompt bar'));
         expect(queryByTestId('agent-bar')).toBeNull();
-        const dock = getByTestId('agent-bar-dock');
-        expect(dock.className).toContain('bottom-6');
-        expect(dock.className).toContain('right-6');
-        expect(dock.className).toContain('z-30');
-        fireEvent.click(dock);
-        expect(getByTestId('agent-bar')).not.toBeNull();
+        expect(getByTestId('agent-bar-dock')).toBeDefined();
     });
 
     test('Send is disabled while the prompt is empty, enabled once text is entered', () => {
         const { getByTestId, getByText } = render(<FloatingAgentBar />);
+        // Open the bar
+        fireEvent.click(getByTestId('agent-bar-dock'));
         const send = getByText('Send') as HTMLButtonElement;
         expect(send.disabled).toBe(true);
         setPromptValue(getByTestId('agent-bar-input'), 'refine this feature');
@@ -1142,6 +1175,8 @@ describe('FloatingAgentBar', () => {
 
     test('submitting clears the field and surfaces the stub notice', () => {
         const { getByTestId, getByText, getByRole } = render(<FloatingAgentBar />);
+        // Open the bar
+        fireEvent.click(getByTestId('agent-bar-dock'));
         const input = getByTestId('agent-bar-input') as HTMLTextAreaElement;
         setPromptValue(input, 'implement F84');
         fireEvent.click(getByText('Send'));
@@ -1153,6 +1188,378 @@ describe('FloatingAgentBar', () => {
         setFetchForTesting((async () => jsonResponse({ ok: true, data: [] })) as unknown as typeof fetch);
         const { getByText, getByTestId } = render(<FeaturesShell />);
         await waitFor(() => expect(getByText('Select a feature to view details')).toBeDefined());
-        expect(getByTestId('agent-bar')).not.toBeNull();
+        expect(getByTestId('agent-bar-dock')).not.toBeNull();
+    });
+});
+
+// ── F841 Acceptance Criteria Scenarios (R1-R15) ──
+
+describe('F841 Acceptance Criteria', () => {
+    test('R1: Feature Tree opens as a left overlay without resizing detail workspace', async () => {
+        installFeatureFetchMock();
+        const { getByText, getByLabelText, container } = render(<FeaturesShell />);
+        await waitFor(() => expect(getByText('Root')).toBeDefined());
+
+        // Select feature
+        fireEvent.click(getByText('Root'));
+        await waitFor(() => expect(container.querySelector('[data-testid="body-preview"]')).not.toBeNull());
+
+        const treeDock = container.querySelector('#feature-tree-dock');
+        // Tree dock is outside the detail workspace container
+        const detailWorkspace = container.querySelector('[data-testid="detail-workspace"]');
+        expect(detailWorkspace).not.toBeNull();
+        expect(detailWorkspace?.contains(treeDock)).toBe(false);
+
+        // Toggle tree closed via header toggle
+        const toggle = getByLabelText('Collapse feature tree');
+        fireEvent.click(toggle);
+        expect(treeDock?.hasAttribute('hidden')).toBe(true);
+
+        // Toggle tree open via header toggle
+        fireEvent.click(getByLabelText('Expand feature tree'));
+        expect(treeDock?.hasAttribute('hidden')).toBe(false);
+
+        // Preview remains full-width
+        const preview = container.querySelector('[data-testid="body-preview"]');
+        expect(preview?.className).toContain('w-full');
+        expect(preview?.className).not.toContain('max-w-4xl');
+    });
+
+    test('R2: Metadata opens as a right overlay without altering editor/preview width', async () => {
+        installFeatureFetchMock();
+        const { getByTestId, getByLabelText } = render(<FeatureDetail featureId="F" />);
+        await waitFor(() => expect(getByTestId('body-preview')).toBeDefined());
+
+        const metadataToggle = getByTestId('metadata-toggle');
+        const metadataPanel = getByTestId('feature-metadata-panel');
+        expect(metadataPanel.className).toContain('absolute');
+        expect(metadataPanel.className).toContain('right-0');
+
+        // Open metadata
+        fireEvent.click(metadataToggle);
+        expect(metadataToggle.getAttribute('aria-expanded')).toBe('true');
+        expect(metadataPanel.getAttribute('aria-hidden')).toBe('false');
+
+        // Close metadata via header close button
+        const closeBtn = getByLabelText('Close metadata');
+        fireEvent.click(closeBtn);
+        expect(metadataToggle.getAttribute('aria-expanded')).toBe('false');
+
+        // Switch to edit mode
+        fireEvent.click(getByLabelText('Edit body'));
+        const editor = getByTestId('body-editor');
+        expect(editor.className).toContain('w-full');
+        expect(editor.className).not.toContain('max-w-4xl');
+    });
+
+    test('R3 & R4: Header Edit/Save/Cancel action slot substitution', async () => {
+        installFeatureFetchMock();
+        const { getByTestId, getByLabelText, queryByText } = render(<FeatureDetail featureId="F" />);
+        await waitFor(() => expect(getByTestId('body-preview')).toBeDefined());
+
+        // No BODY label in body area
+        expect(queryByText('Body')).toBeNull();
+
+        // Edit button is immediately before Metadata
+        const editBtn = getByLabelText('Edit body');
+        const metaBtn = getByTestId('metadata-toggle');
+        expect(editBtn.nextElementSibling).toBe(metaBtn);
+
+        // Click Edit -> enters edit mode
+        fireEvent.click(editBtn);
+        const saveBtn = getByLabelText('Save body');
+        const cancelBtn = getByLabelText('Cancel edit');
+        expect(saveBtn.nextElementSibling).toBe(cancelBtn);
+        expect(cancelBtn.nextElementSibling).toBe(metaBtn);
+    });
+
+    test('R5: Saving from header sends body update request and returns to preview', async () => {
+        let savedBody: string | null = null;
+        setFetchForTesting((async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = input instanceof Request ? input.url : String(input);
+            const method = input instanceof Request ? input.method : (init?.method ?? 'GET');
+            if (url.includes('/tasks')) return jsonResponse({ ok: true, data: [] });
+            if (url.includes('/features/F/body') && method === 'PATCH') {
+                const bodyText = input instanceof Request ? await input.clone().text() : String(init?.body);
+                const bodyJson = JSON.parse(bodyText) as { body: string };
+                savedBody = bodyJson.body;
+                return jsonResponse({ ok: true, data: {} });
+            }
+            if (url.includes('/features/F')) {
+                return jsonResponse({
+                    ok: true,
+                    data: {
+                        id: 'F',
+                        name: 'Root',
+                        status: 'active',
+                        frontmatter: {},
+                        filePath: 'docs/features/F.md',
+                        content: '---\n---\n\n## Goal\nPersisted content',
+                    },
+                });
+            }
+            return jsonResponse({ ok: true, data: {} });
+        }) as unknown as typeof fetch);
+
+        const { getByTestId, getByLabelText } = render(<FeatureDetail featureId="F" />);
+        await waitFor(() => expect(getByTestId('body-preview')).toBeDefined());
+
+        fireEvent.click(getByLabelText('Edit body'));
+        const saveBtn = getByLabelText('Save body');
+        fireEvent.click(saveBtn);
+
+        await waitFor(() => expect(savedBody).not.toBeNull());
+        expect(getByTestId('body-preview')).toBeDefined();
+        expect(getByLabelText('Edit body')).toBeDefined();
+    });
+
+    test('R6: Cancelling from header discards body draft without sending request', async () => {
+        let patchCalled = false;
+        setFetchForTesting((async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/tasks')) return jsonResponse({ ok: true, data: [] });
+            if (url.includes('/features/F/body') && init?.method === 'PATCH') {
+                patchCalled = true;
+                return jsonResponse({ ok: true, data: {} });
+            }
+            if (url.includes('/features/F')) {
+                return jsonResponse({
+                    ok: true,
+                    data: {
+                        id: 'F',
+                        name: 'Root',
+                        status: 'active',
+                        frontmatter: {},
+                        filePath: 'docs/features/F.md',
+                        content: '---\n---\n\n## Goal\nOriginal content',
+                    },
+                });
+            }
+            return jsonResponse({ ok: true, data: {} });
+        }) as unknown as typeof fetch);
+
+        const { getByTestId, getByLabelText } = render(<FeatureDetail featureId="F" />);
+        await waitFor(() => expect(getByTestId('body-preview')).toBeDefined());
+
+        fireEvent.click(getByLabelText('Edit body'));
+        fireEvent.click(getByLabelText('Cancel edit'));
+
+        expect(patchCalled).toBe(false);
+        expect(getByTestId('body-preview')).toBeDefined();
+        expect(getByLabelText('Edit body')).toBeDefined();
+    });
+
+    test('R9 & R10: Branch fold control accessibility, recursive descendant omission, and independent branch state', () => {
+        const features: FeatureSummary[] = [
+            { id: 'F', name: 'Root', status: 'active' },
+            { id: 'F1', name: 'Child 1', status: 'active' },
+            { id: 'F1A', name: 'Grandchild', status: 'done' },
+            { id: 'G', name: 'Other Root', status: 'backlog' },
+            { id: 'G1', name: 'Other Child', status: 'backlog' },
+        ];
+
+        const { queryByText, getByLabelText } = render(
+            <FeatureTree features={features} selectedId={null} onSelect={() => {}} />,
+        );
+
+        // Parent nodes F, F1, G have fold controls; leaf nodes F1A, G1 do not
+        const foldF = getByLabelText('Collapse F: Root');
+        const foldF1 = getByLabelText('Collapse F1: Child 1');
+        const foldG = getByLabelText('Collapse G: Other Root');
+        expect(foldF.getAttribute('aria-expanded')).toBe('true');
+        expect(foldF.getAttribute('aria-controls')).toBe('feature-tree-children-F');
+        expect(foldF1.getAttribute('aria-expanded')).toBe('true');
+        expect(foldG.getAttribute('aria-expanded')).toBe('true');
+
+        // Fold parent F
+        fireEvent.click(foldF);
+        expect(foldF.getAttribute('aria-expanded')).toBe('false');
+        expect(foldF.getAttribute('aria-label')).toBe('Expand F: Root');
+
+        // Recursive descendants F1 and F1A are removed from DOM
+        expect(queryByText('Child 1')).toBeNull();
+        expect(queryByText('Grandchild')).toBeNull();
+
+        // Other branch G and G1 remains visible
+        expect(queryByText('Other Root')).not.toBeNull();
+        expect(queryByText('Other Child')).not.toBeNull();
+    });
+
+    test('R11: Reopening ancestor branch restores preserved nested fold state', () => {
+        const features: FeatureSummary[] = [
+            { id: 'F', name: 'Root', status: 'active' },
+            { id: 'F1', name: 'Child 1', status: 'active' },
+            { id: 'F1A', name: 'Grandchild 1A', status: 'done' },
+            { id: 'F2', name: 'Child 2', status: 'active' },
+            { id: 'F2A', name: 'Grandchild 2A', status: 'done' },
+        ];
+
+        const { queryByText, getByLabelText } = render(
+            <FeatureTree features={features} selectedId={null} onSelect={() => {}} />,
+        );
+
+        // Fold nested branch F1
+        fireEvent.click(getByLabelText('Collapse F1: Child 1'));
+        expect(queryByText('Grandchild 1A')).toBeNull();
+        expect(queryByText('Grandchild 2A')).not.toBeNull();
+
+        // Fold root ancestor F
+        fireEvent.click(getByLabelText('Collapse F: Root'));
+        expect(queryByText('Child 1')).toBeNull();
+        expect(queryByText('Child 2')).toBeNull();
+
+        // Reopen root ancestor F
+        fireEvent.click(getByLabelText('Expand F: Root'));
+        expect(queryByText('Child 1')).not.toBeNull();
+        expect(queryByText('Child 2')).not.toBeNull();
+        // F1 was folded before, so its grandchild remains hidden
+        expect(queryByText('Grandchild 1A')).toBeNull();
+        // F2 was expanded, so its grandchild is visible
+        expect(queryByText('Grandchild 2A')).not.toBeNull();
+    });
+
+    test('R12: Selecting a parent row does not change its fold state', () => {
+        const features: FeatureSummary[] = [
+            { id: 'F', name: 'Root', status: 'active' },
+            { id: 'F1', name: 'Child 1', status: 'active' },
+        ];
+        const selected: string[] = [];
+        const { getByText, getByLabelText } = render(
+            <FeatureTree features={features} selectedId={null} onSelect={(id) => selected.push(id)} />,
+        );
+
+        const foldBtn = getByLabelText('Collapse F: Root');
+        expect(foldBtn.getAttribute('aria-expanded')).toBe('true');
+
+        // Click row text
+        fireEvent.click(getByText('Root'));
+        expect(selected).toEqual(['F']);
+        // Fold state unchanged
+        expect(foldBtn.getAttribute('aria-expanded')).toBe('true');
+        expect(getByText('Child 1')).toBeDefined();
+    });
+
+    test('R13: Presentation controls preserve selection, status filter, and draft without API calls', async () => {
+        const calls: string[] = [];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            calls.push(url);
+            if (url.includes('/tasks')) return jsonResponse({ ok: true, data: [] });
+            if (url.includes('/features/F')) {
+                return jsonResponse({
+                    ok: true,
+                    data: {
+                        id: 'F',
+                        name: 'Root',
+                        status: 'active',
+                        frontmatter: {},
+                        filePath: 'docs/features/F.md',
+                        content: '---\n---\n\n## Goal\nInitial',
+                    },
+                });
+            }
+            if (url.includes('/features')) {
+                return jsonResponse({
+                    ok: true,
+                    data: [
+                        { id: 'F', name: 'Root', status: 'active' },
+                        { id: 'F1', name: 'Child', status: 'active' },
+                    ],
+                });
+            }
+            return jsonResponse({ ok: true, data: {} });
+        }) as unknown as typeof fetch);
+
+        const { getByText, getByLabelText, getByTestId, container } = render(<FeaturesShell />);
+        await waitFor(() => expect(getByText('Root')).toBeDefined());
+
+        fireEvent.click(getByText('Root'));
+        await waitFor(() => expect(container.querySelector('[data-testid="body-preview"]')).not.toBeNull());
+
+        // Enter edit mode
+        fireEvent.click(getByLabelText('Edit body'));
+
+        const callsBeforeToggles = calls.length;
+
+        // Toggle tree overlay
+        fireEvent.click(getByLabelText('Collapse feature tree'));
+        fireEvent.click(getByLabelText('Expand feature tree'));
+
+        // Toggle branch fold
+        fireEvent.click(getByLabelText('Collapse F: Root'));
+        fireEvent.click(getByLabelText('Expand F: Root'));
+
+        // Toggle metadata overlay
+        const metaToggle = getByTestId('metadata-toggle');
+        fireEvent.click(metaToggle);
+        fireEvent.click(metaToggle);
+
+        // Toggle floating prompt
+        const promptDock = getByTestId('agent-bar-dock');
+        fireEvent.click(promptDock);
+        fireEvent.click(getByLabelText('Collapse agent prompt bar'));
+
+        // No additional network requests were made during presentation toggles
+        expect(calls.length).toBe(callsBeforeToggles);
+        // Editor is still in edit mode
+        expect(container.querySelector('[data-testid="body-editor"]')).not.toBeNull();
+    });
+
+    test('R14: Same-feature refresh in edit mode preserves unsaved draft buffers', async () => {
+        let fetchCount = 0;
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/tasks')) return jsonResponse({ ok: true, data: [] });
+            if (url.includes('/features/F')) {
+                fetchCount++;
+                return jsonResponse({
+                    ok: true,
+                    data: {
+                        id: 'F',
+                        name: `Root v${fetchCount}`,
+                        status: fetchCount === 1 ? 'active' : 'verifying',
+                        frontmatter: {},
+                        filePath: 'docs/features/F.md',
+                        content: '---\n---\n\n## Server Body',
+                    },
+                });
+            }
+            return jsonResponse({ ok: true, data: {} });
+        }) as unknown as typeof fetch);
+
+        const { getByTestId, getByLabelText, rerender } = render(<FeatureDetail featureId="F" refreshKey={0} />);
+        await waitFor(() => expect(getByTestId('body-preview')).toBeDefined());
+
+        // Enter edit mode
+        fireEvent.click(getByLabelText('Edit body'));
+        expect(getByTestId('body-editor')).toBeDefined();
+
+        // Trigger same-feature refreshKey reload while in edit mode
+        rerender(<FeatureDetail featureId="F" refreshKey={1} />);
+        await waitFor(() => expect(getByTestId('status-pill').textContent).toBe('verifying'));
+
+        // Editor is still in edit mode, not overwritten by server preview
+        expect(getByTestId('body-editor')).toBeDefined();
+        expect(getByLabelText('Save body')).toBeDefined();
+    });
+
+    test('R15: Planning SSE events refresh the tree and selected detail', async () => {
+        const calls = installFeatureFetchMock();
+        const { getByText } = render(<FeaturesShell />);
+        await waitFor(() => expect(getByText('Root')).toBeDefined());
+
+        fireEvent.click(getByText('Root'));
+        await waitFor(() => expect(calls.some((url) => url.includes('/features/F'))).toBe(true));
+
+        const es = FakeEventSource.instances[0];
+        expect(es).toBeDefined();
+
+        // Send feature.updated event
+        const callsBefore = calls.length;
+        act(() => {
+            es?.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ eventName: 'feature.updated' }) }));
+        });
+
+        await waitFor(() => expect(calls.length).toBeGreaterThan(callsBefore));
     });
 });

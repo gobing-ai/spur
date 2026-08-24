@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F83"
 name: "Feature detail action progress transparency"
-status: backlog
+status: done
 priority: P1
 tags: []
 created_at: "2026-07-29T23:18:23.620Z"
-updated_at: "2026-07-29T23:18:56.196Z"
+updated_at: "2026-08-24T17:41:04.243Z"
 ---
 
 # F83: Feature detail action progress transparency
@@ -116,3 +116,6 @@ Scenario: R7 — Stale or unmatched queue events do not corrupt another feature'
 - `docs/plans/2026-07-29-feature-action-progress-transparency-brainstorm.md`
 - `.spur/run/idea-eval-report.md`
 ## History
+- 2026-08-24T17:41:03.554Z backlog → active (system)
+- 2026-08-24T17:41:03.900Z active → verifying (system)
+- 2026-08-24T17:41:04.243Z verifying → done (system)

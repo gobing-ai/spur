@@ -4,7 +4,7 @@ name: "Config 1.2: implement ADR-078 role-tier SSOT inversion"
 status: done
 template: feature-impl
 created_at: 2026-08-23T23:19:18.658Z
-updated_at: "2026-08-23T23:30:43.067Z"
+updated_at: "2026-08-24T18:14:38.400Z"
 feature_id: A4
 dependencies: ["0642", "0646"]
 ---
@@ -123,31 +123,27 @@ plugin prose), R8 (adapter floors read Layer 1), and both R9 tests. Full monorep
 **Diff files:** `config/config.global.yaml`, `apps/cli/src/context.ts`,
 `packages/config/src/index.ts`, `plugins/sp/tests/roles.test.ts`.
 ### Testing
-Authored directly (no pipeline verdict artifact — this task ran outside `spur workflow run`).
+**Pipeline verify results**
 
-| Gate | Command | Result |
-| --- | --- | --- |
-| Role parity gates | `bun test plugins/sp/tests/roles.test.ts` | **22 pass / 0 fail**, 112 expect() calls |
-| Full monorepo | `bun run test` | **6270 pass / 0 fail** across 342 files |
-| Lint + typecheck | `bun run lint` | clean; all 7 workspaces exit 0 |
+- Verdict: PASS (from verdict artifact)
 
-**New coverage.** `plugins/sp/tests/roles.test.ts` gains *"the shipped config.global.yaml role table
-equals DEFAULT_AGENT_ROLES (ADR-078)"*: parses the shipped YAML, asserts the `agent.roles` table is
-present, asserts the id set matches the fallback constant, and compares tier + stages per role.
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | resolveAgentRoles consumes the merged config table and uses DEFAULT_AGENT_ROLES only when no role table is supplied. |
+| R2 | MET | DEFAULT_AGENT_ROLES is documented and tested as the no-filesystem fallback, byte-identical to the shipped table. |
+| R3 | MET | config/config.global.yaml carries all four authoritative role rows. |
+| R4 | MET | The R9 gate checks roles.md, config.global.yaml, and the fallback; its negative twins prove drift is detected. |
+| R5 | MET | AgentConfigSchema collision tests reject executor and team-member selectors that collide with role names. |
+| R6 | MET | All unchanged role parity, command closure, stage-floor, and prose-boundary gates pass. |
 
-**Gates confirmed still green unchanged** (R6): R1 `AGENT_ROLE_NAMES` parity, R4 tier floors against
-the stage registry, R7 no tier literal in plugin prose, R8 adapter floors read Layer 1, and the
-pre-existing R9 `roles.md` ≡ constant pair — including its negative test, which mutates a tier and
-asserts the comparison fails, proving the projection gate has teeth.
-
-**Negative twin added.** *"a config.global.yaml tier drifting from the fallback fails (gate is
-real)"* mutates one shipped tier in a parsed copy and asserts exactly `['scribe']` surfaces as
-drifted — so the new leg has the same teeth the `roles.md` leg already had. A parity assertion
-nobody has watched fail is not yet a gate.
-
-**Not covered by a new test.** R5's disjointness claim is verified by inspection plus the existing
-`AgentConfigSchema` superRefine suite, not by a new case exercising a config-sourced role table
-against a colliding executor name.
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: The shipped config layer carries the authoritative role table | MET | test | shipped config.global.yaml role-table parity test passes. |
+| Scenario: The fallback constant stays byte-identical to the shipped table | MET | test | three-way role parity test passes. |
+| Scenario: Drift between the two projections fails the gate | MET | test | mutated shipped-table and roles.md negative tests pass. |
+| Scenario: The fallback applies only when no layer supplies a table | MET | test | CLI context role-resolution tests pass in the root suite. |
+| Scenario: The executor-role namespace guard still fires on a config-sourced table | MET | test | AgentConfigSchema selector collision tests pass. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **Review (2026-08-23, inline — three-dimensional). No P1/P2 findings.**
 

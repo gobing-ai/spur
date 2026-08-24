@@ -374,15 +374,17 @@ describe('(c) target resolution — Skill() calls resolve to skills/', () => {
         expect(seen.size).toBeGreaterThan(10);
     });
 
-    test('workflow targets resolve to .spur/workflows/', () => {
+    test('workflow targets resolve to the bundled tree (two-tier model, 0648/0650)', () => {
+        const wfDir = join(ROOT, 'config', 'workflows');
         for (const file of listCommandFiles()) {
             const raw = readFileSync(join(COMMANDS_DIR, file), 'utf8');
             const impl = implSection(raw);
-            const refs = [...impl.matchAll(/\.spur\/workflows\/([^\s)"\]]+\.yaml)/g)];
+            // Command files reference workflows by bare name (bundled fallback, task 0650);
+            // no command may invoke by a `.spur/workflows/` path any longer.
+            expect(impl, `${file}: legacy .spur/workflows path`).not.toMatch(/\.spur\/workflows/);
+            const refs = [...impl.matchAll(/spur workflow (?:run|validate) ([a-z0-9-]+\.yaml)/g)];
             for (const r of refs) {
-                expect(existsSync(join(ROOT, '.spur', 'workflows', r[1])), `${file}: unresolved workflow ${r[1]}`).toBe(
-                    true,
-                );
+                expect(existsSync(join(wfDir, r[1])), `${file}: unresolved workflow ${r[1]}`).toBe(true);
             }
         }
     });
@@ -602,7 +604,7 @@ describe('(f) validator catches violations in corrupted files', () => {
                 '""',
                 '["Bash"]',
                 '/sp:test-cmd',
-                '```bash\nspur workflow run .spur/workflows/nonexistent.yaml\n```',
+                '```bash\nspur workflow run nonexistent.yaml\n```',
             );
             const result = validate(tmp);
             const cViolations = result.violations.filter((v) => v.gate === 'c');

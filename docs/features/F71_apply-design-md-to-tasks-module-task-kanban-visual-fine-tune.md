@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F71"
 name: "Apply DESIGN.md to Tasks module (Task Kanban visual fine-tune)"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-03T17:39:15.157Z"
-updated_at: "2026-08-03T18:43:46.041Z"
+updated_at: "2026-08-24T17:41:14.717Z"
 ---
 
 # F71: Apply DESIGN.md to Tasks module (Task Kanban visual fine-tune)
@@ -82,3 +82,5 @@ Feature: Apply DESIGN.md to Tasks module (Task Kanban visual fine-tune)
 
 ## History
 - 2026-08-03T18:43:46.041Z backlog → active (system)
+- 2026-08-24T17:41:14.366Z active → verifying (system)
+- 2026-08-24T17:41:14.717Z verifying → done (system)

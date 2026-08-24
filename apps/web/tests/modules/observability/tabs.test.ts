@@ -18,19 +18,18 @@ describe('OBSERVABILITY_TABS', () => {
         }
     });
 
-    test('tab ids are unique (append-only contract)', () => {
+    test('tab ids are unique stable selectors', () => {
         const ids = OBSERVABILITY_TABS.map((t) => t.id);
         expect(new Set(ids).size).toBe(ids.length);
     });
 
-    test('contains the post-0254 telemetry-only tabs', () => {
-        // 0254 migrated `inbox` and `process-list` out of Observability into the
-        // Teams module (Messages tab; Processes watch list per 0262 after the
-        // 0260 Roster drop). Observability now keeps system-wide telemetry only.
+    test('contains exactly the consolidated telemetry tabs (J92 R4)', () => {
+        // J92 consolidation: Observability registers exactly system-events, jobs, and routing.
+        // Legacy tasks and tool-using are removed.
         const ids = OBSERVABILITY_TABS.map((t) => t.id);
-        expect(ids).toContain('system-events');
-        expect(ids).toContain('jobs');
-        expect(ids).toContain('tool-using');
+        expect(ids).toEqual(['system-events', 'jobs', 'routing']);
+        expect(ids).not.toContain('tasks');
+        expect(ids).not.toContain('tool-using');
         expect(ids).not.toContain('inbox');
         expect(ids).not.toContain('process-list');
     });

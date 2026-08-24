@@ -462,7 +462,7 @@ describe('runCli — exit classification against the source-local CLI', () => {
 // stable: these tests assert how a claim is judged, not which verbs the CLI
 // happens to ship today, so a real verb rename can never turn them red.
 
-surfaceCache.set('', { commands: ['alpha', 'zeta', 'task', 'status'], flags: ['--help'] });
+surfaceCache.set('', { commands: ['alpha', 'zeta', 'task', 'self'], flags: ['--help'] });
 surfaceCache.set('alpha', { commands: ['run', 'peek'], flags: ['--noun-flag'] });
 surfaceCache.set('alpha run', { commands: [], flags: ['--json', '--force'] });
 surfaceCache.set('alpha peek', { commands: [], flags: ['--json'] });
@@ -470,6 +470,8 @@ surfaceCache.set('zeta', { commands: ['live'], flags: [] });
 surfaceCache.set('task', { commands: ['check', 'update'], flags: [] });
 surfaceCache.set('task check', { commands: [], flags: ['--json'] });
 surfaceCache.set('task update', { commands: [], flags: ['--section', '--from-file'] });
+surfaceCache.set('self', { commands: ['init', 'migrate', 'serve', 'status'], flags: [] });
+surfaceCache.set('self status', { commands: [], flags: ['--json'] });
 
 afterAll(() => surfaceCache.clear());
 
@@ -539,6 +541,12 @@ describe('checkNounVerbFlags — drift verdicts', () => {
     test('a verb claimed with no noun is checked against the root surface', () => {
         checkNounVerbFlags([], ['zeta'], [], occ);
         expect(rowFor('spur zeta')?.status).toBe('ok');
+    });
+
+    test('hidden top-level self aliases are checked against their canonical commands', () => {
+        checkNounVerbFlags(['status'], [], ['--json'], occ);
+        expect(rowFor('spur status')?.status).toBe('ok');
+        expect(rowFor('spur status --json')?.status).toBe('ok');
     });
 
     test('the generated `help` command and doc placeholders assert nothing', () => {
@@ -803,19 +811,28 @@ describe('sweepWorkflows — engine verdicts and the runtime symlink', () => {
         expect(row?.occurrences[0]?.file).toContain('basic.yaml');
     });
 
-    test('the runtime symlink is reported as matching, diverged, or unresolvable', () => {
-        // Ran in beforeAll against a link that resolves to the tracked tree.
-        const row = () => rowFor('.spur/workflows symlink');
-        expect(row()?.status).toBe('ok');
-        expect(row()?.actual).toContain('(== tracked SSOT target)');
+    test('the runtime symlink is reported as absent under the two-tier model (0648/0650)', () => {
+        // record() updates the symlink row in-place and is sticky-mismatch, so reset the
+        // row before each fresh sweep, then read the just-recorded result via rowFor.
+        const resetAndSweep = (link: string) => {
+            const i = rows.findIndex((r) => r.asserted === '.spur/workflows symlink');
+            if (i >= 0) rows.splice(i, 1);
+            sweepWorkflows({ run: runWf, wfDir, link });
+            return rowFor('.spur/workflows symlink');
+        };
 
-        sweepWorkflows({ run: runWf, wfDir, link: dir }); // resolves somewhere else
-        expect(row()?.status).toBe('mismatch');
-        expect(row()?.actual).toContain('expected');
+        // When the path does not exist -> ok (absent is the target state).
+        const absent = join(dir, 'absent-link');
+        rmSync(absent, { force: true });
+        expect(resetAndSweep(absent)?.status).toBe('ok');
+        expect(resetAndSweep(absent)?.method).toBe('symlink-absent');
 
-        sweepWorkflows({ run: runWf, wfDir, link: join(dir, 'absent') }); // no such path
-        expect(row()?.status).toBe('mismatch');
-        expect(row()?.actual).toContain('cannot resolve .spur/workflows');
+        // When a stale symlink still exists -> mismatch.
+        const staleLink = join(dir, 'stale-link');
+        symlinkSync(wfDir, staleLink);
+        expect(resetAndSweep(staleLink)?.status).toBe('mismatch');
+        expect(resetAndSweep(staleLink)?.actual).toContain('should be removed');
+        rmSync(staleLink);
     });
 });
 
@@ -833,7 +850,7 @@ describe('render — the inventory report', () => {
             record('c', 'ut-render(x)', 'ok', 'fine', { file: 'f.md', line: 1 });
 
             const out = render();
-            expect(out).toContain('Root nouns: alpha, zeta, task, status.');
+            expect(out).toContain('Root nouns: alpha, zeta, task, self.');
             expect(out).toContain('**Totals: 1 ok · 1 mismatch · 0 unverified**');
             expect(out).toContain('## ut-render — 1 mismatch / 2 entries');
             expect(out).toContain('`a \\| b`'); // an unescaped pipe would break the table row

@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G3"
 name: "Workspace module"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:38.444Z"
-updated_at: "2026-08-11T20:05:46.211Z"
+updated_at: "2026-08-24T17:41:11.121Z"
 ---
 
 # G3: Workspace module
@@ -78,3 +78,6 @@ Feature: Team-scoped Workspace Board composition
 ## Notes
 
 ## History
+- 2026-08-24T17:41:10.478Z backlog → active (system)
+- 2026-08-24T17:41:10.803Z active → verifying (system)
+- 2026-08-24T17:41:11.121Z verifying → done (system)

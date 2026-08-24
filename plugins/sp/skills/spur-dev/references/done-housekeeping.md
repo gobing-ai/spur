@@ -27,7 +27,7 @@ Invariant: zero `- [ ]` entries (real or placeholder) anywhere in a `done` task 
 Drive the real `task-pipeline.yaml` FSM where applicable:
 
 ```
-spur workflow run .spur/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
+spur workflow run task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
 ```
 
 If you hand-walk lifecycle statuses (manual `spur task update <wbs> <status>` without the
