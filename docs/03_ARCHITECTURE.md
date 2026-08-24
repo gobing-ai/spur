@@ -362,7 +362,10 @@ run windows (`RetroCorrelator`, `packages/domain/src/analytics/retro-correlation
 `estimated` rows, so re-runs are idempotent and observation always wins. The mapping is the
 provenance authority: `history_message.provenance` (`spur-run` vs `ambient`) is aligned to it
 after import (`RunSessionDao.alignMessageProvenance`), replacing the cwd-substring
-`detectProvenance` heuristic deleted in `@gobing-ai/ts-llm-jsonl-importer@0.4.33`.
+`detectProvenance` heuristic deleted in `@gobing-ai/ts-llm-jsonl-importer@0.4.33`. Default import
+also scans run-owned session directories. When a workflow role names the directory (for example
+`coder`) rather than the importer source, the run's recorded source routes discovery; imported
+sessions from that directory promote its unresolved mapping to exact before provenance alignment.
 
 **Routing attribution & token aggregates (0545–0547).** The agent invoke bridge in
 `AgentService.executeRun` merges the resolution funnel's outcome — the only place that knows
@@ -393,9 +396,10 @@ honest-state contract (unmeasured / estimated / exact / no-data-yet kept apart, 
 Schema is composed from package-owned SQL and applied through the `__spur_cli_migrations` journal
 (`0000` foundation + incremental `_spur_cli_`-marked migrations). Tables: `workspaces`, `runs`,
 `phase_runs`, `transition_runs`, `workflow_states`, `artifacts`, `history_import_ledger`,
-`history_import_checkpoint`, `history_etl_<source>`, `history_run_session` (E6 run→session
-mapping, ADR-059), `inbox_messages`, `rule_runs`, `rule_eval_runs`, plus the workflow engine's
-tables.
+`history_import_checkpoint`, typed `history_message` / `history_tool_call`, lazy generic
+`history_etl_<source>`, `history_run_session` (E6 run→session mapping, ADR-059), `inbox_messages`,
+`rule_runs`, `rule_eval_runs`, plus the workflow engine's tables. Generic ETL tables materialize
+only when an accepted record targets them; schema application and empty scans create none.
 
 ### 8.1 Persistence boundary (ADR-011)
 

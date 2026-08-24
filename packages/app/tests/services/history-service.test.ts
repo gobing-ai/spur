@@ -807,12 +807,12 @@ describe('HistoryService', () => {
         });
 
         describe('run-session discovery augmentation (0624 R5)', () => {
-            test('run-dir sessions join the discovery set when neither file nor root is given, and a mapping promotes them to spur-run', async () => {
+            test('a role-named run dir resolves its source mapping and persists the exact imported session', async () => {
                 const home = emptyRoot();
                 const cwd = emptyRoot();
                 const runId = 'run-r5';
                 const stem = '2026-08-20T10-00-00-000Z_0123456789abcdef';
-                const sessionDir = join(cwd, '.spur', 'run', runId, 'agent-sessions', 'omp');
+                const sessionDir = join(cwd, '.spur', 'run', runId, 'agent-sessions', 'coder');
                 mkdirSync(sessionDir, { recursive: true });
                 writeFileSync(
                     join(sessionDir, `${stem}.jsonl`),
@@ -829,8 +829,8 @@ describe('HistoryService', () => {
                 await new RunSessionDao(db).insert({
                     runId,
                     source: 'omp',
-                    sessionId: stem,
-                    exactness: 'exact',
+                    sessionId: null,
+                    exactness: 'unresolved',
                     mechanism: 'observed',
                     resolvedAt: '2026-08-20T10:01:00.000Z',
                 });
@@ -844,6 +844,8 @@ describe('HistoryService', () => {
                 );
                 expect(rows.length).toBeGreaterThanOrEqual(1);
                 expect(rows.every((r) => r.session_id === stem && r.provenance === 'spur-run')).toBe(true);
+                const mappings = await new RunSessionDao(db).getByRunId(runId);
+                expect(mappings.some((m) => m.session_id === stem && m.exactness === 'exact')).toBe(true);
             });
 
             test('an explicit root bypasses run-dir augmentation (caller-directed scan)', async () => {

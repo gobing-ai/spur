@@ -270,12 +270,12 @@ async function seedFixture(db: DbAdapter): Promise<void> {
 describe('forensic queries', () => {
     test('messageRollup folds duplicate request_id rows in SQL (0624 R1)', async () => {
         const db = await setup();
-        // Three rows sharing one request_id (claude re-emits per content block)
-        // plus one request_id-null row: only one of the three may count.
-        for (const [hash, seq] of [
-            ['d1', 1],
-            ['d2', 2],
-            ['d3', 3],
+        // Claude streams cumulative usage under one request_id. The final row
+        // must win; MIN(rowid) silently undercounted real responses.
+        for (const [hash, seq, output, cost] of [
+            ['d1', 1, 25, 0.005],
+            ['d2', 2, 40, 0.008],
+            ['d3', 3, 50, 0.01],
         ] as const) {
             await db.run(
                 `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq,
@@ -294,8 +294,8 @@ describe('forensic queries', () => {
                 '2026-05-30T00:00:00.000Z',
                 'claude-x',
                 100,
-                50,
-                0.01,
+                output,
+                cost,
                 null,
                 'agent',
                 null,
@@ -337,6 +337,7 @@ describe('forensic queries', () => {
         const assistant = rows.find((r) => r.model === 'claude-x');
         expect(assistant?.inputTokens).toBe(100);
         expect(assistant?.outputTokens).toBe(50);
+        expect(assistant?.costUsd).toBeCloseTo(0.01);
         db.close();
     });
 

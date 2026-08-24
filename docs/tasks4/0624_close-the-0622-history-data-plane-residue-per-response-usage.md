@@ -98,6 +98,16 @@ Scenario: R5 — Run-to-session correlation covers the sources that produce runs
   And the reported percentage names its denominator
 ```
 ### Q&A
+**Q (forced re-audit, 2026-08-21): what did the original PASS get wrong?**
+A: Three conclusions were too broad. `MIN(rowid)` keeps the first incomplete cumulative Claude
+response, migration 0019 cannot drop tables recreated after it has been journaled, and the 14/14
+R5 denominator excluded unresolved runs that do have local role-named session directories. The
+re-audit changes the fold to `MAX(rowid)`, prevents the importer from eagerly recreating generic
+ETL tables, and resolves role-named run directories through `history_run_session`. A later
+structured-key scan found sparse native Claude `toolUseResult.durationMs` / `durationSeconds`
+telemetry that the original text-only grep missed; the mapper now preserves it without synthesizing
+timing for records where it is absent.
+
 **Q: Why five findings in one task instead of five tasks?**
 A: They came from one forensic pass and share one root — the history plane records what it ingested
 but not how it was produced. Splitting them at creation would have repeated 0622's failure mode,
@@ -112,60 +122,51 @@ R2 populates the primitives R5's diagnosis needs to compare sources. R1 needs a 
 so it batches with R2's re-import. R5 is last because its denominator depends on R2's attribution.
 
 **Q: 0622 said re-key the fold on `requestId`. Why is R1 schema work?**
-A: Because the column does not exist. `history_message` has no `request_id` (verified 2026-08-21;
-the full column list is in Background). 0622's forensics read `requestId` out of the raw JSONL, not
-out of the DB, and the follow-up register was written as if the fold could simply be re-keyed. It
-cannot — identity has to be persisted at import first. This is the single most expensive premise
-error 0622 left behind, and the reason this task was refined at `--depth ready`.
+A: Because the column did not exist. Identity had to be persisted at import before the SQL rollup
+could fold repeated response snapshots. Rows with a NULL identity remain distinct.
 
 **Q: Is `openclaw` importing zero files a bug?**
-A: No, and this is the trap. `openclaw` is in `UNSUPPORTED_SOURCES` by operator ruling 2026-08-06
-(feature E1 § Out of scope). 0622's F10 grouped it with `antigravity` and rated the cause LOW
-confidence — the fact was observed, the reason never checked. Checked now: one is waived work, the
-other is a key that never matches. An implementer working from 0622's text alone would have
-"fixed" a deliberate deferral.
-
-**Q: Why not just drop the ten `history_etl_*` tables now?**
-A: Because 0622 rated F8's *meaning* MEDIUM, not HIGH — 0 rows is a fact, "should be dropped" is an
-inference. The evidence leans retirement (`rg -n 'history_etl' packages apps` finds exactly one hit,
-a type comment, with no write path anywhere), but confirming against feature E1's scope costs
-minutes and a wrong drop costs a migration to undo. R3's deliverable is the ruling; the code
-follows from it.
+A: No. It remains in `DEFERRED_SOURCES` by the 2026-08-06 operator ruling. The original defect was
+the unmatched `antigravity-ide` key; the implementation uses the real `antigravity` source key and
+keeps deferred as a reporting label, not an import gate.
 
 **Q: What is deliberately NOT in this task?**
-A: F9 (agy chunk-boundary parse errors) — owned by **task 0623 R5**. F18 (inline-drive provenance) —
-still unowned, recorded in 0622. The `cacheHitRatio` denominator and `TokenTotals` contract —
-landed by 0622 R5/F7 and correct. The forensics renderer — it already reads the columns R2 fills.
-0622's R8 retention not having fired (see Background) — belongs to E5/0622.
+A: F9 (agy chunk-boundary parse errors) is task 0623 R5. F18 (inline-drive provenance) remains in
+0622. The `cacheHitRatio` denominator, `TokenTotals` contract, renderer, and 0622 retention scheduler
+are unchanged.
 
 **Q: Why do the AC scenarios not appear in feature E5's AC?**
-A: `spur task check` reports five `L4.uncovered-task-scenario` warnings (DD-09 subset rule). Adding
-them to E5 changes an `active` feature's ship scope, which is an operator decision, not a refine
-one. Deferred with owner: raise at E5 scheduling. The warnings are accepted, not suppressed.
+A: Adding them changes an active feature's ship scope and remains an operator decision. The task
+scenarios are verified directly and feature shippability reports the uncovered-scenario findings.
 
-**Q (R3, implement ruling): drop the ten `history_etl_*` tables or leave them?**
-A: RETIRE. Migration `0019_spur_cli_drop_history_etl_tables` drops them. The upstream
-`CREATE TABLE IF NOT EXISTS history_etl_*` in ts-libs schema-sql is left as-is: it is harmless
-(inert, no write path anywhere in Spur or ts-libs), and a fresh full import simply recreates
-empty tables that the drop migration then removes on next migrate. Editing the ts-libs schema
-const would force a coordinated ts-libs release for zero behavioral gain.
+**Q (R3): drop the ten `history_etl_*` tables or leave them?**
+A: RETIRE the empty built-in tables. Migration 0019 drops existing tables. The forced re-audit found
+that published importer 0.4.41 eagerly recreates all ten after that one-shot migration is journaled.
+Upstream commit `22f891f` makes schema setup create only checkpoint, ledger, and typed tables; a generic ETL
+table is now created lazily only when an accepted generic/custom record targets it. A temporary
+source link into Spur produced a migrated database with zero `history_etl_*` tables and passed the
+full Spur gate. The change still requires the normal release and Spur dependency update, so R3 is
+PARTIAL until shipped.
 
-**Q (R5, implement): why augmented local discovery instead of a second import of run dirs?**
-A: Full-mode reconciliation (`reconcileFullImport` in ts-libs `jsonl-importer-dao.ts`) retires
-ledger rows whose hashes are not in the current discovery set. A second, separate import of
-`.spur/run/*/agent-sessions/` would be wiped by the next `--mode full` of the live root. Run-dir
-sessions must join the SAME discovery set, so `HistoryService.import` now augments the registry
-default roots (resolved home-relative, matching importer semantics) with
-`<cwd>/.spur/run/<runId>/agent-sessions/<dir>` where `dir === source` or starts `<source>-`.
-Explicit `--file`/`--root` bypass augmentation — the caller directed the scan.
+**Q (R2): which Claude duration is safe to persist?**
+A: Only source-native telemetry. A structured parse of 319 local Claude JSONL files found three
+`toolUseResult.durationMs` records and one `durationSeconds` record. The mapper rounds milliseconds,
+converts seconds to milliseconds, joins by `tool_use_id`, and leaves every missing duration NULL.
+Message timestamp subtraction remains forbidden by the 0281/0284 never-fabricate invariant.
 
-**Q (R5, verify): what denominator does correlation report against?**
-A: Named, not bare. Post-fix measurement: 14/14 (100%) of distinct exact-mapped runs join
-imported messages (188 messages, all `provenance='spur-run'`); before the fix 0 of them did.
-The 22 routed-event runs in retained `system_events` (omp 15, grok 5, codex 2) are all
-unresolved-mapping with no local `.spur/run/<id>/` dirs — legitimately non-correlatable, out of
-R5 scope. The historical 9.05% (86/950) baseline came from since-pruned `system_events` and is
-not comparable; the honest floor is exact-mapped runs with locally present session files.
+**Q (R5): why augmented local discovery instead of a second import of run dirs?**
+A: Full-mode reconciliation needs one discovery set. Default import augments live roots with
+run-owned session directories. Direct source names still match directly; a role name such as
+`coder` is included when the run has one recorded importer source. After a write import, sessions
+observed under that directory are persisted as exact mappings before provenance alignment.
+Explicit `--file` and `--root` remain caller-directed and bypass augmentation.
+
+**Q (R5): what denominator is honest?**
+A: The original 14/14 exact-only denominator was not honest because it omitted unresolved mappings
+with local session files. The executable denominator is now run-owned directories discoverable for
+the requested source: direct source-name directories plus role-named directories whose run records
+one sole importer source. The targeted test covers every member of that set and verifies exact
+mapping persistence; a production percentage must be re-measured after the fixed write import.
 ### Design
 Five independent findings sharing one root: the history plane records what it ingested but not
 enough about *how* it was produced to attribute cost or time. They are sequenced R4 → R3 → R2 → R1
@@ -229,10 +230,12 @@ does not imply the intent. Do not leave the type behind after dropping the table
 schema change** — `history_tool_call.duration_ms`, `.result_bytes`, `.call_id` and
 `history_message.model` all already exist.
 
-**WHAT:** populate them. 17,219/17,219 claude tool calls carry null-or-zero `duration_ms` and
-`result_bytes`; `model` is `NULL` for 53,631/87,753 claude messages. `call_id` (migration 0015,
-task 0564) is the join key from a `toolResult` back to its `tool_use` — the same pairing that
-carries the elapsed time and the result payload size.
+**WHAT:** populate source-native fields and preserve unknowns. Published 0.4.41 already extracts
+`request_id`, `result_bytes`, and model but leaves every Claude tool duration NULL. A structured
+parse of 319 local Claude JSONL files found sparse exact telemetry: three
+`toolUseResult.durationMs` records and one `durationSeconds` record. Extract both, convert seconds
+to milliseconds, and use `call_id` (migration 0015, task 0564) to join the result line back to its
+`tool_use`. When neither field exists, keep `duration_ms` NULL.
 
 **Handoff:** after the mapper ships, republish and `bun update` the dependent workspaces, then
 re-import claude. Follow the 0504 R4 contract: source-local binary
@@ -287,42 +290,43 @@ fixed there first, R5's agy-zero row may move; re-measure rather than assuming. 
 dependents: R3's retire-or-populate decision determines whether any future ETL consumer has tables
 to read.
 ### Plan
-- [x] Rename `UNSUPPORTED_SOURCES` → `DEFERRED_SOURCES`, correct `antigravity-ide` → `antigravity`, add the `deferred` status ahead of the scanned-files ternary; test that `openclaw` and `antigravity` report `deferred` and `gemini`/`opencode` still import (R4)
-- [x] Establish whether the ten `history_etl_*` tables were ever meant to be written; record the ruling in `### Q&A`, then either add migration `0019_spur_cli_drop_history_etl_tables` plus delete the type at `analytics/types.ts:82`, or wire the write path (R3)
-- [x] In `@gobing-ai/ts-llm-jsonl-importer`, extract claude `duration_ms` / `result_bytes` via the `call_id` tool_use↔toolResult pairing and populate `history_message.model`; republish, `bun update`, re-import claude with a source-local binary and record the provenance header (R2)
-- [x] Add migration `0018_spur_cli_history_message_request_id` with `addColumnIfMissing` (0015 precedent), populate `request_id` in the importer, then fold usage once per **non-null** `request_id` in `foldMessage`; leave `NULL` rows folding individually (R1)
-- [x] Diagnose what omp/pi/codex/grok emit that claude/agy/opencode/gemini do not, establish the honest denominator of runs that should correlate, then close the gap without adding a second mechanism (R5)
-- [x] Verification: unit tests per requirement; re-measure all five premises against `.spur/spur.db` and record before/after counts in `### Testing` — the acceptance bar is measured deltas, not green tests
+- [x] Preserve honest deferred-source classification and executable R4 coverage.
+- [x] Fold identified responses on the final cumulative row and add the request-id index (R1).
+- [x] Resolve role-named run session directories through recorded sources and persist exact observed mappings (R5).
+- [x] Stop eager ETL-table creation in the upstream importer and verify its full gate (R3 implementation).
+- [x] Extract sparse native Claude `durationMs` / `durationSeconds` telemetry while preserving NULL for absent timing (R2 implementation).
+- [ ] After commit, release the importer, update Spur's pinned dependency, re-import, and confirm native Claude timings populate and the ten ETL tables stay absent (R2/R3 delivery).
+- [x] Record the forced all-focus re-audit, repository gates, live-data deltas, feature check, and residual delivery blocker.
 ### Solution
 | Req | Change | Where |
 | --- | --- | --- |
-| R4 | `antigravity` key fixed into `DEFERRED_SOURCES`; deferred-set sources report `deferred` (not `empty`) and emit no source-empty warning | `packages/app/src/services/history-service.ts:254`, status union `packages/domain/src/analytics/artifact.ts:51-53` |
-| R3 | RETIRE ruling executed: migrations `0018` (add `history_message.request_id`) and `0019` (drop ten `history_etl_*` tables); `EtlPayload` deleted | `packages/domain/src/migrations.ts:306-330` |
-| R2 | claude `request_id`, tool `call_id`, `result_bytes`, assistant `model` persisted at import (ts-libs `62ef896`, npm `@gobing-ai/ts-llm-jsonl-importer@0.4.41`; claude `duration_ms` stays NULL) | upstream mappers/schema-sql/dao; consumer rename in `packages/app/src/services/history-service.ts` (`ClaudeUsagePayload`) |
-| R1 | per-response fold moved into SQL at `messageRollup`: keep `MIN(rowid)` per non-null `request_id` | `packages/domain/src/analytics/forensic-query.ts:228-236` |
-| R5 | run-dir session files join the import discovery set: `runSessionAugmentedRoots` augments registry default roots with `<cwd>/.spur/run/*/agent-sessions/<source\|source-*>`; injectable `historyHome`/`cwd` for hermetic tests; explicit `--file`/`--root` bypass | `packages/app/src/services/history-service.ts:290-303` |
+| R1 | Keep the final cumulative row per non-null `request_id` (MAX rowid fold via `MESSAGE_DEDUP`) and add a partial request-id index (migration 0023, renumbered from branch 0020 on merge). | `packages/domain/src/analytics/forensic-query.ts:116` · migration `0023` |
+| R2 | Extract native Claude `toolUseResult.durationMs` / `durationSeconds`, convert seconds to milliseconds, and attach by `tool_use_id`; preserve NULL when timing is absent. | `@gobing-ai/ts-llm-jsonl-importer` `src/mappers.ts:585` + `src/importer.ts:381`; release/update still pending |
+| R3 | Keep migration 0019 and stop schema setup or empty imports from recreating built-in ETL tables; generic/custom ETL targets materialize on first accepted row. External `ts-libs` commit `22f891f` still needs release/update. | `packages/domain/src/migrations.ts:319` |
+| R4 | Preserve the corrected `DEFERRED_SOURCES` semantics and executable classification coverage. | `packages/app/src/services/history-service.ts:252` |
+| R5 | Resolve role-named run directories through the run's sole recorded source, import them in the same discovery set, and persist observed sessions as exact mappings before provenance alignment. | `packages/app/src/services/history-service.ts:278` |
 | R5 tests | hermetic augmented-discovery + bypass tests | `packages/app/tests/services/history-service.test.ts` (`run-session discovery augmentation (0624 R5)` block) |
 ### Testing
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PARTIAL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Migration 0018 adds `history_message.request_id` (packages/domain/src/migrations.ts:462); re-import populated 24,215 claude rows; `messageRollup` SQL fold keeps MIN(rowid) per non-null request_id, NULL rows counted individually (packages/domain/src/analytics/forensic-query.ts:155-165); measured fold removed exactly 12,204 duplicate rows; targeted test green in packages/domain/tests/analytics/forensic-query.test.ts; cacheHitRatio denominator untouched |
-| R2 | MET | claude tool call_id 17,338 rows and result_bytes>0 17,338/17,338 (was null-or-zero 100%); claude assistant model NULLs 0 (was 53,631/87,753); top real tool categories Bash 12,480 / Edit 1,515 / Read 1,211 — ranking names real categories. Deviation recorded: duration_ms stays NULL (claude JSONL has no tool duration; never-fabricate ruling 0281/0284 forbids inventing one) |
-| R3 | MET | RETIRE ruling recorded in Q&A; migration 0019 drops all ten history_etl_* tables (packages/domain/src/migrations.ts:466); EtlPayload deleted from packages/domain/src/analytics/types.ts; migrations tests 980/980 |
-| R4 | MET | DEFERRED_SOURCES uses real 'antigravity' key (packages/app/src/services/history-service.ts:251); openclaw deferral preserved; 0-file deferred source reports 'deferred' (union extended at packages/domain/src/analytics/artifact.ts:47) with no source-empty warning; deferred source importing records keeps import-derived status; tests in packages/app/tests/services/history-service.test.ts 36/36 |
-| R5 | MET | runSessionAugmentedRoots joins .spur/run/*/agent-sessions/<source |
+| R1 | MET | packages/domain/tests/analytics/forensic-query.test.ts:259 proves final cumulative MAX(rowid) wins and NULL identities remain distinct; packages/domain/tests/dao/migrations.test.ts:407 proves the partial index; live SQLite measured 24,215 identified rows, 12,011 IDs, and 33 IDs where MIN undercounted output by 104,315 tokens |
+| R2 | PARTIAL | A structured parse of 319 local Claude JSONL files found three native toolUseResult.durationMs records and one durationSeconds record. The upstream mapper now persists those values, converts seconds to milliseconds, and leaves absent timing NULL; @gobing-ai/ts-llm-jsonl-importer `tests/importer.test.ts` line 1452 and `tests/mappers.test.ts` line 1631 pass in the 241-test package suite. Published 0.4.41 and the live DB remain unupdated until release and re-import. |
+| R3 | PARTIAL | Live SQLite still has ten history_etl tables although migration 0019 is journaled. Upstream lazy materialization commit 22f891f passes 2,036 tests; a temporary source link into Spur resolved to the fixed dist and createMigratedDb returned etlTables: [], followed by the 6,118-test Spur gate. Published 0.4.41 remains pinned until the normal release and update; .spur/run/0624-verdict.json:1-150 records the forced re-audit and fix pass. |
+| R4 | MET | packages/app/tests/services/history-service.test.ts:855 verifies deferred, expected-empty, and deferred-label-with-records semantics; packages/app/src/services/history-service.ts:252 preserves openclaw and uses the real antigravity key |
+| R5 | MET | packages/app/tests/services/history-service.test.ts:747 proves a role-named coder directory resolves through its sole omp mapping, imports, persists an exact session, and aligns spur-run provenance; explicit root bypass remains covered at line 788 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — Usage is counted once per identified API response | MET | test | forensic-query.test.ts dedup test; measured −12,204 dups; NULL request_id rows individually counted |
-| R2 — A claude-source session yields an actionable bottleneck ranking | MET | command | sqlite3 spot check: result_bytes 17,338/17,338 populated, model NULLs 0 for assistant rows, real tool categories; durations honest NULL per never-fabricate ruling |
-| R3 — The ETL tables are either populated or removed | MET | command | migration 0019 drops all ten (verified by migrations tests, 980/980); no declared-empty-unexplained table remains |
-| R4 — A source that imports nothing says which kind of nothing | MET | test | history-service.test.ts deferred-classification block: deferred reports 'deferred', no source-empty warning; expected-but-empty still reports concrete reason |
-| R4 — Correcting the antigravity key does not re-open waived work | MET | test | openclaw unchanged in DEFERRED_SOURCES; edge test asserts deferred-label source importing records keeps importing |
-| R5 — Run-to-session correlation covers the sources that produce runs | MET | command | 14/14 exact-mapped runs correlate (was 0); percentage denominator named (exact-mapped runs with locally present session files); 22 routed-event runs have no local run dirs — legitimately out of scope |
+| Scenario: R1 — Usage is counted once per identified API response | MET | test | packages/domain/tests/analytics/forensic-query.test.ts:259; live SQLite delta confirms final cumulative usage rather than the first partial snapshot |
+| Scenario: R2 — A claude-source session yields an actionable bottleneck ranking | PARTIAL | command | Executable importer tests populate native durationMs/durationSeconds, result sizes, request identity, and model while preserving NULL for missing timing; published 0.4.41 and the live DB still require release/update/re-import before the runtime scenario is complete |
+| Scenario: R3 — The ETL tables are either populated or removed | PARTIAL | command | A temporary source-linked Spur database completes all migrations with zero history_etl tables and both full gates pass; the live published dependency still recreates the tables until release/update/re-import |
+| Scenario: R4 — A source that imports nothing says which kind of nothing | MET | test | packages/app/tests/services/history-service.test.ts:856 and line 874 |
+| Scenario: R4 — Correcting the antigravity key does not re-open waived work | MET | test | packages/app/tests/services/history-service.test.ts:905 verifies a deferred-labelled source still imports records; packages/app/src/services/history-service.ts:252 preserves openclaw |
+| Scenario: R5 — Run-to-session correlation covers the sources that produce runs | MET | test | packages/app/tests/services/history-service.test.ts:747 uses the previously missed coder-to-omp production shape and verifies exact mapping persistence |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)

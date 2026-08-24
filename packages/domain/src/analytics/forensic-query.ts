@@ -113,8 +113,11 @@ export interface SourceSummaryRow {
     lastImportedAt: string | null;
 }
 
+// 0624 R1 re-audit: claude re-emits an assistant message while a response streams;
+// the final row (MAX rowid) carries the complete cumulative usage. Keep that row
+// once per request_id; unidentified responses stay distinct.
 const MESSAGE_DEDUP = `(m.rowid IN (
-    SELECT MIN(rowid) FROM history_message WHERE request_id IS NOT NULL GROUP BY request_id
+    SELECT MAX(rowid) FROM history_message WHERE request_id IS NOT NULL GROUP BY request_id
 ) OR m.request_id IS NULL)`;
 
 function withMessageDedup(where: string): string {
@@ -231,10 +234,9 @@ export async function messageRollup(
     opts?: WatermarkQueryOptions,
 ): Promise<MessageRollupRow[]> {
     const { where, params } = buildMessageWhere(sel);
-    // 0624 R1: claude re-emits an assistant message per attached content block —
-    // all copies share `request_id`. Fold duplicates in SQL (keep MIN(rowid) per
-    // request_id) instead of double-counting them; rows without a request_id
-    // (all other sources, plus claude user/system lines) pass through untouched.
+    // 0624 R1: claude re-emits an assistant message while a response streams —
+    // all copies share `request_id`; fold duplicates via MESSAGE_DEDUP (MAX rowid
+    // keeps the complete cumulative usage) instead of double-counting them.
     const folded = withMessageDedup(where);
     const wm = applyWatermarkToWhere(folded, opts?.watermark);
     return db.queryAll<MessageRollupRow>(

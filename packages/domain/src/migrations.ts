@@ -138,8 +138,9 @@ CREATE INDEX IF NOT EXISTS idx_coordination_runs_spec ON coordination_runs (spec
  * (`exactness`: `exact` / `unresolved`). Ambiguous (R3) and unresolved (R5)
  * resolutions write a row with a NULL `session_id` — never an exact row with
  * a guessed id, because task 0559 trusts exactness. Populated by the run
- * path (AgentService observer), never by the import path; consumers are
- * tasks 0558 (retroactive correlation) and 0559 (cost attribution).
+ * path (AgentService observer); task 0624 also lets import promote unresolved
+ * rows from a run-owned session directory. Consumers are tasks 0558
+ * (retroactive correlation) and 0559 (cost attribution).
  */
 export const HISTORY_RUN_SESSION_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS history_run_session (
@@ -299,12 +300,19 @@ ALTER TABLE history_tool_call ADD COLUMN call_id TEXT;
 /**
  * Add the `request_id` column to the forensic `history_message` table (task 0624
  * R1). Stores the API request id (`req_…`) that produced the message so the
- * rollup can fold streaming duplicate lines — multiple JSONL lines sharing one
- * request id carry identical usage. Idempotent via `addColumnIfMissing` — the
- * `0015` call_id precedent.
+ * rollup can fold streaming duplicate lines — the final JSONL line for one
+ * request carries its complete cumulative usage. Idempotent via
+ * `addColumnIfMissing` — the `0015` call_id precedent.
  */
 export const HISTORY_MESSAGE_REQUEST_ID_SCHEMA_SQL = `
 ALTER TABLE history_message ADD COLUMN request_id TEXT;
+`;
+
+/** Index the identified-response subset used by the message rollup (task 0624 R1 re-audit). */
+export const HISTORY_MESSAGE_REQUEST_ID_INDEX_SCHEMA_SQL = `
+CREATE INDEX IF NOT EXISTS idx_history_message_request_id
+    ON history_message (request_id)
+    WHERE request_id IS NOT NULL;
 `;
 
 /**
@@ -313,8 +321,8 @@ ALTER TABLE history_message ADD COLUMN request_id TEXT;
  * `ensureTargetTables` but never written — the E1 keystone ruling (2026-08-07)
  * fixed forensic granularity at `history_message` + `history_tool_call`, and
  * every mapper emits only those two targets. Zero rows across all ten in
- * `.spur/spur.db`. The importer-side CREATE remains (harmless empty tables on
- * a fresh import); this migration drops them on the Spur side.
+ * `.spur/spur.db`. The importer now creates generic targets lazily; this
+ * migration removes tables left by older eager schema application.
  */
 export const HISTORY_ETL_TABLES_DROP_SCHEMA_SQL = `
 DROP TABLE IF EXISTS history_etl_pi;
@@ -692,6 +700,11 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     {
         id: '0022_spur_cli_history_performance_indexes',
         sql: HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL,
+    },
+    {
+        // renumbered from 0020 on merge (E6 precedent): main took 0020-0022 first
+        id: '0023_spur_cli_history_message_request_id_idx',
+        sql: HISTORY_MESSAGE_REQUEST_ID_INDEX_SCHEMA_SQL,
     },
 ];
 

@@ -118,8 +118,8 @@ describe('db migrations', () => {
             );
         });
 
-        test('has foundation through History Board indexes and rollups', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(23);
+        test('has foundation through History Board indexes, rollups, and request-id index', () => {
+            expect(CLI_MIGRATIONS).toHaveLength(24);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -143,6 +143,7 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[20]?.id).toBe('0020_spur_cli_history_board_query_indexes');
             expect(CLI_MIGRATIONS[21]?.id).toBe('0021_spur_cli_history_board_rollups');
             expect(CLI_MIGRATIONS[22]?.id).toBe('0022_spur_cli_history_performance_indexes');
+            expect(CLI_MIGRATIONS[23]?.id).toBe('0023_spur_cli_history_message_request_id_idx');
         });
 
         test('run-pid migration adds a pid column to runs', () => {
@@ -214,7 +215,7 @@ describe('db migrations', () => {
             // and 0022 performance indexes (journaled, skipped: stub history_message
             // lacks ts/model and history_tool_call is absent).
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(21);
+            expect(applied).toBe(22);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -253,8 +254,8 @@ describe('db migrations', () => {
             // + history-run-session + name-occurred-index + call_id + 0017 status
             // retirements (0016 nullable-ts skips: CLI_SCHEMA_SQL's history_message
             // is already nullable) + 0018 request_id + 0019 etl drop + 0020 indexes
-            // + 0021 rollups + 0022 performance indexes
-            expect(applied).toBe(22);
+            // + 0021 rollups + 0022 performance indexes + 0023 request_id index
+            expect(applied).toBe(23);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -411,6 +412,18 @@ describe('db migrations', () => {
             adapter.close();
         });
 
+        test('0020 indexes only identified history responses', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(adapter);
+
+            const row = await adapter.queryFirst<{ sql: string }>(
+                "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_history_message_request_id'",
+            );
+            expect(row?.sql).toContain('ON history_message (request_id)');
+            expect(row?.sql).toContain('WHERE request_id IS NOT NULL');
+            adapter.close();
+        });
+
         test('0009 provisions importer tables for databases whose journaled foundation predates them', async () => {
             const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await adapter.exec(
@@ -434,8 +447,8 @@ describe('db migrations', () => {
             // + 0017 completed→done status retirements + 0018 request_id
             // (history_message now exists, guarded apply runs) + 0019 etl drop
             // + 0020 History Board indexes + 0021 rollups + 0022 performance
-            // indexes.
-            expect(await applyCliMigrations(adapter)).toBe(14);
+            // indexes + 0023 request_id index.
+            expect(await applyCliMigrations(adapter)).toBe(15);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );
@@ -492,10 +505,10 @@ describe('db migrations', () => {
             adapter.close();
         });
 
-        test('upgraded DB journaled through 0021 receives 0022 and converges with a fresh DB', async () => {
+        test('upgraded DB journaled through 0021 receives 0022-0023 and converges with a fresh DB', async () => {
             const upgraded = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(upgraded, CLI_MIGRATIONS.slice(0, 22));
-            expect(await applyCliMigrations(upgraded)).toBe(1);
+            expect(await applyCliMigrations(upgraded)).toBe(2);
 
             const fresh = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(fresh);
