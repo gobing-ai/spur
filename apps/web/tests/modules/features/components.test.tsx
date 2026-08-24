@@ -775,6 +775,81 @@ describe('FeatureDetail', () => {
         expect(queryByText(/Child features/)).toBeNull();
         expect(queryByText(/No child features/i)).toBeNull();
     });
+
+    test('0644 R2: metadata drawer is folded by default, opens with aria-expanded flip, and closes on Escape', async () => {
+        installFeatureFetchMock();
+        const { getByTestId, container } = render(<FeatureDetail featureId="F" />);
+        await waitFor(() => expect(getByTestId('status-pill').textContent).toBe('active'));
+
+        const panel = getByTestId('feature-metadata-panel');
+        const toggle = getByTestId('metadata-toggle');
+        // Folded by default: hidden, and its focusable rows are not in the DOM/tab order.
+        expect(panel.getAttribute('aria-hidden')).toBe('true');
+        expect(panel.querySelectorAll('button')).toHaveLength(0);
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+
+        fireEvent.click(toggle);
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+        expect(getByTestId('feature-metadata-panel').getAttribute('aria-hidden')).toBe('false');
+        expect(getByTestId('metadata-status').textContent).toBe('active');
+
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        expect(container.querySelectorAll('#feature-metadata-panel button')).toHaveLength(0);
+    });
+
+    test('0644 R1: body editor and preview wrappers carry the max-w-4xl reading cap', async () => {
+        installFeatureFetchMock();
+        const { getByTestId } = render(<FeatureDetail featureId="F" />);
+        await waitFor(() => expect(getByTestId('body-preview')).toBeDefined());
+        expect(getByTestId('body-preview').firstElementChild?.getAttribute('class')).toContain('max-w-4xl');
+
+        const editButton = document.querySelector('button[aria-label="Edit body"]');
+        expect(editButton).not.toBeNull();
+        fireEvent.click(editButton as HTMLElement);
+        const editor = getByTestId('body-editor');
+        expect(editor.getAttribute('class')).toContain('max-w-4xl');
+        expect(editor.getAttribute('class')).toContain('flex-1');
+        expect(editor.getAttribute('class')).toContain('min-h-0');
+    });
+
+    test('0644 R3: per-status primary and hazard action tiers render', async () => {
+        const expectedPrimary: Record<string, string> = {
+            backlog: 'Start',
+            active: 'Verify',
+            verifying: 'Complete',
+            blocked: 'Unblock',
+        };
+        for (const [status, primaryLabel] of Object.entries(expectedPrimary)) {
+            setFetchForTesting((async (input: RequestInfo | URL) => {
+                const url = input instanceof Request ? input.url : String(input);
+                if (url.includes('/tasks')) return jsonResponse({ ok: true, data: [] });
+                return jsonResponse({
+                    ok: true,
+                    data: {
+                        id: 'F',
+                        name: 'Root',
+                        status,
+                        frontmatter: {},
+                        filePath: 'docs/features/F.md',
+                        content: '---\n---\n\n## Goal\nx',
+                    },
+                });
+            }) as unknown as typeof fetch);
+            const { getByLabelText, unmount } = render(<FeatureDetail featureId="F" />);
+            await waitFor(() => expect(getByLabelText(primaryLabel)).toBeDefined());
+            expect(getByLabelText(primaryLabel).getAttribute('data-action-tier')).toBe('primary');
+            expect(getByLabelText('Cancel').getAttribute('data-action-tier')).toBe('hazard');
+            if (status === 'active') {
+                expect(getByLabelText('+ Child').getAttribute('data-action-tier')).toBe('secondary');
+                expect(getByLabelText('Block').getAttribute('data-action-tier')).toBe('hazard');
+            }
+            if (status === 'verifying') {
+                expect(getByLabelText('Rework').getAttribute('data-action-tier')).toBe('hazard');
+            }
+            unmount();
+        }
+    });
 });
 
 describe('FeaturesShell', () => {

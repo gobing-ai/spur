@@ -17,7 +17,14 @@ import NewTaskPanel from '../task-kanban/NewTaskPanel';
 import type { TaskSummary } from '../task-kanban/types';
 import { useTasks } from '../task-kanban/useTasks';
 import FloatingActionProgress from './FloatingActionProgress';
-import { FEATURE_ACTION_LABELS, FEATURE_STATUS_ACTIONS, FSM_ACTIONS, FSM_TRANSITION_TARGET } from './feature-actions';
+import type { FeatureActionTier } from './feature-actions';
+import {
+    FEATURE_ACTION_LABELS,
+    FEATURE_ACTION_TIER,
+    FEATURE_STATUS_ACTIONS,
+    FSM_ACTIONS,
+    FSM_TRANSITION_TARGET,
+} from './feature-actions';
 import NewFeaturePanel from './NewFeaturePanel';
 import { FeatureStatusIcon } from './status-icons';
 import { useFeatureActionProgress } from './useFeatureActionProgress';
@@ -88,6 +95,16 @@ export default function FeatureDetail({
      * another in-flight `beginLoad` that never clears the spinner.
      */
     const paintedIdRef = useRef<string | null>(null);
+
+    // Escape closes the metadata panel — non-modal inspector; pane behind stays interactive.
+    useEffect(() => {
+        if (!showMetadata) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setShowMetadata(false);
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [showMetadata]);
 
     // Linked tasks: subscribe to the shared TaskStore
     const { tasks } = useTasks();
@@ -453,8 +470,15 @@ export default function FeatureDetail({
 
     const statusActions = FEATURE_STATUS_ACTIONS[data.status] ?? [];
 
+    // Tiered action rendering (R3): membership/order stays in FEATURE_STATUS_ACTIONS;
+    // only the visual grouping comes from FEATURE_ACTION_TIER. Untiered → secondary.
+    const tierOf = (action: string): FeatureActionTier => FEATURE_ACTION_TIER[action] ?? 'secondary';
+    const primaryActions = statusActions.filter((a) => tierOf(a) === 'primary');
+    const secondaryActions = statusActions.filter((a) => tierOf(a) === 'secondary');
+    const hazardActions = statusActions.filter((a) => tierOf(a) === 'hazard');
+
     return (
-        <div className="flex flex-col h-full">
+        <div className="relative flex flex-col h-full">
             {/* Header — title, status pill, and action buttons */}
             <div className="flex items-start justify-between gap-3 p-3 border-b border-spur-border shrink-0">
                 <div className="flex flex-col gap-1 overflow-hidden">
@@ -484,25 +508,57 @@ export default function FeatureDetail({
                     </div>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-1 shrink-0">
-                    {statusActions.map((action) => {
-                        let variant: 'accent' | 'error' | 'outline' = 'accent';
-                        if (action === 'cancel') variant = 'error';
-                        else if (action === 'add-child' || action === 'add-task' || action === 'link-task')
-                            variant = 'outline';
-                        return (
+                    {(
+                        [
+                            ['primary', primaryActions],
+                            ['secondary', secondaryActions],
+                        ] as const
+                    ).map(([tier, actions]) =>
+                        actions.map((action) => (
                             <Button
                                 key={action}
-                                variant={variant}
+                                variant={tier === 'primary' ? 'primary' : 'outline'}
                                 size="xs"
                                 onClick={() => handleAction(action)}
                                 disabled={actionLoading !== null}
                                 aria-busy={actionLoading === action}
                                 aria-label={FEATURE_ACTION_LABELS[action]}
+                                data-action-tier={tier}
                             >
                                 {actionLoading === action ? '…' : FEATURE_ACTION_LABELS[action]}
                             </Button>
-                        );
-                    })}
+                        )),
+                    )}
+                    {hazardActions.length > 0 && (
+                        <div className="flex items-center gap-1 border-l border-spur-border pl-1.5 ml-1.5">
+                            {hazardActions.map((action) => (
+                                <Button
+                                    key={action}
+                                    variant="ghost"
+                                    size="xs"
+                                    className="text-spur-error"
+                                    onClick={() => handleAction(action)}
+                                    disabled={actionLoading !== null}
+                                    aria-busy={actionLoading === action}
+                                    aria-label={FEATURE_ACTION_LABELS[action]}
+                                    data-action-tier="hazard"
+                                >
+                                    {actionLoading === action ? '…' : FEATURE_ACTION_LABELS[action]}
+                                </Button>
+                            ))}
+                        </div>
+                    )}
+                    <Button
+                        variant="ghost"
+                        size="xs"
+                        className="text-spur-text-muted"
+                        onClick={() => setShowMetadata((v) => !v)}
+                        aria-expanded={showMetadata}
+                        aria-controls="feature-metadata-panel"
+                        data-testid="metadata-toggle"
+                    >
+                        ℹ Metadata
+                    </Button>
                     {onClose && (
                         <Button
                             variant="ghost"
@@ -532,136 +588,6 @@ export default function FeatureDetail({
                     {actionFeedback.message}
                 </div>
             )}
-
-            {/* Metadata pane — collapsible */}
-            <div className="border-b border-spur-border shrink-0">
-                <button
-                    type="button"
-                    onClick={() => setShowMetadata((v) => !v)}
-                    className="flex items-center justify-between w-full p-3 text-xs font-semibold text-spur-text-muted uppercase tracking-wide hover:text-spur-text transition-colors"
-                    aria-expanded={showMetadata}
-                >
-                    <span>Metadata</span>
-                    <svg
-                        className={`w-3 h-3 transition-transform ${showMetadata ? 'rotate-180' : ''}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                    >
-                        <title>{showMetadata ? 'Collapse metadata' : 'Expand metadata'}</title>
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                </button>
-                {showMetadata && (
-                    <div className="px-3 pb-3 space-y-3">
-                        {/* Status */}
-                        <div>
-                            <span className="text-xs text-spur-text-muted block mb-1.5">Status</span>
-                            <span className="text-sm text-spur-text" data-testid="metadata-status">
-                                {data.status}
-                            </span>
-                        </div>
-                        {/* Dates */}
-                        {(created || updated) && (
-                            <div className="space-y-1.5">
-                                <span className="text-xs text-spur-text-muted block">Dates</span>
-                                {created && (
-                                    <div className="flex items-center gap-1.5 text-xs">
-                                        <span className="text-spur-text-muted w-14 shrink-0">Created</span>
-                                        <span className="text-spur-text">{created}</span>
-                                        <span className="text-spur-text-muted">({createdRel})</span>
-                                    </div>
-                                )}
-                                {updated && (
-                                    <div className="flex items-center gap-1.5 text-xs">
-                                        <span className="text-spur-text-muted w-14 shrink-0">Updated</span>
-                                        <span className="text-spur-text">{updated}</span>
-                                        <span className="text-spur-text-muted">({updatedRel})</span>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                        {/* Tags */}
-                        {tags.length > 0 && (
-                            <div>
-                                <span className="text-xs text-spur-text-muted block mb-1.5">Tags</span>
-                                <div className="flex flex-wrap gap-1">
-                                    {tags.map((t) => (
-                                        <Badge key={t} variant="outline" size="xs" className="text-spur-text-muted">
-                                            {t}
-                                        </Badge>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                        {/* File path */}
-                        <div className="flex items-center gap-1.5 text-xs">
-                            <span className="text-spur-text-muted w-14 shrink-0">File</span>
-                            <span className="text-spur-text font-mono truncate">{data.filePath}</span>
-                        </div>
-
-                        {/* Child features (task 0525) — direct children of the selected feature,
-                            derived client-side from the shell's unfiltered list. Rows navigate
-                            via the shell-owned selection callback. */}
-                        {childFeatures.length > 0 && (
-                            <div>
-                                <span className="text-xs text-spur-text-muted block mb-1.5">
-                                    Child features ({childFeatures.length})
-                                </span>
-                                <div className="space-y-1">
-                                    {childFeatures.map((child) => (
-                                        <button
-                                            key={child.id}
-                                            type="button"
-                                            onClick={() => onSelectFeature?.(child.id)}
-                                            className="flex items-center gap-2 w-full text-xs text-left hover:underline cursor-pointer"
-                                            aria-label={`Open child feature ${child.id}: ${child.name}`}
-                                        >
-                                            <span className="shrink-0 text-[13px]" title={child.status}>
-                                                <FeatureStatusIcon status={child.status} />
-                                            </span>
-                                            <span className="font-mono text-spur-accent shrink-0">{child.id}</span>
-                                            <span className="text-spur-text truncate flex-1 min-w-0">{child.name}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Linked Tasks */}
-                        <div>
-                            <span className="text-xs text-spur-text-muted block mb-1.5">
-                                Linked Tasks ({linkedTasks.length})
-                            </span>
-                            {linkedTasks.length === 0 ? (
-                                <span className="text-xs text-spur-text-muted italic">No linked tasks</span>
-                            ) : (
-                                <div className="space-y-1">
-                                    {linkedTasks.map((t: TaskSummary) => (
-                                        <div key={t.wbs} className="flex items-center gap-2 w-full text-xs">
-                                            <span className="shrink-0 text-[13px]" title={t.status}>
-                                                {taskStatusIcon(t.status)}
-                                            </span>
-                                            <button
-                                                type="button"
-                                                onClick={() => navigateToTask(t.wbs)}
-                                                className="flex items-center gap-2 flex-1 min-w-0 text-left hover:underline cursor-pointer"
-                                                aria-label={`Go to task ${t.wbs}: ${t.name}`}
-                                            >
-                                                <span className="font-mono text-spur-accent shrink-0">{t.wbs}</span>
-                                                <span className="text-spur-text truncate">{t.name}</span>
-                                            </button>
-                                            <span className="px-1.5 py-0.5 rounded-full border border-spur-border text-[10px] text-spur-text-muted shrink-0">
-                                                {t.status}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-            </div>
 
             {/* Body — MDEditor with edit/preview toggle */}
             <div className="flex-1 flex flex-col overflow-hidden p-3" data-testid="feature-body-section">
@@ -708,7 +634,7 @@ export default function FeatureDetail({
                         Loading body…
                     </div>
                 ) : mode === 'edit' ? (
-                    <div className="flex-1 min-h-0" data-testid="body-editor">
+                    <div className="flex-1 min-h-0 w-full max-w-4xl mx-auto" data-testid="body-editor">
                         <MDEditor
                             value={draftBody}
                             onChange={(val) => setDraftBody(val ?? '')}
@@ -718,7 +644,9 @@ export default function FeatureDetail({
                     </div>
                 ) : (
                     <div className="flex-1 overflow-y-auto" data-testid="body-preview">
-                        <MarkdownBody source={serverBody} />
+                        <div className="w-full max-w-4xl mx-auto">
+                            <MarkdownBody source={serverBody} />
+                        </div>
                     </div>
                 )}
             </div>
@@ -918,6 +846,126 @@ export default function FeatureDetail({
                 onDismiss={() => setIsProgressDismissed(true)}
                 onReopen={() => setIsProgressDismissed(false)}
             />
+            {/* Metadata drawer — in-pane right panel, folded by default (R4) */}
+            <aside
+                id="feature-metadata-panel"
+                data-testid="feature-metadata-panel"
+                aria-label="Feature metadata"
+                aria-hidden={!showMetadata}
+                className={`absolute inset-y-0 right-0 z-30 w-80 max-w-full overflow-y-auto border-l border-spur-border bg-base-200 shadow-xl transition-transform duration-200 ${
+                    showMetadata ? 'translate-x-0' : 'translate-x-full'
+                }`}
+            >
+                {showMetadata && (
+                    <div className="p-3 space-y-3">
+                        {/* Status */}
+                        <div>
+                            <span className="text-xs text-spur-text-muted block mb-1.5">Status</span>
+                            <span className="text-sm text-spur-text" data-testid="metadata-status">
+                                {data.status}
+                            </span>
+                        </div>
+                        {/* Dates */}
+                        {(created || updated) && (
+                            <div className="space-y-1.5">
+                                <span className="text-xs text-spur-text-muted block">Dates</span>
+                                {created && (
+                                    <div className="flex items-center gap-1.5 text-xs">
+                                        <span className="text-spur-text-muted w-14 shrink-0">Created</span>
+                                        <span className="text-spur-text">{created}</span>
+                                        <span className="text-spur-text-muted">({createdRel})</span>
+                                    </div>
+                                )}
+                                {updated && (
+                                    <div className="flex items-center gap-1.5 text-xs">
+                                        <span className="text-spur-text-muted w-14 shrink-0">Updated</span>
+                                        <span className="text-spur-text">{updated}</span>
+                                        <span className="text-spur-text-muted">({updatedRel})</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {/* Tags */}
+                        {tags.length > 0 && (
+                            <div>
+                                <span className="text-xs text-spur-text-muted block mb-1.5">Tags</span>
+                                <div className="flex flex-wrap gap-1">
+                                    {tags.map((t) => (
+                                        <Badge key={t} variant="outline" size="xs" className="text-spur-text-muted">
+                                            {t}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {/* File path */}
+                        <div className="flex items-center gap-1.5 text-xs">
+                            <span className="text-spur-text-muted w-14 shrink-0">File</span>
+                            <span className="text-spur-text font-mono truncate">{data.filePath}</span>
+                        </div>
+
+                        {/* Child features (task 0525) — direct children of the selected feature,
+                            derived client-side from the shell's unfiltered list. Rows navigate
+                            via the shell-owned selection callback. */}
+                        {childFeatures.length > 0 && (
+                            <div>
+                                <span className="text-xs text-spur-text-muted block mb-1.5">
+                                    Child features ({childFeatures.length})
+                                </span>
+                                <div className="space-y-1">
+                                    {childFeatures.map((child) => (
+                                        <button
+                                            key={child.id}
+                                            type="button"
+                                            onClick={() => onSelectFeature?.(child.id)}
+                                            className="flex items-center gap-2 w-full text-xs text-left hover:underline cursor-pointer"
+                                            aria-label={`Open child feature ${child.id}: ${child.name}`}
+                                        >
+                                            <span className="shrink-0 text-[13px]" title={child.status}>
+                                                <FeatureStatusIcon status={child.status} />
+                                            </span>
+                                            <span className="font-mono text-spur-accent shrink-0">{child.id}</span>
+                                            <span className="text-spur-text truncate flex-1 min-w-0">{child.name}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Linked Tasks */}
+                        <div>
+                            <span className="text-xs text-spur-text-muted block mb-1.5">
+                                Linked Tasks ({linkedTasks.length})
+                            </span>
+                            {linkedTasks.length === 0 ? (
+                                <span className="text-xs text-spur-text-muted italic">No linked tasks</span>
+                            ) : (
+                                <div className="space-y-1">
+                                    {linkedTasks.map((t: TaskSummary) => (
+                                        <div key={t.wbs} className="flex items-center gap-2 w-full text-xs">
+                                            <span className="shrink-0 text-[13px]" title={t.status}>
+                                                {taskStatusIcon(t.status)}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => navigateToTask(t.wbs)}
+                                                className="flex items-center gap-2 flex-1 min-w-0 text-left hover:underline cursor-pointer"
+                                                aria-label={`Go to task ${t.wbs}: ${t.name}`}
+                                            >
+                                                <span className="font-mono text-spur-accent shrink-0">{t.wbs}</span>
+                                                <span className="text-spur-text truncate">{t.name}</span>
+                                            </button>
+                                            <span className="px-1.5 py-0.5 rounded-full border border-spur-border text-[10px] text-spur-text-muted shrink-0">
+                                                {t.status}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </aside>
         </div>
     );
 }

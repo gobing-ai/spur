@@ -6,6 +6,7 @@ import {
     AGENT_ACTIONS,
     CREATE_ACTIONS,
     FEATURE_ACTION_LABELS,
+    FEATURE_ACTION_TIER,
     FEATURE_STATUS_ACTIONS,
     FSM_ACTIONS,
     FSM_TRANSITION_TARGET,
@@ -34,6 +35,26 @@ describe('feature-actions constants', () => {
         expect(AGENT_ACTIONS.brainstorm).toBe(true);
         expect(CREATE_ACTIONS['add-task']).toBe(true);
         expect(LINK_ACTIONS['link-task']).toBe(true);
+    });
+
+    test('every labeled action has a tier', () => {
+        for (const action of Object.keys(FEATURE_ACTION_LABELS)) {
+            expect(FEATURE_ACTION_TIER[action]).toBeDefined();
+        }
+    });
+
+    test('every action surfaced in any status list has a tier', () => {
+        for (const actions of Object.values(FEATURE_STATUS_ACTIONS)) {
+            for (const action of actions) {
+                expect(FEATURE_ACTION_TIER[action]).toBeDefined();
+            }
+        }
+    });
+
+    test('tiers are only the three known values', () => {
+        for (const tier of Object.values(FEATURE_ACTION_TIER)) {
+            expect(['primary', 'secondary', 'hazard']).toContain(tier);
+        }
     });
 });
 

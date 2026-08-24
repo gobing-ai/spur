@@ -24,6 +24,25 @@ export const FEATURE_ACTION_LABELS: Record<string, string> = {
     unblock: 'Unblock',
     cancel: 'Cancel',
 };
+/** Visual tier of a detail action button: primary transition, secondary creation/link, or hazard. */
+export type FeatureActionTier = 'primary' | 'secondary' | 'hazard';
+
+/** Visual tier per action — presentation only; membership stays in FEATURE_STATUS_ACTIONS. */
+export const FEATURE_ACTION_TIER: Record<string, FeatureActionTier> = {
+    start: 'primary',
+    verify: 'primary',
+    complete: 'primary',
+    unblock: 'primary',
+    brainstorm: 'secondary',
+    plan: 'secondary',
+    'add-child': 'secondary',
+    'add-task': 'secondary',
+    'link-task': 'secondary',
+    'sync-status': 'secondary',
+    block: 'hazard',
+    rework: 'hazard',
+    cancel: 'hazard',
+};
 
 /** Actions that are FSM transitions (use existing transitionFeature API). */
 export const FSM_ACTIONS: Record<string, true> = {

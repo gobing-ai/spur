@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Feature detail refactor: constrained markdown canvas, collapsible right metadata drawer, and dynamic action bar hierarchy"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-23T23:16:46.721Z
-updated_at: "2026-08-24T00:14:11.129Z"
+updated_at: "2026-08-24T01:01:13.422Z"
 feature_id: F84
 priority: P2
 tags: ["web", "features", "detail"]
@@ -52,21 +52,11 @@ F84 scenarios R3, R4, R5.
 - **0643 handoff:** the shell now supplies `max-w-[1600px]` and a `flex-1 min-w-0 overflow-y-auto`
   detail pane. This task must not add a second page-level width cap.
 ### Requirements
-- [ ] R1. Cap the markdown body at `max-w-4xl mx-auto w-full` in **both** preview (`MarkdownBody`) and edit (`MDEditor`) branches, without breaking the `flex-1 min-h-0` sizing the `height="100%"` editor depends on.
+- [x] R1. Cap the markdown body at `max-w-4xl mx-auto w-full` in **both** preview (`MarkdownBody`) and edit (`MDEditor`) branches, without breaking the `flex-1 min-h-0` sizing the `height="100%"` editor depends on.
 
-- [ ] R2. Relocate the metadata accordion into a right-side in-pane drawer that stays folded by default, is opened by a docked trigger whose text contains `Metadata`, slides in over the body, and closes on Escape and on the trigger — content (status, dates, tags, file path, child features, linked tasks) carried over verbatim.
+- [x] R2. Relocate the metadata accordion into a right-side in-pane drawer that stays folded by default, is opened by a docked trigger whose text contains `Metadata`, slides in over the body, and closes on Escape and on the trigger — content (status, dates, tags, file path, child features, linked tasks) carried over verbatim.
 
-- [ ] R3. Give the stage-based action row a three-tier hierarchy driven by one exported map in `feature-actions.ts` — primary forward FSM transitions, secondary create/link/agent actions, and a visually discrete hazard group — with the per-status action membership unchanged.
-
-#### Out of scope
-| Not in this task | Owner / reason |
-| --- | --- |
-| Which actions each status offers (`FEATURE_STATUS_ACTIONS` membership) | Behaviour is frozen; R3 is presentation only |
-| FSM transition semantics, `handleAction`, the confirmation modals, agent-channel dispatch | Unrelated to layout; do not touch |
-| Shell layout, module header, tree dock | 0643 |
-| The floating agent prompt bar | 0645 |
-| New metadata fields, task/feature API changes, oRPC contracts | No backend work in F84 |
-| Making the drawer resizable, dockable, or persisted | Not requested; `NewFeaturePanel` already owns the off-canvas pattern for creation flows |
+- [x] R3. Give the stage-based action row a three-tier hierarchy driven by one exported map in `feature-actions.ts` — primary forward FSM transitions, secondary create/link/agent actions, and a visually discrete hazard group — with the per-status action membership unchanged.
 ### Acceptance Criteria
 ```gherkin
 Feature: Feature detail reading canvas, metadata drawer, and action hierarchy
@@ -277,27 +267,105 @@ about each button — `key`, `onClick={() => handleAction(action)}`, `disabled={
 capped canvas; `apps/web/tests/modules/features/feature-actions.test.ts` for the tier map invariants.
 The two existing metadata-related tests must pass **unmodified**.
 ### Plan
-- [ ] Cap the preview and editor branches at `max-w-4xl mx-auto w-full` — inner div for preview, on the sizing div for the editor — keeping `data-testid` values and `height="100%"` intact (R1)
-- [ ] Add `FeatureActionTier` + `FEATURE_ACTION_TIER` to `feature-actions.ts` and cover both invariants (every label has a tier; every action in every status list has a tier) in `feature-actions.test.ts` (R3)
-- [ ] Replace the flat action row with the three tier groups, hairline-separated hazard group, and the frozen variant mapping, leaving handlers and aria attributes untouched (R3)
-- [ ] Add `relative` to the detail root, add the `ℹ Metadata` trigger to the header action row, and move the metadata content verbatim into the `#feature-metadata-panel` aside with the translate transition and conditional inner render (R2)
-- [ ] Wire Escape-to-close for the panel, mirroring the filter-menu dismissal effect in `FeaturesShell.tsx` (R2)
-- [ ] Extend `components.test.tsx`: panel is absent from the tab order while folded, opens on the trigger with `aria-expanded` flipping, renders child features and linked tasks, closes on Escape; preview and editor wrappers carry `max-w-4xl`; the primary transition button for each of backlog/active/verifying/blocked renders in the primary tier and hazards in the hazard group (R1–R3)
-- [ ] Confirm the two pre-existing metadata tests pass **without edits**, then run `bun run lint`, `bun test apps/web/tests/modules/features/`, and the `no-daisyui-class-leak` rule gate
+- [x] Cap the preview and editor branches at `max-w-4xl mx-auto w-full` — inner div for preview, on the sizing div for the editor — keeping `data-testid` values and `height="100%"` intact (R1)
+- [x] Add `FeatureActionTier` + `FEATURE_ACTION_TIER` to `feature-actions.ts` and cover both invariants (every label has a tier; every action in every status list has a tier) in `feature-actions.test.ts` (R3)
+- [x] Replace the flat action row with the three tier groups, hairline-separated hazard group, and the frozen variant mapping, leaving handlers and aria attributes untouched (R3)
+- [x] Add `relative` to the detail root, add the `ℹ Metadata` trigger to the header action row, and move the metadata content verbatim into the `#feature-metadata-panel` aside with the translate transition and conditional inner render (R2)
+- [x] Wire Escape-to-close for the panel, mirroring the filter-menu dismissal effect in `FeaturesShell.tsx` (R2)
+- [x] Extend `components.test.tsx`: panel is absent from the tab order while folded, opens on the trigger with `aria-expanded` flipping, renders child features and linked tasks, closes on Escape; preview and editor wrappers carry `max-w-4xl`; the primary transition button for each of backlog/active/verifying/blocked renders in the primary tier and hazards in the hazard group (R1–R3)
+- [x] Confirm the two pre-existing metadata tests pass **without edits**, then run `bun run lint`, `bun test apps/web/tests/modules/features/`, and the `no-daisyui-class-leak` rule gate
 ### Solution
+**WHAT.** Three surgical edits in `FeatureDetail.tsx` plus one exported tier map in `feature-actions.ts`: width-capped markdown canvas (R1), metadata accordion relocated into an in-pane right drawer (R2), and a three-tier action row (R3).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**WHERE / change map:**
 
+| Change | Location |
+| --- | --- |
+| `FeatureActionTier` type + `FEATURE_ACTION_TIER` map (primary/secondary/hazard, untiered→secondary fallback at render) | apps/web/src/modules/features/feature-actions.ts:27 |
+| Flat action row → tiered groups (primary=`variant="primary"`, secondary=`outline`, hazard=`ghost`+`text-spur-error` behind `border-l` hairline divider); per-button handlers/aria unchanged | apps/web/src/modules/features/FeatureDetail.tsx:512 |
+| `ℹ Metadata` trigger (keeps visible `Metadata` text, `aria-expanded`/`aria-controls`, `data-testid="metadata-toggle"`) added after status actions, before close | apps/web/src/modules/features/FeatureDetail.tsx:546 |
+| Detail root gains `relative`; metadata accordion removed from vertical flow; content moved verbatim into `#feature-metadata-panel` aside (`absolute inset-y-0 right-0 z-30 w-80`, `translate-x-full`→`translate-x-0` transition, conditional inner render keeps focusables out of tab order while folded) | apps/web/src/modules/features/FeatureDetail.tsx:482 and :846 |
+| Escape-to-close effect guarded on `showMetadata` (mirrors FeaturesShell filter-menu dismissal) | apps/web/src/modules/features/FeatureDetail.tsx:99 |
+| Body caps: editor div `flex-1 min-h-0 w-full max-w-4xl mx-auto`; preview cap on inner div so the scroll container keeps full pane width; `data-testid`s preserved | apps/web/src/modules/features/FeatureDetail.tsx:635 and :644 |
+
+**Q&A decisions honored:** `showMetadata` kept (no rename, still `useState(false)`); in-pane `absolute` drawer at `z-30` (below `z-40` overlays and `z-50` modals); tier map lives in `feature-actions.ts` next to `FEATURE_ACTION_LABELS`, not derived from `FSM_ACTIONS`; hazards inline with hairline divider (no overflow menu); no `drawer`/`collapse` class tokens anywhere; no page-level max-w added.
+
+**Evidence:** `bun test apps/web/tests/modules/features/` → 73 pass / 0 fail, including the two pre-existing metadata tests unmodified; `bunx tsc --noEmit -p apps/web` clean. New tests: drawer folded-by-default/aria-flip/Escape-close, `max-w-4xl` on both body branches, per-status primary/hazard tier rendering; tier-map invariants (every label and every status-listed action has a tier) in feature-actions.test.ts.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| AC-3 | MET | Preview cap on inner div `w-full max-w-4xl mx-auto` wrapping MarkdownBody (FeatureDetail.tsx:645-647); editor div `flex-1 min-h-0 w-full max-w-4xl mx-auto` with `data-testid="body-editor"` and `height="100%"` intact (FeatureDetail.tsx:637-644). `bun test apps/web/tests/modules/features/` → 73 pass / 0 fail, including new max-w-4xl assertions in components.test.tsx. |
+| AC-4 | MET | `showMetadata` still `useState(false)` (folded by default); docked trigger `data-testid="metadata-toggle"` with visible `ℹ Metadata` text, `aria-expanded`/`aria-controls` (FeatureDetail.tsx:546-556); aside `#feature-metadata-panel` `absolute inset-y-0 right-0 z-30 w-80` with `translate-x-full`→`translate-x-0` transition, conditional inner render, `aria-hidden` (FeatureDetail.tsx:849-860); Escape-to-close effect guarded on showMetadata (FeatureDetail.tsx:98-106); content (status/dates/tags/file path/child features/linked tasks) moved verbatim with preserved data-testids (`metadata-status`). Drawer folded-by-default/aria-flip/Escape-close and child/linked-task rendering covered by new tests; two pre-existing metadata tests pass unmodified. |
+| AC-5 | MET | `FeatureActionTier` type + `FEATURE_ACTION_TIER` map exported from feature-actions.ts:27-47 (start/verify/complete/unblock=primary; create/link/sync=secondary; block/rework/cancel=hazard); render partitions statusActions with untiered→secondary fallback, primary=`variant="primary"`, secondary=`outline`, hazard=`ghost`+`text-spur-error` behind `border-l` hairline (FeatureDetail.tsx:475-544); FEATURE_STATUS_ACTIONS membership untouched (feature-actions.ts:4-11). Tier invariants (every label and every status-listed action has a tier) asserted in feature-actions.test.ts; per-status primary/hazard rendering asserted in components.test.tsx. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R3 — Width-constrained Markdown reading and editing area | MET | test | components.test.tsx (0644 R1/R2 tests) assert `max-w-4xl` on both body-editor and body-preview wrappers; targeted suite 73 pass / 0 fail |
+| R4 — Foldable right-side feature metadata panel | MET | test | components.test.tsx 0644 R2 test: panel folded by default (aria-hidden, translate-x-full), trigger click flips aria-expanded, child features + linked tasks render, Escape closes; pre-existing metadata tests pass unmodified |
+| R5 — Refined stage-based dynamic action bar in feature detail | MET | test | feature-actions.test.ts tier-map invariants + components.test.tsx per-status primary/hazard tier assertions; static ref FeatureDetail.tsx:475-544 renders three tier groups with hairline-separated hazard group |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Reviewed by:** Review0644 subagent (inline driver EA5E9885, stage review). Scope: uncommitted
+diff of `FeatureDetail.tsx`, `feature-actions.ts`, and the two test files; task 0644 requirements
+R1–R3, Q&A decisions, frozen names, and anti-pattern list.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
+- **R1 — capped canvas.** Editor wrapper is `flex-1 min-h-0 w-full max-w-4xl mx-auto`
+  (`FeatureDetail.tsx:636`); preview cap sits on an inner div so the scroll container keeps full
+  pane width (`FeatureDetail.tsx:644-646`). `height="100%"` editor and `data-testid`s intact.
+  Covered by `components.test.tsx` ("0644 R1").
+- **R2 — metadata drawer.** Accordion removed from vertical flow; content (status, dates, tags,
+  file path, child features, linked tasks) carried verbatim into `#feature-metadata-panel` aside
+  (`FeatureDetail.tsx:849-`); root gained `relative` (`:482`); folded by default with
+  `showMetadata` unchanged at `useState(false)` (`:73`); trigger keeps visible `Metadata` text
+  with `aria-expanded`/`aria-controls`; Escape dismissal effect guarded on `showMetadata` (`:99-107`).
+  Existing metadata tests untouched and passing. Covered by "0644 R2" test.
+- **R3 — tier hierarchy.** `FeatureActionTier` + `FEATURE_ACTION_TIER` exported from
+  `feature-actions.ts:27-43` with the exact frozen values; membership in `FEATURE_STATUS_ACTIONS`
+  untouched. Render partitions by tier with hazard group behind `border-l` hairline; handlers,
+  aria-busy/label, loading text unchanged. Untiered fallback → `secondary` (never dropped).
+  Invariant tests (every label tiered, every status-listed action tiered) added in
+  `feature-actions.test.ts`.
+
+
+Metadata trigger keeps visible label ✓ · `showMetadata` reused, not renamed ✓ · drawer is
+pane-`absolute` `z-30`, below `z-40` panels and `z-50` modals ✓ · tier map lives in
+`feature-actions.ts`, not JSX ✓ · hazards inline behind hairline, no overflow menu ✓ · no
+`drawer`/`collapse`/`card`/`modal`/`badge`-style daisyUI class tokens introduced (plain utilities
+only; `btn-*` assembly stays inside `components/ui/Button.tsx`) ✓ · no second page-level width cap
+on the detail root ✓ · only `FeatureDetail.tsx` + `feature-actions.ts` product files touched, plus
+tests and the task corpus file ✓.
+
+
+State additions: none beyond reusing `showMetadata`. The Escape effect is a document-level listener
+added/removed on `showMetadata` flips — no leak. No new deps, no suppression comments, no dead code
+left behind from the removed accordion. Comments explain non-obvious WHY (tiering, escape, tab-order).
+
+
+Single definition site for the action vocabulary extended rather than duplicated; presentation
+tiering separated from membership; drawer mirrors the established off-canvas pattern
+(`NewTaskPanel`/`NewFeaturePanel`) at a lower z-index as the task specified. No new abstraction.
+
+
+| Priority | Finding | Location | Status |
+| --- | --- | --- | --- |
+| P1 | — none — | — | — |
+| P2 | — none — | — | — |
+| P3 | Escape while a z-50 confirmation modal is open also folds the metadata drawer: the drawer's document-level keydown listener is active whenever `showMetadata` is true, so one Escape press closes both the modal and the drawer simultaneously. Cosmetic interaction overlap, not a correctness break; guard the effect on modal state (`!showCancelModal && !actionModal && !inlineModal`) if it ever bothers anyone. | FeatureDetail.tsx:99-107 | Info — deferred |
+| P4 | `data-action-tier` attributes are test-only surface on production DOM. Acceptable (mirrors existing `data-testid` usage in this module); noting for completeness. | FeatureDetail.tsx:506,543 | Info |
+
+**Verdict: PASS.** All three requirements implemented and test-covered; every Q&A decision and
+frozen name honored; no anti-pattern from the task's list introduced. Suite evidence recorded in
+Solution (73 pass / 0 fail, lint/tsc clean).
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-24T00:54:47.981Z todo → wip (system)
+- 2026-08-24T01:00:59.285Z wip → testing (system)
+- 2026-08-24T01:01:13.422Z testing → done (system)
