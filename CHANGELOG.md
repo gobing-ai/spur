@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.3.61] - 2026-08-24
+
+### Added
+
+- feat(web): enhance Observability and Features board layouts, controls, and workflows (df9b03b6)
+- feat(init): idempotent spur self init + pre-A4 global config migration (0649) (4a85a1c4)
+- feat(workflow): two-tier workflow resolution — project path then bundled root (44046ed5)
+
+### Changed
+
+- docs(design): align features board layout refactor spec with docked panels (94dac6d7)
+
+## [0.3.60] - 2026-08-24
+
+### Fixed
+
+- fix(release): guard the release tag push against push.followTags (edacdd5e)
+
+### Changed
+
+- chore(release): bump spur-server + spur + spur-app + spur-config + spur-contracts + spur-domain to 0.3.60 (9a42a782)
+
 ## [0.3.59] - 2026-08-24
 
 ### Added
