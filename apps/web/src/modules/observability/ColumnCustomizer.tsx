@@ -75,7 +75,7 @@ export const ALL_COLUMNS: readonly ColumnDefinition[] = [
         key: 'agent',
         label: 'Agent',
         description: 'Target or actor agent role',
-        defaultVisible: false,
+        defaultVisible: true,
         sortable: true,
         colWidth: 'w-28',
     },
@@ -114,6 +114,7 @@ export const DEFAULT_VISIBLE_COLUMNS: readonly EventColumnKey[] = [
     'summary',
     'correlation',
     'outcome',
+    'agent',
 ];
 
 export const STORAGE_KEY_COLUMNS = 'spur:observability:columns:v1';

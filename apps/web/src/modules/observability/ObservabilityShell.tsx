@@ -14,7 +14,7 @@ import {
  */
 export default function ObservabilityShell() {
     const [activeId, setActiveId] = useState<string>(OBSERVABILITY_TABS[0]?.id ?? '');
-    const [timeRange, setTimeRange] = useState<ObservabilityTimeRange>('all');
+    const [timeRange, setTimeRange] = useState<ObservabilityTimeRange>('24h');
     const [liveness, setLiveness] = useState<ObservabilityLiveness>({
         status: 'connecting',
         rate: 0,
@@ -51,10 +51,7 @@ export default function ObservabilityShell() {
                 : 'bg-base-content/40';
 
     return (
-        <div
-            className="flex flex-col gap-4 p-4 max-w-[1600px] mx-auto w-full h-full overflow-hidden"
-            data-observability-shell
-        >
+        <div className="flex flex-col gap-4 p-4 max-w-[1600px] mx-auto w-full" data-observability-shell>
             {/* Header & Tab Navigation Bar */}
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-base-content/10 pb-3 shrink-0">
                 <div className="flex items-center gap-3">
@@ -119,7 +116,7 @@ export default function ObservabilityShell() {
                 role="tabpanel"
                 id={`observability-tab-panel-${activeId}`}
                 aria-labelledby={`observability-tab-${activeId}`}
-                className="flex-1 overflow-hidden min-h-0 flex flex-col"
+                className="flex flex-col gap-4"
             >
                 {Active ? (
                     <Active

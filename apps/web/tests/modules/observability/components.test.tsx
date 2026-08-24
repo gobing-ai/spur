@@ -408,7 +408,7 @@ describe('observability components', () => {
         expect(thead?.className).toContain('sticky');
         const headers = table?.querySelectorAll('thead th');
         const headerLabels = Array.from(headers ?? []).map((th) => th.textContent?.trim());
-        expect(headerLabels).toEqual(['Time ▼', 'Severity', 'Event', 'Summary', 'Correlation', 'Outcome']);
+        expect(headerLabels).toEqual(['Time ▼', 'Severity', 'Event', 'Summary', 'Correlation', 'Outcome', 'Agent']);
     });
 
     test('event names are colored by a stable prefix-to-color map (task 0223 R4/R5/R6)', async () => {
@@ -610,24 +610,30 @@ describe('observability components', () => {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
             if (url.includes('/events/history')) {
+                const urlObj = new URL(url, 'http://localhost');
+                const sinceParam = urlObj.searchParams.get('since');
+                const allEvts = [
+                    {
+                        id: 'evt-recent',
+                        eventName: 'task.created',
+                        occurredAt: recentIso,
+                        actor: 'op',
+                        payload: {},
+                    },
+                    {
+                        id: 'evt-old',
+                        eventName: 'queue.job.completed',
+                        occurredAt: oldIso,
+                        actor: null,
+                        payload: {},
+                    },
+                ];
+                const events = sinceParam
+                    ? allEvts.filter((e) => new Date(e.occurredAt).getTime() >= new Date(sinceParam).getTime())
+                    : allEvts;
                 return jsonResponse({
-                    events: [
-                        {
-                            id: 'evt-recent',
-                            eventName: 'task.created',
-                            occurredAt: recentIso,
-                            actor: 'op',
-                            payload: {},
-                        },
-                        {
-                            id: 'evt-old',
-                            eventName: 'queue.job.completed',
-                            occurredAt: oldIso,
-                            actor: null,
-                            payload: {},
-                        },
-                    ],
-                    count: 2,
+                    events,
+                    count: events.length,
                     catalog: [
                         { name: 'task.created', prefix: 'task', source: 'planning', renderer: 'planning' },
                         { name: 'queue.job.completed', prefix: 'queue', source: 'queue', renderer: 'queue' },
@@ -1482,7 +1488,7 @@ describe('observability components', () => {
         expect(getByText('1.3s')).toBeDefined();
         // Queue story duration is derived from the oldest to newest correlated event.
         expect(getByText('60.0s')).toBeDefined();
-        const feedItems = container.querySelectorAll('[data-jobs-tab] > ul > li');
+        const feedItems = container.querySelectorAll('[data-jobs-tab] ul > li');
         expect(feedItems).toHaveLength(2);
         expect(feedItems[0]?.textContent).toContain('job-42');
         expect(feedItems[1]?.textContent).toContain('cleanup');
@@ -2131,7 +2137,7 @@ describe('ObservabilityFilters and TimeRange (J92 R1-R7)', () => {
             '7d',
             'All',
         ]);
-        expect(view.getByRole('button', { name: 'All' }).getAttribute('aria-pressed')).toBe('true');
+        expect(view.getByRole('button', { name: '24h' }).getAttribute('aria-pressed')).toBe('true');
         expect(ranges.parentElement?.className).toContain('flex-wrap');
         expect(view.getByLabelText('Toggle filter panel')).toBeDefined();
         expect(view.getByRole('button', { name: 'Pause live event stream' })).toBeDefined();
@@ -2248,7 +2254,7 @@ describe('System Events customizable columns, sorting, and cell polish (J92 R1-R
             true,
             true,
             true,
-            false,
+            true,
             false,
             false,
             false,
@@ -2260,18 +2266,18 @@ describe('System Events customizable columns, sorting, and cell polish (J92 R1-R
 
         fireEvent.click(view.getByLabelText('Summary'));
         const firstRow = view.container.querySelector('tbody > tr');
-        expect(firstRow?.querySelectorAll(':scope > td')).toHaveLength(5);
+        expect(firstRow?.querySelectorAll(':scope > td')).toHaveLength(6);
         expect(firstRow?.textContent).not.toContain('Custom summary');
         fireEvent.click(view.getByRole('button', { name: 'Expand detail for task.created' }));
         const detail = view.container.querySelector('section[aria-label="Detail for task.created"]');
-        expect(detail?.closest('td')?.getAttribute('colspan')).toBe('5');
+        expect(detail?.closest('td')?.getAttribute('colspan')).toBe('6');
         await act(async () => fireEvent.click(view.getByRole('button', { name: 'Copy run ID' })));
         expect(copied).toEqual(['task.created', 'corr-1', 'run-1']);
 
         fireEvent.click(view.getByLabelText('Producer'));
         expect(view.getAllByText('spur / test').length).toBeGreaterThan(0);
         expect(window.localStorage.getItem('spur:observability:columns:v1')).toBe(
-            JSON.stringify(['time', 'severity', 'event', 'correlation', 'outcome', 'producer']),
+            JSON.stringify(['time', 'severity', 'event', 'correlation', 'outcome', 'agent', 'producer']),
         );
         view.unmount();
 
@@ -2281,7 +2287,7 @@ describe('System Events customizable columns, sorting, and cell polish (J92 R1-R
             Array.from(remount.container.querySelectorAll('[data-system-events-tab] thead th')).map((th) =>
                 th.textContent?.trim(),
             ),
-        ).toEqual(['Time ▼', 'Severity', 'Event', 'Correlation', 'Outcome', 'Producer']);
+        ).toEqual(['Time ▼', 'Severity', 'Event', 'Correlation', 'Outcome', 'Agent', 'Producer']);
     });
 
     test('validateColumnKeys and loadVisibleColumns validate and fallback properly (R1, R2)', () => {

@@ -573,7 +573,7 @@ export function displayValue(value: string | null | undefined): string {
 /** Serialize UI filter state into the server-side query params. */
 export function serializeFilter(
     filter: Partial<ObservabilityFilterValues> & { timeWindow?: string },
-    timeRange: ObservabilityTimeRange = 'all',
+    timeRange: ObservabilityTimeRange = '24h',
 ): ActiveFilter {
     const out: ActiveFilter = {};
     if (filter.selectedPrefixes && filter.selectedPrefixes.size === 1) {
@@ -613,7 +613,6 @@ function matchesClientFilter(
     },
     filter: ObservabilityFilterValues,
     tierByName: Map<string, string>,
-    timeRange: ObservabilityTimeRange = 'all',
 ): boolean {
     // Prefix: when any prefixes are selected, filter client-side for immediate UX.
     if (filter.selectedPrefixes.size >= 1) {
@@ -644,15 +643,6 @@ function matchesClientFilter(
             matches = matches || JSON.stringify(evt.payload).toLowerCase().includes(query);
         }
         if (!matches) return false;
-    }
-    // Time-range: client-side filter for immediate UX (also sent to server).
-    if (timeRange !== 'all') {
-        const ms = TIME_RANGE_MS[timeRange];
-        if (ms !== null && ms !== undefined) {
-            const cutoff = Date.now() - ms;
-            const eventTime = new Date(evt.occurredAt).getTime();
-            if (Number.isNaN(eventTime) || eventTime < cutoff) return false;
-        }
     }
     // Run ID: client-side filter for immediate UX (also sent to server).
     if (filter.runId.trim() !== '') {
@@ -785,7 +775,7 @@ export default function SystemEventsTab({
     timeRange: propTimeRange,
     onTimeRangeChange: propOnTimeRangeChange,
 }: ObservabilityTabProps = {}) {
-    const [localTimeRange, setLocalTimeRange] = useState<ObservabilityTimeRange>('all');
+    const [localTimeRange, setLocalTimeRange] = useState<ObservabilityTimeRange>('24h');
     const timeRange = propTimeRange ?? localTimeRange;
     const onTimeRangeChange = propOnTimeRangeChange ?? setLocalTimeRange;
 
@@ -949,7 +939,6 @@ export default function SystemEventsTab({
                 // frame does not pollute the filtered view.
                 const currentFilter = filterRef.current;
                 const currentTier = tierRef.current;
-                const currentRange = timeRangeRef.current;
                 if (
                     !matchesClientFilter(
                         {
@@ -963,7 +952,6 @@ export default function SystemEventsTab({
                         },
                         currentFilter,
                         currentTier,
-                        currentRange,
                     )
                 ) {
                     return;
@@ -1007,8 +995,8 @@ export default function SystemEventsTab({
     // Client-side post-filter for immediate UX. The debounced filter drives
     // the server query; the immediate filter drives the visible rows.
     const visiblePage = useMemo(
-        () => page.filter((evt) => matchesClientFilter(evt, filter, tierByName, timeRange)),
-        [page, filter, tierByName, timeRange],
+        () => page.filter((evt) => matchesClientFilter(evt, filter, tierByName)),
+        [page, filter, tierByName],
     );
     const sortedPage = useMemo(() => sortEventRows(visiblePage, sortState), [visiblePage, sortState]);
 
@@ -1028,7 +1016,7 @@ export default function SystemEventsTab({
     }
 
     return (
-        <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex flex-col gap-4">
             {/* Filter Bar (J92 R2/R3/R4) */}
             <ObservabilityFilters
                 timeRange={timeRange}
@@ -1047,35 +1035,37 @@ export default function SystemEventsTab({
                 }
             />
 
-            {sortedPage.length === 0 ? (
-                <div className="p-4 text-sm text-spur-text-muted italic flex-1 overflow-y-auto">
-                    {page.length === 0
-                        ? 'No system events yet. New events from the planning bus will appear here in real time.'
-                        : 'No events match the active filters.'}
-                </div>
-            ) : (
-                <SystemEventsTable
-                    rows={sortedPage}
-                    catalog={catalog}
-                    visibleColumns={visibleColumns}
-                    sortState={sortState}
-                    onSortChange={handleSort}
-                />
-            )}
-            {/* Load older affordance - advances the opaque keyset cursor (R1). */}
-            {hasMore && (
-                <div className="px-4 py-2 border-t border-spur-border bg-base-100 shrink-0 flex justify-center">
-                    <button
-                        type="button"
-                        onClick={loadMore}
-                        disabled={loadingMore}
-                        data-load-older
-                        className="text-[11px] text-spur-text-muted hover:text-spur-text px-3 py-1 rounded border border-spur-border/40 hover:border-spur-text/40 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait focus:outline-none focus:ring-2 focus:ring-spur-text/40"
-                    >
-                        {loadingMore ? 'Loading…' : 'Load older'}
-                    </button>
-                </div>
-            )}
+            <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 overflow-hidden flex flex-col">
+                {sortedPage.length === 0 ? (
+                    <div className="p-8 text-sm text-spur-text-muted italic text-center">
+                        {page.length === 0
+                            ? 'No system events yet. New events from the planning bus will appear here in real time.'
+                            : 'No events match the active filters.'}
+                    </div>
+                ) : (
+                    <SystemEventsTable
+                        rows={sortedPage}
+                        catalog={catalog}
+                        visibleColumns={visibleColumns}
+                        sortState={sortState}
+                        onSortChange={handleSort}
+                    />
+                )}
+                {/* Load older affordance - advances the opaque keyset cursor (R1). */}
+                {hasMore && (
+                    <div className="px-4 py-2 border-t border-spur-border bg-base-100/50 shrink-0 flex justify-center">
+                        <button
+                            type="button"
+                            onClick={loadMore}
+                            disabled={loadingMore}
+                            data-load-older
+                            className="text-[11px] text-spur-text-muted hover:text-spur-text px-3 py-1 rounded border border-spur-border/40 hover:border-spur-text/40 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait focus:outline-none focus:ring-2 focus:ring-spur-text/40"
+                        >
+                            {loadingMore ? 'Loading…' : 'Load older'}
+                        </button>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
@@ -1090,18 +1080,24 @@ function useMediaQuery(query: string): boolean {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
         return window.matchMedia(query).matches;
     });
+
     useEffect(() => {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
         const mql = window.matchMedia(query);
-        const onChange = () => setMatches(mql.matches);
+        const onChange = (e: MediaQueryListEvent) => setMatches(e.matches);
         mql.addEventListener('change', onChange);
+        setMatches(mql.matches);
         return () => mql.removeEventListener('change', onChange);
     }, [query]);
+
     return matches;
 }
 
 /**
- * Dense table view (task 0223 / 0653) with customizable columns and value sorting.
+ * Responsive system events table:
+ *  - On wide viewports: customizable columns with full metadata.
+ *  - On narrow viewports (<640px): two-column collapse (Time + Event).
+ *  - Expandable row disclosure (R3) for raw forensic details.
  */
 function SystemEventsTable({
     rows,
@@ -1128,7 +1124,7 @@ function SystemEventsTable({
     const columnMap = useMemo(() => new Map(ALL_COLUMNS.map((c) => [c.key, c])), []);
 
     return (
-        <section className="flex-1 overflow-y-auto min-w-0" data-system-events-tab aria-label="System events">
+        <section className="overflow-x-auto min-w-0" data-system-events-tab aria-label="System events">
             <table
                 className={`w-full ${isCompact ? 'min-w-0' : 'min-w-[1000px]'} text-xs border-separate border-spacing-0 table-fixed`}
             >

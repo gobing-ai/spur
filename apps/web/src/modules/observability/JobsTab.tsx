@@ -236,7 +236,7 @@ function jobThreadDurationMs(events: SystemEventRow[]): number | null {
 }
 
 /** Jobs tab: queue status cards plus recent queue/scheduler events. */
-export default function JobsTab({ timeRange = 'all' }: ObservabilityTabProps = {}) {
+export default function JobsTab({ timeRange = '24h' }: ObservabilityTabProps = {}) {
     const [state, setState] = useState<JobsState | null>(null);
     const [error, setError] = useState<string | null>(null);
     const fetchIdRef = useRef(0);
@@ -316,9 +316,9 @@ export default function JobsTab({ timeRange = 'all' }: ObservabilityTabProps = {
     ] as const;
 
     return (
-        <div className="flex flex-col h-full overflow-hidden" data-jobs-tab>
+        <div className="flex flex-col gap-4" data-jobs-tab>
             {/* Current Queue State (Live Aggregate) */}
-            <div className="p-3 border-b border-spur-border bg-base-200 shrink-0 space-y-2">
+            <div className="p-4 rounded-xl border border-base-content/10 bg-base-200 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">
                         Current Queue State
@@ -339,36 +339,38 @@ export default function JobsTab({ timeRange = 'all' }: ObservabilityTabProps = {
                 </div>
             </div>
 
-            {/* Recent Job Events Section Header */}
-            <div className="px-4 py-2.5 border-b border-spur-border bg-base-200 shrink-0 flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">
-                        Recent Job Events
-                    </span>
-                    <Badge variant="outline" size="xs" className="font-mono">
-                        {timeRange === 'all' ? 'All time' : `Last ${timeRange}`}
-                    </Badge>
+            {/* Recent Job Events Section */}
+            <div className="rounded-xl border border-base-content/10 bg-base-200 shadow-sm overflow-hidden flex flex-col">
+                <div className="px-4 py-3 border-b border-base-content/10 bg-base-200 shrink-0 flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">
+                            Recent Job Events
+                        </span>
+                        <Badge variant="outline" size="xs" className="font-mono">
+                            {timeRange === 'all' ? 'All time' : `Last ${timeRange}`}
+                        </Badge>
+                    </div>
+                    <span className="text-xs text-spur-text-muted font-mono">{state.events.length} event(s)</span>
                 </div>
-                <span className="text-xs text-spur-text-muted font-mono">{state.events.length} event(s)</span>
-            </div>
 
-            {/* Event List or Range-Aware Empty State */}
-            {state.events.length === 0 ? (
-                <div className="p-8 text-center text-sm text-spur-text-muted italic" data-jobs-empty>
-                    No job events {timeRange === 'all' ? 'recorded yet' : `in the last ${timeRange}`} — queue and
-                    scheduler have not processed events in this window.
-                </div>
-            ) : (
-                <ul className="flex-1 overflow-y-auto p-3 space-y-2">
-                    {groupJobEvents(state.events).map((item) =>
-                        item.kind === 'thread' ? (
-                            <JobThreadCard key={`thread-${item.jobId}`} item={item} />
-                        ) : (
-                            <JobEventCard key={item.row.id} row={item.row} />
-                        ),
-                    )}
-                </ul>
-            )}
+                {/* Event List or Range-Aware Empty State */}
+                {state.events.length === 0 ? (
+                    <div className="p-8 text-center text-sm text-spur-text-muted italic" data-jobs-empty>
+                        No job events {timeRange === 'all' ? 'recorded yet' : `in the last ${timeRange}`} — queue and
+                        scheduler have not processed events in this window.
+                    </div>
+                ) : (
+                    <ul className="p-3 space-y-2">
+                        {groupJobEvents(state.events).map((item) =>
+                            item.kind === 'thread' ? (
+                                <JobThreadCard key={`thread-${item.jobId}`} item={item} />
+                            ) : (
+                                <JobEventCard key={item.row.id} row={item.row} />
+                            ),
+                        )}
+                    </ul>
+                )}
+            </div>
         </div>
     );
 }

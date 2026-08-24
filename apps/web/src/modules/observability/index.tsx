@@ -12,7 +12,7 @@ import ObservabilityShell from './ObservabilityShell';
 export const module: WebModule = {
     id: 'observability',
     name: 'Observability',
-    icon: '🛰️',
+    icon: '📡',
     route: 'observability',
     component: ObservabilityShell,
     sidebarLabel: 'Observability',
