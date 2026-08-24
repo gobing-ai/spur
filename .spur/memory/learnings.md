@@ -846,3 +846,13 @@ Verification: 354 targeted tests passed; typecheck passed; diff/frontmatter/inde
 - Path fallback includes a plain basename token: `workflow.ts` becomes `workflow`. The task’s Solution prose claiming whole basenames are excluded is stale.
 - Keep YAML comments outside folded `>-` shell strings; folding can place `#` on the same logical line as the next statement and comment it out.
 - `featureGateCmd` executes through `sh -c`; treat it as trusted operator/project configuration and never interpolate untrusted input.
+## 2026-08-24 — F84 batch 0643/0644/0645 (Features board UI refactor)
+
+- **`spur task verdict --from-answer` regenerates the verdict JSON from the answer file** — manual `jq` edits to the artifact are clobbered. Key rows AC-N (F84 scenario aliases) *in the answer file itself* or the L4 feature gate reports `L4.scenario-unverified`; a bare R-id row is cosmetic-pass but credits no scenario.
+- **`spur task update --section X --from-file` replaces the WHOLE section** with the file content — never pass the full task file (it re-embeds the frontmatter/whole doc into the section and can eat the `#### Out of scope` sub-block). Extract the exact section span before applying.
+- **Done-gate `L3.review-priority-table`** wants a P1–P4 table with at least one substantive non-placeholder row; bare `| P1 | — | — | — |` scaffold fails.
+- **Solution section anchors must name the requirement's subject.** The L4 anchor gate parses the cited line and rejects anchors whose content lacks the requirement tokens (e.g. the glass-bar class string) — point the anchor at the exact implementing line, not the file head; test-helper rows must cite the helper's own line.
+- **Reviewer-agent model quota (zai-cn/glm-5.3) is a real failure mode** — 429 weekly/monthly limit. Fall back to inline review/verify in the host session; the pipeline's proof artifacts (answer file, verdict, sections) carry the evidence either way.
+- **`spur task record --transition testing` and `--as done` run the shell guard** — L4 Solution anchor + Requirements checkbox-marker checks are real gates, not decoration; fix sections, then re-record (idempotent-ish: `Testing written, 0643 → testing` style lines).
+- **feature-sync-bounded hops chain** (backlog→active→verifying→done) once all linked tasks are terminal and verdict rows match scenarios — the batch-once wrap transition is automatic.
+
