@@ -20,18 +20,18 @@ Feature **F841** refines the layout and interactions:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ FeaturesShell (w-full h-full p-4 flex justify-center items-stretch gap-3 overflow-hidden)             │
+│ FeaturesShell (relative w-full h-full p-4 overflow-hidden)                                             │
 │                                                                                                        │
-│  ┌─ [Docked Left Feature Tree] ─┐   ┌─ Central Container (max-w-[1600px] flex-1 flex flex-col gap-3) ┐  │
+│  ┌─ [Left Feature Tree overlay] ┐   ┌─ Central Container (w-full max-w-[1600px] mx-auto flex-col)   ┐  │
 │  │                              │   │                                                                │  │
 │  │ [🌳 Feature Tree]            │   │ ┌─ Module Header (w-full) ───────────────────────────────────┐ │  │
 │  │ [▶] F  Root                  │   │ │ [ 🎯 Features ]   Hierarchical roadmap   [ Filter ▾ ] [ + ]│ │  │
 │  │   [▼] F1 Child               │   │ └────────────────────────────────────────────────────────────┘ │  │
 │  │     F1A Grandchild           │   │                                                                │  │
 │  │                              │   │ ┌─ Main Detail Workspace (rounded-lg border bg-base-100) ────┐ │  │
-│  │ (w-72 / w-80 docked panel;   │   │ │ ┌─ Detail Header ────────────────────────────────────────┐ │ │  │
-│  │  positioned outside central  │   │ │ │ [◍ F84] Title ...                [Verify] [Edit] [ℹMeta]│ │ │ │
-│  │  container on the left;      │   │ │ └────────────────────────────────────────────────────────┘ │ │  │
+│  │ (w-72 / w-80 absolute z-20   │   │ │ ┌─ Detail Header ────────────────────────────────────────┐ │ │  │
+│  │  overlay above the workspace;│   │ │ │ [◍ F84] Title ...                [Verify] [Edit] [ℹMeta]│ │ │ │
+│  │  consumes no layout width;   │   │ │ └────────────────────────────────────────────────────────┘ │ │  │
 │  │  hidden when closed)         │   │ │                                                            │ │  │
 │  │                              │   │ │ ┌─ Full-Width Markdown Canvas ───────────────────────────┐ │ │  │
 │  │                              │   │ │ │ Preview / MDEditor spanning container                  │ │ │ │
@@ -59,8 +59,8 @@ Feature **F841** refines the layout and interactions:
   - Status filter dropdown menu (All, Backlog, Active, Verifying, Done, Cancelled, Blocked).
   - Add root feature button (`+`).
 
-### 3.2 Docked Left Feature Tree with Branch Folding
-- **Docked behavior:** Outer card dock (`w-72 lg:w-80 h-full shrink-0 flex flex-col overflow-hidden rounded-lg border border-spur-border bg-base-200 shadow-xl`), positioned outside the central container and docked against its left side. It includes a dedicated panel header with title (`🌳 Feature Tree`) and is unclosable from the dock itself, toggling via the module header button with native `hidden={!isTreeOpen}` attribute.
+### 3.2 Left Feature Tree Overlay with Branch Folding
+- **Overlay behavior:** Outer card overlay (`absolute left-4 top-4 bottom-4 z-20 w-72 lg:w-80 flex flex-col overflow-hidden rounded-lg border border-spur-border bg-base-200 shadow-xl`), positioned outside the central container and floating above the workspace's left edge. Because it is absolutely positioned it consumes no layout width, so toggling it never resizes or shifts the central container (R1). It includes a dedicated panel header with title (`🌳 Feature Tree`) and is unclosable from the panel itself, toggling via the module header button with native `hidden={!isTreeOpen}` attribute.
 - **Branch folding:**
   - `FeatureTree` manages root `collapsedIds: Set<string>` state (empty default = all expanded).
   - Parent nodes render a dedicated fold button before the row button (`aria-label="Collapse|Expand <id>: <name>"`, `aria-expanded`, `aria-controls="feature-tree-children-<id>"`).
@@ -72,8 +72,8 @@ Feature **F841** refines the layout and interactions:
 - **Body Canvas:** Eliminates in-body `BODY` row and `max-w-4xl` limits. Both `MarkdownBody` and `MDEditor` expand across `w-full` of the detail workspace.
 - **Draft Precedence:** `refreshKey` SSE reloads during active editing preserve `draftBody` buffers, updating frontmatter/status while preventing draft replacement.
 
-### 3.4 Docked Right Metadata Inspector
-- **Docked behavior:** In-pane right inspector (`w-80 max-w-full flex flex-col overflow-hidden border-l border-spur-border bg-base-200 shadow-xl`), folded by default (`aria-hidden="true"`). Includes top-right close icon (`✕`) for easy dismissal.
+### 3.4 Right Metadata Inspector Overlay
+- **Overlay behavior:** In-pane absolute right inspector (`absolute inset-y-0 right-0 z-30`) (`w-80 max-w-full flex flex-col overflow-hidden border-l border-spur-border bg-base-200 shadow-xl`), folded by default (`aria-hidden="true"`). Includes top-right close icon (`✕`) for easy dismissal.
 - **Controls:** Opened via header `ℹ Metadata` toggle; dismissible on `✕` close button or `Escape` (unless a nested modal is open).
 
 ### 3.5 Floating Agent Prompt Bar
