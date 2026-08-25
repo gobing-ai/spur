@@ -868,6 +868,14 @@ declared in `config/plugin-scripts.json`, and appended to `package.json` `build:
 0661 amends the same entry for the `history-load.ts` removal; if both land in one commit, a single
 amendment block covers both.
 
+**Amendment (2026-08-24, second).** The standard-shipping roster drops from 8 to 7: remove
+`history-load.ts` (and its twin) — the on-demand load+analyze plugin script deleted with
+the `/sp:dev-history-load` command (HA-S1 0661). Its two supported import owners (`load-history`
+in `package.json`, the History UI Import & Analyze path) were verified independent of the plugin
+script and are preserved. `config/plugin-scripts.json` and `package.json` `build:scripts` no
+longer name it. (0659 added `history-anatomy-cache.ts`; both amendments to this entry land in the
+I8 change — see the first amendment.)
+
 ## ADR-066: Cataloged System Events Use Exhaustive Server-Side Presenters
 
 **Status:** Accepted (design) · **Date:** 2026-08-19 · **Feature:** J9

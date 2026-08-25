@@ -837,14 +837,26 @@ predates the pairings field; re-run spur history analyze)` in place of the missi
 never a throw, never a fabricated row. Registered in `REPORT_MODES` as `pairings`; unknown mode
 names keep failing with `UnknownReportModeError` naming the registered set.
 
-**Report-first surface (task 0556):** `/sp:dev-find-issue` defaults to rendering the report —
-the forensics renderer's 8 data sections plus model-authored IDENTIFY/PROPOSE analysis — and
-creates a task only behind `--create-task`. `--use-history`/`--no-task` are removed (rejected
-with a message naming the replacement). The backing skill `sp:issue-finding` keeps the data
-plane primary; raw JSONL parsing is the fallback under exactly three conditions (no typed mapper
-for the resolved source, explicit `--sessions`, or a primitive the typed tables do not retain —
-0492 R7). Documented flags/modes are tied to real command definitions by
-`plugins/sp/tests/issue-finding-fallback.test.ts`.
+**Report-first surface (task 0556, superseded 0661):** `/sp:dev-find-issue` was the report-first
+entry over the forensics renderer + `sp:issue-finding`. **As of HA-S1 (0661) it is a thin forwarder
+to `sp:history-anatomy`** with the reduced surface `[<focus>] [--mode <daily|ad-hoc>] [--date
+<YYYY-MM-DD>] [--since <RFC3339>] [--until <RFC3339>] [--recompute] [--agent <inline|auto|name>]
+[--output <path>]`; the fourteen legacy flags (`--full`, `--save`, `--source`, `--sessions`,
+`--feature`, `--template`, `--priority`, `--severity`, `--category`, `--top`, `--min-cost`,
+`--strict-topic`, `--create-task`, `--json`) are dropped, `/sp:dev-history-load` is deleted (its
+independent import owners — `load-history` in `package.json` and the History UI Import & Analyze
+path — are preserved), and the command never triggers an import. The legacy skill `sp:issue-finding`
+remains packaged and directly invocable under the bounded coexistence and retirement gate in
+`plugins/sp/README.md`; no logic is shared with the new skill.
+
+**History-anatomy surfaces (HA-S1 0658/0660):** skill `plugins/sp/skills/history-anatomy/` owns
+interpretation (mode contract, finding taxonomy, eleven-section report contract, `enrich`/`validate`
+rubrics); workflow `config/workflows/history-anatomy.yaml` owns the cache branch, deterministic stage
+ordering, one bounded correction pass, and atomic publication — the cache/digest/structure/publish
+determinism is `plugins/sp/scripts/history-anatomy-cache.ts` (+ committed `.mjs` twin, ADR-065
+standard contract, ADR-079 digest-truth). Publication is reachable only from a passing validation
+state; a hit reuses model enrichment only and refreshes `validated_at` + the imported-snapshot banner
+without claiming a later import.
 
 #### History nightly loop — scheduling surface and observability (task 0471)
 

@@ -345,11 +345,11 @@ describe('(b) frontmatter schema — description, argument-hint, allowed-tools',
         }
     });
 
-    test('39 command files exist with unique basenames', () => {
+    test('38 command files exist with unique basenames', () => {
         const files = listCommandFiles();
-        expect(files.length).toBe(39);
+        expect(files.length).toBe(38);
         const names = new Set(files.map((f) => f.replace(/\.md$/, '')));
-        expect(names.size).toBe(39);
+        expect(names.size).toBe(38);
     });
 });
 
@@ -432,9 +432,9 @@ describe('(d) allowed-tools coherence — Skill <-> Skill() call', () => {
 // ─── (e) validator integration — no violations on the real corpus ───────────
 
 describe('(e) validator integration — corpus is clean after the 28-file migration (task 0412)', () => {
-    test('validate() reports zero violations across all 39 commands', () => {
+    test('validate() reports zero violations across all 38 commands', () => {
         const result = validate(ROOT);
-        expect(result.fileCount).toBe(39);
+        expect(result.fileCount).toBe(38);
         expect(result.violations).toEqual([]);
     });
 });
@@ -1121,25 +1121,43 @@ describe('(i) task 0316 — dev-debug and dev-daily entry points', () => {
         expect(raw).not.toContain('Skill(skill="sp:daily-summary"');
     });
 
-    test('dev-find-issue wrapper passes contract gates and delegates to sp:issue-finding', () => {
+    test('dev-find-issue wrapper passes contract gates and delegates to sp:history-anatomy (0661)', () => {
         const raw = readFileSync(join(COMMANDS_DIR, 'dev-find-issue.md'), 'utf8');
         expect(raw).toContain('description:');
-        expect(raw).toMatch(/^argument-hint:.*\[<topic>\]/m);
-        expect(raw).toContain('allowed-tools: ["Bash", "Read", "Write", "Grep", "Glob", "Skill"]');
+        expect(raw).toMatch(/^argument-hint:.*\[<focus>\]/m);
+        expect(raw).toMatch(/^argument-hint:.*--mode </m);
+        expect(raw).toMatch(/^argument-hint:.*--date </m);
+        expect(raw).toContain('allowed-tools: ["Bash", "Read", "Skill"]');
         expect(raw).toContain('# Dev Find Issue');
         expect(raw).toContain('## Usage');
         expect(raw).toContain('## Implementation');
-        expect(implSection(raw)).toContain('Skill(skill="sp:issue-finding", args="$ARGUMENTS")');
-        // Topic + multi-source filters surface on the thin wrapper (skill owns protocol depth).
-        expect(raw).toContain('--source');
-        expect(raw).toContain('--severity');
-        expect(raw).toContain('--category');
-        expect(raw).toContain('--min-cost');
-        expect(raw).toContain('--create-task');
-        expect(raw).toContain('--json');
+        expect(implSection(raw)).toContain('Skill(skill="sp:history-anatomy", args="$ARGUMENTS")');
+        // Only the reduced surface survives; the fourteen legacy flags are gone.
+        for (const kept of ['--mode', '--date', '--since', '--until', '--recompute', '--output']) {
+            expect(raw).toContain(kept);
+        }
+        for (const dropped of [
+            '--full',
+            '--save',
+            '--source',
+            '--sessions',
+            '--feature',
+            '--template',
+            '--priority',
+            '--severity',
+            '--category',
+            '--top',
+            '--min-cost',
+            '--strict-topic',
+            '--create-task',
+            '--json',
+        ]) {
+            expect(raw, `dropped flag ${dropped} must not remain`).not.toContain(dropped);
+        }
         // Skill SSOT exists for target resolution.
+        expect(existsSync(join(SKILLS_DIR, 'history-anatomy', 'SKILL.md'))).toBe(true);
+        // Legacy skill remains packaged and directly invocable (coexistence, not removal).
         expect(existsSync(join(SKILLS_DIR, 'issue-finding', 'SKILL.md'))).toBe(true);
-        expect(existsSync(join(SKILLS_DIR, 'issue-finding', 'examples', 'session-test-loop.jsonl'))).toBe(true);
     });
 });
 

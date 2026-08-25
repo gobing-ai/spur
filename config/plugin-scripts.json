@@ -37,11 +37,6 @@
             "twin": "history-anatomy-cache.mjs"
         },
         {
-            "rel": "history-load.ts",
-            "contract": "standard",
-            "twin": "history-load.mjs"
-        },
-        {
             "rel": "pr-reviewing.ts",
             "contract": "standard",
             "twin": "pr-reviewing.mjs"

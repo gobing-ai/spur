@@ -340,14 +340,18 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         };
         statSync(join(skillDir, 'agents', 'openai.yaml'));
 
-        // Thin command delegates to the skill SSOT.
-        expect(command).toContain('Skill(skill="sp:issue-finding", args="$ARGUMENTS")');
-        expect(command).toMatch(/argument-hint:.*\[<topic>\]/);
-        expect(command).toContain('--source');
-        expect(command).toContain('--severity');
-        expect(command).toContain('--min-cost');
-        expect(command).toContain('--create-task');
-        expect(command).toContain('--json');
+        // Thin command delegates to the skill SSOT (0661: now sp:history-anatomy; the legacy
+        // sp:issue-finding surface is asserted separately below).
+        expect(command).toContain('Skill(skill="sp:history-anatomy", args="$ARGUMENTS")');
+        expect(command).toMatch(/argument-hint:.*\[<focus>\]/);
+        expect(command).toMatch(/argument-hint:.*--mode </);
+        expect(command).toMatch(/argument-hint:.*--date </);
+        expect(command).toContain('--recompute');
+        expect(command).toContain('--output');
+        expect(command).not.toContain('--source');
+        expect(command).not.toContain('--severity');
+        expect(command).not.toContain('--min-cost');
+        expect(command).not.toContain('--create-task');
 
         // Optional topic + multi-source honesty live on the skill.
         expect(skill).toContain('[topic]');

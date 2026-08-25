@@ -200,16 +200,25 @@ restrictor. On `dev-refineall` it is instead one of a required pair — supply e
 
 Select an execution mode: `full|implement` on `dev-run` (full pipeline vs implement-only),
 `sequential|parallel` on `dev-runall` (serial vs fanned-out-independent-subset),
-`fan-out|review-panel|investigation` on `dev-parallel`, and the reconstruction depth
-`briefing|structure|architecture|design|full` on `dev-reverse`. Mode selection is explicit and orthogonal
+`fan-out|review-panel|investigation` on `dev-parallel`, the reconstruction depth
+`briefing|structure|architecture|design|full` on `dev-reverse`, and `daily|ad-hoc` on
+`dev-find-issue` (the history-anatomy report mode). Mode selection is explicit and orthogonal
 to `--next`.
+
+### `--date <YYYY-MM-DD>` — local calendar day selection
+
+**Anchor:** `#flag-date`.
+
+Select a local calendar day on `dev-find-issue` (daily mode) and `dev-daily` (report date). DST-aware:
+`--date <that-date>` spans the full local calendar day including any daylight-saving shift, never a
+fixed 24-hour offset.
 
 ### `--task <wbs>` — task work or task narrowing
 
 **Anchor:** `#flag-task`.
 
 Connect the current command's result to task work, or narrow a history analysis to one task
-(`dev-brainstorm`, `dev-debug`, `dev-dogfood`, `dev-find-next`, `dev-history-load`). The value and
+(`dev-brainstorm`, `dev-debug`, `dev-dogfood`, `dev-find-next`). The value and
 the effect are per-command — this flag is a family, not one behavior:
 
 - `dev-brainstorm` `[<feature-id>]` — **creates** one task from the chosen approach, landing at
@@ -221,7 +230,6 @@ the effect are per-command — this flag is a family, not one behavior:
   id names the target instead of offering rank 1.
 - `dev-debug` `[<wbs>]` — **attaches** findings to an existing task. Optional WBS names it.
 - `dev-dogfood` (no value) — **records** run outcomes against the task under test.
-- `dev-history-load` `<wbs>` — narrows the `analyze` step to that task's messages.
 
 ### `--since <ref>` — lower bound on a range
 
@@ -250,10 +258,10 @@ Upper bound on a range: a git ref on `dev-changelog` (defaults to `HEAD`), or an
 
 **Anchor:** `#flag-source`.
 
-Scope the operation to one agent source (`dev-find-issue`, `dev-history-load`): one of
-`pi|claude|codex|gemini|opencode|antigravity|openclaw|omp|grok|agy` (or `all`). On
-`dev-history-load` the value is forwarded to **both** `spur history import` and
-`spur history analyze`; on `dev-find-issue` it narrows the report scan to that source's sessions.
+_(Removed 2026-08-24, HA-S1 0661.)_ The only two commands that consumed this flag;
+`dev-find-issue` (now a `sp:history-anatomy` forwarder) and `dev-history-load` (deleted) no
+longer declare it, so the entry is dead and removed. The underlying `spur history` surfaces
+retain their own `--source` handling.
 
 ### `--status <s>` — filter by task status
 
@@ -280,7 +288,8 @@ Omit the design package (system-design satellite + task `### Design`) on plannin
 
 **Anchor:** `#flag-output`.
 
-Write the command's result to a file path (`dev-daily`, `dev-reverse`) instead of stdout.
+Write the command's result to a file path (`dev-daily`, `dev-find-issue`, `dev-reverse`) instead of
+stdout. On `dev-find-issue` (ad-hoc mode) an explicit path replaces the default run-directory write.
 
 ### `--merge` — trigger branch cleanup
 
