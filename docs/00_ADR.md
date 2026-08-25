@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.27.0
+version: 1.28.0
 owner: Robin Min
-updated_at: 2026-08-21
+updated_at: 2026-08-24
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -1147,6 +1147,13 @@ constant it would stop guarding the real SSOT. Layer merge per 0639's classifica
 `agent.roles` object-deep-merge, `<role>.tier` scalar-replace, `<role>.stages` array-replace
 (whole-set semantics; concat misroutes). Implementation task follows this ADR + the 0642 Solution
 blast-radius table.
+**Amendment (2026-08-24) — the fallback is explicit, never silent (feature A5 R7/R8).** The
+composition root records role-table provenance (`config` when the merged config supplies
+`agent.roles`, `fallback` otherwise) and threads it alongside the role map; `spur agent doctor`
+reports when the byte-identical fallback is in effect (error-stream note in text mode, a
+`rolesSource` field under `--json`). The fallback's content, applicability rule, and parity gate
+are unchanged — what changes is that applying it is now observable. **Detail:**
+`docs/design/universal-config-loading.md` §Role-fallback provenance.
 
 ## ADR-079: A Report Cache Stores Judgment, Never Evidence — the Deterministic Half Always Reruns
 
@@ -1203,3 +1210,24 @@ rule, and the embed rule written down once rather than re-derived per module.
 **Detail:** `docs/design/tasks-module-shell-parity.md` — header anatomy, combined-input parse rule,
 tab contract, controlled-prop seam, and card enrichment shapes; mechanism placement in
 `docs/03_ARCHITECTURE.md` §14.5.
+## ADR-082: Merged Config Loads Once at the Composition Root — the Only App-Config Source
+
+**Status:** Accepted (design) · **Date:** 2026-08-24 · **Feature:** A5
+
+**Decision.** Every Spur process loads app config exactly once at its composition root via the
+merged `loadSpurConfig` (global defaults + project override, validated once — 0640) and threads
+the resulting `SpurConfig` through the dispatch/service context. ts-infra's `runNodeApplication`
+retains only the project-shaped `bootstrap` section; `appRt.appConfig` is never read, every
+per-slice `loadSpurConfig` call outside the two composition roots (CLI `main()`, server startup)
+is deleted, and no ts-infra multi-file layering API is built — that remains a possible later
+evolution, not a prerequisite. A config-load failure at the composition root emits a single
+`--json` error envelope naming the failing layer.
+
+**Why.** The CLI composition root validated the merged config and then discarded it, feeding
+dispatch from ts-infra's single-file load — so one process held two config truths and the entire
+global layer went invisible whenever a project config existed (`spur agent doctor coder` failing
+against 15 globally defined executors, reproduced 2026-08-24).
+
+**Detail:** `docs/03_ARCHITECTURE.md` §1.2.1 (mechanism + invariants);
+`docs/design/universal-config-loading.md` (context shapes, consumer rewiring table, `--json`
+error-envelope codes, regression-test matrix).

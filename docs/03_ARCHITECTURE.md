@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.31.0
+version: 1.32.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-21
+updated_at: 2026-08-24
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -86,6 +86,30 @@ loader, the app's raw-`yaml` `resolvePlanningFolders`, a CLI `resolveConfigFile`
 folder literals, and the server's legacy `docs/.tasks/config.jsonc` read. All consumers now derive
 the typed result from the single facade; config-shape types (`TaskFoldersConfig`) have one owner.
 Enforced by `config/rules/boundary/config-loading-ownership.yaml`.
+
+### 1.2.1 Composition-root merged-config wiring (accepted design — ADR-082; not yet built)
+
+The merged `loadSpurConfig` result is loaded **once per process at the composition root** — CLI
+`main()`, server startup — and threaded through the dispatch/service context as the only
+app-config source. ts-infra's `runNodeApplication` keeps only the project-shaped `bootstrap`
+section (`configFile` + `bootstrapSection`; no `appConfig` validator, `appRt.appConfig` unread).
+Per-slice loads in `packages/app` services (workflow-service ×4, team-service) and CLI call sites
+(history-refresh, workflow.ts) are replaced by the threaded object; services degrade to current
+defaults when the threaded config is absent/null.
+
+Invariants (enforceable):
+
+1. `loadSpurConfig` is imported only by `packages/config/**`, the two composition roots
+   (`apps/cli/src/index.ts`, `apps/server/src/{serve,context}.ts`), and tests — enforced by the
+   extended `config/rules/boundary/config-loading-ownership.yaml`.
+2. A config value defined only in the global layer reaches every CLI command; a project-layer
+   value wins the same key (1.2 merge semantics, unchanged).
+3. Config-load failure aborts dispatch once, at the root, with one `--json` error envelope naming
+   the failing layer — never one error per consumer.
+4. Role resolution against the byte-identical `DEFAULT_AGENT_ROLES` fallback (ADR-078) carries
+   explicit provenance (`config` | `fallback`); `spur agent doctor` reports an active fallback.
+
+Shapes: `docs/design/universal-config-loading.md`.
 
 ## 2. Runtime Model
 
@@ -667,6 +691,7 @@ the DESIGN.md lavender `#5e6ad2` on `#ffffff`). The daisyUI pins exist because `
 variants onto daisyUI's **own** `--color-primary`, which would otherwise place a second chromatic
 accent on screen (0420 finding F-01). Module code carries **no hex literals and no Tailwind palette
 classes** — every surface resolves a `spur-*` token.
+
 ### 14.5 Module shell convention (ADR-081 proposed — History/Observability shell built; Tasks full-bleed variant not yet built)
 
 A multi-view Board module composes a **shell**: `<Module>Shell.tsx` plus an append-only `tabs.ts`
@@ -686,7 +711,6 @@ uncontrolled in-board defaults, so the embed keeps working with no shell present
 invariants: one shell per module route; `tabs.ts` files are append-only; a full-bleed module shares
 exactly one horizontal padding between header and body; the headerless embed never imports its
 module's shell. Shapes: `docs/design/tasks-module-shell-parity.md`.
-
 
 ## 15. Agent-Facing Plugin Surface Parity (ADR-053/054)
 
