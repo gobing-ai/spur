@@ -148,6 +148,21 @@ describe('BoardLayout', () => {
         expect(root?.getAttribute('data-rightpanel-collapsed')).toBe('true');
     });
 
+    test('keeps long module content inside the viewport-owned workspace scrollport in BoardLayout', async () => {
+        const { container } = renderBoard();
+        const workspace = container.querySelector('main');
+        const scrollport = Array.from(workspace?.children ?? []).find((child) =>
+            child.classList.contains('overflow-auto'),
+        );
+        const layoutCss = await Bun.file(new URL('../../src/styles/board-layout.css', import.meta.url)).text();
+        const documentRule = layoutCss.match(/html,\s*body\s*\{([^}]*)\}/)?.[1] ?? '';
+
+        expect(workspace?.classList.contains('h-full')).toBe(true);
+        expect(workspace?.classList.contains('overflow-hidden')).toBe(true);
+        expect(scrollport?.classList.contains('min-h-0')).toBe(true);
+        expect(documentRule).toContain('overflow: hidden');
+    });
+
     test('collapse toggle flips data-sidebar-collapsed and persists', () => {
         const { container, getByLabelText } = renderBoard();
         const root = container.querySelector('.board-layout');

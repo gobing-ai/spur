@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-24T06:17:40.546Z"
-updated_at: "2026-08-24T17:48:24.510Z"
+updated_at: "2026-08-25T00:41:34.374Z"
 ---
 
 # J92: Observability frontend enhancement: unified header, customizable table, and tab consolidation
@@ -108,6 +108,7 @@ Feature: Observability frontend enhancement: unified header, customizable table,
 | 0652 | Observability filter and time-range bar: quick presets, popover filters, and action controls | done |
 | 0653 | System Events table enhancement: customizable columns, value sorting, and cell presentation refinement | done |
 | 0654 | Jobs tab visual redesign: queue and scheduler execution metrics with focused telemetry feed | done |
+| 0656 | Prevent System Events overscroll from displacing the Board viewport | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -116,3 +117,6 @@ Feature: Observability frontend enhancement: unified header, customizable table,
 - 2026-08-24T16:05:26.533Z backlog → active (system)
 - 2026-08-24T16:05:26.787Z active → verifying (system)
 - 2026-08-24T16:05:27.021Z verifying → done (system)
+- 2026-08-25T00:14:01.002Z done → active (system)
+- 2026-08-25T00:41:34.046Z active → verifying (system)
+- 2026-08-25T00:41:34.374Z verifying → done (system)

@@ -1,3 +1,13 @@
+html,
+body {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: var(--color-spur-bg, #0f1117);
+}
+
 :root {
     --sidebar-w: 240px;
     --rightpanel-w: 320px;
@@ -15,6 +25,7 @@
     grid-template-columns: var(--sidebar-w) var(--sidebar-handle-w) 1fr var(--rightpanel-handle-w) var(--rightpanel-w);
     grid-template-rows: 100vh;
     height: 100vh;
+    max-height: 100vh;
     overflow: hidden;
 }
 

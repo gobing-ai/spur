@@ -7,9 +7,9 @@ interface Props {
 
 export default function MainWorkspace({ children, mobileHeader }: Props) {
     return (
-        <main className="flex flex-col overflow-hidden bg-spur-bg">
+        <main className="flex flex-col h-full overflow-hidden bg-spur-bg">
             {mobileHeader}
-            <div className="flex-1 overflow-auto">{children}</div>
+            <div className="flex-1 min-h-0 overflow-auto">{children}</div>
         </main>
     );
 }
