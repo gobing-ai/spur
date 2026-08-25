@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Tasks module History-shell parity: unified header, inline filters, full-bleed density, enriched cards"
-status: todo
+status: cancelled
 template: feature-impl
 created_at: 2026-08-25T04:37:58.493Z
-updated_at: "2026-08-25T04:37:58.495Z"
+updated_at: "2026-08-25T05:09:52.292Z"
 feature_id: F72
 priority: P2
 tags: ["web", "tasks-module", "shell-parity"]
@@ -68,3 +68,5 @@ Rubric: E2 D1 L1 C0 R1 = 5 → decomposition considered; D=1 (single reviewable 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-08-25T05:09:52.048Z todo → cancelled (system)
