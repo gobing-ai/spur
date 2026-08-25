@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.31.0
+version: 1.32.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-21
+updated_at: 2026-08-24
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -340,6 +340,16 @@ importer. The analyze rollup estimates per-model cost for the artifact from `his
 mapping to `history_message`'s typed token columns — exact and estimated figures folded apart,
 never priced; the ETL `CostRecord` read path is retired on the read side.
 
+**History-anatomy diagnostic (HA-S1, ADR-079/080; 0657–0661).** `analyze` records an additive
+`population` block (`SelectionPopulation` — sessions, tools, loops, warnings, `appliedTop`) from
+unbounded `COUNT(DISTINCT …)` queries over the active selector, never from bounded leaderboard
+lengths; the forensics renderer presents bounded lists as `top N of M` (ADR-080). Diagnostic
+interpretation lives in the plugin space, not the CLI: `sp:history-anatomy` owns the mode/report
+contracts, `history-anatomy.yaml` owns the cache branch / bounded correction / atomic publication,
+and `history-anatomy-cache.ts` (+ committed `.mjs` twin, ADR-065 standard contract) computes the
+semantic artifact digest — the deterministic half always reruns, only model judgment is cacheable
+(ADR-079). Shapes: `docs/design/history-anatomy.md`.
+
 **History Board read plane (E8).** The six `history.*` oRPC procedures delegate through
 `HistoryBoardService`; `LiveHistoryBoardService` composes the existing forensic queries and keeps
 the server transport SQL-free. `HistoryService.analyze()` refreshes checkpoint-keyed SQLite read
@@ -667,6 +677,7 @@ the DESIGN.md lavender `#5e6ad2` on `#ffffff`). The daisyUI pins exist because `
 variants onto daisyUI's **own** `--color-primary`, which would otherwise place a second chromatic
 accent on screen (0420 finding F-01). Module code carries **no hex literals and no Tailwind palette
 classes** — every surface resolves a `spur-*` token.
+
 ### 14.5 Module shell convention (ADR-081 proposed — History/Observability shell built; Tasks full-bleed variant not yet built)
 
 A multi-view Board module composes a **shell**: `<Module>Shell.tsx` plus an append-only `tabs.ts`
@@ -686,7 +697,6 @@ uncontrolled in-board defaults, so the embed keeps working with no shell present
 invariants: one shell per module route; `tabs.ts` files are append-only; a full-bleed module shares
 exactly one horizontal padding between header and body; the headerless embed never imports its
 module's shell. Shapes: `docs/design/tasks-module-shell-parity.md`.
-
 
 ## 15. Agent-Facing Plugin Surface Parity (ADR-053/054)
 

@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.27.0
+version: 1.28.0
 owner: Robin Min
-updated_at: 2026-08-21
+updated_at: 2026-08-24
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -1165,7 +1165,7 @@ blast-radius table.
 
 ## ADR-079: A Report Cache Stores Judgment, Never Evidence — the Deterministic Half Always Reruns
 
-**Status:** Accepted (design) · **Date:** 2026-08-24 · **Feature:** I8
+**Status:** Accepted · **Date:** 2026-08-24 · **Feature:** I8
 
 **Decision.** A cached diagnostic report is reusable only for the model-authored half. Every
 invocation reruns the deterministic half — `spur history analyze` over the live imported database —
@@ -1176,12 +1176,17 @@ The cache is never validated from a filename, a modification time, or a `generat
 **Why.** A cache keyed on anything but re-derived evidence can present a stale conclusion as current
 evidence, which is the one failure a diagnostic report cannot survive.
 
+**Amendment (2026-08-24).** Decision shipped: the cache contract is built as the
+`history-anatomy-cache.ts` plugin script (+ `.mjs` twin) and the `history-anatomy.yaml` workflow
+cache branch (0659/0660). The deterministic half — semantic artifact digest, invalidation matrix,
+structure gate, atomic publication — is installed code, not a design.
+
 **Detail:** `docs/design/history-anatomy.md` §Cache contract — identity tuple, frontmatter
 provenance fields, provisional-versus-closed day semantics, and the invalidation matrix.
 
 ## ADR-080: A Bounded Ranking Is Never a Population Count
 
-**Status:** Accepted (design) · **Date:** 2026-08-24 · **Feature:** I8 · **Consent:** HA-S1, operator-approved 2026-08-24
+**Status:** Accepted · **Date:** 2026-08-24 · **Feature:** I8 · **Consent:** HA-S1, operator-approved 2026-08-24
 
 **Decision.** Any analytics artifact that bounds a leaderboard must also carry the true population it
 was drawn from and the applied depth, and every renderer must present the bounded list as "top N of
@@ -1192,8 +1197,14 @@ figure renders `not available`; a bounded array length is never substituted for 
 `analyze --top` bounds that array to 20, so any day with more than 20 sessions rendered a coverage
 claim that was silently false.
 
+**Amendment (2026-08-24).** Decision shipped: `analyze` records the true selection population and
+applied depth per bounded leaderboard, the forensics renderer labels each leaderboard `top N of M`,
+and pre-addition artifacts render `not available` (0657). The backward-compatibility rule is
+installed code, not a design.
+
 **Detail:** `docs/design/history-anatomy.md` §HA-S1 — the additive artifact fields, the renderer
 change, and the backward-compatibility rule for pre-addition artifacts.
+
 ## ADR-081: Board Module Shell Convention — One-Row Header, Append-Only Tabs, Density-First Full-Bleed
 
 **Status:** Proposed · **Date:** 2026-08-24 · **Feature:** F72
