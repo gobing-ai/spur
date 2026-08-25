@@ -542,6 +542,27 @@ describe('AgentService.doctor', () => {
         expect(warningText).not.toContain('quota_exhausted');
         expect(warningText).not.toContain('unavailable');
     });
+
+    test('--json: a role that resolves to no usable executor emits a single agent-resolution envelope (R5)', async () => {
+        const { lines, output } = captureOutput();
+        const cfg: AgentConfig = {
+            default: 'coder',
+            executors: [{ name: 'cap1-exec', agent: 'claude', tier: 'capable-1' }],
+        };
+        const svc = makeConfiguredService(cfg, {}, roleMap(), output);
+        // reviewer is capable-1 -> cap1-exec; but the doctor deems it unusable, so
+        // resolveRole returns !ok and R5 wraps the message in an agent-resolution envelope.
+        const doctorRunner = {
+            runAll: mock(() => Promise.resolve([mockDoctorResult()])),
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ agent: 'cap1-exec', usable: false }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const code = await svc.doctor({ json: true, agent: 'reviewer' }, { doctorRunner });
+        expect(code).not.toBe(0);
+        const envelope = JSON.parse(lines.find((l) => l.includes('"error"')) ?? '{}');
+        expect(envelope.error?.code).toBe('agent-resolution');
+        // Message propagated verbatim from the resolve failure.
+        expect(envelope.error?.message).toBeTruthy();
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -1966,13 +1987,16 @@ describe('AgentService executor-aware explicit --agent (0346)', () => {
     });
 
     test('R8 (task 0413): unknown --agent error message lists every configured executor', async () => {
-        const { errors, output } = captureOutput();
+        const { lines, output } = captureOutput();
         const svc = new AgentService({ cwd: process.cwd(), env: {}, output, agentConfig: cfg });
         const { deps } = mockResolutionDeps();
         await svc.run('plain prompt', { agent: 'not-a-name', json: true }, deps);
-        // The diagnostic must name the offending value AND list available executors
+        // Under --json, the dispatch failure is a single agent-resolution envelope (R5).
+        const envelope = JSON.parse(lines[0] ?? '{}');
+        expect(envelope.error?.code).toBe('agent-resolution');
+        // The message must name the offending value AND list available executors
         // so a typo is recoverable rather than an opaque "Unknown agent".
-        const diag = errors.join('\n');
+        const diag = envelope.error?.message ?? '';
         expect(diag).toContain("Unknown agent: 'not-a-name'");
         expect(diag).toContain('omp');
         expect(diag).toContain('omp-zai');
@@ -1980,7 +2004,7 @@ describe('AgentService executor-aware explicit --agent (0346)', () => {
     });
 
     test('ADR-047 (G5): --agent inline fails resolution with the frozen message — no agent.default fallback, no dispatch', async () => {
-        const { errors, output } = captureOutput();
+        const { lines, output } = captureOutput();
         const svc = new AgentService({ cwd: process.cwd(), env: {}, output, agentConfig: cfg });
         const { deps, runner } = mockResolutionDeps();
         const code = await svc.run('plain prompt', { agent: 'inline', json: true }, deps);
@@ -1989,7 +2013,8 @@ describe('AgentService executor-aware explicit --agent (0346)', () => {
         // — never normalized to agent.default (no default-executor subprocess).
         expect(code).toBe(2);
         expect(runner.runPromptCommand).not.toHaveBeenCalled();
-        expect(errors.join('\n')).toContain(AGENT_INLINE_HEADLESS_MESSAGE);
+        const envelope = JSON.parse(lines[0] ?? '{}');
+        expect(envelope.error?.message).toContain(AGENT_INLINE_HEADLESS_MESSAGE);
     });
 });
 
@@ -2120,23 +2145,24 @@ describe('AgentService role routing (0536)', () => {
     });
 
     test('0538 R1: an unknown declared role fails loudly naming the vocabulary', async () => {
-        const { errors, output } = captureOutput();
+        const { lines, output } = captureOutput();
         const svc = makeConfiguredService(roleCfg, {}, roleMap(), output);
         const { deps, runner } = mockResolutionDeps();
         const code = await svc.run('plain prompt', { agent: 'auto', role: 'sorcerer', json: true }, deps);
         expect(code).toBe(2);
         expect(runner.runPromptCommand).not.toHaveBeenCalled();
-        expect(errors.join('\n')).toContain("Unknown declared role: 'sorcerer'");
+        const envelope = JSON.parse(lines[0] ?? '{}');
+        expect(envelope.error?.message).toContain("Unknown declared role: 'sorcerer'");
     });
 
     test('R3: an unknown value exits 2 naming both accepted sets, and nothing spawns', async () => {
-        const { errors, output } = captureOutput();
+        const { lines, output } = captureOutput();
         const svc = makeConfiguredService(roleCfg, {}, roleMap(), output);
         const { deps, runner } = mockResolutionDeps();
         const code = await svc.run('plain prompt', { agent: 'not-a-name', json: true }, deps);
         expect(code).toBe(2);
         expect(runner.runPromptCommand).not.toHaveBeenCalled();
-        const diag = errors.join('\n');
+        const diag = JSON.parse(lines[0] ?? '{}').error?.message ?? '';
         expect(diag).toContain("Unknown agent: 'not-a-name'");
         expect(diag).toContain('role');
         expect(diag).toContain('scribe');
@@ -2371,13 +2397,13 @@ describe('AgentService agent.default role domain (0542)', () => {
     });
 
     test('R2: a value that is neither a role nor an executor fails naming both accepted sets', async () => {
-        const { errors, output } = captureOutput();
+        const { lines, output } = captureOutput();
         const svc = makeConfiguredService({ ...execCfg, default: 'bogus-default' }, {}, roleMap(), output);
         const { deps, runner } = mockResolutionDeps();
         const code = await svc.run('plain prompt', { agent: 'auto', json: true }, deps);
         expect(code).toBe(2);
         expect(runner.runPromptCommand).not.toHaveBeenCalled();
-        const joined = errors.join('\n');
+        const joined = JSON.parse(lines[0] ?? '{}').error?.message ?? '';
         expect(joined).toContain("Unknown agent.default value: 'bogus-default'");
         expect(joined).toContain('role (');
         expect(joined).toContain('configured executor (');

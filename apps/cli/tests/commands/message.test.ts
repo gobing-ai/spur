@@ -77,6 +77,24 @@ describe('spur message send', () => {
         }
     });
 
+    test('--json empty body emits a single usage error envelope (R10)', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
+        try {
+            const code = await main(['message', 'send', '--to', 'planner', '--json', ''], {
+                cwd,
+                output: out,
+                dbUrl,
+            });
+            expect(code).toBe(2);
+            const parsed = JSON.parse(out.messages[0] ?? '{}');
+            expect(parsed).toEqual({ error: { code: 'usage', message: 'message send requires a non-empty body' } });
+            // Nothing plain-text on the error stream in json mode.
+            expect(out.errors.join('\n')).not.toMatch(/non-empty body/);
+        } finally {
+            await cleanup();
+        }
+    });
+
     test('rejects a malformed --to id with exit 1', async () => {
         const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {

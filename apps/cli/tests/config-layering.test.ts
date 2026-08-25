@@ -151,4 +151,38 @@ describe('config layering — composition-root merged-config (A5)', () => {
         // No split-brain: dispatch must not throw a per-slice config error.
         expect(res.stderr).not.toMatch(/loadSpurConfig|config/);
     });
+
+    test('R7: no config layer defines agent.roles → doctor reports rolesSource: fallback (explicit fallback proven)', async () => {
+        // Neither layer supplies an `agent.roles` table; a `coder` role selector
+        // resolves via DEFAULT_AGENT_ROLES. The doctor --json payload must carry
+        // top-level `rolesSource: 'fallback'` (whole-table provenance).
+        const dirs = await makeLayerDirs(
+            'version: "1"\nname: global\nagent:\n  executors:\n    - name: coder-exec\n      agent: claude\n      tier: standard\n',
+            'version: "1"\nname: proj\n',
+        );
+        dirsToClean.push(dirs);
+        const res = await runCli(['agent', 'doctor', 'coder', '--json'], dirs.projectDir, {
+            HOME: dirs.fakeHome,
+            USERPROFILE: dirs.fakeHome,
+            SPUR_SKIP_GLOBAL_CONFIG: '',
+        });
+        const json = res.json as { rolesSource?: string; agents?: Array<{ agent?: string }> };
+        expect(json.rolesSource).toBe('fallback');
+        // The coder role still resolves (fallback table), so doctor is usable.
+        expect(Array.isArray(json.agents)).toBe(true);
+    });
+
+    test('R7: text-mode doctor prints the explicit-fallback note when no layer defines agent.roles', async () => {
+        const dirs = await makeLayerDirs(
+            'version: "1"\nname: global\nagent:\n  executors:\n    - name: coder-exec\n      agent: claude\n      tier: standard\n',
+            'version: "1"\nname: proj\n',
+        );
+        dirsToClean.push(dirs);
+        const res = await runCli(['agent', 'doctor', 'coder'], dirs.projectDir, {
+            HOME: dirs.fakeHome,
+            USERPROFILE: dirs.fakeHome,
+            SPUR_SKIP_GLOBAL_CONFIG: '',
+        });
+        expect(res.stderr).toMatch(/DEFAULT_AGENT_ROLES fallback in effect/);
+    });
 });

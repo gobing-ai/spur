@@ -116,6 +116,12 @@ export interface CliContext {
      */
     spurConfig?: SpurConfig;
     /**
+     * Provenance of `agentRoles`: 'fallback' iff no config layer supplied an
+     * `agent.roles` table at all (whole-table, not per-role). Computed at the
+     * CLI root from the merged config; observability only (R3).
+     */
+    agentRolesSource: 'config' | 'fallback';
+    /**
      * Layer-1 role → tier map resolved from `DEFAULT_AGENT_ROLES`
      * (packages/config SSOT, 0572 / ADR-061) with the project's validated
      * `agent.roles` override merged per-field. Threaded into every
@@ -169,6 +175,7 @@ export function createCliContext(options: {
     // Otherwise fall back to lazy creation for tests and the pre-bootstrap path.
     const agentConfig = options.agentConfig ?? options.spurConfig?.agent;
     const agentRoles = options.agentRoles ?? resolveAgentRoles(agentConfig);
+    const agentRolesSource: 'config' | 'fallback' = agentConfig?.roles === undefined ? 'fallback' : 'config';
     let dbPromise: Promise<DbAdapter> | undefined;
     if (options.db) {
         dbPromise = Promise.resolve(options.db);
@@ -188,6 +195,7 @@ export function createCliContext(options: {
         ...(options.agentConfig !== undefined ? { agentConfig: options.agentConfig } : {}),
         ...(options.spurConfig !== undefined ? { spurConfig: options.spurConfig } : {}),
         agentRoles,
+        agentRolesSource,
         agentService: (serviceOptions?: AgentServiceOptions) =>
             new AgentService({
                 cwd,
@@ -195,6 +203,7 @@ export function createCliContext(options: {
                 output: options.output,
                 agentConfig: agentConfig,
                 roles: agentRoles,
+                rolesSource: agentRolesSource,
                 getDb,
                 ...(serviceOptions?.events !== undefined ? { events: serviceOptions.events } : {}),
                 ...(serviceOptions?.processRegistry !== undefined

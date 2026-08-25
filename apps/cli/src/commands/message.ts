@@ -111,7 +111,13 @@ async function runMessageSend(
 ): Promise<number> {
     const trimmed = body.trim();
     if (trimmed === '') {
-        context.output.error('message send requires a non-empty body');
+        if (options.json) {
+            context.output.write(
+                toJson({ error: { code: 'usage', message: 'message send requires a non-empty body' } }),
+            );
+        } else {
+            context.output.error('message send requires a non-empty body');
+        }
         return 2;
     }
     const from = options.from || DEFAULT_FROM;

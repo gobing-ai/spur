@@ -291,6 +291,11 @@ export interface AgentServiceContext {
      */
     agentConfig?: AgentConfig;
     /**
+     * Provenance of `roles` (R3): 'fallback' iff no config layer supplied an
+     * `agent.roles` table. Absent → treated as 'config' (no fallback note).
+     */
+    rolesSource?: 'config' | 'fallback';
+    /**
      * Layer-1 role map resolved at the CLI boundary (0536 R1) from the
      * `DEFAULT_AGENT_ROLES` SSOT (0572 / ADR-061) merged with the project's
      * `agent.roles` override. Absent → role selectors are not recognized
@@ -445,6 +450,11 @@ export class AgentService {
         // `{usable:false}`) and never stop at the first eligible without a
         // usability check (a quota-exhausted or missing executor must fall through
         // to the next rung, exactly as dispatch would).
+        if (this.ctx.rolesSource === 'fallback') {
+            this.ctx.output.error(
+                'agent.roles: no config layer defines a table — built-in DEFAULT_AGENT_ROLES fallback in effect',
+            );
+        }
         if (args.agent === undefined) {
             const results = await doctorRunner.runAll();
             return this.renderDoctor(results, executors, args.json, args.agent);
@@ -453,7 +463,11 @@ export class AgentService {
         if (roleDef !== undefined) {
             const resolved = await this.resolveRole(args.agent, roleDef.tier, doctorRunner);
             if (!resolved.ok) {
-                this.ctx.output.error(resolved.message);
+                if (args.json) {
+                    this.ctx.output.write(toJson({ error: { code: 'agent-resolution', message: resolved.message } }));
+                } else {
+                    this.ctx.output.error(resolved.message);
+                }
                 return resolved.exitCode;
             }
             const results = [await doctorRunner.runOne(resolved.executor ?? resolved.agent)];
@@ -498,7 +512,7 @@ export class AgentService {
                 const executor = executorByName.get(result.agent) ?? { name: result.agent, agent: result.agent };
                 return { ...result, capabilityTier: getExecutorTier(executor) };
             });
-            this.ctx.output.write(toJson({ agents: rows }));
+            this.ctx.output.write(toJson({ agents: rows, rolesSource: this.ctx.rolesSource ?? 'config' }));
         } else if (agent !== undefined) {
             // Single-executor mode: show full model detail when available.
             this.ctx.output.write(renderDoctorDetail(results[0] ?? null));
@@ -522,7 +536,11 @@ export class AgentService {
             execution: this.defaultExecutionOptions(flags),
         });
         if (!outcome.ok) {
-            this.ctx.output.error(outcome.message);
+            if (booleanFlag(flags, 'json')) {
+                this.ctx.output.write(toJson({ error: { code: 'agent-resolution', message: outcome.message } }));
+            } else {
+                this.ctx.output.error(outcome.message);
+            }
             return outcome.exitCode;
         }
         const result = outcome.result;
