@@ -1,7 +1,7 @@
 ---
 description: Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)
 role: coder
-argument-hint: "<wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--continue]"
+argument-hint: "<wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--continue] [--worktree [<name>]]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -20,12 +20,13 @@ Wraps the **sp:spur-dev** and **sp:code-implementation** skills.
 | `--next` | Chain-to-completion via the next-router. | off |
 | `--wrap` | Run the wrap hop after the main step. The `--agent` selector is preserved into the `/sp:dev-wrap <wbs>` handoff when supplied; omission remains omission. The wrap hop is workflow-backed and reports its trigger-3 subprocess override. | off |
 | `--continue` | Resume an interrupted task from its checkpoint. | off |
+| `--worktree` `[<name>]` | Run the task pipeline in an isolated git worktree; FF-merge on success, retain on failure. Bare `--worktree` creates a fresh tree; `--worktree <name>` adopts an existing worktree by name/path/branch. Full mode only. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 
-/sp:dev-run <wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--continue]
+/sp:dev-run <wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--continue] [--worktree [<name>]]
 
 ## Implementation
 
@@ -40,12 +41,30 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 - `--auto` | `--agent <inline|auto|name>` — Skip objective HITL confirmations (taste/irreversible gates still pause). `--agent` names who does the model-bearing work. Interactive omit/`inline` keeps the controller and implement-only stages in this session; full mode reads `task-pipeline.yaml` as the SSOT and interprets its actions/guards through the inline driver, where **omitted** `--agent`'s eligible `agent.run` stages may dispatch once to a native subagent and otherwise run in the host (task 0508); explicit `--agent inline` is the zero-dispatch carve-out — every stage executes in the invoking session. It records `stage <id> executed inline in session <session-id>` or `stage <id> executed via subagent <agent-id> (host session <session-id>)` in the run log. `auto` or a name is merged into `vars.agent` and `vars.implementAgent` and keeps the existing subprocess workflow. Headless `spur workflow run` / `spur agent run` is unchanged. See the [execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 
+`--worktree` `[<name>]` (run the task's pipeline in an isolated git worktree — FF-merge onto the
+base ref on full success, retain intact on any failure/halt/non-FF; bare form creates a fresh tree,
+`<name>` form adopts an existing worktree by name/path/branch). The lifecycle — dirty-tree precheck,
+creation or adoption, crash-safe `.spur/run/` marker, merge-or-retain, `--continue` re-entry — is
+`execution-batch.md` § Worktree isolation applied to a batch of one: marker `command` is `dev-run`
+and `selector` is the `<wbs>`, the derived branch is `sp/run-<wbs>-<short-id>`, and the success
+condition is the task reaching terminal `done` with no failed stage. A failing gate, a non-PASS
+verify verdict, or a HITL pause that ends the run all take the retention path.
+
+**`--worktree` is full-mode only.** `--worktree --mode implement` is **rejected**. `--mode implement`
+*is* the pipeline's implement stage and runs in whatever tree the driver already set up (bug-742);
+giving it a second worktree would split one task's evidence across two trees. Use `--worktree` on the
+full-mode invocation, which carries the implement stage with it.
+
+**`--worktree` corpus visibility.** While the task runs in a worktree, corpus writes (status
+transitions, evidence sections, kanban) land in the worktree copy; your main tree still shows the
+pre-run status until the FF-merge on success. This is expected, not a bug.
+
 **Mode split (load-bearing — bug-742)**
 
 | Mode | What runs | Must not do |
 | --- | --- | --- |
 | `--mode full` (default) | Interactive omit/inline: host-session driver over `task-pipeline.yaml`; explicit/headless executor: workflow subprocess | — |
-| `--mode implement` | Single implement competency via `sp:code-implementation` | Re-launch the full pipeline, `spur workflow run …task-pipeline…`, or `/sp:dev-run` **without** `--mode implement` |
+| `--mode implement` | Single implement competency via `sp:code-implementation` | Re-launch the full pipeline, `spur workflow run …task-pipeline…`, `/sp:dev-run` **without** `--mode implement`, or accept `--worktree` (rejected) |
 
 The pipeline's `implement` step invokes this command **only** as:
 
