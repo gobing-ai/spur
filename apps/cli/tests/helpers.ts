@@ -61,11 +61,16 @@ export interface CliResult {
  * faster and already covers dispatch. Use `runCli` when subprocess isolation
  * or real process exit codes are required.
  */
-export async function runCli(args: string[], cwd?: string): Promise<CliResult> {
+export async function runCli(
+    args: string[],
+    cwd?: string,
+    env?: Record<string, string | undefined>,
+): Promise<CliResult> {
     const entryPath = join(import.meta.dir, '..', 'src', 'index.ts');
     const proc = Bun.spawn({
         cmd: ['bun', 'run', entryPath, ...args],
         cwd,
+        env: { ...process.env, ...env },
         stdout: 'pipe',
         stderr: 'pipe',
     });
