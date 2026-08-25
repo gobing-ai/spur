@@ -4,9 +4,9 @@ name: "idea-handoff-cli: spurBin multi-word string breaks execa command"
 status: backlog
 template: standard
 created_at: 2026-08-25T06:14:57.423Z
-updated_at: "2026-08-25T06:40:20.623Z"
-feature_id: F1
+updated_at: "2026-08-25T06:44:42.948Z"
 ac_altitude: task-local
+ac_numbering: task-local
 ---
 
 ## 0667. idea-handoff-cli: spurBin multi-word string breaks execa command
@@ -55,6 +55,7 @@ __runId=d6592bfe-0f6c-4d10-a220-a0d2e9f106ad featureId=A5 spurBin=spur \
 - [ ] R6. `feature refresh` failure (`exitCode !== 0`, including `null`) returns `ok: false` with the same evidence-carrying error format — fail-closed parity with the `&&`-chained shell fallback in `config/workflows/idea-pipeline.yaml` (`handoff-finalize`). The result is currently discarded (`idea-handoff.ts:162-168`).
 - [ ] R7. `task check` spawn failure (`exitCode === null`) returns `ok: false` naming the WBS and the resolved command, and **no report is written**. Today it is recorded as `pass: false` (`idea-handoff.ts:180`), which fabricates a readiness table — every WBS renders `FAIL` under a heading claiming `spur task check` ran — and still returns `ok: true`. Real check failures (`exitCode !== 0`, non-null) keep today's behaviour: `pass: false` → refineall recommendation, preserving 0518's F1 invariant ("any failed check ⇒ refineall, never runall").
 - [ ] R8. Regression coverage in `packages/app/tests/workflow/idea-handoff.test.ts` using the capturing mock `ProcessExecutor` already in that file (`:31-44`): multi-word spurBin asserts single-token `command` and correctly prefixed `args` on all three spawn sites; single-word spurBin unchanged; rejected spurBin fails before spawning; deps-failure message carries evidence; refresh failure fails the run; check spawn failure fails the run naming the WBS with no report written. If the shared module gets its own test file, it covers the tokenisation and rejection cases directly.
+- [ ] R9. **Non-goals — the change must not touch any of these.** The three `plugins/sp/scripts` split copies (`task-size-precheck.ts:130`, `feature-sync-bounded.ts:280`, `history-load.ts:115`) and `apps/cli/src/commands/workflow.ts:359-361` (separate bundle boundaries, own tests, no import path into `packages/app` — consolidating them is a follow-up); `~/xprojects/ts-libs` `process-executor.ts` (do not thread execa's `error.message`); `config/workflows/idea-pipeline.yaml`; `packages/app/src/workflow/idea-handoff-cli.ts`; `apps/cli/src/workflow/resolve-spur-bin.ts`; quoting/escaping machinery for launch strings containing spaces; and `packages/app/src/index.ts` (the helper stays internal).
 
 ### Acceptance Criteria
 
@@ -116,6 +117,12 @@ Feature: idea-handoff finalization executes spur subcommands for any spurBin lau
     Given the unit tests in packages/app/tests/workflow/idea-handoff.test.ts
     When they run under bun test
     Then R1 and R4-R7b are covered via a capturing mock ProcessExecutor with no real subprocess
+  Scenario: R9. The blast radius stays inside packages/app
+    Given the committed diff for this task
+    When the changed paths are listed
+    Then they are confined to packages/app/src/workflow/ and packages/app/tests/workflow/
+    And plugins/sp/scripts, apps/cli, config/workflows, and ts-libs are untouched
+    And packages/app/src/index.ts exports no new symbol
 ```
 
 ### Q&A
@@ -128,6 +135,8 @@ Feature: idea-handoff finalization executes spur subcommands for any spurBin lau
 - **Why does the shell fallback survive this bug?** `$spurBin task deps …` word-splits in `/bin/sh -c`; execa receives a single `command` token. Same env var, two expansion semantics — the root of the divergence.
 - **Does the check-spawn-failure fix contradict 0518's F1 invariant?** No. F1 is "any failed check ⇒ refineall, never runall" — recommending refineall on a spawn failure is conservative w.r.t. it. The defect R7 fixes is orthogonal: returning `ok: true` with a report whose "Per-task readiness (spur task check)" table is fabricated from checks that never ran.
 - **Why not also fix `spur task deps` idempotency for re-runs?** Out of scope — the live verification re-runs against an already-finalized run (`d6592bfe`) and `task deps … set` is a replace, so re-application is safe. No change needed.
+- **Which feature owns this task?** None, deliberately. It arrived tagged `feature_id: F1`, which was wrong — F1 is "Planning foundation" (`packages/domain` Zod schemas, MarkdownDocument, BDD validator, locks; all six tasks `done`; scope explicitly excludes services). The value was almost certainly copied from task 0518's internal *finding* ID `F1`, not a feature ID; leaving it would have pulled a backlog task into a P0 `verifying` feature's roster on the next `spur feature refresh`. The edge is cleared. No open feature covers the idea-pipeline handoff writer (the topical homes — I2, D5, I11, I1 — are all `done`), and a missing `feature_id` is an L4 advisory that blocks nothing at any status. Operator decision, 2026-08-25; link later if a home opens.
+
 ### Design
 
 **Step 1 — extract the shared split (R2/R3).** New internal module `packages/app/src/workflow/split-launch-command.ts` holding the function that `command-gate.ts` and `doctor-probe.ts` currently duplicate verbatim, parameterised only by the caller's option label so the existing error strings stay byte-identical:
@@ -195,6 +204,22 @@ Both branches return before `fs.writeFile(reportPath, …)`, so no fabricated re
 - The shared helper stays unexported from `packages/app/src/index.ts` (no cross-package consumer yet).
 
 **Impacted surfaces:** new `packages/app/src/workflow/split-launch-command.ts`; edited `packages/app/src/workflow/idea-handoff.ts`, `packages/app/src/workflow/actions/command-gate.ts`, `packages/app/src/workflow/actions/doctor-probe.ts`; tests `packages/app/tests/workflow/idea-handoff.test.ts` (+ optional `split-launch-command.test.ts`); `packages/app/tests/workflow/actions/{command-gate,doctor-probe}.test.ts` must pass unchanged. Not touched: `idea-handoff-cli.ts`, workflow YAML, ts-runtime, `resolve-spur-bin.ts`, `plugins/sp/scripts/*`.
+
+**Anti-patterns — do NOT implement:**
+
+- A third inline `split` in `packages/app` (that is the fault this task exists to stop recurring).
+- `split(' ')` instead of `split(/\s+/)` — repeated whitespace produces an empty argv token that execa passes through as a literal empty argument.
+- Dropping the `SHELL_METACHARACTERS` guard when extracting; both existing callers depend on it as their shell-injection defence.
+- Routing any of this through `execSync` / `spawn(…, { shell: true })` / a joined command string. Every call stays `executor.run({ command, args })` with an argv array.
+- Widening `FinalizeIdeaHandoffOptions` (e.g. adding a pre-split `spurArgs` field). The env contract is one string; the split is internal.
+- Writing the handoff report on any failure path.
+- Making `SHELL_METACHARACTERS` or the helper part of `packages/app`'s public export surface.
+
+**Cross-task:** `dependencies[]` is empty and no other task depends on this one — the change is self-contained
+within `packages/app`. It assumes nothing unlanded from upstream tasks and leaves no contract for
+dependents. Task **0501** is the landed precedent it must conform to (reuse the established split
+shape), not a dependency.
+
 ### Plan
 
 1. Extract `packages/app/src/workflow/split-launch-command.ts` from the two identical copies in `actions/command-gate.ts` and `actions/doctor-probe.ts`; rewire both callers with their existing option labels; delete the duplicates and their local `SHELL_METACHARACTERS` constants.
@@ -204,6 +229,7 @@ Both branches return before `fs.writeFile(reportPath, …)`, so no fabricated re
 5. Targeted green: `bun test packages/app/tests/workflow/idea-handoff.test.ts packages/app/tests/workflow/idea-handoff-cli.test.ts packages/app/tests/workflow/actions/command-gate.test.ts packages/app/tests/workflow/actions/doctor-probe.test.ts`.
 6. Live verification (the recorded repro): `__runId=d6592bfe-0f6c-4d10-a220-a0d2e9f106ad featureId=A5 spurBin="$(which bun) $PWD/apps/cli/src/index.ts" bun packages/app/src/workflow/idea-handoff-cli.ts` → exit 0 and a written report. Idempotent: `task deps … set` replaces, refresh and checks re-run.
 7. Gate: `bun run autofix && bun run spur-check`.
+
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
@@ -227,4 +253,5 @@ Both branches return before `fs.writeFile(reportPath, …)`, so no fabricated re
 - Shell fallback contract (fail-closed parity bar): `config/workflows/idea-pipeline.yaml`, state `handoff-finalize`
 - Prior art / standing rule: task **0501** (done) — same bug class in `task-size-precheck.ts`; R1 mandates reusing the established split shape rather than adding a new one
 - Invariants: task **0518** F1 (any failed check ⇒ refineall, never runall) and its 0604 Q&A (monorepo-writer / shell-fallback split)
+
 ### History
