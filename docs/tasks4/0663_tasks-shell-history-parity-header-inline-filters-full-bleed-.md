@@ -258,6 +258,7 @@ independently.
 7. Browser verification against the dev server per docs/design/tasks-module-shell-parity.md §11 (header full-bleed, filters move URL params and lane sets, /board/tasks/0001 deep link auto-opens detail, drag-and-drop persists, Workspace embed headerless); cite the Open Design artifact as T3 evidence; update docs/04_DESIGN.md in the same commit.
 
 ### Solution
+
 **Change map** (T3 surface evidence; Open Design prototype: project `tasks-frontend`, artifact `index.html` — [Open Design studio](http://127.0.0.1:57774/projects/tasks-frontend-74af/conversations/0c1e3b9c-c54d-46c9-9451-59afbede3356/files/index.html), R12 gate).
 
 | Path | Change |
@@ -272,13 +273,15 @@ independently.
 | `docs/04_DESIGN.md:70` | tasks-module-shell-parity satellite status → shell built (same-commit T3). |
 
 **What was skipped / noted.** Board carries only the props it actually uses — `onFolderChange`/`onToggleColumn` from the design-doc §7 draft are omitted (folder/visibility controls moved wholesale into the shell; single owner, no dead props). Shell live chip reads `connected` from the shared ref-counted `useTasks()` store per design §3; the board keeps its folder-scoped store for lane data (residual: two list calls on mount).
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | TasksShell.tsx header: icon+Tasks+live chip left, tab strip right; browser: headerTitle=1, liveChip rendered, tabs=[Kanban] |
 | R2 | MET | Inline filters in header row (Select/checkboxes/combined input); TaskFilters.tsx deleted, board toolbar removed; browser: phaseSelect=1, checkboxes=7, combinedInput=1, no data-key inputs |
 | R3 | MET | parseCombinedInput `/^\d{4}$/` -> selectTask -> /board/tasks/<wbs>; board location effect opens popup; browser: URL /board/tasks/0663 + detail panel docked right:0 |
@@ -290,8 +293,11 @@ independently.
 | R9 | MET | TaskKanbanView headerless export preserved; workspace/tabs.ts imports unchanged; browser: embed has board, no Tasks header (embedNoHeader=1) |
 | R10 | MET | tabs.ts append-only TASKS_TABS with single kanban tab; tabs.test.ts asserts length 1 + resolvable component |
 | R11 | MET | Open Design artifact project tasks-frontend/index.html (10.4KB) produced before React implementation; cited as T3 evidence in Solution |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
+
 **Functional traceability (R1–R12):** R1 header identity block + live chip + single Kanban tab; R2 inline filters with toolbar/TaskFilters removed; R3/R4/R5 combined-input parse rule (`parseCombinedInput`, pure + unit-tested); R6 full-bleed body with shared header/body padding; R7/R8 URL-driven filter state via `useTaskParams`; R9 TaskDetail untouched (board carried verbatim); R10 headerless `TaskKanbanView` export preserved for the Workspace embed; R11 append-only `TASKS_TABS` contract (+ `tabs.test.ts`); R12 Open Design artifact exists and is cited. All 12 covered by code, tests (705 web tests), or cited artifact.
 
 **SECUA findings.**
@@ -304,6 +310,7 @@ independently.
 **Architecture:** controlled/uncontrolled seam matches design §7 (optional `folder`/`hiddenColumns` with in-board defaults); dead `onFolderChange`/`onToggleColumn` props from the design-doc draft omitted (controls moved wholesale into the shell — single owner); `TaskFilters.tsx` deleted with zero dangling references; NewTaskPanel ownership moved to the shell; sections per one-writer protocol (Solution = implement, Review = this stage).
 
 **Residual risk:** browser-level verification (full-bleed pixel layout, drag overlay under the new header, embed headerlessness) still to be confirmed in the verify browser pass.
+
 ### References
 
 - Parent feature: `docs/features/F72_tasks-module-history-shell-parity-unified-header-inline-filters-full-bleed-density.md`
@@ -314,6 +321,7 @@ independently.
 - Sibling: task 0664 (card enrichment — feature R7)
 
 ### History
+
 - 2026-08-25T05:53:51.473Z todo → wip (system)
 - 2026-08-25T06:10:17.773Z wip → testing (system)
 - 2026-08-25T06:10:23.707Z testing → done (system)

@@ -475,6 +475,7 @@ Captured to `.spur/run/wrapup-learnings.md` (appended after 0541 entry; verified
 - 0559: ts-libs fix delivery — detectProvenance removal requires a lockstep ts-libs release (bun run bump-ver <ver> --push, OIDC CI publish) THEN bun update in the monorepo. The tag trigger didn't fire on push; workflow_dispatch on main published the same version (workflow reads package.json versions). Pre-push lefthook blocks on pre-existing lint warnings — fix the warning (rename to_col), never --no-verify.
 - Batch ops gotchas: inline implement can exhaust implementTimeoutMs (30 min) on large tasks mid-work — raise the budget for resume (partial state carries). A hung review subagent (zero tool calls >5 min) should be stopped and re-dispatched fresh — no partial mutations to protect when nothing was called.
 - Verdict answer files: stray review-table rows leak into the AC table and trip ac-row-dropped warnings — cosmetic, verdict stays authoritative.
+
 # Wrap-up LEARNING-CAPTURE — Feature E3 (tasks 0548, 0549, 0550)
 
 Raw markdown grouped by date + task WBS. Captured from verdicts, verify answers, test-gate logs, and
@@ -670,6 +671,7 @@ Source: task file `docs/tasks4/0552_render-role-routing-and-token-consumption-on
 - **Errors/gotchas** — flattening unmeasured/estimated/no-data-yet into `0` is the core failure mode; trusting 0547's `unmeasured` boolean requires knowing its invariant (`exact === null && estimated === null` at `role-tokens.ts:166`); `toContain('4')` substring assertions cross-match digits (row-count is the real guard); review scoped to task diff, concurrent 0539/0540 edits excluded.
 
 Format matches prior entries: dated header, title, bolded lesson + rationale, `file:line` evidence.
+
 ## 2026-08-15 — task 0561
 
 Source: task file `docs/tasks4/0561_harden-verdict-ac-row-id-matching-so-embedded-gherkin-bodies.md` (done 2026-08-15). Learnings:
@@ -678,6 +680,7 @@ Source: task file `docs/tasks4/0561_harden-verdict-ac-row-id-matching-so-embedde
 - **Errors fixed** — verdict id preserved the full Gherkin body (`Scenario: R4 — … (Given … / Then …)`), exact normalized-title matching in the feature scenario gate (`isScenarioVerified`, `feature-check.ts:681-696`) flagged `L4.scenario-unverified` against a PASS/MET verdict, forcing post-hoc answer-file surgery (task 0558, E6 batch). Root cause was the matcher, not the parser: `normalizeTitle` (`packages/domain/src/bdd/coverage.ts:57-65`) absorbs prefix/case/quotes/whitespace but nothing trailing. Fixed additively: `bodyStripped = stripped.replace(/\s*\([\s\S]*\)\s*$/, '').trim()` as a third derived form beside `id`/`stripped` (`feature-check.ts:926-940`).
 - **Patterns** — additive matching: four existing comparisons untouched, two added — never replace existing comparisons with the new form, or legitimately parenthesized titles regress (R2). Greedy `[\s\S]*` anchored from first `(` to string-final `)` strips a whole trailing parenthetical incl. nested pairs and line breaks; a conservative `[^(]*` leaves a dangling fragment (Q1 closed greedy). Backstop + guidance split: matcher is the backstop for broken artifacts, the style guide (`ac-style-guide.md` "id is exactly the scenario title") is the prevention half — guidance alone already failed once. Frozen design shape agreed pre-implementation; implementation matched it exactly.
 - **Gotchas** — accepted ceiling (Q2): a title legitimately ending in `(...)` *and* carrying an appended body (`handles (a) and (b) cases (Given …)`) strips from the first `(`, no form matches → still unverified, same as before, not a regression. Greedy regex is O(n²)-worst-case on ids without a trailing `)` — negligible for short sentence ids. `feature_id` unset on purpose: E6 is done, linking a backlog issue under it would leave a done feature holding unfinished work. Doc drift: "six new tests" vs 8 added (5 e2e + 3 direct) — fix count on next touch. E6/0558 regression AC verified via verbatim-faithful *reconstructed* fixture (literal `.spur/run/0558-verdict.json` lived in deleted sibling worktree `spur-new-runall-e6-e91f`); byte-for-byte artifact test needs the run dir restored. Unpinned path: `bodyStripped === sc.alias` (e.g. `AC-1 (Given …)`) has no direct test — recommend a one-liner on next touch.
+
 ## 2026-08-15 — feature G5 batch (tasks 0565, 0566)
 
 ### 0565 — Headless --agent inline special error
@@ -740,6 +743,7 @@ Source: task file `docs/tasks4/0569_dev-history-load-degraded-source-tolerance-f
 - **Errors fixed** — test title lied: the new abort test was titled `'exit 2 (all-failed) — analyze is never invoked, exit 1 propagates'` while its fixture ran `importExit: '1'` — assertions correct, title misdirected anyone grepping "exit 2" away from the tolerance describe block; fixed as a one-word edit under `--fix all` from review P3. Lesson: titles must name the actual fixture exit code. Silent-degradation edge (P4, noted not fixed): import exits 2 but emits unparseable stdout ⇒ `degraded = []` ⇒ no warning anywhere and the final fallback payload reports `import.exitCode: 0` while the child really exited 2 — reachable only with a binary that exits 2 without valid coverage JSON (real CLI never does); documented, no action.
 - **Patterns** — stub-script test with branch-by-exit-code: the `writeStub` + `SPUR_BIN=/bin/sh` stub now branches import on exit code (1 → single failed entry; 2 → degraded fan-out with `agy` degraded parseErrors=203 + `pi` ok + a `source-degraded` warning; 0 → clean), so one stub serves all three branches. Behavioral assertions beyond exit code: analyze was never invoked is proven via the stub's calls log; JSON-mode stderr must be `''` (pins the single-object contract); clean-run payload asserted to have no `warnings` key. Verify ran a live probe on this machine's real exit-2 fan-out (`agy`, 104 parse errors) → analyze ran, exit 0, `warnings[0]` named agy with counts — real degraded data, not just stubs. One-language rule: the human stderr block reuses the CLI's own renderer wording (`history.ts:324` per-source status + error counts) so both output surfaces agree. `spur task check 0569` PASS carries two advisory DD-09 WARNs (R2/R3 titles don't text-match feature I5 scenario titles) — feature R9 pins the behavior under different wording and R3 is a doc-sync scenario that can't be a product AC; advisory, leave unless the title-match rule tightens.
 - **Gotchas** — the whole task exists because re-auditing 0567 (done via `--force`) surfaced that fail-hard permanently blocks bare `--source all` runs on machines hosting a corrupt source — agy here has 203 parse errors in Antigravity's own log chunks, unfixable by this project (upstream corruption is the source's problem, explicitly a non-goal). Sequencing: operator first chose the documented `--source <name>` workaround and kept fail-hard; this task shipped only because that workaround proved noisy — the deferred-alternative pattern: record the decision, keep the task file as the fallback, ship when reality calls for it. Exit-2 handling must not silently warn-and-succeed in JSON mode — the `warnings` array is mandatory on the tolerated path when degradation exists. Field-name parity matters across surfaces: `parseErrors`/`validationErrors` must match `CoverageEntry`'s real emit (`history-service.ts:546`) or the JSON contract drifts; counts default to 0 when absent. Implementation left uncommitted in the working tree at done — 5 modified files (script, tests, command doc, feature file, task file), same wrap-after pattern as 0572.
+
 ## 2026-08-16 — task 0575
 
 Source: task file `docs/tasks4/0575_authoring-time-task-size-warning-on-spur-task-create-update-.md` (done 2026-08-16, pipeline run `99A9FB3E` / session `mswlw0hh-2qe6hxc5`) + commit `e4dc09eb` (4 files, +130/−9) + `0575-verdict.json` (PASS, 2 req + 6 AC MET).
@@ -758,6 +762,7 @@ Captured to `.spur/run/wrapup-learnings.md` (appended after the 0569 entry, same
 - **0577**: spur-new deps: root `package.json` `workspaces.catalog` is the SSOT for `catalog:` refs; a `bun update <pkg>` alone re-resolves to the stale catalog pin (installed 0.4.33 while 0.4.36 was on npm). Bump the catalog entry + exact root pin, then `bun install`.
 - **0577**: `task update <wbs> done` provenance gate needs a `task_run_links` row — `spur task run-link <wbs> --run-id <batch-run> --source dev-runall` records it without SPUR_PROVENANCE_OVERRIDE.
 - **0577**: epoch-ms timestamps: verify expected ISO strings by computation, not intuition (test expected wrong date; mapper was right).
+
 ## 2026-08-17 — E5 batch (0578, 0580, 0579, 0581)
 
 - **0578**: importer release is a two-surface atomic: bump catalog pins (`workspaces.catalog`) AND the ts-libs dep versions in the same commit, then `bun install` — a catalog-only bump leaves `bun update` resolving stale.
@@ -773,26 +778,31 @@ Captured to `.spur/run/wrapup-learnings.md` (appended after the 0575 entry, same
 Extracted working learnings from task **0587** grouped by date/WBS:
 
 **Conventions**
+
 - Refuse a harmful action at the earliest spine state that can observe it (`cmdPreflight`, pre-push) — preflight FAIL routes straight to `failed` before `push` fires; keep the later guard as defense-in-depth.
 - Guard on the resolved base (`--base` override, else default) via one shared `resolveUpstream()` that feeds both refusal message and divergence output — two outputs can never disagree.
 - Drive product changes through existing script surfaces: retarget `package.json`'s `check` (what CI runs) instead of touching the CRITICAL `.github/workflows/` path; drop not defer now-unneeded approval gates.
 
 **Errors fixed**
+
 - R3 as first written ("targeted intermediate rechecks, full gate on final") was unimplementable — `test-recheck` is one state whose `→ review` fires on `PASS`. Restructured as **probe-then-full**: only the full gate writes `PASS`, so the invariant holds by construction.
 - Flipping coverage off red-gated the repo: `test-post-check`'s preset `extends: [quality]` pulls in `coverage-gate` reading `.coverage/lcov.info`. Fixed by filtering the fast script to `--rule every-export-has-tsdoc`.
 - R5 split to 0588 — open-ended measurement blocked `done`, pinned the 5-R-item cap.
 
 **Patterns**
+
 - Non-fatal `run()` never `runOk()` for a normal-state condition; `0` fallback on non-numeric `rev-list --count`.
 - When a git-stub fixture has a `*) exit 1` default, every new git call needs a stub case + fixture seed or the suite fails.
 - Don't add a new engine action (`file.read.into-var`) — engine drops non-final `setVars` (0571); read in-shell instead.
 - Prefer an under-inclusive probe (safe by construction — only falls through to existing behavior).
 
 **Gotchas**
+
 - Installed `~/.agents/scripts/sp/pr-reviewing.ts` ≠ in-repo source: `superskill install sp` rewrites the namespace prefix. Fix in-repo (SSOT); re-run install to deploy.
 - Exact branch-name match is the contract; detached HEAD fails earlier in `preflightContext`.
 - Re-derive line refs against the live tree — the original draft's `task-pipeline.yaml` refs were ~150 lines stale.
 - Left recorded back-notes: `preflight` HELP text omits the new hard-fail (deferred); R3 shell has no automated test (AC6 smoke covers it).
+
 ## Feature A3 batch (2026-08-21) — working learnings
 
 - **Promoting an internal spur-dev command to a public noun (0617):** the promoted code must pass the boundary rule gates that `scripts/` never saw — route output through the `CommandOutput` seam (no `console.*`), process spawn through `NodeProcessExecutor` (no `Bun.spawnSync`), and get a `runtime-boundaries` fs-io exemption for sync manifest reads (mirrors `task.ts`). A helper module that is not a command module must NOT live in `apps/cli/src/commands/` — the `cli-surface-parity`/`consistency` noun scan treats every file there as a noun (`release-ops.ts` had to move to `src/` root).
@@ -846,6 +856,7 @@ Verification: 354 targeted tests passed; typecheck passed; diff/frontmatter/inde
 - Path fallback includes a plain basename token: `workflow.ts` becomes `workflow`. The task’s Solution prose claiming whole basenames are excluded is stale.
 - Keep YAML comments outside folded `>-` shell strings; folding can place `#` on the same logical line as the next statement and comment it out.
 - `featureGateCmd` executes through `sh -c`; treat it as trusted operator/project configuration and never interpolate untrusted input.
+
 ## 2026-08-24 — F84 batch 0643/0644/0645 (Features board UI refactor)
 
 - **`spur task verdict --from-answer` regenerates the verdict JSON from the answer file** — manual `jq` edits to the artifact are clobbered. Key rows AC-N (F84 scenario aliases) *in the answer file itself* or the L4 feature gate reports `L4.scenario-unverified`; a bare R-id row is cosmetic-pass but credits no scenario.
@@ -864,4 +875,3 @@ Verification: 354 targeted tests passed; typecheck passed; diff/frontmatter/inde
 - Lifecycle guards re-run `spur task check` at `testing`; the A3 dogfood ordering — verdict artifact BEFORE `task record` — is load-bearing, and `record` backfills Testing from the verdict (PASS rows), not hand-authored prose.
 - pi-lens hooks can autofix the MAIN tree during a worktree batch (wrong-tree hazard); verify paths via `git status` in both trees before WT-4 merge. Don't `pkill -f` broad patterns inside a batch (killed the operator's `spur serve` instances; restart with exact `--cwd/--port/--no-open` args).
 - 0664 (cards): the `.task-kanban` timestamp baseline is already `spur-text-muted`, so the staleness "tint" lands as the dimmer `spur-text-faint` step of the same token ladder — never change the R5-protected baseline.
-

@@ -13,6 +13,7 @@ tags: ["web", "tasks-module", "shell-parity"]
 ## 0664. Task card enrichment: subtask progress, priority accent, staleness tint
 
 ### Background
+
 F72 card half: enrich the task card so key facts are visible without opening the detail panel, per
 `docs/design/tasks-module-shell-parity.md` §8. All additions derive from fields already on
 `TaskSummary` — no contract change. Assignee chip is excluded (it would require growing the task-list
@@ -50,12 +51,15 @@ on the current board.
 
 Rubric: E2 D1 L1 C0 R0 = 4 → legitimate standalone task (disjoint file surface, independently
 demoable, at the `min_hours` boundary); not split further.
+
 ### Requirements
+
 - [ ] R1. `useTasks` exposes a derived subtask-progress map computed once per store update: for each parent WBS, `{ done, total }` counted from tasks whose `parentWbs` matches, with `done` counting `status === 'done'`. Tasks with an absent `parentWbs` contribute to no group.
 - [ ] R2. `TaskCard` reads that map through the existing `useTasks()` store hook — not through new props — and renders a subtask progress chip only when `total > 0`.
 - [ ] R3. `TaskCard` renders a priority accent as a colored left border mapped P1 → `spur-error`, P2 → `spur-warning`, P3 → `spur-text-muted`, resolved through the `.task-kanban` token scope. The existing priority badge is kept. An absent or unrecognized `priority` renders no accent.
 - [ ] R4. `TaskCard` tints the relative timestamp when `updatedAt` is older than a 7-day threshold declared as a named constant in `TaskCard.tsx`. An absent `updatedAt` renders no tint and no error.
 - [ ] R5. No `packages/contracts` or server change; no hex literals; existing card fields (WBS, name, priority badge, type, feature, relative time) and the drag-overlay render path are unchanged.
+
 ### Acceptance Criteria
 
 ```gherkin
@@ -72,6 +76,7 @@ Feature: Task card enrichment — key facts without opening the detail panel
 ```
 
 ### Q&A
+
 **Q: Can `TaskCard` group the loaded tasks array by `parentWbs`, as the original Design stated?**
 
 Closed — no. `TaskCard`'s props are exactly `{ task: TaskSummary; onClick: (wbs: string) => void }`
@@ -93,7 +98,9 @@ Closed — no, by construction. The surface is `useTasks.ts` + `TaskCard.tsx`; 0
 `TasksShell`/`tabs`/`index`/`KanbanBoard`/`TaskFilters`. Plan step 7 makes the disjointness a
 checkable outcome rather than an assumption. If implementation ever needs a third file, stop and
 re-open the ordering question before editing it.
+
 ### Design
+
 **Chosen approach.** Derive all three additions from fields already on `TaskSummary`, with the one
 piece of cross-task data (subtask counts) computed in the store rather than the card.
 
@@ -151,7 +158,9 @@ see above; it manufactures a dependency on 0663.
 
 **Cross-task.** No dependency on 0663 in either direction, by construction. Assumes 0663 leaves the
 card render paths structurally intact (it does — see 0663's Design, Cross-task).
+
 ### Plan
+
 - [ ] 1. In `useTasks.ts`, compute a `Map<string, { done: number; total: number }>` from the store's
       `tasks` array (group by `parentWbs`, count `status === 'done'`), memoized per store update, and
       return it alongside `tasks`. Tasks with no `parentWbs` join no group. (R1)
@@ -171,7 +180,9 @@ card render paths structurally intact (it does — see 0663's Design, Cross-task
 - [ ] 7. Confirm `git status` shows only `useTasks.ts` and `TaskCard.tsx` changed — any third file
       means the surface drifted into 0663's. (R5)
 - [ ] 8. Gate: `bun run lint`, then `bun run spur-check`.
+
 ### Solution
+
 **Change map** (per the cross-task disjointness invariant, 0664's own edits touched only `useTasks.ts` + `TaskCard.tsx` and their tests; `KanbanBoard.tsx`/`KanbanColumn.tsx` were not modified).
 
 | Path | Change |
@@ -183,20 +194,25 @@ card render paths structurally intact (it does — see 0663's Design, Cross-task
 | `apps/web/src/modules/task-kanban/TaskCard.tsx:11` | `STALE_THRESHOLD_MS` = 7 days named constant; `stale` at :58 tints the timestamp via `text-spur-text-faint` when `updatedAt` exceeds it; absent `updatedAt` → no tint, no error (R4). |
 
 **Notes.** The design §8 phrase "> 7 d → `text-spur-text-muted` tint" is delivered as the *dimmer* `spur-text-faint` step of the same `.task-kanban` token ladder, since the timestamp baseline is already `spur-text-muted` (R5 forbids changing the baseline). No contract/server change; existing card fields and the drag-overlay render path unchanged. `TestCard`/`useTasks` tests added: `deriveSubtaskProgress` grouping, hook exposure, P1/P2/P3 accent, staleness tint.
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | deriveSubtaskProgress (useTasks.ts:189) groups by parentWbs counting done; hook exposes memoized subtaskProgress (useTasks.ts:221); unit tests: grouping, absent-parentWbs exclusion, store-exposure |
 | R2 | MET | TaskCard reads map via shared useTasks() and renders data-testid=subtask-progress only when total>0; browser with crafted data: 1/2 on 2-child parent, 0/1 on 1-child parent |
 | R3 | MET | PRIORITY_ACCENT left border P1->spur-error / P2->spur-warning / P3->spur-text-muted; browser: P1 card 'border-l-2 border-l-spur-error', absent priority -> no border-l class; unit tests + un/missing priority |
 | R4 | MET | STALE_THRESHOLD_MS 7d constant; browser: 10d timestamp -> text-spur-text-faint, 1h -> text-spur-text-muted, absent updatedAt -> no timestamp/no error; unit tests |
 | R5 | MET | Surface confined to useTasks.ts + TaskCard.tsx (+tests); KanbanBoard/KanbanColumn untouched; no contract/server change; no hex literals; drag-overlay path unmodified |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
+
 **Functional traceability (R1–R5):** R1 `deriveSubtaskProgress` groups by `parentWbs` counting `done` (+ unit tests: grouping, absent-parent exclusion, hook exposure via memoized `subtaskProgress`); R2 chip reads the map through the shared `useTasks()` store and renders only when `total > 0` (`subtask-progress` testid); R3 priority accent left border P1→`spur-error` / P2→`spur-warning` / P3→`spur-text-muted` via `.task-kanban` tokens, absent/unrecognized → no accent (+ tests); R4 staleness tint on the timestamp past the 7-day `STALE_THRESHOLD_MS` constant, absent `updatedAt` → no tint (+ tests); R5 no contract/server change, no hex literals, existing card fields/overlay path untouched, surface confined to the two declared files.
 
 **SECUA findings.**
@@ -208,14 +224,18 @@ card render paths structurally intact (it does — see 0663's Design, Cross-task
 **Architecture:** map computed once per store update (`useMemo` over `state.tasks`), never per card; no props added to `TaskCard`/`KanbanColumn`/`KanbanBoard` (the collision the design exists to avoid); `spur-text-faint` lane of the `.task-kanban` ladder used for the tint because the baseline timestamp is already `spur-text-muted` (R5 forbids baseline change — documented in Solution).
 
 **Residual risk:** live-data subtask chip (`0/2` style) verified in the browser pass.
+
 ### References
+
 - Parent feature: `docs/features/F72_tasks-module-history-shell-parity-unified-header-inline-filters-full-bleed-density.md`
 - Decision: `docs/00_ADR.md` ADR-081 — Board Module Shell Convention
 - Shapes SSOT: `docs/design/tasks-module-shell-parity.md` §8 (card contents)
 - UI design SSOT: root `DESIGN.md` (tokens, density)
 - Contract: `packages/contracts/src/task.ts:14,16,23` (`TaskSummary.priority` / `parentWbs` / `updatedAt`, all optional)
 - Sibling: task 0663 (shell — feature R1–R6, R8–R12)
+
 ### History
+
 - 2026-08-25T06:15:04.405Z todo → wip (system)
 - 2026-08-25T06:24:44.505Z wip → testing (system)
 - 2026-08-25T06:24:48.324Z testing → done (system)
