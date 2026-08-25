@@ -2,6 +2,7 @@ import type { TaskStatus } from '@gobing-ai/spur-domain/schema';
 import { api } from '../../lib/rpc-client';
 import type { WebModule } from '../types';
 import KanbanBoard from './KanbanBoard';
+import TasksShell from './TasksShell';
 import { useTaskParams } from './useTaskParams';
 /** Fire a status transition and surface failures the same way the board's optimistic path does. */
 export function transition(wbs: string, toStatus: string): void {
@@ -13,9 +14,9 @@ export function transition(wbs: string, toStatus: string): void {
     });
 }
 
-/** Board container: binds URL filters + card-click selection to the board.
- * Exported so the Workspace module can embed the current-project Task Kanban
- * (task 0197 R6). */
+/** Headerless board container: binds URL filters + card-click selection to the
+ * board. Exported so the Workspace module can embed the headerless current-
+ * project Task Kanban (task 0197 R6) — no module shell header inside the embed. */
 export function TaskKanbanView() {
     const { filters, selectTask, setFilter } = useTaskParams();
     return (
@@ -32,5 +33,5 @@ export const module: WebModule = {
     name: 'Tasks',
     icon: '📋',
     route: 'tasks',
-    component: TaskKanbanView,
+    component: TasksShell,
 };
