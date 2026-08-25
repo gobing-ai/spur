@@ -4,7 +4,7 @@ name: "HA-S1: true population counts and truthful coverage rendering in the hist
 status: done
 template: feature-impl
 created_at: 2026-08-25T04:06:58.483Z
-updated_at: "2026-08-25T05:19:53.922Z"
+updated_at: "2026-08-25T17:07:52.310Z"
 feature_id: I8
 priority: P2
 tags: ["history", "analytics", "ha-s1"]
@@ -239,29 +239,26 @@ No new `spur history` verb or flag was added; no schema-version bump; the bounde
 shape and `--top` default are unchanged.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | packages/domain/src/analytics/artifact.ts:165 — SelectionPopulation interface; packages/app/src/services/history-service.ts:459 — selectionPopulation added to analyze query batch; app test proves analyze --top 2 over 3 sessions records population.sessions == 3. |
-| R2 | MET | packages/domain/src/analytics/render-forensics.ts:422 — fmtTopOf labels top N of M; render test pins top 20 of 35 and whole-population plain count. |
-| R3 | MET | packages/domain/src/analytics/render-forensics.ts:375 — renderRawData widened table + per-warning lines; tests pin truncation note and warning detail. |
-| R4 | MET | packages/domain/src/analytics/render-forensics.ts:422 — fmtTopOf returns not available when population absent; render test pins no fabricated count. |
-| R5 | MET | packages/app/tests/services/history-service.test.ts + domain tests extended; apps/cli/src/commands/history.ts unchanged. |
-| R6 | MET | docs/04_DESIGN.md — HA-S1 paragraph added in this commit. |
+|-------------|--------|----------|
+| R1 | MET | `packages/domain/src/analytics/artifact.ts:165-176` (SelectionPopulation) + `:245` (optional `population?`); `packages/domain/src/analytics/forensic-query.ts:464-494` unbounded `COUNT(DISTINCT …)`; `packages/app/src/services/history-service.ts:554-560` writes `population` with `appliedTop: top`. Bounded `bySession`/`byTool` shape and cap unchanged. |
+| R2 | MET | `packages/domain/src/analytics/render-forensics.ts:422-430` (`fmtTopOf`); Sessions metric `:54`; Raw Data counts line `:382`. `packages/domain/tests/analytics/render-forensics.test.ts:195-217` pins `top 20 of 35` for both. |
+| R3 | MET | `packages/domain/src/analytics/render-forensics.ts:391-405` widened 9-column coverage table with `Last imported`/`Parse err`/`Validation err` + `(truncated)` at `MAX_ERROR_SAMPLES`; `:385-390` per-warning `code — detail` lines. |
+| R4 | MET | `packages/domain/src/analytics/render-forensics.ts:423-425` returns `not available` when `population` is undefined; never reconstructed from an array length. `render-forensics.test.ts:227-247`. |
+| R5 | MET | `packages/domain/tests/analytics/render-forensics.test.ts` + `narrow-artifact.test.ts` (31 pass / 0 fail, `bun test`, this run); `packages/app/tests/services/history-service.test.ts:301-336` (1 pass, `--test-name-pattern HA-S1`). `git show 4326c8d4 --stat -- apps/cli/` is empty — no new verb or flag. |
+| R6 | MET | `docs/04_DESIGN.md:815-821` records the additive `population` block and the `fmtTopOf` renderer change; landed in commit `4326c8d4` alongside the source (T3). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
-| R29 — analyze records true population + applied depth; bounded arrays at depth | MET | test | `history-service.test.ts` `analyze --top 2` over 3 sessions: `population.sessions==3`, `population.appliedTop==2`, `bySession` length 2. |
-| R30 — forensics reports `top N of M`, not bounded length; no length as total | MET | test | `render-forensics.test.ts` pins ` |
-| R31 — coverage renders freshness + error detail, truncation, warning detail | MET | test | `render-forensics.test.ts` truncation + warning-detail tests; widened table columns. |
-| R32 — pre-addition artifact renders `not available`, never fabricates from length | MET | test | `render-forensics.test.ts` pre-addition test pins `not available` sessions + counts line; `narrow-artifact.test.ts` preserves absent population. |
-
+|---------------------|--------|---------------|----------|
+| R29 — The analyze artifact records true selection population and applied depth | MET | test | `packages/app/tests/services/history-service.test.ts:301-336` — `analyze --top 2` over 3 sessions / 2 tools records `population.sessions === 3`, `population.tools === 2`, `population.appliedTop === 2`; `bySession` stays at depth 2. Ran this turn: 1 pass, 0 fail. |
+| R30 — The forensics renderer reports "top N of M" instead of a bounded array length | MET | test | `packages/domain/tests/analytics/render-forensics.test.ts:195-217` asserts `\| Sessions \| top 20 of 35 \|` and `top 20 of 35 sessions · 12 tools`; `:218-226` asserts the plain count when the whole population is shown. |
+| R31 — The coverage section renders freshness and error detail the artifact already carries | MET | test | `packages/domain/tests/analytics/render-forensics.test.ts:249-268` asserts `\| claude \| degraded \| 3 \| 40 \| 25 \| 0 \| 2026-08-01T00:00:00Z \| 5 (truncated) \| 2 \|`; `:191` asserts per-warning `- derived-unattributed-time — x` detail lines. |
+| R32 — Pre-addition artifacts still render without the new fields | MET | test | `packages/domain/tests/analytics/render-forensics.test.ts:227-247` — no `population`: renders `\| Sessions \| not available \|` and `not available sessions`, never a fabricated count. `narrow-artifact.test.ts:228-232` keeps it absent through a re-slice. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Final disposition: APPROVED** — implementation satisfies all six requirements; only a P3 advisory.

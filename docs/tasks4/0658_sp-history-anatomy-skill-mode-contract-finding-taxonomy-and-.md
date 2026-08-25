@@ -4,7 +4,7 @@ name: "sp:history-anatomy skill: mode contract, finding taxonomy, and the eleven
 status: done
 template: feature-impl
 created_at: 2026-08-25T04:06:58.527Z
-updated_at: "2026-08-25T05:27:40.330Z"
+updated_at: "2026-08-25T17:07:52.743Z"
 feature_id: I8
 priority: P2
 tags: ["plugin", "skill", "history"]
@@ -274,28 +274,38 @@ The body routes; the procedure lives in `references/` (the test's named shape). 
 platform adapters were added; BASELINE in the BODY test was not touched.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | plugins/sp/skills/history-anatomy/SKILL.md:2 — dispatcher body, 3.4 KB under BODY_BUDGET; BASELINE untouched. |
-| R2 | MET | plugins/sp/tests/skill-structure.test.ts:736 — AGGREGATE_BUDGET 8550; R42 asserts 350 non-router cap. |
-| R3 | MET | plugins/sp/skills/history-anatomy/references/modes.md:57 — mode matrix + DST rule + fail-loud shape. |
-| R4 | MET | plugins/sp/skills/history-anatomy/references/report-contract.md:1 — eleven sections + nine fields + vocabulary + stable key. |
-| R5 | MET | report-contract.md evidence rules (causality two signals, process recurrence, not available, focus-bias). |
-| R6 | MET | report-contract.md comparison semantics (daily prev-day, ad-hoc equal-window, not comparable). |
-| R7 | MET | report-contract.md recurrence ledger (six classes, stable-key match). |
-| R8 | MET | report-contract.md positive-pattern standard; anchor required. |
-| R9 | MET | report-contract.md remediation proposals-only standard. |
-| R10 | MET | plugins/sp/skills/history-anatomy/references/operations.md:1 — enrich/validate, never launch workflow. |
-| R11 | MET | plugins/sp/tests/skill-structure.test.ts:812 — boundary test green; no import/corpus/discovery recipe. |
-| R12 | MET | plugins/sp/README.md:322 roster + :243 dir tree; roles.md:86 roster note. |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/skills/history-anatomy/SKILL.md:1-12` carries the Superskill frontmatter shape (name/description/license/version/metadata.platforms/category/interactions), matching every other `plugins/sp/skills/*` skill. Body = 3,434 bytes, well under `BODY_BUDGET` 20,000; it routes to `references/{modes,report-contract,operations}.md` (`SKILL.md:59-63`) and is absent from `BASELINE` (`plugins/sp/tests/skill-structure.test.ts:776-788`). `git show 33c3e951 --name-only` lists only `.md` + `.ts` — no generated platform adapter was hand-added. |
+| R2 | MET | `plugins/sp/tests/skill-structure.test.ts:740` raises `AGGREGATE_BUDGET` to 8550 with the comment naming skill #30. Description measured this run = 299 chars ≤ the 350-char non-router cap. Suite green: 59 pass / 0 fail. |
+| R3 | MET | `plugins/sp/skills/history-anatomy/references/modes.md:11-14` (daily default + current local calendar day), `:16-32` (daily rejects focus/`--since`/`--until`/`--output`, each fail-loud), `:34-50` (ad-hoc requires non-empty focus + ordered inclusive bounds; rejects `--date`/`--recompute`), `:57-67` (DST-aware calendar-day rule, explicitly not `midnight + 24h`), `:69-84` (fail-loud message shape naming the offending argument). |
+| R4 | MET | `references/report-contract.md:7-22` freezes the eleven sections in order; `:46-60` the per-finding field set (key, category, impact, trend, observation, inference, confidence, contradictions, evidenceAnchor); `:24-29` the closed category vocabulary; `:31-44` the `<category>:<owner-surface>:<signal>` stable-key grammar. Pinned by test `plugins/sp/tests/skill-structure.test.ts:894-929`. |
+| R5 | MET | `references/report-contract.md:62-78` — rule 1 causality needs two independent signals (one signal ⇒ labelled hypothesis with a confirmation path); rule 2 process/workflow change needs recurrence across two independent sessions or one high-impact contract violation cited at `file:line`; rule 3 unsupported dimensions read `not available` mirrored into telemetry-gaps; rule 4 focus biases ranking not collection; rule 5 every inference names its supporting observations. |
+| R6 | MET | `references/report-contract.md:80-88` — daily → immediately preceding local calendar day; ad-hoc → immediately preceding equal-duration window; insufficient or materially different coverage → `not comparable` with no trend, delta or percentage. |
+| R7 | MET | `references/report-contract.md:90-102` — the six classes (new/recurring/regressed/improved/resolved/not-comparable), matched on the stable key, never the prose title; rewording must not reclassify a recurring finding as new. |
+| R8 | MET | `references/report-contract.md:104-109` — positive entries carry observation, inference, confidence and at least one evidence anchor; an anchor-less entry is invalid. |
+| R9 | MET | `references/report-contract.md:111-121` — each option names owner surface, expected impact, verification method and reversibility; the report must contain no applied change, no diff, and no command it claims to have run. |
+| R10 | MET | `references/operations.md:1-12` defines exactly `enrich` and `validate` as skill operations and states the recursion guard ("Neither operation launches a workflow"); `:23-42` and `:44-70` carry the two rubrics; both close with "Never launch a workflow". |
+| R11 | MET | `bun test plugins/sp/tests/skill-structure.test.ts` — 59 pass / 0 fail this run, including `history-anatomy (HA-S1) contains no import/corpus-mutation/discovery recipe` (`:816-837`) which forbids `spur task`, `spur feature`, `spur rule`, `spur history import`, `.jsonl`, `readdir`, `session-root`, `session_formats` across every `.md` in the skill dir. |
+| R12 | MET | `plugins/sp/README.md:321` roster row, `:242` directory-tree entry, `:131` command row, `:358` dev-* skill list; `plugins/sp/references/roles.md:86` names `sp:history-anatomy`. |
 
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| [docs-only] R2 — Daily is the default mode and rejects ad-hoc-only arguments | MET | static-ref | `plugins/sp/skills/history-anatomy/references/modes.md:11-14` resolves omitted `--mode` to `daily` over the current local calendar day; `:29-32` requires printing the normalized inclusive ISO bounds + timezone; `:22-28` rejects focus text, `--since`, `--until` and `--output`, each naming the offending argument (`:69-84`). Skill-contract deliverable — the artifact is prose, so static-ref is the terminal evidence form. |
+| [docs-only] R3 — Ad-hoc mode requires a focus and two ordered bounds | MET | static-ref | `references/modes.md:36-42` — focus required (empty fails loud); `--since` required; `--until` must accompany `--since` and must not precede it; `--output` optional, otherwise the run directory. `:44-50` rejects `--date` and `--recompute`. Message shapes for all four failures at `:74-79`. |
+| [docs-only] R4 — A daily date selector maps to a DST-aware local calendar interval | MET | static-ref | `references/modes.md:57-67` — the interval runs first-to-last local instant, is 23 or 25 hours on a DST day, states the timezone, and is explicitly NOT `midnight + 24h`. |
+| R18 — Every finding carries the full per-finding field set | MET | test | `plugins/sp/tests/skill-structure.test.ts:894-929` pins all eleven section names and all nine finding fields (key, category, impact, trend, observation, inference, confidence, contradictions, evidenceAnchor) against `references/report-contract.md`. Green this run (59 pass / 0 fail). Contract text: `report-contract.md:46-60` (fields incl. per-finding confidence and contradictions shown beside the finding), `:24-29` (closed category vocabulary), `:31-44` (stable key). |
+| [docs-only] R19 — Observation and inference are separated and causality is gated on two signals | MET | static-ref | `references/report-contract.md:64-67` (two independent signals pass; exactly one ⇒ labelled hypothesis with a confirmation path), `:75-76` (an inference that does not name its supporting observations fails validation); enforced by the `validate` rubric at `references/operations.md:52-56`. |
+| [docs-only] R21 — Baseline comparison states an explicit comparability verdict | MET | static-ref | `references/report-contract.md:80-88` — daily vs preceding local calendar day, ad-hoc vs preceding equal-duration window, `not comparable` on insufficient/materially different coverage, and no trend/delta/percentage stated for it; `operations.md:60-61` makes it a `validate` FAIL rule. |
+| [docs-only] R22 — The recurrence ledger classifies every finding against the baseline | MET | static-ref | `references/report-contract.md:90-102` — the six classes; matching on the stable key, never the prose title; rewording must not reclassify recurring as new. `operations.md:62-63` gates it in `validate`. |
+| [docs-only] R23 — Remediation options are proposals with an owner, an impact and a verification method | MET | static-ref | `references/report-contract.md:111-121` — owner surface, expected impact, verification method, reversibility; "no applied change, no diff, and no command it claims to have run". `operations.md:66-67` FAILs any applied change. |
+| [docs-only] R25 — Positive patterns are held to the same evidence standard as problems | MET | static-ref | `references/report-contract.md:104-109` — same observation/inference/confidence/anchor fields; an anchor-less entry is invalid. `operations.md:64-65` FAILs an anchor-less positive entry. |
+| [docs-only] R27 — Focus biases ranking without suppressing high-severity off-topic evidence | MET | static-ref | `references/report-contract.md:72-73` — rule 4: "Focus biases ranking, not collection. A focus string changes finding ranking and emphasis; it never suppresses material off-topic findings within the window." |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Final disposition: APPROVED** — implementation satisfies all twelve requirements; no P1–P3 findings.
