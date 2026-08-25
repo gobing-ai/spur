@@ -7,7 +7,6 @@ import {
     resolveExecutor,
     type SpurConfig,
 } from '@gobing-ai/spur-config';
-import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import {
     atomicWriteAsync,
     type DbAdapter,
@@ -45,6 +44,12 @@ export interface TeamServiceOutput {
 export interface TeamServiceContext {
     cwd: string;
     env: Record<string, string | undefined>;
+    /**
+     * Merged global+project config threaded from the composition root (A5 /
+     * ADR-082). `null` = load failed/absent; consumers degrade to today's
+     * defaults.
+     */
+    spurConfig?: SpurConfig | null;
     /** Optional output sink; TeamService does not read it (kept for CLI stdout coupling). */
     output?: TeamServiceOutput;
     getDb(): Promise<DbAdapter>;
@@ -599,7 +604,8 @@ export class TeamService {
      */
     async listTeams(): Promise<TeamListing[]> {
         const specs = await loadAgentSpecs(this.configDir);
-        const config = await this.loadTeamConfig();
+        // A5/ADR-082: merged config threaded on the context — no per-slice load.
+        const config = this.ctx.spurConfig ?? null;
         const teams = new Map<string, TeamListing>();
         const configTeamIds = new Set<string>();
 
@@ -675,7 +681,8 @@ export class TeamService {
      * true, returns the diff and writes nothing (dry-run).
      */
     async materializeTeam(teamId: string, opts?: { check?: boolean }): Promise<MaterializeResult> {
-        const config = await this.loadTeamConfig();
+        // A5/ADR-082: merged config threaded on the context — no per-slice load.
+        const config = this.ctx.spurConfig ?? null;
         const teamConfig = config?.agent?.team?.[teamId];
         if (!teamConfig) {
             throw new Error(`Team "${teamId}" not found in agent.team config`);
@@ -862,14 +869,6 @@ export class TeamService {
         if (!specs.every((s) => s.workspace === first)) return { workDir: null, isCurrentProject: false };
         const workDir = this.resolveWorkspaceDir(first);
         return { workDir, isCurrentProject: this.isCurrentProject(workDir) };
-    }
-
-    private async loadTeamConfig(): Promise<SpurConfig | null> {
-        try {
-            return await loadSpurConfig(this.ctx.cwd);
-        } catch {
-            return null;
-        }
     }
 
     private async inboxDao(): Promise<InboxMessageDao> {

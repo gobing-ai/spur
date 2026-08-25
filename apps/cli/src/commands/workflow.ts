@@ -28,7 +28,8 @@ import {
     type WorkflowTraceTimeline,
     WorkflowTraceWriter,
 } from '@gobing-ai/spur-app';
-import { bundledConfigRoot, loadSpurConfig } from '@gobing-ai/spur-config/loader';
+import type { SpurConfig } from '@gobing-ai/spur-config';
+import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import type { ActionCost } from '@gobing-ai/spur-domain';
 import { loadWorkflowDef, type WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { EventBus } from '@gobing-ai/ts-infra';
@@ -188,15 +189,13 @@ export function submitSteeringLine(
  */
 const BUNDLED_PATH_PREFIX = 'bundled:';
 
-/** Read configured workflow search paths, defaulting to `['.spur/workflows/']`. */
-async function resolveWorkflowPaths(cwd: string): Promise<string[]> {
-    let paths: string[];
-    try {
-        const config = await loadSpurConfig(cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
-        paths = config.workflows?.paths ?? ['.spur/workflows/'];
-    } catch {
-        return ['.spur/workflows/'];
-    }
+/**
+ * Read configured workflow search paths, defaulting to `['.spur/workflows/']`.
+ * Sync & pure (A5/ADR-082): the merged config is threaded from the composition
+ * root; `bundled:` prefix expansion is unchanged, only the config read moves out.
+ */
+function resolveWorkflowPaths(config: SpurConfig | null): string[] {
+    const paths = config?.workflows?.paths ?? ['.spur/workflows/'];
     const bundledRoot = bundledConfigRoot();
     const expanded: string[] = [];
     for (const path of paths) {
@@ -480,7 +479,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                           dir: join(context.cwd, '.spur', 'run'),
                           runId,
                           ...(planPreview !== undefined ? { planPreview } : {}),
-                          ...(await resolveOutputLogConfig(context.cwd)),
+                          ...resolveOutputLogConfig(context.spurConfig ?? null),
                       });
             if (humanProgress) {
                 context.output.write(`Run: ${runId}`);
@@ -716,7 +715,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             }
             const svc = makeSvc(options.json);
             const result = logsOnly ? undefined : await svc.clean(minutes, dryRun);
-            const retentionDays = await resolveWorkflowLogRetentionDays(context.cwd);
+            const retentionDays = resolveWorkflowLogRetentionDays(context.spurConfig ?? null);
             const logResult = await svc.cleanRunLogs(retentionDays, dryRun);
             if (options.json) {
                 context.output.write(toJson(logsOnly ? logResult : { ...result, logs: logResult }));
@@ -780,7 +779,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .description('List available workflow YAML files.')
         .option(...SHARED_OPTIONS.jsonSupported)
         .action(async (options) => {
-            const paths = await resolveWorkflowPaths(context.cwd);
+            const paths = resolveWorkflowPaths(context.spurConfig ?? null);
             const result = await makeSvc().list(paths);
             if (options.json) {
                 context.output.write(toJson(result));

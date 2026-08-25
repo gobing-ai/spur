@@ -10,7 +10,7 @@
 // dist to a string literal at build time so it resolves at runtime.
 import '@gobing-ai/ts-db';
 import { Command } from '@commander-js/extra-typings';
-import { type SpurAppConfig, spurConfigSchema } from '@gobing-ai/spur-config';
+import type { SpurAppConfig, SpurConfig } from '@gobing-ai/spur-config';
 import { loadSpurConfig, resolveConfigFile } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
@@ -36,7 +36,7 @@ import { CLI_CONFIG } from './config';
 import { EMBEDDED_SPUR_SCHEMAS } from './config/embedded-schemas';
 import { createCliContext, createMigratedDbAdapter } from './context';
 import { errorMessage } from './errors';
-import { type CommandOutput, consoleOutput } from './output';
+import { type CommandOutput, consoleOutput, toJson } from './output';
 /** Options for programmatic CLI execution in tests. */
 export interface MainOptions {
     cwd?: string;
@@ -52,25 +52,42 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
     const output = options.output ?? consoleOutput;
     let exitCode = 0;
 
-    const configFile = resolveConfigFile(options.cwd);
-    const db =
-        options.db ??
-        (await createMigratedDbAdapter(options.cwd ?? process.cwd(), options.env ?? process.env, options.dbUrl));
+    const cwd = options.cwd ?? process.cwd();
+    const env = options.env ?? process.env;
+    const configFile = resolveConfigFile(cwd);
+    const db = options.db ?? (await createMigratedDbAdapter(cwd, env, options.dbUrl));
+
+    // Load the merged global+project config ONCE at the composition root (A5 /
+    // ADR-082) — covering both the config-present and no-config branches — and
+    // thread the result into dispatch as the only app-config source. A config-load
+    // failure emits exactly one error and exits 1 (R4); the loader's message already
+    // names the failing layer path and is propagated verbatim.
+    let spurConfig: SpurConfig;
+    try {
+        // Pass the embedded schemas so the `$schema` ref resolves without
+        // node_modules (dev tree and --compile binary alike).
+        spurConfig = await loadSpurConfig(cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
+    } catch (err) {
+        const message = errorMessage(err);
+        if (argv.includes('--json')) {
+            output.write(toJson({ error: { code: 'config', message } }));
+        } else {
+            output.error(message);
+        }
+        await db.close();
+        return 1;
+    }
 
     try {
         if (configFile !== undefined) {
-            // Pre-validate .spur/config.yaml through the single facade loader (merged zod
-            // schema + optional JSON Schema). Pass the embedded schemas so the `$schema`
-            // ref resolves without node_modules (dev tree and --compile binary alike).
-            // Throws on validation failure — fail fast.
-            await loadSpurConfig(options.cwd ?? process.cwd(), { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
-
             // Bootstrap through runNodeApplication — standard path (R1).
+            // `bootstrap` is project-shaped (0641 split); the app section comes from
+            // the merged load, so the appConfig validator is dropped and
+            // appRt.appConfig is never read.
             const app = await runNodeApplication<SpurAppConfig>({
                 configLoader: {
                     configFile,
                     bootstrapSection: 'bootstrap',
-                    appConfig: { safeParse: (raw) => spurConfigSchema.safeParse(raw) },
                 },
                 // Under test, force logging off so initializeLogger() does not
                 // reconfigure LogTape with a console sink — which would reset the
@@ -81,12 +98,13 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
                     process.env.NODE_ENV === 'test' ? { logging: { enabled: false } } : { logging: { console: false } },
                 services: { db },
                 async start(appRt: ApplicationRuntime<SpurAppConfig>) {
+                    void appRt;
                     const context = createCliContext({
-                        cwd: options.cwd,
-                        env: options.env,
+                        cwd,
+                        env,
                         output,
                         db,
-                        agentConfig: appRt.appConfig?.agent,
+                        spurConfig,
                     });
                     exitCode = await runCommandDispatch(argv, context, output);
                 },
@@ -94,8 +112,7 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
             await app.stop('shutdown');
         } else {
             // No config file — direct path (pre-init, tests).
-            const ctxOpts = { cwd: options.cwd, env: options.env, output, db };
-            const context = createCliContext(ctxOpts);
+            const context = createCliContext({ cwd, env, output, db, spurConfig });
             exitCode = await runCommandDispatch(argv, context, output);
         }
     } finally {

@@ -12,6 +12,7 @@ import {
     DEFAULT_AGENT_ROLES,
     DEFAULT_DATABASE_URL,
     IN_MEMORY_DATABASE_URL,
+    type SpurConfig,
 } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter, getCanonicalStage, TIER_RANK } from '@gobing-ai/spur-domain';
 import type { HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
@@ -109,6 +110,12 @@ export interface CliContext {
      */
     agentConfig?: AgentConfig;
     /**
+     * Merged global+project config, loaded once in main() (A5 / ADR-082). The
+     * only app-config source threaded into the dispatch context — per-slice
+     * `loadSpurConfig` calls are deleted (R5)
+     */
+    spurConfig?: SpurConfig;
+    /**
      * Layer-1 role → tier map resolved from `DEFAULT_AGENT_ROLES`
      * (packages/config SSOT, 0572 / ADR-061) with the project's validated
      * `agent.roles` override merged per-field. Threaded into every
@@ -145,6 +152,8 @@ export function createCliContext(options: {
     db?: DbAdapter;
     /** Validated `agent` config block, threaded into AgentService for phase-aware resolution. */
     agentConfig?: AgentConfig;
+    /** Merged global+project config (A5 / ADR-082) — the only app-config source. */
+    spurConfig?: SpurConfig;
     /**
      * Layer-1 role → tier map (0536 R1 / 0572). Defaults to
      * `resolveAgentRoles(agentConfig)` — `DEFAULT_AGENT_ROLES` merged with the
@@ -155,10 +164,11 @@ export function createCliContext(options: {
     const cwd = resolve(options.cwd ?? process.cwd());
     const env = options.env ?? process.env;
     const fs = createNodeFileSystem(cwd);
-    const agentRoles = options.agentRoles ?? resolveAgentRoles(options.agentConfig);
 
     // When runNodeApplication injects an eager DB adapter, use it directly (R4).
     // Otherwise fall back to lazy creation for tests and the pre-bootstrap path.
+    const agentConfig = options.agentConfig ?? options.spurConfig?.agent;
+    const agentRoles = options.agentRoles ?? resolveAgentRoles(agentConfig);
     let dbPromise: Promise<DbAdapter> | undefined;
     if (options.db) {
         dbPromise = Promise.resolve(options.db);
@@ -176,13 +186,14 @@ export function createCliContext(options: {
         output: options.output,
         getDb,
         ...(options.agentConfig !== undefined ? { agentConfig: options.agentConfig } : {}),
+        ...(options.spurConfig !== undefined ? { spurConfig: options.spurConfig } : {}),
         agentRoles,
         agentService: (serviceOptions?: AgentServiceOptions) =>
             new AgentService({
                 cwd,
                 env,
                 output: options.output,
-                agentConfig: options.agentConfig,
+                agentConfig: agentConfig,
                 roles: agentRoles,
                 getDb,
                 ...(serviceOptions?.events !== undefined ? { events: serviceOptions.events } : {}),

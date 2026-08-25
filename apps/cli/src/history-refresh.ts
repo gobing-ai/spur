@@ -8,14 +8,12 @@
  * operation returns unaffected).
  */
 import { enqueueHistoryRefresh, type HistoryRefreshTriggerPoint, type SystemEventBus } from '@gobing-ai/spur-app';
-import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { EventBus } from '@gobing-ai/ts-infra';
-import { EMBEDDED_SPUR_SCHEMAS } from './config/embedded-schemas';
 import type { CliContext } from './context';
 import { attachSystemEventLedger } from './system-event-ledger';
 
 /** Structural subset of {@link CliContext} the trigger needs (keeps tests cheap). */
-export type HistoryRefreshContext = Pick<CliContext, 'cwd' | 'env' | 'getDb' | 'output'>;
+export type HistoryRefreshContext = Pick<CliContext, 'cwd' | 'env' | 'getDb' | 'output' | 'spurConfig'>;
 
 /**
  * Fire the completion trigger: resolve the opt-in config, enqueue one coalesced
@@ -28,14 +26,10 @@ export async function maybeTriggerHistoryRefresh(
     triggerId: string,
 ): Promise<void> {
     try {
-        // Unreadable/uninitialized config means the project never opted in — treat as
+        // Config is threaded from the composition root (A5/ADR-082); a load failure
+        // there is already surfaced once. Unset/absent means no opt-in — treat as
         // disabled (same tolerance as resolveWorkflowPaths).
-        let config: Awaited<ReturnType<typeof loadSpurConfig>> | null = null;
-        try {
-            config = await loadSpurConfig(context.cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
-        } catch {
-            config = null;
-        }
+        const config = context.spurConfig ?? null;
         const db = await context.getDb();
         const result = await enqueueHistoryRefresh(db, { config, trigger, triggerId });
         if (result.status === 'disabled') return;

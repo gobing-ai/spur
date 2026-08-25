@@ -3,9 +3,10 @@ import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AGENT_ROLE_NAMES } from '@gobing-ai/spur-config';
+import { AGENT_ROLE_NAMES, type SpurConfig, spurConfigSchema } from '@gobing-ai/spur-config';
 import * as loaderModule from '@gobing-ai/spur-config/loader';
 import { createMigratedDb, RunDao, TaskRunLinkDao } from '@gobing-ai/spur-domain';
+import { parse as yamlParse } from 'yaml';
 import type { AgentService } from '../../src/services/agent-service';
 import type { RuleService } from '../../src/services/rule-service';
 import {
@@ -145,10 +146,11 @@ class TestProcessExecutor implements ProcessExecutor {
     }
 }
 
-function makeCtx(cwd = process.cwd()) {
+function makeCtx(cwd = process.cwd(), spurConfig?: SpurConfig) {
     let db: ReturnType<typeof createMigratedDb> | undefined;
     return {
         cwd,
+        ...(spurConfig !== undefined ? { spurConfig } : {}),
         getDb: async () => {
             db ??= createMigratedDb({ url: ':memory:' });
             return db;
@@ -1677,14 +1679,22 @@ terminalStates:
   - done
 `;
 
-        async function seedWorkflow(prefix: string, configuredAgent?: string): Promise<string> {
+        async function seedWorkflow(
+            prefix: string,
+            configuredAgent?: string,
+        ): Promise<{ dir: string; spurConfig?: SpurConfig }> {
             const dir = await mkdtemp(join(tmpdir(), prefix));
             await writeFile(join(dir, 'test.yaml'), AGENT_YAML);
             if (configuredAgent !== undefined) {
                 await mkdir(join(dir, '.spur'), { recursive: true });
                 await writeFile(join(dir, '.spur', 'config.yaml'), `agent:\n  default: ${configuredAgent}\n`);
+                // Same config the composition root would load — threaded, not re-read.
+                return {
+                    dir,
+                    spurConfig: spurConfigSchema.parse({ version: '1', agent: { default: configuredAgent } }),
+                };
             }
-            return dir;
+            return { dir };
         }
 
         async function capturedAgent(dir: string): Promise<string> {
@@ -1693,8 +1703,8 @@ terminalStates:
 
         test('configured agent.default overrides the YAML literal', async () => {
             // `pi` is a canonical agent binary, so R2 validation accepts it.
-            const dir = await seedWorkflow('spur-wf-agent-cfg-', 'pi');
-            const svc = new WorkflowAppService(makeCtx(dir));
+            const { dir, spurConfig } = await seedWorkflow('spur-wf-agent-cfg-', 'pi');
+            const svc = new WorkflowAppService(makeCtx(dir, spurConfig));
 
             const result = await svc.run(join(dir, 'test.yaml'), { runId: 'agent-cfg-1' });
 
@@ -1704,8 +1714,8 @@ terminalStates:
         });
 
         test('an explicit caller agent wins over agent.default', async () => {
-            const dir = await seedWorkflow('spur-wf-agent-explicit-', 'pi');
-            const svc = new WorkflowAppService(makeCtx(dir));
+            const { dir, spurConfig } = await seedWorkflow('spur-wf-agent-explicit-', 'pi');
+            const svc = new WorkflowAppService(makeCtx(dir, spurConfig));
 
             const result = await svc.run(join(dir, 'test.yaml'), {
                 runId: 'agent-explicit-1',
@@ -1720,7 +1730,7 @@ terminalStates:
         test('the YAML literal stands when no agent.default is configured', async () => {
             // Config resolution layers project → user (`~/.config/spur/config.yaml`), so a
             // developer's own global default would otherwise decide this test's outcome.
-            const dir = await seedWorkflow('spur-wf-agent-nocfg-');
+            const { dir } = await seedWorkflow('spur-wf-agent-nocfg-');
             const previous = process.env.SPUR_SKIP_GLOBAL_CONFIG;
             process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
             try {
@@ -1759,12 +1769,14 @@ terminalStates:
   - done
 `;
 
-        async function seedBoth(prefix: string, configYaml: string): Promise<string> {
+        async function seedBoth(prefix: string, configYaml: string): Promise<{ dir: string; spurConfig: SpurConfig }> {
             const dir = await mkdtemp(join(tmpdir(), prefix));
             await writeFile(join(dir, 'test.yaml'), BOTH_AGENT_YAML);
             await mkdir(join(dir, '.spur'), { recursive: true });
             await writeFile(join(dir, '.spur', 'config.yaml'), configYaml);
-            return dir;
+            // The config is threaded into the context (A5/ADR-082), so build the
+            // SpurConfig object from the same YAML the composition root would load.
+            return { dir, spurConfig: spurConfigSchema.parse(yamlParse(configYaml)) };
         }
 
         async function capturedAgents(dir: string): Promise<string> {
@@ -1772,11 +1784,11 @@ terminalStates:
         }
 
         test('AC2: agent.default injects both agent and implementAgent', async () => {
-            const dir = await seedBoth(
+            const { dir, spurConfig } = await seedBoth(
                 'spur-wf-r2-both-',
                 'agent:\n  default: my-exec\n  executors:\n    - name: my-exec\n      agent: pi\n',
             );
-            const svc = new WorkflowAppService(makeCtx(dir));
+            const svc = new WorkflowAppService(makeCtx(dir, spurConfig));
 
             const result = await svc.run(join(dir, 'test.yaml'), { runId: 'r2-both-1' });
 
@@ -1786,11 +1798,11 @@ terminalStates:
         });
 
         test('0487 R4: caller-set agent seeds implementAgent, outranking agent.default', async () => {
-            const dir = await seedBoth(
+            const { dir, spurConfig } = await seedBoth(
                 'spur-wf-r2-impl-',
                 'agent:\n  default: my-exec\n  executors:\n    - name: my-exec\n      agent: pi\n',
             );
-            const svc = new WorkflowAppService(makeCtx(dir));
+            const svc = new WorkflowAppService(makeCtx(dir, spurConfig));
 
             const result = await svc.run(join(dir, 'test.yaml'), {
                 runId: 'r2-impl-1',
@@ -1805,8 +1817,11 @@ terminalStates:
         });
 
         test('0487 R4: caller-set agent seeds implementAgent even with no usable agent.default', async () => {
-            const dir = await seedBoth('spur-wf-r2-impl-nodefault-', 'agent:\n  default: commented-out-exec\n');
-            const svc = new WorkflowAppService(makeCtx(dir));
+            const { dir, spurConfig } = await seedBoth(
+                'spur-wf-r2-impl-nodefault-',
+                'agent:\n  default: commented-out-exec\n',
+            );
+            const svc = new WorkflowAppService(makeCtx(dir, spurConfig));
 
             const result = await svc.run(join(dir, 'test.yaml'), {
                 runId: 'r2-impl-2',
@@ -1819,11 +1834,11 @@ terminalStates:
         });
 
         test('0487 R4: caller-set implementAgent is never overridden by vars.agent', async () => {
-            const dir = await seedBoth(
+            const { dir, spurConfig } = await seedBoth(
                 'spur-wf-r2-impl-pinned-',
                 'agent:\n  default: my-exec\n  executors:\n    - name: my-exec\n      agent: pi\n',
             );
-            const svc = new WorkflowAppService(makeCtx(dir));
+            const svc = new WorkflowAppService(makeCtx(dir, spurConfig));
 
             const result = await svc.run(join(dir, 'test.yaml'), {
                 runId: 'r2-impl-3',
@@ -1836,9 +1851,12 @@ terminalStates:
         });
 
         test('AC3: stale agent.default warns once and the YAML literal stands', async () => {
-            const dir = await seedBoth('spur-wf-r2-stale-', 'agent:\n  default: commented-out-exec\n');
+            const { dir, spurConfig } = await seedBoth('spur-wf-r2-stale-', 'agent:\n  default: commented-out-exec\n');
             const emitted: string[] = [];
-            const svc = new WorkflowAppService({ ...makeCtx(dir), warn: (message) => emitted.push(message) });
+            const svc = new WorkflowAppService({
+                ...makeCtx(dir, spurConfig),
+                warn: (message) => emitted.push(message),
+            });
 
             const result = await svc.run(join(dir, 'test.yaml'), { runId: 'r2-stale-1' });
 
@@ -1858,9 +1876,12 @@ terminalStates:
             // ships `coder`), but this resolver still validated executor names only — so the
             // recommended value was dropped and every agent.run silently fell back to the
             // pipeline's `omp` literal, defeating the role -> tier -> executor ladder.
-            const dir = await seedBoth('spur-wf-role-default-', 'agent:\n  default: coder\n');
+            const { dir, spurConfig } = await seedBoth('spur-wf-role-default-', 'agent:\n  default: coder\n');
             const emitted: string[] = [];
-            const svc = new WorkflowAppService({ ...makeCtx(dir), warn: (message) => emitted.push(message) });
+            const svc = new WorkflowAppService({
+                ...makeCtx(dir, spurConfig),
+                warn: (message) => emitted.push(message),
+            });
 
             const result = await svc.run(join(dir, 'test.yaml'), { runId: 'role-default-1' });
 
@@ -1873,8 +1894,8 @@ terminalStates:
 
         test('every Layer-1 role id is accepted in agent.default', async () => {
             for (const role of AGENT_ROLE_NAMES) {
-                const dir = await seedBoth(`spur-wf-role-${role}-`, `agent:\n  default: ${role}\n`);
-                const svc = new WorkflowAppService(makeCtx(dir));
+                const { dir, spurConfig } = await seedBoth(`spur-wf-role-${role}-`, `agent:\n  default: ${role}\n`);
+                const svc = new WorkflowAppService(makeCtx(dir, spurConfig));
 
                 const result = await svc.run(join(dir, 'test.yaml'), { runId: `role-${role}-1` });
 
@@ -1885,9 +1906,12 @@ terminalStates:
         });
 
         test('a value that is neither role, executor, nor binary still warns and keeps the literal', async () => {
-            const dir = await seedBoth('spur-wf-role-bogus-', 'agent:\n  default: not-a-role\n');
+            const { dir, spurConfig } = await seedBoth('spur-wf-role-bogus-', 'agent:\n  default: not-a-role\n');
             const emitted: string[] = [];
-            const svc = new WorkflowAppService({ ...makeCtx(dir), warn: (message) => emitted.push(message) });
+            const svc = new WorkflowAppService({
+                ...makeCtx(dir, spurConfig),
+                warn: (message) => emitted.push(message),
+            });
 
             const result = await svc.run(join(dir, 'test.yaml'), { runId: 'role-bogus-1' });
 
@@ -1900,9 +1924,12 @@ terminalStates:
         });
 
         test('AC3: a throwing warning sink cannot fail an otherwise completed workflow', async () => {
-            const dir = await seedBoth('spur-wf-r2-warn-failure-', 'agent:\n  default: commented-out-exec\n');
+            const { dir, spurConfig } = await seedBoth(
+                'spur-wf-r2-warn-failure-',
+                'agent:\n  default: commented-out-exec\n',
+            );
             const svc = new WorkflowAppService({
-                ...makeCtx(dir),
+                ...makeCtx(dir, spurConfig),
                 warn: () => {
                     throw new Error('output unavailable');
                 },
@@ -2240,53 +2267,47 @@ describe('agent.output config bounds flow to the consolidated run-log sink (task
             `version: "1"\nname: config-bound\nagent:\n  output:\n    max-bytes: 2048\n    max-lines: 1\n`,
         );
 
-        const config = await resolveOutputLogConfig(dir);
-        expect(config.maxBytes).toBe(2048);
-        expect(config.maxLines).toBe(1);
-        await rm(dir, { recursive: true, force: true });
+        const config: SpurConfig = spurConfigSchema.parse({
+            version: '1',
+            name: 'config-bound',
+            agent: { output: { 'max-bytes': 2048, 'max-lines': 1 } },
+        });
+
+        const logConfig = resolveOutputLogConfig(config);
+        expect(logConfig.maxBytes).toBe(2048);
+        expect(logConfig.maxLines).toBe(1);
     });
 
-    test('resolveOutputLogConfig degrades to defaults when agent.output is absent', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-output-config-'));
-        const config = await resolveOutputLogConfig(dir);
-        expect(config.maxBytes).toBeUndefined();
-        expect(config.maxLines).toBeUndefined();
-        await rm(dir, { recursive: true, force: true });
+    test('resolveOutputLogConfig degrades to defaults when agent.output is absent', () => {
+        const config: SpurConfig = spurConfigSchema.parse({ version: '1', name: 'config-bound' });
+        const logConfig = resolveOutputLogConfig(config);
+        expect(logConfig.maxBytes).toBeUndefined();
+        expect(logConfig.maxLines).toBeUndefined();
     });
 
-    test('resolveOutputLogConfig degrades to defaults when config is unreadable', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-output-config-'));
-        await mkdir(join(dir, '.spur'), { recursive: true });
-        await writeFile(join(dir, '.spur', 'config.yaml'), `this is: not: valid: yaml: [unclosed\n`);
-        const config = await resolveOutputLogConfig(dir);
-        expect(config.maxBytes).toBeUndefined();
-        expect(config.maxLines).toBeUndefined();
-        await rm(dir, { recursive: true, force: true });
+    test('resolveOutputLogConfig degrades to defaults when config is null (load failed)', () => {
+        const logConfig = resolveOutputLogConfig(null);
+        expect(logConfig.maxBytes).toBeUndefined();
+        expect(logConfig.maxLines).toBeUndefined();
     });
 });
 
 describe('workflow.logRetentionDays config flows to clean (task 0429)', () => {
-    test('resolveWorkflowLogRetentionDays reads workflow.logRetentionDays from .spur/config.yaml', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-retention-config-'));
-        await mkdir(join(dir, '.spur'), { recursive: true });
-        await writeFile(join(dir, '.spur', 'config.yaml'), 'version: "1"\nworkflow:\n  logRetentionDays: 7\n');
-
-        expect(await resolveWorkflowLogRetentionDays(dir)).toBe(7);
-        await rm(dir, { recursive: true, force: true });
+    test('resolveWorkflowLogRetentionDays reads workflow.logRetentionDays from the threaded config', () => {
+        const config: SpurConfig = spurConfigSchema.parse({
+            version: '1',
+            workflow: { logRetentionDays: 7 },
+        });
+        expect(resolveWorkflowLogRetentionDays(config)).toBe(7);
     });
 
-    test('resolveWorkflowLogRetentionDays degrades to the 30-day default when unset', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-retention-config-'));
-        expect(await resolveWorkflowLogRetentionDays(dir)).toBe(30);
-        await rm(dir, { recursive: true, force: true });
+    test('resolveWorkflowLogRetentionDays degrades to the 30-day default when unset', () => {
+        const config: SpurConfig = spurConfigSchema.parse({ version: '1', name: 'config-bound' });
+        expect(resolveWorkflowLogRetentionDays(config)).toBe(30);
     });
 
-    test('resolveWorkflowLogRetentionDays degrades to the 30-day default when config is unreadable', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-retention-config-'));
-        await mkdir(join(dir, '.spur'), { recursive: true });
-        await writeFile(join(dir, '.spur', 'config.yaml'), `this is: not: valid: yaml: [unclosed\n`);
-        expect(await resolveWorkflowLogRetentionDays(dir)).toBe(30);
-        await rm(dir, { recursive: true, force: true });
+    test('resolveWorkflowLogRetentionDays degrades to the 30-day default when config is null (load failed)', () => {
+        expect(resolveWorkflowLogRetentionDays(null)).toBe(30);
     });
 });
 

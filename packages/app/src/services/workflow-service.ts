@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
-import { AGENT_ROLE_NAMES } from '@gobing-ai/spur-config';
-import { bundledConfigRoot, loadSpurConfig, resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
+import { AGENT_ROLE_NAMES, type SpurConfig } from '@gobing-ai/spur-config';
+import { bundledConfigRoot, resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import {
     type ActionCostAttribution,
@@ -395,6 +395,12 @@ export interface WorkflowTraceTimeline {
 /** Runtime dependencies injected into WorkflowAppService. */
 export interface WorkflowAppServiceContext {
     cwd: string;
+    /**
+     * Merged global+project config threaded from the composition root (A5 /
+     * ADR-082) — the only app-config source. `null` = load failed/absent;
+     * consumers degrade to today's defaults.
+     */
+    spurConfig?: SpurConfig | null;
     /** Secret values redacted before workflow action results are persisted. */
     secretValues?: readonly string[];
     /** Optional operational warning sink (CLI stderr / server logger). */
@@ -619,7 +625,7 @@ export class WorkflowAppService {
         // governs the implement hop; a stale default warns instead of failing dispatch.
         const warnings: string[] = [];
         const runVars = {
-            ...(await resolveDefaultAgentVar(this.ctx.cwd, opts.vars, (m) => warnings.push(m))),
+            ...resolveDefaultAgentVar(this.ctx.spurConfig ?? null, opts.vars, (m) => warnings.push(m)),
             ...(opts.vars ?? {}),
             __runId: runId,
         };
@@ -1125,16 +1131,13 @@ export class WorkflowAppService {
         } = {
             ...(this.ctx.secretValues !== undefined ? { secretValues: this.ctx.secretValues } : {}),
         };
-        try {
-            const agent = (await loadSpurConfig(this.ctx.cwd)).agent;
-            agentSlice = {
-                ...agentSlice,
-                ...(agent?.default !== undefined ? { default: agent.default } : {}),
-                ...(agent?.sessionAffinity !== undefined ? { sessionAffinity: agent.sessionAffinity } : {}),
-            };
-        } catch {
-            // degrade empty — never block engine create
-        }
+        // A5/ADR-082: the merged config is threaded on the context — no per-slice load.
+        const agent = this.ctx.spurConfig?.agent;
+        agentSlice = {
+            ...agentSlice,
+            ...(agent?.default !== undefined ? { default: agent.default } : {}),
+            ...(agent?.sessionAffinity !== undefined ? { sessionAffinity: agent.sessionAffinity } : {}),
+        };
         try {
             const fs = createNodeFileSystem(this.ctx.cwd);
             const { foldersConfig, featuresDir } = await resolvePlanningFolders(fs);
@@ -1502,22 +1505,21 @@ export function resolveWorkflowFile(cwd: string, file: string): ResolveWorkflowF
  * config here because an explicit `--vars` agent is the operator's own assertion
  * (a bad one fails loudly at dispatch), unlike a stale config default.
  */
-async function resolveDefaultAgentVar(
-    cwd: string,
+/**
+ * Resolve default agent vars from the threaded config (A5/ADR-082) and caller
+ * vars. Sync & pure: a load failure is already surfaced once at the composition
+ * root; `config === null` degrades to empty (today's defaults).
+ */
+function resolveDefaultAgentVar(
+    config: SpurConfig | null,
     callerVars: Record<string, string> | undefined,
     warn: (message: string) => void,
-): Promise<Record<string, string>> {
+): Record<string, string> {
     const result: Record<string, string> = {};
     if (callerVars?.implementAgent === undefined && callerVars?.agent !== undefined) {
         result.implementAgent = callerVars.agent;
     }
-    let config: Awaited<ReturnType<typeof loadSpurConfig>>;
-    try {
-        config = await loadSpurConfig(cwd);
-    } catch {
-        return result;
-    }
-    const configured = config.agent?.default;
+    const configured = config?.agent?.default;
     if (typeof configured !== 'string' || configured.length === 0) {
         return result;
     }
@@ -1533,7 +1535,7 @@ async function resolveDefaultAgentVar(
     // pipeline YAML literal, defeating the whole role ladder.
     const valid =
         (AGENT_ROLE_NAMES as readonly string[]).includes(configured) ||
-        config.agent?.executors?.some((e) => e.name === configured) === true ||
+        config?.agent?.executors?.some((e) => e.name === configured) === true ||
         resolveAgentName(configured) !== undefined;
     if (!valid) {
         warn(
@@ -1550,41 +1552,27 @@ async function resolveDefaultAgentVar(
 }
 
 /**
- * Resolve per-run consolidated-log bounds from `.spur/config.yaml` `agent.output`
- * (feature D2 / task 0426). Best-effort: any config failure degrades to defaults
- * rather than failing the workflow run (R8).
+ * Resolve the run-log retention threshold (days) from the threaded config
+ * `workflow.logRetentionDays` (feature D2 / task 0429). Sync & pure: a load
+ * failure is already surfaced once at the root; `config === null` degrades to
+ * the 30-day default.
  */
-/**
- * Resolve the run-log retention threshold (days) from `.spur/config.yaml`
- * `workflow.logRetentionDays` (feature D2 / task 0429). Best-effort: any config
- * failure degrades to the 30-day default rather than failing the housekeeping
- * verb (same degrade-to-defaults pattern as `resolveOutputLogConfig`).
- */
-export async function resolveWorkflowLogRetentionDays(cwd: string): Promise<number> {
-    try {
-        return (await loadSpurConfig(cwd)).workflow?.logRetentionDays ?? 30;
-    } catch {
-        return 30;
-    }
+export function resolveWorkflowLogRetentionDays(config: SpurConfig | null): number {
+    return config?.workflow?.logRetentionDays ?? 30;
 }
 
 /**
- * Resolve run-log size limits (`maxBytes`, `maxLines`) from `agent.output`
- * in the project config. Returns an empty object when the section is absent
- * or config loading fails - observability config must never break a run.
+ * Resolve run-log size limits (`maxBytes`, `maxLines`) from `agent.output` in
+ * the threaded config. Returns an empty object when the section is absent or
+ * the config is null — observability config must never break a run.
  */
-export async function resolveOutputLogConfig(cwd: string): Promise<WorkflowRunLogConfig> {
-    try {
-        const output = (await loadSpurConfig(cwd)).agent?.output;
-        if (output === undefined) return {};
-        return {
-            ...(output['max-bytes'] !== undefined ? { maxBytes: output['max-bytes'] } : {}),
-            ...(output['max-lines'] !== undefined ? { maxLines: output['max-lines'] } : {}),
-        };
-    } catch {
-        // Observability configuration must never fail a workflow run.
-        return {};
-    }
+export function resolveOutputLogConfig(config: SpurConfig | null): WorkflowRunLogConfig {
+    const output = config?.agent?.output;
+    if (output === undefined) return {};
+    return {
+        ...(output['max-bytes'] !== undefined ? { maxBytes: output['max-bytes'] } : {}),
+        ...(output['max-lines'] !== undefined ? { maxLines: output['max-lines'] } : {}),
+    };
 }
 
 /**
