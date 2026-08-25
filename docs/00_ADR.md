@@ -861,6 +861,13 @@ define the upstream standard contract.
 
 **Detail:** task 0600; `config/plugin-scripts.json`; `plugins/sp/scripts/script-contract-check.ts`.
 
+**Amendment (2026-08-24).** The standard-shipping roster above grows from 7 to 8: add
+`history-anatomy-cache.ts` — the deterministic cache helper for the history-anatomy report
+(HA-S1 0659). It is a `standard` contract with a committed `history-anatomy-cache.mjs` twin,
+declared in `config/plugin-scripts.json`, and appended to `package.json` `build:scripts`. Task
+0661 amends the same entry for the `history-load.ts` removal; if both land in one commit, a single
+amendment block covers both.
+
 ## ADR-066: Cataloged System Events Use Exhaustive Server-Side Presenters
 
 **Status:** Accepted (design) · **Date:** 2026-08-19 · **Feature:** J9
