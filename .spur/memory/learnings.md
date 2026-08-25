@@ -856,3 +856,12 @@ Verification: 354 targeted tests passed; typecheck passed; diff/frontmatter/inde
 - **`spur task record --transition testing` and `--as done` run the shell guard** — L4 Solution anchor + Requirements checkbox-marker checks are real gates, not decoration; fix sections, then re-record (idempotent-ish: `Testing written, 0643 → testing` style lines).
 - **feature-sync-bounded hops chain** (backlog→active→verifying→done) once all linked tasks are terminal and verdict rows match scenarios — the batch-once wrap transition is automatic.
 
+## Learnings — 2026-08-25 (batch F72: 0663 shell, 0664 cards)
+
+- 0663 (Tasks shell): Solution change-map anchors go stale easily — re-derive `file:line` AFTER every source edit (doc-comment moves shift lines), and cite lines whose content literally contains the row's backticked symbol (L4 subject-mismatch is a hard error; missing-file is a warning).
+- Verdict artifacts must key requirement rows by the FEATURE scenario titles (`R1 — <title>`), not task-local requirement numbers — `normalizeTitle` strips the `R\d+` prefix so only full titles match `L4.scenario-unverified` coverage (feature-check `isScenarioVerified`).
+- `--agent inline` + a task > 5 R-items: the size-precheck R3 capability gate blocks on tier `standard` even after raising caps — under inline there is no subprocess executor, so run the size precheck without `--executor` (faithful to inline) and raise `maxImplementReqs`.
+- Lifecycle guards re-run `spur task check` at `testing`; the A3 dogfood ordering — verdict artifact BEFORE `task record` — is load-bearing, and `record` backfills Testing from the verdict (PASS rows), not hand-authored prose.
+- pi-lens hooks can autofix the MAIN tree during a worktree batch (wrong-tree hazard); verify paths via `git status` in both trees before WT-4 merge. Don't `pkill -f` broad patterns inside a batch (killed the operator's `spur serve` instances; restart with exact `--cwd/--port/--no-open` args).
+- 0664 (cards): the `.task-kanban` timestamp baseline is already `spur-text-muted`, so the staleness "tint" lands as the dimmer `spur-text-faint` step of the same token ladder — never change the R5-protected baseline.
+

@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F72"
 name: "Tasks module History-shell parity: unified header, inline filters, full-bleed density"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-25T04:06:01.619Z"
-updated_at: "2026-08-25T05:11:15.715Z"
+updated_at: "2026-08-25T06:26:17.484Z"
 ---
 
 # F72: Tasks module History-shell parity: unified header, inline filters, full-bleed density
@@ -122,10 +122,13 @@ Feature: Tasks module History-shell parity — unified header, inline filters, f
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0662 | Tasks module History-shell parity: unified header, inline filters, full-bleed density, enriched cards | cancelled |
-| 0663 | Tasks shell: History-parity header, inline filters, full-bleed layout | todo |
-| 0664 | Task card enrichment: subtask progress, priority accent, staleness tint | todo |
+| 0663 | Tasks shell: History-parity header, inline filters, full-bleed layout | done |
+| 0664 | Task card enrichment: subtask progress, priority accent, staleness tint | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
 
 ## History
+- 2026-08-25T06:25:16.534Z backlog → active (system)
+- 2026-08-25T06:25:16.897Z active → verifying (system)
+- 2026-08-25T06:26:17.484Z verifying → done (system)
