@@ -4,7 +4,19 @@ var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
 // plugins/sp/scripts/history-anatomy-cache.ts
 import { createHash } from "node:crypto";
-import { closeSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from "node:fs";
+import { join } from "node:path";
 var ELEVEN_SECTIONS = [
   "Scope and provenance",
   "Executive summary",
@@ -29,13 +41,20 @@ var FINDING_FIELDS = [
   "contradictions",
   "evidenceAnchor"
 ];
+var RANKED_ARTIFACT_KEYS = new Set([
+  "byTool",
+  "bySession",
+  "topStepsByTokens",
+  "topStepsByDuration",
+  "topSteps",
+  "bottlenecks"
+]);
 function canonicalize(value, key) {
   if (key === "generatedAt" || key === "validatedAt" || key === "baselineArtifactDigest")
     return null;
   if (Array.isArray(value)) {
     const raw = value.map((v) => JSON.stringify(canonicalize(v, "")));
-    const isRanked = key === "byTool" || key === "bySession" || key === "topStepsByTokens" || key === "topStepsByDuration";
-    return isRanked ? raw : [...raw].sort();
+    return RANKED_ARTIFACT_KEYS.has(key) ? raw : [...raw].sort();
   }
   if (value !== null && typeof value === "object") {
     const out = {};
@@ -116,6 +135,15 @@ function parseBlock(text) {
   }
   return obj;
 }
+function readSourceName(s) {
+  if (s !== null && typeof s === "object")
+    return String(s.source ?? "");
+  return String(s);
+}
+var DISPOSITIONS = ["hit", "miss", "forced-recompute"];
+function optionalString(v) {
+  return v == null || v === "" ? undefined : String(v);
+}
 function parseProvenance(reportMarkdown) {
   const match = reportMarkdown.match(/^---\n([\s\S]*?)\n---/);
   if (match === null)
@@ -133,11 +161,11 @@ function parseProvenance(reportMarkdown) {
     return {
       identity: {
         contractVersion: String(identity.contractVersion ?? ""),
-        mode: "daily",
+        mode: identity.mode === "ad-hoc" ? "ad-hoc" : "daily",
         date: String(identity.date ?? ""),
         timezone: String(identity.timezone ?? ""),
         bounds: { since: bounds.since, until: bounds.until },
-        sources: Array.isArray(identity.sources) ? identity.sources.map((s) => String(s)) : []
+        sources: Array.isArray(identity.sources) ? identity.sources.map(readSourceName) : []
       },
       windowState: obj.windowState === "closed" ? "closed" : "provisional",
       generatedAt: String(obj.generatedAt ?? ""),
@@ -151,7 +179,15 @@ function parseProvenance(reportMarkdown) {
         source: String(c.source ?? ""),
         status: String(c.status ?? ""),
         lastImportedAt: c.lastImportedAt == null ? null : String(c.lastImportedAt)
-      }))
+      })),
+      runId: optionalString(obj.runId),
+      currentArtifactPath: optionalString(obj.currentArtifactPath),
+      baselineArtifactPath: obj.baselineArtifactPath == null ? null : String(obj.baselineArtifactPath),
+      spurVersion: optionalString(obj.spurVersion),
+      schemaVersion: obj.schemaVersion == null ? undefined : Number(obj.schemaVersion),
+      executor: optionalString(obj.executor),
+      model: optionalString(obj.model),
+      cacheDisposition: DISPOSITIONS.includes(obj.cacheDisposition) ? obj.cacheDisposition : undefined
     };
   } catch {
     return null;
@@ -219,15 +255,187 @@ function checkReportStructure(reportMarkdown) {
   const ledgerIdx = reportMarkdown.search(/^#{2,3}\s+Evidence\s+ledger/im);
   if (ledgerIdx !== -1) {
     const ledgerSection = reportMarkdown.slice(ledgerIdx);
-    const claimRows = ledgerSection.match(/^[|>]\s+.+$/gm) ?? [];
+    const sep = ledgerSection.match(/^\|[\s:|-]+\|[ \t]*$/m);
+    const body = sep?.index === undefined ? ledgerSection : ledgerSection.slice(sep.index + sep[0].length);
+    const claimRows = body.match(/^[|>]\s+\S.*$/gm) ?? [];
     for (const row of claimRows) {
       const hasAnchor = /`[^`]+:\d+`|`[^`]+\.(md|ts|json)`|[a-z][a-z0-9_-]*\/[a-z][a-z0-9_./-]*:[0-9]+/i.test(row);
-      if (!hasAnchor)
+      if (!hasAnchor) {
         problems.push("evidence-claim-without-anchor");
-      break;
+        break;
+      }
     }
   }
   return { ok: problems.length === 0, problems };
+}
+var NOT_AVAILABLE = "not available";
+function logicDigest(path) {
+  if (path === undefined || path === "" || !existsSync(path))
+    return NOT_AVAILABLE;
+  try {
+    const h = createHash("sha256");
+    if (statSync(path).isDirectory()) {
+      const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? walk(join(dir, e.name)) : /\.(md|ya?ml)$/.test(e.name) ? [join(dir, e.name)] : []).sort();
+      for (const f of walk(path)) {
+        h.update(f.slice(path.length));
+        h.update(readFileSync(f));
+      }
+    } else {
+      h.update(readFileSync(path));
+    }
+    return h.digest("hex");
+  } catch {
+    return NOT_AVAILABLE;
+  }
+}
+function importedSnapshotAsOf(coverage) {
+  const stamps = coverage.map((c) => c.lastImportedAt).filter((v) => typeof v === "string" && v !== "");
+  if (stamps.length === 0 || stamps.length !== coverage.length)
+    return NOT_AVAILABLE;
+  return [...stamps].sort()[0] ?? NOT_AVAILABLE;
+}
+function localDay(tz, at = new Date) {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: tz, dateStyle: "short" }).format(at);
+  } catch {
+    return at.toISOString().slice(0, 10);
+  }
+}
+function resolvePaths(opts) {
+  const pluginRoot = opts.helper.replace(/\/scripts\/[^/]+$/, "");
+  const skill = `${pluginRoot}/skills/history-anatomy`;
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  const date = opts.date !== undefined && opts.date !== "" ? opts.date : localDay(tz, opts.now ?? new Date);
+  const target = opts.output !== undefined && opts.output !== "" ? opts.output : `${opts.reportDir}/${date}-history-anatomy.md`;
+  return `HA_HELPER=${opts.helper}
+HA_SKILL=${skill}
+HA_TARGET=${target}
+HA_DATE=${date}
+`;
+}
+function buildProvenance(opts) {
+  const raw = JSON.parse(readFileSync(opts.artifact, "utf8"));
+  const coverage = (raw.coverage ?? []).map((c) => ({
+    source: String(c.source ?? ""),
+    status: String(c.status ?? ""),
+    lastImportedAt: c.lastImportedAt == null ? null : String(c.lastImportedAt)
+  }));
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  const now = opts.now ?? new Date;
+  const date = opts.date !== undefined && opts.date !== "" ? opts.date : localDay(tz, now);
+  const windowState = opts.mode === "ad-hoc" || date < localDay(tz, now) ? "closed" : "provisional";
+  const nowIso = now.toISOString();
+  return {
+    identity: {
+      contractVersion: opts.contractVersion ?? "1",
+      mode: opts.mode,
+      date,
+      timezone: tz,
+      bounds: { since: String(raw.selector?.since ?? ""), until: String(raw.selector?.until ?? "") },
+      sources: coverage.map((c) => c.source).sort()
+    },
+    windowState,
+    generatedAt: nowIso,
+    validatedAt: nowIso,
+    artifactDigest: semanticArtifactDigest(raw),
+    baselineArtifactDigest: opts.baseline !== undefined && existsSync(opts.baseline) ? semanticArtifactDigest(JSON.parse(readFileSync(opts.baseline, "utf8"))) : null,
+    contractDigest: logicDigest(opts.contractFile),
+    skillDigest: logicDigest(opts.skillDir),
+    workflowDigest: logicDigest(opts.workflowFile),
+    coverage,
+    runId: opts.runId,
+    currentArtifactPath: opts.artifact,
+    baselineArtifactPath: opts.baseline ?? null,
+    spurVersion: opts.spurVersion ?? NOT_AVAILABLE,
+    schemaVersion: typeof raw.schemaVersion === "number" ? raw.schemaVersion : undefined,
+    executor: opts.executor ?? NOT_AVAILABLE,
+    model: opts.model ?? NOT_AVAILABLE
+  };
+}
+function probe(opts) {
+  const current = buildProvenance(opts);
+  const cachedText = existsSync(opts.target) ? readFileSync(opts.target, "utf8") : null;
+  const cached = cachedText === null ? null : parseProvenance(cachedText);
+  const decision = opts.mode === "ad-hoc" ? { disposition: "miss", reasons: ["ad-hoc-never-cached"] } : decideCache(cached, current, {
+    recompute: opts.recompute,
+    dayClosed: current.windowState === "closed"
+  });
+  current.cacheDisposition = decision.disposition;
+  return { decision, current };
+}
+var YAML_KEYS = [
+  "windowState",
+  "generatedAt",
+  "validatedAt",
+  "artifactDigest",
+  "baselineArtifactDigest",
+  "contractDigest",
+  "skillDigest",
+  "workflowDigest",
+  "runId",
+  "currentArtifactPath",
+  "baselineArtifactPath",
+  "spurVersion",
+  "schemaVersion",
+  "executor",
+  "model",
+  "cacheDisposition"
+];
+function yamlScalar(v) {
+  if (v === null || v === undefined)
+    return "null";
+  if (typeof v === "number" || typeof v === "boolean")
+    return String(v);
+  return `"${String(v).replaceAll('"', "\\\"")}"`;
+}
+function renderProvenanceFrontmatter(p) {
+  const lines = [
+    "---",
+    "identity:",
+    `  contractVersion: ${yamlScalar(p.identity.contractVersion)}`,
+    `  mode: ${p.identity.mode}`,
+    `  date: ${yamlScalar(p.identity.date)}`,
+    `  timezone: ${p.identity.timezone}`,
+    "  bounds:",
+    `    since: ${p.identity.bounds.since}`,
+    `    until: ${p.identity.bounds.until}`,
+    "  sources:"
+  ];
+  for (const s of p.identity.sources)
+    lines.push(`    - source: ${s}`);
+  for (const k of YAML_KEYS) {
+    if (p[k] === undefined)
+      continue;
+    lines.push(`${k}: ${yamlScalar(p[k])}`);
+  }
+  lines.push("coverage:");
+  for (const c of p.coverage) {
+    lines.push(`  - source: ${c.source}, status: ${c.status}, lastImportedAt: ${c.lastImportedAt ?? "null"}`);
+  }
+  lines.push("---");
+  return lines.join(`
+`);
+}
+function bannerLine(p) {
+  return `> imported snapshot as of ${importedSnapshotAsOf(p.coverage)} · window ${p.windowState} · cache ${p.cacheDisposition ?? NOT_AVAILABLE}`;
+}
+function stripHeader(md) {
+  const body = md.replace(/^---\n[\s\S]*?\n---\n?/, "").replace(/^\n+/, "");
+  return body.replace(/^> imported snapshot as of [^\n]*\n+/, "");
+}
+function stampReport(candidateMarkdown, p) {
+  return `${renderProvenanceFrontmatter(p)}
+
+${bannerLine(p)}
+
+${stripHeader(candidateMarkdown).replace(/^\n+/, "")}`;
+}
+function refreshReport(publishedMarkdown, validatedAt, disposition) {
+  const cached = parseProvenance(publishedMarkdown);
+  if (cached === null)
+    return publishedMarkdown;
+  const refreshed = { ...cached, validatedAt, cacheDisposition: disposition };
+  return stampReport(publishedMarkdown, refreshed);
 }
 function publishAtomically(candidatePath, targetPath) {
   const tmpPath = `${targetPath}.tmp`;
@@ -246,6 +454,25 @@ function publishAtomically(candidatePath, targetPath) {
     } catch {}
     throw err;
   }
+}
+var VALID_COMMANDS = "digest, check, paths, probe, stamp, refresh, publish";
+var PROBE_USAGE = "<script> probe --artifact <a.json> --target <report.md> [--baseline <b.json>] [--mode daily|ad-hoc] " + "[--date <YYYY-MM-DD>] [--recompute true] [--out <prov.json>] [--skill-dir <d>] [--contract <f>] [--workflow <f>]";
+function parseFlags(args) {
+  const out = {};
+  for (let i = 0;i < args.length; i++) {
+    const a = args[i] ?? "";
+    if (!a.startsWith("--"))
+      continue;
+    const key = a.slice(2);
+    const next = args[i + 1];
+    if (next === undefined || next.startsWith("--")) {
+      out[key] = "true";
+    } else {
+      out[key] = next;
+      i++;
+    }
+  }
+  return out;
 }
 function runCacheCli(argv) {
   const [cmd, a, b] = argv;
@@ -285,8 +512,104 @@ ${result.problems.map((p) => `- ${p}
       publishAtomically(a, b);
       return { exitCode: 0, stdout: "", stderr: "" };
     }
+    case "paths": {
+      const f = parseFlags(argv.slice(1));
+      if (f.helper === undefined || f.out === undefined) {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: `usage: <script> paths --helper <p> --out <env> [--report-dir <d>] [--date <d>] [--output <p>]
+`
+        };
+      }
+      writeFileSync(f.out, resolvePaths({
+        helper: f.helper,
+        reportDir: f["report-dir"] ?? "docs/report",
+        date: f.date,
+        output: f.output
+      }));
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
+    case "probe": {
+      const f = parseFlags(argv.slice(1));
+      if (f.artifact === undefined || f.target === undefined) {
+        return { exitCode: 1, stdout: "", stderr: `usage: ${PROBE_USAGE}
+` };
+      }
+      let result;
+      try {
+        result = probe({
+          artifact: f.artifact,
+          target: f.target,
+          baseline: f.baseline,
+          mode: f.mode === "ad-hoc" ? "ad-hoc" : "daily",
+          date: f.date,
+          recompute: f.recompute === "true",
+          executor: f.executor,
+          model: f.model,
+          skillDir: f["skill-dir"],
+          contractFile: f.contract,
+          workflowFile: f.workflow,
+          contractVersion: f["contract-version"],
+          runId: f["run-id"],
+          spurVersion: f["spur-version"]
+        });
+      } catch {
+        return { exitCode: 1, stdout: "", stderr: `could not read artifact at ${f.artifact}
+` };
+      }
+      if (f.out !== undefined)
+        writeFileSync(f.out, `${JSON.stringify(result.current, null, 2)}
+`);
+      const reasons = result.decision.reasons.map((r) => `- ${r}
+`).join("");
+      return { exitCode: 0, stdout: `${result.decision.disposition}
+${reasons}`, stderr: "" };
+    }
+    case "stamp": {
+      const f = parseFlags(argv.slice(1));
+      if (f.candidate === undefined || f.provenance === undefined || f.out === undefined) {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: `usage: <script> stamp --candidate <c.md> --provenance <p.json> --out <o.md>
+`
+        };
+      }
+      try {
+        const p = JSON.parse(readFileSync(f.provenance, "utf8"));
+        writeFileSync(f.out, `${stampReport(readFileSync(f.candidate, "utf8"), p)}
+`);
+      } catch {
+        return { exitCode: 1, stdout: "", stderr: `stamp: could not read candidate or provenance
+` };
+      }
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
+    case "refresh": {
+      const f = parseFlags(argv.slice(1));
+      if (f.report === undefined || f.out === undefined) {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: `usage: <script> refresh --report <published.md> --out <o.md> [--disposition hit]
+`
+        };
+      }
+      try {
+        const disposition = f.disposition ?? "hit";
+        const refreshed = refreshReport(readFileSync(f.report, "utf8"), f["validated-at"] ?? new Date().toISOString(), disposition);
+        writeFileSync(f.out, refreshed.endsWith(`
+`) ? refreshed : `${refreshed}
+`);
+      } catch {
+        return { exitCode: 1, stdout: "", stderr: `refresh: could not read report at ${f.report}
+` };
+      }
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
     default:
-      return { exitCode: 1, stdout: "", stderr: `valid commands: digest, check, publish
+      return { exitCode: 1, stdout: "", stderr: `valid commands: ${VALID_COMMANDS}
 ` };
   }
 }
@@ -297,10 +620,19 @@ ${result.problems.map((p) => `- ${p}
   process.exitCode = exitCode;
 }
 export {
+  stampReport,
   semanticArtifactDigest,
   runCacheCli,
+  resolvePaths,
+  renderProvenanceFrontmatter,
+  refreshReport,
   publishAtomically,
+  probe,
   parseProvenance,
+  logicDigest,
+  importedSnapshotAsOf,
   decideCache,
-  checkReportStructure
+  checkReportStructure,
+  buildProvenance,
+  bannerLine
 };

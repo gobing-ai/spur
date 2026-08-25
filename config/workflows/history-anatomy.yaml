@@ -11,14 +11,19 @@
 # would exceed the shell composition threshold and be flagged as an owned-capability candidate.
 #
 # Shape:
-#   start -> resolve-scope -> cache-probe -> analyze -> render -> enrich -> structure-gate
-#            -> validate -> publish -> published
-#            (cache hit -> refresh-provenance -> publish)
-#            (validate PASS -> publish; validate FAIL -> correct (max 1) -> structure-gate ...)
+#   start -> resolve-scope -> resolve-paths -> analyze -> cache-probe
+#            (hit  -> refresh-provenance -> publish -> published)
+#            (miss -> render -> enrich -> structure-gate -> validate -> stamp -> publish)
+#            (validate FAIL -> correct (max 1) -> structure-gate ...; exhausted -> failed)
 #            (any all-paths failure -> failed)
 #
-# terminalStates: [published, failed]. Publication is reachable ONLY from a passing validation
-# state — there is no edge into `publish` from structure-gate or enrich directly.
+# `analyze` precedes `cache-probe` deliberately: ADR-079 makes cache validity a DERIVED fact, so
+# the semantic digest must come from a fresh analyze, never from the cached report being judged.
+# The deterministic half is therefore never cached — only the model-authored half is reused.
+#
+# terminalStates: [published, failed]. Publication is reachable ONLY via `stamp` (guarded on a
+# passing validation) or `refresh-provenance` (whose model half was itself published through a
+# passing validation) — there is no edge into `publish` from structure-gate or enrich directly.
 #
 # Vars (all must be declared here — the vars: block is the only safe shape; `spur workflow
 # validate` and the skill-structure test enforce it):
@@ -60,6 +65,9 @@ vars:
   __runId: ""
   stepTimeoutMs: "1800000"
   correctionCount: "0"
+  workflowFile: "config/workflows/history-anatomy.yaml"
+  contractVersion: "1"
+  reportDir: "docs/report"
 
 states:
   - id: start
@@ -89,18 +97,20 @@ states:
           expectFile: .spur/run/${vars.__runId}-selector.json
           timeoutMs: ${vars.stepTimeoutMs}
 
-  - id: cache-probe
+  - id: resolve-paths
     description: >
-      Deterministic cache probe via the helper (0659). Re-derives the semantic digest from a fresh
-      analyze before any reuse decision — a hit skips only enrichment, never the probe. Daily
-      only; ad-hoc runs never take the hit branch.
+      Resolve the helper, the skill/contract logic paths, and the publication target once, into a
+      run-scoped env file every later stage sources. Keeps each downstream shell action at glue
+      length (ADR-069 R1) instead of repeating path arithmetic per stage.
     onEnter:
       - kind: shell
         options:
+          # Path arithmetic lives in the helper (ADR-069 R1); the shell only locates it. Avoid
+          # `${...}` here — that syntax collides with the engine's own template interpolation.
           command: >-
-            node "$(superskill script path sp history-anatomy-cache.mjs)" decide \
-              "$__runId" "$mode" "$date" "$since" "$until" "$recompute" \
-              > .spur/run/$__runId-cache-disposition.txt 2>&1 || true
+            h=$(superskill script path sp history-anatomy-cache.mjs);
+            node "$h" paths --helper "$h" --report-dir "$reportDir" --date "$date"
+            --output "$output" --out .spur/run/$__runId-paths.env
 
   - id: analyze
     description: >
@@ -117,6 +127,25 @@ states:
         options:
           command: >-
             $spurBin history analyze --out .spur/run/$__runId-history-anatomy-baseline.json --since "$baselineSince" --until "$until" --json 2>/dev/null || true
+
+  - id: cache-probe
+    description: >
+      Deterministic cache probe via the helper (0659). Runs AFTER analyze because ADR-079 makes
+      validity a derived fact: the semantic digest must come from the fresh artifact, never from
+      the cached report being judged. A hit skips only enrichment, never the probe. Daily only;
+      ad-hoc always reports miss (`ad-hoc-never-cached`). Also writes the run's full provenance.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            . .spur/run/$__runId-paths.env;
+            node "$HA_HELPER" probe --artifact .spur/run/$__runId-history-anatomy-current.json
+            --baseline .spur/run/$__runId-history-anatomy-baseline.json --target "$HA_TARGET"
+            --mode "$mode" --date "$HA_DATE" --recompute "$recompute" --executor "$agent"
+            --skill-dir "$HA_SKILL" --contract "$HA_SKILL/references/report-contract.md"
+            --workflow "$workflowFile" --contract-version "$contractVersion" --run-id "$__runId"
+            --out .spur/run/$__runId-provenance.json
+            > .spur/run/$__runId-cache-disposition.txt
 
   - id: render
     description: >
@@ -182,27 +211,45 @@ states:
 
   - id: refresh-provenance
     description: >
-      On a cache hit, refresh validated_at and the imported-snapshot banner from the current
-      per-source lastImportedAt values — never claiming a source was imported after its recorded
-      timestamp.
+      Cache-hit path. Keeps the published model half verbatim and refreshes only validated_at,
+      the cache disposition, and the imported-snapshot banner — which is the EARLIEST per-source
+      lastImportedAt, so the report never claims a source was imported after its own recorded
+      timestamp. Emits the publishable artifact the shared publish state consumes.
     onEnter:
       - kind: shell
         options:
           command: >-
-            node "$(superskill script path sp history-anatomy-cache.mjs)" refresh \
-              .spur/run/$__runId-current.json .spur/run/$__runId-current.md 2>/dev/null || true
+            . .spur/run/$__runId-paths.env;
+            node "$HA_HELPER" refresh --report "$HA_TARGET"
+            --out .spur/run/$__runId-publishable.md --disposition hit
+
+  - id: stamp
+    description: >
+      Cache-miss path. Attaches the full R7 frontmatter provenance block (identity tuple, window
+      state, generated/validated timestamps, artifact paths + digests, contract/skill/workflow
+      digests, per-source coverage + last_imported_at, spur/schema version, executor, run id,
+      cache disposition) and the freshness banner to the validated candidate.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            . .spur/run/$__runId-paths.env;
+            node "$HA_HELPER" stamp --candidate .spur/run/$__runId-candidate.md
+            --provenance .spur/run/$__runId-provenance.json
+            --out .spur/run/$__runId-publishable.md
 
   - id: publish
     description: >
-      Atomic publication via the helper (0659). Only reachable from a passing validate state.
-      Writes the full frontmatter provenance block naming cache disposition, window state,
-      per-source coverage, artifact paths + digests, and the banner.
+      Atomic publication via the helper (0659). Reachable only from `stamp` (which is reachable
+      only from a passing validate) or from `refresh-provenance` on the cache-hit path — the
+      model half a hit reuses was itself published through a passing validation.
     onEnter:
       - kind: shell
         options:
           command: >-
-            node "$(superskill script path sp history-anatomy-cache.mjs)" publish \
-              .spur/run/$__runId-candidate.md "$output"
+            . .spur/run/$__runId-paths.env;
+            mkdir -p "$(dirname "$HA_TARGET")";
+            node "$HA_HELPER" publish .spur/run/$__runId-publishable.md "$HA_TARGET"
 
   - id: published
     description: Terminal — report published atomically after a passing validation.
@@ -218,8 +265,20 @@ transitions:
       kind: always
 
   - from: resolve-scope
+    to: resolve-paths
+    description: Mode valid — resolve helper/skill/target paths once.
+    guard:
+      kind: always
+
+  - from: resolve-paths
+    to: analyze
+    description: Paths resolved — always rerun the deterministic half (ADR-079).
+    guard:
+      kind: always
+
+  - from: analyze
     to: cache-probe
-    description: Mode valid — probe the cache.
+    description: Fresh artifacts on disk — derive the digest and decide reuse.
     guard:
       kind: always
 
@@ -232,20 +291,14 @@ transitions:
       options:
         command: 'test "$mode" = daily && grep -q "^hit$" .spur/run/$__runId-cache-disposition.txt 2>/dev/null'
   - from: cache-probe
-    to: analyze
-    description: Cache miss, forced recompute, or ad-hoc — rerun the deterministic half.
+    to: render
+    description: Cache miss, forced recompute, or ad-hoc — render and re-enrich.
     guard:
       kind: always
 
   - from: refresh-provenance
     to: publish
     description: Provenance refreshed — publish the cached model half.
-    guard:
-      kind: always
-
-  - from: analyze
-    to: render
-    description: Both artifacts analyzed — render.
     guard:
       kind: always
 
@@ -275,8 +328,8 @@ transitions:
       kind: always
 
   - from: validate
-    to: publish
-    description: Independent validation PASS — publish atomically.
+    to: stamp
+    description: Independent validation PASS — stamp provenance, then publish atomically.
     guard:
       kind: shell
       options:
@@ -297,6 +350,12 @@ transitions:
   - from: correct
     to: structure-gate
     description: Corrected candidate re-enters the deterministic gate, then re-validates.
+    guard:
+      kind: always
+
+  - from: stamp
+    to: publish
+    description: Provenance stamped — publish atomically.
     guard:
       kind: always
 

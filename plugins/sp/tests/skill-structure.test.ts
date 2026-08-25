@@ -889,6 +889,75 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         }
     });
 
+    // HA-S1 (0661 R5): the bounded coexistence contract for sp:issue-finding. Writing the
+    // retirement gate down is the deliverable, so pin its five clauses — an undated, un-gated
+    // "deprecated" note is exactly the outcome this contract exists to prevent.
+    test('README carries the sp:issue-finding retirement gate with fixtures and a review point (0661 R5)', () => {
+        const readme = readFileSync(join(PLUGIN_ROOT, 'README.md'), 'utf8');
+        const start = readme.indexOf('Bounded coexistence and retirement gate');
+        expect(start, 'README must carry the retirement gate section').toBeGreaterThan(-1);
+        const section = readme.slice(start, start + 4000);
+        // 1. Parity fixtures — the eight capability areas the new contract must cover.
+        for (const fixture of [
+            'typed history analysis',
+            'range selection',
+            'error reporting',
+            'evidence and confidence',
+            'remediation proposals',
+            'performance',
+            'process observations',
+            'positive patterns',
+        ]) {
+            expect(section, `retirement gate must list parity fixture: ${fixture}`).toContain(fixture);
+        }
+        // 2. Intentional exclusions are named as such, not left to read as parity gaps.
+        expect(section).toMatch(/[Ii]ntentional exclusions/);
+        // 3. Adoption evidence comes from existing run records — no bespoke telemetry.
+        expect(section).toMatch(/[Aa]doption evidence/);
+        expect(section).toMatch(/no bespoke telemetry/i);
+        // 4. A concrete review point, not "eventually".
+        expect(section).toMatch(/[Rr]eview point/);
+        expect(section).toMatch(/30 days/);
+        // 5. Retirement needs explicit operator approval and is a separate change.
+        expect(section).toMatch(/operator approval/i);
+        expect(section).toMatch(/separate change/i);
+        // The legacy skill must still be shipped while the gate is open.
+        expect(existsSync(join(SKILLS_DIR, 'issue-finding', 'SKILL.md'))).toBe(true);
+    });
+
+    // HA-S1 (0660 R2/R6): the two structural guarantees of the FSM — publication is reachable
+    // ONLY behind a passing validation, and correction is capped at exactly one pass. These are
+    // guard/edge facts, so they are pinned against the YAML rather than left to prose.
+    test('history-anatomy.yaml gates publication and caps correction at one pass (0660 R2, R6)', () => {
+        const wf = join(WORKFLOWS_DIR, 'history-anatomy.yaml');
+        if (!existsSync(wf)) {
+            return;
+        }
+        const text = readFileSync(wf, 'utf8');
+        const edges = [...text.matchAll(/- from: (\S+)\n\s+to: (\S+)/g)].map((m) => `${m[1]}->${m[2]}`);
+
+        // Only `stamp` and `refresh-provenance` may reach `publish`.
+        expect(edges.filter((e) => e.endsWith('->publish')).sort()).toEqual([
+            'refresh-provenance->publish',
+            'stamp->publish',
+        ]);
+        // `stamp` is reachable only from `validate`, and only on a PASS verdict.
+        expect(edges.filter((e) => e.endsWith('->stamp'))).toEqual(['validate->stamp']);
+        expect(text).toContain('grep -q "Verdict: PASS" .spur/run/$__runId-validation.txt');
+        // The digest must come from a fresh analyze, so analyze precedes the probe (ADR-079).
+        expect(edges).toContain('analyze->cache-probe');
+        expect(edges).not.toContain('cache-probe->analyze');
+
+        // Correction: one pass only — the retry edge is bounded and the exhausted edge fails.
+        expect(edges).toContain('validate->correct');
+        expect(edges).toContain('validate->failed');
+        expect(edges).toContain('correct->structure-gate');
+        expect(edges).not.toContain('correct->publish');
+        expect(text, 'the correction retry edge must be bounded to a single pass').toMatch(
+            /correction-count[^\n]*-lt 1/,
+        );
+    });
+
     // HA-S1 (0658 R4): the report contract freezes the eleven section names and the per-finding
     // field names. 0659's structure gate and 0660's validation stage consume them verbatim, so
     // this test pins them here so the vocabulary cannot drift.

@@ -1,13 +1,17 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+    type CacheCliResult,
     type CacheProvenance,
     checkReportStructure,
     decideCache,
+    importedSnapshotAsOf,
+    logicDigest,
     parseProvenance,
     publishAtomically,
+    resolvePaths,
     runCacheCli,
     semanticArtifactDigest,
 } from '../scripts/history-anatomy-cache';
@@ -59,6 +63,39 @@ describe('semanticArtifactDigest (R1)', () => {
         expect(semanticArtifactDigest({ a: { nested: [{ z: 1 }, { x: 2 }] } })).toBe(
             semanticArtifactDigest({ a: { nested: [{ x: 2 }, { z: 1 }] } }),
         );
+    });
+
+    // The ranked-key list is a hand-maintained mirror of `HistoryArtifact`'s shape (see
+    // RANKED_ARTIFACT_KEYS). Every ranked array on the artifact must be covered, or a reordering
+    // that IS evidence gets sorted away. `topSteps` and `bottlenecks` were both missing until
+    // 2026-08-25; task 0668 removes the mirror. Until then this pins every known ranking.
+    test('every ranked artifact array preserves order in the digest (drift guard)', () => {
+        const rankedKeys = ['byTool', 'bySession', 'topStepsByTokens', 'topStepsByDuration', 'topSteps', 'bottlenecks'];
+        for (const key of rankedKeys) {
+            const a = {
+                [key]: [
+                    { id: 'A', n: 2 },
+                    { id: 'B', n: 1 },
+                ],
+            };
+            const b = {
+                [key]: [
+                    { id: 'B', n: 1 },
+                    { id: 'A', n: 2 },
+                ],
+            };
+            expect(semanticArtifactDigest(a), `${key} is a ranking — reordering it must change the digest`).not.toBe(
+                semanticArtifactDigest(b),
+            );
+        }
+        // Counterexample: a set-valued array must still sort, or the digest is unstable.
+        for (const key of ['coverage', 'warnings', 'loops', 'stepSupport', 'pairings']) {
+            const a = { [key]: [{ id: 'A' }, { id: 'B' }] };
+            const b = { [key]: [{ id: 'B' }, { id: 'A' }] };
+            expect(semanticArtifactDigest(a), `${key} is a set — order must not change the digest`).toBe(
+                semanticArtifactDigest(b),
+            );
+        }
     });
 });
 
@@ -188,6 +225,40 @@ describe('checkReportStructure (R5)', () => {
         expect(r.ok).toBe(false);
         expect(r.problems.some((p) => p.includes('placeholder'))).toBe(true);
     });
+
+    // R5/R26: the anchor gate must inspect *every* claim, and must not mistake a table's own
+    // header row for an unanchored claim — the two halves of the same defect.
+    const head = sections
+        .slice(0, 10)
+        .map((s) => `## ${s}\n\nbody`)
+        .join('\n\n');
+    const ledger = (rows: string) => `${head}\n\n## Evidence ledger\n\n| Claim | Anchor |\n| --- | --- |\n${rows}`;
+
+    test('a fully anchored ledger table passes — the header row is structure, not a claim', () => {
+        const r = checkReportStructure(
+            ledger(
+                '| tokens rose 20% | `packages/app/src/x.ts:10` |\n| loop detected | `packages/domain/src/y.ts:42` |\n',
+            ),
+        );
+        expect(r.problems).toEqual([]);
+        expect(r.ok).toBe(true);
+    });
+
+    test('an unanchored claim after an anchored first claim still fails', () => {
+        const r = checkReportStructure(
+            ledger('| tokens rose 20% | `packages/app/src/x.ts:10` |\n| sessions were slow | none whatsoever |\n'),
+        );
+        expect(r.ok).toBe(false);
+        expect(r.problems).toContain('evidence-claim-without-anchor');
+    });
+
+    test('a blockquote ledger is scanned past its first line', () => {
+        const r = checkReportStructure(
+            `${head}\n\n## Evidence ledger\n\n> tokens rose 20% — \`packages/app/src/x.ts:10\`\n> loop detected — no anchor here\n`,
+        );
+        expect(r.ok).toBe(false);
+        expect(r.problems).toContain('evidence-claim-without-anchor');
+    });
 });
 
 describe('CLI entry (runCacheCli)', () => {
@@ -236,5 +307,293 @@ describe('publishAtomically (R6)', () => {
         expect(readFileSync(target, 'utf8')).toBe('OLD');
         expect(existsSync(`${target}.tmp`)).toBe(false);
         rmSync(dir, { recursive: true, force: true });
+    });
+});
+
+// ── 0660 R3/R5/R7: provenance emission and the end-to-end cache cycle ──────────────────────────
+//
+// The cache branch is only real if a published report carries provenance the NEXT run can read
+// back. These tests drive the actual CLI surface the workflow invokes (paths → probe → stamp →
+// publish → probe), because that seam — not the exported predicates — is where the feature lives.
+
+describe('provenance + full cache cycle (0660 R3, R5, R7)', () => {
+    const artifact = (over: Record<string, unknown> = {}) => ({
+        schemaVersion: 1,
+        selector: { since: '2026-08-24T00:00:00-07:00', until: '2026-08-25T00:00:00-07:00' },
+        totals: { messages: 42 },
+        population: { sessions: 9, tools: 4, loops: 0, warnings: 0, appliedTop: 20 },
+        coverage: [
+            { source: 'claude', status: 'ok', lastImportedAt: '2026-08-24T23:00:00Z' },
+            { source: 'codex', status: 'ok', lastImportedAt: '2026-08-24T22:30:00Z' },
+        ],
+        loops: [],
+        warnings: [],
+        bySession: [],
+        byTool: [],
+        ...over,
+    });
+
+    /** A fixture project: artifact + logic files + a candidate report, all under one temp dir. */
+    function fixture(over: Record<string, unknown> = {}) {
+        const dir = mkdtempSync(join(tmpdir(), 'ha-cycle-'));
+        writeFileSync(join(dir, 'art.json'), JSON.stringify(artifact(over)));
+        writeFileSync(join(dir, 'contract.md'), 'contract v1');
+        writeFileSync(join(dir, 'wf.yaml'), 'wf: 1');
+        writeFileSync(join(dir, 'candidate.md'), '# body\n\ncontent here\n');
+        return dir;
+    }
+
+    const probeArgs = (dir: string, extra: string[] = []) => [
+        'probe',
+        '--artifact',
+        join(dir, 'art.json'),
+        '--target',
+        join(dir, 'report.md'),
+        '--mode',
+        'daily',
+        '--date',
+        '2026-08-24',
+        '--contract',
+        join(dir, 'contract.md'),
+        '--workflow',
+        join(dir, 'wf.yaml'),
+        '--run-id',
+        'r1',
+        '--out',
+        join(dir, 'prov.json'),
+        ...extra,
+    ];
+
+    /** probe → stamp → publish: the miss path, leaving a published report with provenance. */
+    function publishOnce(dir: string, extra: string[] = []): CacheCliResult {
+        const p = runCacheCli(probeArgs(dir, extra));
+        runCacheCli([
+            'stamp',
+            '--candidate',
+            join(dir, 'candidate.md'),
+            '--provenance',
+            join(dir, 'prov.json'),
+            '--out',
+            join(dir, 'publishable.md'),
+        ]);
+        runCacheCli(['publish', join(dir, 'publishable.md'), join(dir, 'report.md')]);
+        return p;
+    }
+
+    test('R7: the published report carries the full provenance block and it parses back', () => {
+        const dir = fixture();
+        publishOnce(dir);
+        const published = readFileSync(join(dir, 'report.md'), 'utf8');
+        for (const field of [
+            'identity:',
+            'contractVersion:',
+            'mode: daily',
+            'timezone:',
+            'bounds:',
+            'windowState:',
+            'generatedAt:',
+            'validatedAt:',
+            'artifactDigest:',
+            'baselineArtifactDigest:',
+            'contractDigest:',
+            'skillDigest:',
+            'workflowDigest:',
+            'runId:',
+            'currentArtifactPath:',
+            'spurVersion:',
+            'schemaVersion:',
+            'executor:',
+            'cacheDisposition:',
+            'coverage:',
+        ]) {
+            expect(published, `frontmatter must carry ${field}`).toContain(field);
+        }
+        const back = parseProvenance(published);
+        expect(back?.identity.sources).toEqual(['claude', 'codex']);
+        expect(back?.identity.bounds.since).toBe('2026-08-24T00:00:00-07:00');
+        expect(back?.coverage.length).toBe(2);
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('R8: the banner reports the EARLIEST lastImportedAt, never a later one', () => {
+        const dir = fixture();
+        publishOnce(dir);
+        const published = readFileSync(join(dir, 'report.md'), 'utf8');
+        // codex (22:30) is older than claude (23:00) — claiming 23:00 would overstate codex.
+        expect(published).toContain('> imported snapshot as of 2026-08-24T22:30:00Z');
+        expect(published).not.toContain('as of 2026-08-24T23:00:00Z');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('R5: an unchanged second run is a hit against the report published by the first', () => {
+        const dir = fixture();
+        expect(publishOnce(dir).stdout).toBe('miss\n- no-cache\n');
+        expect(runCacheCli(probeArgs(dir)).stdout).toBe('hit\n');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('R6: changed imported data invalidates the published cache', () => {
+        const dir = fixture();
+        publishOnce(dir);
+        writeFileSync(join(dir, 'art.json'), JSON.stringify(artifact({ totals: { messages: 99 } })));
+        expect(runCacheCli(probeArgs(dir)).stdout).toContain('data-changed');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('R7-logic: changed contract logic invalidates even when the data is identical', () => {
+        const dir = fixture();
+        publishOnce(dir);
+        writeFileSync(join(dir, 'contract.md'), 'contract v2');
+        const out = runCacheCli(probeArgs(dir)).stdout;
+        expect(out).toContain('miss');
+        expect(out).toContain('logic-changed:contract');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('R12: a source dropping out of coverage invalidates the published cache', () => {
+        const dir = fixture();
+        publishOnce(dir);
+        writeFileSync(
+            join(dir, 'art.json'),
+            JSON.stringify(artifact({ coverage: [{ source: 'claude', status: 'ok', lastImportedAt: null }] })),
+        );
+        expect(runCacheCli(probeArgs(dir)).stdout).toContain('coverage-degraded');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('R9: --recompute forces recompute against a cache that would otherwise hit', () => {
+        const dir = fixture();
+        publishOnce(dir);
+        expect(runCacheCli(probeArgs(dir)).stdout).toBe('hit\n');
+        expect(runCacheCli(probeArgs(dir, ['--recompute', 'true'])).stdout).toContain('forced-recompute');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('ad-hoc never takes the hit branch even against a valid cache', () => {
+        const dir = fixture();
+        publishOnce(dir);
+        const out = runCacheCli(probeArgs(dir, ['--mode', 'ad-hoc'])).stdout;
+        expect(out).toContain('miss');
+        expect(out).toContain('ad-hoc-never-cached');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('R11: a malformed published report probes as a miss, not a crash', () => {
+        const dir = fixture();
+        writeFileSync(join(dir, 'report.md'), '---\nidentity: {unclosed\n# body\n');
+        const r = runCacheCli(probeArgs(dir));
+        expect(r.exitCode).toBe(0);
+        expect(r.stdout).toContain('no-cache');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('R3: refresh updates validatedAt, disposition and banner but not the recorded evidence', () => {
+        const dir = fixture();
+        publishOnce(dir);
+        const before = parseProvenance(readFileSync(join(dir, 'report.md'), 'utf8'));
+        runCacheCli([
+            'refresh',
+            '--report',
+            join(dir, 'report.md'),
+            '--out',
+            join(dir, 'refreshed.md'),
+            '--disposition',
+            'hit',
+            '--validated-at',
+            '2026-08-25T09:00:00Z',
+        ]);
+        const text = readFileSync(join(dir, 'refreshed.md'), 'utf8');
+        const after = parseProvenance(text);
+        expect(after?.validatedAt).toBe('2026-08-25T09:00:00Z');
+        expect(after?.cacheDisposition).toBe('hit');
+        // The evidence the model half was authored from is untouched.
+        expect(after?.generatedAt).toBe(before?.generatedAt);
+        expect(after?.artifactDigest).toBe(before?.artifactDigest);
+        // R7: republishing must not strip the audit block — a hit republishes from this object.
+        expect(after?.runId).toBe('r1');
+        expect(after?.currentArtifactPath).toBe(before?.currentArtifactPath);
+        expect(after?.schemaVersion).toBe(1);
+        expect(text).toContain('runId:');
+        expect(text).toContain('executor:');
+        // Idempotent: exactly one banner survives a refresh of a refreshed report.
+        expect(text.match(/imported snapshot as of/g)?.length).toBe(1);
+        expect(text).toContain('cache hit');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('windowState is provisional for today and closed for a past day', () => {
+        const dir = fixture();
+        const today = new Intl.DateTimeFormat('en-CA', { dateStyle: 'short' }).format(new Date());
+        runCacheCli(probeArgs(dir, ['--date', today]));
+        expect(JSON.parse(readFileSync(join(dir, 'prov.json'), 'utf8')).windowState).toBe('provisional');
+        runCacheCli(probeArgs(dir));
+        expect(JSON.parse(readFileSync(join(dir, 'prov.json'), 'utf8')).windowState).toBe('closed');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('a provisional cache read once the day has closed is invalidated', () => {
+        const dir = fixture();
+        const today = new Intl.DateTimeFormat('en-CA', { dateStyle: 'short' }).format(new Date());
+        publishOnce(dir, ['--date', today]);
+        // Same report, now requested as a past (closed) day: windowState must invalidate it.
+        const published = readFileSync(join(dir, 'report.md'), 'utf8').replace(
+            `date: "${today}"`,
+            'date: "2026-08-24"',
+        );
+        writeFileSync(join(dir, 'report.md'), published);
+        expect(runCacheCli(probeArgs(dir)).stdout).toContain('window-closed');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('logicDigest: missing paths read not available; a directory folds in file names', () => {
+        const dir = fixture();
+        expect(logicDigest(join(dir, 'nope.md'))).toBe('not available');
+        expect(logicDigest(undefined)).toBe('not available');
+        const d = join(dir, 'skill');
+        mkdirSync(join(d, 'references'), { recursive: true });
+        writeFileSync(join(d, 'SKILL.md'), 'a');
+        const one = logicDigest(d);
+        writeFileSync(join(d, 'references', 'modes.md'), 'b');
+        expect(logicDigest(d)).not.toBe(one);
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('importedSnapshotAsOf reads not available when any source lacks a timestamp', () => {
+        expect(importedSnapshotAsOf([{ source: 'a', status: 'ok', lastImportedAt: null }])).toBe('not available');
+        expect(importedSnapshotAsOf([])).toBe('not available');
+        expect(
+            importedSnapshotAsOf([
+                { source: 'a', status: 'ok', lastImportedAt: '2026-08-02T00:00:00Z' },
+                { source: 'b', status: 'ok', lastImportedAt: '2026-08-01T00:00:00Z' },
+            ]),
+        ).toBe('2026-08-01T00:00:00Z');
+    });
+
+    test('paths resolves the skill dir beside the helper and defaults the target', () => {
+        const env = resolvePaths({
+            helper: '/p/sp/scripts/history-anatomy-cache.mjs',
+            reportDir: 'docs/report',
+            date: '2026-08-24',
+        });
+        expect(env).toContain('HA_SKILL=/p/sp/skills/history-anatomy');
+        expect(env).toContain('HA_TARGET=docs/report/2026-08-24-history-anatomy.md');
+        expect(env).toContain('HA_DATE=2026-08-24');
+        // An explicit --output wins over the derived daily path.
+        expect(
+            resolvePaths({
+                helper: '/p/sp/scripts/h.mjs',
+                reportDir: 'docs/report',
+                date: '2026-08-24',
+                output: '/tmp/x.md',
+            }),
+        ).toContain('HA_TARGET=/tmp/x.md');
+    });
+
+    test('unknown and malformed invocations report the full verb list without throwing', () => {
+        expect(runCacheCli(['nope']).stderr).toContain('digest, check, paths, probe, stamp, refresh, publish');
+        expect(runCacheCli(['probe']).exitCode).toBe(1);
+        expect(runCacheCli(['stamp']).exitCode).toBe(1);
+        expect(runCacheCli(['refresh']).exitCode).toBe(1);
+        expect(runCacheCli(['paths']).exitCode).toBe(1);
     });
 });

@@ -14,6 +14,13 @@
  *   3. decideCache            — the full invalidation matrix
  *   4. checkReportStructure   — the structure gate over a candidate report
  *   5. publishAtomically      — same-directory tmp + rename; target untouched on failure
+ *   6. resolvePaths           — helper/skill/target path resolution, once, into an env file
+ *   7. buildProvenance/probe  — derive this run's provenance and decide reuse against the cache
+ *   8. stampReport/refreshReport — attach or refresh the R7 frontmatter block and the banner
+ *
+ * CLI verbs: paths, probe, stamp, refresh, digest, check, publish. `probe` is the seam the
+ * workflow's cache branch turns on — it must run AFTER analyze, because ADR-079 derives validity
+ * from the fresh artifact rather than trusting what the cached report claims about itself.
  *
  * Mirrors the feature-sync-bounded.ts pattern (ADR-065 / 0659): pure exported functions for every
  * decision, a thin CLI entry, `node:` imports only, `process.argv.slice(2)`, local types — no
@@ -21,13 +28,25 @@
  */
 
 import { createHash } from 'node:crypto';
-import { closeSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    closeSync,
+    existsSync,
+    fsyncSync,
+    openSync,
+    readdirSync,
+    readFileSync,
+    renameSync,
+    rmSync,
+    statSync,
+    writeFileSync,
+} from 'node:fs';
+import { join } from 'node:path';
 
 // ── Local types (match the 0658/0660 frozen vocabulary; no package import) ───────────────
 
 export interface CacheIdentity {
     contractVersion: string;
-    mode: 'daily';
+    mode: 'daily' | 'ad-hoc';
     date: string; // YYYY-MM-DD, local calendar day
     timezone: string; // IANA zone id
     bounds: { since: string; until: string }; // normalized, inclusive, RFC3339
@@ -45,6 +64,16 @@ export interface CacheProvenance {
     skillDigest: string;
     workflowDigest: string;
     coverage: Array<{ source: string; status: string; lastImportedAt: string | null }>;
+    // 0660 R7 audit fields. Recorded in the published frontmatter for provenance; deliberately
+    // NOT part of the invalidation matrix — a changed run id or executor is not stale evidence.
+    runId?: string;
+    currentArtifactPath?: string;
+    baselineArtifactPath?: string | null;
+    spurVersion?: string;
+    schemaVersion?: number;
+    executor?: string;
+    model?: string;
+    cacheDisposition?: CacheDisposition;
 }
 
 export type CacheDisposition = 'hit' | 'miss' | 'forced-recompute';
@@ -87,6 +116,27 @@ const FINDING_FIELDS = [
 /** JSON-compatible value — the domain type for canonicalized artifact material and YAML scalars. */
 type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
 
+/**
+ * Artifact arrays whose ORDER is part of the evidence (bounded leaderboards and ranked lists), so
+ * canonicalization must not sort them. Everything else is a set — sorting is what makes the digest
+ * stable across runs.
+ *
+ * ⚠️ Hand-maintained enumeration of `HistoryArtifact` shape, living outside `packages/domain`.
+ * Nothing keeps it in sync: `cacheWaste.topSteps` and `derived.bottlenecks` were both ranked from
+ * the day they landed (0581/0554) and were both missing here until 2026-08-25. Neither drift was
+ * exploitable — every entry in those lists carries its own sort key, so `analyze` cannot emit the
+ * same entries in a different order — but the next ranked array whose order is NOT determined by
+ * its entries would be silently mis-canonicalized. Fixing the seam is task 0668.
+ */
+const RANKED_ARTIFACT_KEYS = new Set([
+    'byTool',
+    'bySession',
+    'topStepsByTokens',
+    'topStepsByDuration',
+    'topSteps', // CacheWasteStat.topSteps — "largest offenders", artifact.ts
+    'bottlenecks', // DerivedVariables.bottlenecks — "by ms descending", derived.ts
+]);
+
 /** Recursively canonicalize so equivalent evidence digests identically (sorted keys, undefined→null). */
 function canonicalize(value: unknown, key: string): JsonValue {
     // Exclude only volatile generation fields — never derive validity from them.
@@ -94,9 +144,7 @@ function canonicalize(value: unknown, key: string): JsonValue {
     if (Array.isArray(value)) {
         const raw = (value as unknown[]).map((v) => JSON.stringify(canonicalize(v, '')));
         // Rankings keep order; plain lists sort.
-        const isRanked =
-            key === 'byTool' || key === 'bySession' || key === 'topStepsByTokens' || key === 'topStepsByDuration';
-        return isRanked ? raw : [...raw].sort();
+        return RANKED_ARTIFACT_KEYS.has(key) ? raw : [...raw].sort();
     }
     if (value !== null && typeof value === 'object') {
         const out: { [k: string]: JsonValue } = {};
@@ -182,6 +230,19 @@ function parseBlock(text: string): Record<string, unknown> {
     return obj;
 }
 
+/** A source list entry is either a bare scalar or a `- source: <name>` row. */
+function readSourceName(s: unknown): string {
+    if (s !== null && typeof s === 'object') return String((s as { source?: unknown }).source ?? '');
+    return String(s);
+}
+
+const DISPOSITIONS: CacheDisposition[] = ['hit', 'miss', 'forced-recompute'];
+
+/** Absent stays absent — an empty string would render as a real value in the republished block. */
+function optionalString(v: unknown): string | undefined {
+    return v == null || v === '' ? undefined : String(v);
+}
+
 /**
  * Parse the YAML frontmatter of a published report into CacheProvenance. Returns `null` on
  * absent, truncated, or unparsable frontmatter — never throws.
@@ -201,11 +262,13 @@ export function parseProvenance(reportMarkdown: string): CacheProvenance | null 
         return {
             identity: {
                 contractVersion: String(identity.contractVersion ?? ''),
-                mode: 'daily',
+                mode: identity.mode === 'ad-hoc' ? 'ad-hoc' : 'daily',
                 date: String(identity.date ?? ''),
                 timezone: String(identity.timezone ?? ''),
                 bounds: { since: bounds.since, until: bounds.until },
-                sources: Array.isArray(identity.sources) ? identity.sources.map((s) => String(s)) : [],
+                // Rendered as `- source: <name>` list items (the coverage-row style parseBlock
+                // understands); tolerate a bare scalar list too.
+                sources: Array.isArray(identity.sources) ? (identity.sources as unknown[]).map(readSourceName) : [],
             },
             windowState: obj.windowState === 'closed' ? 'closed' : 'provisional',
             generatedAt: String(obj.generatedAt ?? ''),
@@ -220,6 +283,19 @@ export function parseProvenance(reportMarkdown: string): CacheProvenance | null 
                 status: String(c.status ?? ''),
                 lastImportedAt: c.lastImportedAt == null ? null : String(c.lastImportedAt),
             })),
+            // 0660 R7 audit fields must round-trip: the cache-hit path rebuilds the frontmatter
+            // from this object, so anything not read back here would be silently dropped on
+            // republish and the published report would stop carrying the full block.
+            runId: optionalString(obj.runId),
+            currentArtifactPath: optionalString(obj.currentArtifactPath),
+            baselineArtifactPath: obj.baselineArtifactPath == null ? null : String(obj.baselineArtifactPath),
+            spurVersion: optionalString(obj.spurVersion),
+            schemaVersion: obj.schemaVersion == null ? undefined : Number(obj.schemaVersion),
+            executor: optionalString(obj.executor),
+            model: optionalString(obj.model),
+            cacheDisposition: DISPOSITIONS.includes(obj.cacheDisposition as CacheDisposition)
+                ? (obj.cacheDisposition as CacheDisposition)
+                : undefined,
         };
     } catch {
         return null;
@@ -310,17 +386,274 @@ export function checkReportStructure(reportMarkdown: string): { ok: boolean; pro
     const ledgerIdx = reportMarkdown.search(/^#{2,3}\s+Evidence\s+ledger/im);
     if (ledgerIdx !== -1) {
         const ledgerSection = reportMarkdown.slice(ledgerIdx);
-        const claimRows = ledgerSection.match(/^[|>]\s+.+$/gm) ?? [];
+        // A table's header + separator are structure, not claims — scanning from the first row
+        // would fail every well-formed ledger on its own header. Start after the separator when
+        // there is one; a blockquote ledger has no separator and every `>` line is a claim.
+        const sep = ledgerSection.match(/^\|[\s:|-]+\|[ \t]*$/m);
+        const body = sep?.index === undefined ? ledgerSection : ledgerSection.slice(sep.index + sep[0].length);
+        const claimRows = body.match(/^[|>]\s+\S.*$/gm) ?? [];
         for (const row of claimRows) {
             const hasAnchor = /`[^`]+:\d+`|`[^`]+\.(md|ts|json)`|[a-z][a-z0-9_-]*\/[a-z][a-z0-9_./-]*:[0-9]+/i.test(
                 row,
             );
-            if (!hasAnchor) problems.push('evidence-claim-without-anchor');
-            break;
+            // Every claim is checked; one problem entry is enough to fail the gate.
+            if (!hasAnchor) {
+                problems.push('evidence-claim-without-anchor');
+                break;
+            }
         }
     }
 
     return { ok: problems.length === 0, problems };
+}
+
+// ── 4b. Provenance construction (0660 R7) ─────────────────────────────────────────────────────
+
+/** Literal for anything the evidence plane cannot supply — never a fabricated value. */
+const NOT_AVAILABLE = 'not available';
+
+/**
+ * SHA-256 over a file, or over a directory's `.md` / `.yaml` files (names sorted, name and body
+ * both folded in so a rename is a change). Missing paths digest to `not available` rather than
+ * throwing — a logic digest we cannot derive must read as unknown, not as a match.
+ */
+export function logicDigest(path: string | undefined): string {
+    if (path === undefined || path === '' || !existsSync(path)) return NOT_AVAILABLE;
+    try {
+        const h = createHash('sha256');
+        if (statSync(path).isDirectory()) {
+            const walk = (dir: string): string[] =>
+                readdirSync(dir, { withFileTypes: true })
+                    .flatMap((e) =>
+                        e.isDirectory()
+                            ? walk(join(dir, e.name))
+                            : /\.(md|ya?ml)$/.test(e.name)
+                              ? [join(dir, e.name)]
+                              : [],
+                    )
+                    .sort();
+            for (const f of walk(path)) {
+                h.update(f.slice(path.length));
+                h.update(readFileSync(f));
+            }
+        } else {
+            h.update(readFileSync(path));
+        }
+        return h.digest('hex');
+    } catch {
+        return NOT_AVAILABLE;
+    }
+}
+
+/**
+ * The visible "imported snapshot as of" instant: the **earliest** per-source `lastImportedAt`.
+ * Taking the minimum is what makes the banner honest — the report never claims a source was
+ * imported later than that source's own recorded timestamp (0660 R3 / feature scenario R8).
+ */
+export function importedSnapshotAsOf(coverage: CacheProvenance['coverage']): string {
+    const stamps = coverage.map((c) => c.lastImportedAt).filter((v): v is string => typeof v === 'string' && v !== '');
+    if (stamps.length === 0 || stamps.length !== coverage.length) return NOT_AVAILABLE;
+    return [...stamps].sort()[0] ?? NOT_AVAILABLE;
+}
+
+/** Local calendar day (YYYY-MM-DD) in the given IANA zone — the DST-safe way to name "today". */
+function localDay(tz: string, at: Date = new Date()): string {
+    try {
+        return new Intl.DateTimeFormat('en-CA', { timeZone: tz, dateStyle: 'short' }).format(at);
+    } catch {
+        return at.toISOString().slice(0, 10);
+    }
+}
+
+/**
+ * Resolve the run's fixed paths once (0660 R4/R15): the skill directory beside the helper, the
+ * effective local date, and the publication target. Emitted as an env file so every downstream
+ * stage stays a single helper invocation instead of repeating path arithmetic (ADR-069 R1).
+ */
+export function resolvePaths(opts: {
+    helper: string;
+    reportDir: string;
+    date?: string;
+    output?: string;
+    now?: Date;
+}): string {
+    const pluginRoot = opts.helper.replace(/\/scripts\/[^/]+$/, '');
+    const skill = `${pluginRoot}/skills/history-anatomy`;
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+    const date = opts.date !== undefined && opts.date !== '' ? opts.date : localDay(tz, opts.now ?? new Date());
+    const target =
+        opts.output !== undefined && opts.output !== '' ? opts.output : `${opts.reportDir}/${date}-history-anatomy.md`;
+    return `HA_HELPER=${opts.helper}\nHA_SKILL=${skill}\nHA_TARGET=${target}\nHA_DATE=${date}\n`;
+}
+
+export interface ProbeOptions {
+    artifact: string;
+    target: string;
+    baseline?: string;
+    mode: 'daily' | 'ad-hoc';
+    date?: string;
+    recompute: boolean;
+    executor?: string;
+    model?: string;
+    skillDir?: string;
+    contractFile?: string;
+    workflowFile?: string;
+    contractVersion?: string;
+    runId?: string;
+    spurVersion?: string;
+    now?: Date;
+}
+
+/**
+ * Build the provenance describing the run that just produced `artifact`. Everything here is
+ * derived from the fresh analyze artifact and the on-disk logic files — never from the cached
+ * report, which is the thing being judged.
+ */
+export function buildProvenance(opts: ProbeOptions): CacheProvenance {
+    const raw = JSON.parse(readFileSync(opts.artifact, 'utf8')) as {
+        selector?: { since?: string | null; until?: string | null };
+        coverage?: Array<{ source?: unknown; status?: unknown; lastImportedAt?: unknown }>;
+        schemaVersion?: unknown;
+    };
+    const coverage = (raw.coverage ?? []).map((c) => ({
+        source: String(c.source ?? ''),
+        status: String(c.status ?? ''),
+        lastImportedAt: c.lastImportedAt == null ? null : String(c.lastImportedAt),
+    }));
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+    const now = opts.now ?? new Date();
+    const date = opts.date !== undefined && opts.date !== '' ? opts.date : localDay(tz, now);
+    // Ad-hoc windows are explicit and never cached, so they are closed by construction; a daily
+    // window is provisional until its local calendar day has ended.
+    const windowState: 'provisional' | 'closed' =
+        opts.mode === 'ad-hoc' || date < localDay(tz, now) ? 'closed' : 'provisional';
+    const nowIso = now.toISOString();
+    return {
+        identity: {
+            contractVersion: opts.contractVersion ?? '1',
+            mode: opts.mode,
+            date,
+            timezone: tz,
+            bounds: { since: String(raw.selector?.since ?? ''), until: String(raw.selector?.until ?? '') },
+            sources: coverage.map((c) => c.source).sort(),
+        },
+        windowState,
+        generatedAt: nowIso,
+        validatedAt: nowIso,
+        artifactDigest: semanticArtifactDigest(raw),
+        baselineArtifactDigest:
+            opts.baseline !== undefined && existsSync(opts.baseline)
+                ? semanticArtifactDigest(JSON.parse(readFileSync(opts.baseline, 'utf8')))
+                : null,
+        contractDigest: logicDigest(opts.contractFile),
+        skillDigest: logicDigest(opts.skillDir),
+        workflowDigest: logicDigest(opts.workflowFile),
+        coverage,
+        runId: opts.runId,
+        currentArtifactPath: opts.artifact,
+        baselineArtifactPath: opts.baseline ?? null,
+        spurVersion: opts.spurVersion ?? NOT_AVAILABLE,
+        schemaVersion: typeof raw.schemaVersion === 'number' ? raw.schemaVersion : undefined,
+        executor: opts.executor ?? NOT_AVAILABLE,
+        model: opts.model ?? NOT_AVAILABLE,
+    };
+}
+
+/** Read the cached report at `target` and decide reuse against a freshly built provenance. */
+export function probe(opts: ProbeOptions): { decision: CacheDecision; current: CacheProvenance } {
+    const current = buildProvenance(opts);
+    const cachedText = existsSync(opts.target) ? readFileSync(opts.target, 'utf8') : null;
+    const cached = cachedText === null ? null : parseProvenance(cachedText);
+    // Ad-hoc never reuses a cache (0658 modes.md); force the regeneration path.
+    const decision =
+        opts.mode === 'ad-hoc'
+            ? { disposition: 'miss' as const, reasons: ['ad-hoc-never-cached'] }
+            : decideCache(cached, current, {
+                  recompute: opts.recompute,
+                  dayClosed: current.windowState === 'closed',
+              });
+    current.cacheDisposition = decision.disposition;
+    return { decision, current };
+}
+
+const YAML_KEYS: Array<keyof CacheProvenance> = [
+    'windowState',
+    'generatedAt',
+    'validatedAt',
+    'artifactDigest',
+    'baselineArtifactDigest',
+    'contractDigest',
+    'skillDigest',
+    'workflowDigest',
+    'runId',
+    'currentArtifactPath',
+    'baselineArtifactPath',
+    'spurVersion',
+    'schemaVersion',
+    'executor',
+    'model',
+    'cacheDisposition',
+];
+
+function yamlScalar(v: unknown): string {
+    if (v === null || v === undefined) return 'null';
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+    return `"${String(v).replaceAll('"', '\\"')}"`;
+}
+
+/** Render the full R7 provenance block as report frontmatter (parseable back by parseProvenance). */
+export function renderProvenanceFrontmatter(p: CacheProvenance): string {
+    const lines = [
+        '---',
+        'identity:',
+        `  contractVersion: ${yamlScalar(p.identity.contractVersion)}`,
+        `  mode: ${p.identity.mode}`,
+        `  date: ${yamlScalar(p.identity.date)}`,
+        `  timezone: ${p.identity.timezone}`,
+        '  bounds:',
+        `    since: ${p.identity.bounds.since}`,
+        `    until: ${p.identity.bounds.until}`,
+        '  sources:',
+    ];
+    for (const s of p.identity.sources) lines.push(`    - source: ${s}`);
+    for (const k of YAML_KEYS) {
+        if (p[k] === undefined) continue;
+        lines.push(`${k}: ${yamlScalar(p[k])}`);
+    }
+    lines.push('coverage:');
+    for (const c of p.coverage) {
+        lines.push(`  - source: ${c.source}, status: ${c.status}, lastImportedAt: ${c.lastImportedAt ?? 'null'}`);
+    }
+    lines.push('---');
+    return lines.join('\n');
+}
+
+/** The one-line freshness banner rendered under the frontmatter. */
+export function bannerLine(p: CacheProvenance): string {
+    return `> imported snapshot as of ${importedSnapshotAsOf(p.coverage)} · window ${p.windowState} · cache ${p.cacheDisposition ?? NOT_AVAILABLE}`;
+}
+
+/** Strip any existing frontmatter + banner so stamping is idempotent. */
+function stripHeader(md: string): string {
+    const body = md.replace(/^---\n[\s\S]*?\n---\n?/, '').replace(/^\n+/, '');
+    return body.replace(/^> imported snapshot as of [^\n]*\n+/, '');
+}
+
+/** Attach the provenance frontmatter and freshness banner to a candidate report. */
+export function stampReport(candidateMarkdown: string, p: CacheProvenance): string {
+    return `${renderProvenanceFrontmatter(p)}\n\n${bannerLine(p)}\n\n${stripHeader(candidateMarkdown).replace(/^\n+/, '')}`;
+}
+
+/**
+ * Cache-hit path: keep the published model half verbatim, refresh only `validatedAt`, the
+ * disposition, and the banner. The recorded digests and generation time are NOT touched — they
+ * describe the evidence the model half was authored from.
+ */
+export function refreshReport(publishedMarkdown: string, validatedAt: string, disposition: CacheDisposition): string {
+    const cached = parseProvenance(publishedMarkdown);
+    if (cached === null) return publishedMarkdown;
+    const refreshed: CacheProvenance = { ...cached, validatedAt, cacheDisposition: disposition };
+    return stampReport(publishedMarkdown, refreshed);
 }
 
 // ── 5. Atomic publication ──────────────────────────────────────────────────────────────────────
@@ -359,6 +692,29 @@ export interface CacheCliResult {
     stderr: string;
 }
 
+const VALID_COMMANDS = 'digest, check, paths, probe, stamp, refresh, publish';
+const PROBE_USAGE =
+    '<script> probe --artifact <a.json> --target <report.md> [--baseline <b.json>] [--mode daily|ad-hoc] ' +
+    '[--date <YYYY-MM-DD>] [--recompute true] [--out <prov.json>] [--skill-dir <d>] [--contract <f>] [--workflow <f>]';
+
+/** `--key value` / `--flag` → record. Bare flags become `"true"` so `--recompute` needs no value. */
+function parseFlags(args: string[]): Record<string, string | undefined> {
+    const out: Record<string, string | undefined> = {};
+    for (let i = 0; i < args.length; i++) {
+        const a = args[i] ?? '';
+        if (!a.startsWith('--')) continue;
+        const key = a.slice(2);
+        const next = args[i + 1];
+        if (next === undefined || next.startsWith('--')) {
+            out[key] = 'true';
+        } else {
+            out[key] = next;
+            i++;
+        }
+    }
+    return out;
+}
+
 /**
  * Run the CLI with captured stdout/stderr (data, not process side-effects) so unit tests invoke
  * it in-process without leaking into the test runner's own output (feature-sync-bounded pattern).
@@ -394,8 +750,97 @@ export function runCacheCli(argv: string[]): CacheCliResult {
             publishAtomically(a, b);
             return { exitCode: 0, stdout: '', stderr: '' };
         }
+        case 'paths': {
+            const f = parseFlags(argv.slice(1));
+            if (f.helper === undefined || f.out === undefined) {
+                return {
+                    exitCode: 1,
+                    stdout: '',
+                    stderr: 'usage: <script> paths --helper <p> --out <env> [--report-dir <d>] [--date <d>] [--output <p>]\n',
+                };
+            }
+            writeFileSync(
+                f.out,
+                resolvePaths({
+                    helper: f.helper,
+                    reportDir: f['report-dir'] ?? 'docs/report',
+                    date: f.date,
+                    output: f.output,
+                }),
+            );
+            return { exitCode: 0, stdout: '', stderr: '' };
+        }
+        case 'probe': {
+            const f = parseFlags(argv.slice(1));
+            if (f.artifact === undefined || f.target === undefined) {
+                return { exitCode: 1, stdout: '', stderr: `usage: ${PROBE_USAGE}\n` };
+            }
+            let result: ReturnType<typeof probe>;
+            try {
+                result = probe({
+                    artifact: f.artifact,
+                    target: f.target,
+                    baseline: f.baseline,
+                    mode: f.mode === 'ad-hoc' ? 'ad-hoc' : 'daily',
+                    date: f.date,
+                    recompute: f.recompute === 'true',
+                    executor: f.executor,
+                    model: f.model,
+                    skillDir: f['skill-dir'],
+                    contractFile: f.contract,
+                    workflowFile: f.workflow,
+                    contractVersion: f['contract-version'],
+                    runId: f['run-id'],
+                    spurVersion: f['spur-version'],
+                });
+            } catch {
+                return { exitCode: 1, stdout: '', stderr: `could not read artifact at ${f.artifact}\n` };
+            }
+            if (f.out !== undefined) writeFileSync(f.out, `${JSON.stringify(result.current, null, 2)}\n`);
+            const reasons = result.decision.reasons.map((r) => `- ${r}\n`).join('');
+            return { exitCode: 0, stdout: `${result.decision.disposition}\n${reasons}`, stderr: '' };
+        }
+        case 'stamp': {
+            const f = parseFlags(argv.slice(1));
+            if (f.candidate === undefined || f.provenance === undefined || f.out === undefined) {
+                return {
+                    exitCode: 1,
+                    stdout: '',
+                    stderr: 'usage: <script> stamp --candidate <c.md> --provenance <p.json> --out <o.md>\n',
+                };
+            }
+            try {
+                const p = JSON.parse(readFileSync(f.provenance, 'utf8')) as CacheProvenance;
+                writeFileSync(f.out, `${stampReport(readFileSync(f.candidate, 'utf8'), p)}\n`);
+            } catch {
+                return { exitCode: 1, stdout: '', stderr: 'stamp: could not read candidate or provenance\n' };
+            }
+            return { exitCode: 0, stdout: '', stderr: '' };
+        }
+        case 'refresh': {
+            const f = parseFlags(argv.slice(1));
+            if (f.report === undefined || f.out === undefined) {
+                return {
+                    exitCode: 1,
+                    stdout: '',
+                    stderr: 'usage: <script> refresh --report <published.md> --out <o.md> [--disposition hit]\n',
+                };
+            }
+            try {
+                const disposition = (f.disposition ?? 'hit') as CacheDisposition;
+                const refreshed = refreshReport(
+                    readFileSync(f.report, 'utf8'),
+                    f['validated-at'] ?? new Date().toISOString(),
+                    disposition,
+                );
+                writeFileSync(f.out, refreshed.endsWith('\n') ? refreshed : `${refreshed}\n`);
+            } catch {
+                return { exitCode: 1, stdout: '', stderr: `refresh: could not read report at ${f.report}\n` };
+            }
+            return { exitCode: 0, stdout: '', stderr: '' };
+        }
         default:
-            return { exitCode: 1, stdout: '', stderr: 'valid commands: digest, check, publish\n' };
+            return { exitCode: 1, stdout: '', stderr: `valid commands: ${VALID_COMMANDS}\n` };
     }
 }
 
