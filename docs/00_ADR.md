@@ -1147,3 +1147,59 @@ constant it would stop guarding the real SSOT. Layer merge per 0639's classifica
 `agent.roles` object-deep-merge, `<role>.tier` scalar-replace, `<role>.stages` array-replace
 (whole-set semantics; concat misroutes). Implementation task follows this ADR + the 0642 Solution
 blast-radius table.
+
+## ADR-079: A Report Cache Stores Judgment, Never Evidence — the Deterministic Half Always Reruns
+
+**Status:** Accepted (design) · **Date:** 2026-08-24 · **Feature:** I8
+
+**Decision.** A cached diagnostic report is reusable only for the model-authored half. Every
+invocation reruns the deterministic half — `spur history analyze` over the live imported database —
+and reuses the cached enrichment only when the freshly derived semantic artifact digest, the report
+contract version, and the skill/workflow logic digests all match what the cached report recorded.
+The cache is never validated from a filename, a modification time, or a `generated_at` field.
+
+**Why.** A cache keyed on anything but re-derived evidence can present a stale conclusion as current
+evidence, which is the one failure a diagnostic report cannot survive.
+
+**Detail:** `docs/design/history-anatomy.md` §Cache contract — identity tuple, frontmatter
+provenance fields, provisional-versus-closed day semantics, and the invalidation matrix.
+
+## ADR-080: A Bounded Ranking Is Never a Population Count
+
+**Status:** Accepted (design) · **Date:** 2026-08-24 · **Feature:** I8 · **Consent:** HA-S1, operator-approved 2026-08-24
+
+**Decision.** Any analytics artifact that bounds a leaderboard must also carry the true population it
+was drawn from and the applied depth, and every renderer must present the bounded list as "top N of
+M". Where the true population is unavailable — an artifact written before the field existed — the
+figure renders `not available`; a bounded array length is never substituted for a total.
+
+**Why.** `render-forensics.ts:54` printed `bySession.length` as the total session count while
+`analyze --top` bounds that array to 20, so any day with more than 20 sessions rendered a coverage
+claim that was silently false.
+
+**Detail:** `docs/design/history-anatomy.md` §HA-S1 — the additive artifact fields, the renderer
+change, and the backward-compatibility rule for pre-addition artifacts.
+## ADR-081: Board Module Shell Convention — One-Row Header, Append-Only Tabs, Density-First Full-Bleed
+
+**Status:** Proposed · **Date:** 2026-08-24 · **Feature:** F72
+
+**Decision.** Every multi-view Board module composes a shell: a `<Module>Shell.tsx` owning a single
+header row — icon + module name + live chip on the left, module-specific inline filters in the
+middle, tab strip on the right — backed by an append-only `tabs.ts` contract
+(`{ id, label, component }`; never reorder or rename, because the tab strip and any persisted UI
+state key on `id`). The default module layout stays the centered `max-w-[1600px]` column (History,
+Observability); a density-first module whose primary canvas is a multi-lane board MAY go full-bleed,
+with header and body sharing one horizontal padding so lanes align under the header — Tasks is the
+first full-bleed instance. A module embedded inside another module (Workspace ⊃ Tasks) keeps a
+headerless export rendering pure content; the shell is the route component, and header affordances
+(filters, primary actions) belong to the module route, not the embed. Header-owned state (phase,
+lane visibility) reaches the board as optional controlled props with uncontrolled in-board defaults.
+
+**Why.** History (0626) and Observability (J92) already implement this shell by example; F72 is the
+third adopter and the first to diverge on width. An unrecorded divergence is exactly the drift the
+constitution's conflict rule forbids, and the next module refactor needs the convention, the width
+rule, and the embed rule written down once rather than re-derived per module.
+
+**Detail:** `docs/design/tasks-module-shell-parity.md` — header anatomy, combined-input parse rule,
+tab contract, controlled-prop seam, and card enrichment shapes; mechanism placement in
+`docs/03_ARCHITECTURE.md` §14.5.

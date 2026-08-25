@@ -1,0 +1,263 @@
+---
+schema_version: 1
+name: "sp:history-anatomy skill: mode contract, finding taxonomy, and the eleven-section report contract"
+status: todo
+template: feature-impl
+created_at: 2026-08-25T04:06:58.527Z
+updated_at: "2026-08-25T04:37:26.777Z"
+feature_id: I8
+priority: P2
+tags: ["plugin", "skill", "history"]
+dependencies: ["0657"]
+---
+
+## 0658. sp:history-anatomy skill: mode contract, finding taxonomy, and the eleven-section report contract
+
+### Background
+Feature I8 needs one independent owner of diagnostic interpretation over already-imported history.
+The skill owns everything judgment-shaped; orchestration (cache branching, retry policy,
+publication) belongs to `history-anatomy.yaml` (task 0660) so that branching is not prose a model
+must re-execute correctly on every run.
+
+**Verified against the tree on 2026-08-24:**
+
+| Claim | Evidence |
+| --- | --- |
+| A new `SKILL.md` body over 20,000 bytes fails the gate, and a **new** skill cannot be baselined | `plugins/sp/tests/skill-structure.test.ts:770` (`BODY_BUDGET`), `:771-778` (two-sided `BASELINE`) |
+| `issue-finding` is 27,060 bytes and only survives because it is baselined | `plugins/sp/tests/skill-structure.test.ts:778`; `wc -l` = 436 lines |
+| The skill-description aggregate budget is `8200` and the roster currently sums to **8120** — 80 chars of headroom across 29 skills | `plugins/sp/tests/skill-structure.test.ts:736`; measured 2026-08-24 |
+| A non-router skill description is capped at 350 chars | `plugins/sp/tests/skill-structure.test.ts:734` |
+| The aggregate budget is documented as scaling with skill count; per-skill caps are "the real bloat guard" | `plugins/sp/tests/skill-structure.test.ts:736` comment |
+| `superskill` resolves on PATH for the skill lifecycle | `/Users/robin/.bun/bin/superskill` |
+| The plugin README carries a per-skill roster row and a directory tree entry | `plugins/sp/README.md:235`, `:315` |
+| `roles.md` carries a per-role command roster | `plugins/sp/references/roles.md:53` |
+
+**Two blockers this refine froze rather than deferring to the implementer:**
+
+1. **The report contract cannot fit in `SKILL.md`.** Eleven required sections, nine per-finding
+   fields, the evidence rules, mode validation, and two rubrics will exceed 20,000 bytes. The split
+   into `references/` is therefore mandatory, not the conditional "split only if it exceeds the
+   gate" the brainstorm hedged at.
+2. **Skill #30 does not fit under the current aggregate description budget.** 80 chars of headroom
+   cannot hold a 350-char description. `AGGREGATE_BUDGET` must be raised in the same change.
+
+Shapes: `docs/design/history-anatomy.md` §Operator surface, §Report contract. Evidence policy
+derives from ADR-079.
+### Requirements
+- [ ] R1. Create `plugins/sp/skills/history-anatomy/SKILL.md` through the Superskill skill lifecycle (`superskill skill …`); do not hand-maintain generated platform adapters. The body stays under `BODY_BUDGET` (20,000 bytes) by routing to `references/` — a new skill cannot be added to the `BASELINE` exemption map.
+- [ ] R2. Raise `AGGREGATE_BUDGET` in `plugins/sp/tests/skill-structure.test.ts` to accommodate skill #30, and keep the new description within the 350-char non-router cap.
+- [ ] R3. Mode validation: `--mode daily` is the default and rejects focus text, `--since`, `--until` and `--output`; `--mode ad-hoc` requires a non-empty focus and both ordered inclusive bounds and rejects `--date` and `--recompute`. Every conflict fails loud naming the offending argument. `--date` maps to a DST-aware local calendar interval, never a fixed 24-hour offset.
+- [ ] R4. The report contract defines all eleven required sections and, for each finding, the full field set: stable `<category>:<owner-surface>:<signal>` key, category from the closed vocabulary, impact, trend, observation, inference, per-finding confidence, contradictions shown beside the finding, and at least one evidence anchor.
+- [ ] R5. Evidence rules are stated and enforceable: causality needs two independent signals (one signal is a labelled hypothesis with a confirmation path); a process/workflow change needs recurrence across two independent sessions or one high-impact contract violation cited at `file:line`; unsupported dimensions read `not available` and are mirrored into the telemetry-gaps section; focus biases ranking, not collection.
+- [ ] R6. Comparison semantics: daily compares the immediately preceding local calendar day, ad-hoc the immediately preceding equal-duration window, and insufficient or materially different coverage renders `not comparable` with no trend, delta or percentage stated.
+- [ ] R7. The recurrence ledger classifies every finding as new / recurring / regressed / improved / resolved / not-comparable, matched on the stable key so that rewording a title never reclassifies a recurring finding as new.
+- [ ] R8. Positive patterns carry the same observation / inference / confidence / evidence-anchor fields as problem findings; an entry with no anchor is invalid.
+- [ ] R9. Remediation options are proposals only: owner surface, expected impact, verification method and reversibility, with no applied change, diff, or command the report claims to have run.
+- [ ] R10. The skill defines explicit `enrich` and `validate` operations the workflow invokes; neither operation launches a workflow, so the rubric stays single-sourced and cannot recurse.
+- [ ] R11. Skill structure tests pass and the skill contains no JSONL/session-root discovery recipe, no import invocation, and no corpus, docs or source mutation recipe.
+- [ ] R12. The plugin README roster row, directory-tree entry, and the `roles.md` command roster name the new skill.
+### Acceptance Criteria
+```gherkin
+Feature: sp:history-anatomy skill — mode contract, taxonomy, and report contract
+
+  @core
+  Scenario: R2 — Daily is the default mode and rejects ad-hoc-only arguments
+    Given an operator invoking "/sp:dev-find-issue" with no mode argument
+    When the skill resolves the mode
+    Then the resolved mode is "daily"
+    And the resolved window is the current local calendar day
+    And the report prints the normalized inclusive ISO bounds and the timezone used
+    And an invocation combining "--mode daily" with focus text, "--since", "--until" or "--output" fails loud naming the conflicting argument
+
+  @core
+  Scenario: R3 — Ad-hoc mode requires a focus and two ordered bounds
+    Given an operator invoking "/sp:dev-find-issue" with "--mode ad-hoc"
+    When the skill validates the arguments
+    Then a missing or empty focus fails loud
+    And "--until" without "--since" fails loud
+    And "--until" earlier than "--since" fails loud
+    And "--date" or "--recompute" combined with "--mode ad-hoc" fails loud
+    And a valid ad-hoc run writes to the run directory unless "--output <path>" is explicit
+
+  @edge
+  Scenario: R4 — A daily date selector maps to a DST-aware local calendar interval
+    Given a local timezone in which the requested calendar date is 23 or 25 hours long
+    When the operator runs "/sp:dev-find-issue --date <that-date>"
+    Then the normalized bounds span the full local calendar day including the DST shift
+    And the report states the timezone alongside the bounds
+    And the bounds are not computed as a fixed 24-hour offset from local midnight
+
+  @core
+  Scenario: R18 — Every finding carries the full per-finding field set
+    Given the findings table of a published report
+    When each row is inspected
+    Then it carries a stable key of the form "<category>:<owner-surface>:<signal>"
+    And its category is one of reliability, repetition, workflow, performance, coverage, telemetry or positive
+    And it carries impact, trend, observation, inference, confidence and at least one evidence anchor
+    And any contradicting signal is shown beside the finding rather than silently reconciled
+    And confidence is per finding, not one blanket score for the report
+
+  @core
+  Scenario: R19 — Observation and inference are separated and causality is gated on two signals
+    Given a finding asserting that one condition caused another
+    When the evidence validation stage reviews it
+    Then a causal claim supported by two or more independent signals passes
+    And a causal claim supported by exactly one signal fails unless it is labeled a hypothesis with a stated confirmation path
+    And an inference that does not name its supporting observations fails validation
+
+  @core
+  Scenario: R21 — Baseline comparison states an explicit comparability verdict
+    Given a daily report for a closed calendar day
+    When the baseline is computed
+    Then it compares against the immediately preceding local calendar day
+    And an ad-hoc report instead compares against the immediately preceding equal-duration window
+    And missing or materially different baseline coverage renders "not comparable"
+    And no trend, delta or percentage is stated for a "not comparable" baseline
+
+  @core
+  Scenario: R22 — The recurrence ledger classifies every finding against the baseline
+    Given a report with a comparable baseline
+    When the recurrence ledger renders
+    Then every finding is classified as new, recurring, regressed, improved, resolved or not-comparable
+    And classification matches on the stable key, not the prose title
+    And rewording a finding's title between two runs does not reclassify a recurring finding as new
+
+  @core
+  Scenario: R23 — Remediation options are proposals with an owner, an impact and a verification method
+    Given the remediation section of a published report
+    When each option is inspected
+    Then it names the owner surface that would apply it
+    And it states expected impact and a verification method
+    And it states its reversibility
+    And it does not contain an applied change, a diff, or a command the report claims to have already run
+
+  @core
+  Scenario: R25 — Positive patterns are held to the same evidence standard as problems
+    Given the positive patterns section of a published report
+    When each entry is inspected
+    Then it carries the same observation, inference, confidence and evidence anchor fields as a problem finding
+    And an entry without a supporting evidence anchor fails validation
+
+  @edge
+  Scenario: R27 — Focus biases ranking without suppressing high-severity off-topic evidence
+    Given an ad-hoc invocation carrying a focus string
+    When the report is produced
+    Then the focus changes finding ranking and emphasis
+    And material off-topic findings within the window remain visible in the report
+```
+### Q&A
+
+<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
+     condition. Not a parking lot for open questions — an unanswered question here means the task
+     is not ready to hand off. Keep empty if none. -->
+
+### Design
+**WHAT.** One new skill, `sp:history-anatomy`, owning interpretation only: which arguments are legal
+in which mode, what counts as evidence, how findings are keyed and graded, what a report must
+contain, and the rubrics its `enrich` and `validate` operations follow.
+
+**WHY.** Feature I8 needs a single owner of the report contract. Putting it in the workflow YAML
+would make the rubric unreadable and unversioned; leaving it in `sp:issue-finding` would keep the
+raw-JSONL fallback and task-mutation surface the feature exists to remove.
+
+**WHERE.**
+
+| Path | Role |
+| --- | --- |
+| `plugins/sp/skills/history-anatomy/SKILL.md` | dispatcher body — routes, does not carry the procedure |
+| `plugins/sp/skills/history-anatomy/references/report-contract.md` | the eleven sections + finding fields + evidence rules |
+| `plugins/sp/skills/history-anatomy/references/modes.md` | mode validation matrix, bounds normalization, DST rule |
+| `plugins/sp/skills/history-anatomy/references/operations.md` | `enrich` and `validate` rubrics |
+| `plugins/sp/tests/skill-structure.test.ts` | `AGGREGATE_BUDGET` raise |
+| `plugins/sp/README.md`, `plugins/sp/references/roles.md` | roster rows |
+
+**The split is mandatory, not optional.** `BODY_BUDGET` is 20,000 bytes
+(`skill-structure.test.ts:770`) and the `BASELINE` exemption map is two-sided — a *new* skill added
+to it fails the ratchet. `spur-cli` (8.5KB body / 211KB references) and `spur-dev` (13.6KB / 294KB)
+are the shape the test comment names: the body routes, `references/` carries the procedure.
+
+**The aggregate description budget must be raised.** Measured 2026-08-24: 29 skills sum to 8,120
+chars against `AGGREGATE_BUDGET = 8200` — 80 chars of headroom, against a 350-char non-router cap.
+The test's own comment says the budget "scales with skill count (29 skills …)" and that the
+per-skill caps are "the real bloat guard", so raising it on roster growth is the designed behavior,
+not a gate bypass. Set it to `8550` and update the skill-count note in the comment.
+
+**Frozen vocabulary** (consumed verbatim by 0659's structure gate and 0660's validation stage — do
+not rename downstream):
+
+- Modes: `daily` | `ad-hoc`.
+- Finding categories: `reliability` | `repetition` | `workflow` | `performance` | `coverage` |
+  `telemetry` | `positive`.
+- Stable key: `<category>:<owner-surface>:<signal>`.
+- Confidence: `high` | `medium` | `low` — per finding, never one report-level score.
+- Recurrence classes: `new` | `recurring` | `regressed` | `improved` | `resolved` |
+  `not-comparable`.
+- Unsupported value literal: `not available`.
+- The eleven section names, in order: Scope and provenance · Executive summary · Baseline comparison
+  · Findings · Recurrence ledger · Telemetry gaps · Remediation options · Performance analysis ·
+  Workflow and process improvements · Positive patterns · Evidence ledger.
+
+**Operations.** `enrich` takes the rendered forensics artifacts (current + baseline) and authors the
+model half of the report. `validate` takes a candidate report and independently checks evidence
+claims against the artifacts. Both are skill operations invoked by the workflow; **neither launches
+a workflow** — that is the recursion guard, and it is why the rubric lives here rather than being
+duplicated into the YAML.
+
+**Anti-patterns — do not implement.**
+
+- Do **not** copy any procedure from `plugins/sp/skills/issue-finding/`. Coexistence means both ship;
+  it does not mean shared source.
+- Do **not** add the skill to `BASELINE` in `skill-structure.test.ts`. That map exists to stop drift
+  on four pre-existing bodies, not to exempt new ones.
+- Do **not** put cache branching, retry counting, or publication ordering in the skill — 0660 owns
+  those. The skill must read identically whether it was invoked by the workflow or directly.
+- Do **not** write a `--create-task`, `--resolve`, or fix mode, and do not include a recipe that
+  calls `spur task`, `spur feature`, `spur rule`, or `spur history import`.
+- Do **not** include a raw-JSONL or session-root discovery fallback. A dimension the artifact cannot
+  support is a telemetry gap, by design.
+- Do **not** emit one blanket confidence score for the report.
+
+**Cross-task.** Depends on 0657 for `SelectionPopulation` — the report's coverage section and the
+"top N of M" labeling read `artifact.population`. Leaves for 0659: the frozen section names and
+finding-field names its structure gate asserts. Leaves for 0660: the `enrich` / `validate` operation
+names and their input/output contract. Leaves for 0661: the skill name for the command's single
+invocation, plus the roster rows.
+### Plan
+- [ ] 1. Scaffold via `superskill skill` into `plugins/sp/skills/history-anatomy/`; confirm no
+      hand-maintained platform adapters are added. (R1)
+- [ ] 2. Author `references/modes.md`: the daily/ad-hoc validation matrix, bounds normalization,
+      the DST-aware calendar-day rule, and the fail-loud message shape. (R3)
+- [ ] 3. Author `references/report-contract.md`: the eleven sections in order, the nine per-finding
+      fields, the closed category vocabulary, the stable-key grammar, the evidence rules, the
+      comparison/`not comparable` rule, the recurrence classes, and the positive-pattern and
+      remediation standards. (R4–R9)
+- [ ] 4. Author `references/operations.md`: the `enrich` and `validate` rubrics, each stating
+      explicitly that it never launches a workflow. (R10)
+- [ ] 5. Write `SKILL.md` as a dispatcher that routes to the three references; keep the description
+      under 350 chars and the body under 20,000 bytes. (R1, R2)
+- [ ] 6. Raise `AGGREGATE_BUDGET` to `8550` in `plugins/sp/tests/skill-structure.test.ts` and update
+      its skill-count comment. Do **not** touch `BASELINE`. (R2)
+- [ ] 7. Add the roster row and directory-tree entry in `plugins/sp/README.md` and the command/skill
+      reference in `plugins/sp/references/roles.md`. (R12)
+- [ ] 8. Boundary test: assert the skill tree contains no `spur task` / `spur feature` / `spur rule`
+      / `spur history import` invocation and no JSONL or session-root discovery recipe. (R11)
+- [ ] 9. Contract test: assert all eleven section names and the nine finding-field names appear in
+      `references/report-contract.md`, so 0659 and 0660 cannot drift from the frozen vocabulary. (R4)
+- [ ] 10. Gate: `bun test plugins/sp/tests/skill-structure.test.ts` first, then `bun run spur-check`.
+### Solution
+
+<!-- Filled during implementation: file:line change map and concise rationale. -->
+
+### Testing
+
+<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+
+### Review
+
+<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+
+### References
+
+<!-- Links to the parent feature, design docs, related tasks, or external references. -->
+
+### History

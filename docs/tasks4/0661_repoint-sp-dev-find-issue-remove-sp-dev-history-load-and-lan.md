@@ -1,0 +1,259 @@
+---
+schema_version: 1
+name: "Repoint /sp:dev-find-issue, remove /sp:dev-history-load, and land the coexistence and surface documentation"
+status: todo
+template: feature-impl
+created_at: 2026-08-25T04:06:58.604Z
+updated_at: "2026-08-25T04:41:28.737Z"
+feature_id: I8
+priority: P2
+tags: ["plugin", "command", "docs", "migration"]
+dependencies: ["0658", "0660"]
+---
+
+## 0661. Repoint /sp:dev-find-issue, remove /sp:dev-history-load, and land the coexistence and surface documentation
+
+### Background
+The last slice of feature I8 is the operator-visible surface: shrink `/sp:dev-find-issue` from its
+17-option hint to a thin forwarder over `sp:history-anatomy`, remove the obsolete
+`/sp:dev-history-load` (its two supported import owners remain), and write down the bounded
+coexistence and retirement gate for `sp:issue-finding` so coexistence cannot silently become
+permanent. Surface documentation lands in the same change as the surface (constitution T3).
+
+**Verified against the tree on 2026-08-24 — the full removal blast radius:**
+
+| Surface | Evidence | Action |
+| --- | --- | --- |
+| The command file | `plugins/sp/commands/dev-history-load.md` | delete |
+| The plugin script + twin | `plugins/sp/scripts/history-load.ts`, `history-load.mjs` | delete both |
+| Its test | `plugins/sp/tests/history-load.test.ts` | delete |
+| Manifest entry | `config/plugin-scripts.json` (`rel: history-load.ts`) | delete entry |
+| Build chain | `package.json:60` — `build:scripts` names `history-load.ts` explicitly | remove from the chain |
+| Role roster | `plugins/sp/references/roles.md:53` and `:97` | remove both mentions |
+| Plugin README | `plugins/sp/README.md` | remove entry |
+| Command-count assertion | `plugins/sp/tests/command-contract.test.ts:350` asserts **exactly 39** command files | update to 38 |
+| Flag glossary `--source` | `flag-glossary.md:249-256` names **only** `dev-find-issue` and `dev-history-load` | entry becomes dead → delete it |
+| Flag glossary `--task` | `flag-glossary.md:207-215` names `dev-history-load` | remove that mention |
+| `pr-reviewing.test.ts:7` | comment reference only ("history-load pattern") | no change |
+| `CHANGELOG.md` | historical record | no change |
+
+**Preserved — verified independent of the plugin script:**
+
+| Path | Evidence |
+| --- | --- |
+| `bun run load-history` | `package.json:93` — a standalone `history import && history analyze` chain; it does not call the plugin script |
+| History UI **Import & Analyze** | `apps/web/src/modules/history/SourcesTab.tsx` |
+
+**Two gates that make this self-enforcing:**
+
+1. `flag-contract-parity.test.ts` carries a **C1 glossary-membership** check — a glossary entry
+   naming a command that never declared the flag is a violation. Leaving `dev-history-load` in the
+   `--source` / `--task` entries is therefore a *test failure*, not merely drift.
+2. `script-contract-check` is two-sided — an orphaned `.mjs` twin with no manifest entry fails, and a
+   manifest entry with no source fails. A half-finished removal cannot pass.
+
+**Additions this task must make:**
+
+- `--date <YYYY-MM-DD>` has **no** glossary entry today even though `dev-daily.md:4` already declares
+  it. It becomes shared with `dev-find-issue`, so it earns a canonical entry.
+- `--mode <kind>` (`flag-glossary.md:197-205`) lists per-command values; `daily|ad-hoc` on
+  `dev-find-issue` joins that list.
+- `--full` (`flag-glossary.md:299-311`) needs **no** change: `dev-find-issue` never declared it, and
+  its two existing meanings (`dev-next`, `dev-dogfood`) survive.
+
+Shapes: `docs/design/history-anatomy.md` §Operator surface, §Bounded coexistence and retirement,
+§Removed surfaces.
+### Requirements
+- [ ] R1. `plugins/sp/commands/dev-find-issue.md` contains exactly one skill invocation naming `sp:history-anatomy`, an argument-hint listing `--mode`, `--date`, `--since`, `--until`, `--recompute`, `--agent` and `--output` and none of the fourteen dropped flags, and a link to the shared flag glossary. Plugin command structure tests pass.
+- [ ] R2. Remove `plugins/sp/commands/dev-history-load.md`, its helper script, the `.mjs` twin, its test, its build-conversion entry and its `config/plugin-scripts.json` declaration. `bun run script-contract-check` passes and no shipped surface still references the removed command.
+- [ ] R3. `package.json`'s `load-history` script is unchanged, and the History module's **Import & Analyze** action and its queued refresh path are unchanged. Running the new command never triggers an import.
+- [ ] R4. `sp:issue-finding` remains packaged and directly invocable, documented as the legacy path, while `/sp:dev-find-issue` resolves to `sp:history-anatomy`. No logic is copied between them.
+- [ ] R5. The retirement gate is written down: parity fixtures covering typed history analysis, daily and focused range selection, repeated-work and error reporting, evidence and confidence, remediation proposals, performance, process observations and positive patterns; raw JSONL parsing and task creation named as intentional exclusions; adoption evidence defined as successful workflow run records across both modes with no bespoke telemetry added; a review point of one minor release or 30 days, whichever is later; and the statement that retirement needs explicit operator approval and is a separate change.
+- [ ] R6. The shared flag glossary carries a canonical `--date` entry (shared with `dev-daily`) and no dead roster references to the removed flags; the roles inventory, `plugins/sp/README.md` and `docs/04_DESIGN.md` describe the new command, skill and workflow.
+- [ ] R7. `bun run spur-check` passes and `git status` is intentional only.
+### Acceptance Criteria
+```gherkin
+Feature: Command repoint, history-load removal, and coexistence documentation
+
+  @core
+  Scenario: R1 — The command is a thin forwarder carrying only the reduced surface
+    Given the sp plugin command file "plugins/sp/commands/dev-find-issue.md"
+    When the plugin command structure test suite loads it
+    Then its body contains exactly one skill invocation and that invocation names "sp:history-anatomy"
+    And its argument-hint lists "--mode", "--date", "--since", "--until", "--recompute", "--agent" and "--output"
+    And its argument-hint names none of "--full", "--save", "--source", "--sessions", "--feature", "--template", "--priority", "--severity", "--category", "--top", "--min-cost", "--strict-topic", "--create-task" or "--json"
+    And the body links the shared flag glossary at "../skills/spur-dev/references/flag-glossary.md"
+
+  @core
+  Scenario: R33 — Both supported import paths are preserved unchanged
+    Given the feature is fully implemented
+    When the import surfaces are inspected
+    Then the "load-history" script in "package.json" is unchanged
+    And the History module's "Import & Analyze" action and its queued refresh path are unchanged
+    And running the new command never triggers an import
+
+  @core
+  Scenario: R34 — The obsolete history-load command is removed cleanly
+    Given "/sp:dev-history-load" and its plugin helper are removed
+    When the repository gates run
+    Then "plugins/sp/commands/dev-history-load.md", the helper script, its ".mjs" twin, its test and its build-conversion entry are absent
+    And its "config/plugin-scripts.json" declaration is absent
+    And "bun run script-contract-check" passes
+    And no shipped surface still references the removed command
+
+  @core
+  Scenario: R35 — Coexistence: the legacy skill stays invocable while the command resolves to the new one
+    Given the feature is shipped
+    When the plugin package is inspected
+    Then "sp:issue-finding" remains packaged and directly invocable
+    And it is documented as the legacy path
+    And "/sp:dev-find-issue" resolves to "sp:history-anatomy"
+    And no logic is copied from the legacy skill into the new one
+
+  @core
+  Scenario: R36 — The retirement gate is written down with a parity fixture set and a review date
+    Given the coexistence window is defined
+    When the retirement contract is inspected
+    Then it lists parity fixtures covering typed history analysis, daily and focused range selection, repeated-work and error reporting, evidence and confidence, remediation proposals, performance, process observations, and positive patterns
+    And it names raw JSONL parsing and task creation as intentional exclusions rather than parity gaps
+    And it defines adoption evidence as successful workflow run records across both modes, with no bespoke telemetry added
+    And it sets a review point of one minor release or 30 days, whichever is later
+    And it states that retirement requires explicit operator approval and is a separate change
+
+  @core
+  Scenario: R37 — Shared surface documentation lands in the same change as the surface
+    Given the command, skill and workflow surfaces have changed
+    When the documentation gates run
+    Then the shared flag glossary carries a canonical "--date" entry and no dead roster references to removed flags
+    And the roles inventory, "plugins/sp/README.md" and "docs/04_DESIGN.md" describe the new surfaces
+    And "bun run spur-check" passes
+```
+### Q&A
+**Q: Feature I5 (`dev-history-load command: on-demand cumulative import + analyze`, status
+`verifying`) shipped the command this task removes. What happens to it?**
+
+Deferred to the operator, not decided here. Removing a shipped deliverable from a feature that has
+not reached `done` is a corpus decision with two defensible answers — transition I5 to `cancelled`
+with a pointer to I8, or let it reach `done` and record the supersession in its Notes. This task
+does **not** transition I5 either way; it records the dependency so the decision is made
+deliberately rather than as a side effect. Raise it at wrap-up.
+
+**Q: `--full` — why is it dropped rather than kept alongside `--mode`?**
+
+Closed. `--full` conflated report *intent* with *verbosity*, and the glossary already records two
+unrelated meanings for it (`dev-next`, `dev-dogfood`); `dev-find-issue` would have been a third.
+`--mode <daily|ad-hoc>` names the intent directly, and because mode is part of the daily cache
+identity tuple, a boolean verbosity flag could not have keyed the cache at all. No glossary change
+to `--full` is needed — `dev-find-issue` never declared it.
+### Design
+**WHAT.** Repoint one command, delete another and its whole surface footprint, add the retirement
+gate for `sp:issue-finding`, and reconcile the shared flag glossary and rosters.
+
+**WHY.** The command surface is what operators actually see. Leaving the 17-option hint or the
+obsolete loader in place would ship the feature's cost without its benefit.
+
+**WHERE.** See the blast-radius table in Background — it is the file list, verified against the
+tree, and is the authority for this task's scope.
+
+**Frozen command surface** (`plugins/sp/commands/dev-find-issue.md` frontmatter):
+
+```yaml
+role: reviewer
+argument-hint: "[<focus>] [--mode <daily|ad-hoc>] [--date <YYYY-MM-DD>] [--since <RFC3339>] [--until <RFC3339>] [--recompute] [--agent <inline|auto|name>] [--output <path>]"
+```
+
+Body: the execution-surface prelude, the Argument Flags table, a link to the shared flag glossary,
+and exactly one invocation — `Skill(skill="sp:history-anatomy", args="$ARGUMENTS")`. Nothing else.
+
+**Fourteen flags leave the hint:** `--full`, `--save`, `--source`, `--sessions`, `--feature`,
+`--template`, `--priority`, `--severity`, `--category`, `--top`, `--min-cost`, `--strict-topic`,
+`--create-task`, `--json`.
+
+**Ordering within the task.** Do the glossary edits **with** the command edits, not after — the C1
+membership gate reads both surfaces together, so a split leaves the tree red between steps.
+
+**ADR-065 amendment.** Its Decision enumerates the seven standard scripts by name; removing
+`history-load.ts` changes that roster. Land an `**Amendment (YYYY-MM-DD)**` block per constitution
+§6.1 rule 3 — never a rewrite. If 0659 lands in the same commit, one amendment block covers both the
+removal and the addition.
+
+**Retirement gate (new content, written into `plugins/sp/README.md` beside the skill roster):**
+
+- **Parity fixtures** the new contract must cover before retirement is considered: typed history
+  analysis; daily and focused range selection; repeated-work and error reporting; evidence and
+  confidence; remediation proposals; performance analysis; process observations; positive patterns.
+- **Intentional exclusions, not gaps:** raw JSONL parsing and task creation.
+- **Adoption evidence:** successful `history-anatomy.yaml` run records across both modes and the
+  available source families. No bespoke telemetry is added to count adoption.
+- **Review point:** one minor release or 30 days, whichever is later.
+- **Gate:** parity PASS + demonstrated use of both modes + no open high-impact regression + explicit
+  operator approval. A failed gate records the missing evidence and one dated extension.
+- **Retirement is a separate change.** This task does not remove `sp:issue-finding`.
+
+**Anti-patterns — do not implement.**
+
+- Do **not** touch `package.json:93` `load-history`. It is the preserved import owner and is
+  independent of the deleted plugin script. Deleting it would remove a supported ingress path the
+  feature explicitly protects.
+- Do **not** remove or modify `sp:issue-finding`, its fixtures, or its references. Coexistence is the
+  deliverable; retirement is a later, separately-approved change.
+- Do **not** leave `dev-history-load` in the `--source` or `--task` glossary entries. The `--source`
+  entry names only the two commands losing it and must be **deleted**, not edited.
+- Do **not** copy the removed command's behavior into `dev-find-issue.md`. The forwarder carries one
+  skill invocation.
+- Do **not** rewrite ADR-065's original entry. Append an amendment block.
+- Do **not** forget `plugins/sp/tests/command-contract.test.ts:350` — it asserts exactly 39 command
+  files and will fail at 38 until updated.
+- Do **not** silently transition feature I5. See Q&A.
+
+**Cross-task.** Depends on 0658 (the skill must exist before the command can point at it) and 0660
+(the docs describe the workflow). Assumes 0659 landed the new script's manifest entry; if both this
+task and 0659 edit `config/plugin-scripts.json` and `package.json:60` in the same commit, reconcile
+them in one edit rather than two conflicting ones.
+### Plan
+- [ ] 1. Rewrite `plugins/sp/commands/dev-find-issue.md` to the frozen frontmatter and a body of
+      prelude + flags table + glossary link + one `Skill(skill="sp:history-anatomy", …)`
+      invocation. (R1)
+- [ ] 2. Delete `plugins/sp/commands/dev-history-load.md`, `plugins/sp/scripts/history-load.ts`,
+      `plugins/sp/scripts/history-load.mjs`, and `plugins/sp/tests/history-load.test.ts`. (R2)
+- [ ] 3. Remove the `history-load.ts` entry from `config/plugin-scripts.json` and its
+      `superskill script convert` call from `package.json:60` `build:scripts`. (R2)
+- [ ] 4. Update `plugins/sp/tests/command-contract.test.ts:350` from 39 to 38 command files. (R2)
+- [ ] 5. Remove the `dev-history-load` mentions at `plugins/sp/references/roles.md:53` and `:97`,
+      and from `plugins/sp/README.md`. (R2, R6)
+- [ ] 6. Glossary, in the same step as the command edits (the C1 membership gate reads both):
+      delete the now-dead `--source` entry; drop `dev-history-load` from `--task`; add
+      `daily|ad-hoc` on `dev-find-issue` to `--mode`; add the canonical `--date` entry shared with
+      `dev-daily`. Leave `--full` untouched. (R6)
+- [ ] 7. Verify `package.json:93` `load-history` and the History UI **Import & Analyze** path are
+      byte-unchanged, and that no new-command path invokes an import. (R3)
+- [ ] 8. Confirm `sp:issue-finding` remains packaged and directly invocable, documented as the
+      legacy path, with no logic shared with the new skill. (R4)
+- [ ] 9. Write the retirement gate (parity fixtures, intentional exclusions, adoption evidence,
+      review point, approval requirement, separate-change statement) beside the skill roster in
+      `plugins/sp/README.md`. (R5)
+- [ ] 10. Add the ADR-065 amendment block for the standard-script roster change; reconcile with
+      0659's edit if both land in one commit. (R2)
+- [ ] 11. Add the new command, skill and workflow to `docs/04_DESIGN.md` (same-commit T3). (R6)
+- [ ] 12. Raise the feature I5 disposition (see Q&A) with the operator at wrap-up; do not transition
+      it in this task.
+- [ ] 13. Gate: `bun test plugins/sp/tests/command-contract.test.ts` and
+      `plugins/sp/tests/flag-contract-parity.test.ts` first, then `bun run script-contract-check`,
+      then `bun run spur-check`, then confirm `git status` is intentional only. (R7)
+### Solution
+
+<!-- Filled during implementation: file:line change map and concise rationale. -->
+
+### Testing
+
+<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+
+### Review
+
+<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+
+### References
+
+<!-- Links to the parent feature, design docs, related tasks, or external references. -->
+
+### History

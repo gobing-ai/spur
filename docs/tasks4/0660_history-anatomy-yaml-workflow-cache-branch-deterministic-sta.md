@@ -1,0 +1,258 @@
+---
+schema_version: 1
+name: "history-anatomy.yaml workflow: cache branch, deterministic stage ordering, bounded correction, atomic publication"
+status: todo
+template: feature-impl
+created_at: 2026-08-25T04:06:58.577Z
+updated_at: "2026-08-25T04:40:08.307Z"
+feature_id: I8
+priority: P2
+tags: ["workflow", "history", "orchestration"]
+dependencies: ["0658", "0659"]
+---
+
+## 0660. history-anatomy.yaml workflow: cache branch, deterministic stage ordering, bounded correction, atomic publication
+
+### Background
+Five responsibilities with different failure semantics — cache decision, deterministic artifact
+generation and rendering, model enrichment, evidence validation, and atomic publication — justify a
+dedicated state-machine workflow rather than orchestration prose inside the skill. The workflow
+composes the existing `spur history analyze` → explicit artifact → `spur history report --mode
+forensics` seam, invokes 0658's `enrich` and `validate` operations, and gates publication behind
+both the deterministic structure gate and independent evidence validation.
+
+**Verified against the tree on 2026-08-24:**
+
+| Claim | Evidence |
+| --- | --- |
+| Available action kinds across shipped workflows | `agent.run`, `always`, `command.gate`, `doctor.probe`, `file.read.into-var`, `hitl.confirm`, `note`, `proof.fingerprint`, `run.artifact`, `shell`, `state-machine` |
+| Transitions carry `from`/`to`/`description`/`guard`, with `kind: shell` or `kind: always` | `config/workflows/idea-pipeline.yaml:484-514` |
+| Every bundled workflow must carry the package `$schema` ref | `plugins/sp/tests/skill-structure.test.ts:451-457` |
+| Every `${vars.X}` must be declared in the `vars:` block — the test fails otherwise | `plugins/sp/tests/skill-structure.test.ts:541-562` |
+| Tracked SSOT is `config/workflows/`; `apps/cli/config/` is a gitignored `build:bundle` artifact | `CLAUDE.md` § Stack & layout; `docs/04_DESIGN.md` §2.3 |
+| A `shell` action over ~5 non-comment lines is flagged as an owned-capability candidate | ADR-069 amendment R1 (`docs/00_ADR.md:906-916`) |
+| A non-slash `agent.run` `input` triggers a composition report (advisory only) | ADR-069 amendment R2 |
+| `expectFile` proves existence only — a pre-created file passes it, so a content assertion must follow | `config/workflows/idea-pipeline.yaml` system-design state (0515 P3-2 comment) |
+| Guards must stay side-effect free; side effects live in `onEnter` | `plugins/sp/tests/skill-structure.test.ts:563` (R37) |
+
+**Why this shape, concretely.** ADR-069 R1 is the reason the cache/digest/structure/publish logic is
+a script (task 0659) rather than inline shell: every one of those programs would exceed the shell
+composition threshold and be flagged as an owned-capability candidate. The YAML is left with
+ordering, branching, and retry counting — which is what a state machine is actually good at.
+
+Shapes: `docs/design/history-anatomy.md` §Workflow shape, §Cache contract. Decision: ADR-079.
+### Requirements
+- [ ] R1. Add `config/workflows/history-anatomy.yaml` (tracked SSOT; never hand-copied into `apps/cli/config/`). It passes `spur workflow validate` and a dry run.
+- [ ] R2. States resolve scope, probe the cache, analyze the selected and previous comparable windows, render both artifacts, invoke enrichment, run the deterministic structure gate, run independent evidence validation, and publish atomically. Publication is reachable only from a passing validation state.
+- [ ] R3. Every invocation reruns the deterministic analyze against the live imported database; a hit reuses model enrichment only, and refreshes `validated_at` and the visible `imported snapshot as of` banner without claiming any source was imported after its recorded timestamp.
+- [ ] R4. Every `spur history analyze` writes to an explicit unique run-scoped path and every `spur history report --mode forensics` names that exact path. No stage reads the mutable `latest.json` pointer.
+- [ ] R5. `--recompute` forces the full analyze/render/enrich/validate path and records cache disposition `forced-recompute`; a hit records `hit` and a regeneration records `miss`.
+- [ ] R6. Correction is capped at exactly one pass; a second validation failure terminates the run without publishing.
+- [ ] R7. Published reports carry the full frontmatter provenance block: contract version, mode, date, timezone, normalized bounds, window state, generated/validated timestamps, per-source coverage and `last_imported_at`, current and baseline artifact paths with digests, Spur/schema version, skill and workflow digests, executor and model identity, run id, and cache disposition.
+- [ ] R8. Boundary test: neither the workflow nor the skill invokes `spur task`, `spur feature`, `spur rule`, a workflow-definition mutation, a docs mutation, a source edit, or `spur history import`, and neither contains a JSONL or session-root discovery recipe. The only writes are run-scoped intermediates, analyze artifacts, and the requested report or cache file.
+- [ ] R9. Workflow fixtures cover cache hit, data change, logic-digest change, malformed provenance, provisional-to-closed transition, late import for a closed day, forced recompute, and a failed candidate preserving the prior cache.
+### Acceptance Criteria
+```gherkin
+Feature: history-anatomy.yaml workflow — cache branch, ordering, bounded correction, publication
+
+  @core
+  Scenario: R8 — The current day is always labeled provisional and closes exactly once
+    Given the operator requests today's report while the local day is still in progress
+    When the report is generated
+    Then its window spans local midnight through invocation time
+    And its frontmatter records "window_state: provisional"
+    And it displays an "imported snapshot as of" banner derived from per-source lastImportedAt
+    And it never claims a source was imported later than that source's recorded timestamp
+    And the first invocation after the local day closes analyzes the complete calendar interval, records "window_state: closed", and invalidates the provisional cache
+
+  @core
+  Scenario: R9 — Forced recompute bypasses both deterministic and enrichment reuse
+    Given a daily cache that would otherwise be a valid hit
+    When the operator runs "/sp:dev-find-issue --date <date> --recompute"
+    Then the full analyze, render, enrichment and validation path executes
+    And the published report records cache disposition "forced-recompute"
+
+  @core
+  Scenario: R13 — The workflow owns cache, generation, enrichment, validation and publication ordering
+    Given the workflow definition "config/workflows/history-anatomy.yaml"
+    When it is validated and dry-run
+    Then it passes "spur workflow validate"
+    And its states resolve scope, probe the cache, analyze the selected and previous comparable windows, render both artifacts, invoke enrichment, run the deterministic structure gate, run independent evidence validation, and publish atomically
+    And publication is reachable only from a passing validation state
+
+  @core
+  Scenario: R14 — Correction is capped at exactly one pass
+    Given a generated report candidate that fails independent evidence validation
+    When the workflow enters the correction path
+    Then exactly one correction pass is attempted
+    And a second validation failure terminates the run without publishing
+
+  @core
+  Scenario: R15 — Analysis and rendering always use explicit run-scoped artifact paths
+    Given the workflow generates a current-window artifact and a baseline artifact
+    When it renders them
+    Then each "spur history analyze" invocation writes to an explicit unique path
+    And each "spur history report --mode forensics" invocation names that exact path
+    And no stage reads the mutable "latest.json" pointer
+
+  @core
+  Scenario: R20 — Unsupported dimensions read "not available" and are never rendered as zero
+    Given the artifact carries no data for a dimension the report contract requires
+    When the report renders that dimension
+    Then it reads "not available"
+    And it is not rendered as zero
+    And it is not silently omitted
+    And it is also listed in the telemetry gaps section
+
+  @core
+  Scenario: R24 — Process and workflow improvements are gated on recurrence or a high-impact violation
+    Given a proposed workflow or process improvement
+    When the evidence validation stage reviews it
+    Then it passes when the underlying signal recurs across at least two independent sessions
+    And it also passes when it cites exactly one explicit high-impact contract violation with repo-relative "file:line" evidence
+    And it fails when neither condition holds
+    And a single-session low-impact observation is recorded as a finding but not promoted to a process change
+
+  @core
+  Scenario: R28 — The skill and workflow contain no mutation, import or raw-log path
+    Given the new skill and workflow definitions
+    When the boundary test suite scans them
+    Then they contain no invocation of "spur task", "spur feature", "spur rule", a workflow-definition mutation, a docs mutation, or a source edit
+    And they contain no invocation of "spur history import" and no JSONL or session-root discovery recipe
+    And the only writes they perform are run-scoped intermediates, analyze artifacts, and the requested report or cache file
+```
+### Q&A
+
+<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
+     condition. Not a parking lot for open questions — an unanswered question here means the task
+     is not ready to hand off. Keep empty if none. -->
+
+### Design
+**WHAT.** One `kind: state-machine` workflow, `config/workflows/history-anatomy.yaml`, owning the
+cache branch, deterministic stage ordering, executor dispatch, one bounded correction loop, and
+atomic publication sequencing.
+
+**WHY.** ADR-079 requires the deterministic half to rerun on every invocation, and requires
+publication to be unreachable except through a passing validation state. Encoding that as
+transition guards makes it structurally true; encoding it as skill prose makes it a suggestion.
+
+**WHERE.** `config/workflows/history-anatomy.yaml` (tracked SSOT — never hand-copied into the
+gitignored `apps/cli/config/`), plus `plugins/sp/tests/` fixtures.
+
+**State graph.**
+
+```
+start
+  → resolve-scope            (validate mode/bounds via the skill; write the selector artifact)
+  → cache-probe              (shell: helper `decideCache`; writes disposition + reasons)
+      ├─ hit           → refresh-provenance → publish
+      └─ miss | forced-recompute → analyze
+  → analyze                  (current window + previous comparable window, explicit paths)
+  → render                   (report --mode forensics <explicit-path> for both)
+  → enrich                   (agent.run → sp:history-anatomy enrich)
+  → structure-gate           (shell: helper `checkReportStructure`)
+  → validate                 (agent.run → sp:history-anatomy validate)
+      ├─ PASS  → publish     (shell: helper `publishAtomically`)
+      └─ FAIL  → correct     (cap 1) → structure-gate → … → publish | failed
+  → published (terminal) | failed (terminal)
+```
+
+`terminalStates: [published, failed]`. `failureStates: [failed]`.
+
+**Declared vars** (every `${vars.X}` must appear here — `skill-structure.test.ts:541-562` fails
+otherwise): `mode`, `date`, `since`, `until`, `focus`, `recompute`, `output`, `agent`, `spurBin`,
+`__runId`, `stepTimeoutMs`, `correctionCount`.
+
+**Precedence / algorithm.**
+
+1. **The deterministic probe always runs.** `cache-probe` is on the path from `resolve-scope` for
+   every invocation, including a hit — it re-derives the digest from a fresh `analyze` before any
+   reuse decision. A hit skips only `enrich`.
+2. **A hit still refreshes provenance.** `refresh-provenance` rewrites `validated_at` and the
+   "imported snapshot as of" banner from the current per-source `lastImportedAt`, and never writes a
+   timestamp later than the source's recorded one.
+3. **Explicit paths only.** Each `analyze` writes `--out .spur/run/${vars.__runId}-history-anatomy-{current,baseline}.json`;
+   each `report --mode forensics` names that exact path. No stage reads `latest.json`.
+4. **Correction is capped at one.** `correct` increments a counter file in `onEnter`; the
+   `validate --FAIL → correct` edge guards on `correctionCount < 1`, and the second failure takes
+   the `→ failed` edge. Same pattern as `idea-pipeline.yaml`'s design-reject counter.
+5. **Publication is reachable only from a PASS.** There is no edge into `publish` from
+   `structure-gate` or `enrich` directly.
+
+**Composition discipline (ADR-069).** Shell actions stay at glue length — the cache decision,
+digest, structure check, and atomic publish are all single-line invocations of 0659's helper via
+`node "$(superskill script path sp history-anatomy-cache.mjs)" <subcommand>`. `agent.run` inputs
+name the skill operation rather than carrying a raw prompt, keeping R2's advisory clean.
+
+**Frontmatter provenance the publish stage writes** (consumed by 0659's `parseProvenance`):
+`report_contract_version`, `mode`, `date`, `timezone`, `bounds`, `window_state`, `generated_at`,
+`validated_at`, per-source coverage with `last_imported_at`, current and baseline artifact paths and
+digests, Spur/schema version, skill digest, workflow digest, executor and model identity, run id,
+and `cache_disposition`.
+
+**Anti-patterns — do not implement.**
+
+- Do **not** skip the deterministic probe on a suspected hit. "Cache exists, return it" is the exact
+  behavior ADR-079 forbids.
+- Do **not** put the cache comparison, digest, structure check, or publish logic in shell. ADR-069
+  R1 makes those owned-capability candidates; 0659 owns them.
+- Do **not** rely on `expectFile` alone to prove a stage produced content — it proves existence, and
+  a pre-created skeleton passes it. Follow it with a content assertion (the `idea-pipeline.yaml`
+  system-design state is the precedent).
+- Do **not** put side effects in transition guards. Guards read state; `onEnter` writes it.
+- Do **not** allow more than one correction pass, and do **not** publish a corrected candidate that
+  has not re-passed both gates.
+- Do **not** invoke `spur history import`, `spur history daily`, or any corpus/docs/source mutation
+  verb from any state.
+- Do **not** hand-copy the YAML into `apps/cli/config/` — that tree is a `build:bundle` artifact.
+- Do **not** cache ad-hoc runs. Only `mode=daily` reaches `cache-probe`'s hit branch.
+
+**Cross-task.** Depends on 0658 (the `enrich` / `validate` operation names and the frozen report
+vocabulary) and 0659 (the four helper entry points and the `CacheDecision` shape this branches on).
+Leaves for 0661: the workflow name and the fact that the command's single skill invocation is what
+launches it.
+### Plan
+- [ ] 1. Author `config/workflows/history-anatomy.yaml` with the package `$schema` ref, the state
+      graph above, `terminalStates: [published, failed]`, and every `${vars.X}` declared in `vars:`. (R1, R2)
+- [ ] 2. `resolve-scope`: dispatch the skill's mode validation; write the normalized selector
+      (mode, bounds, timezone, window state) to a run-scoped artifact. (R2)
+- [ ] 3. `cache-probe`: single-line helper invocation via
+      `node "$(superskill script path sp history-anatomy-cache.mjs)" decide`; write disposition +
+      reasons; branch `hit` vs `miss`/`forced-recompute`. Daily only. (R3, R5)
+- [ ] 4. `analyze` + `render`: two `analyze --out <explicit>` runs (current + previous comparable
+      window) and two `report --mode forensics <that exact path>` renders. Assert no `latest.json`
+      reference anywhere in the file. (R4)
+- [ ] 5. `enrich` and `validate`: `agent.run` actions naming the skill operations, with `expectFile`
+      plus a following content assertion so a skeleton cannot pass. (R2)
+- [ ] 6. `structure-gate` and `publish`: single-line helper invocations; wire `publish` so it is
+      reachable only from a passing `validate`. (R2, R6)
+- [ ] 7. `correct`: `onEnter` counter increment; guard the retry edge on `correctionCount < 1`;
+      route the second failure to `failed`. Mirror the `idea-pipeline.yaml` design-reject counter. (R6)
+- [ ] 8. `refresh-provenance`: on a hit, rewrite `validated_at` and the imported-snapshot banner
+      from current `lastImportedAt` values without claiming a later import. (R3, R7)
+- [ ] 9. Boundary test: assert the workflow and the skill tree contain no `spur task` / `spur
+      feature` / `spur rule` / `spur history import` / docs / source mutation invocation and no
+      JSONL or session-root discovery recipe. (R8)
+- [ ] 10. Fixtures for the eight cache cases: hit, data change, logic-digest change, malformed
+      provenance, provisional→closed, late import on a closed day, forced recompute, and a failed
+      candidate preserving the prior cache. (R9)
+- [ ] 11. Gate: `spur workflow validate config/workflows/history-anatomy.yaml`, then
+      `spur workflow run … --dry-run`, then `bun test plugins/sp/tests/skill-structure.test.ts`,
+      then `bun run spur-check`.
+### Solution
+
+<!-- Filled during implementation: file:line change map and concise rationale. -->
+
+### Testing
+
+<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+
+### Review
+
+<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+
+### References
+
+<!-- Links to the parent feature, design docs, related tasks, or external references. -->
+
+### History

@@ -667,6 +667,26 @@ the DESIGN.md lavender `#5e6ad2` on `#ffffff`). The daisyUI pins exist because `
 variants onto daisyUI's **own** `--color-primary`, which would otherwise place a second chromatic
 accent on screen (0420 finding F-01). Module code carries **no hex literals and no Tailwind palette
 classes** — every surface resolves a `spur-*` token.
+### 14.5 Module shell convention (ADR-081 proposed — History/Observability shell built; Tasks full-bleed variant not yet built)
+
+A multi-view Board module composes a **shell**: `<Module>Shell.tsx` plus an append-only `tabs.ts`
+(`{ id, label, component }`; never reorder or rename — the tab strip and persisted UI state key on
+`id`). Header anatomy is one row: icon + name + live chip left, module-specific inline filters
+middle, tab strip right. Width rule: the default module layout is the centered `max-w-[1600px]`
+column; a density-first module whose primary canvas is a multi-lane board MAY go full-bleed, with
+header and body sharing one horizontal padding so lanes align under the header. Tasks
+(`task-kanban/TasksShell.tsx` + `tabs.ts`, F72) is the first full-bleed instance; its shell absorbs
+the old in-board toolbar (phase select, lane toggles, combined WBS/feature input, `+ New Task`) and
+`TaskFilters.tsx` is deleted.
+
+Embed rule: a module embedded under another module (Workspace ⊃ Tasks) exports a **headerless**
+view (`TaskKanbanView`) rendering pure content; the shell is the route component only. Header-owned
+state (phase folder, lane visibility) reaches the board as optional controlled props with
+uncontrolled in-board defaults, so the embed keeps working with no shell present. Enforceable
+invariants: one shell per module route; `tabs.ts` files are append-only; a full-bleed module shares
+exactly one horizontal padding between header and body; the headerless embed never imports its
+module's shell. Shapes: `docs/design/tasks-module-shell-parity.md`.
+
 
 ## 15. Agent-Facing Plugin Surface Parity (ADR-053/054)
 
