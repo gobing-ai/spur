@@ -51,3 +51,24 @@ rules:
     exclude:
       - "**/node_modules/**"
       - "**/tests/**"
+
+  - id: spur-config-loader-only-at-composition-roots
+    description: >
+      `loadSpurConfig` is called at the composition roots only (ADR-082). Every other
+      surface consumes the merged result threaded through its context — a per-slice load
+      re-reads a single layer's view and reintroduces the split-brain A5 removed.
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        pattern: "loadSpurConfig\\("
+    include:
+      - "apps/**/src/**/*.ts"
+      - "packages/**/src/**/*.ts"
+    exclude:
+      - "packages/config/src/**"
+      - "apps/cli/src/index.ts"
+      - "apps/server/src/serve.ts"
+      - "apps/server/src/context.ts"
+      - "**/node_modules/**"
+      - "**/tests/**"
