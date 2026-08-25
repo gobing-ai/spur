@@ -875,3 +875,10 @@ Verification: 354 targeted tests passed; typecheck passed; diff/frontmatter/inde
 - Lifecycle guards re-run `spur task check` at `testing`; the A3 dogfood ordering — verdict artifact BEFORE `task record` — is load-bearing, and `record` backfills Testing from the verdict (PASS rows), not hand-authored prose.
 - pi-lens hooks can autofix the MAIN tree during a worktree batch (wrong-tree hazard); verify paths via `git status` in both trees before WT-4 merge. Don't `pkill -f` broad patterns inside a batch (killed the operator's `spur serve` instances; restart with exact `--cwd/--port/--no-open` args).
 - 0664 (cards): the `.task-kanban` timestamp baseline is already `spur-text-muted`, so the staleness "tint" lands as the dimmer `spur-text-faint` step of the same token ladder — never change the R5-protected baseline.
+## F93 learnings (2026-08-25)
+
+- **F93/0671** — Testing-section coverage parser (`parseTesting`) + canonical `VerifyVerdict` convergence. Key: renderTesting now takes the canonical type so `parseTesting(renderTesting(v))` is type-exact in canonical status space; legacy `parseVerdict`/`readVerdict` converge to canonical with a lenient `normalizeRowStatus` that preserves unrecognised statuses as-read (never defaulted).
+- **F93/0672** — completion-gate fallback: when `<wbs>-verdict.json` is absent, feature-check derives coverage from the tracked `## Testing` section via `parseTesting`; artifact stays authoritative; `L4.evidence-not-recoverable` named state for evidence that predates durable recording.
+- **Anchor lesson (0671/0672)**: L4 anchor-subject-mismatch fires when Solution/Testing citations point at stale line numbers or carry multiple citations per cell. Fix: compute `file:line` fresh at write time, one citation per row, backtick the exact symbol (underscore form for `L4_EVIDENCE_NOT_RECOVERABLE`).
+- **Section-update gotcha**: `spur task update --section Requirements --from-file <(awk ...)` with a wrong header regex wipes the section. Use the exact header (`### Requirements`, not `## Requirements`).
+
