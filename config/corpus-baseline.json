@@ -83,27 +83,11 @@
         },
         {
             "kind": "feature",
-            "id": "E6",
-            "code": "L4.scenario-unverified",
-            "severity": "warning",
-            "reason": "Linked task lacks a PASS verdict with MET requirement — verification pending, see note § L4.scenario-unverified.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "feature",
             "id": "E7",
             "code": "L4.orphan-scenarios",
             "severity": "warning",
             "reason": "Accepted backlog: L4.orphan-scenarios",
             "since": "2026-08-19"
-        },
-        {
-            "kind": "feature",
-            "id": "E9",
-            "code": "L4.scenario-unverified",
-            "severity": "warning",
-            "reason": "Accepted clean-checkout limitation: E9 PASS verdict artifacts are runtime-only under .spur/run; tracked task Testing sections retain the verification evidence.",
-            "since": "2026-08-22"
         },
         {
             "kind": "feature",
@@ -418,14 +402,6 @@
         {
             "kind": "feature",
             "id": "M2",
-            "code": "L4.scenario-unverified",
-            "severity": "warning",
-            "reason": "Linked task lacks a PASS verdict with MET requirement — verification pending, see note § L4.scenario-unverified.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "feature",
-            "id": "M3",
             "code": "L4.scenario-unverified",
             "severity": "warning",
             "reason": "Linked task lacks a PASS verdict with MET requirement — verification pending, see note § L4.scenario-unverified.",
@@ -14979,6 +14955,118 @@
             "severity": "warning",
             "reason": "task scenarios sit at finer altitude than feature E5 AC; DD-09 subset rule fires — pre-existing, feature AC not extended",
             "since": "2026-08-21"
+        },
+        {
+            "kind": "feature",
+            "id": "A1",
+            "code": "L4.evidence-not-recoverable",
+            "severity": "warning",
+            "reason": "No verdict artifact and the tracked ## Testing section carries no recoverable coverage evidence; tasks predate durable verification recording (F93 fallback state, task 0673).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "feature",
+            "id": "A2",
+            "code": "L4.evidence-not-recoverable",
+            "severity": "warning",
+            "reason": "No verdict artifact and the tracked ## Testing section carries no recoverable coverage evidence; tasks predate durable verification recording (F93 fallback state, task 0673).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "feature",
+            "id": "F6",
+            "code": "L4.evidence-not-recoverable",
+            "severity": "warning",
+            "reason": "No verdict artifact and the tracked ## Testing section carries no recoverable coverage evidence; tasks predate durable verification recording (F93 fallback state, task 0673).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "feature",
+            "id": "F7",
+            "code": "L4.evidence-not-recoverable",
+            "severity": "warning",
+            "reason": "No verdict artifact and the tracked ## Testing section carries no recoverable coverage evidence; tasks predate durable verification recording (F93 fallback state, task 0673).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "feature",
+            "id": "F8",
+            "code": "L4.evidence-not-recoverable",
+            "severity": "warning",
+            "reason": "No verdict artifact and the tracked ## Testing section carries no recoverable coverage evidence; tasks predate durable verification recording (F93 fallback state, task 0673).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "feature",
+            "id": "F81",
+            "code": "L4.evidence-not-recoverable",
+            "severity": "warning",
+            "reason": "No verdict artifact and the tracked ## Testing section carries no recoverable coverage evidence; tasks predate durable verification recording (F93 fallback state, task 0673).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "feature",
+            "id": "F822",
+            "code": "L4.evidence-not-recoverable",
+            "severity": "warning",
+            "reason": "No verdict artifact and the tracked ## Testing section carries no recoverable coverage evidence; tasks predate durable verification recording (F93 fallback state, task 0673).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "feature",
+            "id": "F9",
+            "code": "L4.evidence-not-recoverable",
+            "severity": "warning",
+            "reason": "No verdict artifact and the tracked ## Testing section carries no recoverable coverage evidence; tasks predate durable verification recording (F93 fallback state, task 0673).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "feature",
+            "id": "G1",
+            "code": "L4.evidence-not-recoverable",
+            "severity": "warning",
+            "reason": "No verdict artifact and the tracked ## Testing section carries no recoverable coverage evidence; tasks predate durable verification recording (F93 fallback state, task 0673).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "feature",
+            "id": "H1",
+            "code": "L4.evidence-not-recoverable",
+            "severity": "warning",
+            "reason": "No verdict artifact and the tracked ## Testing section carries no recoverable coverage evidence; tasks predate durable verification recording (F93 fallback state, task 0673).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "feature",
+            "id": "I1",
+            "code": "L4.evidence-not-recoverable",
+            "severity": "warning",
+            "reason": "No verdict artifact and the tracked ## Testing section carries no recoverable coverage evidence; tasks predate durable verification recording (F93 fallback state, task 0673).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "feature",
+            "id": "J",
+            "code": "L4.evidence-not-recoverable",
+            "severity": "warning",
+            "reason": "No verdict artifact and the tracked ## Testing section carries no recoverable coverage evidence; tasks predate durable verification recording (F93 fallback state, task 0673).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "feature",
+            "id": "J1",
+            "code": "L4.evidence-not-recoverable",
+            "severity": "warning",
+            "reason": "No verdict artifact and the tracked ## Testing section carries no recoverable coverage evidence; tasks predate durable verification recording (F93 fallback state, task 0673).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "feature",
+            "id": "M1",
+            "code": "L4.evidence-not-recoverable",
+            "severity": "warning",
+            "reason": "No verdict artifact and the tracked ## Testing section carries no recoverable coverage evidence; tasks predate durable verification recording (F93 fallback state, task 0673).",
+            "since": "2026-08-25"
         }
     ]
 }

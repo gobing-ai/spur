@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F93"
 name: "Durable verification evidence: the completion gate reads the tracked task record, not a gitignored artifact"
-status: verifying
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-25T18:02:33.790Z"
-updated_at: "2026-08-25T19:30:34.611Z"
+updated_at: "2026-08-25T22:38:26.224Z"
 ---
 
 # F93: Durable verification evidence: the completion gate reads the tracked task record, not a gitignored artifact
@@ -189,7 +189,7 @@ Feature: Durable verification evidence — the completion gate reads the tracked
 | --- | ---- | ------ |
 | 0671 | Testing-section coverage parser with proven record round-trip equivalence | done |
 | 0672 | Wire the fallback into the completion gate with artifact precedence and an unrecoverable-evidence state | done |
-| 0673 | Measured corpus sweep: report recovery, unblock features, and reconcile the baseline delta | cancelled |
+| 0673 | Measured corpus sweep: report recovery, unblock features, and reconcile the baseline delta | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -197,3 +197,6 @@ Feature: Durable verification evidence — the completion gate reads the tracked
 ## History
 - 2026-08-25T19:30:34.261Z backlog → active (system)
 - 2026-08-25T19:30:34.611Z active → verifying (system)
+- 2026-08-25T22:35:09.289Z verifying → active (system)
+- 2026-08-25T22:38:25.855Z active → verifying (system)
+- 2026-08-25T22:38:26.224Z verifying → done (system)
