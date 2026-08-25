@@ -255,7 +255,14 @@ function runCacheCli(argv) {
         return { exitCode: 1, stdout: "", stderr: `usage: <script> digest <artifact.json>
 ` };
       }
-      const digest = semanticArtifactDigest(JSON.parse(readFileSync(a, "utf8")));
+      let artifact;
+      try {
+        artifact = JSON.parse(readFileSync(a, "utf8"));
+      } catch {
+        return { exitCode: 1, stdout: "", stderr: `could not parse artifact at ${a}
+` };
+      }
+      const digest = semanticArtifactDigest(artifact);
       return { exitCode: 0, stdout: `${digest}
 `, stderr: "" };
     }

@@ -84,8 +84,11 @@ const FINDING_FIELDS = [
 
 // ── 1. Semantic artifact digest ────────────────────────────────────────────────────────────
 
+/** JSON-compatible value — the domain type for canonicalized artifact material and YAML scalars. */
+type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
+
 /** Recursively canonicalize so equivalent evidence digests identically (sorted keys, undefined→null). */
-function canonicalize(value: unknown, key: string): unknown {
+function canonicalize(value: unknown, key: string): JsonValue {
     // Exclude only volatile generation fields — never derive validity from them.
     if (key === 'generatedAt' || key === 'validatedAt' || key === 'baselineArtifactDigest') return null;
     if (Array.isArray(value)) {
@@ -96,13 +99,13 @@ function canonicalize(value: unknown, key: string): unknown {
         return isRanked ? raw : [...raw].sort();
     }
     if (value !== null && typeof value === 'object') {
-        const out: Record<string, unknown> = {};
+        const out: { [k: string]: JsonValue } = {};
         for (const k of Object.keys(value as Record<string, unknown>).sort()) {
             out[k] = canonicalize((value as Record<string, unknown>)[k], k);
         }
         return out;
     }
-    return value;
+    return value as JsonValue;
 }
 
 /**
@@ -116,7 +119,7 @@ export function semanticArtifactDigest(artifactJson: unknown): string {
 
 // ── 2. Provenance parsing ───────────────────────────────────────────────────────────────────
 
-function parseScalar(raw: string): unknown {
+function parseScalar(raw: string): JsonValue {
     const t = raw.trim();
     if (t.startsWith('"') && t.endsWith('"')) return t.slice(1, -1).replaceAll('\\"', '"');
     if (t === 'null') return null;
@@ -367,7 +370,13 @@ export function runCacheCli(argv: string[]): CacheCliResult {
             if (a === undefined) {
                 return { exitCode: 1, stdout: '', stderr: 'usage: <script> digest <artifact.json>\n' };
             }
-            const digest = semanticArtifactDigest(JSON.parse(readFileSync(a, 'utf8')));
+            let artifact: unknown;
+            try {
+                artifact = JSON.parse(readFileSync(a, 'utf8'));
+            } catch {
+                return { exitCode: 1, stdout: '', stderr: `could not parse artifact at ${a}\n` };
+            }
+            const digest = semanticArtifactDigest(artifact);
             return { exitCode: 0, stdout: `${digest}\n`, stderr: '' };
         }
         case 'check': {
