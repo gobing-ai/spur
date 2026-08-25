@@ -4,7 +4,7 @@ name: "Agent-surface fallback provenance and --json error envelope"
 status: done
 template: feature-impl
 created_at: 2026-08-25T06:11:03.806Z
-updated_at: "2026-08-25T18:12:59.721Z"
+updated_at: "2026-08-25T18:13:42.881Z"
 feature_id: A5
 priority: P2
 tags: ["config", "agent-surface", "json-error-contract"]
@@ -351,11 +351,11 @@ Agent-surface fallback provenance (R1/R3) and `--json` error envelope (R5/R6); A
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R6 — spur agent doctor resolves a globally defined executor when the project config has no agent: section | MET | test | apps/cli/tests/config-layering.test.ts global-only executor case → 7 pass / 0 fail |
+| R6 — `spur agent doctor` resolves a globally defined executor when the project config has no `agent:` section | MET | test | apps/cli/tests/config-layering.test.ts global-only executor case → 7 pass / 0 fail |
 | R7 — The DEFAULT_AGENT_ROLES fallback is explicit when no config defines the role | MET | test | apps/cli/tests/config-layering.test.ts rolesSource:'fallback' json case + text-mode note case |
 | R8 — The DEFAULT_AGENT_ROLES fallback decision is recorded [docs-only] | MET | static-ref | `docs/00_ADR.md:1169` — amendment naming rolesSource + the error-stream note, matching what ships |
-| R9 — Agent-surface failures emit the standard --json error envelope | MET | test | packages/app/tests/services/agent-service.test.ts agent-resolution envelope (doctor + run) → 163 pass / 0 fail |
-| R10 — Message-surface failures emit the standard --json error envelope | MET | test | apps/cli/tests/commands/message.test.ts --json empty body usage envelope |
+| R9 — Agent-surface failures emit the standard `--json` error envelope | MET | test | packages/app/tests/services/agent-service.test.ts agent-resolution envelope (doctor + run) → 163 pass / 0 fail |
+| R10 — Message-surface failures emit the standard `--json` error envelope | MET | test | apps/cli/tests/commands/message.test.ts --json empty body usage envelope |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)
