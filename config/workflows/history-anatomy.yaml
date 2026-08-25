@@ -1,40 +1,59 @@
-# History-anatomy pipeline — daily/ad-hoc diagnostic report over already-imported history
+# History-anatomy pipeline — daily/ad-hoc diagnostic report over already-
+# imported history
 # (feature I8, HA-S1 0660 / ADR-079).
 #
-# Orchestration is configuration (ADR-022): a state machine over the existing dual-workflow
-# engine. The YAML owns ONLY the cache branch, deterministic stage ordering, executor dispatch,
-# bounded correction, and atomic publication sequencing. The deterministic cache/digest/
-# structure/publish work is 0659's dependency-free helper script; the judgment (mode validity,
-# what counts as evidence, the report contract, enrich/validate rubrics) is 0658's skill. Per
-# ADR-069 R1, cache-decide / digest / structure-check / publish must NOT be inline shell — every
-# shell action here is glue length (a single helper invocation), because each of those programs
-# would exceed the shell composition threshold and be flagged as an owned-capability candidate.
+# Orchestration is configuration (ADR-022): a state machine over the existing
+# dual-workflow
+# engine. The YAML owns ONLY the cache branch, deterministic stage ordering,
+# executor dispatch,
+# bounded correction, and atomic publication sequencing. The deterministic
+# cache/digest/
+# structure/publish work is 0659's dependency-free helper script; the judgment
+# (mode validity,
+# what counts as evidence, the report contract, enrich/validate rubrics) is
+# 0658's skill. Per
+# ADR-069 R1, cache-decide / digest / structure-check / publish must NOT be
+# inline shell — every
+# shell action here is glue length (a single helper invocation), because each
+# of those programs
+# would exceed the shell composition threshold and be flagged as an owned-
+# capability candidate.
 #
 # Shape:
-#   start -> resolve-scope -> cache-probe -> analyze -> render -> enrich -> structure-gate
+#   start -> resolve-scope -> cache-probe -> analyze -> render -> enrich ->
+# structure-gate
 #            -> validate -> publish -> published
 #            (cache hit -> refresh-provenance -> publish)
-#            (validate PASS -> publish; validate FAIL -> correct (max 1) -> structure-gate ...)
+#            (validate PASS -> publish; validate FAIL -> correct (max 1) ->
+# structure-gate ...)
 #            (any all-paths failure -> failed)
 #
-# terminalStates: [published, failed]. Publication is reachable ONLY from a passing validation
-# state — there is no edge into `publish` from structure-gate or enrich directly.
+# terminalStates: [published, failed]. Publication is reachable ONLY from a
+# passing validation
+# state — there is no edge into `publish` from structure-gate or enrich
+# directly.
 #
-# Vars (all must be declared here — the vars: block is the only safe shape; `spur workflow
+# Vars (all must be declared here — the vars: block is the only safe shape;
+# `spur workflow
 # validate` and the skill-structure test enforce it):
 #   mode      — "daily" (default) | "ad-hoc" (validated in resolve-scope)
 #   date      — YYYY-MM-DD for --date (daily); empty for ad-hoc
-#   since     — inclusive ISO lower bound (ad-hoc; also normalizes daily via the DST-aware rule)
+#   since     — inclusive ISO lower bound (ad-hoc; also normalizes daily via
+# the DST-aware rule)
 #   until     — inclusive ISO upper bound (ad-hoc)
-#   focus     — ad-hoc focus string (required in ad-hoc mode, rejected in daily)
-#   recompute — "true" forces the full analyze/render/enrich/validate path (cache disposition
+#   focus     — ad-hoc focus string (required in ad-hoc mode, rejected in
+# daily)
+#   recompute — "true" forces the full analyze/render/enrich/validate path
+# (cache disposition
 #               forced-recompute)
 #   output    — explicit report output path; default run directory
 #   agent     — executor for the agent.run stages (enrich/validate)
-#   spurBin   — PATH-independent spur invocation (overridden by CLI at run start)
+#   spurBin   — PATH-independent spur invocation (overridden by CLI at run
+# start)
 #   __runId   — run-scoped id for explicit artifact paths (allocated in start)
 #   stepTimeoutMs — agent.run budget for enrich/validate
-#   correctionCount — bounded correction loop counter file path bits (name resolved in correct)
+#   correctionCount — bounded correction loop counter file path bits (name
+# resolved in correct)
 
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
@@ -305,3 +324,4 @@ transitions:
     description: Report published.
     guard:
       kind: always
+
