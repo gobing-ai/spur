@@ -103,6 +103,40 @@ describe('TaskCard', () => {
         const { container } = render(<TaskCard task={t} onClick={() => {}} />);
         expect(container.textContent).not.toContain('ago');
     });
+
+    test('R7 — priority accent: left border color per P1/P2/P3, none for absent/unrecognized', () => {
+        const p1 = render(<TaskCard task={task({ priority: 'P1' })} onClick={() => {}} />);
+        expect(p1.container.querySelector('button')?.className).toContain('border-l-spur-error');
+        p1.unmount();
+        const p2 = render(<TaskCard task={task({ priority: 'P2' })} onClick={() => {}} />);
+        expect(p2.container.querySelector('button')?.className).toContain('border-l-spur-warning');
+        p2.unmount();
+        const p3 = render(<TaskCard task={task({ priority: 'P3' })} onClick={() => {}} />);
+        expect(p3.container.querySelector('button')?.className).toContain('border-l-spur-text-muted');
+        p3.unmount();
+        // Absent or unrecognized priority → no accent border class at all.
+        const none = render(<TaskCard task={task({ priority: undefined })} onClick={() => {}} />);
+        const cls = none.container.querySelector('button')?.className ?? '';
+        expect(cls).not.toContain('border-l-');
+        none.unmount();
+        const unknown = render(<TaskCard task={task({ priority: 'P9' })} onClick={() => {}} />);
+        expect(unknown.container.querySelector('button')?.className).not.toContain('border-l-');
+        unknown.unmount();
+    });
+
+    test('R7 — staleness tint: timestamp faint when updatedAt older than 7 days', () => {
+        const stale = task({ updatedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString() });
+        const s = render(<TaskCard task={stale} onClick={() => {}} />);
+        const span = s.container.querySelector('button span[title]');
+        expect(span?.className).toContain('text-spur-text-faint');
+        s.unmount();
+        const fresh = task({ updatedAt: new Date(Date.now() - 60_000).toISOString() });
+        const f = render(<TaskCard task={fresh} onClick={() => {}} />);
+        const span2 = f.container.querySelector('button span[title]');
+        expect(span2?.className).toContain('text-spur-text-muted');
+        expect(span2?.className).not.toContain('text-spur-text-faint');
+        f.unmount();
+    });
 });
 
 describe('KanbanColumn', () => {

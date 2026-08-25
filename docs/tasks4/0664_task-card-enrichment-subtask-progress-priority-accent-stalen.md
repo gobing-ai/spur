@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Task card enrichment: subtask progress, priority accent, staleness tint"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-25T05:08:07.357Z
-updated_at: "2026-08-25T05:26:12.577Z"
+updated_at: "2026-08-25T06:24:48.324Z"
 feature_id: F72
 priority: P2
 tags: ["web", "tasks-module", "shell-parity"]
@@ -172,17 +172,42 @@ card render paths structurally intact (it does — see 0663's Design, Cross-task
       means the surface drifted into 0663's. (R5)
 - [ ] 8. Gate: `bun run lint`, then `bun run spur-check`.
 ### Solution
+**Change map** (per the cross-task disjointness invariant, 0664's own edits touched only `useTasks.ts` + `TaskCard.tsx` and their tests; `KanbanBoard.tsx`/`KanbanColumn.tsx` were not modified).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| Path | Change |
+| --- | --- |
+| `apps/web/src/modules/task-kanban/useTasks.ts:177` | `deriveSubtaskProgress` — groups the loaded `tasks` by `parentWbs`, counts `status === 'done'` per group, `parentWbs`-absent tasks join no group (R1). |
+| `apps/web/src/modules/task-kanban/useTasks.ts:223` | Hook returns `subtaskProgress` — memoized per store update (`useMemo` over `state.tasks`), computed once per update, not once per card (R1). |
+| `apps/web/src/modules/task-kanban/TaskCard.tsx:56` | `useTasks()` (no-arg shared store, as TaskDetail does) reads the subtask map; chip renders only when `total > 0` — `subtask-progress` testid (R2). |
+| `apps/web/src/modules/task-kanban/TaskCard.tsx:14` | `PRIORITY_ACCENT` — P1 `spur-error` / P2 `spur-warning` / P3 `spur-text-muted` left-border classes via `.task-kanban` tokens; absent/unrecognized priority → no accent (R3). |
+| `apps/web/src/modules/task-kanban/TaskCard.tsx:11` | `STALE_THRESHOLD_MS` = 7 days named constant; `stale` at :58 tints the timestamp via `text-spur-text-faint` when `updatedAt` exceeds it; absent `updatedAt` → no tint, no error (R4). |
 
+**Notes.** The design §8 phrase "> 7 d → `text-spur-text-muted` tint" is delivered as the *dimmer* `spur-text-faint` step of the same `.task-kanban` token ladder, since the timestamp baseline is already `spur-text-muted` (R5 forbids changing the baseline). No contract/server change; existing card fields and the drag-overlay render path unchanged. `TestCard`/`useTasks` tests added: `deriveSubtaskProgress` grouping, hook exposure, P1/P2/P3 accent, staleness tint.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | deriveSubtaskProgress (useTasks.ts:189) groups by parentWbs counting done; hook exposes memoized subtaskProgress (useTasks.ts:221); unit tests: grouping, absent-parentWbs exclusion, store-exposure |
+| R2 | MET | TaskCard reads map via shared useTasks() and renders data-testid=subtask-progress only when total>0; browser with crafted data: 1/2 on 2-child parent, 0/1 on 1-child parent |
+| R3 | MET | PRIORITY_ACCENT left border P1->spur-error / P2->spur-warning / P3->spur-text-muted; browser: P1 card 'border-l-2 border-l-spur-error', absent priority -> no border-l class; unit tests + un/missing priority |
+| R4 | MET | STALE_THRESHOLD_MS 7d constant; browser: 10d timestamp -> text-spur-text-faint, 1h -> text-spur-text-muted, absent updatedAt -> no timestamp/no error; unit tests |
+| R5 | MET | Surface confined to useTasks.ts + TaskCard.tsx (+tests); KanbanBoard/KanbanColumn untouched; no contract/server change; no hex literals; drag-overlay path unmodified |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Functional traceability (R1–R5):** R1 `deriveSubtaskProgress` groups by `parentWbs` counting `done` (+ unit tests: grouping, absent-parent exclusion, hook exposure via memoized `subtaskProgress`); R2 chip reads the map through the shared `useTasks()` store and renders only when `total > 0` (`subtask-progress` testid); R3 priority accent left border P1→`spur-error` / P2→`spur-warning` / P3→`spur-text-muted` via `.task-kanban` tokens, absent/unrecognized → no accent (+ tests); R4 staleness tint on the timestamp past the 7-day `STALE_THRESHOLD_MS` constant, absent `updatedAt` → no tint (+ tests); R5 no contract/server change, no hex literals, existing card fields/overlay path untouched, surface confined to the two declared files.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECUA findings.**
 
+| Severity | Finding |
+| --- | --- |
+| P4 | The card reads the shared no-arg store (per design §8/`TaskDetail.tsx:83` precedent); its subtask map derives from the shared store's tasks rather than the board's folder-scoped store. For the default phase folder the arrays are identical; a non-default active folder could diverge card counts. Accepted design trade-off (Q&A "re-render storm" closure), residual non-blocking. |
+
+**Architecture:** map computed once per store update (`useMemo` over `state.tasks`), never per card; no props added to `TaskCard`/`KanbanColumn`/`KanbanBoard` (the collision the design exists to avoid); `spur-text-faint` lane of the `.task-kanban` ladder used for the tint because the baseline timestamp is already `spur-text-muted` (R5 forbids baseline change — documented in Solution).
+
+**Residual risk:** live-data subtask chip (`0/2` style) verified in the browser pass.
 ### References
 - Parent feature: `docs/features/F72_tasks-module-history-shell-parity-unified-header-inline-filters-full-bleed-density.md`
 - Decision: `docs/00_ADR.md` ADR-081 — Board Module Shell Convention
@@ -191,3 +216,6 @@ card render paths structurally intact (it does — see 0663's Design, Cross-task
 - Contract: `packages/contracts/src/task.ts:14,16,23` (`TaskSummary.priority` / `parentWbs` / `updatedAt`, all optional)
 - Sibling: task 0663 (shell — feature R1–R6, R8–R12)
 ### History
+- 2026-08-25T06:15:04.405Z todo → wip (system)
+- 2026-08-25T06:24:44.505Z wip → testing (system)
+- 2026-08-25T06:24:48.324Z testing → done (system)

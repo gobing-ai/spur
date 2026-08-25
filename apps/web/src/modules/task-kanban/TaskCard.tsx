@@ -3,8 +3,19 @@ import { CSS } from '@dnd-kit/utilities';
 import { useEffect, useState } from 'react';
 import { Badge, Card, CardBody } from '@/ui';
 import type { TaskSummary } from './types';
+import { useTasks } from './useTasks';
 
 const RELATIVE_REFRESH_MS = 60_000;
+
+/** Staleness threshold: timestamps older than 7 days get the faint tint (F72 R4). */
+const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Priority accent — colored left border resolved through `.task-kanban` tokens (F72 R3). */
+const PRIORITY_ACCENT: Record<string, string> = {
+    P1: 'border-l-2 border-l-spur-error',
+    P2: 'border-l-2 border-l-spur-warning',
+    P3: 'border-l-2 border-l-spur-text-muted',
+};
 
 function relativeTime(iso: string, now: number): string {
     const then = new Date(iso).getTime();
@@ -41,11 +52,17 @@ export default function TaskCard({ task, onClick }: Props) {
         ? { transform: CSS.Transform.toString(transform), zIndex: isDragging ? 50 : undefined }
         : undefined;
 
+    // F72 R2: read the store-derived subtask map (shared no-arg store, as TaskDetail does).
+    const { subtaskProgress } = useTasks();
+    const progress = subtaskProgress.get(task.wbs);
+    const accent = task.priority ? PRIORITY_ACCENT[task.priority] : undefined;
+    const stale = task.updatedAt ? now - new Date(task.updatedAt).getTime() > STALE_THRESHOLD_MS : false;
+
     return (
         <Card
             variant="compact"
             asChild
-            className={`bg-spur-surface-2 hover:bg-spur-surface-3 rounded-xl border border-spur-border cursor-pointer transition-colors w-full text-left ${
+            className={`bg-spur-surface-2 hover:bg-spur-surface-3 rounded-xl border border-spur-border cursor-pointer transition-colors w-full text-left ${accent ?? ''} ${
                 isDragging ? 'opacity-30' : ''
             }`}
         >
@@ -69,6 +86,16 @@ export default function TaskCard({ task, onClick }: Props) {
                     </div>
                     <p className="text-sm font-medium text-spur-text leading-snug">{task.name}</p>
                     <div className="flex gap-1 flex-wrap items-center">
+                        {progress && progress.total > 0 && (
+                            <Badge
+                                variant="outline"
+                                size="xs"
+                                data-testid="subtask-progress"
+                                title="subtasks done/total"
+                            >
+                                {progress.done}/{progress.total}
+                            </Badge>
+                        )}
                         {task.type && task.type !== 'task' && (
                             <Badge variant="outline" size="xs">
                                 {task.type}
@@ -80,7 +107,10 @@ export default function TaskCard({ task, onClick }: Props) {
                             </Badge>
                         )}
                         {task.updatedAt && (
-                            <span className="text-xs font-mono text-spur-text-muted ml-auto" title={task.updatedAt}>
+                            <span
+                                className={`text-xs font-mono ml-auto ${stale ? 'text-spur-text-faint' : 'text-spur-text-muted'}`}
+                                title={task.updatedAt}
+                            >
                                 {relativeTime(task.updatedAt, now)}
                             </span>
                         )}

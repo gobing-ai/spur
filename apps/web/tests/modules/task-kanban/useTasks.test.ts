@@ -3,7 +3,7 @@ registerHappyDom();
 import { afterAll, describe, expect, test } from 'bun:test';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
-import { createRefresh, TaskStore, useTasks } from '../../../src/modules/task-kanban/useTasks';
+import { createRefresh, deriveSubtaskProgress, TaskStore, useTasks } from '../../../src/modules/task-kanban/useTasks';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 describe('createRefresh', () => {
@@ -53,6 +53,30 @@ describe('createRefresh', () => {
     });
 });
 
+describe('deriveSubtaskProgress (F72 R1)', () => {
+    test('groups children by parentWbs and counts done', () => {
+        const tasks: TaskSummary[] = [
+            { wbs: '0002', name: 'a', status: 'done', parentWbs: '0001', filePath: '/t/0002.md' },
+            { wbs: '0003', name: 'b', status: 'todo', parentWbs: '0001', filePath: '/t/0003.md' },
+            { wbs: '0004', name: 'c', status: 'done', parentWbs: '0001', filePath: '/t/0004.md' },
+            { wbs: '0005', name: 'd', status: 'wip', parentWbs: '0006', filePath: '/t/0005.md' },
+        ];
+        expect(deriveSubtaskProgress(tasks).get('0001')).toEqual({ done: 2, total: 3 });
+        expect(deriveSubtaskProgress(tasks).get('0006')).toEqual({ done: 0, total: 1 });
+        expect(deriveSubtaskProgress(tasks).get('0002')).toBeUndefined(); // not a parent
+    });
+
+    test('tasks without parentWbs join no group', () => {
+        const tasks: TaskSummary[] = [
+            { wbs: '0001', name: 'root', status: 'todo', filePath: '/t/0001.md' },
+            { wbs: '0002', name: 'a', status: 'done', parentWbs: '0001', filePath: '/t/0002.md' },
+        ];
+        const map = deriveSubtaskProgress(tasks);
+        expect(map.get('0001')).toEqual({ done: 1, total: 1 });
+        expect(map.size).toBe(1);
+    });
+});
+
 describe('useTasks', () => {
     afterAll(teardownHappyDom);
 
@@ -71,6 +95,19 @@ describe('useTasks', () => {
         await waitFor(() => expect(result.current.loading).toBe(false));
         expect(result.current.tasks).toEqual(items);
         unmount(); // triggers useEffect cleanup (covers clearInterval)
+    });
+
+    test('exposes the derived subtask-progress map (F72 R1)', async () => {
+        const items: TaskSummary[] = [
+            { wbs: '0001', name: 'parent', status: 'todo', filePath: '/t/0001.md' },
+            { wbs: '0002', name: 'a', status: 'done', parentWbs: '0001', filePath: '/t/0002.md' },
+            { wbs: '0003', name: 'b', status: 'wip', parentWbs: '0001', filePath: '/t/0003.md' },
+        ];
+        const listFn = async () => ({ data: items });
+        const { result, unmount } = renderHook(() => useTasks(listFn));
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current.subtaskProgress.get('0001')).toEqual({ done: 1, total: 2 });
+        unmount();
     });
 
     test('sets error on fetch failure', async () => {
