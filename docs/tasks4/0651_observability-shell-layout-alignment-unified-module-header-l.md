@@ -4,7 +4,7 @@ name: "Observability shell layout alignment: unified module header, live status 
 status: done
 template: feature-impl
 created_at: 2026-08-24T06:19:15.168Z
-updated_at: "2026-08-24T17:52:16.088Z"
+updated_at: "2026-08-25T00:22:29.690Z"
 feature_id: J92
 priority: P2
 ---
@@ -84,7 +84,7 @@ Files: `apps/web/src/modules/observability/{ObservabilityShell.tsx,SystemEventsT
 ### Solution
 - `apps/web/src/modules/observability/ObservabilityShell.tsx:15`: `ObservabilityShell` implements the centered layout, header/chip, newest-event time, pill navigation, and labelled panel.
 - `apps/web/src/modules/observability/tabs.ts:17`: `ObservabilityTabProps` defines the narrow liveness/range handoff; `OBSERVABILITY_TABS` at line 40 contains exactly System Events, Jobs, and Routing.
-- `apps/web/src/modules/observability/SystemEventsTab.tsx:783`: `SystemEventsTab` reports its existing SSE state, rate, and newest event without a second connection.
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:773`: `SystemEventsTab` reports its existing SSE state, rate, and newest event without a second connection.
 - `apps/web/tests/modules/observability/tabs.test.ts:26`: The registry test locks the exact three-tab order.
 - `apps/web/tests/modules/observability/components.test.tsx:275`: The `FakeEventSource` assertion proves the shell adds no second SSE connection; adjacent assertions cover tab/panel relationships and live/error/idle states.
 ### Testing

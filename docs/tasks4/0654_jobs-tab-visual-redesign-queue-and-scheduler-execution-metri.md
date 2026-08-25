@@ -4,7 +4,7 @@ name: "Jobs tab visual redesign: queue and scheduler execution metrics with focu
 status: done
 template: feature-impl
 created_at: 2026-08-24T06:19:15.218Z
-updated_at: "2026-08-24T17:52:17.375Z"
+updated_at: "2026-08-25T00:22:31.013Z"
 feature_id: J92
 priority: P2
 dependencies: ["0652"]
@@ -68,11 +68,11 @@ Files: `apps/web/src/modules/observability/JobsTab.tsx` and its existing cases i
 ### Solution
 - `apps/web/src/modules/observability/JobsTab.tsx:239`: `JobsTab` consumes the shared range, clears prior state/error for each request generation, and renders current KPIs separately from the range-labelled feed.
 - `apps/web/src/modules/observability/JobsTab.tsx:251`: One `timeRangeSince` value builds both prefix-filtered history URLs; `All` omits it.
-- `apps/web/tests/modules/observability/components.test.tsx:1422`: Existing feed cases prove queue-thread/scheduler ordering, structured fields, raw disclosure, counters, and empty state.
-- `apps/web/tests/modules/observability/components.test.tsx:1537`: Range cases prove exact limits, one shared `since`, and `All` omission.
-- `apps/web/tests/modules/observability/components.test.tsx:1571`: The regression proves an older response cannot overwrite a faster selection even when cancellation is ignored by the transport.
-- `apps/web/tests/modules/observability/components.test.tsx:1630`: Error coverage proves a failed request is visible and the next range selection recovers.
-- `apps/web/tests/modules/observability/components.test.tsx:2595`: The loading-state regression proves prior-range rows disappear while replacement data is pending.
+- `apps/web/tests/modules/observability/components.test.tsx:1418`: Existing feed cases prove queue-thread/scheduler ordering, structured fields, raw disclosure, counters, and empty state.
+- `apps/web/tests/modules/observability/components.test.tsx:1543`: Range cases prove exact limits, one shared `since`, and `All` omission.
+- `apps/web/tests/modules/observability/components.test.tsx:1577`: The regression proves an older response cannot overwrite a faster selection even when cancellation is ignored by the transport.
+- `apps/web/tests/modules/observability/components.test.tsx:1636`: Error coverage proves a failed request is visible and the next range selection recovers.
+- `apps/web/tests/modules/observability/components.test.tsx:2601`: The loading-state regression proves prior-range rows disappear while replacement data is pending.
 ### Testing
 **Pipeline verify results**
 
@@ -80,16 +80,16 @@ Files: `apps/web/src/modules/observability/JobsTab.tsx` and its existing cases i
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/tests/modules/observability/components.test.tsx:1514` |
-| R2 | MET | `apps/web/tests/modules/observability/components.test.tsx:1422` |
-| R3 | MET | `apps/web/tests/modules/observability/components.test.tsx:1537` |
-| R4 | MET | `apps/web/tests/modules/observability/components.test.tsx:2595` |
-| R5 | MET | `apps/web/tests/modules/observability/components.test.tsx:1514` |
-| R6 | MET | `apps/web/tests/modules/observability/components.test.tsx:2595` |
+| R1 | MET | `apps/web/tests/modules/observability/components.test.tsx:1520` |
+| R2 | MET | `apps/web/tests/modules/observability/components.test.tsx:1418` |
+| R3 | MET | `apps/web/tests/modules/observability/components.test.tsx:1543` |
+| R4 | MET | `apps/web/tests/modules/observability/components.test.tsx:2601` |
+| R5 | MET | `apps/web/tests/modules/observability/components.test.tsx:1520` |
+| R6 | MET | `apps/web/tests/modules/observability/components.test.tsx:2601` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R8 — Redesigned Jobs tab | MET | test | `apps/web/tests/modules/observability/components.test.tsx:1422`; coverage-enabled J92 gate: 207 pass, 0 fail. |
+| Scenario: R8 — Redesigned Jobs tab | MET | test | `apps/web/tests/modules/observability/components.test.tsx:1418`; coverage-enabled J92 gate: 207 pass, 0 fail. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 | Priority | Dimension | Location | Finding |

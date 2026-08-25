@@ -4,7 +4,7 @@ name: "Observability filter and time-range bar: quick presets, popover filters, 
 status: done
 template: feature-impl
 created_at: 2026-08-24T06:19:15.188Z
-updated_at: "2026-08-24T17:52:16.485Z"
+updated_at: "2026-08-25T00:22:29.960Z"
 feature_id: J92
 priority: P2
 dependencies: ["0651"]
@@ -81,7 +81,7 @@ Files: `apps/web/src/modules/observability/{ObservabilityShell.tsx,Observability
 - `apps/web/src/modules/observability/ObservabilityShell.tsx:15`: `ObservabilityShell` owns the selected range and passes it to every active tab.
 - `apps/web/src/modules/observability/ObservabilityFilters.tsx:31`: `TIME_RANGES`, `TIME_RANGE_MS`, and `timeRangeSince` centralize preset behavior.
 - `apps/web/src/modules/observability/ObservabilityFilters.tsx:103`: `ObservabilityFilters` wraps its range selector and result/action cluster; the native Filter disclosure and Live control remain accessible.
-- `apps/web/src/modules/observability/SystemEventsTab.tsx:783`: `SystemEventsTab` shares the controlled range across history serialization, immediate filtering, and pause/resume connection lifecycle.
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:773`: `SystemEventsTab` shares the controlled range across history serialization, immediate filtering, and pause/resume connection lifecycle.
 - `apps/web/tests/modules/observability/components.test.tsx:343`: The connection test proves pause closes the stream, retains history, and resume creates one replacement connection.
 - `apps/web/tests/modules/observability/components.test.tsx:2110`: Focused cases cover every lower bound, the exact responsive action contract, severity, Clear, and shell persistence.
 - `docs/design/observability-frontend-enhancement.md:24`: The as-built design records six presets and the API condition for a future bounded Custom range.

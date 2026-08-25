@@ -4,7 +4,7 @@ name: "System Events table enhancement: customizable columns, value sorting, and
 status: done
 template: feature-impl
 created_at: 2026-08-24T06:19:15.204Z
-updated_at: "2026-08-24T17:52:16.913Z"
+updated_at: "2026-08-25T00:22:30.492Z"
 feature_id: J92
 priority: P2
 dependencies: ["0652"]
@@ -101,12 +101,12 @@ Files: `apps/web/src/modules/observability/{ColumnCustomizer.tsx,ObservabilityFi
 6. Update the J92 design satellite's file diagram, run targeted Observability tests plus web typecheck/lint, and confirm no backend or `RoutingTab.tsx` diff (R8).
 ### Solution
 - `apps/web/src/modules/observability/ColumnCustomizer.tsx:25`: `ALL_COLUMNS` defines the ten canonical desktop columns; the same module validates, persists, and enforces a non-empty canonical selection.
-- `apps/web/src/modules/observability/SystemEventsTab.tsx:674`: `sortEventRows` implements the seven sortable dimensions with stable ties; `CopyValueButton` begins at line 729.
-- `apps/web/src/modules/observability/SystemEventsTab.tsx:1106`: `SystemEventsTable` maps selected columns through colgroup, sortable headers, body cells, and the expanded-row span while preserving the missing-Agent blank-cell contract.
-- `apps/web/src/modules/observability/SystemEventsTab.tsx:1224`: `SeverityLabel` provides icon-plus-text presentation while existing tooltip/detail paths remain in place.
-- `apps/web/tests/modules/observability/components.test.tsx:2209`: The integrated case proves default/optional composition, dynamic cells and span, persistence, and event/correlation/run-id copy placement.
-- `apps/web/tests/modules/observability/components.test.tsx:2287`: Pure/helper cases cover malformed preferences, every comparator, sort toggles, stability, copy success/failure, and at-least-one enforcement; mobile coverage is at line 687.
-- `apps/web/tests/modules/observability/components.test.tsx:2645`: Regressions prove a missing Agent renders as a blank optional cell and duplicate stored keys are discarded.
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:664`: `sortEventRows` implements the seven sortable dimensions with stable ties; `CopyValueButton` begins at line 719.
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:1102`: `SystemEventsTable` maps selected columns through colgroup, sortable headers, body cells, and the expanded-row span while preserving the missing-Agent blank-cell contract.
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:1220`: `SeverityLabel` provides icon-plus-text presentation while existing tooltip/detail paths remain in place.
+- `apps/web/tests/modules/observability/components.test.tsx:2215`: The integrated case proves default/optional composition, dynamic cells and span, persistence, and event/correlation/run-id copy placement.
+- `apps/web/tests/modules/observability/components.test.tsx:2293`: Helper cases cover malformed preferences, every comparator, sort toggles, stability, copy success/failure, and at-least-one enforcement; mobile coverage is at line 687.
+- `apps/web/tests/modules/observability/components.test.tsx:2651`: Regressions prove a missing Agent renders as a blank optional cell and duplicate stored keys are discarded.
 - `docs/design/observability-frontend-enhancement.md:10`: The Observability frontend enhancement design records the final in-file table placement and exact sortable/visibility-only columns.
 - `DESIGN.md:485`: The current J92 UI authority records the default and optional column composition, including the blank missing-Agent exception.
 ### Testing
@@ -116,21 +116,21 @@ Files: `apps/web/src/modules/observability/{ColumnCustomizer.tsx,ObservabilityFi
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/tests/modules/observability/components.test.tsx:2209` |
-| R2 | MET | `apps/web/tests/modules/observability/components.test.tsx:2680` |
-| R3 | MET | `apps/web/tests/modules/observability/components.test.tsx:2645` |
-| R4 | MET | `apps/web/tests/modules/observability/components.test.tsx:2329` |
-| R5 | MET | `apps/web/tests/modules/observability/components.test.tsx:2580` |
-| R6 | MET | `apps/web/tests/modules/observability/components.test.tsx:2542` |
+| R1 | MET | `apps/web/tests/modules/observability/components.test.tsx:2215` |
+| R2 | MET | `apps/web/tests/modules/observability/components.test.tsx:2686` |
+| R3 | MET | `apps/web/tests/modules/observability/components.test.tsx:2651` |
+| R4 | MET | `apps/web/tests/modules/observability/components.test.tsx:2335` |
+| R5 | MET | `apps/web/tests/modules/observability/components.test.tsx:2585` |
+| R6 | MET | `apps/web/tests/modules/observability/components.test.tsx:2548` |
 | R7 | MET | `apps/web/tests/modules/observability/components.test.tsx:687` |
-| R8 | MET | `apps/web/tests/modules/observability/components.test.tsx:2645` |
+| R8 | MET | `apps/web/tests/modules/observability/components.test.tsx:2651` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R4 — Customizable column visibility with persistence | MET | test | `apps/web/tests/modules/observability/components.test.tsx:2209`; coverage-enabled J92 gate: 207 pass, 0 fail. |
-| Scenario: R5 — Default column composition | MET | test | `apps/web/tests/modules/observability/components.test.tsx:2209`; coverage-enabled J92 gate: 207 pass, 0 fail. |
-| Scenario: R6 — Column value sorting | MET | test | `apps/web/tests/modules/observability/components.test.tsx:2329`; coverage-enabled J92 gate: 207 pass, 0 fail. |
-| Scenario: R7 — Cell visual formatting and ergonomics | MET | test | `apps/web/tests/modules/observability/components.test.tsx:2645`; coverage-enabled J92 gate: 207 pass, 0 fail. |
+| Scenario: R4 — Customizable column visibility with persistence | MET | test | `apps/web/tests/modules/observability/components.test.tsx:2215`; coverage-enabled J92 gate: 207 pass, 0 fail. |
+| Scenario: R5 — Default column composition | MET | test | `apps/web/tests/modules/observability/components.test.tsx:2215`; coverage-enabled J92 gate: 207 pass, 0 fail. |
+| Scenario: R6 — Column value sorting | MET | test | `apps/web/tests/modules/observability/components.test.tsx:2335`; coverage-enabled J92 gate: 207 pass, 0 fail. |
+| Scenario: R7 — Cell visual formatting and ergonomics | MET | test | `apps/web/tests/modules/observability/components.test.tsx:2585`; coverage-enabled J92 gate: 207 pass, 0 fail. |
 | Scenario: R9 — Responsive table layout | MET | test | `apps/web/tests/modules/observability/components.test.tsx:687`; coverage-enabled J92 gate: 207 pass, 0 fail. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
