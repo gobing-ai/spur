@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Measured corpus sweep: report recovery, unblock features, and reconcile the baseline delta"
-status: todo
+status: cancelled
 template: feature-impl
 created_at: 2026-08-25T18:05:19.670Z
-updated_at: "2026-08-25T18:12:57.449Z"
+updated_at: "2026-08-25T18:22:51.414Z"
 feature_id: F93
 priority: P2
 dependencies: ["0671", "0672"]
@@ -175,3 +175,4 @@ tune upward is real, and yielding to it would invert the feature.
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-25T18:22:51.414Z todo → cancelled (system)
