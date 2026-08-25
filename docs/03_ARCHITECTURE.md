@@ -87,7 +87,7 @@ folder literals, and the server's legacy `docs/.tasks/config.jsonc` read. All co
 the typed result from the single facade; config-shape types (`TaskFoldersConfig`) have one owner.
 Enforced by `config/rules/boundary/config-loading-ownership.yaml`.
 
-### 1.2.1 Composition-root merged-config wiring (accepted design — ADR-082; not yet built)
+### 1.2.1 Composition-root merged-config wiring (accepted design — ADR-082)
 
 The merged `loadSpurConfig` result is loaded **once per process at the composition root** — CLI
 `main()`, server startup — and threaded through the dispatch/service context as the only

@@ -1131,7 +1131,10 @@ verb, or subagent. SSOT:
 ### 2.1 Project config — `.spur/config.yaml` (ADR-017)
 
 Written by `spur init`. Single YAML config surface; the legacy `.spur/config.json` project marker is
-retired. Resolution order: project `.spur/config.yaml` (cwd) → fallback `~/.config/spur/config.yaml`.
+retired. The merged global+project config (ADR-082) is loaded once at the composition root and
+threaded through dispatch; the project-first pick below now describes only which file supplies the
+project-shaped `bootstrap:` block to ts-infra: project `.spur/config.yaml` (cwd) → fallback
+`~/.config/spur/config.yaml`.
 
 Two top-level concerns:
 
