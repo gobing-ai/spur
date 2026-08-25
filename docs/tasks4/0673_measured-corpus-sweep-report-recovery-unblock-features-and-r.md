@@ -4,7 +4,7 @@ name: "Measured corpus sweep: report recovery, unblock features, and reconcile t
 status: todo
 template: feature-impl
 created_at: 2026-08-25T18:05:19.670Z
-updated_at: "2026-08-25T18:07:17.153Z"
+updated_at: "2026-08-25T18:12:57.449Z"
 feature_id: F93
 priority: P2
 dependencies: ["0671", "0672"]
@@ -135,9 +135,29 @@ tune upward is real, and yielding to it would invert the feature.
 - Do **not** report a recovery percentage without the denominator and the date. "Recovered 41%" is
   unfalsifiable; "recovered 128 of 313, measured 2026-08-25" can be re-run.
 ### Plan
-
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
-
+- [ ] 1. Re-measure the pre-change baseline on the current tree and record it with the command that
+      produced it: done-task count, artifact-present/absent split, `verifying` feature count,
+      baselined `L4.scenario-unverified` count. Do not reuse the Design's 2026-08-25 figures if the
+      tree has moved. (R1, R2)
+- [ ] 2. Run the sweep across every done task lacking an artifact; record how many resolve to
+      verified and how many land in `evidence-not-recoverable`. (R1)
+- [ ] 3. Re-run the sweep on the unchanged tree and assert identical counts — no timestamps, no
+      ordering-dependent aggregation, no network. (R2)
+- [ ] 4. Re-check the features previously blocked only by `L4.scenario-unverified`; record which
+      cleared and confirm any remaining findings are unrelated to evidence durability. (R3)
+- [ ] 5. Run `spur task check --corpus`; capture NEW and STALE. **Attribute before editing** — a
+      finding on a task or file this feature did not touch belongs to the 77-finding backlog
+      (task 0670), not here. (R4)
+- [ ] 6. Reconcile only this change's delta in `config/corpus-baseline.json`: remove entries that
+      stopped reproducing, add newly surfaced ones. (R4)
+- [ ] 7. Prove two-sidedness survives: an unlisted finding still fails, and a repaired defect whose
+      entry remains still fails. (R5)
+- [ ] 8. Write the results into Testing as reproducible numbers with denominators and the date —
+      never a bare percentage. If parser tolerance changed during this task, state which section
+      parsed incorrectly and why; never "to improve the count". (R1, R6)
+- [ ] 9. Final boundary sweep over the whole feature diff: no migration, no new artifact directory,
+      no new CLI noun/verb/flag, `renderTesting` output unchanged. (R7)
+- [ ] 10. Gate: `bun run lint`, `bun run spur-check`, then `bun run corpus-check` for the delta.
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
