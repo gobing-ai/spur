@@ -30,6 +30,7 @@ import {
     type Severity,
 } from './planning-check-base';
 import { applyStructuralRepairs, type StructuralRepair } from './structural-repair';
+import { parseTesting } from './task-record';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -444,7 +445,7 @@ export class FeatureCheckService extends PlanningCheckService {
         // A scenario is "covered" by a task when DD-09 normalized-title matching
         // links them; "verified" only when that task is done AND carries a PASS
         // verdict artifact whose matching requirement row is MET.
-        const linkedTaskRecords: Array<{ wbs: string; status: string; ac: string }> = [];
+        const linkedTaskRecords: Array<{ wbs: string; status: string; ac: string; testing: string }> = [];
         for (const tasksDir of tasksDirs) {
             try {
                 const entries = await this.fs.readDir(tasksDir);
@@ -466,7 +467,12 @@ export class FeatureCheckService extends PlanningCheckService {
                         const tac = stripAcFence(taskDoc.getSection('Acceptance Criteria') ?? '');
                         if (tac.trim().length > 0) linkedTaskAc.push(tac);
                         linkedTaskSolutions.push(taskDoc.getSection('Solution') ?? '');
-                        linkedTaskRecords.push({ wbs, status: tStatus, ac: tac });
+                        linkedTaskRecords.push({
+                            wbs,
+                            status: tStatus,
+                            ac: tac,
+                            testing: taskDoc.getSection('Testing') ?? '',
+                        });
                     } catch {
                         // A task that references this feature but fails to parse is a
                         // dangling edge — surface it as a traceability warning.
@@ -600,7 +606,7 @@ export class FeatureCheckService extends PlanningCheckService {
      */
     private async checkScenarioSatisfaction(
         featureAc: string,
-        linkedTasks: Array<{ wbs: string; status: string; ac: string }>,
+        linkedTasks: Array<{ wbs: string; status: string; ac: string; testing: string }>,
         runDir: string | undefined,
         findings: CheckFeatureFindings[],
     ): Promise<void> {
@@ -648,12 +654,52 @@ export class FeatureCheckService extends PlanningCheckService {
             }
         }
         const artifacts = new Map<string, ParsedVerdictArtifact>();
+        // F93 (0672): the tracked `## Testing` section is the durable copy — thread it in
+        // with zero extra I/O (the same already-parsed task document supplied `ac`).
+        const testingByWbs = new Map(linkedTasks.map((t) => [t.wbs, t.testing]));
         for (const wbs of doneWbs) {
             const artifact = await this.readVerdictArtifact(runDir, wbs);
             artifacts.set(wbs, artifact);
-            // R7 (0451, option B): missing artifact is treated as "unverified for this
-            // coverer" only — do NOT emit L4.malformed-verdict-artifact for pure missing.
-            // Still emit malformed for present but invalid JSON/fields.
+            // F93 (0672): supersedes 0451 R7's "missing artifact ⇒ unverified for this
+            // coverer only" path. Outcome unchanged (missing still never reads as
+            // verified), but missing now consults the tracked `## Testing` section
+            // first via parseTesting (0671). The artifact stays authoritative whenever
+            // it exists; the fallback never merges and never tiebreaks.
+            const missing = artifact.diagnostics.artifactError === 'artifact is missing';
+            if (missing) {
+                const parsed = parseTesting(testingByWbs.get(wbs) ?? '', wbs);
+                if (parsed.kind === 'valid') {
+                    artifacts.set(wbs, {
+                        path: 'tracked ## Testing section',
+                        verdict: parsed.verdict.verdict,
+                        requirements: parsed.verdict.requirements.map((r) => ({ id: r.id, status: r.status })),
+                        acceptanceCriteria: parsed.verdict.acceptanceCriteria.map((r) => ({
+                            id: r.id,
+                            status: r.status,
+                        })),
+                        diagnostics: {
+                            rejectedRowCount: 0,
+                            invalidFields: [],
+                            arrayStates: { requirements: 'populated', acceptanceCriteria: 'populated' },
+                        },
+                    });
+                } else {
+                    // Evidence was never durably recorded — a named state that reads as
+                    // neither verified nor failed (R3/R4). Distinct from
+                    // L4.scenario-unverified ("we looked and it was not verified") and
+                    // from L4.malformed-verdict-artifact (artifact exists, corrupt).
+                    findings.push({
+                        layer: 'L4',
+                        code: FINDING_CODES.L4_EVIDENCE_NOT_RECOVERABLE,
+                        severity: 'warning',
+                        section: 'Acceptance Criteria',
+                        message:
+                            `Task ${wbs} has no verdict artifact and its tracked ## Testing section ` +
+                            `carries no recoverable coverage evidence (${parsed.kind}); its evidence ` +
+                            'predates durable recording, so it is neither verified nor failed.',
+                    });
+                }
+            }
             const diagnosticParts: string[] = [];
             if (artifact.diagnostics.artifactError !== undefined) {
                 // Only flag as malformed when the artifact file exists but is corrupt.

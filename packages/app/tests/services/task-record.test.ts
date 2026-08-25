@@ -19,13 +19,14 @@ import { PlanningWriteService } from '../../src/services/planning-write-service'
 import {
     escapeTablePipe,
     gitDiffU0,
+    parseTesting,
     parseVerdict,
     renderReview,
     renderSolutionFromDiff,
     renderTesting,
-    type VerifyVerdict,
 } from '../../src/services/task-record';
 import { sectionIsBare, TaskService } from '../../src/services/task-service';
+import type { VerifyVerdict } from '../../src/services/verify-verdict';
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -34,9 +35,10 @@ function makeVerdict(overrides?: Partial<VerifyVerdict>): VerifyVerdict {
         wbs: '0100',
         verdict: 'PASS',
         requirements: [
-            { id: 'R1', status: 'PASS', evidence: 'test passes' },
-            { id: 'R2', status: 'PASS', evidence: 'lint clean' },
+            { id: 'R1', status: 'MET', evidenceType: '', evidence: 'test passes' },
+            { id: 'R2', status: 'MET', evidenceType: '', evidence: 'lint clean' },
         ],
+        acceptanceCriteria: [],
         checks: [
             { name: 'Security', status: 'P1', evidence: 'no auth bypass' },
             { name: 'Style', status: 'P3', evidence: 'minor formatting issue' },
@@ -134,14 +136,14 @@ describe('parseVerdict', () => {
         const v = parseVerdict(
             JSON.stringify({
                 requirements: [
-                    { id: 'R1', status: 'PASS', evidence: 'done' },
-                    { id: 'R2', status: 'FAIL', evidence: 'not done' },
+                    { id: 'R1', status: 'MET', evidence: 'done' },
+                    { id: 'R2', status: 'UNMET', evidence: 'not done' },
                 ],
             }),
         );
         expect(v.requirements).toHaveLength(2);
         expect(v.requirements[0]?.id).toBe('R1');
-        expect(v.requirements[1]?.status).toBe('FAIL');
+        expect(v.requirements[1]?.status).toBe('UNMET');
     });
 
     test('treats non-array requirements as empty', () => {
@@ -199,8 +201,8 @@ describe('renderTesting', () => {
         expect(out).toContain('**Pipeline verify results**');
         expect(out).toContain('- Verdict: PASS');
         expect(out).toContain('| Requirement | Status | Evidence |');
-        expect(out).toContain('| R1 | PASS | test passes |');
-        expect(out).toContain('| R2 | PASS | lint clean |');
+        expect(out).toContain('| R1 | MET | test passes |');
+        expect(out).toContain('| R2 | MET | lint clean |');
         // P3 fix (task 0159): verdict-generated Testing must carry a coverage claim
         // so `spur task check` does not warn about a missing coverage phrase.
         expect(out).toContain('Coverage: N/A');
@@ -214,7 +216,7 @@ describe('renderTesting', () => {
 
     test('collapses newlines in evidence', () => {
         const v = makeVerdict({
-            requirements: [{ id: 'R1', status: 'PASS', evidence: 'line1\nline2\nline3' }],
+            requirements: [{ id: 'R1', status: 'MET', evidenceType: '', evidence: 'line1\nline2\nline3' }],
         });
         const out = renderTesting(v);
         expect(out).toContain('line1 line2 line3');
@@ -225,7 +227,7 @@ describe('renderTesting', () => {
 
     test('escapes pipe characters in evidence', () => {
         const v = makeVerdict({
-            requirements: [{ id: 'R1', status: 'PASS', evidence: 'has | pipe | chars' }],
+            requirements: [{ id: 'R1', status: 'MET', evidenceType: '', evidence: 'has | pipe | chars' }],
         });
         const out = renderTesting(v);
         expect(out).toContain('has \\| pipe \\| chars');
@@ -264,6 +266,189 @@ describe('renderTesting', () => {
         expect(out).toContain('echo "a\\|b"');
         // Unescaped pipe would break the table
         expect(out).not.toMatch(/\| echo "a\|b" \|/);
+    });
+});
+
+describe('parseTesting', () => {
+    // Round-trip equivalence (R5): parseTesting(renderTesting(v)) returns the same
+    // verdict and rows for any canonical verdict, in canonical status space.
+    test('round-trips a canonical PASS verdict with requirement and AC rows', () => {
+        const v = makeVerdict({
+            requirements: [
+                { id: 'R1', status: 'MET', evidenceType: '', evidence: 'test passes' },
+                { id: 'R2', status: 'UNMET', evidenceType: '', evidence: 'test fails' },
+            ],
+            acceptanceCriteria: [
+                { id: 'Scenario: fallback works', status: 'MET', evidenceType: 'test', evidence: 'a | b' },
+            ],
+        });
+        const out = parseTesting(renderTesting(v), '0100');
+        expect(out.kind).toBe('valid');
+        if (out.kind === 'valid') {
+            expect(out.verdict.verdict).toBe(v.verdict);
+            expect(out.verdict.requirements).toEqual(v.requirements);
+            expect(out.verdict.acceptanceCriteria).toEqual(v.acceptanceCriteria);
+        }
+    });
+
+    test('round-trips PARTIAL and FAIL verdicts and unescapes pipes', () => {
+        for (const verdict of ['PARTIAL', 'FAIL'] as const) {
+            const v = makeVerdict({
+                verdict,
+                requirements: [{ id: 'R1', status: 'MET', evidenceType: '', evidence: 'evidence | with pipe' }],
+            });
+            const out = parseTesting(renderTesting(v), '0100');
+            expect(out.kind).toBe('valid');
+            if (out.kind === 'valid') {
+                expect(out.verdict.verdict).toBe(verdict);
+                expect(out.verdict.requirements[0]?.evidence).toBe('evidence | with pipe');
+            }
+        }
+    });
+
+    // Tolerance over real corpus shapes (R3/R6): Requirement/Req header variants,
+    // scenario-title-keyed rows, and a table without a Verdict: line. The sections
+    // below are real shapes harvested from docs/tasks* (0417, 0360), lightly trimmed.
+    test('parses a Requirement-header corpus section without a Verdict line', () => {
+        const corpus = [
+            '**Verification run 2026-08-02.**',
+            '',
+            '| Requirement | Status | Evidence |',
+            '|-------------|--------|----------|',
+            '| R1 | MET | All four scenarios cited to passing tests |',
+            '| R2 | MET | Scenarios recorded verbatim |',
+            '| R3 | MET | Every citation is a pre-existing test |',
+            '',
+            '**Acceptance Criteria Verification**',
+            '',
+            '| AC | Status | Evidence Type | Evidence |',
+            '|----|--------|---------------|----------|',
+            '| Section editing is the hot path | MET | test | task-service.test.ts |',
+            '',
+        ].join('\n');
+        const out = parseTesting(corpus, '0417');
+        expect(out.kind).toBe('valid');
+        if (out.kind === 'valid') {
+            // No Verdict line → aggregate derived by the canonical rule (all MET → PASS).
+            expect(out.verdict.verdict).toBe('PASS');
+            expect(out.verdict.requirements).toEqual([
+                { id: 'R1', status: 'MET', evidenceType: '', evidence: 'All four scenarios cited to passing tests' },
+                { id: 'R2', status: 'MET', evidenceType: '', evidence: 'Scenarios recorded verbatim' },
+                { id: 'R3', status: 'MET', evidenceType: '', evidence: 'Every citation is a pre-existing test' },
+            ]);
+            expect(out.verdict.acceptanceCriteria[0]?.id).toBe('Section editing is the hot path');
+            expect(out.verdict.acceptanceCriteria[0]?.evidenceType).toBe('test');
+        }
+    });
+
+    test('parses a Req-header corpus section keyed by scenario title', () => {
+        const corpus = [
+            '**Per-Requirement Traceability**',
+            '',
+            '| Req | Status | Evidence |',
+            '|-----|--------|----------|',
+            '| R1 List idea-path touchpoints | MET | Solution table rows 1-17 |',
+            '| R2 Must-change vs leave-alone split | MET | Solution Must-change rows |',
+            '',
+            '**Acceptance Criteria Verification**',
+            '',
+            '| AC | Status | Evidence Type | Evidence |',
+            '|----|--------|---------------|----------|',
+            '| Scenario: Idea-path touchpoints listed | MET | static | Solution inventory table |',
+            '',
+        ].join('\n');
+        const out = parseTesting(corpus, '0360');
+        expect(out.kind).toBe('valid');
+        if (out.kind === 'valid') {
+            expect(out.verdict.requirements[0]?.id).toBe('R1 List idea-path touchpoints');
+            expect(out.verdict.acceptanceCriteria[0]?.id).toBe('Scenario: Idea-path touchpoints listed');
+        }
+    });
+
+    test('recognises N/A and case-insensitive statuses', () => {
+        const corpus = [
+            '| Requirement | Status | Evidence |',
+            '|-------------|--------|----------|',
+            '| R1 | met | lowercase status |',
+            '| R2 | N/A | not applicable |',
+            '',
+        ].join('\n');
+        const out = parseTesting(corpus, '9999');
+        expect(out.kind).toBe('valid');
+        if (out.kind === 'valid') {
+            expect(out.verdict.requirements.map((r) => r.status)).toEqual(['MET', 'N/A']);
+        }
+    });
+
+    // Honest-outcome tests (R4): no rows → not valid; prose never reads as MET.
+    test('empty or whitespace-only section is missing', () => {
+        expect(parseTesting('', '0100').kind).toBe('missing');
+        expect(parseTesting('  \n\n  ', '0100').kind).toBe('missing');
+    });
+
+    test('prose claiming tests pass is invalid, never MET', () => {
+        const out = parseTesting('Tests all pass. Full suite green. Verified 2026-08-01.', '0100');
+        expect(out.kind).toBe('invalid');
+    });
+
+    test('a table with no recognisable rows is invalid, not a fabricated verdict', () => {
+        const corpus = [
+            '| Requirement | Status | Evidence |',
+            '|-------------|--------|----------|',
+            '| — | — | No requirements recorded; verify verdict PASS |',
+            '',
+        ].join('\n');
+        const out = parseTesting(corpus, '0100');
+        expect(out.kind).toBe('invalid');
+        if (out.kind === 'invalid') {
+            expect(out.reason).toContain('no recognisable coverage rows');
+        }
+    });
+
+    test('does not mistake a mid-line Verdict token for the section verdict', () => {
+        const corpus = [
+            '- Verdict: PASS (from verdict artifact)',
+            '',
+            '| Requirement | Status | Evidence |',
+            '|-------------|--------|----------|',
+            '| R1 | MET | saw a "Verdict: FAIL" string inside evidence text |',
+            '',
+        ].join('\n');
+        const out = parseTesting(corpus, '0100');
+        expect(out.kind).toBe('valid');
+        if (out.kind === 'valid') {
+            expect(out.verdict.verdict).toBe('PASS');
+        }
+    });
+
+    test('truncated table is malformed without throwing', () => {
+        const corpus = [
+            '| Requirement | Status | Evidence |',
+            '|-------------|--------|----------|',
+            '| R1 |',
+            '',
+        ].join('\n');
+        expect(parseTesting(corpus, '0100').kind).toBe('malformed');
+    });
+
+    test('locates the Testing section inside a full task document', () => {
+        const doc = [
+            '## Background',
+            'Something.',
+            '',
+            '### Testing',
+            '| Requirement | Status | Evidence |',
+            '|-------------|--------|----------|',
+            '| R1 | MET | done |',
+            '',
+            '### Review',
+            'Nothing.',
+        ].join('\n');
+        const out = parseTesting(doc, '0100');
+        expect(out.kind).toBe('valid');
+        if (out.kind === 'valid') {
+            expect(out.verdict.requirements[0]?.id).toBe('R1');
+        }
     });
 });
 

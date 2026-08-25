@@ -2091,6 +2091,8 @@ describe('FeatureCheckService', () => {
             acceptanceCriteria?: Array<{ id: string; status: string }>;
         };
         scenarioTitle?: string;
+        /** Optional `## Testing` section body written into the task (F93 fallback). */
+        testing?: string;
     }): Promise<{ result: CheckFeatureResult; cleanup: () => void }> {
         const dir = mkdtempSync(join(tmpdir(), 'spur-fc-0340-'));
         const featuresDir = join(dir, 'features');
@@ -2146,6 +2148,7 @@ describe('FeatureCheckService', () => {
                 '### Acceptance Criteria',
                 '',
                 ...fenced(['Feature: T', '', `  Scenario: ${scenario}`, '    Given x']),
+                ...(opts.testing !== undefined ? ['', '### Testing', '', opts.testing] : []),
             ].join('\n'),
         );
         if (opts.verdict !== undefined) {
@@ -2633,6 +2636,87 @@ describe('FeatureCheckService', () => {
         expect(unverified).toHaveLength(1);
         rmSync(dir, { recursive: true, force: true });
     });
+
+    // ── F93 (0672): completion-gate fallback reads the tracked ## Testing section ──
+
+    test('0672 R1: absent artifact falls back to a parseable tracked Testing section', async () => {
+        // done task, no verdict artifact, but ## Testing carries a Verdict + MET row keyed
+        // by the scenario title → scenario verified with no error on the missing artifact.
+        const { result, cleanup } = await setupScenarioSatisfaction({
+            taskStatus: 'done',
+            testing: [
+                '- Verdict: PASS (from verdict artifact)',
+                '',
+                '| Requirement | Status | Evidence |',
+                '|-------------|--------|----------|',
+                '| R1 | MET | covered |',
+                '',
+                '| Acceptance Criteria | Status | Evidence Type | Evidence |',
+                '|---------------------|--------|---------------|----------|',
+                '| alpha | MET | test | t |',
+            ].join('\n'),
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
+        expect(result.findings.filter((f) => f.code === 'L4.evidence-not-recoverable')).toHaveLength(0);
+        expect(result.findings.filter((f) => f.code === 'L4.malformed-verdict-artifact')).toHaveLength(0);
+        cleanup();
+    });
+
+    test('0672 R2: artifact stays authoritative over a conflicting Testing section', async () => {
+        // Both present and disagreeing — the artifact's UNMET row wins, so the scenario
+        // is unverified even though the tracked section says MET.
+        const { result, cleanup } = await setupScenarioSatisfaction({
+            taskStatus: 'done',
+            verdict: { verdict: 'PASS', requirements: [{ id: 'alpha', status: 'UNMET' }] },
+            testing: [
+                '| Acceptance Criteria | Status | Evidence Type | Evidence |',
+                '|---------------------|--------|---------------|----------|',
+                '| alpha | MET | test | t |',
+            ].join('\n'),
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+        expect(result.findings.filter((f) => f.code === 'L4.evidence-not-recoverable')).toHaveLength(0);
+        cleanup();
+    });
+
+    test('0672 R3/R4: absent artifact + bare Testing lands in evidence-not-recoverable, never PASS', async () => {
+        const { result, cleanup } = await setupScenarioSatisfaction({
+            taskStatus: 'done',
+            testing: 'No parseable rows — just prose claiming the suite passed.',
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.evidence-not-recoverable')).toHaveLength(1);
+        // Never counts as a PASS for any scenario.
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+        const ev = result.findings.find((f) => f.code === 'L4.evidence-not-recoverable');
+        expect(ev?.message).toContain('0001');
+        expect(ev?.message).toContain('predates durable recording');
+        cleanup();
+    });
+
+    test('0672 R4: PARTIAL row from tracked Testing never verifies a scenario', async () => {
+        const { result, cleanup } = await setupScenarioSatisfaction({
+            taskStatus: 'done',
+            testing: [
+                '| Requirement | Status | Evidence |',
+                '|-------------|--------|----------|',
+                '| alpha | PARTIAL | partial |',
+            ].join('\n'),
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+        expect(result.findings.filter((f) => f.code === 'L4.evidence-not-recoverable')).toHaveLength(0);
+        cleanup();
+    });
+
+    test('0672 R5: simple absence never emits malformed-verdict-artifact', async () => {
+        const { result, cleanup } = await setupScenarioSatisfaction({
+            taskStatus: 'done',
+            testing: '',
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.malformed-verdict-artifact')).toHaveLength(0);
+        expect(result.findings.filter((f) => f.code === 'L4.evidence-not-recoverable')).toHaveLength(1);
+        cleanup();
+    });
+
     // ── 0410: Verdict artifact hardening (scenario alias + diagnostics) ────
 
     /**
