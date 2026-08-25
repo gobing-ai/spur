@@ -383,6 +383,12 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 );
             }
 
+            // Load the merged global+project config ONCE (A5/ADR-082) and thread
+            // it into the server context so Team/Workflow services + the history-
+            // refresh job (J8 R2) never re-read the config per slice. A load failure
+            // degrades to null (env-only) here, same tolerance as the CLI root.
+            const spurConfig = await loadSpurConfig(process.cwd()).catch(() => null);
+
             const ctx: ServerContext = deps.createServerContext(appRt, {
                 cwd: process.cwd(),
                 fs,
@@ -394,6 +400,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 scheduler,
                 teamAutostart: bootConfig.teamAutostart,
                 bootConfig,
+                ...(spurConfig !== undefined ? { spurConfig } : {}),
             });
             let jobWorker: JobWorkerService<unknown> | undefined;
 
@@ -401,7 +408,6 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             // autostart is true across `agent.team.*`, unioned with the SPUR_TEAM_AUTOSTART
             // env. `resolveAutostartSet` handles both; a load failure degrades to env-only.
             // The same loaded config threads `agent` into the history-refresh job (J8 R2).
-            const spurConfig = await loadSpurConfig(process.cwd()).catch(() => null);
             const autostartIds = resolveAutostartSet(spurConfig, env.SPUR_TEAM_AUTOSTART);
             if (autostartIds.length > 0) {
                 try {

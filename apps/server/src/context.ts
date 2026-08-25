@@ -47,6 +47,7 @@ import {
     DEFAULT_FEATURES_DIR,
     DEFAULT_TASKS_DIR,
     IN_MEMORY_DATABASE_URL,
+    type SpurConfig,
 } from '@gobing-ai/spur-config';
 import {
     createMigratedDbViaRuntime,
@@ -286,6 +287,13 @@ export interface CreateServerContextOptions {
     teamAutostart?: string[];
 
     /**
+     * Merged global+project config (A5/ADR-082), loaded once in serve.ts and
+     * threaded in so Team/Workflow services never re-read the config file.
+     * Omitted/`null` → service defaults (same tolerance as the CLI).
+     */
+    spurConfig?: SpurConfig | null;
+
+    /**
      * Resolved server boot config. Falls back to a sensible default when omitted
      * (so tests/CF Workers that don't bootstrap through serve.ts keep working).
      */
@@ -441,6 +449,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                     // system_events tap + SSE stream (task 0193/0204 / 0237).
                     eventBus: bridgeEventBus(eventsBus),
                     events: bridgeEventBus(eventsBus),
+                    ...(options.spurConfig !== undefined ? { spurConfig: options.spurConfig } : {}),
                 });
             }
             return teamSvc;
@@ -520,6 +529,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 agentService: this.agentService.bind(this),
                 ruleService: this.ruleService.bind(this),
                 hitlResponder: this.hitlResponder.bind(this),
+                ...(options.spurConfig !== undefined ? { spurConfig: options.spurConfig } : {}),
                 // Wire both buses onto the canonical server EventBus so the
                 // system_events tap + SSE stream capture engine-native names
                 // (via `events` → bridgeEngineEvents) AND the adapter's richer
