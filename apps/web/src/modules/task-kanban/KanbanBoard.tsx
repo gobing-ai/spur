@@ -1,14 +1,12 @@
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { TASK_STATUSES, taskStatusIcon } from '@gobing-ai/spur-domain/schema';
+import { TASK_STATUSES } from '@gobing-ai/spur-domain/schema';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { useLocation } from 'react-router';
-import { Button, Checkbox, Loading, Select } from '@/ui';
+import { Loading } from '@/ui';
 import ResizeHandle from '../../components/ResizeHandle';
 import { api } from '../../lib/rpc-client';
 import KanbanColumn from './KanbanColumn';
-import NewTaskPanel from './NewTaskPanel';
 import TaskCard from './TaskCard';
-import TaskFilters from './TaskFilters';
 import type { TaskListFilters, TaskSummary } from './types';
 import { useTasks } from './useTasks';
 
@@ -17,22 +15,37 @@ const KANBAN_COLUMNS = TASK_STATUSES;
 
 /**
  * Initial folder shown before the `task.folders` endpoint responds. The server is
- * the authority on the actual phase folders (it reads `.spur/config.yaml`); this is
- * only a first-paint placeholder, immediately replaced on mount. Mirrors the
- * `DEFAULT_TASKS_DIR` SSOT in @gobing-ai/spur-config (kept inline to avoid a config
+ * the authority on the actual phase folders; this is only a first-paint placeholder,
+ * immediately replaced on mount for the uncontrolled (embed) default. Mirrors the
+ * DEFAULT_TASKS_DIR SSOT in @gobing-ai/spur-config (kept inline to avoid a config
  * dependency in the browser bundle).
  */
-const BOOTSTRAP_FOLDER = 'docs/tasks';
+export const BOOTSTRAP_FOLDER = 'docs/tasks';
 
 /** localStorage key for the user's last-set detail-panel width (px). */
 const DETAIL_WIDTH_KEY = 'spur:detail-width';
 
+/** Default lane visibility when the board is uncontrolled (Workspace embed). */
+const DEFAULT_HIDDEN: ReadonlySet<string> = new Set(['blocked', 'cancelled']);
+
 type TaskStatus = (typeof TASK_STATUSES)[number];
 
+/**
+ * Headerless board — the Workspace embed entry point and the Kanban tab body.
+ *
+ * All added props are optional with uncontrolled in-board defaults, so the
+ * Workspace embed renders this board exactly as today (minus the old toolbar).
+ * Under the module route, TasksShell controls folder + lane visibility through
+ * these props; all filter state stays URL-driven via `useTaskParams`.
+ */
 interface Props {
     onSelectTask: (wbs: string) => void;
     filters?: TaskListFilters;
     onFilterChange?: (key: 'status' | 'feature' | 'parent' | 'assignee', value: string | null) => void;
+    /** Controlled phase folder (module route). Omitted → board resolves its own default. */
+    folder?: string;
+    /** Controlled lane visibility. Omitted → board defaults `blocked`/`cancelled` hidden. */
+    hiddenColumns?: ReadonlySet<string>;
 }
 
 function applyFilters(tasks: TaskSummary[], filters?: TaskListFilters): TaskSummary[] {
@@ -45,20 +58,14 @@ function applyFilters(tasks: TaskSummary[], filters?: TaskListFilters): TaskSumm
     });
 }
 
-export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: Props) {
+export default function KanbanBoard(props: Props) {
+    const { onSelectTask, filters, folder: folderProp, hiddenColumns: hiddenProp } = props;
     const [sortState, setSortState] = useState<Record<string, 'asc' | 'desc'>>({});
-    const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set(['blocked', 'cancelled']));
-    // Bootstrap placeholders only — replaced on mount by the `task.folders` endpoint,
-    // which is the authority on the configured phase folders (server reads .spur/config.yaml).
-    // Kept inline (not imported from spur-config) so the browser bundle stays dependency-light.
-    const [folder, setFolder] = useState(BOOTSTRAP_FOLDER);
-    const [folders, setFolders] = useState<{ path: string; label?: string }[]>([
-        { path: BOOTSTRAP_FOLDER, label: 'Primary' },
-    ]);
+    // Uncontrolled default folder — server active folder adopted on mount; used only
+    // when the shell doesn't pass a controlled `folder` (Workspace embed).
+    const [internalFolder, setInternalFolder] = useState(BOOTSTRAP_FOLDER);
     const [popupTaskWbs, setPopupTaskWbs] = useState<string | null>(null);
     // Default ~3× the old 576px (1728px), clamped to 80vw so it never overflows the viewport.
-    // A user-resized width persists to localStorage and takes priority next time; a missing or
-    // unparseable stored value falls back to the computed default.
     const [detailWidth, setDetailWidth] = useState(() => {
         const fallback = typeof window !== 'undefined' ? Math.min(1728, window.innerWidth * 0.8) : 1728;
         if (typeof window === 'undefined') return fallback;
@@ -72,11 +79,15 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
         }
         return fallback;
     });
+
+    const folder = folderProp ?? internalFolder;
+    const hiddenColumns = hiddenProp ?? DEFAULT_HIDDEN;
+
     const listWithFolder = useCallback(() => api.task.list({ folder }), [folder]);
-    const { tasks, loading, error, connected, setTasks } = useTasks(listWithFolder);
-    const [showNewPanel, setShowNewPanel] = useState(false);
+    const { tasks, loading, error, setTasks } = useTasks(listWithFolder);
     const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
+    // Adopt the server's active folder as the uncontrolled default (embed / no prop).
     useEffect(() => {
         if (typeof api.task.folders !== 'function') return;
         api.task
@@ -86,29 +97,20 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                     data?: { path: string; label?: string }[];
                     activeFolder?: string;
                 };
-                // Prefer the server's `activeFolder` (`tasks.active` in .spur/config.yaml);
-                // fall back to the first entry only if the server omits it (older builds).
                 const active = activeFolder ?? data?.[0]?.path;
-                if (data && active !== undefined) {
-                    setFolders(data);
-                    // This effect runs once on mount, so `folder` is still the bootstrap
-                    // placeholder here — adopt the server's active folder unconditionally.
-                    // (User-initiated folder switches happen later via the <Select>, not here.)
-                    setFolder(active);
-                }
+                if (active !== undefined) setInternalFolder(active);
             })
             .catch(() => {
-                // Fallback to default folder list on error
+                // Fall back to the bootstrap default folder.
             });
     }, []);
 
-    // Sync --detail-w CSS variable for the right-docked panel width (R3)
+    // Sync --detail-w CSS variable for the right-docked panel width.
     useEffect(() => {
         document.documentElement.style.setProperty('--detail-w', `${detailWidth}px`);
     }, [detailWidth]);
 
-    // Close the docked detail panel on Escape. A window listener is used because the
-    // backdrop <div> never holds focus, so its onKeyDown would not fire.
+    // Close the docked detail panel on Escape.
     useEffect(() => {
         if (!popupTaskWbs) return;
         const onKey = (e: KeyboardEvent) => {
@@ -117,8 +119,9 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [popupTaskWbs]);
+
+    // Auto-popup task detail when arriving with a WBS in the URL path (e.g. from the combined input).
     const location = useLocation();
-    // Auto-popup task detail when arriving with a WBS in the URL path (e.g. from feature linked tasks).
     useEffect(() => {
         const parts = location.pathname.split('/');
         const tasksIdx = parts.indexOf('tasks');
@@ -127,20 +130,10 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
             setPopupTaskWbs(pathWbs);
         }
     }, [location.pathname]);
-    const pointerSensor = useSensor(PointerSensor, {
-        activationConstraint: { distance: 5 },
-    });
+
+    const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 5 } });
     const keyboardSensor = useSensor(KeyboardSensor);
     const sensors = useSensors(pointerSensor, keyboardSensor);
-
-    const handleCreated = async () => {
-        try {
-            const res = await listWithFolder();
-            setTasks((res.data as unknown as TaskSummary[]) ?? []);
-        } catch {
-            // Poll will catch up on next interval.
-        }
-    };
 
     const visible = applyFilters(tasks, filters);
 
@@ -154,19 +147,8 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
         });
     };
 
-    const toggleColumn = (status: string) => {
-        setHiddenColumns((prev) => {
-            const next = new Set(prev);
-            if (next.has(status)) next.delete(status);
-            else next.add(status);
-            return next;
-        });
-    };
-
     const tasksByStatus = (status: string): TaskSummary[] => {
         const cols = visible.filter((t) => t.status === status);
-        // Default to descending WBS so the newest tasks surface at the top of each lane;
-        // the per-column toggle still overrides with an explicit asc/desc.
         const dir = sortState[status] ?? 'desc';
         return [...cols].sort((a, b) => {
             const cmp = a.wbs.localeCompare(b.wbs);
@@ -225,56 +207,6 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
     return (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div className="flex flex-col h-full">
-                <div className="flex items-center gap-2 px-4 pt-3 pb-1 shrink-0">
-                    {onFilterChange && <TaskFilters filters={filters ?? {}} onChange={onFilterChange} />}
-                    <div
-                        className="flex items-center gap-1.5"
-                        title={connected ? 'Live updates active' : 'Polling (stream disconnected)'}
-                    >
-                        <span
-                            className={`inline-block w-2 h-2 rounded-full ${connected ? 'bg-spur-success' : 'bg-spur-error'}`}
-                        />
-                        <span className="text-xs text-spur-text-muted">{connected ? 'Live' : 'Polling'}</span>
-                    </div>
-                    <span className="text-xs text-spur-text-muted">|</span>
-                    <Select
-                        variant="ghost"
-                        size="xs"
-                        className="text-xs"
-                        value={folder}
-                        onChange={(e) => setFolder(e.target.value)}
-                        aria-label="Task folder"
-                    >
-                        {folders.map((f) => (
-                            <option key={f.path} value={f.path}>
-                                {f.label ? `${f.label} (${f.path})` : f.path}
-                            </option>
-                        ))}
-                    </Select>
-                    <span className="text-xs text-spur-text-muted">|</span>
-                    <div className="flex-1" />
-                    {KANBAN_COLUMNS.map((status) => (
-                        <label
-                            key={status}
-                            htmlFor={`kanban-col-toggle-${status}`}
-                            className="flex items-center gap-1 cursor-pointer"
-                        >
-                            <Checkbox
-                                id={`kanban-col-toggle-${status}`}
-                                size="xs"
-                                checked={!hiddenColumns.has(status)}
-                                onChange={() => toggleColumn(status)}
-                            />
-                            <span className="text-[10px] text-spur-text-muted">
-                                {taskStatusIcon(status)} {status}
-                            </span>
-                        </label>
-                    ))}
-                    <span className="text-xs text-spur-text-muted">|</span>
-                    <Button variant="primary" size="sm" onClick={() => setShowNewPanel(true)}>
-                        + New Task
-                    </Button>
-                </div>
                 <div className="flex gap-3 overflow-x-auto h-full p-4">
                     {KANBAN_COLUMNS.filter((s) => !hiddenColumns.has(s)).map((status: string) => (
                         <KanbanColumn
@@ -291,12 +223,6 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                         />
                     ))}
                 </div>
-                <NewTaskPanel
-                    open={showNewPanel}
-                    onClose={() => setShowNewPanel(false)}
-                    onCreated={handleCreated}
-                    folder={folder}
-                />
                 {popupTaskWbs && (
                     <>
                         <button

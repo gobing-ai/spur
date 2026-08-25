@@ -1,4 +1,4 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { api, resolveApiUrl } from '../../lib/rpc-client';
 import type { TaskSummary } from './types';
 
@@ -17,6 +17,8 @@ export function createRefresh(
     return async () => {
         try {
             const r = await listFn();
+            // SAFETY: the oRPC list envelope's `data` is typed `unknown` by the JSONified
+            // transport, but the contract handler always returns a task array under `data`.
             setTasks((r.data as unknown as TaskSummary[]) ?? []);
             setError(null);
         } catch (e) {
@@ -98,6 +100,8 @@ export class TaskStore {
     private refresh = async () => {
         try {
             const r = await this.listFn();
+            // SAFETY: the oRPC list envelope's `data` is typed `unknown` by the JSONified
+            // transport, but the contract handler always returns a task array under `data`.
             this.state = {
                 tasks: (r.data as unknown as TaskSummary[]) ?? [],
                 loading: false,
@@ -162,6 +166,30 @@ function getSharedStore(): TaskStore {
     return _sharedStore;
 }
 
+/** Subtask progress for one parent WBS: done counts `status === 'done'` children. */
+interface SubtaskProgress {
+    done: number;
+    total: number;
+}
+
+/**
+ * Derive a subtask-progress map from the loaded tasks (F72 R1): group children by
+ * `parentWbs`, count `status === 'done'` per group. Tasks with an absent `parentWbs`
+ * join no group. Computed once per store update (memoized on the tasks array), never
+ * once per card — cards read the map through the same store hook.
+ */
+export function deriveSubtaskProgress(tasks: TaskSummary[]): Map<string, SubtaskProgress> {
+    const map = new Map<string, SubtaskProgress>();
+    for (const t of tasks) {
+        if (!t.parentWbs) continue;
+        const entry = map.get(t.parentWbs) ?? { done: 0, total: 0 };
+        entry.total += 1;
+        if (t.status === 'done') entry.done += 1;
+        map.set(t.parentWbs, entry);
+    }
+    return map;
+}
+
 /**
  * Hook for task data with SSE stream + polling fallback.
  *
@@ -170,9 +198,11 @@ function getSharedStore(): TaskStore {
  * safety net — if the stream drops, the board stays fresh from polling
  * and the store's `connected` flag reflects the stream state.
  *
- * Without a `listFn` argument, all callers share a single module-level store
- * (one polling interval + one SSE connection). Pass `listFn` to use an isolated
- * store that is recreated when `listFn` changes (e.g. for folder switching).
+ * Returns tasks/loading/error/connected plus `setTasks`, and the F72 derived
+ * `subtaskProgress` map (computed once per store update). Without a `listFn`
+ * argument, all callers share a single module-level store (one polling interval
+ * + one SSE connection). Pass `listFn` to use an isolated store that is
+ * recreated when `listFn` changes (e.g. for folder switching).
  */
 export function useTasks(listFn?: ListFn) {
     // With a listFn, use a stable isolated store kept for the hook's lifetime and
@@ -192,5 +222,8 @@ export function useTasks(listFn?: ListFn) {
     }, [listFn]);
 
     const state = useSyncExternalStore(store.subscribe, store.getState);
-    return { ...state, setTasks: store.setTasks };
+    // Derived per store update (F72 R1): the same tasks array feeds the board lanes
+    // and the cards' subtask counts, so the map is computed once, not once per card.
+    const subtaskProgress = useMemo(() => deriveSubtaskProgress(state.tasks), [state.tasks]);
+    return { ...state, setTasks: store.setTasks, subtaskProgress };
 }

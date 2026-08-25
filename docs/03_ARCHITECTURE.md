@@ -692,7 +692,8 @@ variants onto daisyUI's **own** `--color-primary`, which would otherwise place a
 accent on screen (0420 finding F-01). Module code carries **no hex literals and no Tailwind palette
 classes** — every surface resolves a `spur-*` token.
 
-### 14.5 Module shell convention (ADR-081 proposed — History/Observability shell built; Tasks full-bleed variant not yet built)
+### 14.5 Module shell convention (ADR-081 proposed — History/Observability shell built; Tasks full-bleed instance built 0663, F72)
+>>>>>>>
 
 A multi-view Board module composes a **shell**: `<Module>Shell.tsx` plus an append-only `tabs.ts`
 (`{ id, label, component }`; never reorder or rename — the tab strip and persisted UI state key on

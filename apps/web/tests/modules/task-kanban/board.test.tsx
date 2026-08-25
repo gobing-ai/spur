@@ -12,6 +12,7 @@ import { buildFullRpcMock } from '../../test-helpers/rpc-client-mock';
 const transitionCalls: Array<{ wbs: string; toStatus: string }> = [];
 const createCalls: Array<{ title: string; folder?: string; template?: string }> = [];
 const actionCalls: Array<{ wbs: string; action: string; channel?: string; skipDeps?: boolean }> = [];
+const listCalls: Array<{ folder?: string }> = [];
 let transitionImpl: () => Promise<unknown> = async () => ({ ok: true });
 
 const tasks: TaskSummary[] = [
@@ -21,7 +22,10 @@ const tasks: TaskSummary[] = [
 
 const defaultBoardApi = {
     task: {
-        list: async () => ({ data: tasks }),
+        list: async (input?: { folder?: string }) => {
+            listCalls.push(input ?? {});
+            return { data: tasks };
+        },
         transition: (input: { wbs: string; toStatus: string }) => {
             transitionCalls.push(input);
             return transitionImpl();
@@ -72,6 +76,7 @@ afterEach(() => {
     transitionCalls.length = 0;
     createCalls.length = 0;
     actionCalls.length = 0;
+    listCalls.length = 0;
     transitionImpl = async () => ({ ok: true });
     resetDndState();
     restoreMock();
@@ -218,43 +223,21 @@ describe('KanbanBoard', () => {
         expect(lane.indexOf('Beta')).toBeLessThan(lane.indexOf('Alpha'));
     });
 
-    test('column visibility checkboxes are rendered for each status', async () => {
-        const { getByRole, container } = renderBoard();
+    test('renders pure lanes — no toolbar checkboxes or header chrome (moved to shell)', async () => {
+        const { getByRole, queryByRole, container } = renderBoard();
         await waitFor(() => expect(getByRole('button', { name: 'Sort todo by WBS' })).toBeDefined());
 
-        // Checkboxes exist for each column status
-        const checkboxes = container.querySelectorAll('input[type="checkbox"]');
-        expect(checkboxes.length).toBe(KANBAN_COLUMNS.length);
+        // Column-visibility checkboxes moved to TasksShell; the board renders none.
+        expect(container.querySelectorAll('input[type="checkbox"]').length).toBe(0);
+        expect(queryByRole('button', { name: '+ New Task' })).toBeNull();
     });
 
-    test('folder selector renders and shows default folder', async () => {
-        const { getByLabelText } = renderBoard();
-        await waitFor(() => expect(getByLabelText('Task folder')).toBeDefined());
-        const select = getByLabelText('Task folder') as HTMLSelectElement;
-        expect(select.value).toBe('docs/tasks');
+    test('uses the controlled folder prop for the task list', async () => {
+        const { getByText } = renderBoard({ folder: 'docs/tasks2' });
+        await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+        // The folder-scoped list call carries the controlled folder.
+        await waitFor(() => expect(listCalls.some((c) => c.folder === 'docs/tasks2')).toBe(true));
     });
-});
-
-// ── 0100 R1: header right-cluster (spacer before toggle group) ──
-test('header spacer sits before the status toggle group so they cluster right', async () => {
-    const { getByText, container } = renderBoard();
-    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
-
-    const header = container.querySelector('.flex.items-center.gap-2.px-4') as HTMLElement;
-    expect(header).toBeTruthy();
-    const children = Array.from(header.children);
-
-    // Find the flex-1 spacer
-    const spacerIdx = children.findIndex((el) => el.classList.contains('flex-1'));
-    expect(spacerIdx).toBeGreaterThan(0);
-
-    // Everything after the spacer should be the toggle group + New Task button
-    const afterSpacer = children.slice(spacerIdx + 1);
-    const afterText = afterSpacer.map((el) => el.textContent ?? '').join(' ');
-    expect(afterText).toContain('+ New Task');
-    // Toggle group checkboxes + New Task are all after the spacer
-    const hasToggleCheckboxes = afterSpacer.some((el) => el.querySelector('input[type="checkbox"]'));
-    expect(hasToggleCheckboxes).toBe(true);
 });
 
 // ── 0100 R2: right-docked detail panel ──
@@ -381,30 +364,23 @@ test('an invalid stored detail width falls back to the computed default', async 
     }
 });
 
-// ── toggleColumn: clicking a column checkbox hides/shows the column ──
-test('column toggle hides and shows a column lane', async () => {
+// ── controlled lane visibility (hiddenColumns prop; toggling lives in TasksShell) ──
+test('hiddenColumns prop hides lanes; omitting it defaults blocked/cancelled hidden', async () => {
     const { getByText, queryByLabelText, container } = renderBoard();
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
-    // Find all labels with checkboxes, locate the one with "blocked" text
-    const labels = container.querySelectorAll('label.flex.items-center.gap-1');
-    let blockedCheckbox: HTMLInputElement | null = null;
-    labels.forEach((label) => {
-        if (label.textContent?.includes('blocked')) {
-            blockedCheckbox = label.querySelector('input[type="checkbox"]');
-        }
-    });
-    expect(blockedCheckbox).not.toBeNull();
-    // Initially unchecked — blocked column should not be rendered
+    // Defaults: to-do and wip visible, blocked/cancelled absent.
+    expect(container.querySelector('[aria-label="todo column"]')).toBeTruthy();
     expect(queryByLabelText('blocked column')).toBeNull();
+    expect(queryByLabelText('cancelled column')).toBeNull();
 
-    // Toggle it on
-    if (blockedCheckbox) fireEvent.click(blockedCheckbox);
-    await waitFor(() => expect(queryByLabelText('blocked column')).toBeTruthy());
+    // Controlled: hiding wip removes that lane; un-hiding cancelled adds it.
+    const { container: c2, getByText: g2 } = renderBoard({ hiddenColumns: new Set(['wip']) });
+    await waitFor(() => expect(g2('Beta')).toBeDefined());
+    expect(c2.querySelector('[aria-label="wip column"]')).toBeNull();
 
-    // Toggle it off
-    if (blockedCheckbox) fireEvent.click(blockedCheckbox);
-    await waitFor(() => expect(queryByLabelText('blocked column')).toBeNull());
+    const { container: c3 } = renderBoard({ hiddenColumns: new Set() });
+    await waitFor(() => expect(c3.querySelector('[aria-label="blocked column"]')).toBeTruthy());
 });
 
 // ── handleDragStart: onDragStart sets activeDragId ──
@@ -420,32 +396,12 @@ test('onDragStart captures the active drag id', async () => {
     // The mock DragOverlay just passes children through, so check the DOM
 });
 
-// ── NewTaskPanel integration: board opens the real creation panel ──
-test('opens the real NewTaskPanel from the board toolbar', async () => {
-    const { getByRole, getByText } = renderBoard();
-    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
-
-    fireEvent.click(getByText('+ New Task'));
-    await waitFor(() => expect(getByRole('dialog', { name: 'New Task' })).toBeDefined());
-    expect(getByText('Create Task')).toBeDefined();
-});
+// ── NewTaskPanel integration moved to TasksShell (board is pure lanes) ──
 
 // ── onTransition: TaskDetail cancel fires transition callback ──
 test('TaskDetail cancel button fires onTransition to move card', async () => {
-    const { getByRole, getByText, container } = renderBoard();
+    const { getByRole, getByText, container } = renderBoard({ hiddenColumns: new Set() });
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
-
-    // Make the cancelled column visible (hidden by default)
-    const labels = container.querySelectorAll('label.flex.items-center.gap-1');
-    labels.forEach((label) => {
-        if (label.textContent?.includes('cancelled')) {
-            const cb = label.querySelector('input[type="checkbox"]') as HTMLInputElement;
-            if (cb) fireEvent.click(cb);
-        }
-    });
-    await waitFor(() => {
-        expect(container.querySelector('[aria-label="cancelled column"]')).toBeTruthy();
-    });
 
     // Open detail panel
     fireEvent.click(getByText('Alpha'));
@@ -469,20 +425,8 @@ test('onTransition catch handler dispatches api-error when transition fails', as
     transitionImpl = async () => {
         throw new Error('Server gone');
     };
-    const { getByRole, getByText, container } = renderBoard();
+    const { getByRole, getByText, container } = renderBoard({ hiddenColumns: new Set() });
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
-
-    // Make cancelled column visible
-    const labels = container.querySelectorAll('label.flex.items-center.gap-1');
-    labels.forEach((label) => {
-        if (label.textContent?.includes('cancelled')) {
-            const cb = label.querySelector('input[type="checkbox"]') as HTMLInputElement;
-            if (cb) fireEvent.click(cb);
-        }
-    });
-    await waitFor(() => {
-        expect(container.querySelector('[aria-label="cancelled column"]')).toBeTruthy();
-    });
 
     // Open detail to capture onTransition
     fireEvent.click(getByText('Alpha'));
@@ -589,4 +533,3 @@ test('shows error message when task list fetch fails', async () => {
     await waitFor(() => expect(getByText('Failed to load tasks')).toBeDefined());
     await waitFor(() => expect(getByText('Network Error')).toBeDefined());
 });
-const KANBAN_COLUMNS = ['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled'];
