@@ -4,7 +4,7 @@ name: "Config 1.2: two-tier workflow resolution — project path then bundled ro
 status: done
 template: feature-impl
 created_at: 2026-08-24T04:10:17.881Z
-updated_at: "2026-08-24T18:14:38.784Z"
+updated_at: "2026-08-25T00:22:29.422Z"
 feature_id: A4
 ---
 
@@ -242,9 +242,9 @@ flat under `workflows/`.
 | `packages/app/src/services/workflow-service.ts:578` | `run()` resolves via the helper; both-tiers-missing throws naming both probed paths. |
 | `packages/app/src/services/workflow-service.ts:687` | `maybeLinkPipelineRun()` re-resolves via the helper so the pipeline link works for a bundled-only workflow. |
 | `packages/app/src/index.ts:481` | Re-export `resolveWorkflowFile` from `@gobing-ai/spur-app`. |
-| `apps/cli/src/commands/workflow.ts:441` | Plan preview resolves via the helper (advisory). |
-| `apps/cli/src/commands/workflow.ts:519` | Steering identity resolves via the helper (advisory). |
-| `apps/cli/src/commands/workflow.ts:776` | `workflow show` resolves via the helper; not-found names both probed paths. |
+| `apps/cli/src/commands/workflow.ts:462` | Plan preview resolves via the helper (advisory). |
+| `apps/cli/src/commands/workflow.ts:540` | Steering identity resolves via the helper (advisory). |
+| `apps/cli/src/commands/workflow.ts:797` | `workflow show` resolves via the helper; not-found names both probed paths. |
 | `apps/cli/src/workflow/make-lifecycle-adapter.ts:24` | Drop the global `~/.config/spur/workflows/` tier from `resolveWorkflowPath`; two-tier (bundled → project) ladder remains; remove `globalConfigRoot()` and the homedir/`SPUR_GLOBAL_RULES_DIR` override. |
 
 Task 0648 gives the `workflow run`/`validate`/`show` CLI surfaces the same bundled-tree

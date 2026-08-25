@@ -1196,6 +1196,24 @@ failureStates:
         await rm(dir, { recursive: true, force: true });
     });
 
+    // ── list with bundled: path (read-time expansion via bundledConfigRoot) ──
+
+    test('list subcommand expands bundled: paths against the installed package config root', async () => {
+        const dir = await createTempProject();
+        await mkdir(join(dir, '.spur'), { recursive: true });
+        await writeFile(join(dir, '.spur', 'config.yaml'), 'workflows:\n  paths:\n    - bundled:workflows\n');
+        const output = createCapturedOutput();
+
+        const exitCode = await main(['workflow', 'list', '--json'], { output, cwd: dir, dbUrl: ':memory:' });
+
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(output.messages[0] ?? '{}');
+        const names = ((parsed.entries ?? []) as Array<{ name: string }>).map((entry) => entry.name);
+        // The repository's bundled workflow catalog ships task-pipeline.yaml.
+        expect(names).toContain('task-pipeline');
+        await rm(dir, { recursive: true, force: true });
+    });
+
     // ── continue with HITL rejection (lines 142-152) ──
 
     test('continue without --yes asks confirmation and aborts when user says no', async () => {

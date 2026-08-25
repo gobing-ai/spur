@@ -4,7 +4,7 @@ name: "Config 1.2: idempotent spur self init and pre-A4 global config migration"
 status: done
 template: feature-impl
 created_at: 2026-08-24T04:33:27.418Z
-updated_at: "2026-08-24T19:27:57.014Z"
+updated_at: "2026-08-25T00:27:13.892Z"
 feature_id: A4
 dependencies: []
 ---
@@ -268,9 +268,9 @@ R6 resolved (operator ruling, 2026-08-24): `version` is an inert label reconcile
 | `apps/cli/src/commands/init.ts:215` | R4 detection runs on every init: parse the global config and collect misplaced keys. |
 | `apps/cli/src/commands/init.ts:224` | Replace exit-1 re-init guard with the converge path: seed missing assets, write no config, report drift (R1/R2). |
 | `apps/cli/src/commands/init.ts:257` | R3 backup: build `backupPath` from `globalConfigPath` with `toISOString()` before the opted-in global rewrite. |
-| `config/config.global.yaml:137` | Add top-level `workflows: {}` key (R5) — the A4 goal names it among global defaults; empty because paths are project-relative. |
+| `config/config.global.yaml:139-141` | Add the top-level `workflows` key promised by A4, seeded with the portable `bundled:workflows` search tier (R5). |
 | `config/config.example.yaml:11` | R6 reconcile: stamp `version: "1.2"` (was "1.1"). |
-| `config/config.global.yaml:23` | R6 reconcile: add inert `version: "1.2"` label. |
+| `config/config.global.yaml:27` | R6 reconcile: add inert `version: "1.2"` label. |
 | `apps/cli/schemas/spur-config.schema.json:14` | R6 reconcile: JSON Schema `version` description recommends "1.2". |
 
 Notes: R6 ruling (2026-08-24) — `version` is an inert label reconciled to "1.2" across all four shipped artifacts (Background 9: nothing branches on it, so no gate is added and existing installs are unaffected). R1–R7 implemented and green.

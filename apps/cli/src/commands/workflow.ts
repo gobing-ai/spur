@@ -28,7 +28,7 @@ import {
     type WorkflowTraceTimeline,
     WorkflowTraceWriter,
 } from '@gobing-ai/spur-app';
-import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
+import { bundledConfigRoot, loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import type { ActionCost } from '@gobing-ai/spur-domain';
 import { loadWorkflowDef, type WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { EventBus } from '@gobing-ai/ts-infra';
@@ -179,14 +179,35 @@ export function submitSteeringLine(
     if (ack === undefined) output.error(`[steer] ignored command: ${line}`);
 }
 
+/**
+ * Prefix for config-driven workflow paths that resolve against the installed
+ * package's bundled config root at read time (`bundled:workflows` →
+ * `<package>/<bundled-config>/workflows`). Read-time expansion keeps machine-specific
+ * absolute paths out of user-owned config files — the shipped global default
+ * survives reinstalls, package-manager switches, and dotfiles sync.
+ */
+const BUNDLED_PATH_PREFIX = 'bundled:';
+
 /** Read configured workflow search paths, defaulting to `['.spur/workflows/']`. */
 async function resolveWorkflowPaths(cwd: string): Promise<string[]> {
+    let paths: string[];
     try {
         const config = await loadSpurConfig(cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
-        return config.workflows?.paths ?? ['.spur/workflows/'];
+        paths = config.workflows?.paths ?? ['.spur/workflows/'];
     } catch {
         return ['.spur/workflows/'];
     }
+    const bundledRoot = bundledConfigRoot();
+    const expanded: string[] = [];
+    for (const path of paths) {
+        if (path.startsWith(BUNDLED_PATH_PREFIX)) {
+            // No bundled root under `bun build --compile` — skip the tier.
+            if (bundledRoot !== null) expanded.push(join(bundledRoot, path.slice(BUNDLED_PATH_PREFIX.length)));
+        } else {
+            expanded.push(path);
+        }
+    }
+    return expanded;
 }
 
 /** Register `spur workflow` commands. */

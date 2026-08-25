@@ -300,7 +300,7 @@ describe('init command', () => {
         const configRoot = bundledConfigRoot();
         expect(configRoot).not.toBeNull();
         const text = await readFile(join(configRoot as string, 'config.global.yaml'), 'utf8');
-        expect(text).toMatch(/^workflows:\s*\{\}/m);
+        expect(text).toMatch(/^workflows:\n\s+paths:\n\s+- bundled:workflows$/m);
     });
 
     test('SCAFFOLD_MANIFEST ships exactly one task template per TASK_VARIANTS entry', () => {
