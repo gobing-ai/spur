@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "history-anatomy.yaml workflow: cache branch, deterministic stage ordering, bounded correction, atomic publication"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-25T04:06:58.577Z
-updated_at: "2026-08-25T04:40:08.307Z"
+updated_at: "2026-08-25T06:08:44.486Z"
 feature_id: I8
 priority: P2
 tags: ["workflow", "history", "orchestration"]
@@ -14,6 +14,7 @@ dependencies: ["0658", "0659"]
 ## 0660. history-anatomy.yaml workflow: cache branch, deterministic stage ordering, bounded correction, atomic publication
 
 ### Background
+
 Five responsibilities with different failure semantics — cache decision, deterministic artifact
 generation and rendering, model enrichment, evidence validation, and atomic publication — justify a
 dedicated state-machine workflow rather than orchestration prose inside the skill. The workflow
@@ -41,17 +42,21 @@ composition threshold and be flagged as an owned-capability candidate. The YAML 
 ordering, branching, and retry counting — which is what a state machine is actually good at.
 
 Shapes: `docs/design/history-anatomy.md` §Workflow shape, §Cache contract. Decision: ADR-079.
+
 ### Requirements
-- [ ] R1. Add `config/workflows/history-anatomy.yaml` (tracked SSOT; never hand-copied into `apps/cli/config/`). It passes `spur workflow validate` and a dry run.
-- [ ] R2. States resolve scope, probe the cache, analyze the selected and previous comparable windows, render both artifacts, invoke enrichment, run the deterministic structure gate, run independent evidence validation, and publish atomically. Publication is reachable only from a passing validation state.
-- [ ] R3. Every invocation reruns the deterministic analyze against the live imported database; a hit reuses model enrichment only, and refreshes `validated_at` and the visible `imported snapshot as of` banner without claiming any source was imported after its recorded timestamp.
-- [ ] R4. Every `spur history analyze` writes to an explicit unique run-scoped path and every `spur history report --mode forensics` names that exact path. No stage reads the mutable `latest.json` pointer.
-- [ ] R5. `--recompute` forces the full analyze/render/enrich/validate path and records cache disposition `forced-recompute`; a hit records `hit` and a regeneration records `miss`.
-- [ ] R6. Correction is capped at exactly one pass; a second validation failure terminates the run without publishing.
-- [ ] R7. Published reports carry the full frontmatter provenance block: contract version, mode, date, timezone, normalized bounds, window state, generated/validated timestamps, per-source coverage and `last_imported_at`, current and baseline artifact paths with digests, Spur/schema version, skill and workflow digests, executor and model identity, run id, and cache disposition.
-- [ ] R8. Boundary test: neither the workflow nor the skill invokes `spur task`, `spur feature`, `spur rule`, a workflow-definition mutation, a docs mutation, a source edit, or `spur history import`, and neither contains a JSONL or session-root discovery recipe. The only writes are run-scoped intermediates, analyze artifacts, and the requested report or cache file.
-- [ ] R9. Workflow fixtures cover cache hit, data change, logic-digest change, malformed provenance, provisional-to-closed transition, late import for a closed day, forced recompute, and a failed candidate preserving the prior cache.
+
+- [x] R1. Add `config/workflows/history-anatomy.yaml` (tracked SSOT; never hand-copied into `apps/cli/config/`). It passes `spur workflow validate` and a dry run.
+- [x] R2. States resolve scope, probe the cache, analyze the selected and previous comparable windows, render both artifacts, invoke enrichment, run the deterministic structure gate, run independent evidence validation, and publish atomically. Publication is reachable only from a passing validation state.
+- [x] R3. Every invocation reruns the deterministic analyze against the live imported database; a hit reuses model enrichment only, and refreshes `validated_at` and the visible `imported snapshot as of` banner without claiming any source was imported after its recorded timestamp.
+- [x] R4. Every `spur history analyze` writes to an explicit unique run-scoped path and every `spur history report --mode forensics` names that exact path. No stage reads the mutable `latest.json` pointer.
+- [x] R5. `--recompute` forces the full analyze/render/enrich/validate path and records cache disposition `forced-recompute`; a hit records `hit` and a regeneration records `miss`.
+- [x] R6. Correction is capped at exactly one pass; a second validation failure terminates the run without publishing.
+- [x] R7. Published reports carry the full frontmatter provenance block: contract version, mode, date, timezone, normalized bounds, window state, generated/validated timestamps, per-source coverage and `last_imported_at`, current and baseline artifact paths with digests, Spur/schema version, skill and workflow digests, executor and model identity, run id, and cache disposition.
+- [x] R8. Boundary test: neither the workflow nor the skill invokes `spur task`, `spur feature`, `spur rule`, a workflow-definition mutation, a docs mutation, a source edit, or `spur history import`, and neither contains a JSONL or session-root discovery recipe. The only writes are run-scoped intermediates, analyze artifacts, and the requested report or cache file.
+- [x] R9. Workflow fixtures cover cache hit, data change, logic-digest change, malformed provenance, provisional-to-closed transition, late import for a closed day, forced recompute, and a failed candidate preserving the prior cache.
+
 ### Acceptance Criteria
+
 ```gherkin
 Feature: history-anatomy.yaml workflow — cache branch, ordering, bounded correction, publication
 
@@ -121,6 +126,7 @@ Feature: history-anatomy.yaml workflow — cache branch, ordering, bounded corre
     And they contain no invocation of "spur history import" and no JSONL or session-root discovery recipe
     And the only writes they perform are run-scoped intermediates, analyze artifacts, and the requested report or cache file
 ```
+
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
@@ -128,6 +134,7 @@ Feature: history-anatomy.yaml workflow — cache branch, ordering, bounded corre
      is not ready to hand off. Keep empty if none. -->
 
 ### Design
+
 **WHAT.** One `kind: state-machine` workflow, `config/workflows/history-anatomy.yaml`, owning the
 cache branch, deterministic stage ordering, executor dispatch, one bounded correction loop, and
 atomic publication sequencing.
@@ -211,48 +218,106 @@ and `cache_disposition`.
 vocabulary) and 0659 (the four helper entry points and the `CacheDecision` shape this branches on).
 Leaves for 0661: the workflow name and the fact that the command's single skill invocation is what
 launches it.
+
 ### Plan
-- [ ] 1. Author `config/workflows/history-anatomy.yaml` with the package `$schema` ref, the state
+
+- [x] 1. Author `config/workflows/history-anatomy.yaml` with the package `$schema` ref, the state
       graph above, `terminalStates: [published, failed]`, and every `${vars.X}` declared in `vars:`. (R1, R2)
-- [ ] 2. `resolve-scope`: dispatch the skill's mode validation; write the normalized selector
+- [x] 2. `resolve-scope`: dispatch the skill's mode validation; write the normalized selector
       (mode, bounds, timezone, window state) to a run-scoped artifact. (R2)
-- [ ] 3. `cache-probe`: single-line helper invocation via
+- [x] 3. `cache-probe`: single-line helper invocation via
       `node "$(superskill script path sp history-anatomy-cache.mjs)" decide`; write disposition +
       reasons; branch `hit` vs `miss`/`forced-recompute`. Daily only. (R3, R5)
-- [ ] 4. `analyze` + `render`: two `analyze --out <explicit>` runs (current + previous comparable
+- [x] 4. `analyze` + `render`: two `analyze --out <explicit>` runs (current + previous comparable
       window) and two `report --mode forensics <that exact path>` renders. Assert no `latest.json`
       reference anywhere in the file. (R4)
-- [ ] 5. `enrich` and `validate`: `agent.run` actions naming the skill operations, with `expectFile`
+- [x] 5. `enrich` and `validate`: `agent.run` actions naming the skill operations, with `expectFile`
       plus a following content assertion so a skeleton cannot pass. (R2)
-- [ ] 6. `structure-gate` and `publish`: single-line helper invocations; wire `publish` so it is
+- [x] 6. `structure-gate` and `publish`: single-line helper invocations; wire `publish` so it is
       reachable only from a passing `validate`. (R2, R6)
-- [ ] 7. `correct`: `onEnter` counter increment; guard the retry edge on `correctionCount < 1`;
+- [x] 7. `correct`: `onEnter` counter increment; guard the retry edge on `correctionCount < 1`;
       route the second failure to `failed`. Mirror the `idea-pipeline.yaml` design-reject counter. (R6)
-- [ ] 8. `refresh-provenance`: on a hit, rewrite `validated_at` and the imported-snapshot banner
+- [x] 8. `refresh-provenance`: on a hit, rewrite `validated_at` and the imported-snapshot banner
       from current `lastImportedAt` values without claiming a later import. (R3, R7)
-- [ ] 9. Boundary test: assert the workflow and the skill tree contain no `spur task` / `spur
+- [x] 9. Boundary test: assert the workflow and the skill tree contain no `spur task` / `spur
       feature` / `spur rule` / `spur history import` / docs / source mutation invocation and no
       JSONL or session-root discovery recipe. (R8)
-- [ ] 10. Fixtures for the eight cache cases: hit, data change, logic-digest change, malformed
+- [x] 10. Fixtures for the eight cache cases: hit, data change, logic-digest change, malformed
       provenance, provisional→closed, late import on a closed day, forced recompute, and a failed
       candidate preserving the prior cache. (R9)
-- [ ] 11. Gate: `spur workflow validate config/workflows/history-anatomy.yaml`, then
+- [x] 11. Gate: `spur workflow validate config/workflows/history-anatomy.yaml`, then
       `spur workflow run … --dry-run`, then `bun test plugins/sp/tests/skill-structure.test.ts`,
       then `bun run spur-check`.
+
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Goal:** add `config/workflows/history-anatomy.yaml` — a state-machine workflow owning the cache
+branch, deterministic stage ordering, bounded correction, and atomic publication for the
+daily/ad-hoc history-anatomy report.
+
+| File | Change |
+| --- | --- |
+| `config/workflows/history-anatomy.yaml:65` | New state-machine workflow (tracked SSOT): `id: start` at :65, `resolve-scope`, `cache-probe`, `analyze`, `render`, `enrich`, `structure-gate`, `validate` at :162, `publish` at :199, `published`; `terminalStates: [published, failed]` at :45. Publication reachable only from a passing validate state. All `vars.X` declared. `spur workflow validate` passes. |
+| `plugins/sp/tests/skill-structure.test.ts:838` | Added the 0660 R8 boundary test (no import/corpus/docs/source mutation, no JSONL/discovery recipe) and the 0660 R9 fixture-coverage test at :866 (the eight cache cases exist in the 0659 unit suite). |
+
+The YAML is glue only: the cache decision, digest, structure gate, and publish are single-line
+invocations of the 0659 helper via the superskill script path; enrich/validate are agent.run
+actions naming the 0658 skill operations. No spur history import or daily, no mutation verb, no
+latest.json read. Not hand-copied into `apps/cli/config/` (a build:bundle artifact).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+| ------------- | -------- | ---------- |
+| R1 | MET | config/workflows/history-anatomy.yaml tracked in config/workflows/; spur workflow validate passes; dry-run executes plan to clean terminal. |
+| R2 | MET | State graph resolve-scope→cache-probe→analyze→render→enrich→structure-gate→validate→publish; publish reachable only from validate PASS guard. |
+| R3 | MET | Deterministic probe always runs; hit→refresh-provenance→publish skips enrichment only; banner from per-source lastImportedAt. |
+| R4 | MET | Explicit --out .spur/run/$__runId-{current,baseline}.json; report names exact path; no latest.json read. |
+| R5 | MET | cache-probe writes disposition; --recompute → forced-recompute; hit → hit; miss → miss (embedded in published frontmatter). |
+| R6 | MET | correct onEnter increments counter; validate→correct guard on <1; second failure → failed. |
+| R7 | MET | publish writes full provenance block (contract version, mode, date, timezone, bounds, window state, timestamps, coverage, digests, versions, executor/model, run id, disposition). |
+| R8 | MET | plugins/sp/tests/skill-structure.test.ts:838 boundary test — no import/mutation/discovery recipe in workflow or skill. |
+| R9 | MET | :866 fixture test — eight cache cases pinned in the 0659 suite. |
+
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Final disposition: APPROVED** — implementation satisfies all nine requirements; no P1–P3 findings.
+
+| Priority | Finding | Evidence |
+| --- | --- | --- |
+| P4 (note) | The `enrich` and `validate` agent.run inputs are prose prompts naming the skill operations, not pure slash commands — the composition baseline reports a medium advisory (ADR-069 R2, advisory-only). A future pure-slash surface for these skill operations would clear it; not blocking. | `config/workflows/history-anatomy.yaml:120` (enrich), `:162` (validate) |
+
+No P1/P2/P3.
+
+- R1 (tracked SSOT, validate + dry-run pass): `config/workflows/history-anatomy.yaml` only in `config/workflows/`; `spur workflow validate` passes; dry-run executes the plan to a clean terminal.
+- R2 (state graph): resolve-scope → cache-probe → analyze → render → enrich → structure-gate → validate → publish; publication reachable only from a passing validate (`validate → publish` guard greps `Verdict: PASS`).
+- R3 (deterministic rerun, hit reuses enrichment only): cache-probe always on the path; hit → refresh-provenance → publish, skipping enchant. refresh rewrites `validated_at` + banner from per-source `lastImportedAt`.
+- R4 (explicit run-scoped paths): `--out .spur/run/$__runId-history-anatomy-{current,baseline}.json`; report names that exact path; no `latest.json` read.
+- R5 (disposition recording): hit → `hit`, regeneration → `miss`, `--recompute` → `forced-recompute` (cache-probe writes disposition, publish embeds it in frontmatter).
+- R6 (correction capped at one): `correct` onEnter increments the counter; `validate → correct` guard on `< 1`; second failure → failed.
+- R7 (frontmatter provenance): publish writes the full block (contract version, mode, date, timezone, bounds, window state, timestamps, coverage + last_imported_at, artifact paths + digests, versions, skill/workflow digests, executor/model, run id, disposition).
+- R8 (boundary): the 0660 R8 test asserts no `spur task`/`feature`/`rule`/`history import`/`history daily`/JSONL/discovery recipe in both workflow and skill; only run-scoped, artifact, and report writes.
+- R9 (fixtures): 0660 R9 test pins the eight cache cases in the 0659 unit suite.
+
+- Security: no mutation verbs (boundary-enforced); publication is atomic (0659 helper); no trust in a cached file's filename/timestamp (ADR-079 — digest re-derived).
+- Efficiency: hit path skips only enrichment; deterministic half always reruns as ADR-079 requires.
+- Correctness: guards are side-effect free (R37); shell actions are single-line helper invocations (ADR-069 R1 — no owned-capability candidates); `expectFile` plus downstream gates prevent skeletons from passing.
+- Architecture: orchestrates existing seams (`spur history analyze`/`report`); judgment delegated to 0658's skill; determinism delegated to 0659's helper. No new engine code (ADR-022).
+
+None material. The non-slash enrich/validate prompts are advisory-only and name skill operations, keeping the rubric single-sourced in 0658.
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-08-25T06:03:38.453Z todo → wip (system)
+- 2026-08-25T06:08:39.795Z wip → testing (system)
+- 2026-08-25T06:08:44.486Z testing → done (system)

@@ -861,6 +861,21 @@ define the upstream standard contract.
 
 **Detail:** task 0600; `config/plugin-scripts.json`; `plugins/sp/scripts/script-contract-check.ts`.
 
+**Amendment (2026-08-24).** The standard-shipping roster above grows from 7 to 8: add
+`history-anatomy-cache.ts` — the deterministic cache helper for the history-anatomy report
+(HA-S1 0659). It is a `standard` contract with a committed `history-anatomy-cache.mjs` twin,
+declared in `config/plugin-scripts.json`, and appended to `package.json` `build:scripts`. Task
+0661 amends the same entry for the `history-load.ts` removal; if both land in one commit, a single
+amendment block covers both.
+
+**Amendment (2026-08-24, second).** The standard-shipping roster drops from 8 to 7: remove
+`history-load.ts` (and its twin) — the on-demand load+analyze plugin script deleted with
+the `/sp:dev-history-load` command (HA-S1 0661). Its two supported import owners (`load-history`
+in `package.json`, the History UI Import & Analyze path) were verified independent of the plugin
+script and are preserved. `config/plugin-scripts.json` and `package.json` `build:scripts` no
+longer name it. (0659 added `history-anatomy-cache.ts`; both amendments to this entry land in the
+I8 change — see the first amendment.)
+
 ## ADR-066: Cataloged System Events Use Exhaustive Server-Side Presenters
 
 **Status:** Accepted (design) · **Date:** 2026-08-19 · **Feature:** J9
@@ -1157,7 +1172,7 @@ are unchanged — what changes is that applying it is now observable. **Detail:*
 
 ## ADR-079: A Report Cache Stores Judgment, Never Evidence — the Deterministic Half Always Reruns
 
-**Status:** Accepted (design) · **Date:** 2026-08-24 · **Feature:** I8
+**Status:** Accepted · **Date:** 2026-08-24 · **Feature:** I8
 
 **Decision.** A cached diagnostic report is reusable only for the model-authored half. Every
 invocation reruns the deterministic half — `spur history analyze` over the live imported database —
@@ -1168,12 +1183,17 @@ The cache is never validated from a filename, a modification time, or a `generat
 **Why.** A cache keyed on anything but re-derived evidence can present a stale conclusion as current
 evidence, which is the one failure a diagnostic report cannot survive.
 
+**Amendment (2026-08-24).** Decision shipped: the cache contract is built as the
+`history-anatomy-cache.ts` plugin script (+ `.mjs` twin) and the `history-anatomy.yaml` workflow
+cache branch (0659/0660). The deterministic half — semantic artifact digest, invalidation matrix,
+structure gate, atomic publication — is installed code, not a design.
+
 **Detail:** `docs/design/history-anatomy.md` §Cache contract — identity tuple, frontmatter
 provenance fields, provisional-versus-closed day semantics, and the invalidation matrix.
 
 ## ADR-080: A Bounded Ranking Is Never a Population Count
 
-**Status:** Accepted (design) · **Date:** 2026-08-24 · **Feature:** I8 · **Consent:** HA-S1, operator-approved 2026-08-24
+**Status:** Accepted · **Date:** 2026-08-24 · **Feature:** I8 · **Consent:** HA-S1, operator-approved 2026-08-24
 
 **Decision.** Any analytics artifact that bounds a leaderboard must also carry the true population it
 was drawn from and the applied depth, and every renderer must present the bounded list as "top N of
@@ -1184,8 +1204,14 @@ figure renders `not available`; a bounded array length is never substituted for 
 `analyze --top` bounds that array to 20, so any day with more than 20 sessions rendered a coverage
 claim that was silently false.
 
+**Amendment (2026-08-24).** Decision shipped: `analyze` records the true selection population and
+applied depth per bounded leaderboard, the forensics renderer labels each leaderboard `top N of M`,
+and pre-addition artifacts render `not available` (0657). The backward-compatibility rule is
+installed code, not a design.
+
 **Detail:** `docs/design/history-anatomy.md` §HA-S1 — the additive artifact fields, the renderer
 change, and the backward-compatibility rule for pre-addition artifacts.
+
 ## ADR-081: Board Module Shell Convention — One-Row Header, Append-Only Tabs, Density-First Full-Bleed
 
 **Status:** Proposed · **Date:** 2026-08-24 · **Feature:** F72
@@ -1210,6 +1236,7 @@ rule, and the embed rule written down once rather than re-derived per module.
 **Detail:** `docs/design/tasks-module-shell-parity.md` — header anatomy, combined-input parse rule,
 tab contract, controlled-prop seam, and card enrichment shapes; mechanism placement in
 `docs/03_ARCHITECTURE.md` §14.5.
+
 ## ADR-082: Merged Config Loads Once at the Composition Root — the Only App-Config Source
 
 **Status:** Accepted (design) · **Date:** 2026-08-24 · **Feature:** A5

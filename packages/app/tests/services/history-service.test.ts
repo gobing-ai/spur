@@ -287,6 +287,8 @@ describe('HistoryService', () => {
             expect(artifact.bySession[0]?.sessionState).toBe('complete');
             // loops: Read/abc repeated 2 — below the >=3 threshold, so none
             expect(artifact.loops).toEqual([]);
+            // HA-S1: true population recorded, not the bounded array lengths.
+            expect(artifact.population).toMatchObject({ sessions: 1, tools: 2, loops: 0, appliedTop: 20 });
             // drift warning
             expect(artifact.warnings.some((w) => w.code === 'unknown-drift')).toBe(true);
             // coverage
@@ -294,6 +296,45 @@ describe('HistoryService', () => {
             expect(artifact.coverage[0]?.messages).toBe(3);
             expect(artifact.coverage[0]?.toolCalls).toBe(3);
             expect(artifact.coverage[0]?.unknownRecords).toBe(1);
+        });
+
+        test('HA-S1: analyze --top 2 records the true population, not the bounded depth', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            // Three sessions, two distinct tools — population must be 3/2 even at top=2.
+            for (const s of ['sess-a', 'sess-b', 'sess-c']) {
+                await insertMessage(db, {
+                    record_hash: `m-${s}`,
+                    session_id: s,
+                    seq: 1,
+                    ts: '2026-05-30T10:00:00Z',
+                    model: 'claude-opus-5',
+                    input: 100,
+                    output: 50,
+                    cost: 0.01,
+                    duration_ms: 1000,
+                });
+            }
+            for (const tool of ['Read', 'Bash']) {
+                await insertToolCall(db, {
+                    record_hash: `tc-${tool}`,
+                    message_hash: 'm-sess-a',
+                    session_id: 'sess-a',
+                    seq: 1,
+                    tool_name: tool,
+                    args_digest: null,
+                    status: 'success',
+                    duration_ms: 100,
+                });
+            }
+            const svc = new HistoryService(ctx);
+            const artifact = await svc.analyze(ALL, { top: 2 });
+            // True population exceeds the bounded leaderboard depth (2).
+            expect(artifact.population?.sessions).toBe(3);
+            expect(artifact.population?.tools).toBe(2);
+            expect(artifact.population?.appliedTop).toBe(2);
+            // Bounded leaderboards stay at depth.
+            expect(artifact.bySession).toHaveLength(2);
         });
 
         test('marks a still-appending session in-progress and excludes the trailing turn', async () => {

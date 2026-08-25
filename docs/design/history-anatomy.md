@@ -1,7 +1,7 @@
 # History anatomy: daily cache, ad-hoc diagnosis, and bounded migration
 
 **Area:** sp plugin > `sp:history-anatomy` skill, `/sp:dev-find-issue` command, `history-anatomy.yaml` workflow, `docs/report` daily cache, and the HA-S1 correction to the history analyze artifact + forensics renderer.
-**Status:** accepted design (I8; ADR-079/080) — not yet built.
+**Status:** built (I8 HA-S1; 0657–0661 — ADR-079 cache, ADR-080 bounded rankings).
 **Authority:** decisions in `00` (ADR-079 cache, ADR-080 bounded rankings); command/flag shapes in `04`; this satellite owns the report contract, cache contract, workflow shape, and migration gate. The history data plane itself remains [`history-data-processing.md`](history-data-processing.md) and [`sqlite-forensics-token-time-per-step.md`](sqlite-forensics-token-time-per-step.md); shared flag semantics remain `plugins/sp/skills/spur-dev/references/flag-glossary.md`.
 
 Baseline artifacts: `.spur/run/7fa52fa5-…-idea-eval-report.md` (idea evaluation) and

@@ -69,6 +69,7 @@ When collaborating with the design team:
 | [`features-board-layout-refactor.md`](design/features-board-layout-refactor.md)                         | Features Board — History layout alignment, collapsible tree/metadata panels, markdown width constraints, dynamic action bar, and floating agent prompt bar (feature F84)                           | design                                                                                                                                                         |
 | [`universal-config-loading.md`](design/universal-config-loading.md)                                       | Composition-root merged-config wiring — single load threaded to all consumers, role-fallback provenance, agent-surface `--json` error envelope (ADR-082, ADR-078 amendment, feature A5)             | accepted design                                                                                                                                                |
 | [`tasks-module-shell-parity.md`](design/tasks-module-shell-parity.md)                                   | Tasks Board — History-parity shell: one-row header, inline filters (phase/status/combined WBS-feature), append-only tabs, full-bleed density, enriched cards (ADR-081, feature F72)                 | shell built (0663); enriched cards landed by 0664                                                                                                             |
+| [`history-anatomy.md`](design/history-anatomy.md)                                                     | History-anatomy diagnostic — daily/ad-hoc report mode, closed finding taxonomy, eleven-section report contract, cache branch + semantic digest (ADR-079/080), atomic publication, HA-S1 issue-finding migration gate (feature I8 / 0657–0661) | built (0657–0661)                                                                                                                                             |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -811,6 +812,18 @@ waste counts assistant steps with fresh input > 100,000 tokens and < 10 % cache 
 only measured low-reuse steps count. Pre-0581 artifacts state `not available` for all four
 sections (R5), never zeros.
 
+**True population + coverage rendering (HA-S1, ADR-080):** `analyze` records an additive
+optional `population` block on `HistoryArtifact` (`SelectionPopulation` — sessions, tools,
+loops, warnings, `appliedTop`; no schema bump) from unbounded `COUNT(DISTINCT …)` queries over
+the active selector — never from the bounded leaderboard array lengths. `renderForensics`
+renders the Sessions metric and the Raw Data Counts line through `fmtTopOf`: `top N of M` when
+the applied depth is below the true population, the plain count when the whole population is
+shown, and `not available` on a pre-HA-S1 artifact (never reconstructed from a bounded length).
+The coverage table adds `Last imported` / `Parse err` / `Validation err`, marks sample overflow
+`(truncated)` at the `MAX_ERROR_SAMPLES` cap, and warnings render one `code — detail` line per
+warning instead of a code-only list. `narrowArtifact` re-slice (`report --top`) lowers
+`appliedTop` to `min(requested, existing)` and leaves the population counts untouched.
+
 **Pairings renderer (task 0574, feature J8 R2/R3):** `renderPairings`
 (`packages/domain/src/analytics/render-pairings.ts`) — a pure `HistoryArtifact → string` mode
 consuming ONLY the additive `pairings` / `ladderSnapshot` fields (0573); never opens the
@@ -826,14 +839,26 @@ predates the pairings field; re-run spur history analyze)` in place of the missi
 never a throw, never a fabricated row. Registered in `REPORT_MODES` as `pairings`; unknown mode
 names keep failing with `UnknownReportModeError` naming the registered set.
 
-**Report-first surface (task 0556):** `/sp:dev-find-issue` defaults to rendering the report —
-the forensics renderer's 8 data sections plus model-authored IDENTIFY/PROPOSE analysis — and
-creates a task only behind `--create-task`. `--use-history`/`--no-task` are removed (rejected
-with a message naming the replacement). The backing skill `sp:issue-finding` keeps the data
-plane primary; raw JSONL parsing is the fallback under exactly three conditions (no typed mapper
-for the resolved source, explicit `--sessions`, or a primitive the typed tables do not retain —
-0492 R7). Documented flags/modes are tied to real command definitions by
-`plugins/sp/tests/issue-finding-fallback.test.ts`.
+**Report-first surface (task 0556, superseded 0661):** `/sp:dev-find-issue` was the report-first
+entry over the forensics renderer + `sp:issue-finding`. **As of HA-S1 (0661) it is a thin forwarder
+to `sp:history-anatomy`** with the reduced surface `[<focus>] [--mode <daily|ad-hoc>] [--date
+<YYYY-MM-DD>] [--since <RFC3339>] [--until <RFC3339>] [--recompute] [--agent <inline|auto|name>]
+[--output <path>]`; the fourteen legacy flags (`--full`, `--save`, `--source`, `--sessions`,
+`--feature`, `--template`, `--priority`, `--severity`, `--category`, `--top`, `--min-cost`,
+`--strict-topic`, `--create-task`, `--json`) are dropped, `/sp:dev-history-load` is deleted (its
+independent import owners — `load-history` in `package.json` and the History UI Import & Analyze
+path — are preserved), and the command never triggers an import. The legacy skill `sp:issue-finding`
+remains packaged and directly invocable under the bounded coexistence and retirement gate in
+`plugins/sp/README.md`; no logic is shared with the new skill.
+
+**History-anatomy surfaces (HA-S1 0658/0660):** skill `plugins/sp/skills/history-anatomy/` owns
+interpretation (mode contract, finding taxonomy, eleven-section report contract, `enrich`/`validate`
+rubrics); workflow `config/workflows/history-anatomy.yaml` owns the cache branch, deterministic stage
+ordering, one bounded correction pass, and atomic publication — the cache/digest/structure/publish
+determinism is `plugins/sp/scripts/history-anatomy-cache.ts` (+ committed `.mjs` twin, ADR-065
+standard contract, ADR-079 digest-truth). Publication is reachable only from a passing validation
+state; a hit reuses model enrichment only and refreshes `validated_at` + the imported-snapshot banner
+without claiming a later import.
 
 #### History nightly loop — scheduling surface and observability (task 0471)
 

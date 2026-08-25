@@ -50,7 +50,7 @@ version: 1
 roles:
   - id: scribe
     tier: cheap
-    commands: [dev-gitmsg, dev-handover, dev-daily, dev-history-load, dev-changelog, dev-refresh, rule-add, rule-refine, workflow-add, workflow-refine, spur-init]
+    commands: [dev-gitmsg, dev-handover, dev-daily, dev-changelog, dev-refresh, rule-add, rule-refine, workflow-add, workflow-refine, spur-init]
     stages: [changelog]
   - id: coder
     tier: standard
@@ -83,19 +83,19 @@ must not sit below the highest `min_tier` among its folded stages.
 - **`reviewer` (capable-1).** Verification and analysis: per-task verify/review, batch verify,
   dogfooding, anti-pattern scanning (`rule-scan`), and the two audit commands (`dev-find-conflict`,
   `dev-find-issue`) — those analyse rather than transcribe, which is why they sit here and not
-  under `scribe`. Folds `verify`, `review`, `dogfood`.
+  under `scribe`. `dev-find-issue` now routes through the `sp:history-anatomy` skill (mode contract + report contract). Folds `verify`, `review`, `dogfood`.
 - **`planner` (capable-2).** The planning half: feature planning, requirement refinement (single
   and batch), brainstorm, idea intake, batch run/parallel orchestration, next-step routing,
   architecture survey, feature-frontier prioritization, and feature-tree restructure. Folds `plan`,
   `refine`, `brainstorm`.
 
 **Placement notes (directory closure, task 0535).** The decided four-row table listed 31 commands;
-the live `plugins/sp/commands/` directory has 39. The six additional commands were placed by the
+the live `plugins/sp/commands/` directory has 38 (39 at the time of the mapping; `dev-history-load`
+was removed in HA-S1 0661). The six additional commands were placed by the
 same stage logic: `dev-refineall` folds `refine` → planner; `dev-find-next` is planning-side
 frontier work → planner; `dev-feature-change` is planning-half corpus surgery on the feature tree →
 planner; `dev-gtd` is the execution/delivery flow → coder; `dev-find-conflict` and `dev-find-issue`
-are audits/analysis → reviewer (same reasoning as `rule-scan`). Later additions: `dev-history-load`
-is mechanical load+analyze orchestration → scribe; `dev-pr-review` is review orchestration —
+are audits/analysis → reviewer (same reasoning as `rule-scan`). Later additions: `dev-pr-review` is review orchestration —
 driving the external PR review and triaging its findings folds the `review` stage → reviewer.
 
 **Consistency is a test, not a convention.** `plugins/sp/tests/roles.test.ts` parses this YAML and

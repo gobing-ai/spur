@@ -159,12 +159,15 @@ describe('(0556 R4) fallback categorization reproduces pre-rewrite findings on t
 // ─── R5: documented surface tied to real definitions ───
 
 describe('(0556 R5) documented flags / modes / --json tied to real command definitions', () => {
-    test('command argument-hint carries --create-task, not the removed flags', () => {
-        expect(command).toMatch(/^argument-hint:.*\[<topic>\]/m);
-        expect(command).toContain('--create-task');
+    test('command argument-hint carries the reduced history-anatomy surface (0661 repoint)', () => {
+        expect(command).toMatch(/^argument-hint:.*\[<focus>\]/m);
+        expect(command).toContain('--mode');
+        expect(command).toContain('--recompute');
         const hint = command.match(/^argument-hint:\s*(.*)$/m)?.[1] ?? '';
-        expect(hint).not.toContain('--use-history');
-        expect(hint).not.toContain('--no-task');
+        // The fourteen legacy flags are dropped from the forwarder.
+        for (const dropped of ['--create-task', '--sessions', '--source', '--use-history', '--no-task']) {
+            expect(hint).not.toContain(dropped);
+        }
     });
 
     test('SKILL.md names replacements for removed flags (no silent unknown-option)', () => {

@@ -1,0 +1,307 @@
+# History-anatomy pipeline — daily/ad-hoc diagnostic report over already-imported history
+# (feature I8, HA-S1 0660 / ADR-079).
+#
+# Orchestration is configuration (ADR-022): a state machine over the existing dual-workflow
+# engine. The YAML owns ONLY the cache branch, deterministic stage ordering, executor dispatch,
+# bounded correction, and atomic publication sequencing. The deterministic cache/digest/
+# structure/publish work is 0659's dependency-free helper script; the judgment (mode validity,
+# what counts as evidence, the report contract, enrich/validate rubrics) is 0658's skill. Per
+# ADR-069 R1, cache-decide / digest / structure-check / publish must NOT be inline shell — every
+# shell action here is glue length (a single helper invocation), because each of those programs
+# would exceed the shell composition threshold and be flagged as an owned-capability candidate.
+#
+# Shape:
+#   start -> resolve-scope -> cache-probe -> analyze -> render -> enrich -> structure-gate
+#            -> validate -> publish -> published
+#            (cache hit -> refresh-provenance -> publish)
+#            (validate PASS -> publish; validate FAIL -> correct (max 1) -> structure-gate ...)
+#            (any all-paths failure -> failed)
+#
+# terminalStates: [published, failed]. Publication is reachable ONLY from a passing validation
+# state — there is no edge into `publish` from structure-gate or enrich directly.
+#
+# Vars (all must be declared here — the vars: block is the only safe shape; `spur workflow
+# validate` and the skill-structure test enforce it):
+#   mode      — "daily" (default) | "ad-hoc" (validated in resolve-scope)
+#   date      — YYYY-MM-DD for --date (daily); empty for ad-hoc
+#   since     — inclusive ISO lower bound (ad-hoc; also normalizes daily via the DST-aware rule)
+#   until     — inclusive ISO upper bound (ad-hoc)
+#   focus     — ad-hoc focus string (required in ad-hoc mode, rejected in daily)
+#   recompute — "true" forces the full analyze/render/enrich/validate path (cache disposition
+#               forced-recompute)
+#   output    — explicit report output path; default run directory
+#   agent     — executor for the agent.run stages (enrich/validate)
+#   spurBin   — PATH-independent spur invocation (overridden by CLI at run start)
+#   __runId   — run-scoped id for explicit artifact paths (allocated in start)
+#   stepTimeoutMs — agent.run budget for enrich/validate
+#   correctionCount — bounded correction loop counter file path bits (name resolved in correct)
+
+"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+kind: state-machine
+name: history-anatomy
+description: "Daily/ad-hoc history-anatomy report: cache branch, deterministic analyze/render, skill enrichment, deterministic structure gate, independent evidence validation, bounded correction, atomic publication"
+iterationBound: 20
+initialState: start
+terminalStates:
+  - published
+  - failed
+failureStates:
+  - failed
+vars:
+  mode: "daily"
+  date: ""
+  since: ""
+  until: ""
+  focus: ""
+  recompute: "false"
+  output: ""
+  agent: "omp"
+  spurBin: "spur"
+  __runId: ""
+  stepTimeoutMs: "1800000"
+  correctionCount: "0"
+
+states:
+  - id: start
+    description: >
+      Allocate the run-scoped id and root. Every analyze/render path in this workflow writes to
+      an explicit unique path under this run id — no stage reads the mutable latest.json pointer.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run;
+            if [ -z "$__runId" ]; then __runId=$(uuidgen | tr 'A-Z' 'a-z' | cut -c1-8); fi;
+            echo "$__runId" > .spur/run/history-anatomy-run.id
+
+  - id: resolve-scope
+    description: >
+      Dispatch the skill's mode validation (0658 references/modes.md): daily is the default and
+      rejects focus/since/until/output; ad-hoc requires a non-empty focus plus two ordered
+      inclusive bounds and rejects --date/--recompute. Writes the normalized selector artifact.
+    onEnter:
+      - kind: agent.run
+        options:
+          agent: ${vars.agent}
+          input: "Validate the mode arguments per sp:history-anatomy references/modes.md and write the normalized selector to .spur/run/${vars.__runId}-selector.json. mode=${vars.mode} date=${vars.date} since=${vars.since} until=${vars.until} focus=${vars.focus}. Reject conflicting arguments, naming the offending one; a rejection marks the run failed."
+          # Declared Layer-1 role (0538 R2): mode validation is a reviewer-standard judgment.
+          role: reviewer
+          expectFile: .spur/run/${vars.__runId}-selector.json
+          timeoutMs: ${vars.stepTimeoutMs}
+
+  - id: cache-probe
+    description: >
+      Deterministic cache probe via the helper (0659). Re-derives the semantic digest from a fresh
+      analyze before any reuse decision — a hit skips only enrichment, never the probe. Daily
+      only; ad-hoc runs never take the hit branch.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            node "$(superskill script path sp history-anatomy-cache.mjs)" decide \
+              "$__runId" "$mode" "$date" "$since" "$until" "$recompute" \
+              > .spur/run/$__runId-cache-disposition.txt 2>&1 || true
+
+  - id: analyze
+    description: >
+      Deterministic analyze of the current window and the immediately preceding comparable
+      window, each to an explicit run-scoped path. Always reruns — the deterministic half is
+      never cached (ADR-079).
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run;
+            $spurBin history analyze --out .spur/run/$__runId-history-anatomy-current.json --since "$since" --until "$until" --json
+      - kind: shell
+        options:
+          command: >-
+            $spurBin history analyze --out .spur/run/$__runId-history-anatomy-baseline.json --since "$baselineSince" --until "$until" --json 2>/dev/null || true
+
+  - id: render
+    description: >
+      Render both artifacts with report --mode forensics, naming the exact analyze paths.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run;
+            $spurBin history report .spur/run/$__runId-history-anatomy-current.json --mode forensics > .spur/run/$__runId-history-anatomy-current.md;
+            $spurBin history report .spur/run/$__runId-history-anatomy-baseline.json --mode forensics > .spur/run/$__runId-history-anatomy-baseline.md || true
+
+  - id: enrich
+    description: >
+      Model enrichment via the skill operation sp:history-anatomy enrich (0658 operations.md).
+      Consumes the two artifacts; authors the model half of the report.
+    onEnter:
+      - kind: agent.run
+        options:
+          agent: ${vars.agent}
+          input: "Run sp:history-anatomy enrich: given .spur/run/${vars.__runId}-history-anatomy-current.json and -baseline.json, author the model half of the report (Baseline comparison, Findings, Recurrence ledger, Remediation options, Performance analysis, Workflow/process improvements, Positive patterns) to .spur/run/${vars.__runId}-candidate.md per references/report-contract.md. This operation never launches a workflow."
+          # Declared Layer-1 role (0538 R2): enrichment is model judgment.
+          role: reviewer
+          expectFile: .spur/run/${vars.__runId}-candidate.md
+          timeoutMs: ${vars.stepTimeoutMs}
+
+  - id: structure-gate
+    description: >
+      Deterministic structure gate via the helper (0659). Asserts the eleven sections in order,
+      per-finding fields, no placeholders, evidence anchors. Not reachable on the hit path from
+      enrich — always gated before validation.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            node "$(superskill script path sp history-anatomy-cache.mjs)" check \
+              .spur/run/$__runId-candidate.md > .spur/run/$__runId-structure-gate.txt 2>&1 || true
+
+  - id: validate
+    description: >
+      Independent evidence validation via the skill operation sp:history-anatomy validate.
+      Publication is reachable only from a PASS here.
+    onEnter:
+      - kind: agent.run
+        options:
+          agent: ${vars.agent}
+          input: "Run sp:history-anatomy validate: independently check .spur/run/${vars.__runId}-candidate.md against the two artifacts per references/operations.md; write Verdict: PASS or FAIL to .spur/run/${vars.__runId}-validation.txt. This operation never launches a workflow."
+          # Declared Layer-1 role (0538 R2): independent verification.
+          role: reviewer
+          expectFile: .spur/run/${vars.__runId}-validation.txt
+          timeoutMs: ${vars.stepTimeoutMs}
+
+  - id: correct
+    description: >
+      One bounded correction pass. onEnter increments the counter; the retry edge guards on
+      correctionCount < 1, the second failure takes the -> failed edge.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            n=$(cat .spur/run/$__runId-correction-count 2>/dev/null || echo 0) &&
+            printf '%s\n' "$((n + 1))" > .spur/run/$__runId-correction-count
+
+  - id: refresh-provenance
+    description: >
+      On a cache hit, refresh validated_at and the imported-snapshot banner from the current
+      per-source lastImportedAt values — never claiming a source was imported after its recorded
+      timestamp.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            node "$(superskill script path sp history-anatomy-cache.mjs)" refresh \
+              .spur/run/$__runId-current.json .spur/run/$__runId-current.md 2>/dev/null || true
+
+  - id: publish
+    description: >
+      Atomic publication via the helper (0659). Only reachable from a passing validate state.
+      Writes the full frontmatter provenance block naming cache disposition, window state,
+      per-source coverage, artifact paths + digests, and the banner.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            node "$(superskill script path sp history-anatomy-cache.mjs)" publish \
+              .spur/run/$__runId-candidate.md "$output"
+
+  - id: published
+    description: Terminal — report published atomically after a passing validation.
+
+  - id: failed
+    description: Terminal — mode rejection, gate failure, or validation failure not corrected.
+
+transitions:
+  - from: start
+    to: resolve-scope
+    description: Scope resolved.
+    guard:
+      kind: always
+
+  - from: resolve-scope
+    to: cache-probe
+    description: Mode valid — probe the cache.
+    guard:
+      kind: always
+
+  # Daily only takes the hit branch; ad-hoc always regenerates.
+  - from: cache-probe
+    to: refresh-provenance
+    description: Cache hit (daily) — refresh provenance and publish without re-enrichment.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$mode" = daily && grep -q "^hit$" .spur/run/$__runId-cache-disposition.txt 2>/dev/null'
+  - from: cache-probe
+    to: analyze
+    description: Cache miss, forced recompute, or ad-hoc — rerun the deterministic half.
+    guard:
+      kind: always
+
+  - from: refresh-provenance
+    to: publish
+    description: Provenance refreshed — publish the cached model half.
+    guard:
+      kind: always
+
+  - from: analyze
+    to: render
+    description: Both artifacts analyzed — render.
+    guard:
+      kind: always
+
+  - from: render
+    to: enrich
+    description: Both artifacts rendered — enrich.
+    guard:
+      kind: always
+
+  - from: enrich
+    to: structure-gate
+    description: Candidate authored — deterministic structure gate.
+    guard:
+      kind: always
+
+  - from: structure-gate
+    to: validate
+    description: Candidate structurally sound — independent evidence validation.
+    guard:
+      kind: shell
+      options:
+        command: 'grep -q "^PASS$" .spur/run/$__runId-structure-gate.txt 2>/dev/null'
+  - from: structure-gate
+    to: failed
+    description: Structure gate FAIL — never publish a malformed candidate.
+    guard:
+      kind: always
+
+  - from: validate
+    to: publish
+    description: Independent validation PASS — publish atomically.
+    guard:
+      kind: shell
+      options:
+        command: 'grep -q "Verdict: PASS" .spur/run/$__runId-validation.txt 2>/dev/null'
+  - from: validate
+    to: correct
+    description: Validation FAIL under the correction cap — one bounded pass.
+    guard:
+      kind: shell
+      options:
+        command: '! grep -q "Verdict: PASS" .spur/run/$__runId-validation.txt 2>/dev/null && test "$(cat .spur/run/$__runId-correction-count 2>/dev/null || echo 0)" -lt 1'
+  - from: validate
+    to: failed
+    description: Validation FAIL with the correction cap exhausted — terminate without publishing.
+    guard:
+      kind: always
+
+  - from: correct
+    to: structure-gate
+    description: Corrected candidate re-enters the deterministic gate, then re-validates.
+    guard:
+      kind: always
+
+  - from: publish
+    to: published
+    description: Report published.
+    guard:
+      kind: always

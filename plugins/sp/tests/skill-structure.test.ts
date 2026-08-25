@@ -21,7 +21,7 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 const PLUGIN_ROOT = join(import.meta.dir, '..');
@@ -340,14 +340,18 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         };
         statSync(join(skillDir, 'agents', 'openai.yaml'));
 
-        // Thin command delegates to the skill SSOT.
-        expect(command).toContain('Skill(skill="sp:issue-finding", args="$ARGUMENTS")');
-        expect(command).toMatch(/argument-hint:.*\[<topic>\]/);
-        expect(command).toContain('--source');
-        expect(command).toContain('--severity');
-        expect(command).toContain('--min-cost');
-        expect(command).toContain('--create-task');
-        expect(command).toContain('--json');
+        // Thin command delegates to the skill SSOT (0661: now sp:history-anatomy; the legacy
+        // sp:issue-finding surface is asserted separately below).
+        expect(command).toContain('Skill(skill="sp:history-anatomy", args="$ARGUMENTS")');
+        expect(command).toMatch(/argument-hint:.*\[<focus>\]/);
+        expect(command).toMatch(/argument-hint:.*--mode </);
+        expect(command).toMatch(/argument-hint:.*--date </);
+        expect(command).toContain('--recompute');
+        expect(command).toContain('--output');
+        expect(command).not.toContain('--source');
+        expect(command).not.toContain('--severity');
+        expect(command).not.toContain('--min-cost');
+        expect(command).not.toContain('--create-task');
 
         // Optional topic + multi-source honesty live on the skill.
         expect(skill).toContain('[topic]');
@@ -733,7 +737,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const ROUTER_SKILLS = new Set(['spur-dev', 'spur-cli']);
         const NON_ROUTER_BUDGET = 350;
         const ROUTER_BUDGET = 600;
-        const AGGREGATE_BUDGET = 8200; // scales with skill count (29 skills incl. pr-reviewing); per-skill caps below are the real bloat guard
+        const AGGREGATE_BUDGET = 8550; // scales with skill count (30 skills incl. pr-reviewing and history-anatomy); per-skill caps below are the real bloat guard
 
         let aggregate = 0;
         const offenders: string[] = [];
@@ -805,6 +809,125 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // A baseline entry for a skill that no longer exists is dead weight.
         const unknown = Object.keys(BASELINE).filter((skill) => !skillDirs.includes(skill));
         expect(unknown, 'BASELINE entries naming no shipped skill').toEqual([]);
+    });
+
+    // HA-S1 (0658 R11): history-anatomy owns interpretation only. It must contain no recipe that
+    // reprocesses raw history, launches the importer, or mutates the corpus/docs/sources.
+    test('history-anatomy (HA-S1) contains no import/corpus-mutation/discovery recipe', () => {
+        const dir = join(SKILLS_DIR, 'history-anatomy');
+        if (!existsSync(dir)) {
+            // Skill not present — this task's boundary is vacuous until it ships; do not fail.
+            return;
+        }
+        const md = walk(dir, (p) => p.endsWith('.md'));
+        const text = md.map((p) => readFileSync(p, 'utf8')).join('\n');
+        const forbidden = [
+            'spur task',
+            'spur feature',
+            'spur rule',
+            'spur history import',
+            '.jsonl',
+            'readdir',
+            'session-root',
+            'session_formats',
+        ];
+        for (const needle of forbidden) {
+            expect(text, `history-anatomy must not contain ${needle}`).not.toContain(needle);
+        }
+    });
+
+    // HA-S1 (0660 R8): the workflow owns ordering/branching only. It must contain no import,
+    // corpus/docs/source mutation, or discovery recipe; its only writes are run-scoped
+    // intermediates, analyze artifacts, and the requested report or cache file.
+    test('history-anatomy.yaml (0660 R8) contains no import/mutation/discovery recipe', () => {
+        const wf = join(WORKFLOWS_DIR, 'history-anatomy.yaml');
+        if (!existsSync(wf)) {
+            // Workflow not yet shipped — boundary vacuous until it lands.
+            return;
+        }
+        const text = readFileSync(wf, 'utf8');
+        const forbidden = [
+            'spur task',
+            'spur feature',
+            'spur rule',
+            'spur history import',
+            'spur history daily',
+            '.jsonl',
+            'readdir',
+            'session-root',
+            'session_formats',
+            'task update',
+            'feature update',
+        ];
+        for (const needle of forbidden) {
+            expect(text, `history-anatomy.yaml must not contain ${needle}`).not.toContain(needle);
+        }
+        // Allowed writes: run-scoped intermediates + analyze --out + report render + publish.
+        expect(text).toContain('--out .spur/run');
+    });
+
+    // HA-S1 (0660 R9): workflow fixtures cover the eight cache cases.
+    test('history-anatomy workflow fixtures cover the cache decision matrix (0660 R9)', () => {
+        const testsDir = join(PLUGIN_ROOT, 'tests');
+        const fixture = join(testsDir, 'history-anatomy-cache.test.ts');
+        if (!existsSync(fixture)) {
+            return;
+        }
+        const text = readFileSync(fixture, 'utf8');
+        const cases = [
+            'identical cache is a hit',
+            'changed artifact digest',
+            'changed logic digest',
+            'no frontmatter returns null',
+            'provisional cache read after day closed',
+            'degraded coverage',
+            '--recompute forces',
+            'failed candidate leaves the prior target',
+        ];
+        for (const c of cases) {
+            expect(text, `fixture missing cache case: ${c}`).toContain(c);
+        }
+    });
+
+    // HA-S1 (0658 R4): the report contract freezes the eleven section names and the per-finding
+    // field names. 0659's structure gate and 0660's validation stage consume them verbatim, so
+    // this test pins them here so the vocabulary cannot drift.
+    test('history-anatomy report contract carries the frozen eleven sections and finding fields (HA-S1 0658 R4)', () => {
+        const contract = join(SKILLS_DIR, 'history-anatomy/references/report-contract.md');
+        if (!existsSync(contract)) {
+            return;
+        }
+        const text = readFileSync(contract, 'utf8');
+        const sections = [
+            'Scope and provenance',
+            'Executive summary',
+            'Baseline comparison',
+            'Findings',
+            'Recurrence ledger',
+            'Telemetry gaps',
+            'Remediation options',
+            'Performance analysis',
+            'Workflow and process improvements',
+            'Positive patterns',
+            'Evidence ledger',
+        ];
+        for (const s of sections) {
+            expect(text, `report contract must name section: ${s}`).toContain(s);
+        }
+        const fields = [
+            'key',
+            'category',
+            'impact',
+            'trend',
+            'observation',
+            'inference',
+            'confidence',
+            'contradictions',
+            'evidenceAnchor',
+        ];
+        for (const f of fields) {
+            expect(text, `report contract must name finding field: ${f}`).toContain(f);
+        }
     });
 
     test('R43 — README index tables list every shipped command/skill/agent exactly once (task 0187 AC6, task 0514 R1)', () => {

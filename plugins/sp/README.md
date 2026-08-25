@@ -127,9 +127,8 @@ list this README is checked against.
 | `dev-handover`      | Generate a structured handover document when blocked — captures goal, progress, blocker, rejected approaches, and next steps                                                                      |
 | `dev-debug`         | Systematic debugging protocol — reproduce, isolate, diagnose root cause, apply minimal fix, and verify with regression tests                                                                      |
 | `dev-daily`         | Generate a daily summary report from agent usage data, git history, and notes                                                                                                                     |
-| `dev-history-load`  | On-demand cumulative history load + narrowed analyze — import (checkpoint-resume) then analyze, optionally by session/task/window, with optional forensics render                                     |
 | `dev-dogfood`       | Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report                                                                     |
-| `dev-find-issue`    | Review agent session logs, identify performance bottlenecks and behavioral anti-patterns, and generate a structured task file with proposed fixes                                                 |
+| `dev-find-issue`    | Generate the daily/ad-hoc history-anatomy diagnostic report over already-imported history — mode contract, closed finding taxonomy, eleven-section report contract, cache branch, atomic publication; forwards to sp:history-anatomy                               |
 | `dev-find-conflict` | Authority-aware semantic audit across source, task, feature, and project authority files — detect conflicts, resolve claim-specific authority, and route confirmed repairs through owner surfaces |
 | `dev-find-next`     | Prompt-first feature frontier prioritizer — ranks the open feature frontier by derived importance/urgency with per-candidate evidence; gates unactionable features; emits tree defects as proposals only     |
 | `dev-fixall`        | Fix all lint, type, and test errors systematically across the working tree                                                                                                                        |
@@ -240,6 +239,8 @@ plugins/sp/
 │   │   └── references/{authority-resolution.md, comparison-protocol.md, finding-contract.md, remediation-routing.md}
 │   ├── next-feature/                # Prompt-first feature frontier prioritizer (backs /sp:dev-find-next)
 │   │   └── references/{signal-derivation.md, ranking-rubric.md, proposal-contract.md, handoff-routing.md}
+│   ├── history-anatomy/             # Diagnostic interpretation owner over already-imported history (backs /sp:dev-find-issue)
+│   │   └── references/{modes.md, report-contract.md, operations.md}
 │   ├── sys-architecture/            # Architecture / ADR judgment competency
 │   │   └── references/decision-method.md
 │   ├── sys-debugging/               # Structured debugging protocol
@@ -312,11 +313,23 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `daily-summary`             | 1.0.0 | Daily summary report generator — orchestrates ccusage CLI + git history into structured markdown summaries                                                                                                                                 |
 | `doc-evolve`                | 1.0   | Key-document evolution per `docs/99_PROJECT_CONSTITUTION.md` — drift audits, same-commit sync checks, frontmatter-contract verification, machine-appended lessons                                                                          |
 | `reverse-engineering`       | 1.1   | Codebase analysis / HLD generation / audit — depth-driven reverse engineering with orthogonal mode, focus, and format controls; backs `/sp:dev-reverse`                                                                                    |
-| `issue-finding`             | 1.1   | Session-log forensics — multi-source discovery, bottleneck ranking, optional topic focus, CLI-gated fix task generation; backs `/sp:dev-find-issue`                                                                                        |
+| `issue-finding`             | 1.1   | Session-log forensics — multi-source discovery, bottleneck ranking, optional topic focus, CLI-gated fix task generation; **legacy path** — superseded by `history-anatomy` for indexed reporting; backs no current command; directly invocable as sp:issue-finding |
 | `conflict-finding`          | 1.0   | Authority-aware semantic audit — four-pillar (source/task/feature/authority) conflict discovery, claim-specific authority resolution, reproducible evidence, confirmed owner-routed remediation; backs `/sp:dev-find-conflict`             |
 | `next-feature`              | 1.0   | Prompt-first feature frontier prioritizer — sync-first precondition, B3 actionability gate (cited, never restated), tiered rubric over measured signals, D1–D4 defect proposals conforming to the restructure map schema; backs `/sp:dev-find-next` |
 | `pr-reviewing`              | 1.0   | GitHub Codex PR review — PR prepare/reuse, `@codex review` request with per-HEAD dedupe, bounded polling, findings normalization, validated fix + re-review; spine SSOT `pr-review.yaml` + `scripts/pr-reviewing.ts`; backs `/sp:dev-pr-review`     |
 | `indexed-context`           | 1.0   | Cross-agent project context — anatomy/learnings/pitfalls/buglog/memory in `.spur/context/`; hook-tracked token-ledger; graceful degradation on agents without hooks                                                                        |
+| `history-anatomy`           | 1.0   | Diagnostic interpretation owner over already-imported history — daily/ad-hoc mode contract, closed finding taxonomy, eleven-section report contract, `enrich`/`validate` rubrics; no workflow launch, no JSONL fallback, no corpus mutation                                                                   |
+
+#### Bounded coexistence and retirement gate — `sp:issue-finding` (HA-S1 0661)
+
+`sp:issue-finding` remains packaged and directly invocable as the **legacy path**; `/sp:dev-find-issue` resolves to `sp:history-anatomy`. No logic is shared between them. This coexistence is _bounded_, not permanent — the retirement gate below is the contract:
+
+- **Parity fixtures** the new contract must cover before retirement is considered: typed history analysis; daily and focused range selection; repeated-work and error reporting; evidence and confidence; remediation proposals; performance analysis; process observations; positive patterns.
+- **Intentional exclusions, not gaps:** raw history-file parsing and task creation are deliberately out of scope for `history-anatomy`; a missing parity item is checked against this list before it counts as a gap.
+- **Adoption evidence:** successful `history-anatomy.yaml` workflow run records across both modes (`daily`, `ad-hoc`) and the available source families. No bespoke telemetry is added to count adoption.
+- **Review point:** one minor release or 30 days after this feature ships, whichever is later.
+- **Gate:** parity PASS + demonstrated use of both modes + no open high-impact regression + explicit operator approval. A failed gate records the missing evidence and one dated extension.
+- **Retirement is a separate change.** This feature removes nothing; `sp:issue-finding` stays until the operator approves a dedicated retirement change.
 
 Each skill directory contains:
 
@@ -338,11 +351,11 @@ Skills contain zero validation logic — the CLI is the gate.
 
 Thin slash-command wrappers that parse user arguments and delegate to the corresponding skill. Each
 command is a user-facing entry point that bridges natural language to skill invocation. There are
-**39 commands** (see the Command index above for the full list), organized by the surface they wrap:
+**38 commands** (see the Command index above for the full list), organized by the surface they wrap:
 
 | Prefix       | Count | Delegates to                                                                                                                                                                                                                                                                                                        | Purpose                                                                                |
 | ------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `dev-*`      | 33    | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:next-router`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, `sp:sys-debugging`, `sp:daily-summary`, `sp:issue-finding`, `sp:conflict-finding`, `sp:reverse-engineering`, `sp:pr-reviewing`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
+| `dev-*`      | 32    | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:next-router`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, `sp:sys-debugging`, `sp:daily-summary`, `sp:history-anatomy`, `sp:conflict-finding`, `sp:reverse-engineering`, `sp:pr-reviewing`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
 | `rule-*`     | 3     | `sp:spur-cli`                                                                                                                                                                                                                                                                                                       | The rule surface — `rule-add`, `rule-refine`, `rule-scan`                              |
 | `workflow-*` | 2     | `sp:spur-cli`                                                                                                                                                                                                                                                                                                       | The workflow surface — `workflow-add`, `workflow-refine`                               |
 | `spur-init`  | 1     | `sp:doc-evolve`                                                                                                                                                                                                                                                                                                     | Project bootstrap (`spur init`) with doc-evolve integration                            |
@@ -352,7 +365,7 @@ Each command file contains:
 - YAML frontmatter (`description`, `argument-hint`, `allowed-tools`).
 - A delegation block: `Skill(skill="sp:<skill-name>", args="<operation> $ARGUMENTS")`.
 
-**Commands as SSOT (ADR-032).** The 39 `.md` files in `commands/` are the authoritative,
+**Commands as SSOT (ADR-032).** The 38 `.md` files in `commands/` are the authoritative,
 hand-editable source for the operator command surface. Per-platform adapters are **install-time
 output** owned by `superskill` (`superskill install sp`) and never committed here. Plugin `sp` ships
 no per-platform artifacts — only the platform-independent thin wrappers.

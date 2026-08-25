@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "History-anatomy cache helper: semantic artifact digest, invalidation matrix, structure gate, atomic publish"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-25T04:06:58.552Z
-updated_at: "2026-08-25T04:38:44.467Z"
+updated_at: "2026-08-25T06:01:15.263Z"
 feature_id: I8
 priority: P2
 tags: ["plugin", "script", "cache"]
@@ -14,6 +14,7 @@ dependencies: ["0657"]
 ## 0659. History-anatomy cache helper: semantic artifact digest, invalidation matrix, structure gate, atomic publish
 
 ### Background
+
 ADR-079 makes cache validity a **derived fact**, not a stored claim: a cached daily report is
 reusable only for its model-authored half, and only when a freshly derived semantic digest of the
 analyze artifact plus the contract/skill/workflow logic digests all match what the cached report
@@ -40,17 +41,21 @@ constitution §6.1 rule 3 — never a rewrite of the original entry. (Task 0661 
 for the `history-load.ts` removal; if both land in one commit, one amendment block covers both.)
 
 Shapes: `docs/design/history-anatomy.md` §Cache contract.
+
 ### Requirements
-- [ ] R1. Compute a normalized semantic SHA-256 digest over analyze artifact JSON, excluding only volatile generation fields (`generatedAt`, absolute paths, the digest field itself). Two artifacts describing the same evidence produce the same digest across runs and machines.
-- [ ] R2. Implement the full invalidation matrix: identity tuple (contract version, mode, date, timezone, normalized bounds, source scope), semantic artifact digest, contract/skill/workflow logic digests, provenance parsability, source coverage not narrowing, and window-state transition. Any failing row is a miss.
-- [ ] R3. Absent, truncated or unparsable cache frontmatter classifies as a miss with a stated reason and never aborts the run.
-- [ ] R4. A `provisional` cache read after the local day has closed is invalidated; a closed-day cache whose artifact digest changed (a late import) is invalidated.
-- [ ] R5. The structure gate checks a candidate report for all eleven required sections, the per-finding field set, the absence of placeholders/TODOs/empty bodies, and that every claim in the evidence ledger carries an anchor.
-- [ ] R6. Publication is atomic: a candidate reaches `docs/report/YYYY-MM-DD-history-anatomy.md` only after passing the gate, and a failed candidate leaves any previously published report byte-identical.
-- [ ] R7. The script contains no finding, remediation, severity or ranking logic — deterministic file, hash and schema work only.
-- [ ] R8. The `.mjs` twin is present and current, the script is declared in `config/plugin-scripts.json`, no shipped surface names a repo-relative `bun plugins/sp/scripts/` path, and `bun run script-contract-check` passes.
-- [ ] R9. Unit tests cover each invalidation-matrix row plus digest stability, malformed provenance, and the failed-candidate preservation case.
+
+- [x] R1. Compute a normalized semantic SHA-256 digest over analyze artifact JSON, excluding only volatile generation fields (`generatedAt`, absolute paths, the digest field itself). Two artifacts describing the same evidence produce the same digest across runs and machines.
+- [x] R2. Implement the full invalidation matrix: identity tuple (contract version, mode, date, timezone, normalized bounds, source scope), semantic artifact digest, contract/skill/workflow logic digests, provenance parsability, source coverage not narrowing, and window-state transition. Any failing row is a miss.
+- [x] R3. Absent, truncated or unparsable cache frontmatter classifies as a miss with a stated reason and never aborts the run.
+- [x] R4. A `provisional` cache read after the local day has closed is invalidated; a closed-day cache whose artifact digest changed (a late import) is invalidated.
+- [x] R5. The structure gate checks a candidate report for all eleven required sections, the per-finding field set, the absence of placeholders/TODOs/empty bodies, and that every claim in the evidence ledger carries an anchor.
+- [x] R6. Publication is atomic: a candidate reaches `docs/report/YYYY-MM-DD-history-anatomy.md` only after passing the gate, and a failed candidate leaves any previously published report byte-identical.
+- [x] R7. The script contains no finding, remediation, severity or ranking logic — deterministic file, hash and schema work only.
+- [x] R8. The `.mjs` twin is present and current, the script is declared in `config/plugin-scripts.json`, no shipped surface names a repo-relative `bun plugins/sp/scripts/` path, and `bun run script-contract-check` passes.
+- [x] R9. Unit tests cover each invalidation-matrix row plus digest stability, malformed provenance, and the failed-candidate preservation case.
+
 ### Acceptance Criteria
+
 ```gherkin
 Feature: History-anatomy cache helper — digest, invalidation, structure gate, atomic publish
 
@@ -129,6 +134,7 @@ Feature: History-anatomy cache helper — digest, invalidation, structure gate, 
     And every repository-contract claim names repo-relative "file:line" evidence
     And a claim with no anchor fails the deterministic structure gate
 ```
+
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
@@ -136,6 +142,7 @@ Feature: History-anatomy cache helper — digest, invalidation, structure gate, 
      is not ready to hand off. Keep empty if none. -->
 
 ### Design
+
 **WHAT.** One plugin-shipped, dependency-free script performing four deterministic jobs: semantic
 artifact digest, cache-metadata comparison against the invalidation matrix, structural checks on a
 candidate report, and atomic publication. Plus its `.mjs` twin and manifest entry.
@@ -251,47 +258,107 @@ and the target is untouched.
 **Cross-task.** Depends on 0657 for `population` (part of the digest material) and on 0658 for the
 frozen section/field vocabulary the structure gate asserts. Leaves for 0660: the four exported
 entry points and the `CacheDecision` shape the workflow branches on.
+
 ### Plan
-- [ ] 1. Create `plugins/sp/scripts/history-anatomy-cache.ts` mirroring `feature-sync-bounded.ts`:
+
+- [x] 1. Create `plugins/sp/scripts/history-anatomy-cache.ts` mirroring `feature-sync-bounded.ts`:
       pure exported functions + thin CLI entry, `node:` imports only, `process.argv.slice(2)`,
       local types, no `packages/` imports. (R7)
-- [ ] 2. Implement `semanticArtifactDigest` with recursive canonicalization copied in spirit from
+- [x] 2. Implement `semanticArtifactDigest` with recursive canonicalization copied in spirit from
       `selectorDigest` (`artifact.ts:240-263`); exclude only `generatedAt`, absolute paths, and the
       digest field. Include `population`. (R1)
-- [ ] 3. Implement `parseProvenance` — returns `null` on absent/truncated/unparsable frontmatter,
+- [x] 3. Implement `parseProvenance` — returns `null` on absent/truncated/unparsable frontmatter,
       never throws. (R3)
-- [ ] 4. Implement `decideCache` covering every invalidation-matrix row with its reason string,
+- [x] 4. Implement `decideCache` covering every invalidation-matrix row with its reason string,
       including the provisional→closed transition and `--recompute`. (R2, R4)
-- [ ] 5. Implement `checkReportStructure` reading the frozen vocabulary from 0658's
+- [x] 5. Implement `checkReportStructure` reading the frozen vocabulary from 0658's
       `references/report-contract.md`; assert sections, per-finding fields, no placeholders, and
       evidence-anchor presence. (R5)
-- [ ] 6. Implement `publishAtomically` — same-directory tmp + `renameSync`; remove the tmp and leave
+- [x] 6. Implement `publishAtomically` — same-directory tmp + `renameSync`; remove the tmp and leave
       the target untouched on any failure. (R6)
-- [ ] 7. Generate the twin: `superskill script convert sp history-anatomy-cache.ts`; add the
+- [x] 7. Generate the twin: `superskill script convert sp history-anatomy-cache.ts`; add the
       `standard` entry to `config/plugin-scripts.json`; append the convert call to
       `package.json:60` `build:scripts`. (R8)
-- [ ] 8. Add the ADR-065 `**Amendment (YYYY-MM-DD)**` block recording the standard-script roster
+- [x] 8. Add the ADR-065 `**Amendment (YYYY-MM-DD)**` block recording the standard-script roster
       change. Do not rewrite the original entry. (R8)
-- [ ] 9. Unit tests in `plugins/sp/tests/history-anatomy-cache.test.ts`: digest stability across
+- [x] 9. Unit tests in `plugins/sp/tests/history-anatomy-cache.test.ts`: digest stability across
       key order and runs; each invalidation-matrix row producing its reason; malformed provenance →
       `null` not a throw; structure-gate pass and each failure class; atomic publish leaving the
       prior target byte-identical on failure. (R9)
-- [ ] 10. Gate: `bun test plugins/sp/tests/history-anatomy-cache.test.ts` first, then
+- [x] 10. Gate: `bun test plugins/sp/tests/history-anatomy-cache.test.ts` first, then
       `bun run script-contract-check`, then `bun run spur-check`.
+
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Goal:** create the history-anatomy-cache script (with committed twin) — a dependency-free,
+deterministic cache helper for the history-anatomy report: semantic artifact digest, the full
+invalidation matrix, the structure gate, and atomic publication.
+
+| File | Change |
+| --- | --- |
+| `plugins/sp/scripts/history-anatomy-cache.ts:112` | New dependency-free script — pure exported semanticArtifactDigest / parseProvenance / decideCache / checkReportStructure / publishAtomically functions plus runCacheCli with captured output; node: imports only, no packages/ imports, no Bun.* globals. |
+| `plugins/sp/scripts/history-anatomy-cache.mjs:5` | Committed portable twin generated via the superskill script convert step, running under bare node. |
+| `config/plugin-scripts.json` | Added the history-anatomy-cache.ts standard entry with its twin. |
+| `package.json` | Appended the superskill script convert call for history-anatomy-cache.ts to build:scripts. |
+| `docs/00_ADR.md` | Added the ADR-065 amendment block recording the standard-script roster growth from 7 to 8. |
+| `plugins/sp/tests/history-anatomy-cache.test.ts:193` | Unit tests over digest stability, each invalidation-matrix row, malformed provenance to null, structure-gate failures, atomic publish/rollback, and the runCacheCli CLI entry with captured output. |
+
+The helper performs deterministic file/hash/schema work only — no finding, remediation, severity,
+or ranking logic (that is the skill's judgment). script-contract-check passes (16 scripts, 0
+violations).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+| ------------- | -------- | ---------- |
+| R1 | MET | plugins/sp/scripts/history-anatomy-cache.ts:101 semanticArtifactDigest; tests pin canonicalization stability. |
+| R2 | MET | :217 decideCache full matrix; each row tested. |
+| R3 | MET | :171 parseProvenance returns null, never throws; tested. |
+| R4 | MET | window-closed row in decideCache; tested. |
+| R5 | MET | :267 checkReportStructure — sections/fields/placeholders/anchors; tested. |
+| R6 | MET | :311 publishAtomically atomic; failed candidate preserves target; tested. |
+| R7 | MET | script contains no finding/remediation/severity/ranking logic. |
+| R8 | MET | twin generated; config/plugin-scripts.json entry; build:scripts updated; ADR-065 amendment; script-contract-check PASS. |
+| R9 | MET | plugins/sp/tests/history-anatomy-cache.test.ts — 20 tests, 94.33% lines. |
+
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Final disposition: APPROVED** — implementation satisfies all nine requirements; no P1–P3 findings.
+
+| Priority | Finding | Evidence |
+| --- | --- | --- |
+| P4 (note) | The YAML frontmatter parser (`parseBlock`/`parseScalar`) is a purpose-built minimal subset, not a full YAML parser. It is correct for the deterministic frontmatter this script and its workflow emit, but a future hand-authored frontmatter with an unsupported construct would parse conservatively (returning `null` → cache miss) rather than crash — safe degradation, documented. | `plugins/sp/scripts/history-anatomy-cache.ts:143` |
+
+No P1/P2/P3.
+
+- R1 (semantic digest, exclude only generatedAt/paths/digest): `semanticArtifactDigest` at `:101`; tests pin key-order/array-order stability and rank-order preservation.
+- R2 (full invalidation matrix): `decideCache` at `:217` covers identity tuple, data, logic, provenance, coverage, window-state, and recompute rows.
+- R3 (malformed provenance → miss, never throw): `parseProvenance` at `:171` returns `null`; tests confirm no-throw on absent/truncated frontmatter.
+- R4 (provisional→closed invalidation): `window-closed` row in `decideCache`; tested.
+- R5 (structure gate): `checkReportStructure` at `:267` — eleven sections, nine fields, no placeholders, evidence anchors; tested.
+- R6 (atomic publication): `publishAtomically` at `:311` — same-dir tmp + fsync + rename; failed candidate leaves target byte-identical; tested.
+- R7 (deterministic work only): no finding/remediation/severity/ranking logic in the script.
+- R8 (.mjs twin + manifest + ADR-065 amendment): twin generated; `config/plugin-scripts.json` entry; `build:scripts` updated; amendment recorded. `script-contract-check` passes (16 scripts, 0 violations).
+- R9 (unit tests): `plugins/sp/tests/history-anatomy-cache.test.ts` — 20 tests, 94.33% line coverage.
+
+- Security: hash comparison is truth, not a stored claim (ADR-079); no trust in filename/mtime. The frontmatter parser never executes input.
+- Efficiency: digest is a single canonicalized SHA-256; the matrix is pure comparisons.
+- Correctness: population (0657) included in digest material — a session-count change is a change in evidence; canonicalization matches `selectorDigest` discipline.
+- Architecture: `node:` only, no `packages/` imports, no `Bun.*` globals — the committed `.mjs` twin runs under bare node (ADR-065).
+
+None material. The hand-rolled YAML subset is the only bespoke surface; it degrades to a cache miss on anything it cannot parse, never to a false hit.
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-08-25T05:33:27.383Z todo → wip (system)
+- 2026-08-25T06:01:15.263Z wip → done (system)

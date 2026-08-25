@@ -364,6 +364,16 @@ importer. The analyze rollup estimates per-model cost for the artifact from `his
 mapping to `history_message`'s typed token columns — exact and estimated figures folded apart,
 never priced; the ETL `CostRecord` read path is retired on the read side.
 
+**History-anatomy diagnostic (HA-S1, ADR-079/080; 0657–0661).** `analyze` records an additive
+`population` block (`SelectionPopulation` — sessions, tools, loops, warnings, `appliedTop`) from
+unbounded `COUNT(DISTINCT …)` queries over the active selector, never from bounded leaderboard
+lengths; the forensics renderer presents bounded lists as `top N of M` (ADR-080). Diagnostic
+interpretation lives in the plugin space, not the CLI: `sp:history-anatomy` owns the mode/report
+contracts, `history-anatomy.yaml` owns the cache branch / bounded correction / atomic publication,
+and `history-anatomy-cache.ts` (+ committed `.mjs` twin, ADR-065 standard contract) computes the
+semantic artifact digest — the deterministic half always reruns, only model judgment is cacheable
+(ADR-079). Shapes: `docs/design/history-anatomy.md`.
+
 **History Board read plane (E8).** The six `history.*` oRPC procedures delegate through
 `HistoryBoardService`; `LiveHistoryBoardService` composes the existing forensic queries and keeps
 the server transport SQL-free. `HistoryService.analyze()` refreshes checkpoint-keyed SQLite read
@@ -693,7 +703,6 @@ accent on screen (0420 finding F-01). Module code carries **no hex literals and 
 classes** — every surface resolves a `spur-*` token.
 
 ### 14.5 Module shell convention (ADR-081 proposed — History/Observability shell built; Tasks full-bleed instance built 0663, F72)
->>>>>>>
 
 A multi-view Board module composes a **shell**: `<Module>Shell.tsx` plus an append-only `tabs.ts`
 (`{ id, label, component }`; never reorder or rename — the tab strip and persisted UI state key on

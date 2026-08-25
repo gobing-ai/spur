@@ -188,8 +188,83 @@ describe('renderForensics — empty buckets and appendix edges', () => {
             },
         ];
         const out = renderForensics(a);
-        expect(out).toContain('- Warning codes: derived-unattributed-time');
-        expect(out).toContain('| claude | ok | 3 | 40 | 25 | 0 |');
+        expect(out).toContain('  - derived-unattributed-time — x');
+        expect(out).toContain('| claude | ok | 3 | 40 | 25 | 0 | not available | 0 | 0 |');
+    });
+
+    test('HA-S1: population > applied depth renders top N of M, never the array length', () => {
+        const a = artifact({
+            bySession: [
+                {
+                    sessionId: 's1',
+                    source: 'claude',
+                    startedAt: null,
+                    messages: 1,
+                    toolCalls: 0,
+                    tokens: 0,
+                    costUsd: 0,
+                    topTool: null,
+                    assistantDurationMs: 0,
+                    assistantDurationUnmeasured: 0,
+                },
+            ],
+            population: { sessions: 35, tools: 12, loops: 4, warnings: 2, appliedTop: 20 },
+        });
+        const out = renderForensics(a);
+        expect(out).toContain('| Sessions | top 20 of 35 |');
+        expect(out).toContain('top 20 of 35 sessions · 12 tools · 4 loops · 2 warnings');
+    });
+
+    test('HA-S1: whole population shown when population <= array length renders plain count', () => {
+        const a = artifact({ population: { sessions: 35, tools: 12, loops: 4, warnings: 2, appliedTop: 50 } });
+        a.bySession = [];
+        a.byTool = [];
+        const out = renderForensics(a);
+        expect(out).toContain('| Sessions | 35 |');
+        expect(out).toContain('· 12 tools · 4 loops · 2 warnings');
+    });
+
+    test('HA-S1: pre-addition artifact (no population) renders not available, never a fabricated count', () => {
+        const a = artifact({
+            bySession: [
+                {
+                    sessionId: 's1',
+                    source: 'claude',
+                    startedAt: null,
+                    messages: 1,
+                    toolCalls: 0,
+                    tokens: 0,
+                    costUsd: 0,
+                    topTool: null,
+                    assistantDurationMs: 0,
+                    assistantDurationUnmeasured: 0,
+                },
+            ],
+        });
+        const out = renderForensics(a);
+        expect(out).toContain('| Sessions | not available |');
+        expect(out).toContain('not available sessions');
+    });
+
+    test('HA-S1: coverage truncation note appears when error samples hit the cap', () => {
+        const a = artifact();
+        a.coverage = [
+            {
+                source: 'claude',
+                status: 'degraded',
+                files: 3,
+                messages: 40,
+                toolCalls: 25,
+                unknownRecords: 0,
+                lastImportedAt: '2026-08-01T00:00:00Z',
+                parseErrors: 5,
+                parseErrorSamples: Array.from({ length: 20 }, (_, i) => `err${i}`),
+                validationErrors: 2,
+                validationErrorSamples: [],
+            },
+        ];
+        const out = renderForensics(a);
+        expect(out).toContain('| claude | degraded | 3 | 40 | 25 | 0 | 2026-08-01T00:00:00Z | 5 (truncated) | 2 |');
     });
 
     test('tool with all calls unmeasured renders n/a durations, not 0s', () => {
