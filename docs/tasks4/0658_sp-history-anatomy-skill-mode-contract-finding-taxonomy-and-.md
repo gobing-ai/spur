@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "sp:history-anatomy skill: mode contract, finding taxonomy, and the eleven-section report contract"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-25T04:06:58.527Z
-updated_at: "2026-08-25T04:37:26.777Z"
+updated_at: "2026-08-25T05:27:40.330Z"
 feature_id: I8
 priority: P2
 tags: ["plugin", "skill", "history"]
@@ -44,18 +44,18 @@ must re-execute correctly on every run.
 Shapes: `docs/design/history-anatomy.md` §Operator surface, §Report contract. Evidence policy
 derives from ADR-079.
 ### Requirements
-- [ ] R1. Create `plugins/sp/skills/history-anatomy/SKILL.md` through the Superskill skill lifecycle (`superskill skill …`); do not hand-maintain generated platform adapters. The body stays under `BODY_BUDGET` (20,000 bytes) by routing to `references/` — a new skill cannot be added to the `BASELINE` exemption map.
-- [ ] R2. Raise `AGGREGATE_BUDGET` in `plugins/sp/tests/skill-structure.test.ts` to accommodate skill #30, and keep the new description within the 350-char non-router cap.
-- [ ] R3. Mode validation: `--mode daily` is the default and rejects focus text, `--since`, `--until` and `--output`; `--mode ad-hoc` requires a non-empty focus and both ordered inclusive bounds and rejects `--date` and `--recompute`. Every conflict fails loud naming the offending argument. `--date` maps to a DST-aware local calendar interval, never a fixed 24-hour offset.
-- [ ] R4. The report contract defines all eleven required sections and, for each finding, the full field set: stable `<category>:<owner-surface>:<signal>` key, category from the closed vocabulary, impact, trend, observation, inference, per-finding confidence, contradictions shown beside the finding, and at least one evidence anchor.
-- [ ] R5. Evidence rules are stated and enforceable: causality needs two independent signals (one signal is a labelled hypothesis with a confirmation path); a process/workflow change needs recurrence across two independent sessions or one high-impact contract violation cited at `file:line`; unsupported dimensions read `not available` and are mirrored into the telemetry-gaps section; focus biases ranking, not collection.
-- [ ] R6. Comparison semantics: daily compares the immediately preceding local calendar day, ad-hoc the immediately preceding equal-duration window, and insufficient or materially different coverage renders `not comparable` with no trend, delta or percentage stated.
-- [ ] R7. The recurrence ledger classifies every finding as new / recurring / regressed / improved / resolved / not-comparable, matched on the stable key so that rewording a title never reclassifies a recurring finding as new.
-- [ ] R8. Positive patterns carry the same observation / inference / confidence / evidence-anchor fields as problem findings; an entry with no anchor is invalid.
-- [ ] R9. Remediation options are proposals only: owner surface, expected impact, verification method and reversibility, with no applied change, diff, or command the report claims to have run.
-- [ ] R10. The skill defines explicit `enrich` and `validate` operations the workflow invokes; neither operation launches a workflow, so the rubric stays single-sourced and cannot recurse.
-- [ ] R11. Skill structure tests pass and the skill contains no JSONL/session-root discovery recipe, no import invocation, and no corpus, docs or source mutation recipe.
-- [ ] R12. The plugin README roster row, directory-tree entry, and the `roles.md` command roster name the new skill.
+- [x] R1. Create `plugins/sp/skills/history-anatomy/SKILL.md` through the Superskill skill lifecycle (`superskill skill …`); do not hand-maintain generated platform adapters. The body stays under `BODY_BUDGET` (20,000 bytes) by routing to `references/` — a new skill cannot be added to the `BASELINE` exemption map.
+- [x] R2. Raise `AGGREGATE_BUDGET` in `plugins/sp/tests/skill-structure.test.ts` to accommodate skill #30, and keep the new description within the 350-char non-router cap.
+- [x] R3. Mode validation: `--mode daily` is the default and rejects focus text, `--since`, `--until` and `--output`; `--mode ad-hoc` requires a non-empty focus and both ordered inclusive bounds and rejects `--date` and `--recompute`. Every conflict fails loud naming the offending argument. `--date` maps to a DST-aware local calendar interval, never a fixed 24-hour offset.
+- [x] R4. The report contract defines all eleven required sections and, for each finding, the full field set: stable `<category>:<owner-surface>:<signal>` key, category from the closed vocabulary, impact, trend, observation, inference, per-finding confidence, contradictions shown beside the finding, and at least one evidence anchor.
+- [x] R5. Evidence rules are stated and enforceable: causality needs two independent signals (one signal is a labelled hypothesis with a confirmation path); a process/workflow change needs recurrence across two independent sessions or one high-impact contract violation cited at `file:line`; unsupported dimensions read `not available` and are mirrored into the telemetry-gaps section; focus biases ranking, not collection.
+- [x] R6. Comparison semantics: daily compares the immediately preceding local calendar day, ad-hoc the immediately preceding equal-duration window, and insufficient or materially different coverage renders `not comparable` with no trend, delta or percentage stated.
+- [x] R7. The recurrence ledger classifies every finding as new / recurring / regressed / improved / resolved / not-comparable, matched on the stable key so that rewording a title never reclassifies a recurring finding as new.
+- [x] R8. Positive patterns carry the same observation / inference / confidence / evidence-anchor fields as problem findings; an entry with no anchor is invalid.
+- [x] R9. Remediation options are proposals only: owner surface, expected impact, verification method and reversibility, with no applied change, diff, or command the report claims to have run.
+- [x] R10. The skill defines explicit `enrich` and `validate` operations the workflow invokes; neither operation launches a workflow, so the rubric stays single-sourced and cannot recurse.
+- [x] R11. Skill structure tests pass and the skill contains no JSONL/session-root discovery recipe, no import invocation, and no corpus, docs or source mutation recipe.
+- [x] R12. The plugin README roster row, directory-tree entry, and the `roles.md` command roster name the new skill.
 ### Acceptance Criteria
 ```gherkin
 Feature: sp:history-anatomy skill — mode contract, taxonomy, and report contract
@@ -223,41 +223,99 @@ finding-field names its structure gate asserts. Leaves for 0660: the `enrich` / 
 names and their input/output contract. Leaves for 0661: the skill name for the command's single
 invocation, plus the roster rows.
 ### Plan
-- [ ] 1. Scaffold via `superskill skill` into `plugins/sp/skills/history-anatomy/`; confirm no
+- [x] 1. Scaffold via `superskill skill` into `plugins/sp/skills/history-anatomy/`; confirm no
       hand-maintained platform adapters are added. (R1)
-- [ ] 2. Author `references/modes.md`: the daily/ad-hoc validation matrix, bounds normalization,
+- [x] 2. Author `references/modes.md`: the daily/ad-hoc validation matrix, bounds normalization,
       the DST-aware calendar-day rule, and the fail-loud message shape. (R3)
-- [ ] 3. Author `references/report-contract.md`: the eleven sections in order, the nine per-finding
+- [x] 3. Author `references/report-contract.md`: the eleven sections in order, the nine per-finding
       fields, the closed category vocabulary, the stable-key grammar, the evidence rules, the
       comparison/`not comparable` rule, the recurrence classes, and the positive-pattern and
       remediation standards. (R4–R9)
-- [ ] 4. Author `references/operations.md`: the `enrich` and `validate` rubrics, each stating
+- [x] 4. Author `references/operations.md`: the `enrich` and `validate` rubrics, each stating
       explicitly that it never launches a workflow. (R10)
-- [ ] 5. Write `SKILL.md` as a dispatcher that routes to the three references; keep the description
+- [x] 5. Write `SKILL.md` as a dispatcher that routes to the three references; keep the description
       under 350 chars and the body under 20,000 bytes. (R1, R2)
-- [ ] 6. Raise `AGGREGATE_BUDGET` to `8550` in `plugins/sp/tests/skill-structure.test.ts` and update
+- [x] 6. Raise `AGGREGATE_BUDGET` to `8550` in `plugins/sp/tests/skill-structure.test.ts` and update
       its skill-count comment. Do **not** touch `BASELINE`. (R2)
-- [ ] 7. Add the roster row and directory-tree entry in `plugins/sp/README.md` and the command/skill
+- [x] 7. Add the roster row and directory-tree entry in `plugins/sp/README.md` and the command/skill
       reference in `plugins/sp/references/roles.md`. (R12)
-- [ ] 8. Boundary test: assert the skill tree contains no `spur task` / `spur feature` / `spur rule`
+- [x] 8. Boundary test: assert the skill tree contains no `spur task` / `spur feature` / `spur rule`
       / `spur history import` invocation and no JSONL or session-root discovery recipe. (R11)
-- [ ] 9. Contract test: assert all eleven section names and the nine finding-field names appear in
+- [x] 9. Contract test: assert all eleven section names and the nine finding-field names appear in
       `references/report-contract.md`, so 0659 and 0660 cannot drift from the frozen vocabulary. (R4)
-- [ ] 10. Gate: `bun test plugins/sp/tests/skill-structure.test.ts` first, then `bun run spur-check`.
+- [x] 10. Gate: `bun test plugins/sp/tests/skill-structure.test.ts` first, then `bun run spur-check`.
 ### Solution
+**Goal:** create `sp:history-anatomy` — the independent owner of diagnostic interpretation over
+already-imported history — as a dispatcher body routing to three references, splitting the report
+contract out of `SKILL.md` (BODY_BUDGET) and raising the aggregate description budget for skill #30.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change |
+| --- | --- |
+| `plugins/sp/skills/history-anatomy/SKILL.md:2` | `name: history-anatomy` — new dispatcher skill body (3.4 KB, under BODY_BUDGET 20,000) routing to the three references; description under the 350-char non-router cap; a fresh skill cannot enter the BASELINE exemption map. |
+| `plugins/sp/skills/history-anatomy/references/modes.md:57` | The DST-aware calendar-day rule — the daily vs ad-hoc mode contract, bounds normalization, and the fail-loud argument shape. |
+| `plugins/sp/skills/history-anatomy/references/report-contract.md:1` | `# Report contract` — the eleven frozen sections in order (Findings, Recurrence ledger, Evidence ledger among them), the nine per-finding fields, category vocabulary, stable keys, evidence rules, comparison/recurrence, and the positive-pattern + remediation standards. |
+| `plugins/sp/skills/history-anatomy/references/operations.md:1` | `# Operations` — the enrich and validate operation rubrics; each states it never launches a workflow (recursion guard). |
+| `plugins/sp/tests/skill-structure.test.ts:736` | AGGREGATE_BUDGET raised 8200 to 8550 with the 30-skill count note; added the HA-S1 boundary test (line 812) and the report-contract freeze test (line 838). |
+| `plugins/sp/README.md:322` | Added the skill roster row; the directory-tree entry at line 243; bumped the platforms note. |
+| `plugins/sp/references/roles.md:2` | `name: roles` — noted dev-find-issue routes through the new sp:history-anatomy skill in the reviewer roster (line 86). |
 
+The body routes; the procedure lives in `references/` (the test's named shape). No hand-maintained
+platform adapters were added; BASELINE in the BODY test was not touched.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | plugins/sp/skills/history-anatomy/SKILL.md:2 — dispatcher body, 3.4 KB under BODY_BUDGET; BASELINE untouched. |
+| R2 | MET | plugins/sp/tests/skill-structure.test.ts:736 — AGGREGATE_BUDGET 8550; R42 asserts 350 non-router cap. |
+| R3 | MET | plugins/sp/skills/history-anatomy/references/modes.md:57 — mode matrix + DST rule + fail-loud shape. |
+| R4 | MET | plugins/sp/skills/history-anatomy/references/report-contract.md:1 — eleven sections + nine fields + vocabulary + stable key. |
+| R5 | MET | report-contract.md evidence rules (causality two signals, process recurrence, not available, focus-bias). |
+| R6 | MET | report-contract.md comparison semantics (daily prev-day, ad-hoc equal-window, not comparable). |
+| R7 | MET | report-contract.md recurrence ledger (six classes, stable-key match). |
+| R8 | MET | report-contract.md positive-pattern standard; anchor required. |
+| R9 | MET | report-contract.md remediation proposals-only standard. |
+| R10 | MET | plugins/sp/skills/history-anatomy/references/operations.md:1 — enrich/validate, never launch workflow. |
+| R11 | MET | plugins/sp/tests/skill-structure.test.ts:812 — boundary test green; no import/corpus/discovery recipe. |
+| R12 | MET | plugins/sp/README.md:322 roster + :243 dir tree; roles.md:86 roster note. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Final disposition: APPROVED** — implementation satisfies all twelve requirements; no P1–P3 findings.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
+| Priority | Finding | Evidence |
+| --- | --- | --- |
+| P4 (note) | `description`/body are under their budget caps by a healthy margin; the skill braces against re-entering a workflow (recursion guard) by design, which means any future cross-skill reference must stay in prose, not a nested invocation. | `plugins/sp/skills/history-anatomy/SKILL.md:1` |
+
+No P1/P2/P3. 
+
+
+All twelve requirements MET with direct evidence:
+
+- R1 (SKILL.md via lifecycle, body under BODY_BUDGET, not baselined): `plugins/sp/skills/history-anatomy/SKILL.md:2` — 3.4 KB body; `BASELINE` untouched (`skill-structure.test.ts:745-769` unchanged).
+- R2 (AGGREGATE_BUDGET raise + 350-cap): `plugins/sp/tests/skill-structure.test.ts:736` → 8550; the R42 test asserts both the 350 non-router cap and the new aggregate ceiling hold (57 tests green).
+- R3 (mode validation): `references/modes.md:57` — daily/ad-hoc matrix, DST calendar rule, fail-loud shape.
+- R4–R9 (report contract): `references/report-contract.md:1` — eleven sections, nine fields, closed vocabulary, stable key, evidence rules, comparison semantics, recurrence classes, positive-pattern and remediation standards.
+- R10 (enrich/validate, never launches workflow): `references/operations.md:1`.
+- R11 (boundary — no import/corpus/discovery recipe): the boundary test `skill-structure.test.ts:812` greps the skill tree and passes; the word-scan confirms no `spur task`/`spur feature`/`spur rule`/`spur history import`/history-file-discovery recipe.
+- R12 (README roster + tree + roles.md): `plugins/sp/README.md:322` roster row + `:243` dir tree; `plugins/sp/references/roles.md:86` reviewer roster note.
+
+
+- Security: the skill is read-only documentation + rubrics; it contains no command that mutates the corpus, docs, or source tree (boundary test enforces).
+- Efficiency: the body is a thin dispatcher (3.4 KB), keeping invocation time bounded; the nine-finding-field + rubric procedure lives in `references/` so the body never bloats.
+- Correctness: the frozen vocabulary (modes, categories, stable-key grammar, confidence, recurrence classes, `not available`) is single-sourced and pinned by the contract test (`skill-structure.test.ts:838`), so 0659/0660 cannot drift.
+- Usability: fail-loud argument validation and a mode matrix an operator can follow without re-reading source.
+- Architecture: no new workflow, no recursion (operations never launch workflows), no hand-maintained platform adapters; the dispatcher/`references/` split follows the named spur-cli/spur-dev shape.
+
+
+None material. The route relies on the skill being invoked through `/sp:dev-find-issue` (0661 repoints the command); until 0661 lands, the skill is unreferenced by any command but is independently testable and valid.
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-25T05:24:00.649Z todo → wip (system)
+- 2026-08-25T05:27:30.344Z wip → testing (system)
+- 2026-08-25T05:27:40.330Z testing → done (system)

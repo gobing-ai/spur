@@ -83,7 +83,7 @@ must not sit below the highest `min_tier` among its folded stages.
 - **`reviewer` (capable-1).** Verification and analysis: per-task verify/review, batch verify,
   dogfooding, anti-pattern scanning (`rule-scan`), and the two audit commands (`dev-find-conflict`,
   `dev-find-issue`) — those analyse rather than transcribe, which is why they sit here and not
-  under `scribe`. Folds `verify`, `review`, `dogfood`.
+  under `scribe`. `dev-find-issue` now routes through the `sp:history-anatomy` skill (mode contract + report contract). Folds `verify`, `review`, `dogfood`.
 - **`planner` (capable-2).** The planning half: feature planning, requirement refinement (single
   and batch), brainstorm, idea intake, batch run/parallel orchestration, next-step routing,
   architecture survey, feature-frontier prioritization, and feature-tree restructure. Folds `plan`,

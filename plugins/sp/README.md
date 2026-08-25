@@ -240,6 +240,8 @@ plugins/sp/
 │   │   └── references/{authority-resolution.md, comparison-protocol.md, finding-contract.md, remediation-routing.md}
 │   ├── next-feature/                # Prompt-first feature frontier prioritizer (backs /sp:dev-find-next)
 │   │   └── references/{signal-derivation.md, ranking-rubric.md, proposal-contract.md, handoff-routing.md}
+│   ├── history-anatomy/             # Diagnostic interpretation owner over already-imported history (backs /sp:dev-find-issue)
+│   │   └── references/{modes.md, report-contract.md, operations.md}
 │   ├── sys-architecture/            # Architecture / ADR judgment competency
 │   │   └── references/decision-method.md
 │   ├── sys-debugging/               # Structured debugging protocol
@@ -317,6 +319,7 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `next-feature`              | 1.0   | Prompt-first feature frontier prioritizer — sync-first precondition, B3 actionability gate (cited, never restated), tiered rubric over measured signals, D1–D4 defect proposals conforming to the restructure map schema; backs `/sp:dev-find-next` |
 | `pr-reviewing`              | 1.0   | GitHub Codex PR review — PR prepare/reuse, `@codex review` request with per-HEAD dedupe, bounded polling, findings normalization, validated fix + re-review; spine SSOT `pr-review.yaml` + `scripts/pr-reviewing.ts`; backs `/sp:dev-pr-review`     |
 | `indexed-context`           | 1.0   | Cross-agent project context — anatomy/learnings/pitfalls/buglog/memory in `.spur/context/`; hook-tracked token-ledger; graceful degradation on agents without hooks                                                                        |
+| `history-anatomy`           | 1.0   | Diagnostic interpretation owner over already-imported history — daily/ad-hoc mode contract, closed finding taxonomy, eleven-section report contract, `enrich`/`validate` rubrics; no workflow launch, no JSONL fallback, no corpus mutation                                                                   |
 
 Each skill directory contains:
 
