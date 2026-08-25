@@ -20,7 +20,7 @@ import {
     WAYFINDER_MAP_TAG,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { readVerdictArtifact as readGuardVerdictArtifact } from './done-transition-guard';
+import { computeAggregate, readVerdictArtifact as readGuardVerdictArtifact } from './done-transition-guard';
 import {
     type CheckFindings,
     FINDING_CODES,
@@ -31,6 +31,7 @@ import {
 } from './planning-check-base';
 import { applyStructuralRepairs, type StructuralRepair } from './structural-repair';
 import { parseTesting } from './task-record';
+import { aggregateVerifyVerdict } from './verify-verdict';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -443,8 +444,8 @@ export class FeatureCheckService extends PlanningCheckService {
         const linkedTaskSolutions: string[] = [];
         // Per-task linkage record for scenario-satisfaction classification (0340).
         // A scenario is "covered" by a task when DD-09 normalized-title matching
-        // links them; "verified" only when that task is done AND carries a PASS
-        // verdict artifact whose matching requirement row is MET.
+        // links them; "verified" only when that task is done AND its resolved
+        // evidence is an internally consistent PASS with a matching MET row.
         const linkedTaskRecords: Array<{ wbs: string; status: string; ac: string; testing: string }> = [];
         for (const tasksDir of tasksDirs) {
             try {
@@ -531,8 +532,8 @@ export class FeatureCheckService extends PlanningCheckService {
         }
 
         // 0340: Scenario-satisfaction classification. For each linked (non-orphan)
-        // scenario, check whether any covering task is `done` AND carries a PASS
-        // verdict artifact whose matching requirement row is MET. Unverified
+        // scenario, check whether any covering task is `done` AND resolves to an
+        // internally consistent PASS with a matching MET row. Unverified
         // scenarios emit L4.scenario-unverified (warning by default; --strict
         // elevates to error). Orphans were already handled above and are excluded.
         await this.checkScenarioSatisfaction(acBody, linkedTaskRecords, runDir, findings);
@@ -599,10 +600,10 @@ export class FeatureCheckService extends PlanningCheckService {
 
     /**
      * 0340: Classify each linked (non-orphan) AC scenario as verified or
-     * unverified against per-task verdict artifacts. A scenario is verified when
-     * ANY covering task is `done` AND its `<wbs>-verdict.json` shows verdict PASS
-     * with a matching requirement row of status MET. Otherwise the scenario is
-     * linked-but-unverified → L4.scenario-unverified (warning; elevated by strict).
+     * unverified against resolved per-task evidence. A scenario is verified when
+     * ANY covering task is `done` AND its artifact-first, tracked-Testing-fallback
+     * evidence is an internally consistent PASS with a matching MET row. Otherwise
+     * the scenario is linked-but-unverified → L4.scenario-unverified.
      */
     private async checkScenarioSatisfaction(
         featureAc: string,
@@ -672,6 +673,10 @@ export class FeatureCheckService extends PlanningCheckService {
                     artifacts.set(wbs, {
                         path: 'tracked ## Testing section',
                         verdict: parsed.verdict.verdict,
+                        computedVerdict: aggregateVerifyVerdict({
+                            requirements: parsed.verdict.requirements,
+                            acceptanceCriteria: parsed.verdict.acceptanceCriteria,
+                        }),
                         requirements: parsed.verdict.requirements.map((r) => ({ id: r.id, status: r.status })),
                         acceptanceCriteria: parsed.verdict.acceptanceCriteria.map((r) => ({
                             id: r.id,
@@ -703,9 +708,9 @@ export class FeatureCheckService extends PlanningCheckService {
             const diagnosticParts: string[] = [];
             if (artifact.diagnostics.artifactError !== undefined) {
                 // Only flag as malformed when the artifact file exists but is corrupt.
-                // A missing artifact is expected for archive tasks that predate the verdict
-                // convention — it just means "unverified for this coverer."
-                // The `readError` is `'artifact is missing'` when the file doesn't exist.
+                // A missing artifact is expected for archive tasks and was already
+                // offered the tracked-Testing fallback above. Only an artifact that
+                // exists but is corrupt belongs in this diagnostic.
                 if (artifact.diagnostics.artifactError !== 'artifact is missing') {
                     diagnosticParts.push(artifact.diagnostics.artifactError);
                 }
@@ -749,9 +754,10 @@ export class FeatureCheckService extends PlanningCheckService {
     }
 
     /**
-     * A scenario is verified when ANY covering task is `done` AND its verdict
-     * artifact shows verdict PASS with a matching requirement **or acceptanceCriteria**
-     * row of status MET. Matching id = normalized scenario title, optional
+     * A scenario is verified when ANY covering task is `done` AND its resolved
+     * evidence shows both stored and recomputed PASS with a matching
+     * requirement **or acceptanceCriteria** row of status MET. Matching id =
+     * normalized scenario title, optional
      * `Scenario: ` prefix, or AC-N alias.
      *
      * 0410: reads from the pre-built artifact cache (no per-scenario file I/O).
@@ -765,7 +771,7 @@ export class FeatureCheckService extends PlanningCheckService {
             if (task.status !== 'done') continue;
             const artifact = artifacts.get(task.wbs);
             if (artifact === undefined) continue;
-            if (artifact.verdict !== 'PASS') continue;
+            if (artifact.verdict !== 'PASS' || artifact.computedVerdict !== 'PASS') continue;
             const rows = [...artifact.requirements, ...artifact.acceptanceCriteria];
             const matched = rows.find((r) => rowMatchesScenario(r.id, sc));
             if (matched !== undefined && matched.status === 'MET') return true;
@@ -810,6 +816,7 @@ export class FeatureCheckService extends PlanningCheckService {
         return {
             path: loaded.path,
             verdict: typeof parsed.verdict === 'string' ? parsed.verdict : undefined,
+            computedVerdict: computeAggregate(loaded.artifact),
             requirements: req.rows,
             acceptanceCriteria: ac.rows,
             diagnostics: {
@@ -878,6 +885,7 @@ interface VerdictRow {
 interface ParsedVerdictArtifact {
     path: string;
     verdict?: string;
+    computedVerdict?: string;
     requirements: VerdictRow[];
     acceptanceCriteria: VerdictRow[];
     diagnostics: {

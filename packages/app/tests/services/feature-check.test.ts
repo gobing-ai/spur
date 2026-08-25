@@ -2679,6 +2679,35 @@ describe('FeatureCheckService', () => {
         cleanup();
     });
 
+    test('0672: stored PASS must also recompute to PASS for artifact and Testing evidence', async () => {
+        const cases = [
+            {
+                verdict: {
+                    verdict: 'PASS',
+                    requirements: [
+                        { id: 'alpha', status: 'MET' },
+                        { id: 'R2', status: 'UNMET' },
+                    ],
+                },
+            },
+            {
+                testing: [
+                    '- Verdict: PASS (from verdict artifact)',
+                    '',
+                    '| Requirement | Status | Evidence |',
+                    '|-------------|--------|----------|',
+                    '| alpha | MET | matching row |',
+                    '| R2 | UNMET | blocking row |',
+                ].join('\n'),
+            },
+        ];
+        for (const evidence of cases) {
+            const { result, cleanup } = await setupScenarioSatisfaction({ taskStatus: 'done', ...evidence });
+            expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+            cleanup();
+        }
+    });
+
     test('0672 R3/R4: absent artifact + bare Testing lands in evidence-not-recoverable, never PASS', async () => {
         const { result, cleanup } = await setupScenarioSatisfaction({
             taskStatus: 'done',

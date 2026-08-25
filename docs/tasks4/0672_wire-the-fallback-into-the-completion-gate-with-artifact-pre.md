@@ -4,7 +4,7 @@ name: "Wire the fallback into the completion gate with artifact precedence and a
 status: done
 template: feature-impl
 created_at: 2026-08-25T18:05:19.652Z
-updated_at: "2026-08-25T19:30:32.844Z"
+updated_at: "2026-08-25T20:51:01.671Z"
 feature_id: F93
 priority: P1
 dependencies: ["0671"]
@@ -178,15 +178,14 @@ reconciling the baseline delta belong to 0673 — this task changes behaviour, i
 ### Solution
 Change-map:
 
-- `checkScenarioSatisfaction` — `packages/app/src/services/feature-check.ts:607` — linked-task records now carry the tracked Testing section, threaded from the already-parsed task document with zero extra I/O.
-- `testingByWbs` — `packages/app/src/services/feature-check.ts:659` — maps each done task's WBS to its Testing body for the cache loop fallback.
-- `parseTesting` fallback — `packages/app/src/services/feature-check.ts:670` — when a verdict artifact is missing, resolves coverage from the tracked Testing section via the 0671 parser; on valid maps canonical rows to the cache's VerdictRow id/status. The artifact stays authoritative whenever it exists; the fallback never merges or tiebreaks (R1/R2).
-- `L4_EVIDENCE_NOT_RECOVERABLE` — `packages/app/src/services/feature-check.ts:693` — a done task with neither artifact nor parseable tracked rows is reported in a named state (warning, elevated by --strict) that never counts as a PASS, distinct from the scenario-unverified and malformed-artifact codes (R3/R4/R5).
-- `L4_EVIDENCE_NOT_RECOVERABLE` — `packages/config/src/finding-codes.ts:137` — registers the new code in the canonical FINDING_CODES registry.
-- `L4.evidence-not-recoverable` — `packages/config/src/finding-codes.ts:67` — lists the new code in the ALL_FINDING_CODES enumeration.
-- 0672 tests — `packages/app/tests/services/feature-check.test.ts:2642` — fallback-verified, artifact-precedence, bare-to-unrecoverable, PARTIAL-never-verifies, and simple-absence-no-malformed cases (R1-R5).
+- tracked Testing threading — `packages/app/src/services/feature-check.ts:444-473,658-671` — reuses each already-parsed task document and consults Testing only when the artifact is absent (R1/R2/R5).
+- fallback and unrecoverable state — `packages/app/src/services/feature-check.ts:672-705` — maps valid parser rows into the existing cache or emits the named task-specific evidence-not-recoverable finding (R1/R3/R4).
+- aggregate consistency — `packages/app/src/services/feature-check.ts:765-819` — requires both stored and canonically recomputed PASS before any matching MET row verifies a scenario, for artifact and tracked-Testing sources alike (R1/R2).
+- finding registry — `packages/config/src/finding-codes.ts:67,137` — retains the canonical `L4.evidence-not-recoverable` code (R3/R4).
+- design contract — `docs/04_DESIGN.md:1578-1581`; `docs/design/feature-check-strict-ac-satisfaction.md:16-73` — records artifact → tracked Testing → unrecoverable precedence outside the command table and updates the detailed AC-satisfaction contract (R7).
+- feature-check tests — `packages/app/tests/services/feature-check.test.ts:2642-2746` — cover fallback, unconditional artifact precedence, aggregate inconsistency for both sources, unrecoverable evidence, PARTIAL, and simple absence (R1–R5).
 
-Why: 313 of 627 done tasks have no verdict artifact (gitignored .spur/run), so their scenarios read scenario-unverified regardless of actual verification. The tracked Testing section is the durable copy spur task record already writes; this change makes the completion gate read it when the artifact is absent. No database/schema change, .spur/run stays gitignored, no second artifact directory, no new CLI noun/verb/flag (R6). docs/04_DESIGN.md records the resolution order (R7).
+Why: an authoritative source is useful only if its aggregate agrees with all canonical rows. The existing cache remains the single resolution seam; no database/schema change, second artifact directory, extra I/O pass, dependency, or CLI surface was added (R6).
 ### Testing
 **Pipeline verify results**
 
@@ -194,34 +193,35 @@ Why: 313 of 627 done tasks have no verdict artifact (gitignored .spur/run), so t
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | test `0672 R1: absent artifact falls back to a parseable tracked Testing section` at `packages/app/tests/services/feature-check.test.ts:2642` — absent artifact resolves coverage from tracked Testing; MET row verifies the scenario; no error on missing artifact |
-| R2 | MET | test `0672 R2: artifact stays authoritative over a conflicting Testing section` at `packages/app/tests/services/feature-check.test.ts:2665` — artifact used, Testing not consulted when the two disagree |
-| R3 | MET | test `0672 R3/R4: absent artifact + bare Testing lands in evidence-not-recoverable, never PASS` at `packages/app/tests/services/feature-check.test.ts:2682` — named unrecoverable-evidence state, never a PASS verdict |
-| R4 | MET | test `0672 R3/R4: absent artifact + bare Testing lands in evidence-not-recoverable, never PASS` at `packages/app/tests/services/feature-check.test.ts:2682` — finding names the task and states evidence predates durable recording |
-| R5 | MET | test `0672 R5: simple absence never emits malformed-verdict-artifact` at `packages/app/tests/services/feature-check.test.ts:2710` — simple absence is not an error path, no malformed-artifact diagnostic |
-| R6 | MET | test `0672 R1: absent artifact falls back to a parseable tracked Testing section` at `packages/app/tests/services/feature-check.test.ts:2642` — no schema change, gitignore intact, no second artifact dir, no new CLI noun/verb/flag |
-| R7 | MET | docs/04_DESIGN.md records the resolution order (artifact, then tracked section, then unrecoverable) in this same commit |
+| R1 | MET | `packages/app/tests/services/feature-check.test.ts:2642` — absent artifact falls back to tracked Testing and a matching MET row verifies without error. |
+| R2 | MET | `packages/app/tests/services/feature-check.test.ts:2665` — present artifact remains authoritative; line 2682 pins aggregate consistency for artifact and fallback. |
+| R3 | MET | `packages/app/tests/services/feature-check.test.ts:2711` — bare/prose evidence emits evidence-not-recoverable and never verifies. |
+| R4 | MET | `packages/app/src/services/feature-check.ts:698` — L4_EVIDENCE_NOT_RECOVERABLE identifies the task and says evidence predates durable recording. |
+| R5 | MET | `packages/app/tests/services/feature-check.test.ts:2739` — simple absence never emits malformed-verdict-artifact. |
+| R6 | MET | `.gitignore:132` — /.spur/run remains ignored; no migration, second artifact directory, dependency, or CLI surface changed. |
+| R7 | MET | `docs/04_DESIGN.md:1578` — artifact → tracked Testing → unrecoverable order is recorded in the same repair; the satellite carries the detailed semantics. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R1 — An absent artifact falls back to the tracked task record | MET | test | `0672 R1: absent artifact falls back to a parseable tracked Testing section` at `packages/app/tests/services/feature-check.test.ts:2642` — MET row verifies the scenario, no error on the missing artifact |
-| Scenario: R2 — The artifact stays authoritative whenever it exists | MET | test | `0672 R2: artifact stays authoritative over a conflicting Testing section` at `packages/app/tests/services/feature-check.test.ts:2665` — artifact wins, Testing not consulted |
-| Scenario: R5 — Evidence that was never durably written is neither verified nor silently failed | MET | test | `0672 R3/R4: absent artifact + bare Testing lands in evidence-not-recoverable, never PASS` at `packages/app/tests/services/feature-check.test.ts:2682` — unrecoverable state names the task, never PASS, distinguishable from verified-and-failed |
+| Scenario: R1 — An absent artifact falls back to the tracked task record | MET | test | `packages/app/tests/services/feature-check.test.ts:2642` — tracked MET verifies and emits no missing-artifact error. |
+| Scenario: R2 — The artifact stays authoritative whenever it exists | MET | test | `packages/app/tests/services/feature-check.test.ts:2665` — artifact UNMET wins over tracked MET; line 2682 rejects inconsistent PASS. |
+| Scenario: R5 — Evidence that was never durably written is neither verified nor silently failed | MET | test | `packages/app/tests/services/feature-check.test.ts:2711` — the named state identifies task 0001 and remains non-PASS. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (review coordinator — `/sp:dev-review 0672 --auto`)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|---------|
-| P4 | C | `packages/app/src/services/feature-check.ts:607` | Solution change-map required fresh line anchors after the implementation edits shifted line numbers; no functional defect. No P1–P3 findings. |
+| P4 | Correctness | `packages/app/src/services/feature-check.ts:672-819` | Review found and closed an inconsistent-PASS path: a matching MET row could verify while a sibling row was UNMET. Artifact and fallback evidence now require stored plus recomputed PASS; no remaining P1–P3 finding. |
+| P4 | Documentation | `docs/04_DESIGN.md:1578`; `docs/design/feature-check-strict-ac-satisfaction.md:16` | The resolution-order sentence no longer splits the command table, and the satellite now documents fallback, unrecoverable evidence, and aggregate consistency. |
 
-**Functional traceability (R1–R7):** all MET — R1 (absent artifact falls back to tracked Testing via parseTesting, MET row verifies scenario), R2 (artifact authoritative over conflicting Testing — unconditional, no merge), R3/R4 (bare/prose → evidence-not-recoverable named state, never PASS, names task + predates durable recording), R5 (simple absence never emits malformed-artifact), R6 (no schema change, gitignore intact, no second artifact dir, no new CLI surface), R7 (docs/04_DESIGN.md resolution order — pending same-commit).
+**Functional traceability (R1–R7):** all MET — absent artifacts use tracked Testing (R1); present artifacts remain unconditional authority and are never merged (R2); missing/unparseable durable evidence has a distinct non-PASS state (R3/R4); simple absence is non-throwing and never malformed (R5); storage, gitignore, dependency, and CLI boundaries stay intact (R6); both design surfaces now record the fixed order (R7).
 
-**SECUA:** no security surface (reads task-corpus markdown, no external input, no injection risk). Efficiency: fallback uses the already-parsed task document — zero extra I/O (no second corpus pass). Correctness: artifact precedence unconditional; PAR-00TIAL/UNMET rows never verify; `evidence-not-recoverable` distinct from `scenario-unverified` and `malformed-verdict-artifact`. Usability: named finding state is operator-actionable.
+**SECUA:** no auth, secret, network, command, or injection surface. Resolution is fail-closed; the existing prebuilt cache preserves zero-extra-I/O behavior. No remaining blocker, major, or minor finding.
 
-**Architecture:** extends the existing `ParsedVerdictArtifact` cache rather than a new store; parser reused from 0671 (single owner); finding code registered in the canonical registry + enumeration.
+**Architecture:** the fix reuses `aggregateVerifyVerdict`/`computeAggregate`, `parseTesting`, and the existing `ParsedVerdictArtifact` cache. No second parser, store, or resolution path was introduced.
 
-**Residual risk:** recoverability of the 313 artifact-less done tasks is a function of parser tolerance — the measured sweep belongs to 0673 (out of scope here, per the task's own boundary).
+**Residual risk:** recovery counts and corpus baseline reconciliation are intentionally task 0673; that next-task scope is the only remaining F93 work, not unfinished 0672 implementation.
 
 **Disposition:** approve. No blockers.
 ### References
