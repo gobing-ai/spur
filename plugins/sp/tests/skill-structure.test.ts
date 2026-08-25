@@ -832,6 +832,59 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         }
     });
 
+    // HA-S1 (0660 R8): the workflow owns ordering/branching only. It must contain no import,
+    // corpus/docs/source mutation, or discovery recipe; its only writes are run-scoped
+    // intermediates, analyze artifacts, and the requested report or cache file.
+    test('history-anatomy.yaml (0660 R8) contains no import/mutation/discovery recipe', () => {
+        const wf = join(WORKFLOWS_DIR, 'history-anatomy.yaml');
+        if (!existsSync(wf)) {
+            // Workflow not yet shipped — boundary vacuous until it lands.
+            return;
+        }
+        const text = readFileSync(wf, 'utf8');
+        const forbidden = [
+            'spur task',
+            'spur feature',
+            'spur rule',
+            'spur history import',
+            'spur history daily',
+            '.jsonl',
+            'readdir',
+            'session-root',
+            'session_formats',
+            'task update',
+            'feature update',
+        ];
+        for (const needle of forbidden) {
+            expect(text, `history-anatomy.yaml must not contain ${needle}`).not.toContain(needle);
+        }
+        // Allowed writes: run-scoped intermediates + analyze --out + report render + publish.
+        expect(text).toContain('--out .spur/run');
+    });
+
+    // HA-S1 (0660 R9): workflow fixtures cover the eight cache cases.
+    test('history-anatomy workflow fixtures cover the cache decision matrix (0660 R9)', () => {
+        const testsDir = join(PLUGIN_ROOT, 'tests');
+        const fixture = join(testsDir, 'history-anatomy-cache.test.ts');
+        if (!existsSync(fixture)) {
+            return;
+        }
+        const text = readFileSync(fixture, 'utf8');
+        const cases = [
+            'identical cache is a hit',
+            'changed artifact digest',
+            'changed logic digest',
+            'no frontmatter returns null',
+            'provisional cache read after day closed',
+            'degraded coverage',
+            '--recompute forces',
+            'failed candidate leaves the prior target',
+        ];
+        for (const c of cases) {
+            expect(text, `fixture missing cache case: ${c}`).toContain(c);
+        }
+    });
+
     // HA-S1 (0658 R4): the report contract freezes the eleven section names and the per-finding
     // field names. 0659's structure gate and 0660's validation stage consume them verbatim, so
     // this test pins them here so the vocabulary cannot drift.
