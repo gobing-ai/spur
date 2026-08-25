@@ -16,6 +16,7 @@ import {
     aggregateVerifyVerdict,
     type VerifyVerdict as CanonicalVerifyVerdict,
     type ParseVerdictOutcome,
+    parseVerifyVerdict,
     ROW_STATUSES,
     type VerdictAggregate,
     type VerdictCoverageRow,
@@ -96,25 +97,8 @@ export interface RecordResult {
  * @param fallbackWbs  WBS to use when the JSON omits it.
  */
 export function parseVerdict(raw: string, fallbackWbs?: string): CanonicalVerifyVerdict {
-    if (raw.trim() === '') {
-        return { wbs: fallbackWbs ?? '', verdict: 'UNKNOWN', requirements: [], acceptanceCriteria: [], checks: [] };
-    }
-
-    try {
-        const parsed: unknown = JSON.parse(raw);
-        if (parsed !== null && typeof parsed === 'object') {
-            const obj = parsed as Record<string, unknown>;
-            const wbs = typeof obj.wbs === 'string' ? obj.wbs : (fallbackWbs ?? '');
-            const verdict = normalizeVerdict(obj.verdict);
-            const requirements = normalizeRequirements(obj.requirements);
-            const acceptanceCriteria = normalizeAcceptanceCriteria(obj.acceptanceCriteria);
-            const checks = normalizeChecks(obj.checks);
-            return { wbs, verdict, requirements, acceptanceCriteria, checks };
-        }
-    } catch {
-        // Malformed JSON — fall through to UNKNOWN.
-    }
-
+    const parsed = parseVerifyVerdict(raw, fallbackWbs);
+    if (parsed.kind === 'valid') return parsed.verdict;
     return { wbs: fallbackWbs ?? '', verdict: 'UNKNOWN', requirements: [], acceptanceCriteria: [], checks: [] };
 }
 
@@ -132,67 +116,6 @@ export async function readVerdict(fs: FileSystem, path: string, fallbackWbs?: st
         return { wbs: fallbackWbs ?? '', verdict: 'UNKNOWN', requirements: [], acceptanceCriteria: [], checks: [] };
     }
     return parseVerdict(raw, fallbackWbs);
-}
-
-function normalizeVerdict(raw: unknown): VerifyVerdict['verdict'] {
-    if (typeof raw !== 'string') return 'UNKNOWN';
-    const upper = raw.toUpperCase();
-    if (upper === 'PASS') return 'PASS';
-    if (upper === 'PARTIAL') return 'PARTIAL';
-    if (upper === 'FAIL') return 'FAIL';
-    return 'UNKNOWN';
-}
-
-function normalizeRequirements(raw: unknown): VerdictCoverageRow[] {
-    if (!Array.isArray(raw)) return [];
-    return raw
-        .filter((r): r is Record<string, unknown> => r !== null && typeof r === 'object')
-        .map((r) => ({
-            id: typeof r.id === 'string' ? r.id : '',
-            status: normalizeRowStatus(r.status),
-            evidenceType: typeof r.evidenceType === 'string' ? r.evidenceType : '',
-            evidence: typeof r.evidence === 'string' ? r.evidence : '',
-        }));
-}
-
-function normalizeAcceptanceCriteria(raw: unknown): VerdictCoverageRow[] {
-    if (!Array.isArray(raw)) return [];
-    return raw
-        .filter((ac): ac is Record<string, unknown> => ac !== null && typeof ac === 'object')
-        .map((ac) => ({
-            id: typeof ac.id === 'string' ? ac.id : '',
-            status: normalizeRowStatus(ac.status),
-            evidenceType: typeof ac.evidenceType === 'string' ? ac.evidenceType : '',
-            evidence: typeof ac.evidence === 'string' ? ac.evidence : '',
-        }));
-}
-
-/**
- * Lenient status coercion for the legacy verdict reader. Recognised row statuses
- * (MET/PARTIAL/UNMET/N-A, case-insensitive) normalize to the canonical union;
- * any other value the artifact carries is preserved as-read via a documented
- * cast — the reader records what it read rather than defaulting or inferring a
- * status (task 0671 R4 anti-pattern: "no status is ever defaulted or inferred").
- */
-function normalizeRowStatus(raw: unknown): VerdictRowStatus {
-    if (typeof raw === 'string') {
-        const upper = raw.toUpperCase().trim();
-        if ((ROW_STATUSES as readonly string[]).includes(upper)) return upper as VerdictRowStatus;
-        if (upper === 'NA') return 'N/A';
-        return raw as VerdictRowStatus;
-    }
-    return '' as VerdictRowStatus;
-}
-
-function normalizeChecks(raw: unknown): VerdictCheck[] {
-    if (!Array.isArray(raw)) return [];
-    return raw
-        .filter((c): c is Record<string, unknown> => c !== null && typeof c === 'object')
-        .map((c) => ({
-            name: typeof c.name === 'string' ? c.name : '',
-            status: typeof c.status === 'string' ? c.status : '',
-            evidence: typeof c.evidence === 'string' ? c.evidence : '',
-        }));
 }
 
 // ─── R2: Pure generators ────────────────────────────────────────────────
@@ -261,19 +184,25 @@ export function renderTesting(v: CanonicalVerifyVerdict): string {
  */
 export function parseTesting(markdown: string, wbs: string): ParseVerdictOutcome {
     const section = extractTestingSection(markdown);
-    if (section.trim() === '') return { kind: 'missing', wbs };
+    if (section === null || section.trim() === '') return { kind: 'missing', wbs };
     return parseTestingBody(section, wbs);
 }
 
 /**
  * Locate the `## Testing` (or `### Testing`) section in a task document and
  * slice it to the next same-or-higher heading. When the input carries no
- * Testing heading, the caller passed the section body directly — return it
- * unchanged (an absent section then presents as an empty body).
+ * Testing heading, a task document is missing the section; otherwise the caller
+ * passed the section body directly, so return it unchanged.
  */
-function extractTestingSection(markdown: string): string {
+function extractTestingSection(markdown: string): string | null {
     const heading = /^#{1,6}\s+Testing\s*$/m.exec(markdown);
-    if (!heading || heading.index === undefined) return markdown;
+    if (!heading || heading.index === undefined) {
+        const taskDocument =
+            /^##\s+\d+\.\s+|^###\s+(?:Background|Requirements|Acceptance Criteria|Q&A|Design|Plan|Solution|Review|References|History|Notes)\s*$/m.test(
+                markdown,
+            );
+        return taskDocument ? null : markdown;
+    }
     const level = heading[0].match(/^#+/)?.[0]?.length ?? 2;
     const bodyStart = heading.index + heading[0].length;
     const rest = markdown.slice(bodyStart);
@@ -341,10 +270,10 @@ function parseVerdictLine(lines: string[]): VerdictAggregate | null {
  * Parse one coverage table (requirement or acceptance-criteria) from the
  * section lines. Header variants `Requirement` / `Req` / `R#` (and
  * `Acceptance Criteria` / `AC`) are recognised; rows keyed by scenario title
- * use the title verbatim as the row id. A status cell that does not match
- * {@link ROW_STATUSES} is not a usable row (never fabricated). A detected
- * header with a data row whose status column is missing marks the table
- * malformed (R6: a miss, not a crash).
+ * use the title verbatim as the row id. A detected header with a data row whose
+ * id or status is missing or non-canonical marks the table malformed (R6: a
+ * miss, not a crash). Extra cells before status are reconstructed into the id,
+ * preserving the existing renderer's unescaped id format.
  */
 function parseCoverageTable(
     lines: string[],
@@ -356,6 +285,7 @@ function parseCoverageTable(
     let colStatus = -1;
     let colEvidence = -1;
     let colEvidenceType = -1;
+    let columnCount = -1;
     let inTable = false;
 
     for (const rawLine of lines) {
@@ -368,7 +298,12 @@ function parseCoverageTable(
         const cells = splitTableRow(line);
         if (cells.length === 0) continue;
         // Separator row (`|---|---|`): skip.
-        if (cells.every((c) => /^[-: ]*$/.test(c))) continue;
+        if (cells.every((c) => /^[-: ]*$/.test(c))) {
+            if (inTable && cells.length !== columnCount) {
+                return { kind: 'malformed', rows };
+            }
+            continue;
+        }
 
         if (!inTable) {
             if (headerRe.test(line)) {
@@ -376,24 +311,33 @@ function parseCoverageTable(
                 colStatus = cells.findIndex((c) => /status/i.test(c));
                 colEvidenceType = cells.findIndex((c) => /evidence type/i.test(c));
                 colEvidence = cells.findIndex((c) => /evidence/i.test(c) && !/type/i.test(c));
+                columnCount = cells.length;
+                if (colStatus < 0 || colEvidence < 0 || (kind === 'acceptance' && colEvidenceType < 0)) {
+                    return { kind: 'malformed', rows };
+                }
             }
             continue;
         }
 
         // Data row inside the table.
-        if (colStatus < 0 || colStatus >= cells.length) {
+        if (cells.length < columnCount) {
             return { kind: 'malformed', rows };
         }
-        const id = (cells[0] ?? '').trim();
-        const statusCell = (cells[colStatus] ?? '').trim();
-        if (id === '' || statusCell === '') continue;
-        const status = normalizeRowStatus(statusCell);
-        if (!(ROW_STATUSES as readonly string[]).includes(status)) continue; // not a usable row
-        const evidence = unescapeTablePipe((cells[colEvidence >= 0 ? colEvidence : cells.length - 1] ?? '').trim());
+        const extraIdCells = cells.length - columnCount;
+        const shifted = (column: number): number => column + extraIdCells;
+        const id = cells
+            .slice(0, extraIdCells + 1)
+            .join('|')
+            .trim();
+        const statusCell = (cells[shifted(colStatus)] ?? '').trim();
+        if (id === '—' && statusCell === '—') continue;
+        const status = parseRowStatus(statusCell);
+        if (id === '' || status === null) return { kind: 'malformed', rows };
+        const evidence = unescapeTablePipe((cells[shifted(colEvidence)] ?? '').trim());
         rows.push({
             id,
             status,
-            evidenceType: kind === 'acceptance' ? (cells[colEvidenceType >= 0 ? colEvidenceType : 1] ?? '').trim() : '',
+            evidenceType: kind === 'acceptance' ? (cells[shifted(colEvidenceType)] ?? '').trim() : '',
             evidence,
         });
     }
@@ -401,35 +345,28 @@ function parseCoverageTable(
     return { kind: 'ok', rows };
 }
 
+function parseRowStatus(raw: string): VerdictRowStatus | null {
+    const status = raw.toUpperCase().trim();
+    return (ROW_STATUSES as readonly string[]).includes(status) ? (status as VerdictRowStatus) : null;
+}
+
 /**
- * Split a markdown table row into cells on unescaped pipes, preserving
- * backslashes so `\|` stays a single cell (the inverse of {@link escapeTablePipe}
- * is applied by {@link unescapeTablePipe} after splitting).
+ * Split a markdown table row into cells while preserving pipes prefixed by a
+ * backslash. This exactly reverses {@link escapeTablePipe}, including evidence
+ * that already contained a backslash before a pipe.
  */
 function splitTableRow(line: string): string[] {
     const body = line.replace(/^\|/, '').replace(/\|$/, '');
     const cells: string[] = [];
     let cur = '';
-    let escaped = false;
     for (const ch of body) {
-        if (escaped) {
-            cur += ch;
-            escaped = false;
-            continue;
-        }
-        if (ch === '\\') {
-            escaped = true;
-            cur += ch;
-            continue;
-        }
-        if (ch === '|') {
+        if (ch === '|' && !cur.endsWith('\\')) {
             cells.push(cur);
             cur = '';
             continue;
         }
         cur += ch;
     }
-    if (escaped) cur += '\\';
     cells.push(cur);
     return cells;
 }

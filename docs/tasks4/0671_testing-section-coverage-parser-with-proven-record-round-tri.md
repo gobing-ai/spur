@@ -4,7 +4,7 @@ name: "Testing-section coverage parser with proven record round-trip equivalence
 status: done
 template: feature-impl
 created_at: 2026-08-25T18:05:19.627Z
-updated_at: "2026-08-25T18:55:46.315Z"
+updated_at: "2026-08-25T20:51:00.984Z"
 feature_id: F93
 priority: P1
 ---
@@ -175,17 +175,14 @@ kinds are the contract between them: `valid` feeds coverage rows, and `missing` 
 ### Solution
 Change-map:
 
-- `parseVerdict` / `readVerdict` — `packages/app/src/services/task-record.ts:98` — converge onto the canonical `VerifyVerdict` from `verify-verdict.ts`: rows become `VerdictCoverageRow[]` with `evidenceType`, and statuses narrow to `VerdictRowStatus` via a lenient `normalizeRowStatus` (recognised statuses uppercase; unrecognised values preserved as-read, never defaulted or inferred — R4).
-- `renderTesting` — `packages/app/src/services/task-record.ts:208` — takes the canonical `VerifyVerdict` so the round-trip `parseTesting(renderTesting(v))` is type-exact in canonical status space; `acceptanceCriteria` is now non-optional. `renderReview` stays on the legacy type (canonical is assignable to it), so no other `VerifyVerdict` consumer is migrated (R2).
-- `parseTesting` — `packages/app/src/services/task-record.ts:262` — the inverse parser: locates `## Testing`/`### Testing` (or accepts the section body directly), reads the `Verdict:` line, parses requirement/AC tables, unescapes pipes, returns `missing`/`malformed`/`invalid`/`valid` per the frozen tolerance rules (R1/R3/R4).
-- `extractTestingSection` — `packages/app/src/services/task-record.ts:274` — slices the Testing section to the next same-or-higher heading.
-- `parseVerdictLine` — `packages/app/src/services/task-record.ts:327` — reads a canonical aggregate from a `Verdict:` line; an absent line never discards parseable rows (the aggregate is then derived by `aggregateVerifyVerdict`).
-- `parseCoverageTable` — `packages/app/src/services/task-record.ts:349` — recognises `Requirement`/`Req`/`R#` and `AC`/`Acceptance Criteria` headers; scenario-title rows key by title; truncated rows mark `malformed`, unrecognised statuses are not usable rows (R4/R6).
-- `splitTableRow` — `packages/app/src/services/task-record.ts:409` — splits a table row on unescaped pipes.
-- `unescapeTablePipe` — `packages/app/src/services/task-record.ts:438` — reverses `escapeTablePipe`.
-- `parseTesting` suite — `packages/app/tests/services/task-record.test.ts:272` — round-trip equivalence (R5), real-corpus tolerance (R3/R6), negative/honest outcomes (R4).
+- `parseVerdict` — `packages/app/src/services/task-record.ts:99` — delegates artifact decoding to the canonical runtime parser; invalid row statuses now degrade to UNKNOWN instead of entering the canonical type through a cast (R1/R2).
+- `renderTesting` — `packages/app/src/services/task-record.ts:131` — remains on canonical `VerifyVerdict` and retains the existing emitted Testing format (R2/R7).
+- `parseTesting` / `extractTestingSection` — `packages/app/src/services/task-record.ts:185,197` — distinguish absent Testing from a section body and return the canonical discriminated outcome (R1/R4).
+- `parseCoverageTable` / `parseRowStatus` — `packages/app/src/services/task-record.ts:278,348` — recognize the frozen header/status set, reject truncated or invalid rows as malformed, and reconstruct pipe-bearing row IDs without changing the renderer (R3–R5).
+- `splitTableRow` / `unescapeTablePipe` — `packages/app/src/services/task-record.ts:358,375` — preserve escaped pipes and remove exactly the renderer's escape layer (R5).
+- parser and record tests — `packages/app/tests/services/task-record.test.ts:69-530` — cover canonical artifact validation, real-corpus tolerance, missing/malformed honesty, escaped evidence, pipe-bearing IDs, and malformed siblings that previously allowed false PASS (R3–R6).
 
-Why: the completion gate must read the tracked task record when the verdict artifact is absent. The durable copy is `renderTesting`'s output; this task adds its inverse and makes the two sources provably one by converging producer and parser onto the same canonical type. No new CLI surface, no schema change, `renderTesting` output unchanged (R7).
+Why: the fallback is a verification trust boundary. Invalid rows must poison the recognized table rather than disappear behind a surviving MET row, while the inverse must recover IDs emitted verbatim by the frozen renderer. No schema, migration, dependency, or public CLI surface changed.
 ### Testing
 **Pipeline verify results**
 
@@ -193,34 +190,35 @@ Why: the completion gate must read the tracked task record when the verdict arti
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | test `round-trips a canonical PASS verdict with requirement and AC rows` at `packages/app/tests/services/task-record.test.ts:275` — parseTesting yields a valid outcome carrying the canonical VerifyVerdict |
-| R2 | MET | test `round-trips a canonical PASS verdict with requirement and AC rows` at `packages/app/tests/services/task-record.test.ts:275` — renderTesting is type-exact with the canonical VerifyVerdict (task-service + index re-export typecheck green, no other consumer migrated) |
-| R3 | MET | test `parses a Requirement-header corpus section without a Verdict line` at `packages/app/tests/services/task-record.test.ts:312` — Requirement/Req headers, scenario-title keys, case-insensitive ROW_STATUSES all parse (the Req-header variant is the `parses a Req-header corpus section keyed by scenario title` test) |
-| R4 | MET | test `prose claiming tests pass is invalid, never MET` at `packages/app/tests/services/task-record.test.ts:389` — invalid/malformed/missing kinds; valid never carries zero rows; no defaulted status |
-| R5 | MET | test `round-trips a canonical PASS verdict with requirement and AC rows` at `packages/app/tests/services/task-record.test.ts:275` — parsed verdict and rows equal the input by id and status |
-| R6 | MET | test `parses a Requirement-header corpus section without a Verdict line` at `packages/app/tests/services/task-record.test.ts:312` — tolerance pinned against real corpus sections (0417 Requirement-header, 0360 Req-header) |
-| R7 | MET | test `round-trips a canonical PASS verdict with requirement and AC rows` at `packages/app/tests/services/task-record.test.ts:275` — renderTesting output unchanged (round-trip proves it); no schema change, no new CLI noun/verb/flag |
+| R1 | MET | `packages/app/src/services/task-record.ts:185` — parseTesting returns the canonical ParseVerdictOutcome; parseVerdict at line 99 delegates runtime artifact validation to parseVerifyVerdict. |
+| R2 | MET | `packages/app/src/services/task-record.ts:131` — renderTesting accepts CanonicalVerifyVerdict; lint/typecheck and the record integration test pass. |
+| R3 | MET | `packages/app/src/services/task-record.ts:283` — headerRe recognizes the frozen variants and parseRowStatus accepts only canonical ROW_STATUSES case-insensitively. |
+| R4 | MET | `packages/app/src/services/task-record.ts:335` — an empty id or noncanonical status returns malformed instead of disappearing behind a surviving MET row. |
+| R5 | MET | `packages/app/tests/services/task-record.test.ts:329` — the inverse round-trips pipe-bearing requirement and AC IDs; adjacent tests cover aggregates and escaped evidence. |
+| R6 | MET | `packages/app/tests/services/task-record.test.ts:347` — real Requirement-header and Req-header corpus samples remain executable tolerance fixtures. |
+| R7 | MET | `packages/app/src/services/task-record.ts:131` — renderTesting's emitted table format is unchanged; no schema, migration, dependency, or CLI surface changed. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R3 — Round-trip equivalence makes the two sources one source | MET | test | `round-trips a canonical PASS verdict with requirement and AC rows` at `packages/app/tests/services/task-record.test.ts:275` — verdict + req rows + AC rows equal by id and status |
-| Scenario: R4 — The parser tolerates the shapes the corpus actually contains | MET | test | `parses a Requirement-header corpus section without a Verdict line` at `packages/app/tests/services/task-record.test.ts:312` — headers, scenario-title rows, MET/PARTIAL/UNMET/N-A, no fabrication (Req-header variant covered by the same parser) |
-| Scenario: R6 — A malformed or truncated Testing section is a miss, not a crash | MET | test | `truncated table is malformed without throwing` at `packages/app/tests/services/task-record.test.ts:424` — parsing yields malformed without throwing; sweep continues |
+| Scenario: R3 — Round-trip equivalence makes the two sources one source | MET | test | `packages/app/tests/services/task-record.test.ts:329` — requirement and acceptance-criteria IDs containing pipes round-trip exactly; adjacent tests cover aggregates and escaped evidence. |
+| Scenario: R4 — The parser tolerates the shapes the corpus actually contains | MET | test | `packages/app/tests/services/task-record.test.ts:347` — real corpus headers, scenario-title IDs, canonical statuses, missing Verdict derivation, and no-row honesty pass. |
+| Scenario: R6 — A malformed or truncated Testing section is a miss, not a crash | MET | test | `packages/app/tests/services/task-record.test.ts:459` — truncated rows/separators and malformed siblings return malformed without throwing. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (review coordinator — `/sp:dev-review 0671 --auto`)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|---------|
-| P4 | C | `packages/app/src/services/task-record.ts:327` | Review caught an un-anchored `Verdict:` regex that could read a mid-line token in evidence text as the section verdict; tightened to line-anchored (`- ` / `**` prefix) and a regression test added. No remaining P1–P3 findings. |
+| P4 | Correctness | `packages/app/src/services/task-record.ts:99,278-350` | Review found and closed three false-trust gaps: noncanonical artifact statuses, malformed rows dropped behind MET, and pipe-bearing IDs failing round-trip. Focused regressions cover each path; no remaining P1–P3 finding. |
+| P4 | Architecture | `packages/app/src/services/task-record.ts:99,185` | The repair reuses the canonical verdict parser/types and keeps the inverse beside `renderTesting`; no parallel decoder or abstraction was added. |
 
-**Functional traceability (R1–R7):** all MET — R1 (parser returns canonical `ParseVerdictOutcome`), R2 (renderTesting converged onto canonical; task-service:1136 + index re-export green; no other consumer migrated), R3 (Requirement/Req/R# variants, scenario-title keys, case-insensitive statuses, missing Verdict line tolerated), R4 (invalid/malformed/missing kinds; valid never carries zero rows; no defaulted status), R5 (round-trip proven by tests), R6 (tolerance pinned against real corpus sections 0417/0360), R7 (no schema/CLI change; rendered output unchanged — round-trip diff test).
+**Functional traceability (R1–R7):** all MET — canonical outcome/type and record-reader validation (R1/R2); bounded header/status tolerance (R3); honest missing/invalid/malformed results with no dropped invalid rows (R4); exact representative round-trip including escaped evidence and pipe-bearing IDs (R5); real corpus samples remain pinned (R6); renderer output and public/storage surfaces remain unchanged (R7).
 
-**SECUA:** no security surface (pure markdown parser, no I/O, no injection risk — input is task-corpus markdown, not external). Efficiency fine (single pass over section lines). Correctness hardened as above. Usability: parser returns discriminated outcomes the gate speaks.
+**SECUA:** no security surface. Correctness is fail-closed at the markdown/artifact trust boundary; parsing remains linear in section size. No remaining blocker, major, or minor finding.
 
-**Architecture:** parser sits beside its inverse producer (`task-record.ts`), single-file drift coupling as designed; reuses canonical `ParseVerdictOutcome`/`VerifyVerdict`/`ROW_STATUSES`/`aggregateVerifyVerdict` rather than re-stating a second vocabulary. No new abstraction with one caller.
+**Architecture:** one producer/inverse pair in `task-record.ts`, one canonical runtime artifact parser in `verify-verdict.ts`, and no new dependency or storage seam.
 
-**Residual risk:** the parser's tolerance is deliberately bounded (statuses must match canonical `ROW_STATUSES`); 129 prose-only corpus sections will parse as `invalid` (not verified), which is the honest outcome by design — 0672 consumes the non-`valid` kinds as unrecoverable-evidence.
+**Residual risk:** tolerance intentionally rejects prose and noncanonical statuses. That lowers recovery rather than fabricating evidence; the corpus measurement/reconciliation remains task 0673 by design.
 
 **Disposition:** approve. No blockers.
 ### References

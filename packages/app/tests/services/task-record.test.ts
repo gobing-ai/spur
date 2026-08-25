@@ -66,8 +66,8 @@ describe('escapeTablePipe', () => {
         expect(escapeTablePipe('a|b|c')).toBe('a\\|b\\|c');
     });
 
-    test('does not escape already-escaped pipes', () => {
-        // Only unescaped `|` should get a backslash prefix.
+    test('adds an escape layer to already-escaped pipes', () => {
+        // Rendering always adds one layer so parsing can remove exactly one.
         expect(escapeTablePipe('a\\|b')).toBe('a\\\\|b');
     });
 });
@@ -135,6 +135,7 @@ describe('parseVerdict', () => {
     test('parses requirements array', () => {
         const v = parseVerdict(
             JSON.stringify({
+                verdict: 'FAIL',
                 requirements: [
                     { id: 'R1', status: 'MET', evidence: 'done' },
                     { id: 'R2', status: 'UNMET', evidence: 'not done' },
@@ -159,6 +160,7 @@ describe('parseVerdict', () => {
     test('parses checks array', () => {
         const v = parseVerdict(
             JSON.stringify({
+                verdict: 'UNKNOWN',
                 checks: [{ name: 'Security', status: 'P1', evidence: 'xss' }],
             }),
         );
@@ -166,19 +168,26 @@ describe('parseVerdict', () => {
         expect(v.checks[0]?.name).toBe('Security');
     });
 
-    test('filters non-object requirements', () => {
+    test('degrades an artifact with invalid coverage rows to UNKNOWN', () => {
         const v = parseVerdict(
             JSON.stringify({
                 requirements: [{ id: 'R1', status: 'ok', evidence: 'y' }, 'bad', null, 42],
             }),
         );
-        expect(v.requirements).toHaveLength(1);
-        expect(v.requirements[0]?.id).toBe('R1');
+        expect(v.verdict).toBe('UNKNOWN');
+        expect(v.requirements).toEqual([]);
+    });
+
+    test('never admits an unknown row status into the canonical verdict type', () => {
+        const v = parseVerdict(JSON.stringify({ verdict: 'PASS', requirements: [{ id: 'R1', status: 'BANANA' }] }));
+        expect(v.verdict).toBe('UNKNOWN');
+        expect(v.requirements).toEqual([]);
     });
 
     test('parses acceptanceCriteria array', () => {
         const v = parseVerdict(
             JSON.stringify({
+                verdict: 'PASS',
                 acceptanceCriteria: [
                     {
                         id: 'Scenario: CLI emits JSON',
@@ -306,6 +315,32 @@ describe('parseTesting', () => {
         }
     });
 
+    test('round-trips evidence with a backslash immediately before a pipe', () => {
+        const v = makeVerdict({
+            requirements: [{ id: 'R1', status: 'MET', evidenceType: '', evidence: 'escaped \\| pipe' }],
+        });
+        const out = parseTesting(renderTesting(v), '0100');
+        expect(out.kind).toBe('valid');
+        if (out.kind === 'valid') {
+            expect(out.verdict.requirements).toEqual(v.requirements);
+        }
+    });
+
+    test('round-trips requirement and acceptance-criteria ids containing pipes', () => {
+        const v = makeVerdict({
+            requirements: [{ id: 'R1|pipe', status: 'MET', evidenceType: '', evidence: 'covered' }],
+            acceptanceCriteria: [
+                { id: 'Scenario: alpha | beta', status: 'MET', evidenceType: 'test', evidence: 'covered' },
+            ],
+        });
+        const out = parseTesting(renderTesting(v), '0100');
+        expect(out.kind).toBe('valid');
+        if (out.kind === 'valid') {
+            expect(out.verdict.requirements[0]?.id).toBe('R1|pipe');
+            expect(out.verdict.acceptanceCriteria[0]?.id).toBe('Scenario: alpha | beta');
+        }
+    });
+
     // Tolerance over real corpus shapes (R3/R6): Requirement/Req header variants,
     // scenario-title-keyed rows, and a table without a Verdict: line. The sections
     // below are real shapes harvested from docs/tasks* (0417, 0360), lightly trimmed.
@@ -422,13 +457,45 @@ describe('parseTesting', () => {
     });
 
     test('truncated table is malformed without throwing', () => {
-        const corpus = [
+        const missingStatus = [
             '| Requirement | Status | Evidence |',
             '|-------------|--------|----------|',
             '| R1 |',
             '',
         ].join('\n');
-        expect(parseTesting(corpus, '0100').kind).toBe('malformed');
+        const missingEvidence = [
+            '| Requirement | Status | Evidence |',
+            '|-------------|--------|----------|',
+            '| R1 | MET |',
+            '',
+        ].join('\n');
+        const truncatedSeparator = [
+            '| Requirement | Status | Evidence |',
+            '|-------------|--------|',
+            '| R1 | MET | evidence |',
+            '',
+        ].join('\n');
+        expect(parseTesting(missingStatus, '0100').kind).toBe('malformed');
+        expect(parseTesting(missingEvidence, '0100').kind).toBe('malformed');
+        expect(parseTesting(truncatedSeparator, '0100').kind).toBe('malformed');
+    });
+
+    test('a malformed row cannot be dropped behind a surviving MET row', () => {
+        for (const brokenRow of [
+            '|  | UNMET | missing id |',
+            '| R2 |  | missing status |',
+            '| R2 | UNME | typo |',
+            '| R2 | NA | alias |',
+        ]) {
+            const corpus = [
+                '| Requirement | Status | Evidence |',
+                '|-------------|--------|----------|',
+                '| R1 | MET | valid row |',
+                brokenRow,
+                '',
+            ].join('\n');
+            expect(parseTesting(corpus, '0100').kind).toBe('malformed');
+        }
     });
 
     test('locates the Testing section inside a full task document', () => {
@@ -449,6 +516,18 @@ describe('parseTesting', () => {
         if (out.kind === 'valid') {
             expect(out.verdict.requirements[0]?.id).toBe('R1');
         }
+    });
+
+    test('a full task document without a Testing section is missing', () => {
+        const doc = [
+            '## 0100. No testing section',
+            '',
+            '### Requirements',
+            '| Requirement | Status | Evidence |',
+            '|-------------|--------|----------|',
+            '| R1 | MET | this table is outside Testing |',
+        ].join('\n');
+        expect(parseTesting(doc, '0100').kind).toBe('missing');
     });
 });
 
@@ -608,7 +687,7 @@ describe('TaskService.record', () => {
             JSON.stringify({
                 wbs,
                 verdict: 'PASS',
-                requirements: [{ id: 'R1', status: 'PASS', evidence: 'all good' }],
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'all good' }],
                 checks: [{ name: 'Security', status: 'P4', evidence: 'clean' }],
             }),
         );
@@ -624,7 +703,7 @@ describe('TaskService.record', () => {
         const raw = await fs.readFile(`${tasksDir}/${wbs}_record-test-task.md`);
         expect(raw).toContain('### Testing');
         expect(raw).toContain('**Pipeline verify results**');
-        expect(raw).toContain('| R1 | PASS | all good |');
+        expect(raw).toContain('| R1 | MET | all good |');
         expect(raw).toContain('### Review');
         expect(raw).toContain('| Priority | Dimension | Location | Finding |');
     });
