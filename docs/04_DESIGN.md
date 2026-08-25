@@ -860,6 +860,28 @@ standard contract, ADR-079 digest-truth). Publication is reachable only from a p
 state; a hit reuses model enrichment only and refreshes `validated_at` + the imported-snapshot banner
 without claiming a later import.
 
+**Helper verb surface and stage order (0659/0660, corrected 2026-08-25).** The helper's CLI is
+`paths | probe | stamp | refresh | digest | check | publish` — every stage in the workflow is one
+invocation of one of these (ADR-069 R1 glue length). Stage order is
+`resolve-scope → resolve-paths → analyze → cache-probe → {hit: refresh-provenance | miss: render →
+enrich → structure-gate → validate → stamp} → publish`. **`analyze` precedes `cache-probe`
+deliberately:** ADR-079 makes validity a *derived* fact, so the semantic digest must come from the
+fresh artifact, never from the cached report being judged. Publication is reachable only via `stamp`
+(guarded on `Verdict: PASS`) or `refresh-provenance` (whose model half was itself published through
+a passing validation).
+
+**Frontmatter provenance block (0660 R7).** `stamp` writes, and `parseProvenance` reads back, the
+full block: `identity` (contract version, mode, date, IANA timezone, normalized inclusive bounds,
+sources), `windowState` (`provisional` until the local calendar day closes, then `closed`),
+`generatedAt`/`validatedAt`, `artifactDigest` + `baselineArtifactDigest`, `contractDigest` /
+`skillDigest` / `workflowDigest`, per-source `coverage` with `lastImportedAt`, `runId`,
+`currentArtifactPath`/`baselineArtifactPath`, `spurVersion`, `schemaVersion`, `executor`, `model`,
+and `cacheDisposition`. Audit fields round-trip through `parseProvenance` so a cache-hit republish
+never strips them. A logic path that cannot be resolved digests to `not available` (which compares
+equal to itself, so an unresolvable path degrades to "no invalidation signal", never a false match).
+The banner renders the **earliest** per-source `lastImportedAt`, so the report never claims a source
+was imported later than its own recorded timestamp.
+
 #### History nightly loop — scheduling surface and observability (task 0471)
 
 The daily pipeline runs on an **external macOS launchd agent**, not Spur's embedded scheduler. The

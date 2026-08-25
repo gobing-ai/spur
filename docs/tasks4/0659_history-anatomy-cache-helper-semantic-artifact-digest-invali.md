@@ -4,7 +4,7 @@ name: "History-anatomy cache helper: semantic artifact digest, invalidation matr
 status: done
 template: feature-impl
 created_at: 2026-08-25T04:06:58.552Z
-updated_at: "2026-08-25T06:01:15.263Z"
+updated_at: "2026-08-25T17:07:53.138Z"
 feature_id: I8
 priority: P2
 tags: ["plugin", "script", "cache"]
@@ -308,25 +308,34 @@ or ranking logic (that is the skill's judgment). script-contract-check passes (1
 violations).
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | plugins/sp/scripts/history-anatomy-cache.ts:101 semanticArtifactDigest; tests pin canonicalization stability. |
-| R2 | MET | :217 decideCache full matrix; each row tested. |
-| R3 | MET | :171 parseProvenance returns null, never throws; tested. |
-| R4 | MET | window-closed row in decideCache; tested. |
-| R5 | MET | :267 checkReportStructure — sections/fields/placeholders/anchors; tested. |
-| R6 | MET | :311 publishAtomically atomic; failed candidate preserves target; tested. |
-| R7 | MET | script contains no finding/remediation/severity/ranking logic. |
-| R8 | MET | twin generated; config/plugin-scripts.json entry; build:scripts updated; ADR-065 amendment; script-contract-check PASS. |
-| R9 | MET | plugins/sp/tests/history-anatomy-cache.test.ts — 20 tests, 94.33% lines. |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/scripts/history-anatomy-cache.ts:91-118` — `canonicalize` sorts object keys, sorts plain arrays, preserves ranked arrays (`byTool`/`bySession`/`topSteps*`), and nulls only the volatile fields `generatedAt`, `validatedAt`, `baselineArtifactDigest`; `semanticArtifactDigest` is SHA-256 over that material. Tests `plugins/sp/tests/history-anatomy-cache.test.ts:43-62` pin key-order/array-order stability and evidence sensitivity. |
+| R2 | MET | `plugins/sp/scripts/history-anatomy-cache.ts:235-272` — `decideCache` covers every matrix row: identity tuple (`contractVersion`, `mode`, `date`, `timezone`, `bounds`, sorted `sources`), semantic artifact digest (`data-changed`), the three logic digests (`logic-changed:contract |
+| R3 | MET | `plugins/sp/scripts/history-anatomy-cache.ts:189` — `parseProvenance` returns `null` (never throws) on absent/truncated/unparsable frontmatter; `decideCache:241` maps `null` to `{disposition:'miss', reasons:['no-cache']}`. Tests `history-anatomy-cache.test.ts:95-101`. |
+| R4 | MET | `plugins/sp/scripts/history-anatomy-cache.ts:270` invalidates a `provisional` cache once `dayClosed`; `:257` invalidates a closed-day cache whose `artifactDigest` changed (late import). Tests `history-anatomy-cache.test.ts:111-116` and `:143-148`. |
+| R5 | MET | `plugins/sp/scripts/history-anatomy-cache.ts:285-330` — `checkReportStructure` verifies all eleven sections present and in order (`:291-300`), no placeholder/TODO/FIXME/empty cell (`:288`), the nine per-finding fields on every finding row (`:301-307`), and that **every** claim in the evidence ledger carries an anchor (`:309-328`). **Repaired this run under `--fix all`** — see the SECUA table: the anchor scan previously inspected only the first `^[ |
+| R6 | MET | `plugins/sp/scripts/history-anatomy-cache.ts:333-350` — `publishAtomically` writes `<target>.tmp` in the same directory, `fsync`s, then `rename`s; on any failure it removes the tmp and rethrows, leaving the target untouched. Workflow order gates publication behind the structure gate (`config/workflows/history-anatomy.yaml:155` `check` before `:204` `publish`). Test `history-anatomy-cache.test.ts:264-272` proves the prior target stays byte-identical (`OLD`) and no `.tmp` survives. |
+| R7 | MET | `rg -ni "severity\|rank\|remediat\|blocker\|major\|minor\|priority" plugins/sp/scripts/history-anatomy-cache.ts` returns only the module docstring's own disclaimer (`:9-10`), the frozen section name `'Remediation options'` (`:66`), and the digest's array-order preservation comment (`:96-99`). No finding, remediation, severity or ranking logic exists in the script. |
+| R8 | MET | Twin regenerated this run via `superskill script convert sp history-anatomy-cache.ts` → `plugins/sp/scripts/history-anatomy-cache.mjs` (10,360 bytes) and confirmed to carry the repaired anchor scan (`history-anatomy-cache.mjs:220-232`). Declared in `config/plugin-scripts.json:34-38` (`rel: history-anatomy-cache.ts`, `contract: standard`, `twin: history-anatomy-cache.mjs`). `config/workflows/history-anatomy.yaml:101,155,192,204` invoke it via `node "$(superskill script path sp history-anatomy-cache.mjs)"` — no repo-relative `bun plugins/sp/scripts/` path. `bun run script-contract-check` → `15 script(s) baselined (7 standard, 8 repo-only), 0 violation(s) — PASS`. |
+| R9 | MET | `bun test plugins/sp/tests/history-anatomy-cache.test.ts` → 23 pass / 0 fail this run; 93.75% funcs / 94.84% lines. Covers every invalidation-matrix row (`:104-154`), digest stability (`:42-63`), malformed provenance (`:65-102`), the failed-candidate preservation case (`:264-272`), and — added this run — the three evidence-anchor regressions (`:191-217`). |
 
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R5 — A valid daily cache is reused without repeating model enrichment | MET | command | Driven against real imported history this turn (5 sources, 64 sessions). `probe` on a cold target → `miss`/`no-cache`; after `stamp` + `publish`, the identical `probe` → **`hit`**. `config/workflows/history-anatomy.yaml` routes `cache-probe → refresh-provenance` on `grep -q "^hit$"`, skipping `render`/`enrich`; `refresh` advances `validatedAt` and stamps `cache hit` while preserving `generatedAt`/`artifactDigest`. Regression tests: `plugins/sp/tests/history-anatomy-cache.test.ts` "R5: an unchanged second run is a hit against the report published by the first" and "R3: refresh updates validatedAt, disposition and banner but not the recorded evidence". 39 pass / 0 fail. |
+| R6 — Changed imported data invalidates the cache before it can be presented | MET | command | Real run this turn: a re-analyzed wider window against the published report → `miss` with reasons `identity:bounds`, `data-changed`. The disposition now reaches the report — `stamp` writes `cacheDisposition: "miss"` into the frontmatter and the banner (`· cache miss`), verified in the published artifact. Test: "R6: changed imported data invalidates the published cache". |
+| R7 — Changed report logic invalidates the cache even when the data is identical | MET | command | Real run this turn with an unchanged artifact but a different `--workflow` path → `miss` / `logic-changed:workflow`. `logicDigest` hashes the contract file, the skill directory (names + bodies, sorted) and the workflow file; `buildProvenance` records all three and `stamp` writes them. Test: "R7-logic: changed contract logic invalidates even when the data is identical". |
+| R10 — A failed candidate never replaces a valid cached report | MET | test | `history-anatomy-cache.test.ts:264-272` — `publishAtomically` throws on a missing candidate, the prior target remains byte-identical (`OLD`), and no `.tmp` remains. Source: `history-anatomy-cache.ts:333-350`. |
+| R11 — Missing or malformed cache provenance is treated as a miss, not a crash | MET | test | `history-anatomy-cache.test.ts:95-101` — no frontmatter and truncated frontmatter both return `null` without throwing; `history-anatomy-cache.test.ts:131-135` maps `null` to `miss` with a stated reason `no-cache`. |
+| R12 — Degraded source coverage invalidates a cache that claimed broader coverage | MET | test | Reachable through `probe` since this run. Test "R12: a source dropping out of coverage invalidates the published cache" publishes a two-source report, re-probes with a one-source artifact, and asserts `coverage-degraded`. The regenerated report states the reduced coverage: `stamp` writes the current per-source `coverage:` rows plus the derived banner, so the surviving source set and each `lastImportedAt` are on the published page. |
+| R16 — The helper script performs only deterministic file, hash and schema work | MET | command | `bun run script-contract-check` → `15 script(s) baselined (7 standard, 8 repo-only), 0 violation(s) — PASS` (run this turn). Twin present and regenerated (`history-anatomy-cache.mjs`, 10,360 bytes); declared at `config/plugin-scripts.json:34-38`; `config/workflows/history-anatomy.yaml:101,155,192,204` use `superskill script path`, never a repo-relative `bun plugins/sp/scripts/` path. Judgment-logic grep over the script returns only the docstring disclaimer and a frozen section name. |
+| R17 — Every published report carries all eleven required sections | MET | test | `history-anatomy-cache.test.ts:172-184` — the eleven-section report passes; a five-section report fails with `section-missing…`. Source `history-anatomy-cache.ts:291-300` also enforces **order** (a section appearing before the previous one fails). Placeholder/TODO/empty-cell rejection: `:288`, test `:186-190`. |
+| R26 — The evidence ledger anchors every claim to a citable source | MET | test | `history-anatomy-cache.ts:309-328` scans every ledger claim row (table rows after the separator, or every `>` line) and fails with `evidence-claim-without-anchor` when any lacks a backticked `path:line`, a backticked `.md`/`.ts`/`.json` file, or a bare `path:line`. Regression tests added this run: `history-anatomy-cache.test.ts:191-199` (fully anchored table passes), `:201-207` (unanchored 2nd claim fails), `:209-216` (blockquote ledger scanned past its first line). Report-authoring half of the AC: `plugins/sp/skills/history-anatomy/references/report-contract.md:123-126`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Final disposition: APPROVED** — implementation satisfies all nine requirements; no P1–P3 findings.

@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I8"
 name: "History anatomy: daily cacheable diagnostic report, workflow orchestration, and bounded issue-finding migration"
-status: verifying
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-25T04:01:01.272Z"
-updated_at: "2026-08-25T06:40:39.271Z"
+updated_at: "2026-08-25T17:48:35.951Z"
 ---
 
 # I8: History anatomy: daily cacheable diagnostic report, workflow orchestration, and bounded issue-finding migration
@@ -438,3 +438,4 @@ Feature: History anatomy: daily cacheable diagnostic report, workflow orchestrat
 
 - 2026-08-25T06:40:38.841Z backlog → active (system)
 - 2026-08-25T06:40:39.271Z active → verifying (system)
+- 2026-08-25T17:48:35.951Z verifying → done (system)
