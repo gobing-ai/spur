@@ -810,6 +810,18 @@ waste counts assistant steps with fresh input > 100,000 tokens and < 10 % cache 
 only measured low-reuse steps count. Pre-0581 artifacts state `not available` for all four
 sections (R5), never zeros.
 
+**True population + coverage rendering (HA-S1, ADR-080):** `analyze` records an additive
+optional `population` block on `HistoryArtifact` (`SelectionPopulation` — sessions, tools,
+loops, warnings, `appliedTop`; no schema bump) from unbounded `COUNT(DISTINCT …)` queries over
+the active selector — never from the bounded leaderboard array lengths. `renderForensics`
+renders the Sessions metric and the Raw Data Counts line through `fmtTopOf`: `top N of M` when
+the applied depth is below the true population, the plain count when the whole population is
+shown, and `not available` on a pre-HA-S1 artifact (never reconstructed from a bounded length).
+The coverage table adds `Last imported` / `Parse err` / `Validation err`, marks sample overflow
+`(truncated)` at the `MAX_ERROR_SAMPLES` cap, and warnings render one `code — detail` line per
+warning instead of a code-only list. `narrowArtifact` re-slice (`report --top`) lowers
+`appliedTop` to `min(requested, existing)` and leaves the population counts untouched.
+
 **Pairings renderer (task 0574, feature J8 R2/R3):** `renderPairings`
 (`packages/domain/src/analytics/render-pairings.ts`) — a pure `HistoryArtifact → string` mode
 consuming ONLY the additive `pairings` / `ladderSnapshot` fields (0573); never opens the

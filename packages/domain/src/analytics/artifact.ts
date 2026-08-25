@@ -161,6 +161,20 @@ export interface CacheWasteStat {
     topSteps: StepStat[];
 }
 
+/** True selection population behind the bounded leaderboards (HA-S1, ADR-080). */
+export interface SelectionPopulation {
+    /** Distinct sessions in the selection — NOT bounded by `top`. */
+    sessions: number;
+    /** Distinct tools in the selection — NOT bounded by `top`. */
+    tools: number;
+    /** Loop findings in the selection. */
+    loops: number;
+    /** Warnings attached to the artifact. */
+    warnings: number;
+    /** Leaderboard depth applied when the bounded arrays were built (`analyze --top`). */
+    appliedTop: number;
+}
+
 /**
  * One executor on the capability ladder, snapshotted at analyze time (feature J8 R2).
  *
@@ -223,6 +237,12 @@ export interface HistoryArtifact {
     cacheWaste?: CacheWasteStat;
     /** Per-source per-step section support, derived from data - additive (0581 R5). */
     stepSupport?: StepSupportEntry[];
+    /**
+     * True selection population behind the bounded leaderboards (HA-S1, ADR-080) —
+     * additive, absent on pre-HA-S1 artifacts so consumers treat absence as unknown
+     * and never reconstruct a population from a bounded array length.
+     */
+    population?: SelectionPopulation;
 }
 
 /**

@@ -47,6 +47,7 @@ import {
     runRetention,
     type SessionState,
     type SourceSummaryRow,
+    selectionPopulation,
     selectorDigest,
     sessionSpans,
     sessionToolDurations,
@@ -433,6 +434,7 @@ export class HistoryService {
             cacheWasteAggRow,
             cacheWasteRows,
             stepSupportRows,
+            population,
         ] = await Promise.all([
             messageRollup(db, selector, queryOpts),
             toolRollup(db, selector, queryOpts),
@@ -454,6 +456,7 @@ export class HistoryService {
             cacheWasteAggregate(db, selector, queryOpts),
             topCacheWasteSteps(db, selector, top, queryOpts),
             stepSupport(db, selector, queryOpts),
+            selectionPopulation(db, selector, queryOpts),
         ]);
         await dropWatermarkExclude();
 
@@ -483,6 +486,11 @@ export class HistoryService {
 
         const coverage = buildCoverage(sourceRows, tRows, driftRows, opts.coverageErrors, opts.importCoverage);
         const derived = computeDerived(spanRows, toolDurRows, todoRows);
+        const warnings = [
+            ...buildWarnings(driftRows, coverage),
+            ...derivedWarnings(derived),
+            ...(opts.extraWarnings ?? []),
+        ];
 
         // R2: mark each session's completeness state so consumers can exclude in-progress
         // sessions (task 0547). Analyze always writes it; the field stays additive.
@@ -528,11 +536,7 @@ export class HistoryService {
                 sessionState: stateByKey.get(`${r.sessionId}\0${r.source}`) ?? 'complete',
             })),
             loops: loopRows,
-            warnings: [
-                ...buildWarnings(driftRows, coverage),
-                ...derivedWarnings(derived),
-                ...(opts.extraWarnings ?? []),
-            ],
+            warnings,
             pairings,
             ladderSnapshot,
             derived,
@@ -544,6 +548,16 @@ export class HistoryService {
                 topSteps: cacheWasteRows,
             },
             stepSupport: stepSupportRows,
+            // HA-S1 (ADR-080): the true selection population behind the bounded
+            // leaderboards — never the array lengths. loops/warnings are the full
+            // sets (unbounded queries), so their counts equal the array lengths.
+            population: {
+                sessions: population.sessions,
+                tools: population.tools,
+                loops: loopRows.length,
+                warnings: warnings.length,
+                appliedTop: top,
+            },
         };
 
         await refreshHistoryRollups(db);

@@ -51,7 +51,7 @@ function renderSessionSummary(artifact: HistoryArtifact, derived: DerivedVariabl
         '',
         '| Metric | Value |',
         '| --- | --- |',
-        `| Sessions | ${artifact.bySession.length.toLocaleString('en-US')} |`,
+        `| Sessions | ${fmtTopOf(artifact.population?.sessions, artifact.population?.appliedTop)} |`,
         `| Wall-clock span | ${wall} |`,
         `| Messages | ${t.messages.toLocaleString('en-US')} |`,
         `| Tool calls | ${t.toolCalls.toLocaleString('en-US')} |`,
@@ -374,24 +374,30 @@ function renderBottlenecks(derived: DerivedVariables | null): string[] {
 
 function renderRawData(artifact: HistoryArtifact): string[] {
     const s = artifact.selector;
+    const p = artifact.population;
     const lines = [
         '## Raw Data',
         '',
         `- Selector: since=${s.since ?? '-'} until=${s.until ?? '-'} sources=${s.sources ? s.sources.join(',') : 'all'} session=${s.sessionId ?? '-'} run=${s.runId ?? '-'} task=${s.taskWbs ?? '-'}`,
-        `- Counts: ${artifact.bySession.length} sessions · ${artifact.byTool.length} tools · ${artifact.loops.length} loops · ${artifact.warnings.length} warnings`,
+        `- Counts: ${fmtTopOf(p?.sessions, p?.appliedTop)} sessions · ${fmtTopOf(p?.tools, p?.appliedTop)} tools · ${p?.loops ?? artifact.loops.length} loops · ${p?.warnings ?? artifact.warnings.length} warnings`,
     ];
     if (artifact.warnings.length > 0) {
-        lines.push(`- Warning codes: ${[...new Set(artifact.warnings.map((w) => w.code))].join(', ')}`);
+        lines.push('- Warnings:');
+        for (const w of artifact.warnings) {
+            lines.push(`  - ${w.code}${w.source !== undefined ? ` (${w.source})` : ''} — ${w.detail}`);
+        }
     }
     if (artifact.coverage.length > 0) {
         lines.push(
             '',
-            '| Source | Status | Files | Messages | Tool calls | Unknown |',
-            '| --- | --- | ---: | ---: | ---: | ---: |',
+            '| Source | Status | Files | Messages | Tool calls | Unknown | Last imported | Parse err | Validation err |',
+            '| --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |',
         );
         for (const c of artifact.coverage) {
+            const parseTrunc = c.parseErrorSamples.length >= MAX_ERROR_SAMPLES ? ' (truncated)' : '';
+            const validationTrunc = c.validationErrorSamples.length >= MAX_ERROR_SAMPLES ? ' (truncated)' : '';
             lines.push(
-                `| ${c.source} | ${c.status} | ${c.files} | ${c.messages} | ${c.toolCalls} | ${c.unknownRecords} |`,
+                `| ${c.source} | ${c.status} | ${c.files} | ${c.messages} | ${c.toolCalls} | ${c.unknownRecords} | ${c.lastImportedAt ?? 'not available'} | ${c.parseErrors}${parseTrunc} | ${c.validationErrors}${validationTrunc} |`,
             );
         }
     }
@@ -403,6 +409,25 @@ function renderRawData(artifact: HistoryArtifact): string[] {
 // ---------------------------------------------------------------------------
 
 const NOT_AVAILABLE_DERIVED = '> not available — artifact has no derived block (rerun `spur history analyze`)';
+
+const MAX_ERROR_SAMPLES = 20;
+
+/**
+ * Format a leaderboard label truthfully (HA-S1, ADR-080). The population and applied
+ * depth come from the artifact's `population` block — never reconstructed from an array
+ * length. When the applied depth falls below the true population the leaderboard was
+ * truncated, so it renders `top N of M`; when the whole population is shown it renders
+ * the plain count; a pre-HA-S1 artifact (no population) is `not available`.
+ */
+function fmtTopOf(population: number | undefined, appliedTop: number | undefined): string {
+    if (population === undefined) {
+        return 'not available';
+    }
+    if (appliedTop !== undefined && appliedTop < population) {
+        return `top ${appliedTop} of ${population.toLocaleString('en-US')}`;
+    }
+    return population.toLocaleString('en-US');
+}
 
 /** Wall-clock formatting for forensics scales: `86ms` → `1.2s` → `3.4m` → `5.2h`. */
 export function fmtWall(ms: number): string {

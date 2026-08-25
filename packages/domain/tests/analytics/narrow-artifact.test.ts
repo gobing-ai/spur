@@ -163,6 +163,75 @@ describe('narrowArtifact (task 0564 R3)', () => {
         expect(a.bySession).toHaveLength(3);
     });
 
+    test('HA-S1: --top re-slice lowers appliedTop but preserves the true population counts', () => {
+        const a = artifact({
+            byTool: [
+                {
+                    toolName: 'a',
+                    calls: 3,
+                    errors: 0,
+                    durationMsTotal: 0,
+                    durationMsMean: 0,
+                    durationMsMax: 0,
+                    durationUnmeasured: 0,
+                    resultBytes: 0,
+                },
+                {
+                    toolName: 'b',
+                    calls: 2,
+                    errors: 0,
+                    durationMsTotal: 0,
+                    durationMsMean: 0,
+                    durationMsMax: 0,
+                    durationUnmeasured: 0,
+                    resultBytes: 0,
+                },
+            ],
+            bySession: [
+                {
+                    sessionId: 's1',
+                    source: 'claude',
+                    startedAt: null,
+                    messages: 1,
+                    toolCalls: 0,
+                    tokens: 0,
+                    costUsd: 0,
+                    topTool: null,
+                    assistantDurationMs: 0,
+                    assistantDurationUnmeasured: 0,
+                },
+                {
+                    sessionId: 's2',
+                    source: 'claude',
+                    startedAt: null,
+                    messages: 1,
+                    toolCalls: 0,
+                    tokens: 0,
+                    costUsd: 0,
+                    topTool: null,
+                    assistantDurationMs: 0,
+                    assistantDurationUnmeasured: 0,
+                },
+            ],
+            population: { sessions: 35, tools: 12, loops: 4, warnings: 2, appliedTop: 20 },
+        });
+        const { artifact: narrowed } = narrowArtifact(a, { top: 1 }, PATH);
+        // appliedTop lowered to the requested depth; population counts untouched.
+        expect(narrowed.population?.appliedTop).toBe(1);
+        expect(narrowed.population?.sessions).toBe(35);
+        expect(narrowed.population?.tools).toBe(12);
+        expect(narrowed.bySession).toHaveLength(1);
+        // Input untouched.
+        expect(a.population?.appliedTop).toBe(20);
+    });
+
+    test('HA-S1: narrowing a pre-addition artifact (no population) leaves it absent', () => {
+        const a = artifact();
+        const { artifact: narrowed } = narrowArtifact(a, { top: 1 }, PATH);
+        expect(a.population).toBeUndefined();
+        expect(narrowed.population).toBeUndefined();
+    });
+
     test('no narrowing yields a null banner and the same artifact', () => {
         const a = artifact();
         const { artifact: narrowed, banner } = narrowArtifact(a, {}, PATH);

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "HA-S1: true population counts and truthful coverage rendering in the history forensics artifact"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-25T04:06:58.483Z
-updated_at: "2026-08-25T04:34:21.159Z"
+updated_at: "2026-08-25T05:19:53.922Z"
 feature_id: I8
 priority: P2
 tags: ["history", "analytics", "ha-s1"]
@@ -37,12 +37,12 @@ forensics` surfaces. It does **not** authorize a new verb or flag.
 
 Decision record: ADR-080. Shapes: `docs/design/history-anatomy.md` §HA-S1.
 ### Requirements
-- [ ] R1. `spur history analyze` records, for each bounded leaderboard, the true selection population and the applied leaderboard depth. The bounded `bySession` / `byTool` arrays keep their existing shape and cap.
-- [ ] R2. The forensics renderer reports the true population rather than the bounded array length, and labels each leaderboard as `top N of M`. No bounded array length is presented as a total anywhere in the renderer, including the counts line at `:381`.
-- [ ] R3. The forensics coverage section renders per-source `lastImportedAt`, parse-error and validation-error counts, an indicator when error samples were truncated, and warning detail rather than only a warning count.
-- [ ] R4. An artifact written before these fields existed still renders: absent population and depth values read `not available`, and no population figure is reconstructed from an array length.
-- [ ] R5. Tests pin true population counts, bounded ranking labels, last-import and error rendering, and pre-addition backward compatibility. No new `spur history` verb or flag is added.
-- [ ] R6. `docs/04_DESIGN.md` records the additive artifact fields and the renderer change in the same commit (T3).
+- [x] R1. `spur history analyze` records, for each bounded leaderboard, the true selection population and the applied leaderboard depth. The bounded `bySession` / `byTool` arrays keep their existing shape and cap.
+- [x] R2. The forensics renderer reports the true population rather than the bounded array length, and labels each leaderboard as `top N of M`. No bounded array length is presented as a total anywhere in the renderer, including the counts line at `:381`.
+- [x] R3. The forensics coverage section renders per-source `lastImportedAt`, parse-error and validation-error counts, an indicator when error samples were truncated, and warning detail rather than only a warning count.
+- [x] R4. An artifact written before these fields existed still renders: absent population and depth values read `not available`, and no population figure is reconstructed from an array length.
+- [x] R5. Tests pin true population counts, bounded ranking labels, last-import and error rendering, and pre-addition backward compatibility. No new `spur history` verb or flag is added.
+- [x] R6. `docs/04_DESIGN.md` records the additive artifact fields and the renderer change in the same commit (T3).
 ### Acceptance Criteria
 ```gherkin
 Feature: HA-S1 — true population counts and truthful coverage rendering
@@ -182,46 +182,119 @@ coverage section and the cache helper's semantic digest read `population`. Freez
 `SelectionPopulation`'s field names here; downstream tasks consume them verbatim and must not
 rename or re-shape them.
 ### Plan
-- [ ] 1. Add `SelectionPopulation` and the optional `population?` field to `HistoryArtifact`
+- [x] 1. Add `SelectionPopulation` and the optional `population?` field to `HistoryArtifact`
       (`packages/domain/src/analytics/artifact.ts`), matching the `CacheWasteStat` comment style.
       Confirm `HISTORY_ARTIFACT_SCHEMA_VERSION` stays `1`. (R1)
-- [ ] 2. Populate it in `HistoryService.analyze()` from unbounded `COUNT(DISTINCT …)` queries over
+- [x] 2. Populate it in `HistoryService.analyze()` from unbounded `COUNT(DISTINCT …)` queries over
       the active selector, with `appliedTop` = the `top` actually used. Never derive a count from a
       bounded array. (R1)
-- [ ] 3. Update `narrowArtifact` so a render-time `--top` lowers `appliedTop` to
+- [x] 3. Update `narrowArtifact` so a render-time `--top` lowers `appliedTop` to
       `min(requested, existing)` and leaves every population count untouched. (R1)
-- [ ] 4. Add the module-private `fmtTopOf` helper to `render-forensics.ts`; replace the `Sessions`
+- [x] 4. Add the module-private `fmtTopOf` helper to `render-forensics.ts`; replace the `Sessions`
       metric at `:54` and the counts line at `:381` so they read the population and label each
       leaderboard `top N of M`. Grep the whole renderer for any remaining `.length` used as a
       total. (R2)
-- [ ] 5. Widen the coverage table at `:386-395` with `Last imported`, `Parse err` and
+- [x] 5. Widen the coverage table at `:386-395` with `Last imported`, `Parse err` and
       `Validation err`; add the sample-truncation note keyed on `MAX_ERROR_SAMPLES`; replace the
       warning-codes line at `:383` with per-warning `code — detail` lines. (R3)
-- [ ] 6. Tests — `packages/domain/tests/analytics/`: population > applied depth renders `top N of
+- [x] 6. Tests — `packages/domain/tests/analytics/`: population > applied depth renders `top N of
       M`; population == bounded length renders the plain count; a pre-HA-S1 artifact (no
       `population`) renders `not available` and never fabricates from `.length`; coverage columns
       and the truncation note render; `narrowArtifact` lowers `appliedTop` without touching counts.
       Extend `narrow-artifact.test.ts` rather than starting a parallel suite. (R5)
-- [ ] 7. Service-level test in `packages/app/tests/` proving `analyze --top 2` over a fixture with
+- [x] 7. Service-level test in `packages/app/tests/` proving `analyze --top 2` over a fixture with
       more than two sessions writes the true population, not `2`. (R1, R5)
-- [ ] 8. Record the additive artifact fields and the renderer change in `docs/04_DESIGN.md`
+- [x] 8. Record the additive artifact fields and the renderer change in `docs/04_DESIGN.md`
       (same-commit T3). Confirm no new verb or flag appears in `apps/cli/src/commands/history.ts`. (R6)
-- [ ] 9. Gate: targeted tests first (`bun test <file> --test-name-pattern …`), then
+- [x] 9. Gate: targeted tests first (`bun test <file> --test-name-pattern …`), then
       `bun run spur-check`.
 ### Solution
+**Goal:** stop the forensics renderer from overstating coverage — record the true selection
+population + applied leaderboard depth on the artifact, render `top N of M` truthfully, and surface
+the per-source freshness/error detail the artifacts already carry.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change |
+| --- | --- |
+| `packages/domain/src/analytics/artifact.ts:165` | Added the `SelectionPopulation` interface (sessions, tools, loops, warnings, appliedTop). |
+| `packages/domain/src/analytics/artifact.ts:245` | Added the optional additive `population?` field on `HistoryArtifact`; schema version stays 1. |
+| `packages/domain/src/analytics/forensic-query.ts:464` | Added `selectionPopulation`, returning unbounded distinct session/tool counts over the active selector. |
+| `packages/domain/src/analytics/index.ts:67` | Exported `selectionPopulation`. |
+| `packages/app/src/services/history-service.ts:459` | `analyze()` added `selectionPopulation` to the shared Promise.all query batch. |
+| `packages/domain/src/analytics/render-forensics.ts:375` | `renderRawData` renders Counts via `fmtTopOf`, per-warning `code — detail` lines, and a widened coverage table. |
+| `packages/domain/src/analytics/render-forensics.ts:422` | Added module-private `fmtTopOf` (`top N of M` / plain count / `not available`). |
+| `packages/domain/src/analytics/narrow-artifact.ts:101` | `--top` re-slice lowers `appliedTop` to min(requested, existing) and leaves population counts untouched. |
 
+No new `spur history` verb or flag was added; no schema-version bump; the bounded leaderboard
+shape and `--top` default are unchanged.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/domain/src/analytics/artifact.ts:165 — SelectionPopulation interface; packages/app/src/services/history-service.ts:459 — selectionPopulation added to analyze query batch; app test proves analyze --top 2 over 3 sessions records population.sessions == 3. |
+| R2 | MET | packages/domain/src/analytics/render-forensics.ts:422 — fmtTopOf labels top N of M; render test pins top 20 of 35 and whole-population plain count. |
+| R3 | MET | packages/domain/src/analytics/render-forensics.ts:375 — renderRawData widened table + per-warning lines; tests pin truncation note and warning detail. |
+| R4 | MET | packages/domain/src/analytics/render-forensics.ts:422 — fmtTopOf returns not available when population absent; render test pins no fabricated count. |
+| R5 | MET | packages/app/tests/services/history-service.test.ts + domain tests extended; apps/cli/src/commands/history.ts unchanged. |
+| R6 | MET | docs/04_DESIGN.md — HA-S1 paragraph added in this commit. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R29 — analyze records true population + applied depth; bounded arrays at depth | MET | test | `history-service.test.ts` `analyze --top 2` over 3 sessions: `population.sessions==3`, `population.appliedTop==2`, `bySession` length 2. |
+| R30 — forensics reports `top N of M`, not bounded length; no length as total | MET | test | `render-forensics.test.ts` pins ` |
+| R31 — coverage renders freshness + error detail, truncation, warning detail | MET | test | `render-forensics.test.ts` truncation + warning-detail tests; widened table columns. |
+| R32 — pre-addition artifact renders `not available`, never fabricates from length | MET | test | `render-forensics.test.ts` pre-addition test pins `not available` sessions + counts line; `narrow-artifact.test.ts` preserves absent population. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Final disposition: APPROVED** — implementation satisfies all six requirements; only a P3 advisory.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
+| Priority | Finding | Evidence |
+| --- | --- | --- |
+| P3 (advisory) | Sessions summary row semantics change from a plain count to a `top N of M` label when truncated; downstream markdown consumers (e.g. the daily history-anatomy report, feature I8) must expect the label. Intended truthfulness correction, propagated by design. | `packages/domain/src/analytics/render-forensics.ts:54` → `fmtTopOf` label |
+
+No P1/P2 findings. No P4 documentation-only notes.
+
+
+All six requirements MET with direct evidence in the blameable diff:
+
+- R1 (record true population + applied depth): `packages/domain/src/analytics/artifact.ts:165`
+  adds `SelectionPopulation`; `selectionPopulation` at
+  `packages/domain/src/analytics/forensic-query.ts:464` returns unbounded distinct counts;
+  `analyze()` writes `population` at `packages/app/src/services/history-service.ts:554`.
+  Service-level test proves `analyze --top 2` over 3 sessions records `population.sessions == 3`.
+- R2 (renderer reports true population, `top N of M`, no bounded length as total): Sessions
+  metric and the Raw Data counts line route through `fmtTopOf`
+  (`packages/domain/src/analytics/render-forensics.ts:422`). Grep confirmed no remaining
+  `.length` used as a total.
+- R3 (coverage freshness/error/detail): coverage table widened with `Last imported` /
+  `Parse err` / `Validation err` (`render-forensics.ts:375`); truncation note at the
+  `MAX_ERROR_SAMPLES` cap; warnings render per-warning `code — detail` lines. Tested.
+- R4 (pre-addition artifact renders): `fmtTopOf` returns `not available` when `population` is
+  undefined; never reconstructed from an array length. Tested.
+- R5 (tests + no new verb/flag): domain + app tests added; no CLI surface change.
+- R6 (T3 docs): `docs/04_DESIGN.md` records the additive fields + renderer in the same commit.
+
+
+- Security: no new trust boundary; selectors stay on the existing parameterized path.
+- Efficiency: two `COUNT(DISTINCT …)` queries added to the existing `Promise.all` batch, each
+  `LIMIT ?`-bounded (R2 structural invariant green).
+- Correctness: population derived from the selector (unbounded counts), never from bounded arrays
+  (explicit anti-pattern honored); capability-gate waiver + caps raise were operator-authorized.
+- Usability: truthful `top N of M` labels; `not available` on pre-HA-S1 artifacts.
+- Architecture: additive-only, `HISTORY_ARTIFACT_SCHEMA_VERSION` stays 1; followed the
+  `CacheWasteStat` precedent, no second shape invented.
+
+
+None material. `population.loops` / `population.warnings` duplicate the array lengths (both are
+full, unbounded sets) — kept for a uniform shape, harmless.
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-25T05:10:29.129Z todo → wip (system)
+- 2026-08-25T05:19:07.954Z wip → testing (system)
+- 2026-08-25T05:19:53.922Z testing → done (system)

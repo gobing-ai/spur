@@ -92,6 +92,15 @@ export function narrowArtifact(
                 ...artifact,
                 byTool: artifact.byTool.slice(0, top),
                 bySession: artifact.bySession.slice(0, top),
+                // HA-S1 (ADR-080): narrowing the view narrows the applied depth, never
+                // the population counts — the leaderboards-label stays truthful to the
+                // full selection even after a render-time `--top` re-slice.
+                population: artifact.population
+                    ? {
+                          ...artifact.population,
+                          appliedTop: Math.min(top, artifact.population.appliedTop),
+                      }
+                    : undefined,
             };
         }
         parts.push(`top ${top}`);

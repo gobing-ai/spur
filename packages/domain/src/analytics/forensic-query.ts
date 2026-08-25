@@ -325,8 +325,7 @@ export async function bySkill(db: DbAdapter, sel: ArtifactSelector, top: number)
     );
 }
 
-/** Per-session leaderboard (Q5), bounded by `top`. */
-export async function bySession(
+/** Per-session leaderboard (Q5), bounded by `top`. */ export async function bySession(
     db: DbAdapter,
     sel: ArtifactSelector,
     top: number,
@@ -453,6 +452,45 @@ export async function bySession(
             state: msg.state,
         };
     });
+}
+
+/**
+ * True selection population behind the bounded leaderboards (HA-S1, ADR-080).
+ * Unbounded `COUNT(DISTINCT …)` over the same selector the bounded rankings use —
+ * never derived from `bySession.length` / `byTool.length` (that reintroduces the
+ * exact defect the counts exist to fix). Sessions exclude the same placeholder ids
+ * `bySession` filters; tools count distinct tool names over the same join.
+ */
+export async function selectionPopulation(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    opts?: WatermarkQueryOptions,
+): Promise<{ sessions: number; tools: number }> {
+    const { where, params } = buildMessageWhere(sel);
+    const folded = withMessageDedup(where);
+    const sessionScoped = `${folded} AND m.session_id NOT IN ('', 'unknown', 'session')`;
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
+    const wmSession = applyWatermarkToWhere(sessionScoped, opts?.watermark);
+
+    const [sessionRow, toolRow] = await Promise.all([
+        db.queryFirst<{ n: number }>(
+            `SELECT COUNT(DISTINCT m.session_id) AS n FROM history_message m ${wmSession.where} LIMIT ?`,
+            ...params,
+            ...wmSession.params,
+            1,
+        ),
+        db.queryFirst<{ n: number }>(
+            `SELECT COUNT(DISTINCT tc.tool_name) AS n
+             FROM history_tool_call tc
+             JOIN history_message m ON m.record_hash = tc.message_hash
+             ${wm.where}
+             LIMIT ?`,
+            ...params,
+            ...wm.params,
+            1,
+        ),
+    ]);
+    return { sessions: sessionRow?.n ?? 0, tools: toolRow?.n ?? 0 };
 }
 
 /** Repeated-call loop findings (Q4): same args_digest repeated >= 3 times. */

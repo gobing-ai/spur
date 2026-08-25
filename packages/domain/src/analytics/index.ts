@@ -64,6 +64,7 @@ export {
     type SkillStatRow,
     type SourceSummaryRow,
     type StepRow,
+    selectionPopulation,
     sessionSpans,
     sessionTimeline,
     sessionToolDurations,
