@@ -9,19 +9,15 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { createMigratedDbAdapter } from '../src/context';
-import { maybeTriggerHistoryRefresh } from '../src/history-refresh';
+import { type HistoryRefreshContext, maybeTriggerHistoryRefresh } from '../src/history-refresh';
 import { type CapturedOutput, createCapturedOutput } from './helpers';
 
 interface Project {
     cwd: string;
     output: CapturedOutput;
-    context: {
-        cwd: string;
-        env: Record<string, string | undefined>;
-        getDb: () => Promise<Awaited<ReturnType<typeof createMigratedDbAdapter>>>;
-        output: CapturedOutput;
-    };
+    context: HistoryRefreshContext;
 }
 
 /** Scaffold a tmp project with an optional `.spur/config.yaml` body. */
@@ -33,7 +29,10 @@ async function project(configYaml: string | null): Promise<Project> {
     }
     const output = createCapturedOutput();
     const db = await createMigratedDbAdapter(cwd, {});
-    const context = { cwd, env: {}, getDb: async () => db, output };
+    // A5/ADR-082: merged config is threaded on the context; load it through the same
+    // loader the composition root uses so the type matches HistoryRefreshContext.
+    const spurConfig = configYaml === null ? undefined : await loadSpurConfig(cwd);
+    const context: HistoryRefreshContext = { cwd, env: {}, getDb: async () => db, output, spurConfig };
     return { cwd, output, context };
 }
 

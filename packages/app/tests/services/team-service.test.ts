@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { type SpurConfig, spurConfigSchema } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
 import {
     type AgentEvents,
@@ -14,6 +15,7 @@ import {
 } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { parse as yamlParse } from 'yaml';
 import {
     type AgentRoleDefinition,
     type MessageEventBus,
@@ -38,6 +40,7 @@ async function makeService(
     bus?: MessageEventBus | TeamServiceEventBus,
     events?: EventBus<AgentEvents>,
     roles?: ReadonlyMap<string, AgentRoleDefinition>,
+    spurConfig?: SpurConfig | null,
 ): Promise<{ svc: TeamService; cwd: string; db: DbAdapter; cleanup: () => Promise<void> }> {
     const cwd = await mkdtemp(join(tmpdir(), 'spur-team-'));
     const db = await createMigratedDb({ url: ':memory:' });
@@ -50,6 +53,7 @@ async function makeService(
         ...(bus ? { eventBus: bus } : {}),
         ...(events ? { events } : {}),
         ...(roles ? { roles } : {}),
+        ...(spurConfig !== undefined ? { spurConfig } : {}),
     };
     return {
         svc: new TeamService(ctx),
@@ -482,15 +486,12 @@ describe('TeamService status & assignment', () => {
     });
 
     test('0544 R1: getStatus carries the declared role and resolved executor; unset when absent', async () => {
-        const { svc, cwd, cleanup } = await makeService(
+        const { svc, cleanup } = await makeService(
             undefined,
             undefined,
             new Map<string, AgentRoleDefinition>([['reviewer', { tier: 'capable-1', stages: ['verify'] }]]),
-        );
-        try {
-            await writeConfig(
-                cwd,
-                `agent:
+            spurConfigSchema.parse(
+                yamlParse(`agent:
   executors:
     - name: capable-exec
       agent: claude
@@ -502,8 +503,10 @@ describe('TeamService status & assignment', () => {
       members:
         - role: reviewer
         - executor: capable-exec
-`,
-            );
+`),
+            ),
+        );
+        try {
             await svc.materializeTeam('demo');
             const status = await svc.getStatus();
             const byId = new Map(status.agents.map((a) => [a.id, a]));
@@ -700,11 +703,6 @@ describe('TeamService agent lifecycle bus (task 0237)', () => {
 // ---------------------------------------------------------------------------
 
 /** Write a `.spur/config.yaml` with the given YAML body under cwd. */
-async function writeConfig(cwd: string, yaml: string): Promise<void> {
-    await mkdir(join(cwd, '.spur'), { recursive: true });
-    await writeFile(join(cwd, '.spur', 'config.yaml'), yaml, 'utf8');
-}
-
 /** Save a spec with the given tags under `.spur/agents/`. */
 async function seedSpec(configDir: string, id: string, tags: string[], type = 'claude'): Promise<void> {
     await saveAgentSpec(
@@ -732,12 +730,14 @@ const DEVOPS_CONFIG = `agent:
         - executor: codex
 `;
 
+/** Parsed view of DEVOPS_CONFIG — the service reads this threaded object, not the file. */
+const DEVOPS_SPUR: SpurConfig = spurConfigSchema.parse(yamlParse(DEVOPS_CONFIG));
+
 describe('TeamService team management (0258)', () => {
     describe('listTeams (R1)', () => {
         test('returns config-declared teams with empty specs when no specs exist', async () => {
-            const { svc, cwd, cleanup } = await makeService();
+            const { svc, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
             try {
-                await writeConfig(cwd, DEVOPS_CONFIG);
                 const teams = await svc.listTeams();
                 expect(teams).toHaveLength(1);
                 expect(teams[0]?.teamId).toBe('devops');
@@ -749,9 +749,8 @@ describe('TeamService team management (0258)', () => {
         });
 
         test('groups specs under their team: tag and merges with config', async () => {
-            const { svc, cwd, cleanup } = await makeService();
+            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
             try {
-                await writeConfig(cwd, DEVOPS_CONFIG);
                 const configDir = join(cwd, '.spur', 'agents');
                 await seedSpec(configDir, 'devops-claude', ['team:devops', 'spur:generated']);
                 await seedSpec(configDir, 'devops-codex', ['team:devops', 'spur:generated'], 'codex');
@@ -766,9 +765,8 @@ describe('TeamService team management (0258)', () => {
         });
 
         test('groups orphaned specs (team tag not in config) under a synthesized entry', async () => {
-            const { svc, cwd, cleanup } = await makeService();
+            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
             try {
-                await writeConfig(cwd, DEVOPS_CONFIG);
                 const configDir = join(cwd, '.spur', 'agents');
                 // 'ghost' team is not declared in config — synthesized entry uses teamId as name.
                 await seedSpec(configDir, 'ghost-x', ['team:ghost', 'spur:generated']);
@@ -786,9 +784,8 @@ describe('TeamService team management (0258)', () => {
         });
 
         test('surfaces specs with no team tag under the __untethered__ group (0256 R2)', async () => {
-            const { svc, cwd, cleanup } = await makeService();
+            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
             try {
-                await writeConfig(cwd, DEVOPS_CONFIG);
                 const configDir = join(cwd, '.spur', 'agents');
                 await seedSpec(configDir, 'devops-claude', ['team:devops', 'spur:generated']);
                 await seedSpec(configDir, 'lonely', []); // hand-authored spec, no team tag
@@ -818,21 +815,26 @@ describe('TeamService team management (0258)', () => {
         // ── 0197 R4: workDir / isCurrentProject ──
 
         test('R4: configured team resolves work_dir relative to the service cwd', async () => {
-            const { svc, cwd, cleanup } = await makeService();
+            const { svc, cwd, cleanup } = await makeService(
+                undefined,
+                undefined,
+                undefined,
+                spurConfigSchema.parse(
+                    yamlParse(
+                        [
+                            'agent:',
+                            '  team:',
+                            '    proj:',
+                            '      name: Proj',
+                            '      work_dir: .',
+                            '      members:',
+                            '        - executor: claude',
+                        ].join('\n'),
+                    ),
+                ),
+            );
             try {
                 // work_dir '.' resolves to the service cwd -> current project.
-                await writeConfig(
-                    cwd,
-                    [
-                        'agent:',
-                        '  team:',
-                        '    proj:',
-                        '      name: Proj',
-                        '      work_dir: .',
-                        '      members:',
-                        '        - executor: claude',
-                    ].join('\n'),
-                );
                 const teams = await svc.listTeams();
                 expect(teams).toHaveLength(1);
                 const team = teams[0];
@@ -845,9 +847,8 @@ describe('TeamService team management (0258)', () => {
         });
 
         test('R4: configured team with an external work_dir is not the current project', async () => {
-            const { svc, cwd, cleanup } = await makeService();
+            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
             try {
-                await writeConfig(cwd, DEVOPS_CONFIG); // work_dir /tmp/devops
                 const teams = await svc.listTeams();
                 const devops = teams.find((t) => t.teamId === 'devops');
                 expect(devops?.workDir).toBe(resolve(cwd, '/tmp/devops'));
@@ -917,9 +918,8 @@ describe('TeamService team management (0258)', () => {
 
     describe('materializeTeam (R2)', () => {
         test('throws when the team is not declared in config', async () => {
-            const { svc, cwd, cleanup } = await makeService();
+            const { svc, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
             try {
-                await writeConfig(cwd, DEVOPS_CONFIG);
                 await expect(svc.materializeTeam('unknown')).rejects.toThrow(
                     'Team "unknown" not found in agent.team config',
                 );
@@ -929,9 +929,8 @@ describe('TeamService team management (0258)', () => {
         });
 
         test('check=true returns the diff and writes nothing', async () => {
-            const { svc, cwd, cleanup } = await makeService();
+            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
             try {
-                await writeConfig(cwd, DEVOPS_CONFIG);
                 const configDir = join(cwd, '.spur', 'agents');
 
                 const result = await svc.materializeTeam('devops', { check: true });
@@ -947,9 +946,8 @@ describe('TeamService team management (0258)', () => {
         });
 
         test('writes one generated spec per member and reports written=true', async () => {
-            const { svc, cwd, cleanup } = await makeService();
+            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
             try {
-                await writeConfig(cwd, DEVOPS_CONFIG);
                 const configDir = join(cwd, '.spur', 'agents');
 
                 const result = await svc.materializeTeam('devops');
@@ -973,11 +971,12 @@ describe('TeamService team management (0258)', () => {
         });
 
         test('records the executor name beside the kind (0537 R1)', async () => {
-            const { svc, cwd, cleanup } = await makeService();
-            try {
-                await writeConfig(
-                    cwd,
-                    `agent:
+            const { svc, cwd, cleanup } = await makeService(
+                undefined,
+                undefined,
+                undefined,
+                spurConfigSchema.parse(
+                    yamlParse(`agent:
   executors:
     - name: codex-sol
       agent: codex
@@ -990,8 +989,10 @@ describe('TeamService team management (0258)', () => {
       members:
         - executor: codex-sol
           purpose: verifier
-`,
-                );
+`),
+                ),
+            );
+            try {
                 const configDir = join(cwd, '.spur', 'agents');
 
                 await svc.materializeTeam('demo');
@@ -1008,11 +1009,12 @@ describe('TeamService team management (0258)', () => {
         });
 
         test('0538 R3: a member declaring role records it on the materialized spec', async () => {
-            const { svc, cwd, cleanup } = await makeService();
-            try {
-                await writeConfig(
-                    cwd,
-                    `agent:
+            const { svc, cwd, cleanup } = await makeService(
+                undefined,
+                undefined,
+                undefined,
+                spurConfigSchema.parse(
+                    yamlParse(`agent:
   team:
     demo:
       name: Demo
@@ -1022,8 +1024,10 @@ describe('TeamService team management (0258)', () => {
           purpose: verdict writer
           role: reviewer
         - executor: codex
-`,
-                );
+`),
+                ),
+            );
+            try {
                 const configDir = join(cwd, '.spur', 'agents');
 
                 await svc.materializeTeam('demo');
@@ -1049,11 +1053,8 @@ describe('TeamService team management (0258)', () => {
                     ['coder', { tier: 'standard', stages: ['implement'] }],
                     ['reviewer', { tier: 'capable-1', stages: ['verify'] }],
                 ]),
-            );
-            try {
-                await writeConfig(
-                    cwd,
-                    `agent:
+                spurConfigSchema.parse(
+                    yamlParse(`agent:
   executors:
     - name: cheap-exec
       agent: pi
@@ -1067,8 +1068,10 @@ describe('TeamService team management (0258)', () => {
       work_dir: /tmp/demo
       members:
         - role: reviewer
-`,
-                );
+`),
+                ),
+            );
+            try {
                 const configDir = join(cwd, '.spur', 'agents');
 
                 await svc.materializeTeam('demo');
@@ -1090,11 +1093,8 @@ describe('TeamService team management (0258)', () => {
                 undefined,
                 undefined,
                 new Map<string, AgentRoleDefinition>([['coder', { tier: 'standard', stages: ['implement'] }]]),
-            );
-            try {
-                await writeConfig(
-                    cwd,
-                    `agent:
+                spurConfigSchema.parse(
+                    yamlParse(`agent:
   executors:
     - name: cheap-exec
       agent: pi
@@ -1109,8 +1109,10 @@ describe('TeamService team management (0258)', () => {
       members:
         - executor: cheap-exec
           role: coder
-`,
-                );
+`),
+                ),
+            );
+            try {
                 const configDir = join(cwd, '.spur', 'agents');
 
                 await svc.materializeTeam('demo');
@@ -1131,19 +1133,9 @@ describe('TeamService team management (0258)', () => {
             const roles = new Map<string, AgentRoleDefinition>([
                 ['reviewer', { tier: 'capable-1', stages: ['verify', 'review', 'dogfood'] }],
             ]);
-            const {
-                svc: svcWithPurpose,
-                cwd: cwdWithPurpose,
-                cleanup: cleanupWithPurpose,
-            } = await makeService(undefined, undefined, roles);
-            const {
-                svc: svcPlain,
-                cwd: cwdPlain,
-                cleanup: cleanupPlain,
-            } = await makeService(undefined, undefined, roles);
-            try {
-                const config = (purposeLine: string) =>
-                    `agent:
+            const config = (purposeLine: string) =>
+                spurConfigSchema.parse(
+                    yamlParse(`agent:
   executors:
     - name: capable-exec
       agent: claude
@@ -1155,9 +1147,19 @@ describe('TeamService team management (0258)', () => {
       members:
         - role: reviewer
 ${purposeLine}
-`;
-                await writeConfig(cwdWithPurpose, config('          purpose: annotation-only'));
-                await writeConfig(cwdPlain, config(''));
+`),
+                );
+            const {
+                svc: svcWithPurpose,
+                cwd: cwdWithPurpose,
+                cleanup: cleanupWithPurpose,
+            } = await makeService(undefined, undefined, roles, config('          purpose: annotation-only'));
+            const {
+                svc: svcPlain,
+                cwd: cwdPlain,
+                cleanup: cleanupPlain,
+            } = await makeService(undefined, undefined, roles, config(''));
+            try {
                 const configDirWithPurpose = join(cwdWithPurpose, '.spur', 'agents');
                 const configDirPlain = join(cwdPlain, '.spur', 'agents');
 
@@ -1183,11 +1185,8 @@ ${purposeLine}
                 undefined,
                 undefined,
                 new Map<string, AgentRoleDefinition>([['coder', { tier: 'standard', stages: ['implement'] }]]),
-            );
-            try {
-                await writeConfig(
-                    cwd,
-                    `agent:
+                spurConfigSchema.parse(
+                    yamlParse(`agent:
   executors:
     - name: capable-exec
       agent: claude
@@ -1199,8 +1198,10 @@ ${purposeLine}
       members:
         - role: coder
         - role: coder
-`,
-                );
+`),
+                ),
+            );
+            try {
                 const configDir = join(cwd, '.spur', 'agents');
 
                 await svc.materializeTeam('demo');
@@ -1214,11 +1215,12 @@ ${purposeLine}
         });
 
         test('0543 R1: a role-only member fails loudly when no role table is available (server path)', async () => {
-            const { svc, cwd, cleanup } = await makeService();
-            try {
-                await writeConfig(
-                    cwd,
-                    `agent:
+            const { svc, cleanup } = await makeService(
+                undefined,
+                undefined,
+                undefined,
+                spurConfigSchema.parse(
+                    yamlParse(`agent:
   executors:
     - name: capable-exec
       agent: claude
@@ -1229,8 +1231,10 @@ ${purposeLine}
       work_dir: /tmp/demo
       members:
         - role: reviewer
-`,
-                );
+`),
+                ),
+            );
+            try {
                 await expect(svc.materializeTeam('demo')).rejects.toThrow('no Layer-1 role table is available');
             } finally {
                 await cleanup();
@@ -1238,9 +1242,8 @@ ${purposeLine}
         });
 
         test('prunes orphaned generated specs that are no longer desired', async () => {
-            const { svc, cwd, cleanup } = await makeService();
+            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
             try {
-                await writeConfig(cwd, DEVOPS_CONFIG);
                 const configDir = join(cwd, '.spur', 'agents');
                 // A previously-generated member that is no longer in the config's member list.
                 await seedSpec(configDir, 'devops-stale', ['team:devops', 'spur:generated']);
@@ -1256,9 +1259,8 @@ ${purposeLine}
         });
 
         test('skips hand-authored (ref:) specs — never overwrites them', async () => {
-            const { svc, cwd, cleanup } = await makeService();
+            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
             try {
-                await writeConfig(cwd, DEVOPS_CONFIG);
                 const configDir = join(cwd, '.spur', 'agents');
                 // A hand-authored spec occupying devops-claude (team tag but NOT generated).
                 await seedSpec(configDir, 'devops-claude', ['team:devops'], 'handauth');
@@ -1278,9 +1280,8 @@ ${purposeLine}
         });
 
         test('falls back to a type-derived purpose when the member omits purpose', async () => {
-            const { svc, cwd, cleanup } = await makeService();
+            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
             try {
-                await writeConfig(cwd, DEVOPS_CONFIG);
                 const configDir = join(cwd, '.spur', 'agents');
 
                 await svc.materializeTeam('devops');
@@ -1296,9 +1297,8 @@ ${purposeLine}
 
     describe('teardownTeam (R3)', () => {
         test('without purge returns stopped ids for all team specs and deletes nothing', async () => {
-            const { svc, cwd, cleanup } = await makeService();
+            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
             try {
-                await writeConfig(cwd, DEVOPS_CONFIG);
                 const configDir = join(cwd, '.spur', 'agents');
                 await seedSpec(configDir, 'devops-claude', ['team:devops', 'spur:generated']);
                 await seedSpec(configDir, 'devops-handauth', ['team:devops'], 'handauth');
@@ -1315,9 +1315,8 @@ ${purposeLine}
         });
 
         test('with purge deletes only generated specs and never hand-authored ones', async () => {
-            const { svc, cwd, cleanup } = await makeService();
+            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
             try {
-                await writeConfig(cwd, DEVOPS_CONFIG);
                 const configDir = join(cwd, '.spur', 'agents');
                 await seedSpec(configDir, 'devops-claude', ['team:devops', 'spur:generated']);
                 await seedSpec(configDir, 'devops-codex', ['team:devops', 'spur:generated'], 'codex');
@@ -1335,9 +1334,8 @@ ${purposeLine}
         });
 
         test('returns empty stopped list when the team has no specs', async () => {
-            const { svc, cwd, cleanup } = await makeService();
+            const { svc, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
             try {
-                await writeConfig(cwd, DEVOPS_CONFIG);
                 const result = await svc.teardownTeam('devops', { purge: true });
                 expect(result.purged).toEqual([]);
                 expect(result.stopped).toEqual([]);
@@ -1463,9 +1461,8 @@ function makeTeamCapturingBus(): {
 describe('TeamService team.* events (task 0371)', () => {
     test('R15: materializeTeam emits team.up with teamId and memberCount', async () => {
         const { bus, lifecycle } = makeTeamCapturingBus();
-        const { svc, cwd, cleanup } = await makeService(bus);
+        const { svc, cleanup } = await makeService(bus, undefined, undefined, DEVOPS_SPUR);
         try {
-            await writeConfig(cwd, DEVOPS_CONFIG);
             const result = await svc.materializeTeam('devops');
             expect(result.written).toBe(true);
             const ups = lifecycle.get('team.up');
@@ -1480,9 +1477,8 @@ describe('TeamService team.* events (task 0371)', () => {
 
     test('R15: dry-run materialize does not emit team.up', async () => {
         const { bus, lifecycle } = makeTeamCapturingBus();
-        const { svc, cwd, cleanup } = await makeService(bus);
+        const { svc, cleanup } = await makeService(bus, undefined, undefined, DEVOPS_SPUR);
         try {
-            await writeConfig(cwd, DEVOPS_CONFIG);
             await svc.materializeTeam('devops', { check: true });
             expect(lifecycle.get('team.up')).toEqual([]);
         } finally {
@@ -1492,9 +1488,8 @@ describe('TeamService team.* events (task 0371)', () => {
 
     test('R15: teardownTeam emits team.down with teamId and memberCount', async () => {
         const { bus, lifecycle } = makeTeamCapturingBus();
-        const { svc, cwd, cleanup } = await makeService(bus);
+        const { svc, cleanup } = await makeService(bus, undefined, undefined, DEVOPS_SPUR);
         try {
-            await writeConfig(cwd, DEVOPS_CONFIG);
             await svc.materializeTeam('devops');
             const result = await svc.teardownTeam('devops', { purge: true });
             const downs = lifecycle.get('team.down');
@@ -1509,9 +1504,8 @@ describe('TeamService team.* events (task 0371)', () => {
 
     test('R16: assignTask emits team.member.assigned with teamId/memberId/agentType', async () => {
         const { bus, members } = makeTeamCapturingBus();
-        const { svc, cwd, cleanup } = await makeService(bus);
+        const { svc, cwd, cleanup } = await makeService(bus, undefined, undefined, DEVOPS_SPUR);
         try {
-            await writeConfig(cwd, DEVOPS_CONFIG);
             await svc.materializeTeam('devops');
             const tasksDir = join(cwd, 'docs', 'tasks');
             await mkdir(tasksDir, { recursive: true });
@@ -1637,9 +1631,8 @@ describe('TeamService team.* events (task 0371)', () => {
 
     test('R15: teardownTeam without purge emits outcome ok (not purged)', async () => {
         const { bus, lifecycle } = makeTeamCapturingBus();
-        const { svc, cwd, cleanup } = await makeService(bus);
+        const { svc, cleanup } = await makeService(bus, undefined, undefined, DEVOPS_SPUR);
         try {
-            await writeConfig(cwd, DEVOPS_CONFIG);
             await svc.materializeTeam('devops');
             const result = await svc.teardownTeam('devops');
             expect(result.purged).toEqual([]);
@@ -1653,9 +1646,8 @@ describe('TeamService team.* events (task 0371)', () => {
     });
 
     test('no team.* emit when eventBus is absent (CLI without ledger)', async () => {
-        const { svc, cwd, cleanup } = await makeService();
+        const { svc, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
         try {
-            await writeConfig(cwd, DEVOPS_CONFIG);
             // Must not throw without a bus.
             await svc.materializeTeam('devops');
             await svc.teardownTeam('devops');
