@@ -1,7 +1,7 @@
 ---
 schema_version: 1
 name: "Measured corpus sweep: report recovery, unblock features, and reconcile the baseline delta"
-status: cancelled
+status: todo
 template: feature-impl
 created_at: 2026-08-25T18:05:19.670Z
 updated_at: "2026-08-25T18:22:51.414Z"
@@ -80,26 +80,27 @@ Feature: Measured corpus sweep and baseline reconciliation
      is not ready to hand off. Keep empty if none. -->
 
 ### Design
+
 **WHAT.** Run the fallback across the corpus, report the recovery numbers, confirm the features it
 unblocks, and reconcile the resulting `config/corpus-baseline.json` delta — all in one change, so
 the claim "verification evidence is durable" is a measured statement rather than an assertion.
 
 **WHY this is a task and not a step in 0672.** Its output is a number an operator has to accept,
 not a green test. It carries a different review question — "is this recovery honest?" rather than
-"is this code correct?" — and a different failure mode: a sweep that recovers too *many* tasks is
+"is this code correct?" — and a different failure mode: a sweep that recovers too _many_ tasks is
 the bad outcome, not the good one.
 
 **Frozen baseline to measure against (2026-08-25, pre-change).**
 
-| Quantity | Value |
-| --- | --- |
-| `done` tasks | 627 |
-| with a verdict artifact | 314 (50%) |
-| without | 313 |
-| of those: bare `## Testing` | 34 |
-| of those: unstructured prose | 129 |
-| features in `verifying` | 25 |
-| baselined `L4.scenario-unverified` entries | 21 |
+| Quantity                                   | Value     |
+| ------------------------------------------ | --------- |
+| `done` tasks                               | 627       |
+| with a verdict artifact                    | 314 (50%) |
+| without                                    | 313       |
+| of those: bare `## Testing`                | 34        |
+| of those: unstructured prose               | 129       |
+| features in `verifying`                    | 25        |
+| baselined `L4.scenario-unverified` entries | 21        |
 
 **Reproducibility contract.** "Reproducible" means: running the sweep twice on an unchanged tree
 yields identical counts. The sweep therefore reads only tracked files and the run directory — no
@@ -134,30 +135,33 @@ tune upward is real, and yielding to it would invert the feature.
   exactly how the file becomes the silent suppression list T10 forbids.
 - Do **not** report a recovery percentage without the denominator and the date. "Recovered 41%" is
   unfalsifiable; "recovered 128 of 313, measured 2026-08-25" can be re-run.
+
 ### Plan
+
 - [ ] 1. Re-measure the pre-change baseline on the current tree and record it with the command that
-      produced it: done-task count, artifact-present/absent split, `verifying` feature count,
-      baselined `L4.scenario-unverified` count. Do not reuse the Design's 2026-08-25 figures if the
-      tree has moved. (R1, R2)
+     produced it: done-task count, artifact-present/absent split, `verifying` feature count,
+     baselined `L4.scenario-unverified` count. Do not reuse the Design's 2026-08-25 figures if the
+     tree has moved. (R1, R2)
 - [ ] 2. Run the sweep across every done task lacking an artifact; record how many resolve to
-      verified and how many land in `evidence-not-recoverable`. (R1)
+     verified and how many land in `evidence-not-recoverable`. (R1)
 - [ ] 3. Re-run the sweep on the unchanged tree and assert identical counts — no timestamps, no
-      ordering-dependent aggregation, no network. (R2)
+     ordering-dependent aggregation, no network. (R2)
 - [ ] 4. Re-check the features previously blocked only by `L4.scenario-unverified`; record which
-      cleared and confirm any remaining findings are unrelated to evidence durability. (R3)
+     cleared and confirm any remaining findings are unrelated to evidence durability. (R3)
 - [ ] 5. Run `spur task check --corpus`; capture NEW and STALE. **Attribute before editing** — a
-      finding on a task or file this feature did not touch belongs to the 77-finding backlog
-      (task 0670), not here. (R4)
+     finding on a task or file this feature did not touch belongs to the 77-finding backlog
+     (task 0670), not here. (R4)
 - [ ] 6. Reconcile only this change's delta in `config/corpus-baseline.json`: remove entries that
-      stopped reproducing, add newly surfaced ones. (R4)
+     stopped reproducing, add newly surfaced ones. (R4)
 - [ ] 7. Prove two-sidedness survives: an unlisted finding still fails, and a repaired defect whose
-      entry remains still fails. (R5)
+     entry remains still fails. (R5)
 - [ ] 8. Write the results into Testing as reproducible numbers with denominators and the date —
-      never a bare percentage. If parser tolerance changed during this task, state which section
-      parsed incorrectly and why; never "to improve the count". (R1, R6)
+     never a bare percentage. If parser tolerance changed during this task, state which section
+     parsed incorrectly and why; never "to improve the count". (R1, R6)
 - [ ] 9. Final boundary sweep over the whole feature diff: no migration, no new artifact directory,
-      no new CLI noun/verb/flag, `renderTesting` output unchanged. (R7)
+     no new CLI noun/verb/flag, `renderTesting` output unchanged. (R7)
 - [ ] 10. Gate: `bun run lint`, `bun run spur-check`, then `bun run corpus-check` for the delta.
+
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
@@ -175,4 +179,5 @@ tune upward is real, and yielding to it would invert the feature.
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-08-25T18:22:51.414Z todo → cancelled (system)
