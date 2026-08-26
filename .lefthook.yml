@@ -30,6 +30,9 @@ post-merge:
 pre-push:
   commands:
     cog:
-      run: cog check
+      # Merge commits are not conventional commits; the commit-msg hook cannot
+      # validate them (git skips it for merges), so cog check is the only place
+      # they surface — at push time, after they are expensive to reword.
+      run: cog check --ignore-merge-commits
     lint:
       run: bun run lint
