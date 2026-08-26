@@ -6,6 +6,7 @@ import {
     NodeProcessExecutor,
     type ProcessExecutor,
 } from '@gobing-ai/ts-runtime';
+import { splitLaunchCommand } from '../split-launch-command';
 
 const KIND = 'command.gate';
 
@@ -46,40 +47,6 @@ export interface CommandGateOptions {
      * than kill the run — set this to keep the engine going while still recording `FAIL`.
      */
     softFail?: boolean;
-}
-
-/**
- * Shell metacharacters that must never appear in a resolved executable.
- *
- * The gate spawns argv directly and never goes through a shell, so these carry no meaning
- * here — their presence signals that a caller is trying to smuggle a shell program into
- * the executable slot, which is exactly what this action kind exists to prevent.
- */
-const SHELL_METACHARACTERS = /[;&|<>$`(){}[\]!*?~#\n\r"']/;
-
-/**
- * Split a resolved executable into its argv head and leading arguments.
- *
- * `spurBin` legitimately resolves to a multi-token launch string (`resolveSpurBin()` returns
- * `"<bun> <mainModule>"` when the CLI runs from source), so a single-token-only rule would
- * make every real gate in the shipped pipelines inexpressible. Splitting on whitespace is
- * safe precisely because no shell is involved: each token becomes one literal argv entry.
- */
-function splitExecutable(executable: string): { command: string; leadingArgs: string[] } | { error: string } {
-    if (SHELL_METACHARACTERS.test(executable)) {
-        return {
-            error: `command.gate "executable" must not contain shell metacharacters (got ${executable})`,
-        };
-    }
-    const tokens = executable
-        .trim()
-        .split(/\s+/)
-        .filter((t) => t.length > 0);
-    const command = tokens[0];
-    if (command === undefined) {
-        return { error: 'Action option "executable" must be a non-empty string' };
-    }
-    return { command, leadingArgs: tokens.slice(1) };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -154,7 +121,7 @@ export class CommandGateActionRunner implements ActionRunner {
             };
         }
 
-        const split = splitExecutable(executable);
+        const split = splitLaunchCommand(executable, 'command.gate "executable"');
         if ('error' in split) {
             return { ok: false, error: split.error };
         }

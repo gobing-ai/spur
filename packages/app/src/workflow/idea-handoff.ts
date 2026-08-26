@@ -4,7 +4,9 @@ import {
     type FileSystem,
     NodeProcessExecutor,
     type ProcessExecutor,
+    type ProcessResult,
 } from '@gobing-ai/ts-runtime';
+import { splitLaunchCommand } from './split-launch-command';
 
 /**
  * Options configuring idea handoff finalization.
@@ -41,6 +43,15 @@ export interface FinalizeIdeaHandoffResult {
 }
 
 /**
+ * Format the failure evidence a ProcessResult actually carries — a spawn failure
+ * surfaces as `exitCode: null` with empty stderr, so the empty-stderr symptom is
+ * made explicit rather than rendered as a bare trailing colon (task 0667 R5).
+ */
+function processEvidence(r: ProcessResult): string {
+    return `exit=${r.exitCode ?? 'null'}${r.signal ? ` signal=${r.signal}` : ''}: ${r.stderr.trim() || 'no stderr'}`;
+}
+
+/**
  * Deterministically finalizes an idea pipeline run by validating batch creation,
  * applying task dependencies via `spur task deps`, refreshing feature roster,
  * running per-task readiness checks, and authoring the handoff markdown report.
@@ -60,6 +71,23 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
     const resultPath = resolve(runDir, `${runId}-idea-batch-create-result.json`);
     const orderPath = resolve(runDir, `${runId}-idea-task-order.json`);
     const reportPath = resolve(runDir, `${runId}-idea-handoff.md`);
+
+    // Split the launch string once: `spurBin` legitimately resolves to `"<bun> <mainModule>"`
+    // under the JS-runtime launch modes (resolveSpurBin), and the executor hands `command`
+    // verbatim to execa without shell-splitting — a multi-word string would ENOENT. Reject
+    // before any subprocess and any report (R1/R4).
+    const spurSplit = splitLaunchCommand(spurBin, 'idea-handoff "spurBin"');
+    if ('error' in spurSplit) {
+        return {
+            ok: false,
+            wbsList: [],
+            nextCommand: '',
+            reportPath,
+            error: spurSplit.error,
+        };
+    }
+    const spurCommand = spurSplit.command;
+    const spurArgsPrefix = spurSplit.leadingArgs;
 
     if (!(await fs.exists(batchPath)) || !(await fs.exists(resultPath)) || !(await fs.exists(orderPath))) {
         return {
@@ -140,8 +168,8 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
 
             if (deps.length > 0) {
                 const depRes = await executor.run({
-                    command: spurBin,
-                    args: ['task', 'deps', ownWbs, 'set', ...deps, '--json'],
+                    command: spurCommand,
+                    args: [...spurArgsPrefix, 'task', 'deps', ownWbs, 'set', ...deps, '--json'],
                     cwd: root,
                     forceBuffered: true,
                     rejectOnError: false,
@@ -152,31 +180,53 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
                         wbsList: result.wbs,
                         nextCommand: '',
                         reportPath,
-                        error: `Failed to set dependencies for task ${ownWbs}: ${depRes.stderr}`,
+                        error: `Failed to set dependencies for task ${ownWbs}: ${processEvidence(depRes)}`,
                     };
                 }
             }
         }
 
-        // Refresh feature roster
-        await executor.run({
-            command: spurBin,
-            args: ['feature', 'refresh', '--feature', featureId, '--json'],
+        // Refresh feature roster — fail closed on any non-zero (including a null spawn
+        // exit), matching the &&-chained shell fallback in idea-pipeline.yaml (R6).
+        const refreshRes = await executor.run({
+            command: spurCommand,
+            args: [...spurArgsPrefix, 'feature', 'refresh', '--feature', featureId, '--json'],
             cwd: root,
             forceBuffered: true,
             rejectOnError: false,
         });
+        if (refreshRes.exitCode !== 0) {
+            return {
+                ok: false,
+                wbsList: result.wbs,
+                nextCommand: '',
+                reportPath,
+                error: `Feature refresh for ${featureId} failed: ${processEvidence(refreshRes)}`,
+            };
+        }
 
         // Check per-task readiness
         const checkResults: Array<{ wbs: string; pass: boolean }> = [];
         for (const wbs of result.wbs) {
             const checkRes = await executor.run({
-                command: spurBin,
-                args: ['task', 'check', wbs, '--json'],
+                command: spurCommand,
+                args: [...spurArgsPrefix, 'task', 'check', wbs, '--json'],
                 cwd: root,
                 forceBuffered: true,
                 rejectOnError: false,
             });
+            // A null exitCode means the executor could not spawn the resolved command —
+            // the executor is broken, not the task. Fail loudly with no fabricated
+            // readiness table (R7). Real failures keep pass:false → refineall (R7b).
+            if (checkRes.exitCode === null) {
+                return {
+                    ok: false,
+                    wbsList: result.wbs,
+                    nextCommand: '',
+                    reportPath,
+                    error: `Task check for ${wbs} could not be spawned (${spurCommand}): ${processEvidence(checkRes)}`,
+                };
+            }
             checkResults.push({ wbs, pass: checkRes.exitCode === 0 });
         }
 

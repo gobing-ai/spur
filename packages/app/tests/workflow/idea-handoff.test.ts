@@ -265,4 +265,297 @@ describe('finalizeIdeaHandoff', () => {
         await fs.deleteFile(`${runDir}/${runId}-idea-batch-create-result.json`);
         await fs.deleteFile(`${runDir}/${runId}-idea-task-order.json`);
     });
+
+    // ── R1 / R4–R7b regression suite (task 0667) ──
+    test('R1: multi-word spurBin splits into a single command token with prefixed args on every spawn', async () => {
+        const runId = 'test-idea-run-multiword';
+        const featureId = 'D5';
+        const runDir = '.spur/run';
+        await fs.ensureDir(runDir);
+
+        const batch = [{ name: 'Task A' }, { name: 'Task B' }];
+        const result = { wbs: ['0601', '0602'] };
+        const order = [{ name: 'Task A' }, { name: 'Task B', depends_on_names: ['Task A'] }];
+
+        await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify(batch));
+        await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify(result));
+        await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify(order));
+
+        const executedCommands: Array<{ command: string; args?: string[] }> = [];
+        const mockExecutor: ProcessExecutor = {
+            run: async (opts) => {
+                executedCommands.push({ command: opts.command, args: opts.args });
+                return {
+                    command: opts.command,
+                    args: opts.args ?? [],
+                    durationMs: 1,
+                    exitCode: 0,
+                    stdout: 'ok',
+                    stderr: '',
+                };
+            },
+            runStreaming: () => ({}) as unknown as PipeProcess,
+        };
+
+        const res = await finalizeIdeaHandoff({
+            runId,
+            featureId,
+            spurBin: '/abs/bun /abs/apps/cli/src/index.ts',
+            processExecutor: mockExecutor,
+        });
+
+        expect(res.ok).toBe(true);
+        expect(executedCommands.length).toBeGreaterThan(0);
+        for (const c of executedCommands) {
+            expect(c.command).toBe('/abs/bun');
+            expect(c.args?.[0]).toBe('/abs/apps/cli/src/index.ts');
+        }
+        expect(executedCommands.some((c) => c.args?.includes('deps') && c.args?.includes('0602'))).toBe(true);
+        expect(executedCommands.some((c) => c.args?.includes('refresh'))).toBe(true);
+        expect(executedCommands.some((c) => c.args?.includes('check'))).toBe(true);
+
+        await fs.deleteFile(`${runDir}/${runId}-idea-task-batch.json`);
+        await fs.deleteFile(`${runDir}/${runId}-idea-batch-create-result.json`);
+        await fs.deleteFile(`${runDir}/${runId}-idea-task-order.json`);
+        await fs.deleteFile(res.reportPath);
+    });
+
+    test('R1b: single-word spurBin keeps byte-identical argv', async () => {
+        const runId = 'test-idea-run-singleword';
+        const featureId = 'D5';
+        const runDir = '.spur/run';
+        await fs.ensureDir(runDir);
+
+        await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify([{ name: 'Task A' }]));
+        await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify({ wbs: ['0601'] }));
+        await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify([{ name: 'Task A' }]));
+
+        const executedCommands: Array<{ command: string; args?: string[] }> = [];
+        const mockExecutor: ProcessExecutor = {
+            run: async (opts) => {
+                executedCommands.push({ command: opts.command, args: opts.args });
+                return {
+                    command: opts.command,
+                    args: opts.args ?? [],
+                    durationMs: 1,
+                    exitCode: 0,
+                    stdout: 'ok',
+                    stderr: '',
+                };
+            },
+            runStreaming: () => ({}) as unknown as PipeProcess,
+        };
+
+        const res = await finalizeIdeaHandoff({
+            runId,
+            featureId,
+            spurBin: 'spur',
+            processExecutor: mockExecutor,
+        });
+
+        expect(res.ok).toBe(true);
+        for (const c of executedCommands) {
+            expect(c.command).toBe('spur');
+        }
+        // single-task scenario has no deps call — assert the unprefixed argv head on the
+        // refresh call instead (leadingArgs is empty for a single-word spurBin).
+        const refreshCall = executedCommands.find((c) => c.args?.includes('refresh'));
+        expect(refreshCall?.args?.[0]).toBe('feature');
+
+        await fs.deleteFile(`${runDir}/${runId}-idea-task-batch.json`);
+        await fs.deleteFile(`${runDir}/${runId}-idea-batch-create-result.json`);
+        await fs.deleteFile(`${runDir}/${runId}-idea-task-order.json`);
+        await fs.deleteFile(res.reportPath);
+    });
+
+    test('R4: a rejected spurBin fails closed before any subprocess is spawned', async () => {
+        const runId = 'test-idea-run-rejected';
+        const featureId = 'D5';
+        const runDir = '.spur/run';
+        await fs.ensureDir(runDir);
+
+        await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify([{ name: 'Task A' }]));
+        await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify({ wbs: ['0601'] }));
+        await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify([{ name: 'Task A' }]));
+
+        let spawned = 0;
+        const mockExecutor: ProcessExecutor = {
+            run: async (opts) => {
+                spawned++;
+                return {
+                    command: opts.command,
+                    args: opts.args ?? [],
+                    durationMs: 1,
+                    exitCode: 0,
+                    stdout: '',
+                    stderr: '',
+                };
+            },
+            runStreaming: () => ({}) as unknown as PipeProcess,
+        };
+
+        const res = await finalizeIdeaHandoff({
+            runId,
+            featureId,
+            spurBin: 'spur; rm -rf /',
+            processExecutor: mockExecutor,
+        });
+
+        expect(res.ok).toBe(false);
+        expect(res.error).toContain('shell metacharacters');
+        expect(spawned).toBe(0);
+
+        await fs.deleteFile(`${runDir}/${runId}-idea-task-batch.json`);
+        await fs.deleteFile(`${runDir}/${runId}-idea-batch-create-result.json`);
+        await fs.deleteFile(`${runDir}/${runId}-idea-task-order.json`);
+    });
+
+    test('R5: a failing task deps reports exit code and stderr evidence', async () => {
+        const runId = 'test-idea-run-deps-evidence';
+        const featureId = 'D5';
+        const runDir = '.spur/run';
+        await fs.ensureDir(runDir);
+
+        const batch = [{ name: 'Task A' }, { name: 'Task B' }];
+        const result = { wbs: ['0601', '0602'] };
+        const order = [{ name: 'Task A' }, { name: 'Task B', depends_on_names: ['Task A'] }];
+
+        await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify(batch));
+        await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify(result));
+        await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify(order));
+
+        const mockExecutor: ProcessExecutor = {
+            run: async (opts) => {
+                if (opts.args?.includes('deps')) {
+                    return {
+                        command: opts.command,
+                        args: opts.args ?? [],
+                        durationMs: 1,
+                        exitCode: 1,
+                        stdout: '',
+                        stderr: 'boom',
+                    };
+                }
+                return {
+                    command: opts.command,
+                    args: opts.args ?? [],
+                    durationMs: 1,
+                    exitCode: 0,
+                    stdout: 'ok',
+                    stderr: '',
+                };
+            },
+            runStreaming: () => ({}) as unknown as PipeProcess,
+        };
+
+        const res = await finalizeIdeaHandoff({ runId, featureId, processExecutor: mockExecutor });
+        expect(res.ok).toBe(false);
+        expect(res.error).toContain('Failed to set dependencies for task 0602');
+        expect(res.error).toContain('exit=1');
+        expect(res.error).toContain('boom');
+
+        await fs.deleteFile(`${runDir}/${runId}-idea-task-batch.json`);
+        await fs.deleteFile(`${runDir}/${runId}-idea-batch-create-result.json`);
+        await fs.deleteFile(`${runDir}/${runId}-idea-task-order.json`);
+    });
+
+    test('R6: a failing feature refresh fails the run with evidence and no report', async () => {
+        const runId = 'test-idea-run-refresh-fail';
+        const featureId = 'D5';
+        const runDir = '.spur/run';
+        await fs.ensureDir(runDir);
+
+        // stale report from an earlier red run would trip the no-report assertion below
+        if (await fs.exists(`${runDir}/${runId}-idea-handoff.md`)) {
+            await fs.deleteFile(`${runDir}/${runId}-idea-handoff.md`);
+        }
+
+        await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify([{ name: 'Task A' }]));
+        await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify({ wbs: ['0601'] }));
+        await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify([{ name: 'Task A' }]));
+
+        const mockExecutor: ProcessExecutor = {
+            run: async (opts) => {
+                if (opts.args?.includes('refresh')) {
+                    return {
+                        command: opts.command,
+                        args: opts.args ?? [],
+                        durationMs: 1,
+                        exitCode: 1,
+                        stdout: '',
+                        stderr: 'refresh boom',
+                    };
+                }
+                return {
+                    command: opts.command,
+                    args: opts.args ?? [],
+                    durationMs: 1,
+                    exitCode: 0,
+                    stdout: 'ok',
+                    stderr: '',
+                };
+            },
+            runStreaming: () => ({}) as unknown as PipeProcess,
+        };
+
+        const res = await finalizeIdeaHandoff({ runId, featureId, processExecutor: mockExecutor });
+        expect(res.ok).toBe(false);
+        expect(res.error).toContain('Feature refresh');
+        expect(res.error).toContain('refresh boom');
+        expect(await fs.exists(res.reportPath)).toBe(false);
+
+        await fs.deleteFile(`${runDir}/${runId}-idea-task-batch.json`);
+        await fs.deleteFile(`${runDir}/${runId}-idea-batch-create-result.json`);
+        await fs.deleteFile(`${runDir}/${runId}-idea-task-order.json`);
+    });
+
+    test('R7: a task check spawn failure (exitCode null) fails loudly naming the WBS with no report', async () => {
+        const runId = 'test-idea-run-check-spawn-fail';
+        const featureId = 'D5';
+        const runDir = '.spur/run';
+        await fs.ensureDir(runDir);
+
+        // stale report from an earlier red run would trip the no-report assertion below
+        if (await fs.exists(`${runDir}/${runId}-idea-handoff.md`)) {
+            await fs.deleteFile(`${runDir}/${runId}-idea-handoff.md`);
+        }
+
+        await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify([{ name: 'Task A' }]));
+        await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify({ wbs: ['0601'] }));
+        await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify([{ name: 'Task A' }]));
+
+        const mockExecutor: ProcessExecutor = {
+            run: async (opts) => {
+                if (opts.args?.includes('check')) {
+                    return {
+                        command: opts.command,
+                        args: opts.args ?? [],
+                        durationMs: 1,
+                        exitCode: null,
+                        stdout: '',
+                        stderr: '',
+                    };
+                }
+                return {
+                    command: opts.command,
+                    args: opts.args ?? [],
+                    durationMs: 1,
+                    exitCode: 0,
+                    stdout: 'ok',
+                    stderr: '',
+                };
+            },
+            runStreaming: () => ({}) as unknown as PipeProcess,
+        };
+
+        const res = await finalizeIdeaHandoff({ runId, featureId, processExecutor: mockExecutor });
+        expect(res.ok).toBe(false);
+        expect(res.error).toContain('0601');
+        expect(res.error).toContain('could not be spawned');
+        expect(await fs.exists(res.reportPath)).toBe(false);
+
+        await fs.deleteFile(`${runDir}/${runId}-idea-task-batch.json`);
+        await fs.deleteFile(`${runDir}/${runId}-idea-batch-create-result.json`);
+        await fs.deleteFile(`${runDir}/${runId}-idea-task-order.json`);
+    });
 });

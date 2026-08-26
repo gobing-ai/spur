@@ -7,34 +7,9 @@ import {
     type ProcessExecutor,
 } from '@gobing-ai/ts-runtime';
 import { bounded, type WorkflowActionOutputEvent, type WorkflowObservabilityBus } from '../observability';
+import { splitLaunchCommand } from '../split-launch-command';
 
 const KIND = 'doctor.probe';
-
-/**
- * Shell metacharacters that must never appear in a resolved spurBin launch string.
- * `spurBin` resolves to `<bun> <mainModule>` when the CLI runs from source, so it is
- * split into argv like `command.gate`'s executable — no shell is involved, and the
- * presence of shell syntax means a caller is smuggling a program into the slot.
- */
-const SHELL_METACHARACTERS = /[;&|<>$`(){}[\]!*?~#\n\r"']/;
-
-/**
- * Split a multi-token spurBin launch string into its argv head and leading arguments.
- */
-function splitSpurBin(spurBin: string): { command: string; leadingArgs: string[] } | { error: string } {
-    if (SHELL_METACHARACTERS.test(spurBin)) {
-        return { error: `doctor.probe "spurBin" must not contain shell metacharacters (got ${spurBin})` };
-    }
-    const tokens = spurBin
-        .trim()
-        .split(/\s+/)
-        .filter((t) => t.length > 0);
-    const command = tokens[0];
-    if (command === undefined) {
-        return { error: 'Action option "spurBin" must be a non-empty string' };
-    }
-    return { command, leadingArgs: tokens.slice(1) };
-}
 
 function stringOption(options: Record<string, unknown>, key: string, fallback?: string): string {
     const value = options[key];
@@ -128,7 +103,7 @@ export class DoctorProbeActionRunner implements ActionRunner {
             };
         }
 
-        const split = splitSpurBin(spurBin);
+        const split = splitLaunchCommand(spurBin, 'doctor.probe "spurBin"');
         if ('error' in split) {
             return { ok: false, error: split.error };
         }

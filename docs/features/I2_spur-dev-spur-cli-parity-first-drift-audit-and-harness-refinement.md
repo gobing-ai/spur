@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-11T20:26:51.743Z"
-updated_at: "2026-08-12T02:20:53.642Z"
+updated_at: "2026-08-26T00:03:49.968Z"
 ---
 
 # I2: spur-dev/spur-cli parity-first drift audit and harness refinement
@@ -149,6 +149,7 @@ Feature: spur-dev/spur-cli parity-first drift audit and harness refinement
 | 0517 | Wire facade/spine parity assertions against the captured surface | done |
 | 0518 | Idea handoff finalization: task ordering, roster refresh, readiness-gated recommendation | done |
 | 0519 | Idea-pipeline regression tests for dogfood findings with no-surface guard | done |
+| 0667 | idea-handoff-cli: spurBin multi-word string breaks execa command | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -178,3 +179,6 @@ Revise the design once before decomposition:
 - 2026-08-12T00:05:41.122Z backlog → active (system)
 - 2026-08-12T02:18:38.815Z active → verifying (system)
 - 2026-08-12T02:20:53.642Z verifying → done (system)
+- 2026-08-25T22:02:01.915Z done → active (system)
+- 2026-08-26T00:03:49.632Z active → verifying (system)
+- 2026-08-26T00:03:49.968Z verifying → done (system)
