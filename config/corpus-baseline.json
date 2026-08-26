@@ -1,5 +1,5 @@
 {
-    "note": "Accepted `spur task check` / `spur feature check` errors. This is a POLICY file, not a status dump: it is an INPUT to `bun run corpus-check`, so it must be committed — an untracked baseline means the gate behaves differently on every clone and CI, and the first person to meet 8 unexplained failures disables it. Do not move it under `.spur/` (gitignored, ephemeral run artifacts). The gate fails on any error NOT listed here, and ALSO on any entry that no longer reproduces, so this cannot rot into a silent suppression list. Every entry needs a real diagnosis, a reason, and a date — 'pre-existing, not investigated' is not a reason. SCOPE (2026-08-17, ADR-062 / task 0582): the sweep now covers EVERY configured task folder, not just the active one. The entries dated 2026-08-17 are that widening's honest backlog — all in docs/tasks{,2,3}, none in the active folder — and every one is a gate that postdates the task it fires on. They stay two-sided: if a legacy corpus is migrated and an error stops reproducing, the gate fails as stale and the entry must be removed. PER-CODE DIAGNOSIS FOR THE 2026-08-17 ENTRIES. § L1.schema-validation — These tasks predate DD-03, when `schema_version: 1` became a required frontmatter field; 79 of 128 files in docs/tasks lack it entirely, so the strictness gate reports `expected 1` against an absent field. The work is closed and correct; only the envelope is pre-schema. Backfilling across three archived corpora is a corpus migration, not a task repair. § L3.review-priority-table — The P1–P4 priority findings table became the required Review shape after these tasks closed; they carry the older prose form (`#### Verification (dev-verify) … **Verdict: PASS**` plus narrative findings). The review happened and its verdict is recorded — only the layout is pre-gate. Re-formatting closed reviews rewrites historical evidence to satisfy a later convention. § L3.solution-file-line — The `file:line` citation requirement postdates these tasks; their Solution sections describe changes in prose, naming modules rather than lines. Retrofitting citations means re-deriving line numbers for long-merged diffs — a guess dressed as evidence, which is precisely what feature L exists to prevent. § L3.required-section-placeholder — These reached `done` before the section matrix required a populated Testing/Solution at terminal status, so the section sits at its template placeholder. `spur task record` cannot fill them: these runs predate `.spur/run/<wbs>-verdict.json`, so no verdict artifact exists to transcribe. § L3.ac-empty — Acceptance Criteria was not a populated-at-close requirement when these ran, and several are spike, meta, and brainstorm tasks whose output is a decision or a document rather than a testable behavior. Authoring AC for closed exploratory work would be fiction written to satisfy a checker. § L2.missing-required-section — The section matrix gained these required sections (chiefly Review) after the tasks closed. Adding an empty required heading converts a legible historical record into a hollow one that then trips the placeholder gate instead. § L3.requirements-empty — Nine spike/meta/brainstorm tasks whose Requirements were never populated because their contract was a question to answer, not a behavior to build. The `unverifiable` diagnosis is accurate and accepted: they were never verified against requirements, and back-filling now would invent a contract the work was never held to. DEDUPE (2026-08-17, task 0582 R5 verify): the warning half was generated per-observed-finding rather than per key, so 2541 entries covered only 903 distinct keys. Reconciliation is key-addressed, so the extras were unreachable and the ratchet could see only a key's total disappearance, never a partial reduction. Collapsed to one entry per key; `duplicateBaselineKeys` now fails the gate so this cannot recur. ANCHOR-SUBJECT WAVE (2026-08-18, task 0583 R6): `L4.anchor-subject-mismatch` entries are the first sweep of the content-matching rule over historical citations, accepted at WARNING severity only. 0583 R6 promotes the code to error after the qualification migration is APPLIED and this residue is worked down; promotion is a reconcile-the-entry event because severity is part of the acceptance contract.",
+    "note": "Accepted `spur task check` / `spur feature check` errors. This is a POLICY file, not a status dump: it is an INPUT to `bun run corpus-check`, so it must be committed — an untracked baseline means the gate behaves differently on every clone and CI, and the first person to meet 8 unexplained failures disables it. Do not move it under `.spur/` (gitignored, ephemeral run artifacts). The gate fails on any error NOT listed here, and ALSO on any entry that no longer reproduces, so this cannot rot into a silent suppression list. Every entry needs a real diagnosis, a reason, and a date — 'pre-existing, not investigated' is not a reason. SCOPE (2026-08-17, ADR-062 / task 0582): the sweep now covers EVERY configured task folder, not just the active one. The entries dated 2026-08-17 are that widening's honest backlog — all in docs/tasks{,2,3}, none in the active folder — and every one is a gate that postdates the task it fires on. They stay two-sided: if a legacy corpus is migrated and an error stops reproducing, the gate fails as stale and the entry must be removed. PER-CODE DIAGNOSIS FOR THE 2026-08-17 ENTRIES. § L1.schema-validation — These tasks predate DD-03, when `schema_version: 1` became a required frontmatter field; 79 of 128 files in docs/tasks lack it entirely, so the strictness gate reports `expected 1` against an absent field. The work is closed and correct; only the envelope is pre-schema. Backfilling across three archived corpora is a corpus migration, not a task repair. § L3.review-priority-table — The P1–P4 priority findings table became the required Review shape after these tasks closed; they carry the older prose form (`#### Verification (dev-verify) … **Verdict: PASS**` plus narrative findings). The review happened and its verdict is recorded — only the layout is pre-gate. Re-formatting closed reviews rewrites historical evidence to satisfy a later convention. § L3.solution-file-line — The `file:line` citation requirement postdates these tasks; their Solution sections describe changes in prose, naming modules rather than lines. Retrofitting citations means re-deriving line numbers for long-merged diffs — a guess dressed as evidence, which is precisely what feature L exists to prevent. § L3.required-section-placeholder — These reached `done` before the section matrix required a populated Testing/Solution at terminal status, so the section sits at its template placeholder. `spur task record` cannot fill them: these runs predate `.spur/run/<wbs>-verdict.json`, so no verdict artifact exists to transcribe. § L3.ac-empty — Acceptance Criteria was not a populated-at-close requirement when these ran, and several are spike, meta, and brainstorm tasks whose output is a decision or a document rather than a testable behavior. Authoring AC for closed exploratory work would be fiction written to satisfy a checker. § L2.missing-required-section — The section matrix gained these required sections (chiefly Review) after the tasks closed. Adding an empty required heading converts a legible historical record into a hollow one that then trips the placeholder gate instead. § L3.requirements-empty — Nine spike/meta/brainstorm tasks whose Requirements were never populated because their contract was a question to answer, not a behavior to build. The `unverifiable` diagnosis is accurate and accepted: they were never verified against requirements, and back-filling now would invent a contract the work was never held to. DEDUPE (2026-08-17, task 0582 R5 verify): the warning half was generated per-observed-finding rather than per key, so 2541 entries covered only 903 distinct keys. Reconciliation is key-addressed, so the extras were unreachable and the ratchet could see only a key's total disappearance, never a partial reduction. Collapsed to one entry per key; `duplicateBaselineKeys` now fails the gate so this cannot recur. ANCHOR-SUBJECT WAVE (2026-08-18, task 0583 R6): `L4.anchor-subject-mismatch` entries are the first sweep of the content-matching rule over historical citations, accepted at WARNING severity only. 0583 R6 promotes the code to error after the qualification migration is APPLIED and this residue is worked down; promotion is a reconcile-the-entry event because severity is part of the acceptance contract. RECONCILED 2026-08-25 (task 0670, feature F61; decision ADR-083). § L4.anchor-subject-mismatch (2026-08-25) — Measured residue of the point-window matcher (ADR-083 probe 2): the cited line resolves and is in bounds but does not lexically name the requirement row's subject, because the matcher reads only the cited lines and a single-line anchor inside a symbol cannot contain that symbol's name. The citation is correct; the window is too narrow. Decision: dated legacy set, frozen pending feature F91's matcher decision; not a repair campaign and not a matcher change here. § L4.stale-line-anchor (2026-08-25) — Measured residue of anchors whose path cannot resolve from project root (bare or plugin-relative paths such as plugins/sp/scripts/history-load.ts, dev-find-issue.md:47, eval-pipeline.ts:204) or whose line range exceeds the file. The F91 anchor-qualification migration (task 0583) repaired the 2026-08-17 ambiguous set; these postdate that pass. Decision: dated legacy set, frozen pending F91 (ADR-083). § L3.unchecked-checklist (2026-08-25) — Recent closed tasks (0662, 0663, 0664, 0668) reached done/cancelled with planning checklist items never flipped; flipping post-close rewrites history (same family as the 2026-08-17 block). § L3.ac-empty (2026-08-25) — Task 0662 closed with placeholder-only Acceptance Criteria; authoring AC post-close for exploratory work invents a contract (same family as the 2026-08-17 block).",
     "entries": [
         {
             "kind": "feature",
@@ -5681,14 +5681,6 @@
         },
         {
             "kind": "task",
-            "id": "0127",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair — see note § L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0128",
             "code": "L3.required-section-placeholder",
             "reason": "Gate postdates the task: closed before the terminal-status section matrix, and no verdict artifact exists to record from — see note § L3.required-section-placeholder.",
@@ -5700,14 +5692,6 @@
             "code": "L3.unchecked-checklist",
             "severity": "warning",
             "reason": "Done tasks carry unflipped planning checkboxes; flipping post-close rewrites history — remediation is separate work, see note § L3.unchecked-checklist.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
-            "id": "0128",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair — see note § L4.stale-line-anchor.",
             "since": "2026-08-17"
         },
         {
@@ -12535,14 +12519,6 @@
         },
         {
             "kind": "task",
-            "id": "0434",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning",
-            "reason": "Anchor written with an incomplete path; qualification migration (task 0583) owns the mechanical repair — see note § L4.stale-line-anchor.",
-            "since": "2026-08-17"
-        },
-        {
-            "kind": "task",
             "id": "0435",
             "code": "L3.requirements-format",
             "severity": "warning",
@@ -15066,6 +15042,302 @@
             "code": "L4.evidence-not-recoverable",
             "severity": "warning",
             "reason": "No verdict artifact and the tracked ## Testing section carries no recoverable coverage evidence; tasks predate durable verification recording (F93 fallback state, task 0673).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0102",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0384",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0660",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0664",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0542",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0649",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0624",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0561",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0570",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0625",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0632",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0647",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0629",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0648",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0642",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0661",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0638",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0658",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0641",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0628",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0662",
+            "code": "L3.ac-empty",
+            "severity": "error",
+            "reason": "Task closed with placeholder-only Acceptance Criteria; authoring AC post-close invents a contract — see note § L3.ac-empty (2026-08-25).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0657",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0659",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0420",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning",
+            "reason": "Anchor path cannot resolve from project root (bare or plugin-relative) or line range exceeds file — see note § L4.stale-line-anchor (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0569",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning",
+            "reason": "Anchor path cannot resolve from project root (bare or plugin-relative) or line range exceeds file — see note § L4.stale-line-anchor (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0664",
+            "code": "L3.unchecked-checklist",
+            "severity": "warning",
+            "reason": "Closed task carries planning checkboxes never flipped; flipping post-close rewrites history — see note § L3.unchecked-checklist (2026-08-25).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0663",
+            "code": "L3.unchecked-checklist",
+            "severity": "warning",
+            "reason": "Closed task carries planning checkboxes never flipped; flipping post-close rewrites history — see note § L3.unchecked-checklist (2026-08-25).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0556",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning",
+            "reason": "Anchor path cannot resolve from project root (bare or plugin-relative) or line range exceeds file — see note § L4.stale-line-anchor (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0570",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning",
+            "reason": "Anchor path cannot resolve from project root (bare or plugin-relative) or line range exceeds file — see note § L4.stale-line-anchor (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0661",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning",
+            "reason": "Anchor path cannot resolve from project root (bare or plugin-relative) or line range exceeds file — see note § L4.stale-line-anchor (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0549",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning",
+            "reason": "Anchor path cannot resolve from project root (bare or plugin-relative) or line range exceeds file — see note § L4.stale-line-anchor (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0658",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning",
+            "reason": "Anchor path cannot resolve from project root (bare or plugin-relative) or line range exceeds file — see note § L4.stale-line-anchor (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0567",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning",
+            "reason": "Anchor path cannot resolve from project root (bare or plugin-relative) or line range exceeds file — see note § L4.stale-line-anchor (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0668",
+            "code": "L3.unchecked-checklist",
+            "severity": "warning",
+            "reason": "Closed task carries planning checkboxes never flipped; flipping post-close rewrites history — see note § L3.unchecked-checklist (2026-08-25).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0662",
+            "code": "L3.unchecked-checklist",
+            "severity": "warning",
+            "reason": "Closed task carries planning checkboxes never flipped; flipping post-close rewrites history — see note § L3.unchecked-checklist (2026-08-25).",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0657",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning",
+            "reason": "Anchor path cannot resolve from project root (bare or plugin-relative) or line range exceeds file — see note § L4.stale-line-anchor (2026-08-25), ADR-083.",
+            "since": "2026-08-25"
+        },
+        {
+            "kind": "task",
+            "id": "0659",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning",
+            "reason": "Anchor path cannot resolve from project root (bare or plugin-relative) or line range exceeds file — see note § L4.stale-line-anchor (2026-08-25), ADR-083.",
             "since": "2026-08-25"
         }
     ]

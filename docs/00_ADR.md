@@ -1266,3 +1266,77 @@ against 15 globally defined executors, reproduced 2026-08-24).
 **Detail:** `docs/03_ARCHITECTURE.md` §1.2.1 (mechanism + invariants);
 `docs/design/universal-config-loading.md` (context shapes, consumer rewiring table, `--json`
 error-envelope codes, regression-test matrix).
+
+## ADR-083: The Anchor-Citation Class Is a Dated Legacy Set — Frozen Pending F91's Matcher Decision
+
+**Status:** Accepted (design) · **Date:** 2026-08-25 · **Feature:** F61
+
+**Decision.** The anchor-citation class — `L4.anchor-subject-mismatch` and `L4.stale-line-anchor` —
+is reconciled as a **dated legacy set**: the 2026-08-25 findings are accepted into the baseline
+under per-code diagnoses, and **no repair campaign and no matcher change runs under this
+reconciliation**. The matcher (`citedLinesNameSubject`, `extractSubjectTokens`, the cited-window
+slice in `checkLineAnchors`) stays byte-for-byte unchanged, because feature F61 puts it Out of
+Scope ("loosening it to excuse a bad citation is forbidden") and F61 AC R2 requires it unchanged
+from the shape feature F91 shipped. The measured matcher evidence is routed to feature F91 as a
+proposal (below), not applied here.
+
+**Why this outcome.** Three probes measured in task 0670 (Background) make "repair the citations"
+the wrong campaign and "narrow/loosen the rule" unavailable:
+
+- **Probe 1 — multi-anchor union: real, negligible.** `extractSubjectTokens` excludes only the
+  anchor under test, so a sibling anchor's path becomes a subject token. It can never appear in the
+  cited source, and it defeats the "every token is a row id ⇒ nothing to assert" escape in
+  `citedLinesNameSubject` (`packages/app/src/services/task-check.ts:400-406`). A bare one-anchor
+  evidence row passes; the same row with a second anchor reports; excluding every anchor restores
+  the pass. Corpus fallout of the narrowing: 2 baseline entries stop reproducing (`task:0110`,
+  `task:0368`). Mechanism confirmed; explains ~0.5 % of the class.
+- **Probe 2 — point-window matching: the driver.** The matcher reads only the cited lines
+  (`packages/app/src/services/task-check.ts:1367-1372`). A single-line anchor pointing *inside* a
+  symbol can never contain that symbol's name. Worked example (task 0665): a citation of
+  `apps/cli/src/context.ts:170` for subjects `createCliContext` / `AgentConfig` — line 170 is
+  `const cwd = resolve(options.cwd ?? process.cwd());`, inside `createCliContext` declared at line
+  151, `agentConfig` bound at line 176. The citation is correct and the window is too narrow.
+  Widening the cited window to ±20 lines moves new mismatches **42 → 10** and turns ~101 baselined
+  mismatch entries stale (5 → 106); total observed findings 4,873 → 3,976.
+- **Probe 3 — cap coupling.** `checkLineAnchors` caps findings at 5 per section, so per-code counts
+  are not independent: under probe 2, `L4.stale-line-anchor` rose 31 → 56 purely because suppressed
+  mismatches freed cap slots.
+
+Probe 2 says most citations are *correct* and the matcher's point-window is what makes them
+"mismatch" — so a citation-repair campaign would be mass re-authoring of correct citations, which
+the two-sided gate would then re-flag under a different diagnosis. Freezing the dated legacy set is
+the honest reconciliation: the entries record that these findings were measured on 2026-08-25,
+diagnosed per code, and accepted while F91 decides the matcher's window. **Narrowing or widening
+the matcher is not an outcome of this ADR** (F61 Scope; F61 AC R2).
+
+**Detail.** Baseline reconciliation and the per-code dated diagnoses live in
+`config/corpus-baseline.json` `note` (`§ L4.anchor-subject-mismatch (2026-08-25)`,
+`§ L4.stale-line-anchor (2026-08-25)`). The residue codes are reconciled independently:
+`§ L3.unchecked-checklist (2026-08-25)` and `§ L3.ac-empty (2026-08-25)`. The F93-owned codes
+(`L4.scenario-unverified`, `L4.evidence-not-recoverable`, `L4.verifying-incomplete-tasks`) are
+out of scope and stay unlisted per their F93 ownership.
+
+## Routed proposal to feature F91 (task 0670 R2)
+
+Feature F91 owns the matcher (`task-check.ts` anchor subject-matching) and is `done`. The probe
+measurements below are **routed, not applied**: no matcher source file is modified by task 0670.
+
+- **Probe-1 result (per-row anchor exclusion):** excluding every anchor in an evidence row (not
+  just the anchor under test) from the subject-token extraction makes 2 baseline entries stale
+  (`task:0110`, `task:0368`) and moves new mismatches 42 → 43. Mechanism at
+  `packages/app/src/services/task-check.ts:1378` / `:400-406`.
+- **Probe-2 result (point-window matching):** widening the cited window to ±20 lines drops new
+  mismatches **42 → 10** and turns ~101 baselined mismatch entries stale (5 → 106); total observed
+  findings 4,873 → 3,976. The matcher reads only the cited lines
+  (`packages/app/src/services/task-check.ts:1367-1372`); a single-line anchor inside a symbol can
+  never name it.
+
+**Reproduction commands (frozen, for a future F91 task):**
+
+```bash
+# full sweep, machine-readable (measured 2026-08-25, ~60 s wall clock)
+bun run apps/cli/src/index.ts task check --corpus --json > /tmp/corpus.json
+
+# probe 2 (window widening): edit the cited-window slice in checkLineAnchors to ±20,
+# re-run the sweep, compare new-mismatch and stale-entry counts against the above.
+```
