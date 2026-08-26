@@ -123,24 +123,13 @@ describe('TaskCard', () => {
         expect(container.textContent).not.toContain('ago');
     });
 
-    test('R7 — priority accent: left border color per P1/P2/P3, none for absent/unrecognized', () => {
-        const p1 = render(<TaskCard task={task({ priority: 'P1' })} onClick={() => {}} />);
-        expect(p1.container.querySelector('button')?.className).toContain('border-l-spur-error');
-        p1.unmount();
-        const p2 = render(<TaskCard task={task({ priority: 'P2' })} onClick={() => {}} />);
-        expect(p2.container.querySelector('button')?.className).toContain('border-l-spur-warning');
-        p2.unmount();
-        const p3 = render(<TaskCard task={task({ priority: 'P3' })} onClick={() => {}} />);
-        expect(p3.container.querySelector('button')?.className).toContain('border-l-spur-text-muted');
-        p3.unmount();
-        // Absent or unrecognized priority → no accent border class at all.
-        const none = render(<TaskCard task={task({ priority: undefined })} onClick={() => {}} />);
-        const cls = none.container.querySelector('button')?.className ?? '';
-        expect(cls).not.toContain('border-l-');
-        none.unmount();
-        const unknown = render(<TaskCard task={task({ priority: 'P9' })} onClick={() => {}} />);
-        expect(unknown.container.querySelector('button')?.className).not.toContain('border-l-');
-        unknown.unmount();
+    test('priority shows via badge only — no colored left border on the card', () => {
+        for (const priority of ['P1', 'P2', 'P3', undefined]) {
+            const { container } = render(<TaskCard task={task({ priority })} onClick={() => {}} />);
+            const cls = container.querySelector('button')?.className ?? '';
+            expect(cls).not.toContain('border-l-');
+            container.remove();
+        }
     });
 
     test('R7 — staleness tint: timestamp faint when updatedAt older than 7 days', () => {

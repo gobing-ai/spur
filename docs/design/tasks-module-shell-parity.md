@@ -85,7 +85,7 @@ content.
 One input replaces the three `TaskFilters` inputs (feature / parent-WBS / assignee). On submit:
 
 | Input shape | Action |
-|---|---|
+| --- | --- |
 | `/^\d{4}$/` | navigate `/board/tasks/<wbs>` — opens the existing path-WBS detail popup |
 | contains `.` (dotted WBS) | `setFilter('parent', value)` |
 | anything else | `setFilter('feature', value)` (substring match stays server/client-side as today) |
@@ -163,9 +163,9 @@ updates are unchanged in the embed.
 All additions derive from fields already on `TaskSummary` — **no contract change**:
 
 | Addition | Derivation |
-|---|---|
+| --- | --- |
 | Subtask progress `done/total` | The active board `TaskStore` groups its loaded task set by `parentWbs` once when state changes; cards read their parent entry through the provider-aware `useTasks()` hook. Rendered only when `total > 0`. |
-| Priority accent | `priority` field → colored left border on the card (`P1` error / `P2` warning / `P3` muted, resolved through `spur-*` semantic tokens). Existing priority badge stays. |
+| Priority signal | The colored priority badge (P1 error / P2 warning / P3 neutral) is the **sole** priority signal — no colored left border (removed 2026-08-26 to keep cards clean; badge already conveys priority). |
 | Staleness tint | age from `updatedAt` (already rendered as relative time): > 7 d → `text-spur-text-faint` tint on the timestamp; threshold constant in `TaskCard.tsx`. |
 
 Feature badge, type badge, WBS, name, relative time: unchanged. **Assignee chip: excluded** —

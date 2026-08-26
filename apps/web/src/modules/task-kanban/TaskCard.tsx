@@ -10,13 +10,6 @@ const RELATIVE_REFRESH_MS = 60_000;
 /** Staleness threshold: timestamps older than 7 days get the faint tint (F72 R4). */
 const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Priority accent — colored left border resolved through `.task-kanban` tokens (F72 R3). */
-const PRIORITY_ACCENT: Record<string, string> = {
-    P1: 'border-l-2 border-l-spur-error',
-    P2: 'border-l-2 border-l-spur-warning',
-    P3: 'border-l-2 border-l-spur-text-muted',
-};
-
 /** Priority badge daisyUI variant (F72 card density pass) — falls back to outline. */
 const PRIORITY_BADGE: Record<string, 'error' | 'warning' | 'neutral'> = {
     P1: 'error',
@@ -74,14 +67,13 @@ export default function TaskCard({ task, onClick }: Props) {
     // F72 R2: read the active board store's derived map through the existing hook.
     const { subtaskProgress } = useTasks();
     const progress = subtaskProgress.get(task.wbs);
-    const accent = task.priority ? PRIORITY_ACCENT[task.priority] : undefined;
     const stale = task.updatedAt ? now - new Date(task.updatedAt).getTime() > STALE_THRESHOLD_MS : false;
 
     return (
         <Card
             variant="compact"
             asChild
-            className={`bg-spur-surface-2 hover:bg-spur-surface-3 rounded-xl border border-spur-border hover:border-spur-accent/40 cursor-pointer transition-colors w-full text-left ${accent ?? ''} ${
+            className={`bg-spur-surface-2 hover:bg-spur-surface-3 rounded-xl border border-spur-border hover:border-spur-accent/40 cursor-pointer transition-colors w-full text-left ${
                 isDragging ? 'opacity-30' : ''
             }`}
         >
