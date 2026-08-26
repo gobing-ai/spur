@@ -49,6 +49,11 @@ const EXCLUDED_COMMANDS = [
 // wrappers are tested separately below because ADR-047 grants them the inline driver.
 const HEADLESS_ONLY_WORKFLOW_COMMANDS = ['dev-plan'] as const;
 
+// 0676 R1/R2: engine-driven headless surfaces must not present `inline` as usable.
+// They either omit it from the advertised options (this set) or document the stable
+// rejection explicitly (dev-wrap/dev-wrapall shape, covered by their own docs).
+const HEADLESS_NO_INLINE_ADVERTISED = ['dev-find-issue', 'dev-idea'] as const;
+
 describe('task 0406 / H82 — unified --agent execution-surface contract', () => {
     test('the unified --agent selector governs the surface; omit is the default, explicit inline is the zero-dispatch carve-out', () => {
         // Extracted claims (R2/R3) — not prose pins. The value→behavior table and the
@@ -101,7 +106,7 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
             expect(MODE_AWARE_COMMANDS, `${expected} should be mode-aware`).toContain(expected);
         }
 
-        for (const command of MODE_AWARE_COMMANDS) {
+        for (const command of MODE_AWARE_COMMANDS.filter((c) => !HEADLESS_NO_INLINE_ADVERTISED.includes(c as never))) {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
 
             // The unified selector must appear with all three values
@@ -116,6 +121,18 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
                 );
             }
             expect(raw, `${command}: domain vocabulary leaked into the operator surface`).not.toContain('--executor');
+        }
+    });
+
+    test('0676 R1/R2 — headless find-issue/idea never advertise inline as usable', () => {
+        for (const command of HEADLESS_NO_INLINE_ADVERTISED) {
+            const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
+            expect(raw, `${command}: must not advertise --agent <inline|auto|name>`).not.toContain(
+                '--agent <inline|auto|name>',
+            );
+            expect(raw, `${command}: must still reference the execution-surface contract`).toContain(
+                'cross-cutting.md#inline-default-execution-surface',
+            );
         }
     });
 

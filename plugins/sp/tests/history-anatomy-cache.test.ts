@@ -8,6 +8,7 @@ import {
     type CacheProvenance,
     checkReportStructure,
     decideCache,
+    diffPorcelain,
     importedSnapshotAsOf,
     logicDigest,
     parseProvenance,
@@ -450,6 +451,20 @@ describe('checkReportStructure (R5)', () => {
     });
 });
 
+describe('diffPorcelain (0676 R3)', () => {
+    test('names paths gained since baseline, excluding declared outputs', () => {
+        const before = ' M docs/tasks/0001.md\n?? .spur/run/x.env\n';
+        const now = ' M docs/tasks/0001.md\n?? .spur/run/x.env\n?? history-anatomy..md\n';
+        const undeclared = diffPorcelain(before, now, new Set(['.spur/run/candidate.md']));
+        expect(undeclared).toEqual(['history-anatomy..md']);
+    });
+    test('declared outputs and pre-existing dirt are not violations', () => {
+        const before = '?? already-dirty.txt\n';
+        const now = '?? already-dirty.txt\n?? .spur/run/candidate.md\n';
+        expect(diffPorcelain(before, now, new Set(['.spur/run/candidate.md']))).toEqual([]);
+    });
+});
+
 describe('CLI entry (runCacheCli)', () => {
     test('digest command computes, check validates, publish is atomic, usage errors return 1', () => {
         const dir = mkdtempSync(join(tmpdir(), 'ha-cli-'));
@@ -837,10 +852,85 @@ describe('provenance + full cache cycle (0660 R3, R5, R7)', () => {
     });
 
     test('unknown and malformed invocations report the full verb list without throwing', () => {
-        expect(runCacheCli(['nope']).stderr).toContain('digest, check, paths, probe, stamp, refresh, publish');
+        expect(runCacheCli(['nope']).stderr).toContain(
+            'digest, check, paths, assert-clean, probe, stamp, refresh, publish',
+        );
         expect(runCacheCli(['probe']).exitCode).toBe(1);
         expect(runCacheCli(['stamp']).exitCode).toBe(1);
         expect(runCacheCli(['refresh']).exitCode).toBe(1);
         expect(runCacheCli(['paths']).exitCode).toBe(1);
+    });
+});
+
+describe('CLI assert-clean (0676 R3)', () => {
+    test('usage error without --baseline', () => {
+        expect(runCacheCli(['assert-clean']).exitCode).toBe(1);
+        expect(runCacheCli(['assert-clean']).stderr).toContain('--baseline');
+    });
+
+    test('clean tree passes; undeclared write fails naming the path', async () => {
+        const { mkdirSync, mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+        const { execFileSync } = await import('node:child_process');
+        const dir = mkdtempSync(join(tmpdir(), 'assert-clean-'));
+        try {
+            const git = (...args: string[]): void =>
+                execFileSync('git', args, {
+                    cwd: dir,
+                    env: {
+                        ...process.env,
+                        GIT_AUTHOR_NAME: 't',
+                        GIT_COMMITTER_NAME: 't',
+                        GIT_AUTHOR_EMAIL: 't@t',
+                        GIT_COMMITTER_EMAIL: 't@t',
+                    },
+                });
+            git('init', '-q');
+            // Mirror the real repo: .spur/ run glue is gitignored, so porcelain reports only
+            // genuinely undeclared writes outside the sanctioned namespace (0676 R3 scope).
+            mkdirSync(join(dir, '.spur'), { recursive: true });
+            writeFileSync(join(dir, '.gitignore'), '.spur/\n');
+            writeFileSync(join(dir, 'committed.txt'), 'x');
+            git('add', '.');
+            git('commit', '-qm', 'init');
+            // Baseline lives OUTSIDE the watched tree so its own untracked presence never counts.
+            const baseline = join(mkdtempSync(join(tmpdir(), 'ac-baseline-')), 'baseline.txt');
+            writeFileSync(baseline, '');
+            const ok = runCacheCli([
+                'assert-clean',
+                '--baseline',
+                baseline,
+                '--expect=.spur/run/candidate.md',
+                '--cwd',
+                dir,
+            ]);
+            expect(ok.exitCode).toBe(0);
+
+            writeFileSync(join(dir, 'history-anatomy..md'), 'leak');
+            const bad = runCacheCli([
+                'assert-clean',
+                '--baseline',
+                baseline,
+                '--expect=.spur/run/candidate.md',
+                '--cwd',
+                dir,
+            ]);
+            expect(bad.exitCode).toBe(1);
+            expect(bad.stderr).toContain('undeclared write: history-anatomy..md');
+
+            mkdirSync(join(dir, '.spur/run'), { recursive: true });
+            rmSync(join(dir, 'history-anatomy..md'));
+            writeFileSync(join(dir, '.spur/run/candidate.md'), 'report');
+            const declaredOk = runCacheCli([
+                'assert-clean',
+                '--baseline',
+                baseline,
+                '--expect=.spur/run/candidate.md',
+                '--cwd',
+                dir,
+            ]);
+            expect(declaredOk.exitCode).toBe(0);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 });

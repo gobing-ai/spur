@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Make the find-issue surface honest about --agent and fail the run on undeclared model-stage writes"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-26T05:38:44.933Z
-updated_at: "2026-08-26T05:48:10.904Z"
+updated_at: "2026-08-26T15:43:41.584Z"
 feature_id: I81
 priority: P2
 tags: ["history-anatomy", "sp-plugin", "contract", "hygiene"]
@@ -23,12 +23,12 @@ Second, the enrich stage wrote `history-anatomy..md` (note the double dot) into 
 Third, the workflow's default executor is `agent: "omp"` (`config/workflows/history-anatomy.yaml:63`), which returned HTTP 429 "Monthly usage limit reached" during the 2026-08-25 dogfood run, hard-failing at the first `agent.run` stage for any operator who does not override it.
 
 ### Requirements
-- [ ] R1. Correct the `--agent` contract on `/sp:dev-find-issue`: either drop `inline` from the flag table for this headless target or translate `inline` to the sanctioned surface at the seam. Whichever is chosen, invoking the documented default must not produce the headless-rejection error.
-- [ ] R2. Audit the sibling `/sp:dev-*` command files for the same over-promise and correct any that advertise `inline` against a headless target — `/sp:dev-idea` is a known second instance.
-- [ ] R3. Assert after each `agent.run` stage that the working tree gained no file outside the stage's declared output path; an undeclared write fails the run and names the offending path.
-- [ ] R4. Remove the leaked `history-anatomy..md` from the repository root as part of this task.
-- [ ] R5. Change the workflow's fallback executor from the quota-dead `omp` to one the project currently expects to be reachable, and keep the existing fail-loud error naming the sanctioned alternatives.
-- [ ] R6. Do not change any public `spur` CLI noun or verb — this task changes plugin-surface documentation and workflow configuration only (ADR-051 consent gate).
+- [x] R1. Correct the `--agent` contract on `/sp:dev-find-issue`: either drop `inline` from the flag table for this headless target or translate `inline` to the sanctioned surface at the seam. Whichever is chosen, invoking the documented default must not produce the headless-rejection error.
+- [x] R2. Audit the sibling `/sp:dev-*` command files for the same over-promise and correct any that advertise `inline` against a headless target — `/sp:dev-idea` is a known second instance.
+- [x] R3. Assert after each `agent.run` stage that the working tree gained no file outside the stage's declared output path; an undeclared write fails the run and names the offending path.
+- [x] R4. Remove the leaked `history-anatomy..md` from the repository root as part of this task.
+- [x] R5. Change the workflow's fallback executor from the quota-dead `omp` to one the project currently expects to be reachable, and keep the existing fail-loud error naming the sanctioned alternatives.
+- [x] R6. Do not change any public `spur` CLI noun or verb — this task changes plugin-surface documentation and workflow configuration only (ADR-051 consent gate).
 ### Acceptance Criteria
 
 ```gherkin
@@ -88,19 +88,51 @@ Scenario: R17 — The workflow's default executor is not a quota-dead one
 9. Tests: `assert-clean` passes on a clean stage; fails and names the path on a stray write; the corrected flag tables match the headless contract (extend `validate-flag-contracts.ts` if it already covers this shape).
 10. Run `bun run lint`, `bun run test`, `bun run script-contract-check`, and `spur workflow validate config/workflows/history-anatomy.yaml`.
 ### Solution
+Plugin docs, one helper subcommand, and workflow config — no public spur noun/verb touched (R6).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| Change | Why |
+| --- | --- |
+| plugins/sp/commands/dev-find-issue.md | R1: flag table and argument-hint no longer advertise `inline` (was the documented default on a headless target that exits 2 on it); options now `auto\|name`, default omitted |
+| plugins/sp/commands/dev-idea.md | R2: same over-promise corrected; rejection sentence retained for operators who pass it anyway. dev-run/dev-runall/dev-refine keep inline legitimately (host driver); dev-wrap/wrapall already document the rejection explicitly |
+| history-anatomy-cache.ts `assert-clean` verb + pure `diffPorcelain` (`plugins/sp/scripts/history-anatomy-cache.ts:813`) + .mjs twin regen | R3: porcelain fingerprint diff around model stages; undeclared writes exit 1 naming each path |
+| config/workflows/history-anatomy.yaml enrich/validate states capture a pre-dispatch baseline and assert-clean after | R3: an undeclared write fails the run before publication |
+| repo-root leaked `history-anatomy..md` deleted from main tree | R4 |
 
+R5: workflow fallback literal `agent: "omp"` → `agent: "claude"` (omp returned HTTP 429 quota-dead in the 2026-08-25 dogfood; claude verified usable/capable by `spur agent doctor` in this batch's precheck). `config.agent.default` still overrides via the precedence chain, so no new stale pin is created beyond the project's current healthy default.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | plugins/sp/commands/dev-find-issue.md flag table options are `auto |
+| R2 | MET | plugins/sp/commands/dev-idea.md same correction; sweep of plugins/sp/commands/ confirms wrap/wrapall document rejection explicitly and run/runall/refine keep host-driver inline |
+| R3 | MET | history-anatomy-cache.ts assert-clean verb + diffPorcelain; enrich/validate states capture baseline then assert; failing action routes run to failed before publish |
+| R4 | MET | leaked history-anatomy..md removed from main-tree repo root |
+| R5 | MET | config/workflows/history-anatomy.yaml agent literal claude (doctor-verified reachable); comment records omp 429 precedent and agent.default override |
+| R6 | MET | no public spur noun/verb changed — plugin docs, plugin script, workflow config only |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R15 — A headless surface never advertises an execution mode it rejects | MET | test | doc change pinned by HEADLESS_NO_INLINE_ADVERTISED assertions in plugins/sp/tests/inline-execution-contract.test.ts; default no longer produces the rejection error |
+| R16 — A model stage that writes outside its declared output path fails the run | MET | test | assert-clean unit tests (clean passes, stray write exits 1 naming path, declared output exempt); workflow asserts after enrich and validate before publication |
+| R17 — The workflow's default executor is not a quota-dead one | MET | command | doctor probe in this batch's precheck shows claude installed/usable/capable-3; yaml literal updated |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Functional traceability** — all six requirements MET. R1: `dev-find-issue.md` no longer presents `inline` as usable (options `auto|name`, default omitted); invoking the documented default now resolves through the precedence chain, never hitting the headless rejection. R2: `dev-idea.md` corrected; repo-wide audit found dev-wrap/wrapall already document the explicit rejection honestly (kept), dev-run/runall/refine keep inline legitimately (host driver). R3: porcelain fingerprint diff (`assert-clean` verb + pure `diffPorcelain`) wired as baseline-capture/assert actions around enrich and validate; undeclared writes exit 1 naming each path and halt before publication; unit tests cover clean/undeclared/declared paths with a gitignored-run-dir mirror of the real repo. R4: leaked root file deleted. R5: fallback literal moved from quota-dead `omp` to currently-reachable `claude` with `agent.default` still overriding via the precedence chain.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P3 | The inline-contract test pinned "every contract-referencing command advertises inline|auto|name"; headless carve-out set added for find-issue/idea | Accept — same-commit reconciliation; the corrected contract is that headless surfaces never present inline as usable |
+| P3 | `assert-clean` scopes to git-visible paths only; `.spur/` run glue is gitignored so sanctioned sidecars never trip it | Accept — matches the defect class (root-level leaks) exactly |
 
+SECUA — no new trust boundaries; fail-loud only. Correctness: twin regenerated, script-contract-check green. Architecture: helper-owned glue per ADR-069 R1, no public CLI surface change.
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-26T07:28:49.036Z todo → wip (system)
+- 2026-08-26T15:43:40.981Z wip → testing (system)
+- 2026-08-26T15:43:41.584Z testing → done (system)

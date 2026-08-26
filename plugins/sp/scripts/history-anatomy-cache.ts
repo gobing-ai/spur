@@ -27,6 +27,7 @@
  * `packages/` imports and no `Bun.*` globals, so the committed `.mjs` twin runs under bare `node`.
  */
 
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
     closeSync,
@@ -735,7 +736,23 @@ export interface CacheCliResult {
     stderr: string;
 }
 
-const VALID_COMMANDS = 'digest, check, paths, probe, stamp, refresh, publish';
+/** Parse a `git status --porcelain` text into its path set. */
+export function porcelainPaths(text: string): Set<string> {
+    return new Set(
+        text
+            .split('\n')
+            .map((line) => line.replace(/^\S+\s+/, '').trim())
+            .filter((line) => line.length > 0),
+    );
+}
+
+/** Paths present now but absent from the baseline and not declared outputs (0676 R3). */
+export function diffPorcelain(before: string, now: string, expects: Set<string>): string[] {
+    const beforePaths = porcelainPaths(before);
+    return [...porcelainPaths(now)].filter((p) => !beforePaths.has(p) && !expects.has(p)).sort();
+}
+
+const VALID_COMMANDS = 'digest, check, paths, assert-clean, probe, stamp, refresh, publish';
 const PROBE_USAGE =
     '<script> probe --artifact <a.json> --target <report.md> [--baseline <b.json>] [--mode daily|ad-hoc] ' +
     '[--date <YYYY-MM-DD>] [--recompute true] [--out <prov.json>] [--skill-dir <d>] [--contract <f>] [--workflow <f>]';
@@ -792,6 +809,42 @@ export function runCacheCli(argv: string[]): CacheCliResult {
             }
             publishAtomically(a, b);
             return { exitCode: 0, stdout: '', stderr: '' };
+        }
+        case 'assert-clean': {
+            // 0676 R3: fingerprint diff around a model stage. `--baseline` holds the
+            // pre-stage `git status --porcelain`; every path present now but absent there
+            // must be one of the stage's declared outputs, else exit 1 naming each.
+            const f = parseFlags(argv.slice(1));
+            if (f.baseline === undefined) {
+                return {
+                    exitCode: 1,
+                    stdout: '',
+                    stderr: 'usage: <script> assert-clean --baseline <porcelain.txt> [--expect <path>]...\n',
+                };
+            }
+            const expects = new Set<string>();
+            for (const arg of argv.slice(1)) {
+                if (arg.startsWith('--expect=')) expects.add(arg.slice('--expect='.length));
+            }
+            let now: string;
+            try {
+                now =
+                    spawnSync('git', ['status', '--porcelain'], {
+                        encoding: 'utf8',
+                        ...(f.cwd !== undefined ? { cwd: f.cwd } : {}),
+                    }).stdout ?? '';
+            } catch {
+                return { exitCode: 0, stdout: '', stderr: 'assert-clean: git unavailable; skipped\n' };
+            }
+            const undeclared = diffPorcelain(readFileSync(f.baseline, 'utf8'), now, expects);
+            if (undeclared.length > 0) {
+                return {
+                    exitCode: 1,
+                    stdout: '',
+                    stderr: undeclared.map((p) => `undeclared write: ${p}\n`).join(''),
+                };
+            }
+            return { exitCode: 0, stdout: 'clean\n', stderr: '' };
         }
         case 'paths': {
             const f = parseFlags(argv.slice(1));

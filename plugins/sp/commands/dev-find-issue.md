@@ -1,7 +1,7 @@
 ---
 description: "Generate the daily or ad-hoc history-anatomy diagnostic report over already-imported history: the eleven-section report contract, closed finding taxonomy, cache branch, bounded correction, and atomic publication. Triggers: find issues, post-mortem, performance analysis, session review, history-anatomy, run the daily report, ad-hoc diagnosis"
 role: reviewer
-argument-hint: "[<focus>] [--mode <daily|ad-hoc>] [--date <YYYY-MM-DD>] [--since <RFC3339>] [--until <RFC3339>] [--recompute] [--agent <inline|auto|name>] [--output <path>]"
+argument-hint: "[<focus>] [--mode <daily|ad-hoc>] [--date <YYYY-MM-DD>] [--since <RFC3339>] [--until <RFC3339>] [--recompute] [--agent <auto|name>] [--output <path>]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -25,7 +25,7 @@ evidence validation. This command never triggers an import.
 | `--since` `<RFC3339>`                  | Inclusive lower bound (ad-hoc; required).                                                          | omitted  |
 | `--until` `<RFC3339>`                  | Inclusive upper bound (ad-hoc; required).                                                          | omitted  |
 | `--recompute`                          | Force the full analyze/render/enrich/validate path; records disposition forced-recompute.          | off      |
-| `--agent` `<inline\|auto\|name>`       | Execution surface selector.                                                                        | inline   |
+| `--agent` `<auto\|name>`               | Execution surface selector. This target is engine-driven (headless): omit resolves through the executor precedence chain to `agent.default`, then the workflow literal. Explicit `--agent inline` is rejected with the stable special error (exit 2). | omitted  |
 | `--output` `<path>`                    | Explicit report output path (ad-hoc; default writes to the run directory).                         | run dir  |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).

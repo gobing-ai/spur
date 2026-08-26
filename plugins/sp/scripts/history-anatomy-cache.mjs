@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
 // plugins/sp/scripts/history-anatomy-cache.ts
+import { spawnSync } from "node:child_process";
 import { createHash as createHash2 } from "node:crypto";
 import {
   closeSync,
@@ -537,7 +538,15 @@ function publishAtomically(candidatePath, targetPath) {
     throw err;
   }
 }
-var VALID_COMMANDS = "digest, check, paths, probe, stamp, refresh, publish";
+function porcelainPaths(text) {
+  return new Set(text.split(`
+`).map((line) => line.replace(/^\S+\s+/, "").trim()).filter((line) => line.length > 0));
+}
+function diffPorcelain(before, now, expects) {
+  const beforePaths = porcelainPaths(before);
+  return [...porcelainPaths(now)].filter((p) => !beforePaths.has(p) && !expects.has(p)).sort();
+}
+var VALID_COMMANDS = "digest, check, paths, assert-clean, probe, stamp, refresh, publish";
 var PROBE_USAGE = "<script> probe --artifact <a.json> --target <report.md> [--baseline <b.json>] [--mode daily|ad-hoc] " + "[--date <YYYY-MM-DD>] [--recompute true] [--out <prov.json>] [--skill-dir <d>] [--contract <f>] [--workflow <f>]";
 function parseFlags(args) {
   const out = {};
@@ -593,6 +602,43 @@ ${result.problems.map((p) => `- ${p}
       }
       publishAtomically(a, b);
       return { exitCode: 0, stdout: "", stderr: "" };
+    }
+    case "assert-clean": {
+      const f = parseFlags(argv.slice(1));
+      if (f.baseline === undefined) {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: `usage: <script> assert-clean --baseline <porcelain.txt> [--expect <path>]...
+`
+        };
+      }
+      const expects = new Set;
+      for (const arg of argv.slice(1)) {
+        if (arg.startsWith("--expect="))
+          expects.add(arg.slice("--expect=".length));
+      }
+      let now;
+      try {
+        now = spawnSync("git", ["status", "--porcelain"], {
+          encoding: "utf8",
+          ...f.cwd !== undefined ? { cwd: f.cwd } : {}
+        }).stdout ?? "";
+      } catch {
+        return { exitCode: 0, stdout: "", stderr: `assert-clean: git unavailable; skipped
+` };
+      }
+      const undeclared = diffPorcelain(readFileSync(f.baseline, "utf8"), now, expects);
+      if (undeclared.length > 0) {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: undeclared.map((p) => `undeclared write: ${p}
+`).join("")
+        };
+      }
+      return { exitCode: 0, stdout: `clean
+`, stderr: "" };
     }
     case "paths": {
       const f = parseFlags(argv.slice(1));
@@ -713,9 +759,11 @@ export {
   refreshReport,
   publishAtomically,
   probe,
+  porcelainPaths,
   parseProvenance,
   logicDigest,
   importedSnapshotAsOf,
+  diffPorcelain,
   decideCache,
   checkReportStructure,
   buildProvenance,

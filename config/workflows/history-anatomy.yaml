@@ -66,7 +66,9 @@ vars:
   focus: ""
   recompute: "false"
   output: ""
-  agent: "omp"
+  # 0676 R5: omp went quota-dead (HTTP 429) in the 2026-08-25 dogfood. The literal names a
+  # currently-reachable executor; `agent.default` in config still overrides via the precedence chain.
+  agent: "claude"
   spurBin: "spur"
   __runId: ""
   stepTimeoutMs: "1800000"
@@ -170,8 +172,14 @@ states:
   - id: enrich
     description: >
       Model enrichment via the skill operation sp:history-anatomy enrich (0658 operations.md).
-      Consumes the two artifacts; authors the model half of the report.
+      Consumes the two artifacts; authors the model half of the report. A porcelain baseline
+      is captured before dispatch and asserted after: any working-tree file created outside the
+      declared output fails the run (0676 R3).
     onEnter:
+      - kind: shell
+        options:
+          command: >-
+            git status --porcelain > .spur/run/$__runId-baseline-enrich.txt || true
       - kind: agent.run
         options:
           agent: ${vars.agent}
@@ -180,6 +188,10 @@ states:
           role: reviewer
           expectFile: .spur/run/${vars.__runId}-candidate.md
           timeoutMs: ${vars.stepTimeoutMs}
+      - kind: shell
+        options:
+          command: >-
+            node "$(superskill script path sp history-anatomy-cache.mjs)" assert-clean --baseline .spur/run/$__runId-baseline-enrich.txt --expect .spur/run/$__runId-candidate.md
 
   - id: structure-gate
     description: >
@@ -196,8 +208,12 @@ states:
   - id: validate
     description: >
       Independent evidence validation via the skill operation sp:history-anatomy validate.
-      Publication is reachable only from a PASS here.
+      Publication is reachable only from a PASS here. Same undeclared-write assertion as enrich (0676 R3).
     onEnter:
+      - kind: shell
+        options:
+          command: >-
+            git status --porcelain > .spur/run/$__runId-baseline-validate.txt || true
       - kind: agent.run
         options:
           agent: ${vars.agent}
@@ -206,6 +222,10 @@ states:
           role: reviewer
           expectFile: .spur/run/${vars.__runId}-validation.txt
           timeoutMs: ${vars.stepTimeoutMs}
+      - kind: shell
+        options:
+          command: >-
+            node "$(superskill script path sp history-anatomy-cache.mjs)" assert-clean --baseline .spur/run/$__runId-baseline-validate.txt --expect .spur/run/$__runId-validation.txt
 
   - id: correct
     description: >
