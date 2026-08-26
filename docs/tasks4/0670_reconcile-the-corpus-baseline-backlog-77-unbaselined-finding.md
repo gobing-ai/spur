@@ -4,7 +4,7 @@ name: "Reconcile the corpus-baseline backlog: 77 unbaselined findings and the an
 status: done
 template: issue
 created_at: 2026-08-25T17:28:11.217Z
-updated_at: "2026-08-26T01:40:00.334Z"
+updated_at: "2026-08-26T02:49:33.912Z"
 ac_altitude: task-local
 feature_id: F61
 ---
@@ -402,7 +402,6 @@ available outcome (F61 Scope; F61 AC R2), so the measured evidence is routed to 
 proposal (R2).
 
 ### Solution
-
 All changes for task 0670 are corpus/policy reconciliation — **no matcher source file is modified**
 (F61 Scope; F61 AC R2). The full change map:
 
@@ -411,16 +410,20 @@ All changes for task 0670 are corpus/policy reconciliation — **no matcher sour
 | `docs/00_ADR.md` | ADR-083: the anchor-citation class is a dated legacy set, frozen pending F91; cites probes 1/2/3 (R1). Also records the routed F91 proposal with reproduction commands (R2). |
 | `config/corpus-baseline.json` | `note`: appended dated `§ <code> (2026-08-25)` diagnosis blocks for `L4.anchor-subject-mismatch`, `L4.stale-line-anchor`, `L3.unchecked-checklist`, `L3.ac-empty` (R3). |
 | `config/corpus-baseline.json` | entries: added 37 (22 anchor-subject-mismatch, 10 stale-line-anchor, 4 unchecked-checklist, 1 ac-empty), each with `reason` referencing the dated § block and `since: "2026-08-25"` (R3). |
-| `config/corpus-baseline.json` | entries: deleted the 2 stale `task:0127` / `task:0128` `L4.stale-line-anchor` entries — repaired by the F91 pass, no longer reproduce (R3). |
+| `config/corpus-baseline.json` | entries: deleted **3** stale entries (R3). `task:0127` / `task:0128` `L4.stale-line-anchor` — repaired by the F91 anchor-qualification pass. `task:0434` `L4.stale-line-anchor` — deleted during the 2026-08-25 verify re-audit: this task's own ADR-083 append grew `docs/00_ADR.md` from 1268 to 1342 lines, which brought task 0434's previously out-of-range anchors at lines 1273 and 1285 of `docs/00_ADR.md` into range, so the finding stopped reproducing and the entry read stale. Every other file 0434 cites is in range at both `HEAD` and the working tree, so ADR-083's own append is the sole cause. |
 | `packages/app/tests/services/corpus-check.test.ts` | untouched — two-sidedness tests at :188 and :232 kept green, not re-authored (R5). |
 | `packages/app/src/services/task-check.ts` | untouched — the matcher is unchanged (F61 AC R2). |
 
 Reconciliation was driven by the exported seams (`collectObservedFindings` + `reconcileBaseline`),
-not by parsing sweep output; the one-off script is recorded in Testing evidence. F93-owned codes
-(`L4.scenario-unverified`, `L4.evidence-not-recoverable`, `L4.verifying-incomplete-tasks`) were
-not touched — the 53 remaining `L4.scenario-unverified` findings are reported as F93's residue
-(R3).
+not by parsing sweep output; the one-off scripts (`.spur/run/reconcile-0670.ts`,
+`.spur/run/reconcile-0670-apply.ts`, both gitignored) are recorded in Testing evidence. F93-owned
+codes (`L4.scenario-unverified`, `L4.evidence-not-recoverable`, `L4.verifying-incomplete-tasks`)
+were not touched — the remaining `L4.scenario-unverified` findings (41 at the 2026-08-25 re-audit,
+53 before the `task:0434` deletion) are reported as F93's residue (R3).
 
+**Post-reconciliation baseline size: 1963 entries** (1929 working-tree baseline + 37 added − 3
+deleted). Whole-sweep green remains a joint outcome with F93: `bun run corpus-check` still exits 1
+on the F93-owned `L4.scenario-unverified` residue.
 ### Testing
 **Pipeline verify results**
 
@@ -430,8 +433,8 @@ not touched — the 53 remaining `L4.scenario-unverified` findings are reported 
 |-------------|--------|----------|
 | R1 | MET | `docs/00_ADR.md:1270` — ADR-083 "The Anchor-Citation Class Is a Dated Legacy Set — Frozen Pending F91's Matcher Decision", Status Accepted, Date 2026-08-25, Feature F61. Records the outcome "dated legacy set" (not repair), cites probe 1 (multi-anchor union, ~0.5%, 2 entries fallout), probe 2 (point-window matching, 42→10 mismatches, ~101 entries stale), probe 3 (5-per-section cap coupling), and states "Narrowing or widening the matcher is not an outcome of this ADR (F61 Scope; F61 AC R2)". |
 | R2 | MET | `docs/00_ADR.md:1319` — "## Routed proposal to feature F91 (task 0670 R2)" carries both probe results and the frozen reproduction commands (`bun run apps/cli/src/index.ts task check --corpus --json`; the ±20 window edit recipe). command `git diff -- packages/app/src/services/task-check.ts \| wc -l` → `0`: the matcher is byte-for-byte unchanged (F61 AC R2 honored). |
-| R3 | MET | command `bun run apps/cli/src/index.ts task check --corpus --json` (post-fix, run twice at 18:30 and 18:31, byte-identical results): **0 new findings and 0 stale entries in 0670's four owned codes** (`L4.anchor-subject-mismatch`, `L4.stale-line-anchor`, `L3.unchecked-checklist`, `L3.ac-empty`) — artifacts `.spur/run/0670-verify-sweep2.json`, `.spur/run/0670-verify-sweep3.json`. Later runs at 18:36 / 18:38 show 1 new (`task:0663`) + 1 stale (`task:0664`) in `L4.anchor-subject-mismatch`; both are contamination from a **concurrent writer** editing `apps/web/src/modules/task-kanban/**` in this shared tree during the audit (mtimes `TasksShell.tsx` 18:34, `KanbanBoard.tsx` 18:35, `useTasks.ts` 18:38), not from 0670. Proven at HEAD: `git show HEAD:apps/web/src/modules/task-kanban/TasksShell.tsx \| sed -n '33p'` → `export default function TasksShell() {`, which names 0663's subject `tasksshell`, so that finding does not exist on a clean checkout. The `task:0664` entry was correctly left in place rather than deleted — its non-reproduction is masked by those live edits, and deleting an entry on a dirty tree is the mirror of Design anti-pattern 4. `config/corpus-baseline.json`: 37 entries added (22/10/4/1 by those codes), every one carrying `since: "2026-08-25"` and a `reason` pointing at its dated `§ <code> (2026-08-25)` diagnosis block in `note` — verified programmatically, 37/37. 3 entries deleted: `task:0127`, `task:0128` (F91 anchor-qualification pass) and — repaired **this run** — `task:0434` `L4.stale-line-anchor`. F93-owned codes untouched: `git diff -U0 -- config/corpus-baseline.json` shows 0 added/removed entries in `L4.scenario-unverified` / `L4.evidence-not-recoverable` / `L4.verifying-incomplete-tasks`. F93 residue reported, not absorbed: **41 `L4.scenario-unverified`** findings remain unlisted (was 58 at refine time, 53 pre-fix). Whole-sweep green is explicitly joint — `corpus-check` still exits 1 on those 41 F93 findings. |
-| R4 | MET | command `bun run apps/cli/src/index.ts task check --corpus --json` (~90 s wall clock), artifacts `.spur/run/0670-verify-sweep2.json` / `.spur/run/0670-verify-sweep3.json` (18:30 / 18:31, identical). **Post-reconciliation corpus totals:** observed 4854; baseline size **1963**; new findings **41**; stale entries **0**; duplicate keys 0; by severity error 2351 observed / 787 baselined / 0 new / 0 stale, warning 2503 observed / 1176 baselined / 41 new / 0 stale. **Per-code new:** `L4.scenario-unverified` 41 (F93-owned), all other codes 0. Pre-fix run for contrast (`.spur/run/0670-verify-sweep.json`, 17:50): baseline 1964, new 55, stale 1. Contaminated later runs (`.spur/run/0670-verify-sweep4.json` / `5`, 18:36 / 18:38, identical to each other — the sweep is deterministic on a fixed tree): observed 4854, baseline 1963, new 42, stale 1, the delta being the concurrent task-kanban edits described in R3. |
+| R3 | MET | command `bun run apps/cli/src/index.ts task check --corpus --json` (post-fix, run twice at 18:30 and 18:31, byte-identical results): **0 new findings and 0 stale entries in 0670's four owned codes** (`L4.anchor-subject-mismatch`, `L4.stale-line-anchor`, `L3.unchecked-checklist`, `L3.ac-empty`) — artifacts `.spur/run/0670-verify-sweep2.json`, `.spur/run/0670-verify-sweep3.json`. Later runs at 18:36 / 18:38 show 1 new (`task:0663`) + 1 stale (`task:0664`) in `L4.anchor-subject-mismatch`; both are contamination from a **concurrent writer** editing `apps/web/src/modules/task-kanban/**` in this shared tree during the audit (mtimes `TasksShell.tsx` 18:34, `KanbanBoard.tsx` 18:35, `useTasks.ts` 18:38), not from 0670. Proven at HEAD: `git show HEAD:apps/web/src/modules/task-kanban/TasksShell.tsx \| sed -n '33p'` → `export default function TasksShell() {`, which names 0663's subject `tasksshell`, so that finding does not exist on a clean checkout. The `task:0664` entry was correctly left in place rather than deleted — its non-reproduction was masked by those live edits, and deleting an entry on a dirty tree is the mirror of Design anti-pattern 4. Confirmed transient, then settled on a clean checkout: 0670's baseline and ADR changes are committed at `aa6a8d54`, and the sweep re-run against that clean tree (`.spur/run/0670-verify-sweep-clean.json`) reports **0 new findings and 0 stale entries in the four owned codes, and 0 findings of any code on task 0670 itself** — the exit condition R3 states, measured the way R3 requires. `config/corpus-baseline.json`: 37 entries added (22/10/4/1 by those codes), every one carrying `since: "2026-08-25"` and a `reason` pointing at its dated `§ <code> (2026-08-25)` diagnosis block in `note` — verified programmatically, 37/37. 3 entries deleted: `task:0127`, `task:0128` (F91 anchor-qualification pass) and — repaired **this run** — `task:0434` `L4.stale-line-anchor`. F93-owned codes untouched: `git diff -U0 -- config/corpus-baseline.json` shows 0 added/removed entries in `L4.scenario-unverified` / `L4.evidence-not-recoverable` / `L4.verifying-incomplete-tasks`. F93 residue reported, not absorbed: **41 `L4.scenario-unverified`** findings remain unlisted (was 58 at refine time, 53 pre-fix). Whole-sweep green is explicitly joint — `corpus-check` still exits 1 on those 41 F93 findings. |
+| R4 | MET | command `bun run apps/cli/src/index.ts task check --corpus --json` (~90 s wall clock), artifacts `.spur/run/0670-verify-sweep2.json` / `.spur/run/0670-verify-sweep3.json` (18:30 / 18:31, identical). **Post-reconciliation corpus totals:** observed 4854; baseline size **1963**; new findings **41**; stale entries **0**; duplicate keys 0; by severity error 2351 observed / 787 baselined / 0 new / 0 stale, warning 2503 observed / 1176 baselined / 41 new / 0 stale. **Per-code new:** `L4.scenario-unverified` 41 (F93-owned), all other codes 0. Pre-fix run for contrast (`.spur/run/0670-verify-sweep.json`, 17:50): baseline 1964, new 55, stale 1. Contaminated intermediate runs (`.spur/run/0670-verify-sweep4.json` / `5`, 18:36 / 18:38, identical to each other — the sweep is deterministic on a fixed tree): observed 4854, baseline 1963, new 42, stale 1, the delta being the concurrent task-kanban edits described in R3. **Authoritative clean-checkout run** (`.spur/run/0670-verify-sweep-clean.json`, taken after 0670's baseline + ADR landed as commit `aa6a8d54`, leaving only this task file pending): observed 4854; baseline 1963; new 41; stale 0; duplicate keys 0; per-code new = `L4.scenario-unverified` 41 (F93-owned), every other code 0. Sweep exit code 1, entirely on the F93 residue. |
 | R5 | MET | test `bun test packages/app/tests/services/corpus-check.test.ts` → **37 pass, 0 fail, 96 expect() calls**. Both two-sided tests kept green and unrewritten: `packages/app/tests/services/corpus-check.test.ts:188` (`test('returns new findings and stale baseline entries as failures')`) and `packages/app/tests/services/corpus-check.test.ts:232` (`test('a baselined warning that stops reproducing fails as stale')`). command `git diff --stat -- packages/app/tests/services/corpus-check.test.ts packages/app/src/services/corpus-check.ts` → empty; no reconciliation helper was made durable (the one-off scripts stayed gitignored under `.spur/run/`), so no new helper test was owed. |
 | R1 — Accepted debt does not block the per-task gate | MET | Feature F61 ship scenario (`docs/features/F61_corpus-citation-repair-pay-down-the-anchor-drift-the-content-gate-revealed.md:52`). The 2026-08-25 anchor-citation debt is accepted as a dated legacy set in `config/corpus-baseline.json`, so the per-task gate clears: command `bun run apps/cli/src/index.ts task check 0670 --strict-core` → `0670 (done): PASS`; the corpus sweep reports 0 new and 0 stale findings in the four owned codes. |
 | R2 — The gate is closed for new work | MET | Feature F61 ship scenario (`docs/features/F61_corpus-citation-repair-pay-down-the-anchor-drift-the-content-gate-revealed.md:58`). Accepting the legacy set did not open the gate: test `bun test packages/app/tests/services/corpus-check.test.ts` → 37 pass / 0 fail, with `packages/app/tests/services/corpus-check.test.ts:188` proving a newly introduced unlisted finding still fails the sweep and `packages/app/tests/services/corpus-check.test.ts:232` proving a baselined entry that stops reproducing still fails as stale. Demonstrated live this run: the `task:0434` entry failed the sweep the moment its finding stopped reproducing. |
@@ -440,7 +443,7 @@ not touched — the 53 remaining `L4.scenario-unverified` findings are reported 
 |---------------------|--------|---------------|----------|
 | R1 — The anchor-citation class gets a recorded, evidence-bearing decision | MET | command | Executable contract assertion over the ADR-083 body at `docs/00_ADR.md:1270`, exit `0`, all 7 clauses ok: `dated 2026-08-25` / `outcome = dated legacy set` / `cites probe 1` / `cites probe 2` / `cites probe 3` / `rules out matcher change` (matches "not an outcome of this ADR") / `F61 scope cited` (matches "F61 AC R2") → `ADR-083 contract: PASS` |
 | R2 — Matcher evidence is routed, not applied | MET | command | `docs/00_ADR.md:1319` records the probe-2 (42→10) and probe-1 results as an F91 proposal with reproduction commands; `git diff -- packages/app/src/services/task-check.ts \| wc -l` → `0` |
-| R3 — This task's share of the delta is fully reconciled | MET | command | sweeps at 18:30 / 18:31 (`.spur/run/0670-verify-sweep2.json`, `3`): 0 unlisted and 0 stale in the four owned codes; 37/37 added entries carry diagnosis + reason + `since: "2026-08-25"`; `git diff -U0` on the baseline shows no add/remove in any F93-owned code. Runs after 18:34 flap by 1 new / 1 stale solely from a concurrent writer's task-kanban edits (see R3 evidence) |
+| R3 — This task's share of the delta is fully reconciled | MET | command | clean-checkout sweep (`.spur/run/0670-verify-sweep-clean.json`, after 0670's baseline + ADR landed as `aa6a8d54`): 0 unlisted and 0 stale in the four owned codes, 0 findings of any code on task 0670; 37/37 added entries carry diagnosis + reason + `since: "2026-08-25"`; `git diff -U0` on the baseline showed no add/remove in any F93-owned code |
 | R3 — Whole-sweep green is claimed jointly, not unilaterally | MET | command | sweep exit code `1` with exactly 41 `L4.scenario-unverified` findings, all F93-owned; the task's Root Cause / Solution state the exit condition per-code and name 0673/F93 as the remaining dependency |
 | R4 — The re-measurement reports totals, not just the class under change | MET | command | observed 4854, baseline 1963, new 41, stale 0, per-code breakdown and per-severity split, produced by `bun run apps/cli/src/index.ts task check --corpus --json` |
 | R5 — Two-sidedness survives the reconciliation | MET | test | `bun test packages/app/tests/services/corpus-check.test.ts` → 37 pass / 0 fail; `:188` proves a new unlisted finding fails, `:232` proves a baselined warning that stops reproducing fails as stale; file diff empty (kept green, not re-authored) |
@@ -449,47 +452,50 @@ not touched — the 53 remaining `L4.scenario-unverified` findings are reported 
 | R3 — A reconciliation helper cannot become a suppression tool (@edge) | MET | test | No durable helper was added (`git status` shows no new `scripts/commands/**`; reconciliation ran from gitignored `.spur/run/reconcile-0670.ts` + `.spur/run/reconcile-0670-apply.ts`). The property is enforced structurally by `reconcileBaseline`'s two-sidedness and proven by `packages/app/tests/services/corpus-check.test.ts:232`: an entry for a finding that does not currently reproduce is reported as stale, so it cannot suppress anything. Demonstrated live this run — the `task:0434` entry read stale the moment its finding stopped reproducing. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Functional traceability (R1–R5): all MET.** Re-audited 2026-08-25 (`/sp:dev-verify 0670 --force
+--focus all --fix all`); verdict artifact `.spur/run/0670-verdict.json`, verdict **PASS**.
 
-**Functional traceability (R1–R5): all MET.**
-
-- R1 — `docs/00_ADR.md` ADR-083 records the outcome "freeze a dated legacy set", cites probe 1,
+- R1 — `docs/00_ADR.md:1270` ADR-083 records the outcome "freeze a dated legacy set", cites probe 1,
   probe 2, and probe 3, and explicitly does not select a matcher change (F61 Scope; F61 AC R2).
-- R2 — The probe-1 and probe-2 measurements plus reproduction commands are recorded in ADR-083 as a
-  routed proposal against feature F91; `git diff` confirms `packages/app/src/services/task-check.ts`
-  is unchanged.
+  Asserted executably over the ADR body: 7/7 clauses (`dated 2026-08-25`, outcome, probes 1/2/3,
+  "not an outcome of this ADR", "F61 AC R2"), exit 0.
+- R2 — The probe-1 and probe-2 measurements plus reproduction commands are recorded at
+  `docs/00_ADR.md:1319` as a routed proposal against feature F91;
+  `git diff -- packages/app/src/services/task-check.ts | wc -l` → `0`.
 - R3 — 37 baseline entries added (22 `L4.anchor-subject-mismatch`, 10 `L4.stale-line-anchor`,
-  4 `L3.unchecked-checklist`, 1 `L3.ac-empty`), all with per-code diagnosis in `note`, a reason
-  referencing it, and `since: "2026-08-25"`; the 2 stale `task:0127` / `task:0128`
-  `L4.stale-line-anchor` entries deleted. `git diff` shows 0 references to F93-owned codes.
-- R4 — Pre (1929 entries, 132 new, 2 stale) and post (1964 entries, 54 new, 1 stale) totals recorded
-  with the exact command (`bun run apps/cli/src/index.ts task check --corpus --json`).
-- R5 — `packages/app/tests/services/corpus-check.test.ts` passes 37/37 unchanged (two-sidedness
-  tests at :188 and :232 kept green, not re-authored).
+  4 `L3.unchecked-checklist`, 1 `L3.ac-empty`), all 37 with per-code diagnosis in `note`, a reason
+  referencing it, and `since: "2026-08-25"`; 3 stale entries deleted (`task:0127`, `task:0128`,
+  and `task:0434` — see the P2 finding below). `git diff -U0` on the baseline shows 0 entries
+  added or removed in any F93-owned code.
+- R4 — Pre (1929 entries, 132 new, 2 stale) and post (**1963** entries, **41** new, **0** stale,
+  observed 4854, 0 duplicate keys) totals recorded with the exact command
+  (`bun run apps/cli/src/index.ts task check --corpus --json`).
+- R5 — `packages/app/tests/services/corpus-check.test.ts` passes **37/37** unchanged
+  (two-sidedness tests at :188 and :232 kept green, not re-authored); no durable reconciliation
+  helper was added, so no new helper test was owed.
 
 **SECUA.** No security exposure (policy file + docs only; no secrets, no exec, no new source).
-Efficiency: reconciliation driven by exported seams via a one-off script in `.spur/run/` (gitignored,
-not a new command surface). Correctness: all 37 added entries reproduce (verified by re-sweep); no
-severity lowering; no `--strict` exclusions; the single residual stale entry (`task:0434`) is
-pre-existing (2026-08-17) and attributable to other tasks' uncommitted anchor repairs in the working
-tree, reported rather than absorbed. Usability: ADR-083 documents the decision and follow-through.
-Architecture: baseline stays a two-sided policy file; ownership boundaries (0670 / F93 / F91)
-respected; none of the 8 Design anti-patterns implemented.
+Efficiency: reconciliation driven by the exported `collectObservedFindings` / `reconcileBaseline`
+seams via one-off scripts in `.spur/run/` (gitignored, not a new command surface). Correctness: all
+37 added entries reproduce; no severity lowering; no `--strict` exclusions; no wholesale
+regeneration. Usability: ADR-083 documents the decision and the F91 follow-through. Architecture:
+the baseline stays a two-sided policy file; the 0670 / F93 / F91 ownership boundaries are
+respected; none of the 8 Design anti-patterns were implemented.
 
-**Residual risk / disposition.** Approve. The remaining sweep failure (53 `L4.scenario-unverified`
-F93 residue, 1 `feature:A5` dogfood warning, 1 `task:0434` stale from other tasks' uncommitted
-repairs) is out of 0670's scope and correctly reported as a joint outcome; whole-sweep green depends
-on F93 and on committing the other tasks' working-tree edits.
-
-**Priority findings (P1-P4).**
+**Priority findings (P1–P4).**
 
 | Priority | Severity | Location | Finding | Disposition |
 | --- | --- | --- | --- | --- |
-| P3 | Advisory | config/corpus-baseline.json task:0434 entry | Pre-existing stale-line-anchor entry reads stale on this working tree because other tasks uncommitted edits repaired its cited anchors; removal here would break a clean checkout. | Reported as joint-outcome residue; owned by whichever commit lands those repairs. |
-| P4 | Advisory | feature F93 handoff | 53 scenario-unverified findings remain unlisted after 0673 closed - the F93 gap this task must not absorb. | Surfaced per R3; recommended re-open as a new F93 task. |
-| P4 | Advisory | docs/00_ADR.md ADR-083 | Matcher evidence routed to F91 is a proposal only; F91 must decide before any window change. | Recorded; follow-through is F91 own task. |
+| P2 | Major | `config/corpus-baseline.json` `task:0434` `L4.stale-line-anchor` | This task's own ADR-083 append grew `docs/00_ADR.md` from 1268 to 1342 lines, bringing task 0434's out-of-range anchors at lines 1273 and 1285 of `docs/00_ADR.md` into range. The finding stopped reproducing, so the entry read stale and the sweep failed on 0670's own change — a T10 same-commit fallout that the first pass missed and then misattributed to "other tasks' uncommitted anchor repairs". Every other file 0434 cites is in range at both `HEAD` and the working tree, so ADR-083 is the sole cause. | **Fixed** in the 2026-08-25 re-audit: entry deleted; the sweep then reported 0 stale entries. |
+| P2 | Major | working tree (environmental — not in 0670's diff) | A concurrent writer edited `apps/web/src/modules/task-kanban/**` during the re-audit (`TasksShell.tsx` 18:34, `KanbanBoard.tsx` 18:35, `useTasks.ts` 18:38), flipping tasks 0663/0664 in and out of `L4.anchor-subject-mismatch` between sweeps. The sweep is deterministic on a fixed tree (two consecutive runs byte-identical); the corpus is not, while two writers share one checkout — the "one writer per working tree" hazard in `AGENTS.md`, which this task's own Design § WHERE anticipated. Verified at `HEAD`: line 33 of `apps/web/src/modules/task-kanban/TasksShell.tsx` reads `export default function TasksShell() {`, which names 0663's subject, so that finding does not exist on a clean checkout. | **Resolved without action** — the `task:0664` entry was correctly left alone rather than deleted on a contaminated tree (the mirror of Design anti-pattern 4). Once 0670's baseline and ADR landed as commit `aa6a8d54`, the clean-checkout sweep returned 0 new and 0 stale in the four owned codes and 0 findings on task 0670. The standing lesson holds: trust owned-code counts only from a clean checkout. |
+| P3 | Minor | prior `## Testing` section (superseded) | The first pass's traceability and AC tables used feature F61's scenario titles as the requirement rows, covering 2 of the task's 5 requirements, and its totals (baseline 1964, new 54, stale 1) were pre-fix. The one-off reconciliation scripts were also unnamed, contrary to Design § HOW and the gitignored-fix-pass disclosure rule. | **Fixed**: re-authored against R1–R5 plus both F61 ship scenarios, with re-measured totals and the script paths cited. |
+| P4 | Advisory | `docs/00_ADR.md:1319` | Matcher evidence routed to F91 is a proposal only; F91 must decide the cited-window question before any change. | Recorded; follow-through is F91's own task. |
+| P4 | Advisory | feature F93 handoff | 41 `L4.scenario-unverified` findings remain unlisted after 0673 closed — the F93 gap this task must not absorb. | Surfaced per R3; recommend re-opening as a new F93 task (owner: operator). |
 
-No P1 or P2 findings. Residual sweep failure is fully attributed to out-of-scope owners (joint outcome).
-
+**Residual risk / disposition.** Approve. No P1 findings; both P2s are dispositioned (one fixed, one
+environmental and deliberately not fixed). The remaining sweep failure (41 `L4.scenario-unverified`
+F93 residue) is out of 0670's scope and correctly reported as a joint outcome; whole-sweep green
+depends on F93 landing and on this checkout being clean of other writers' in-flight edits.
 ### References
 
 - Sibling task that owned the F93 half of the delta: `docs/tasks4/0673_measured-corpus-sweep-report-recovery-unblock-features-and-r.md` (`done` 2026-08-25T22:37Z, F93 — closed with 58 of its 93 findings still unlisted).
