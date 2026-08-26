@@ -13,6 +13,7 @@ tags: ["history", "analytics", "correctness", "telemetry"]
 ## 0677. Enforce analyze invariants: ordered phase intervals and absent-not-zero telemetry
 
 ### Background
+
 Two analyze-side defects make the forensics artifact quietly untrustworthy, and both reports named them.
 
 **Reversed phase intervals.** Of 4,545 rendered phase records, **1,185 have `endedAt` earlier than `startedAt`**, 1,732 are zero-length, and only 1,628 are positively ordered. Every reversed sample carries `source: "todo"` — for example index 3, `startedAt 2025-11-16T04:06:03.855Z` against `endedAt 2025-11-16T04:03:59.672Z`. `render-forensics.ts:166` computes `Date.parse(endedAt) - Date.parse(startedAt)` with no ordering guard, so those rows enter elapsed-duration analysis as negative durations.
@@ -27,13 +28,16 @@ endedAt:   ended.get(content)   ?? lastCallTs,
 `lastCallTs` is the **session's last** todo-call timestamp. So a todo item that reaches `completed` without ever having been observed `in_progress` gets `startedAt = lastCallTs` (late) and `endedAt = its own completion timestamp` (early) — a guaranteed reversal whenever the item completed before the session ended. That single fallback explains the 1,185 reversed rows, and the symmetric case (an item never `in_progress` and never `completed`, so both fields collapse to `lastCallTs`) explains the 1,732 zero-length ones. The sampled ~2-minute reversal at index 3 is consistent with exactly this.
 
 **Unmeasured telemetry rendered as zero.** The artifact warns that 44.2 billion ms "could not be attributed to llm/tool/idle because some durations were unmeasured", and the support matrix shows why: duration is recorded for 127,634 of 458,360 assistant steps, with AGY, Claude, Codex and Gemini at zero. Because absent reads as zero, the unattributed and idle buckets look like actionable findings when they are instrumentation gaps — both reports had to spend a paragraph each warning readers not to act on them.
+
 ### Requirements
+
 - [x] R1. Add an ordering invariant to phase derivation: a phase whose `endedAt` precedes its `startedAt` must not enter elapsed-duration analysis as a positive interval, and must be recorded as invalid rather than silently emitted.
 - [x] R2. Investigate and record the derivation cause for the `source: "todo"` reversal before choosing between rejecting and marking — trace the boundary assignment for the cited sample indices (3, 10, 13, 14, 16) rather than guarding the symptom at the renderer.
 - [x] R3. Keep unmeasured duration and unmeasured provider usage as null through the artifact and the renderer; never coerce absent to zero.
 - [x] R4. Render an absent value as "not available" in the forensics output, distinct from a measured zero.
 - [x] R5. Keep the `stepSupport` matrix as the authoritative statement of what is measured, and make the unattributed-time warning reference it so a reader can tell an instrumentation gap from a workload category.
 - [x] R6. Do not fabricate values for sources that expose nothing — this task makes absence legible; the adapter mapping work is a separate task.
+
 ### Acceptance Criteria
 
 ```gherkin
@@ -59,6 +63,7 @@ Scenario: R10 — Unmeasured telemetry is null, never zero
      is not ready to hand off. Keep empty if none. -->
 
 ### Design
+
 **Fix the fabricated fallback, not the renderer.** Adding `Math.max(0, …)` at `render-forensics.ts:166` would hide 1,185 broken rows rather than fix them, and every other consumer of `derived.phases` would still see the reversal. The defect is that `extractPhases` invents a boundary it does not have.
 
 **The change is small and precise.** In `packages/domain/src/analytics/derived.ts:265-273`, stop substituting `lastCallTs` for a boundary that was never observed:
@@ -84,7 +89,9 @@ Widen `Phase.startedAt` / `Phase.endedAt` to `string | null` accordingly. A phas
 **Handoff to 0678 and 0679.** Both declare this task as a dependency because they need the absent-not-zero contract in place first: 0678's audit measures coverage against a truthful baseline, and 0679 applies the same discipline to pairing rows.
 
 **Reversibility.** Both changes are additive guards over nullable fields; reverting restores the current (wrong) output with no data rewrite.
+
 ### Plan
+
 1. Add a failing test that reproduces the reversal from todo-call fixtures: one item completed without ever being `in_progress`, in a session whose last call is later than that completion.
 2. Change `extractPhases` (`packages/domain/src/analytics/derived.ts:265-273`) to stop substituting `lastCallTs` for unobserved boundaries; widen `Phase.startedAt` / `Phase.endedAt` to `string | null`.
 3. Add the explicit invalid marker for any phase whose two observed boundaries are still out of order, and exclude marked phases from elapsed-duration analysis.
@@ -95,7 +102,9 @@ Widen `Phase.startedAt` / `Phase.endedAt` to `string | null` accordingly. A phas
 8. Tests: reversed-boundary input produces no positive interval; a null duration renders `not available` while a measured zero renders `0`; the warning names the support matrix.
 9. Regenerate an artifact over the current corpus and assert the reversed-interval count is zero (or fully marked); record the before/after counts in the Solution section.
 10. Run `bun run lint`, `bun run test`.
+
 ### Solution
+
 Fix the fabricated fallback at the derivation, not the renderer.
 
 | Change | Why |
@@ -106,13 +115,15 @@ Fix the fabricated fallback at the derivation, not the renderer.
 | render-forensics naOrValue + phase/warning rendering | R4 absent renders `not available`, distinct from measured zero; R5 the unattributed warning and table row now point at stepSupport |
 
 Corpus verification (R2 plan step 9, 2025-11 window): old code emitted 11 reversed intervals of 36 phases in this window; new code emits **0 reversed positives**, 23 phases carry an honest null boundary, invalidPhaseCount = 0. No residual out-of-order source records — the lastCallTs fallback was the whole cause. Digest impact expected: phase-shape change flows through the existing `data-changed` cache signal.
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | extractPhases excludes both-boundaries-observed-but-reversed phases and counts them in PhaseResult.invalidPhaseCount (packages/domain/src/analytics/derived.ts extractPhases); unit test pins exclusion + count |
 | R2 | MET | Cause documented in Solution: lastCallTs substitution produced late start / early end; fixture reproduces; fix at extraction |
 | R3 | MET | TimeDecomposition.llmMs/toolMs are number |
@@ -124,8 +135,11 @@ Corpus verification (R2 plan step 9, 2025-11 window): old code emitted 11 revers
 |---------------------|--------|---------------|----------|
 | R9 — A derived phase whose end precedes its start is rejected or explicitly marked | MET | test | out-of-order unit test (excluded + counted); corpus verification: 0 reversed positives in the 2025-11 window where old code had 11 |
 | R10 — Unmeasured telemetry is null, never zero | MET | test | all-NULL duration fixture yields llmMs/toolMs null; renderer emits not available distinct from 0ms |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
+
 **Functional traceability** — all six requirements MET. R1: out-of-order observed boundaries are excluded from `phases` and counted in `invalidPhaseCount` — they can never enter elapsed-duration analysis as positive intervals. R2: derivation traced per the cited sample shape, cause confirmed as the `lastCallTs` substitution (fixture test reproduces the reversal class), fix landed at extraction not rendering. R3/R4: null threaded through TimeDecomposition components; renderer shows `not available` for absent vs measured zero (`0ms`). R5: warning text and the Unattributed table row now cite stepSupport. R6: nothing fabricated for telemetry-less sources; adapter mapping left to 0678.
 
 | Priority | Finding | Disposition |
@@ -134,11 +148,13 @@ Corpus verification (R2 plan step 9, 2025-11 window): old code emitted 11 revers
 | P4 | Corpus spot-check window Nov 2025: 23/36 phases honest-null, 13 fully-measured, 0 reversed | Recorded as evidence in Solution; full-corpus sweep runs with next daily report |
 
 SECUA — fail-open nowhere: reversed phases excluded + counted, never silently dropped. Correctness: fixture tests pin all boundary states (null-start, null-both, out-of-order counted). Architecture: derivation owns honesty; renderer only formats.
+
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-08-26T15:57:48.438Z todo → wip (system)
 - 2026-08-26T16:02:26.668Z wip → testing (system)
 - 2026-08-26T16:02:35.143Z testing → done (system)

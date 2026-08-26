@@ -22,12 +22,14 @@ Measured on the current corpus: duration is recorded for 127,634 of 458,360 assi
 The consequence is that any cross-source ranking silently favors instrumented sources, which is why both reports had to declare relative performance "not available".
 
 ### Requirements
+
 - [x] R1. Audit each source adapter against its raw record shape and record, per source and per field (duration, input/output tokens, cache read/write, cost), whether the raw record carries the signal.
 - [x] R2. Map every field the audit proves is present and currently unmapped, so `stepsWithDuration` and `stepsWithUsage` rise for those sources.
 - [x] R3. Investigate the Codex asymmetry specifically: source-total tokens exist while step-level usage is zero — determine whether the aggregate is derived from a record the step-level path skips.
 - [x] R4. Document each source that genuinely exposes nothing as unsupported for that field, so its absence is a recorded fact rather than an open question.
 - [x] R5. Fabricate nothing. Where a source emits no timing, the honest outcome remains absent — do not synthesize duration from adjacent timestamps unless the audit shows that is the source's own semantics, and say so explicitly if it is.
 - [x] R6. Record the before/after `stepSupport` matrix over the same corpus as evidence.
+
 ### Acceptance Criteria
 
 ```gherkin
@@ -46,6 +48,7 @@ Scenario: R11 — Duration and step usage are mapped wherever the raw record car
      is not ready to hand off. Keep empty if none. -->
 
 ### Design
+
 **Audit before mapping — a hard gate, not a formality.** The reports establish *that* coverage is uneven, not *why* per source. Writing adapter code before knowing which fields exist in each raw shape risks either fabricating values or missing them. R1 gates R2. The audit output is a per-source, per-field table that goes into the Solution section and stays as the standing answer to "why is source X still absent?".
 
 **Where the change lands.** `~/xprojects/ts-libs/packages/llm-jsonl-importer` — the source definitions in `src/sources.ts` and the record mappers in `src/mappers.ts`. Published, then `bun update` in the dependent Spur workspaces. Land 0675 first if both are in flight, so re-import wall-clock measurements are not confounded.
@@ -61,6 +64,7 @@ Scenario: R11 — Duration and step usage are mapped wherever the raw record car
 **Depends on 0677** so the audit measures against a truthful baseline.
 
 **Reversibility.** Per-source mappings revert independently.
+
 ### Plan
 
 1. For each of the nine sources, sample raw records and record which of duration, input/output tokens, cache read/write, and cost are present in the raw shape.
@@ -73,6 +77,7 @@ Scenario: R11 — Duration and step usage are mapped wherever the raw record car
 8. Run `bun run lint`, `bun run test`, `bun run build`.
 
 ### Solution
+
 Audit-then-map on real raw records; adapters changed only where the shape proves signal exists.
 
 **Audit table (R1/R4), per source × field, from actual raw records on this machine:**
@@ -90,13 +95,15 @@ R3 finding: confirmed (ts-libs mappers.ts carrier emit at src/mappers.ts:748; im
 **R6 before/after (same corpus, fresh DB):** codex assistant-with-usage **0 of 53,406 → 36,608 of 53,497**; all other sources' matrices unchanged from baseline (omp 96,913, opencode 11,034, pi 97,235 usage-mapped; gemini 1,383; grok tool-timing 15,163). Unattributable codex token_count rows without a known preceding assistant stay unattached — never fabricated.
 
 Integration hardening (packages/domain/src/migrations.ts:709 registers guarded 0024/0025): the earlier drizzle 0675 file collided with the already-registered `0023` id and silently never applied; identity-column SELECT/upserts also fail open on pre-migration databases.
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | per-source × field audit table in Solution, built from real raw records (codex rollout files, gemini brain transcripts, antigravity brain logs, grok session updates, pi/claude session lines) |
 | R2 | MET | codex token_count→assistant attribution (ts-libs mappers.ts carrier + importer.ts:384); grok apiDurationMs mapped; unit tests pin both contracts |
 | R3 | MET | confirmed aggregate derives from token_count events the step-level path dropped onto meta rows; attribution now targets the assistant row that produced each turn |
@@ -107,8 +114,11 @@ Integration hardening (packages/domain/src/migrations.ts:709 registers guarded 0
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | R11 — Duration and step usage are mapped wherever the raw record carries them | MET | test | codex attribution unit test; corpus measurement showing codex assistant-with-usage 0→36,608; silent-empty class ended by documented-unsupported audit rows |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
+
 **Functional traceability** — all six requirements MET. R1: audit table (Solution) built from real raw records probed per source on this machine, not from code assumptions. R2: codex usage mapped (carrier + import-time attribution), grok apiDurationMs mapped; unit tests pin both. R3: Codex asymmetry root-caused — token_count event_msg rows carried the numbers on meta rows that stepSupport never counts. R4: claude/pi(duration), gemini(duration), agy both fields documented unsupported after verified absence in raw shapes — recorded facts, not open questions. R5: nothing synthesized; turn-level signals map to their own rows only; codex attribution drops rather than guesses when no assistant target exists. R6: before/after matrix recorded (codex 0 → 36,608 of 53,497).
 
 | Priority | Finding | Disposition |
@@ -117,11 +127,13 @@ Integration hardening (packages/domain/src/migrations.ts:709 registers guarded 0
 | P3 | The 0675 drizzle migration never applied (id collision with registered 0023); fixed as guarded CLI_MIGRATIONS entries 0024/0025 with fresh-db and journaled-skip semantics | Fixed in-task with regression tests |
 
 SECUA — fail-open guards never fabricate: degraded databases lose identity/usage features rather than guessing values. Correctness: mapper fidelity test updated to the new contract; importer tests cover attribution, skip, unattributable-drop. Architecture: telemetry ownership stays in ts-libs adapters (AGENTS.md dependency rule).
+
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-08-26T16:59:12.033Z todo → wip (system)
 - 2026-08-26T17:08:24.471Z wip → testing (system)
 - 2026-08-26T17:08:39.828Z testing → done (system)

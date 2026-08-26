@@ -21,6 +21,7 @@ Root cause is `@gobing-ai/ts-llm-jsonl-importer` `src/importer.ts:157-163`: for 
 The fix is a file-level short-circuit: record enough of the file's identity alongside the checkpoint to prove it has not changed, and skip the read entirely when it has not. This is the operator's issue 1.1. Note that SQL indexing (issue 1.3) is explicitly *not* part of it — E9 already landed `drizzle/0020` and `0022`, `idx_history_message_ts` exists, and a bounded analyze is already 2.0 s.
 
 ### Requirements
+
 - [x] R1. Record file identity (size and modification time at minimum) in `history_import_checkpoint` alongside `last_imported_line`, via an additive schema change in the importer's schema SQL plus a Spur migration at `max(prefix)+1`.
 - [x] R2. In incremental mode, skip reading a file entirely when its recorded identity is unchanged — no `readLines` call, no per-line work.
 - [x] R3. A file whose size or modification time differs from its checkpoint entry is still read from its checkpoint line onward, and every record after that line is imported exactly once.
@@ -28,6 +29,7 @@ The fix is a file-level short-circuit: record enough of the file's identity alon
 - [x] R5. Replace the per-file `readCheckpoint` `SELECT` with a bounded number of queries per source, independent of file count.
 - [x] R6. Full mode (`--mode full`) and `force-file` keep their current read-everything semantics — the short-circuit is incremental-only.
 - [x] R7. Record the before/after wall-clock for a no-op import as evidence, using the source-local binary and its printed provenance header per the monorepo contract.
+
 ### Acceptance Criteria
 
 ```gherkin
@@ -66,6 +68,7 @@ Scenario: R19 — A file rewritten in place within one modification-time tick is
      is not ready to hand off. Keep empty if none. -->
 
 ### Design
+
 **Where the change lands.** `~/xprojects/ts-libs/packages/llm-jsonl-importer` (published as `@gobing-ai/ts-llm-jsonl-importer`, currently `0.4.42`), not a Spur workaround — AGENTS.md is explicit that ts-libs facades are the place to fix importer behavior. Spur's part is the migration for the additive columns and the dependency bump.
 
 **The port already carries what is needed.** Refinement confirmed `FileStat` in `@gobing-ai/ts-runtime` (`src/file-system.ts:2-7`) is `{ isFile(); isDirectory(); size: number; mtimeMs: number }`, and the Node backend populates both from `statSync` (`src/file-system-node.ts:102-115`). `FileSystem.stat` is already non-optional on the interface (`:59`). **No port change is required** — the earlier assumption that the port might need extending is wrong.
@@ -85,7 +88,9 @@ Scenario: R19 — A file rewritten in place within one modification-time tick is
 **Handoff to 0678.** That task touches the same adapters in the same package; if both are in flight, land this one first so 0678's re-import measurements are not confounded by import wall-clock changes.
 
 **Reversibility.** Ignoring the two columns restores current behavior; no data rewrite.
+
 ### Plan
+
 1. Reproduce and record the baseline: two back-to-back no-op imports with the source-local binary (`bun run apps/cli/src/index.ts history import --json`), capturing wall-clock, per-source file counts, and the printed provenance header per the monorepo real-data contract.
 2. In `~/xprojects/ts-libs/packages/llm-jsonl-importer`, add `source_size INTEGER` and `source_mtime_ms REAL` to the `history_import_checkpoint` DDL in `src/schema-sql.ts`, and thread both through the checkpoint read/upsert paths in `src/jsonl-importer-dao.ts` (`readCheckpoint` :134, the upsert :155, `checkpointUpsertOp` :244, and the realpath-normalization collapse :411-449).
 3. Add a per-source batched checkpoint loader returning `Map<sourceFile, {line, size, mtimeMs}>`; replace the per-file `readCheckpoint` call at `src/importer.ts:158`.
@@ -96,7 +101,9 @@ Scenario: R19 — A file rewritten in place within one modification-time tick is
 8. Add `drizzle/0023_spur_cli_history_checkpoint_identity.sql` with the two `ALTER TABLE … ADD COLUMN` statements and the `_spur_cli_` marker; run `spur self migrate` against a copy of the real database.
 9. Re-measure the no-op import and record the before/after delta in the Solution section.
 10. Run `bun run lint`, `bun run test`, `bun run build`.
+
 ### Solution
+
 Importer change landed on a ts-libs feature branch (`feat/history-checkpoint-identity`, commit 0708922); Spur lands only the additive migration. Publishing remains operator-gated.
 
 | Change | Why |
@@ -108,14 +115,16 @@ Importer change landed on a ts-libs feature branch (`feat/history-checkpoint-ide
 | drizzle/0023_spur_cli_history_checkpoint_identity.sql — two ADD COLUMNs + `_spur_cli_` marker | existing Spur DBs get the same shape as fresh DDL |
 
 R7 evidence (source-local binary, provenance header printed): before = published importer 0.4.42 no-op incremental all-sources **31.2 s** (every file streamed line-by-line from byte 0); after = linked branch, no-op incremental source pi **5.6 s** vs full-mode re-parse of the same corpus **33.6 s** — the no-op completes in ~1/6 of the full-read wall-clock (AC bar: <1/5). After one self-heal pass, all 17,788 checkpoint rows carry identity and subsequent runs report zero new messages across every source without reading any history content (only per-file stats). Wall-clock on this box is noisy (live-growing corpus, shared load); the structural claim is exact: unchanged files are never opened for reading.
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | nullable source_size/source_mtime_ms in ts-libs schema-sql.ts DDL + drizzle/0023_spur_cli_history_checkpoint_identity.sql with _spur_cli_ marker |
+| ------------- | -------- | ---------- |
+| R1 | MET | nullable source_size/source_mtime_ms in ts-libs schema-sql.ts DDL + drizzle/0023_spur_cli_history_checkpoint_identity.sql with *spur_cli* marker |
 | R2 | MET | importer.ts short-circuit continues before readLines when stored identity matches stat(); skippedUnchangedFiles counter; unit test: second incremental run skips unchanged file |
 | R3 | MET | changed size/mtime falls through to checkpoint-line read; unit test: appended file read from checkpoint line onward, exactly-once via ledger |
 | R4 | MET | predicate requires BOTH size and mtimeMs to match — mtime-alone skip impossible by construction; residual risk named in Design with --mode full escape hatch |
@@ -124,13 +133,16 @@ R7 evidence (source-local binary, provenance header printed): before = published
 | R7 | MET | Solution records before/after wall-clock with provenance header from source-local binary (bun apps/cli/src/index.ts, importer 0.4.42 baseline vs linked branch) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
+| --------------------- | -------- | --------------- | ---------- |
 | R6 — A no-op incremental import skips unchanged files without reading them | MET | command | no-op run after self-heal reports zero new messages across all sources; single-source no-op 5.6s vs full re-parse 33.6s (~1/6, under the 1/5 AC bar) |
 | R7 — A source file that changed since its checkpoint is still imported | MET | test | appended-file unit test: read from checkpoint line onward, each record exactly once |
 | R8 — Checkpoint lookups do not cost one query per file | MET | test | loadSourceCheckpoints loads all rows for one source in a single query (dao test) |
 | R19 — A file rewritten in place within one modification-time tick is not skipped | MET | test | predicate demands size AND mtimeMs match; same-size-same-tick rewrite is named residual risk with documented mitigation (--mode full), not silently dropped |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
+
 **Functional traceability** — all seven requirements MET. R1 identity columns in both fresh DDL and migration 0023; R2/R3 short-circuit skips whole files only when stored `(size, mtimeMs)` match stat(), failing open; changed files read from checkpoint line with exactly-once ledger protection (unit-tested); R4 mtime-alone skip rejected by construction — the predicate requires BOTH fields to match, and the residual in-place-rewrite-same-size risk is named in Design with `--mode full` as escape hatch; R5 batched per-source checkpoint load replaces the per-file SELECT; R6 short-circuit gated on `mode === 'incremental'` with full/force-file reading everything (tested); R7 before/after wall-clock recorded in Solution with provenance header from the source-local binary.
 
 | Priority | Finding | Disposition |
@@ -139,11 +151,13 @@ R7 evidence (source-local binary, provenance header printed): before = published
 | P3 | No-op wall-clock on a live corpus is noisy (active sessions keep appending); the honest comparison is single-source no-op vs full re-parse (~1/6) plus the structural guarantee that unchanged files are never opened | Accept — recorded as such in Solution |
 
 SECUA — fail-open short-circuit can never drop data (worst case: extra read). Correctness: unit tests cover unchanged/changed-size/full-mode/null-identity paths plus the loader shape. Architecture: fix lives in the ts-libs facade per AGENTS.md dependency rule, not a Spur workaround.
+
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-08-26T07:14:18.488Z todo → wip (system)
 - 2026-08-26T07:20:45.249Z wip → testing (system)
 - 2026-08-26T07:20:46.621Z testing → done (system)

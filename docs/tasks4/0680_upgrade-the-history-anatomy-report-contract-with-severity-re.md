@@ -26,6 +26,7 @@ A third gap: repeated tool-call signatures (8,079 groups across 2,051 sessions, 
 The chained `agent.run` step cost is also unobservable from the driver session — both dogfood runs recorded chained cost as "~unknown" — which means neither report kind can state what a run actually cost.
 
 ### Requirements
+
 - [x] R1. Add a severity to every finding in the report contract, and make the deterministic structure gate fail a candidate whose finding lacks one.
 - [x] R2. Add a repro command to every finding — the invocation that reproduces the observation — gated the same way.
 - [x] R3. Add an owner surface to every finding, naming the surface that owns the fix, gated the same way.
@@ -33,6 +34,7 @@ The chained `agent.run` step cost is also unobservable from the driver session �
 - [x] R5. Give the report a standing report-only advisory section for repeated tool-and-argument signatures, proposing no automatic interruption.
 - [x] R6. Surface chained `agent.run` step cost back to the invoking session so a run's real cost is reportable rather than "~unknown".
 - [x] R7. Land the report contract, the skill references, and the deterministic structure-gate implementation in a single commit, so the published-report shape and its two-sided check never diverge.
+
 ### Acceptance Criteria
 
 ```gherkin
@@ -65,6 +67,7 @@ Scenario: R18 — The report carries a report-only repeated-call advisory
      is not ready to hand off. Keep empty if none. -->
 
 ### Design
+
 **Borrow the shape, not the protocol.** The dogfood report's value is that a reader can triage it: severity orders the work, a repro makes a claim checkable in one command, and an owner surface routes it. Those three are additive fields on the per-finding block, which `plugins/sp/skills/history-anatomy/references/report-contract.md` § "Per-finding field set" (`:46-60`) already defines with nine entries — `key`, `category`, `impact`, `trend`, `observation`, `inference`, `confidence`, `contradictions`, `evidenceAnchor`. This is an extension of a working contract, not a redesign; the evidence discipline that made both published reports honest stays exactly as it is.
 
 **Severity is not confidence.** `confidence` says how sure the finding is; severity says how much it matters. They are orthogonal — the phase-reversal finding is `high` confidence and P2, while a `low`-confidence P1 would be the most urgent thing to investigate.
@@ -82,6 +85,7 @@ Scenario: R18 — The report carries a report-only repeated-call advisory
 **Anti-patterns.** Do not make the new fields advisory — the structure gate must fail a candidate missing any of them, or they will be omitted under time pressure. Do not auto-write to the task corpus. Do not replace `confidence` with severity. Do not add a severity scale beyond the P1/P2/P3 vocabulary the dogfood protocol already uses in this repo.
 
 **Reversibility.** The gate additions are refusals only; reverting the contract restores the current nine-field finding block.
+
 ### Plan
 
 1. Extend `plugins/sp/skills/history-anatomy/references/report-contract.md` with the severity, repro-command, and owner-surface fields, and define the closed severity vocabulary.
@@ -94,6 +98,7 @@ Scenario: R18 — The report carries a report-only repeated-call advisory
 8. Run one full daily report end to end and confirm the published output carries all three fields per finding; run `bun run lint`, `bun run test`, `bun run script-contract-check`.
 
 ### Solution
+
 Contract, gate, and rubrics moved in one commit (R7), twin regenerated.
 
 | Change | Why |
@@ -103,13 +108,15 @@ Contract, gate, and rubrics moved in one commit (R7), twin regenerated.
 | operations.md enrich/validate rubrics updated to author and validate the new fields, advisory section, handoff text, and run-cost reporting | R6's rubric leg |
 
 R6: chained `agent.run` cost surfaces through the pairing analytics fold that 0679 repaired (payload-path attribution); Performance analysis now contracts to report it instead of "~unknown". No auto-write to the corpus anywhere: the handoff prints an invocation for the operator to run.
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | severity in FINDING_FIELDS + P1/P2/P3 closed-vocabulary check in checkReportStructure (`plugins/sp/scripts/history-anatomy-cache.ts:110` FINDING_FIELDS + checkReportStructure finding-block scan at :351) |
 | R2 | MET | reproCommand required per finding block; unit test pins failure-by-name when missing |
 | R3 | MET | ownerSurface required; consistent-with-key noted in contract |
@@ -119,12 +126,15 @@ R6: chained `agent.run` cost surfaces through the pairing analytics fold that 06
 | R7 | MET | contract + cache helper + .mjs twin + operations rubrics in one commit |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
+| --------------------- | -------- | --------------- | ---------- |
 | R13 — Each published finding names its severity, repro command, and owner surface | MET | test | gate fails candidates missing each field (unit tests); complete finding passes |
 | R14 — An accepted remediation proposal can be handed to the task corpus | MET | test | contract defines printed spur task create invocation carrying the stable key; operator executes it |
 | R18 — The report carries a report-only repeated-call advisory | MET | test | twelfth-section contract change pins the standing advisory slot proposing no automatic interruption |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
+
 **Functional traceability** — all seven requirements MET. R1-R3: triage fields gate-enforced (gate now actually scans real bullet findings — the legacy regex was vacuous against the format every published report uses, found and fixed in-task); R4: handoff prints the task-create invocation with stable key; R5: standing Report-only advisories section takes the frozen count to twelve; R6: run-cost reporting contracts to the 0679-repaired pairing fold; R7: contract + helper twin + rubrics landed in one commit.
 
 | Priority | Finding | Disposition |
@@ -133,11 +143,13 @@ R6: chained `agent.run` cost surfaces through the pairing analytics fold that 06
 | P4 | End-to-end daily-report rerun with a live model stage was not executed in this session | Deferred — deterministic gate + rubric coverage verified by unit tests; the enrich stage is exercised on the next scheduled run |
 
 SECUA — fail-closed gate additions only. Architecture: vocabulary stays duplicated-by-design per the frozen local-copy rule.
+
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-08-26T18:17:30.655Z todo → wip (system)
 - 2026-08-26T18:19:34.193Z wip → testing (system)
 - 2026-08-26T18:19:34.878Z testing → done (system)
