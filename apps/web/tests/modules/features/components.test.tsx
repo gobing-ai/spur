@@ -802,7 +802,38 @@ describe('FeatureDetail', () => {
         const closeBtn = getByLabelText('Close metadata');
         fireEvent.click(closeBtn);
         expect(toggle.getAttribute('aria-expanded')).toBe('false');
-        expect(container.querySelectorAll('#feature-metadata-panel button')).toHaveLength(0);
+    });
+
+    test('metadata panel portals into a provided dock as a right-anchored floating mirror (no overlap)', async () => {
+        installFeatureFetchMock();
+        const { getByTestId, getByLabelText, rerender, container } = render(<FeatureDetail featureId="F" />);
+        await waitFor(() => expect(getByTestId('status-pill').textContent).toBe('active'));
+
+        // Dock the panel into an element standing in for the shell's body area.
+        const dock = document.createElement('div');
+        container.appendChild(dock);
+        rerender(<FeatureDetail featureId="F" metadataDockRef={{ current: dock }} />);
+
+        // Portaled into the dock (mirror of the tree dock), not the component root.
+        const panel = getByTestId('feature-metadata-panel');
+        expect(panel.parentElement).toBe(dock);
+        // Mirror classes: right-anchored outside the body (100% + 12px gap), no overlap.
+        expect(panel.className).toContain('left-[calc(100%_+_12px)]');
+        expect(panel.className).toContain('w-72');
+        expect(panel.className).not.toContain('inset-y-0 right-0');
+
+        // Folded by default in mirror mode too: hidden + no focusable rows.
+        expect(panel.hasAttribute('hidden')).toBe(true);
+        expect(panel.querySelectorAll('button')).toHaveLength(0);
+
+        // Open lifts the hidden attribute and renders metadata.
+        fireEvent.click(getByTestId('metadata-toggle'));
+        expect(panel.hasAttribute('hidden')).toBe(false);
+        expect(getByTestId('metadata-status').textContent).toBe('active');
+
+        // Close via the panel's close icon returns it to hidden.
+        fireEvent.click(getByLabelText('Close metadata'));
+        expect(panel.hasAttribute('hidden')).toBe(true);
     });
 
     test('0644 R2 (P3): Escape with a confirmation modal open leaves the metadata drawer open', async () => {

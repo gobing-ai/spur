@@ -36,7 +36,9 @@ function FilterIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
  * ID-derived tree (status badges + filter menu, FeatureTree) as a floating
  * overlay in the work area below the module header — anchored to the left margin
  * with its right edge clear of the body (no overlap), so the body keeps the full
- * header width. SSE subscription to `feature.*` events keeps the tree + selected
+ * header width. The detail's metadata panel is its floating mirror on the RIGHT
+ * margin (no overlap either), portaled into the same body area via
+ * `bodyAreaRef`. SSE subscription to `feature.*` events keeps the tree + selected
  * detail live without refresh.
  */
 export default function FeaturesShell() {
@@ -50,6 +52,8 @@ export default function FeaturesShell() {
     /** Bumped to make the detail panel re-fetch the already-selected feature. */
     const [detailRefreshKey, setDetailRefreshKey] = useState(0);
     const filterMenuRef = useRef<HTMLDivElement | null>(null);
+    /** Body area container — the metadata panel portals here as the tree's mirror. */
+    const bodyAreaRef = useRef<HTMLDivElement | null>(null);
 
     /**
      * ID-prefix children of every feature, derived once from the UNFILTERED list so
@@ -287,8 +291,11 @@ export default function FeaturesShell() {
                         </div>
                     </header>
 
-                    {/* Body area — relative so the floating tree aligns to the body panel (below the header). The body keeps the full header width. The tree floats in the left margin, its right edge clear of the body (no overlap). */}
-                    <div className="relative flex-1 min-h-0">
+                    {/* Body area — relative so the floating tree + metadata mirror align to
+                        the body panel (below the header). The body keeps the full header
+                        width. The tree floats in the left margin (right edge clear, no
+                        overlap); the metadata panel mirrors it in the right margin. */}
+                    <div className="relative flex-1 min-h-0" ref={bodyAreaRef}>
                         <div
                             id="feature-tree-dock"
                             hidden={!isTreeOpen}
@@ -327,6 +334,7 @@ export default function FeaturesShell() {
                                         onClose={() => setSelectedId(null)}
                                         childFeatures={selectedChildren}
                                         onSelectFeature={setSelectedId}
+                                        metadataDockRef={bodyAreaRef}
                                     />
                                 ) : (
                                     <div className="flex items-center justify-center h-full text-sm text-spur-text-muted italic">

@@ -1,5 +1,6 @@
 import { taskStatusIcon } from '@gobing-ai/spur-domain/schema';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Badge, Button, Checkbox, Loading, MDEditor, Select } from '@/ui';
 import {
     createChildFeature,
@@ -44,6 +45,13 @@ interface FeatureDetailProps {
     childFeatures?: FeatureSummary[];
     /** Shell selection callback; production passes setSelectedId. */
     onSelectFeature?: (id: string) => void;
+    /**
+     * Optional dock container for the metadata panel. When provided, the panel is
+     * portaled into it as the floating mirror of the feature tree — anchored to the
+     * RIGHT edge of the body with no overlap. Omit to render as the legacy in-pane
+     * right drawer (standalone/tests).
+     */
+    metadataDockRef?: RefObject<HTMLDivElement | null>;
 }
 
 type BodyMode = 'preview' | 'edit';
@@ -61,6 +69,7 @@ export default function FeatureDetail({
     refreshKey = 0,
     childFeatures = [],
     onSelectFeature,
+    metadataDockRef,
 }: FeatureDetailProps) {
     const [data, setData] = useState<FeatureShowData | null>(null);
     const [serverBody, setServerBody] = useState('');
@@ -484,6 +493,147 @@ export default function FeatureDetail({
     const secondaryActions = statusActions.filter((a) => tierOf(a) === 'secondary');
     const hazardActions = statusActions.filter((a) => tierOf(a) === 'hazard');
 
+    /**
+     * Metadata panel — floating mirror of the feature tree when the shell provides a
+     * dock ref: portaled into the shell's body area and anchored to the RIGHT edge of
+     * the body with no overlap (same 12px gap, w-72/lg:w-80, rounded dock styling as
+     * the tree). Without a dock ref it renders as the legacy in-pane right drawer.
+     */
+    const isMetadataMirror = Boolean(metadataDockRef?.current);
+    const metadataPanel = (
+        <aside
+            id="feature-metadata-panel"
+            data-testid="feature-metadata-panel"
+            aria-label="Feature metadata"
+            aria-hidden={!showMetadata}
+            hidden={isMetadataMirror && !showMetadata}
+            className={`flex flex-col overflow-hidden bg-base-200 shadow-xl ${
+                isMetadataMirror
+                    ? 'absolute top-0 bottom-0 left-[calc(100%_+_12px)] z-20 w-72 lg:w-80 rounded-lg border border-spur-border'
+                    : `absolute inset-y-0 right-0 z-30 w-80 max-w-full border-l border-spur-border transition-transform duration-200 ${
+                          showMetadata ? 'translate-x-0' : 'translate-x-full'
+                      }`
+            }`}
+        >
+            {showMetadata && (
+                <>
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-spur-border bg-base-300/60 shrink-0">
+                        <span className="text-xs font-semibold text-spur-text flex items-center gap-1.5">
+                            <span>ℹ</span> Metadata
+                        </span>
+                        <Button
+                            variant="ghost"
+                            size="xs"
+                            className="text-spur-text-muted hover:text-spur-accent h-5 w-5 p-0 text-xs flex items-center justify-center"
+                            onClick={() => setShowMetadata(false)}
+                            aria-label="Close metadata"
+                            title="Close metadata"
+                        >
+                            &#x2715;
+                        </Button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                        <div>
+                            <span className="text-xs text-spur-text-muted block mb-1.5">Status</span>
+                            <span className="text-sm text-spur-text" data-testid="metadata-status">
+                                {data.status}
+                            </span>
+                        </div>
+                        {(created || updated) && (
+                            <div className="space-y-1.5">
+                                <span className="text-xs text-spur-text-muted block">Dates</span>
+                                {created && (
+                                    <div className="flex items-center gap-1.5 text-xs">
+                                        <span className="text-spur-text-muted w-14 shrink-0">Created</span>
+                                        <span className="text-spur-text">{created}</span>
+                                        <span className="text-spur-text-muted">({createdRel})</span>
+                                    </div>
+                                )}
+                                {updated && (
+                                    <div className="flex items-center gap-1.5 text-xs">
+                                        <span className="text-spur-text-muted w-14 shrink-0">Updated</span>
+                                        <span className="text-spur-text">{updated}</span>
+                                        <span className="text-spur-text-muted">({updatedRel})</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {tags.length > 0 && (
+                            <div>
+                                <span className="text-xs text-spur-text-muted block mb-1.5">Tags</span>
+                                <div className="flex flex-wrap gap-1">
+                                    {tags.map((t) => (
+                                        <Badge key={t} variant="outline" size="xs" className="text-spur-text-muted">
+                                            {t}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        <div className="flex items-center gap-1.5 text-xs">
+                            <span className="text-spur-text-muted w-14 shrink-0">File</span>
+                            <span className="text-spur-text font-mono truncate">{data.filePath}</span>
+                        </div>
+                        {childFeatures.length > 0 && (
+                            <div>
+                                <span className="text-xs text-spur-text-muted block mb-1.5">
+                                    Child features ({childFeatures.length})
+                                </span>
+                                <div className="space-y-1">
+                                    {childFeatures.map((child) => (
+                                        <button
+                                            key={child.id}
+                                            type="button"
+                                            onClick={() => onSelectFeature?.(child.id)}
+                                            className="flex items-center gap-2 w-full text-xs text-left hover:underline cursor-pointer"
+                                            aria-label={`Open child feature ${child.id}: ${child.name}`}
+                                        >
+                                            <span className="shrink-0 text-[13px]" title={child.status}>
+                                                <FeatureStatusIcon status={child.status} />
+                                            </span>
+                                            <span className="font-mono text-spur-accent shrink-0">{child.id}</span>
+                                            <span className="text-spur-text truncate flex-1 min-w-0">{child.name}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        <div>
+                            <span className="text-xs text-spur-text-muted block mb-1.5">
+                                Linked Tasks ({linkedTasks.length})
+                            </span>
+                            {linkedTasks.length === 0 ? (
+                                <span className="text-xs text-spur-text-muted italic">No linked tasks</span>
+                            ) : (
+                                <div className="space-y-1">
+                                    {linkedTasks.map((t: TaskSummary) => (
+                                        <div key={t.wbs} className="flex items-center gap-2 w-full text-xs">
+                                            <span className="shrink-0 text-[13px]" title={t.status}>
+                                                {taskStatusIcon(t.status)}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => navigateToTask(t.wbs)}
+                                                className="flex items-center gap-2 flex-1 min-w-0 text-left hover:underline cursor-pointer"
+                                                aria-label={`Go to task ${t.wbs}: ${t.name}`}
+                                            >
+                                                <span className="font-mono text-spur-accent shrink-0">{t.wbs}</span>
+                                                <span className="text-spur-text truncate">{t.name}</span>
+                                            </button>
+                                            <span className="px-1.5 py-0.5 rounded-full border border-spur-border text-[10px] text-spur-text-muted shrink-0">
+                                                {t.status}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </>
+            )}
+        </aside>
+    );
+
     return (
         <div className="relative flex flex-col h-full">
             {/* Header — title, status pill, and action buttons */}
@@ -849,145 +999,7 @@ export default function FeatureDetail({
                 onDismiss={() => setIsProgressDismissed(true)}
                 onReopen={() => setIsProgressDismissed(false)}
             />
-            {/* Metadata drawer — in-pane right panel, folded by default (R4) */}
-            <aside
-                id="feature-metadata-panel"
-                data-testid="feature-metadata-panel"
-                aria-label="Feature metadata"
-                aria-hidden={!showMetadata}
-                className={`absolute inset-y-0 right-0 z-30 w-80 max-w-full flex flex-col overflow-hidden border-l border-spur-border bg-base-200 shadow-xl transition-transform duration-200 ${
-                    showMetadata ? 'translate-x-0' : 'translate-x-full'
-                }`}
-            >
-                {showMetadata && (
-                    <>
-                        <div className="flex items-center justify-between px-3 py-2 border-b border-spur-border bg-base-300/60 shrink-0">
-                            <span className="text-xs font-semibold text-spur-text flex items-center gap-1.5">
-                                <span>ℹ</span> Metadata
-                            </span>
-                            <Button
-                                variant="ghost"
-                                size="xs"
-                                className="text-spur-text-muted hover:text-spur-accent h-5 w-5 p-0 text-xs flex items-center justify-center"
-                                onClick={() => setShowMetadata(false)}
-                                aria-label="Close metadata"
-                                title="Close metadata"
-                            >
-                                &#x2715;
-                            </Button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                            {/* Status */}
-                            <div>
-                                <span className="text-xs text-spur-text-muted block mb-1.5">Status</span>
-                                <span className="text-sm text-spur-text" data-testid="metadata-status">
-                                    {data.status}
-                                </span>
-                            </div>
-                            {/* Dates */}
-                            {(created || updated) && (
-                                <div className="space-y-1.5">
-                                    <span className="text-xs text-spur-text-muted block">Dates</span>
-                                    {created && (
-                                        <div className="flex items-center gap-1.5 text-xs">
-                                            <span className="text-spur-text-muted w-14 shrink-0">Created</span>
-                                            <span className="text-spur-text">{created}</span>
-                                            <span className="text-spur-text-muted">({createdRel})</span>
-                                        </div>
-                                    )}
-                                    {updated && (
-                                        <div className="flex items-center gap-1.5 text-xs">
-                                            <span className="text-spur-text-muted w-14 shrink-0">Updated</span>
-                                            <span className="text-spur-text">{updated}</span>
-                                            <span className="text-spur-text-muted">({updatedRel})</span>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            {/* Tags */}
-                            {tags.length > 0 && (
-                                <div>
-                                    <span className="text-xs text-spur-text-muted block mb-1.5">Tags</span>
-                                    <div className="flex flex-wrap gap-1">
-                                        {tags.map((t) => (
-                                            <Badge key={t} variant="outline" size="xs" className="text-spur-text-muted">
-                                                {t}
-                                            </Badge>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                            {/* File path */}
-                            <div className="flex items-center gap-1.5 text-xs">
-                                <span className="text-spur-text-muted w-14 shrink-0">File</span>
-                                <span className="text-spur-text font-mono truncate">{data.filePath}</span>
-                            </div>
-
-                            {/* Child features (task 0525) — direct children of the selected feature,
-                            derived client-side from the shell's unfiltered list. Rows navigate
-                            via the shell-owned selection callback. */}
-                            {childFeatures.length > 0 && (
-                                <div>
-                                    <span className="text-xs text-spur-text-muted block mb-1.5">
-                                        Child features ({childFeatures.length})
-                                    </span>
-                                    <div className="space-y-1">
-                                        {childFeatures.map((child) => (
-                                            <button
-                                                key={child.id}
-                                                type="button"
-                                                onClick={() => onSelectFeature?.(child.id)}
-                                                className="flex items-center gap-2 w-full text-xs text-left hover:underline cursor-pointer"
-                                                aria-label={`Open child feature ${child.id}: ${child.name}`}
-                                            >
-                                                <span className="shrink-0 text-[13px]" title={child.status}>
-                                                    <FeatureStatusIcon status={child.status} />
-                                                </span>
-                                                <span className="font-mono text-spur-accent shrink-0">{child.id}</span>
-                                                <span className="text-spur-text truncate flex-1 min-w-0">
-                                                    {child.name}
-                                                </span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Linked Tasks */}
-                            <div>
-                                <span className="text-xs text-spur-text-muted block mb-1.5">
-                                    Linked Tasks ({linkedTasks.length})
-                                </span>
-                                {linkedTasks.length === 0 ? (
-                                    <span className="text-xs text-spur-text-muted italic">No linked tasks</span>
-                                ) : (
-                                    <div className="space-y-1">
-                                        {linkedTasks.map((t: TaskSummary) => (
-                                            <div key={t.wbs} className="flex items-center gap-2 w-full text-xs">
-                                                <span className="shrink-0 text-[13px]" title={t.status}>
-                                                    {taskStatusIcon(t.status)}
-                                                </span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => navigateToTask(t.wbs)}
-                                                    className="flex items-center gap-2 flex-1 min-w-0 text-left hover:underline cursor-pointer"
-                                                    aria-label={`Go to task ${t.wbs}: ${t.name}`}
-                                                >
-                                                    <span className="font-mono text-spur-accent shrink-0">{t.wbs}</span>
-                                                    <span className="text-spur-text truncate">{t.name}</span>
-                                                </button>
-                                                <span className="px-1.5 py-0.5 rounded-full border border-spur-border text-[10px] text-spur-text-muted shrink-0">
-                                                    {t.status}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </>
-                )}
-            </aside>
+            {metadataDockRef?.current ? createPortal(metadataPanel, metadataDockRef.current) : metadataPanel}
         </div>
     );
 }
