@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.3.62] - 2026-08-25
+
+### Added
+
+- feat(web): History-parity Tasks shell + enriched task cards — header, inline filters, full-bleed, subtask progress, priority accent (0663/0664, F72) (f104bf5c, 16ddc65c, 9fd03699)
+- feat(web): drive tasks shell filters and folder store from the URL; board-owned folder-scoped TaskStore (F72) (3141be80)
+- feat(app): composition-root merged spurConfig threading — CLI root load, server hoist, boundary ownership rule, layering regression tests (A5 0665) (9dc53c85, 7b9222ee, 47c00437, e78ac0aa, cec56345)
+- feat(agent): agent-surface fallback provenance and --json error envelope (A5 0666) (5291d0b7)
+- feat(app): add splitLaunchCommand for multi-token launch strings (b916307b)
+- feat(app): measure durable corpus evidence — report recovery, unblock features, reconcile baseline (0673/F93) (7acfd4ea)
+- feat(f93): durable verification evidence — completion gate reads the tracked task record (ffacf829, 0f7efa81)
+- feat(sp): history-anatomy batch — skill with mode/report contracts, deterministic cache helper, state-machine workflow, truthful coverage rendering (0658–0661, I8) (33c3e951, f996c88f, d9b7cc7c, d5776f13)
+- feat(domain): record true selection population and truthful coverage rendering (0657) (4326c8d4)
+- feat(plugin): add --worktree to /sp:dev-run — single-task worktree lifecycle (f42e38da, 8f70ee6c)
+- feat(cli): resolve bundled: workflow paths against package config root (dcd7b11c)
+
+### Fixed
+
+- fix(app): split multi-token spurBin before every idea-handoff spawn; fail closed on rejected/failed spawns (0667/I2) (713f9cbb)
+- fix(app): keep doctor fallback note out of --json output; harden A5 layering/envelope assertions (A5 0665/0666) (d50e100c)
+- fix(app): harden tracked Testing evidence parsing (0671) (1200d814)
+- fix(app): enforce feature evidence consistency (0672) (3569744f)
+- fix(sp): make the history-anatomy cache branch functional + digest type-safety (0659/0660) (75ce359a, 15123e16)
+- fix(web): Observability scroll layout fixes and Board long-content scrollport containment (fb9f541f, 99d6b3c7, bc6ba67c, f618932e)
+
+### Changed
+
+- chore(corpus): reconcile anchor-citation legacy set into baseline, frozen pending F91 matcher decision (ADR-083, 0670) (aa6a8d54)
+- refactor(domain): own the semantic artifact digest beside its type (0669) (1d12b9ba)
+- refactor(sp): repoint dev-find-issue to history-anatomy, remove dev-history-load (0661) (9187db34)
+- chore(config): upgrade .spur/config.yaml to 1.2 (93d2657d)
+
 ## [0.3.61] - 2026-08-24
 
 ### Added
