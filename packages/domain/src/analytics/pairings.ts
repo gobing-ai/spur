@@ -30,13 +30,18 @@ export interface PairingStat {
     model: string | null;
     /** `agent.invoke.start` rows attributed to this pairing. */
     dispatches: number;
-    /** Share of dispatches whose final dispatch outcome was `done` (0..1). */
+    /** Share of dispatches WITH a joined exit row whose outcome was success (0..1).
+     * R4: the denominator excludes unknown-outcome dispatches, carried in `unknownOutcomes`. */
     successRate: number;
+    /** Dispatches with a non-zero `exitCode` (R3). */
+    failures: number;
+    /** Dispatches with no joined exit row — distinct from failure (R3/R4). */
+    unknownOutcomes: number;
     /** Escalation counts keyed by `agent.invoke.escalated.trigger`; {} when none. */
     escalations: Record<string, number>;
-    /** Folded `history_message.cost_usd` through the run→session mapping. */
+    /** Folded `history_message.cost_usd` through the run→session mapping; 0 = no folded cost (absent-not-zero contract). */
     totalCostUsd: number;
-    /** Mean `agent.invoke.exit.durationMs` across dispatches with a measured duration; 0 when none. */
+    /** Mean measured duration across dispatches with one; 0 = none measured (never a fabricated zero). */
     meanDurationMs: number;
 }
 
@@ -103,6 +108,7 @@ export async function pairingSummary(db: DbAdapter, spec: PairingSummaryOptions 
         } else {
             existing.dispatches += d.dispatches;
             existing.successes += d.successes;
+            existing.failures += d.failures;
             existing.durationTotal += d.durationTotal;
             existing.durationCount += d.durationCount;
         }
@@ -110,13 +116,18 @@ export async function pairingSummary(db: DbAdapter, spec: PairingSummaryOptions 
 
     const byKey = new Map<string, PairingStat>();
     for (const [key, d] of rawByKey) {
+        // 0679 R4: the denominator is dispatches with a KNOWN outcome only; the
+        // unknown count rides alongside so absence stays legible.
+        const known = d.successes + d.failures;
         byKey.set(key, {
             executor: d.executor,
             role: d.role,
             agent: d.agent,
             model: d.model,
             dispatches: d.dispatches,
-            successRate: d.dispatches > 0 ? d.successes / d.dispatches : 0,
+            successRate: known > 0 ? d.successes / known : 0,
+            failures: d.failures,
+            unknownOutcomes: d.dispatches - known,
             escalations: {},
             totalCostUsd: 0,
             meanDurationMs: d.durationCount > 0 ? d.durationTotal / d.durationCount : 0,
@@ -150,6 +161,7 @@ interface DispatchStatRow {
     model: string | null;
     dispatches: number;
     successes: number;
+    failures: number;
     durationTotal: number;
     durationCount: number;
 }
@@ -161,9 +173,14 @@ async function loadDispatchStats(db: DbAdapter, spec: PairingSummaryOptions): Pr
         return await db.queryAll<DispatchStatRow>(
             `WITH dispatch AS (
                  SELECT id, run_id, occurred_at,
-                        json_extract(payload_json, '$.data.executionId') AS execution_id,
+                        -- 0679 R1: the writer emits the execution key at either
+                        -- $.data.executionId or inside its correlation object; COALESCE
+                        -- covers both payload shapes (reader/writer drift guard, R9).
+                        COALESCE(json_extract(payload_json, '$.data.executionId'),
+                                 json_extract(payload_json, '$.data.correlation.executionId')) AS execution_id,
                         json_extract(payload_json, '$.data.agent') AS agent,
-                        json_extract(payload_json, '$.data.model') AS model,
+                        COALESCE(json_extract(payload_json, '$.data.model'),
+                                 json_extract(payload_json, '$.data.routing.model')) AS model,
                         json_extract(payload_json, '$.data.routing.executor') AS executor,
                         json_extract(payload_json, '$.data.routing.role') AS role
                  FROM system_events
@@ -175,14 +192,18 @@ async function loadDispatchStats(db: DbAdapter, spec: PairingSummaryOptions): Pr
              ),
              exit_rows AS (
                  SELECT id, occurred_at,
-                        json_extract(payload_json, '$.data.executionId') AS execution_id,
-                        json_extract(payload_json, '$.data.outcome') AS outcome,
+                        -- 0679 R1: same dual-path join key on the exit leg.
+                        COALESCE(json_extract(payload_json, '$.data.executionId'),
+                                 json_extract(payload_json, '$.data.correlation.executionId')) AS execution_id,
+                        -- 0679 R2: the writer emits exitCode, never an outcome field.
+                        json_extract(payload_json, '$.data.exitCode') AS exit_code,
                         json_extract(payload_json, '$.data.durationMs') AS duration_ms
                  FROM system_events
                  WHERE event_name = 'agent.invoke.exit'
                    ${where}
                    AND json_valid(payload_json) = 1
-                   AND json_extract(payload_json, '$.data.executionId') IS NOT NULL
+                   AND COALESCE(json_extract(payload_json, '$.data.executionId'),
+                                json_extract(payload_json, '$.data.correlation.executionId')) IS NOT NULL
              ),
              -- One exit per executionId: the latest. An execution emits one exit,
              -- but picking the latest keeps the FINAL dispatch outcome honest if
@@ -198,7 +219,10 @@ async function loadDispatchStats(db: DbAdapter, spec: PairingSummaryOptions): Pr
              )
              SELECT d.executor AS executor, d.role AS role, d.agent AS agent, d.model AS model,
                     COUNT(DISTINCT d.id) AS dispatches,
-                    COALESCE(SUM(CASE WHEN f.outcome = 'done' THEN 1 ELSE 0 END), 0) AS successes,
+                    -- 0679 R2/R3: success = exitCode 0; failure = a non-zero exit; a dispatch
+                    -- with no joined exit stays unknown (never reads as failure).
+                    COALESCE(SUM(CASE WHEN f.exit_code = 0 THEN 1 ELSE 0 END), 0) AS successes,
+                    COALESCE(SUM(CASE WHEN f.exit_code IS NOT NULL AND f.exit_code != 0 THEN 1 ELSE 0 END), 0) AS failures,
                     COALESCE(SUM(f.duration_ms), 0) AS durationTotal,
                     COALESCE(SUM(CASE WHEN f.duration_ms IS NOT NULL THEN 1 ELSE 0 END), 0) AS durationCount
              FROM dispatch d

@@ -1,7 +1,7 @@
 ---
 description: Turn a vague idea into a feature with AC and a decomposed task batch — discovery, idea-eval, feature-create, AC, feature-check, system-design, decompose, batch-create (Design by default), handoff
 role: planner
-argument-hint: "\"<idea>\" [--auto] [--skip-design] [--approve-taste] [--agent <inline|auto|name>]"
+argument-hint: "\"<idea>\" [--auto] [--skip-design] [--approve-taste] [--agent <auto|name>]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -20,7 +20,7 @@ contract below maps to that workflow's transitions.
 | `--approve-taste` | With `--auto`: set idea_approved + design_approved so idea-eval / design-approval do not pause. | off |
 | `--idea-approved` | Compatibility alias for idea_approved=true (subset of --approve-taste). | off |
 | `--design-approved` | Compatibility alias for design_approved=true (subset of --approve-taste). | off |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing ideation. The pipeline's `agent.run` stages are headless — they always dispatch a subprocess, so `--agent inline` is rejected there with the stable special error (exit 2). Use `omit` (resolves to `agent.default`), `auto` (tier-resolves an executor), or a name (pins that executor). | agent.default |
+| `--agent` `<auto\|name>` | Who runs the model-bearing ideation. The pipeline's `agent.run` stages are headless — they always dispatch a subprocess, so `--agent inline` is rejected there with the stable special error (exit 2). Use `omit` (resolves to `agent.default`), `auto` (tier-resolves an executor), or a name (pins that executor). | agent.default |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
@@ -31,7 +31,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
   [--auto]              # skip objective HITL only (feature-check, batch-create)
   [--skip-design]       # design package off (system-design + task Design)
   [--approve-taste]     # with --auto: skip idea-eval + design-approval pauses
-  [--agent <inline|auto|name>]   # who runs the model-bearing ideation (default: agent.default)
+  [--agent <auto|name>]          # who runs the model-bearing ideation (default: agent.default)
 ```
 
 There is **no** `--design` force flag. Design is default-on; only `--skip-design` opts out.

@@ -36,6 +36,9 @@ export interface AgentRoutingAttribution {
     executor: string;
     /** How the executor was selected: role resolution, explicit pin, agent.default, stage, phase, or priority. */
     source: 'role' | 'explicit' | 'default' | 'phase' | 'stage' | 'priority';
+    /** Resolved model override (0679 R7). Absent when the executor pins no model —
+     * recorded absent rather than a placeholder. */
+    model?: string;
 }
 
 /** Emitted after agent/model/invocation resolution and before process dispatch. */

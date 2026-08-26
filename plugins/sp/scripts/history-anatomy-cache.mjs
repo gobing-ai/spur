@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
 // plugins/sp/scripts/history-anatomy-cache.ts
+import { spawnSync } from "node:child_process";
 import { createHash as createHash2 } from "node:crypto";
 import {
   closeSync,
@@ -73,6 +74,7 @@ var ELEVEN_SECTIONS = [
   "Remediation options",
   "Performance analysis",
   "Workflow and process improvements",
+  "Report-only advisories",
   "Positive patterns",
   "Evidence ledger"
 ];
@@ -85,7 +87,10 @@ var FINDING_FIELDS = [
   "inference",
   "confidence",
   "contradictions",
-  "evidenceAnchor"
+  "evidenceAnchor",
+  "severity",
+  "reproCommand",
+  "ownerSurface"
 ];
 function parseScalar(raw) {
   const t = raw.trim();
@@ -270,6 +275,24 @@ function checkReportStructure(reportMarkdown) {
         problems.push(`finding-missing-field:${field}`);
     }
   }
+  const findingsIdx = reportMarkdown.search(/^##\s+Findings\s*$/im);
+  if (findingsIdx !== -1) {
+    const tail = reportMarkdown.slice(findingsIdx);
+    const nextSection = tail.slice(1).search(/^##\s+/im);
+    const findingsBody = nextSection === -1 ? tail : tail.slice(0, nextSection + 1);
+    const blocks = findingsBody.split(/^###\s+/m).slice(1);
+    for (const block of blocks) {
+      if (!block.includes("`key`") && !/\|\s*key\s*:/.test(block))
+        continue;
+      for (const field of FINDING_FIELDS) {
+        if (!block.includes(field))
+          problems.push(`finding-missing-field:${field}`);
+      }
+      if (!/(^|[\s`])P[123]([\s`.]|$)/.test(block) && !block.includes("symbolic-severity")) {
+        problems.push("finding-invalid-severity");
+      }
+    }
+  }
   const ledgerIdx = reportMarkdown.search(/^#{2,3}\s+Evidence\s+ledger/im);
   if (ledgerIdx !== -1) {
     const ledgerSection = reportMarkdown.slice(ledgerIdx);
@@ -319,17 +342,68 @@ function localDay(tz, at = new Date) {
     return at.toISOString().slice(0, 10);
   }
 }
+function tzOffsetMs(tz, at) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).formatToParts(at).filter((p) => p.type !== "literal").map((p) => [p.type, p.value]));
+  const asUtc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), parts.hour === "24" ? 0 : Number(parts.hour), Number(parts.minute), Number(parts.second));
+  const atSec = Math.floor(at.getTime() / 1000) * 1000;
+  return asUtc - atSec;
+}
+function zonedDayStart(tz, ymd) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const utcMidnight = Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1);
+  const guess = new Date(utcMidnight - tzOffsetMs(tz, new Date(utcMidnight)));
+  return new Date(utcMidnight - tzOffsetMs(tz, guess));
+}
+function formatZonedIso(tz, at) {
+  const off = tzOffsetMs(tz, at);
+  const abs = Math.abs(off);
+  const pad = (n) => String(n).padStart(2, "0");
+  const offStr = `${off < 0 ? "-" : "+"}${pad(Math.floor(abs / 3600000))}:${pad(Math.floor(abs % 3600000 / 60000))}`;
+  return `${new Date(at.getTime() + off).toISOString().slice(0, 23)}${offStr}`;
+}
+function dayBounds(tz, ymd) {
+  const start = zonedDayStart(tz, ymd);
+  const nextYmd = localDay(tz, new Date(start.getTime() + 30 * 3600000));
+  return {
+    since: formatZonedIso(tz, start),
+    until: formatZonedIso(tz, new Date(zonedDayStart(tz, nextYmd).getTime() - 1))
+  };
+}
 function resolvePaths(opts) {
   const pluginRoot = opts.helper.replace(/\/scripts\/[^/]+$/, "");
   const skill = `${pluginRoot}/skills/history-anatomy`;
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  const tz = opts.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
   const date = opts.date !== undefined && opts.date !== "" ? opts.date : localDay(tz, opts.now ?? new Date);
   const target = opts.output !== undefined && opts.output !== "" ? opts.output : `${opts.reportDir}/${date}-history-anatomy.md`;
-  return `HA_HELPER=${opts.helper}
+  const adHoc = opts.mode === "ad-hoc" && !!opts.since && !!opts.until;
+  let env = `HA_HELPER=${opts.helper}
 HA_SKILL=${skill}
 HA_TARGET=${target}
 HA_DATE=${date}
 `;
+  if (adHoc) {
+    return `${env}HA_SINCE=${opts.since}
+HA_UNTIL=${opts.until}
+`;
+  }
+  const current = dayBounds(tz, date);
+  const baseline = dayBounds(tz, localDay(tz, new Date(zonedDayStart(tz, date).getTime() - 12 * 3600000)));
+  env += `HA_SINCE=${current.since}
+HA_UNTIL=${current.until}
+`;
+  env += `HA_BASELINE_SINCE=${baseline.since}
+HA_BASELINE_UNTIL=${baseline.until}
+`;
+  return env;
 }
 function buildProvenance(opts) {
   let raw;
@@ -486,7 +560,15 @@ function publishAtomically(candidatePath, targetPath) {
     throw err;
   }
 }
-var VALID_COMMANDS = "digest, check, paths, probe, stamp, refresh, publish";
+function porcelainPaths(text) {
+  return new Set(text.split(`
+`).map((line) => line.replace(/^\S+\s+/, "").trim()).filter((line) => line.length > 0));
+}
+function diffPorcelain(before, now, expects) {
+  const beforePaths = porcelainPaths(before);
+  return [...porcelainPaths(now)].filter((p) => !beforePaths.has(p) && !expects.has(p)).sort();
+}
+var VALID_COMMANDS = "digest, check, paths, assert-clean, probe, stamp, refresh, publish";
 var PROBE_USAGE = "<script> probe --artifact <a.json> --target <report.md> [--baseline <b.json>] [--mode daily|ad-hoc] " + "[--date <YYYY-MM-DD>] [--recompute true] [--out <prov.json>] [--skill-dir <d>] [--contract <f>] [--workflow <f>]";
 function parseFlags(args) {
   const out = {};
@@ -543,13 +625,50 @@ ${result.problems.map((p) => `- ${p}
       publishAtomically(a, b);
       return { exitCode: 0, stdout: "", stderr: "" };
     }
+    case "assert-clean": {
+      const f = parseFlags(argv.slice(1));
+      if (f.baseline === undefined) {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: `usage: <script> assert-clean --baseline <porcelain.txt> [--expect <path>]...
+`
+        };
+      }
+      const expects = new Set;
+      for (const arg of argv.slice(1)) {
+        if (arg.startsWith("--expect="))
+          expects.add(arg.slice("--expect=".length));
+      }
+      let now;
+      try {
+        now = spawnSync("git", ["status", "--porcelain"], {
+          encoding: "utf8",
+          ...f.cwd !== undefined ? { cwd: f.cwd } : {}
+        }).stdout ?? "";
+      } catch {
+        return { exitCode: 0, stdout: "", stderr: `assert-clean: git unavailable; skipped
+` };
+      }
+      const undeclared = diffPorcelain(readFileSync(f.baseline, "utf8"), now, expects);
+      if (undeclared.length > 0) {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: undeclared.map((p) => `undeclared write: ${p}
+`).join("")
+        };
+      }
+      return { exitCode: 0, stdout: `clean
+`, stderr: "" };
+    }
     case "paths": {
       const f = parseFlags(argv.slice(1));
       if (f.helper === undefined || f.out === undefined) {
         return {
           exitCode: 1,
           stdout: "",
-          stderr: `usage: <script> paths --helper <p> --out <env> [--report-dir <d>] [--date <d>] [--output <p>]
+          stderr: `usage: <script> paths --helper <p> --out <env> [--report-dir <d>] [--date <d>] [--output <p>] [--mode <m>] [--since <s>] [--until <u>]
 `
         };
       }
@@ -557,7 +676,10 @@ ${result.problems.map((p) => `- ${p}
         helper: f.helper,
         reportDir: f["report-dir"] ?? "docs/report",
         date: f.date,
-        output: f.output
+        output: f.output,
+        mode: f.mode,
+        since: f.since,
+        until: f.until
       }));
       return { exitCode: 0, stdout: "", stderr: "" };
     }
@@ -659,9 +781,11 @@ export {
   refreshReport,
   publishAtomically,
   probe,
+  porcelainPaths,
   parseProvenance,
   logicDigest,
   importedSnapshotAsOf,
+  diffPorcelain,
   decideCache,
   checkReportStructure,
   buildProvenance,

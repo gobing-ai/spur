@@ -549,6 +549,14 @@ export class WorkflowAppService {
                 return { ok: false, valid: false, file, errors: roleErrors };
             }
 
+            // Undeclared shell-var check (0674 R5): every `$var` a shell action/guard references
+            // must have a declared home in the workflow's vars: block (or be assigned/sourced
+            // locally). Same post-schema enforcement surface as the role check above.
+            const varErrors = collectUndeclaredShellVarViolations(workflow);
+            if (varErrors.length > 0) {
+                return { ok: false, valid: false, file, errors: varErrors };
+            }
+
             // 0614: warn-only composition advisory (shell measure + agent.run
             // prompt size + disposition suppression). Never affects validity.
             const composition = collectCompositionAdvisory(workflow, absolute);
@@ -1322,6 +1330,90 @@ function collectAgentRunRoleViolations(def: WorkflowDef): string[] {
         for (const state of smDef.states ?? []) {
             for (const [i, action] of (state.onEnter ?? []).entries()) visitAction(state.id, action, i);
             for (const [i, action] of (state.onExit ?? []).entries()) visitAction(state.id, action, i);
+        }
+    }
+    return violations;
+}
+
+/**
+ * Post-schema check (0674 R5): a shell action/guard referencing `$var` where `var` is neither
+ * declared in the workflow's `vars:` block nor provided locally fails validation — the
+ * undeclared-`$baselineSince` class of defect cannot silently recur.
+ *
+ * Exemptions (each has one reason):
+ * - UPPER_SNAKE names: environment namespace — ambient (`PATH`, `PWD`) or helper-emitted via a
+ *   sourced `*.env` file (ADR-069 glue convention, e.g. `HA_SINCE`). ponytail ceiling: an
+ *   undeclared UPPER_SNAKE workflow var would slip through; upgrade path is parsing the sourced
+ *   file, not worth it while repo-owned helpers control that namespace.
+ * - dotted braced names (`${vars.x}`): engine templates, interpolated before sh runs.
+ * - escaped `\$name`: literal text passed through to jq/awk, never shell-expanded.
+ * - names bound locally: shell assignment (`x=…`), jq `--arg/--argjson/--slurpfile`, `for x in`,
+ *   `read x`.
+ */
+export function collectUndeclaredShellVarViolations(def: WorkflowDef): string[] {
+    const declared = new Set(Object.keys(def.vars ?? {}));
+    const violations: string[] = [];
+
+    const visitCommand = (location: string, command: string): void => {
+        // Mask single-quoted spans first — sh treats them as literal text (jq/awk program bodies).
+        let masked = '';
+        let open = false;
+        for (const ch of command) {
+            if (ch === "'") open = !open;
+            else if (!open) masked += ch;
+        }
+        const assigned = new Set<string>();
+        for (const m of command.matchAll(/\b(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\S/g)) {
+            assigned.add(m[1] as string);
+        }
+        for (const m of masked.matchAll(/(?:^|\s)(?:--arg|--argjson|--slurpfile)\s+([A-Za-z_][A-Za-z0-9_]*)\b/g)) {
+            assigned.add(m[1] as string);
+        }
+        for (const m of masked.matchAll(/\bfor\s+([A-Za-z_][A-Za-z0-9_]*)\s+in\b/g)) {
+            assigned.add(m[1] as string);
+        }
+        for (const m of masked.matchAll(
+            /\bread\s+(?:-[a-zA-Z]+\s+)*([A-Za-z_][A-Za-z0-9_]*(?:\s+[A-Za-z_][A-Za-z0-9_]*)*)/g,
+        )) {
+            for (const v of ((m[1] as string) ?? '').split(/\s+/)) assigned.add(v);
+        }
+        for (const m of masked.matchAll(/\$(?:\{([^}]*)\}|([A-Za-z_][A-Za-z0-9_]*))/g)) {
+            const raw = (m[1] ?? m[2]) as string;
+            if (raw.includes('.')) continue;
+            if (/^[A-Z][A-Z0-9_]*$/.test(raw)) continue;
+            if ((masked[(m.index ?? 0) - 1] ?? '') === '\\') continue;
+            if (declared.has(raw) || assigned.has(raw)) continue;
+            violations.push(
+                `Shell command at ${location} references $${raw}, which is not declared in the workflow's vars: block (0674 R5) — declare it or provide it locally`,
+            );
+        }
+    };
+
+    if (def.kind === 'transition-flow' || def.kind === undefined) {
+        const flowDef = def as TransitionFlowWorkflowDef;
+        for (const node of flowDef.nodes ?? []) {
+            const cmd = node.action?.kind === 'shell' ? node.action.options?.command : undefined;
+            if (typeof cmd === 'string' && cmd.length > 0) visitCommand(node.id, cmd);
+        }
+        for (const edge of flowDef.edges ?? []) {
+            const cmd = edge.condition?.kind === 'shell' ? edge.condition.options?.command : undefined;
+            if (typeof cmd === 'string' && cmd.length > 0) visitCommand(`${edge.from}→${edge.to}`, cmd);
+        }
+    } else {
+        const smDef = def as StateMachineWorkflowDef;
+        const walkActions = (stateId: string, actions: readonly ActionDef[] | undefined): void => {
+            for (const [i, action] of (actions ?? []).entries()) {
+                const cmd = action.kind === 'shell' ? action.options?.command : undefined;
+                if (typeof cmd === 'string' && cmd.length > 0) visitCommand(`${stateId}/action[${i}]`, cmd);
+            }
+        };
+        for (const state of smDef.states ?? []) {
+            walkActions(state.id, state.onEnter);
+            walkActions(state.id, state.onExit);
+        }
+        for (const trans of smDef.transitions ?? []) {
+            const cmd = trans.guard?.kind === 'shell' ? trans.guard.options?.command : undefined;
+            if (typeof cmd === 'string' && cmd.length > 0) visitCommand(`${trans.from}→${trans.to}`, cmd);
         }
     }
     return violations;

@@ -13,11 +13,17 @@ import type { ArtifactSelector, ArtifactWarning } from './artifact';
 // Result types — the DerivedVariables attached to the artifact
 // ---------------------------------------------------------------------------
 
-/** A single lifecycle phase extracted from todo-tool calls. */
+/** A single lifecycle phase extracted from todo-tool calls.
+ *
+ * A boundary that was never observed in the todo signal is `null` (0677): absent, not
+ * fabricated from an unrelated timestamp. Phases with any null boundary carry no
+ * elapsed duration; phases with both boundaries observed but out of order are
+ * excluded and counted in `PhaseResult.invalidPhaseCount` (0677 R1).
+ */
 export interface Phase {
     name: string;
-    startedAt: string;
-    endedAt: string;
+    startedAt: string | null;
+    endedAt: string | null;
     /** Always `'todo'` for now — todo-tool args are the only phase signal source. */
     source: 'todo';
 }
@@ -27,14 +33,17 @@ export interface PhaseResult {
     /** `'supported'` if any todo-tool calls with args_raw exist; `'unsupported'` otherwise. */
     phaseSupport: 'supported' | 'unsupported';
     phases: Phase[];
+    /** Phases excluded because both observed boundaries are out of order (0677 R1). */
+    invalidPhaseCount: number;
 }
 
 /** Per-session / aggregate time decomposition (ms). */
 export interface TimeDecomposition {
-    /** Sum of assistant `duration_ms`. */
-    llmMs: number;
-    /** Sum of tool `duration_ms`. */
-    toolMs: number;
+    /** Sum of assistant `duration_ms`. Null when no assistant duration was measured (0677 R3) —
+     * absent, never a fabricated zero. */
+    llmMs: number | null;
+    /** Sum of tool `duration_ms`. Same absent-not-zero rule as `llmMs` (0677 R3). */
+    toolMs: number | null;
     /** Wall-clock idle (remainder when all durations measured). */
     idleMs: number;
     /** Remainder when some durations were NULL/unmeasured. */
@@ -142,8 +151,15 @@ export class MetricRegistry {
 /** Factory for the default-empty derived block. */
 export function emptyDerived(): DerivedVariables {
     return {
-        phases: { phaseSupport: 'unsupported', phases: [] },
-        timeDecomposition: { llmMs: 0, toolMs: 0, idleMs: 0, unattributedMs: 0, spanMs: 0, spanExcludedSessions: 0 },
+        phases: { phaseSupport: 'unsupported', phases: [], invalidPhaseCount: 0 },
+        timeDecomposition: {
+            llmMs: null,
+            toolMs: null,
+            idleMs: 0,
+            unattributedMs: 0,
+            spanMs: 0,
+            spanExcludedSessions: 0,
+        },
         bottlenecks: [],
     };
 }
@@ -226,10 +242,16 @@ function itemsFromOps(ops: readonly unknown[]): TodoItem[] {
 /**
  * Extract lifecycle phases from todo-tool calls. Process chronologically per session;
  * for each distinct content string, track the first `in_progress` timestamp (startedAt)
- * and the first `completed` timestamp (endedAt). If never completed, endedAt = the
- * session's last todo-call timestamp.
+ * and the first `completed` timestamp (endedAt). An unobserved boundary is `null` —
+ * the old `lastCallTs` substitution fabricated reversals (0677 R2): an item that
+ * completed without ever being `in_progress` got a LATE start from the session's last
+ * todo-call and an EARLY end from its own completion.
+ *
+ * Returns invalidPhaseCount alongside: a phase whose two OBSERVED boundaries are still
+ * out of order is a genuinely anomalous source record — excluded (never a positive
+ * interval) and counted rather than silently dropped or emitted (0677 R1).
  */
-export function extractPhases(todoCalls: readonly TodoToolCallRow[]): Phase[] {
+export function extractPhases(todoCalls: readonly TodoToolCallRow[]): { phases: Phase[]; invalidPhaseCount: number } {
     // Group by session, already ordered by session_id, ts from the query.
     const sessions = new Map<string, TodoToolCallRow[]>();
     for (const call of todoCalls) {
@@ -242,6 +264,7 @@ export function extractPhases(todoCalls: readonly TodoToolCallRow[]): Phase[] {
     }
 
     const phases: Phase[] = [];
+    let invalidPhaseCount = 0;
 
     for (const [, calls] of sessions) {
         // Track per-content first-seen timestamps.
@@ -262,19 +285,18 @@ export function extractPhases(todoCalls: readonly TodoToolCallRow[]): Phase[] {
             }
         }
 
-        // Fallback: sessions with calls but no in_progress status — use first call ts.
-        const lastCallTs = calls[calls.length - 1]?.ts ?? '';
         for (const content of seen) {
-            phases.push({
-                name: content,
-                startedAt: started.get(content) ?? lastCallTs,
-                endedAt: ended.get(content) ?? lastCallTs,
-                source: 'todo',
-            });
+            const s = started.get(content) ?? null;
+            const e = ended.get(content) ?? null;
+            if (s !== null && e !== null && Date.parse(e) < Date.parse(s)) {
+                invalidPhaseCount += 1;
+                continue;
+            }
+            phases.push({ name: content, startedAt: s, endedAt: e, source: 'todo' });
         }
     }
 
-    return phases;
+    return { phases, invalidPhaseCount };
 }
 
 // ---------------------------------------------------------------------------
@@ -284,13 +306,11 @@ export function extractPhases(todoCalls: readonly TodoToolCallRow[]): Phase[] {
 /** Metric: phase support + phase extraction from todo-tool calls. */
 function phasesMetric(ctx: MetricContext): void {
     if (ctx.todoCalls.length === 0) {
-        ctx.results.phases = { phaseSupport: 'unsupported', phases: [] };
+        ctx.results.phases = { phaseSupport: 'unsupported', phases: [], invalidPhaseCount: 0 };
         return;
     }
-    ctx.results.phases = {
-        phaseSupport: 'supported',
-        phases: extractPhases(ctx.todoCalls),
-    };
+    const { phases, invalidPhaseCount } = extractPhases(ctx.todoCalls);
+    ctx.results.phases = { phaseSupport: 'supported', phases, invalidPhaseCount };
 }
 
 /** Metric: per-session time decomposition, aggregated across sessions. */
@@ -301,8 +321,8 @@ function decompositionMetric(ctx: MetricContext): void {
         toolMap.set(`${row.sessionId}\0${row.source}`, row);
     }
 
-    let llmMs = 0;
-    let toolMs = 0;
+    let llmMs: number | null = null;
+    let toolMs: number | null = null;
     let idleMs = 0;
     let unattributedMs = 0;
     let spanMs = 0;
@@ -312,16 +332,18 @@ function decompositionMetric(ctx: MetricContext): void {
     for (const span of ctx.sessionSpans) {
         const ms = new Date(span.lastTs ?? NaN).getTime() - new Date(span.firstTs ?? NaN).getTime();
 
-        const llm = span.assistantDurationMs ?? 0;
+        const llm = span.assistantDurationMs; // null = no measured assistant duration in this session
         const llmUnmeasured = span.assistantDurationUnmeasured;
         const key = `${span.sessionId}\0${span.source}`;
         const toolRow = toolMap.get(key);
-        const tool = toolRow?.toolDurationMs ?? 0;
+        const tool = toolRow?.toolDurationMs ?? null; // null = no measured tool duration
         const toolUnmeasured = toolRow?.toolDurationUnmeasured ?? 0;
 
         // Measured durations survive a broken span — only the span-derived remainder is dropped.
-        llmMs += llm;
-        toolMs += tool;
+        // Absence stays null (0677 R3): a session whose assistant/tool rows carry no measured
+        // duration contributes absence, never a fabricated zero, to the component sum.
+        if (llm !== null) llmMs = (llmMs ?? 0) + llm;
+        if (tool !== null) toolMs = (toolMs ?? 0) + tool;
 
         // Null bounds (sentinel-only session) or a non-finite/non-positive span (NaN <= 0 is false,
         // so the old guard let it through): exclude from the span math, count it, move on.
@@ -331,7 +353,7 @@ function decompositionMetric(ctx: MetricContext): void {
         }
         spanMs += ms;
 
-        const remainder = Math.max(0, ms - llm - tool);
+        const remainder = Math.max(0, ms - (llm ?? 0) - (tool ?? 0));
         if (llmUnmeasured > 0 || toolUnmeasured > 0) {
             unattributedMs += remainder;
         } else {
@@ -346,8 +368,8 @@ function decompositionMetric(ctx: MetricContext): void {
 function bottlenecksMetric(ctx: MetricContext): void {
     const { llmMs, toolMs, idleMs, unattributedMs, spanMs } = ctx.results.timeDecomposition;
     const entries: Array<{ label: string; ms: number }> = [
-        { label: 'llm', ms: llmMs },
-        { label: 'tool', ms: toolMs },
+        ...(llmMs !== null ? [{ label: 'llm', ms: llmMs }] : []),
+        ...(toolMs !== null ? [{ label: 'tool', ms: toolMs }] : []),
         { label: 'idle', ms: idleMs },
         { label: 'unattributed', ms: unattributedMs },
     ];
@@ -397,12 +419,18 @@ export function computeDerived(
  * Produce warnings for the derived block. Currently only flags unmeasured durations
  * that inflated `unattributedMs` — the signal that the source lacks per-tool timing.
  */
+/**
+ * Produce warnings for the derived block. Currently only flags unmeasured durations
+ * that inflated `unattributedMs` — the signal that the source lacks per-tool timing.
+ * The detail names `stepSupport` (0677 R5): an instrumentation gap must be readable
+ * as one, not as a workload category.
+ */
 export function derivedWarnings(derived: DerivedVariables): ArtifactWarning[] {
     const warnings: ArtifactWarning[] = [];
     if (derived.timeDecomposition.unattributedMs > 0) {
         warnings.push({
             code: 'derived-unattributed-time',
-            detail: `${derived.timeDecomposition.unattributedMs}ms could not be attributed to llm/tool/idle because some durations were unmeasured.`,
+            detail: `${derived.timeDecomposition.unattributedMs}ms could not be attributed to llm/tool/idle because some durations were unmeasured. Check the stepSupport matrix for per-source coverage before treating this as workload.`,
         });
     }
     return warnings;

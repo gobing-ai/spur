@@ -64,13 +64,15 @@ function renderPairingsSection(artifact: HistoryArtifact): string[] {
         const rows = pairings.filter((p) => p.role === role).sort(comparePairings);
         lines.push(`### role: ${role}`, '');
         lines.push(
-            '| executor | agent | model | dispatches | success | escalations | cost | mean dur |',
-            '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |',
+            '| executor | agent | model | dispatches | success | unknown | escalations | cost | mean dur |',
+            '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |',
         );
         for (const p of rows) {
+            // 0679 R4: the unknown count rides beside success so a rate over known
+            // outcomes never masquerades as "all dispatches failed".
             lines.push(
                 `| ${p.executor} | ${p.agent} | ${p.model ?? 'n/a'} | ${p.dispatches} | ${pct(p.successRate)} | ` +
-                    `${fmtEscalations(p)} | ${usd(p.totalCostUsd)} | ${fmtDuration(p.meanDurationMs)} |`,
+                    `${(p.unknownOutcomes ?? 0).toString()} | ${fmtEscalations(p)} | ${usd(p.totalCostUsd)} | ${fmtDuration(p.meanDurationMs)} |`,
             );
         }
         lines.push('');

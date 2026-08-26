@@ -2316,5 +2316,8 @@ function buildRoutingAttribution(result: AgentResolveResult): AgentRoutingAttrib
         tier: tier ?? 'unknown',
         executor: executor ?? result.agent,
         source: result.source,
+        // 0679 R7: resolved model override, so agent.invoke.* payloads stop carrying
+        // a universally-null $.data.model. Absent when nothing resolved one.
+        ...(result.model !== undefined ? { model: result.model } : {}),
     };
 }

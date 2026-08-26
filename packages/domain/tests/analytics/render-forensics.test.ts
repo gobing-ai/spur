@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { HistoryArtifact } from '../../src/analytics/artifact';
 import { HISTORY_ARTIFACT_SCHEMA_VERSION } from '../../src/analytics/artifact';
 import type { DerivedVariables } from '../../src/analytics/derived';
-import { fmtWall, renderForensics } from '../../src/analytics/render-forensics';
+import { fmtWall, naOrValue, renderForensics } from '../../src/analytics/render-forensics';
 
 function emptyTokens() {
     return {
@@ -26,6 +26,7 @@ function derived(): DerivedVariables {
     return {
         phases: {
             phaseSupport: 'supported',
+            invalidPhaseCount: 0,
             phases: [
                 { name: 'recon', startedAt: '2026-08-13T10:00:00Z', endedAt: '2026-08-13T10:02:30Z', source: 'todo' },
                 {
@@ -131,7 +132,9 @@ describe('renderForensics — honest unavailability (R5)', () => {
     });
 
     test('phaseSupport unsupported → its own not-available line', () => {
-        const a = artifact({ derived: { ...derived(), phases: { phaseSupport: 'unsupported', phases: [] } } });
+        const a = artifact({
+            derived: { ...derived(), phases: { phaseSupport: 'unsupported', invalidPhaseCount: 0, phases: [] } },
+        });
         const out = renderForensics(a);
         expect(out).toContain('no todo-tool phase signal');
         expect(out).toContain('## Time Decomposition');
@@ -159,7 +162,9 @@ describe('renderForensics — empty buckets and appendix edges', () => {
 
     test('todo signal present but zero phases → placeholder row, headings intact', () => {
         const out = renderForensics(
-            artifact({ derived: { ...derived(), phases: { phaseSupport: 'supported', phases: [] } } }),
+            artifact({
+                derived: { ...derived(), phases: { phaseSupport: 'supported', invalidPhaseCount: 0, phases: [] } },
+            }),
         );
         expect(out).toContain('| (todo signal present but no phases extracted) |');
     });
@@ -475,5 +480,30 @@ describe('renderForensics — per-step sections (0581)', () => {
         expect(out).toContain('| claude | 4 | no | no | no |');
         expect(out).toContain('(no assistant steps with provider usage in selection)');
         expect(out).toContain('(no assistant steps carry measured duration in selection)');
+    });
+});
+
+describe('0677 absent-not-zero rendering', () => {
+    test('naOrValue: null renders "not available"; a measured zero renders as zero', () => {
+        expect(naOrValue(null, fmtWall)).toBe('not available');
+        expect(naOrValue(0, fmtWall)).toBe(fmtWall(0));
+        expect(naOrValue(0, fmtWall)).toBe('0ms');
+    });
+
+    test('phase with a null boundary renders not available, never a fabricated wall time', () => {
+        const base = derived();
+        base.phases.phases = [
+            { name: 'no-start', startedAt: null, endedAt: '2026-08-13T10:02:30Z', source: 'todo' },
+            {
+                name: 'fully-measured',
+                startedAt: '2026-08-13T10:00:00Z',
+                endedAt: '2026-08-13T10:01:00Z',
+                source: 'todo',
+            },
+        ];
+        const md = renderForensics(artifact({ derived: base }));
+        expect(md).toContain('| no-start | not available | not available |');
+        expect(md).not.toContain('| no-start | not available | 0ms');
+        expect(md).toContain('fully-measured');
     });
 });

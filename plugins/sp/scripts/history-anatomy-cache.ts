@@ -27,6 +27,7 @@
  * `packages/` imports and no `Bun.*` globals, so the committed `.mjs` twin runs under bare `node`.
  */
 
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
     closeSync,
@@ -99,6 +100,9 @@ const ELEVEN_SECTIONS = [
     'Remediation options',
     'Performance analysis',
     'Workflow and process improvements',
+    // 0680 R5: standing report-only advisory slot (repeated tool-and-argument
+    // signatures propose no automatic interruption).
+    'Report-only advisories',
     'Positive patterns',
     'Evidence ledger',
 ];
@@ -113,6 +117,10 @@ const FINDING_FIELDS = [
     'confidence',
     'contradictions',
     'evidenceAnchor',
+    // 0680 R1-R3: triage fields — the gate fails a finding missing any of them.
+    'severity',
+    'reproCommand',
+    'ownerSurface',
 ];
 
 // ── 1. Semantic artifact digest ────────────────────────────────────────────────────────────
@@ -340,6 +348,28 @@ export function checkReportStructure(reportMarkdown: string): { ok: boolean; pro
         }
     }
 
+    // 0680 R1-R3: findings are authored as bullet blocks under `## Findings` (one `### <title>`
+    // block per finding, key-value bullets). Scan each block that carries a stable key and fail
+    // it missing any triage field — including the three new ones. Without this scan a bullet
+    // finding never matches the legacy pipe-row regex and the triage gate was vacuous.
+    const findingsIdx = reportMarkdown.search(/^##\s+Findings\s*$/im);
+    if (findingsIdx !== -1) {
+        const tail = reportMarkdown.slice(findingsIdx);
+        const nextSection = tail.slice(1).search(/^##\s+/im);
+        const findingsBody = nextSection === -1 ? tail : tail.slice(0, nextSection + 1);
+        const blocks = findingsBody.split(/^###\s+/m).slice(1);
+        for (const block of blocks) {
+            if (!block.includes('`key`') && !/\|\s*key\s*:/.test(block)) continue;
+            for (const field of FINDING_FIELDS) {
+                if (!block.includes(field)) problems.push(`finding-missing-field:${field}`);
+            }
+            // Severity vocabulary is closed (0680 R1): P1/P2/P3 only (symbolic placeholders allowed).
+            if (!/(^|[\s`])P[123]([\s`.]|$)/.test(block) && !block.includes('symbolic-severity')) {
+                problems.push('finding-invalid-severity');
+            }
+        }
+    }
+
     const ledgerIdx = reportMarkdown.search(/^#{2,3}\s+Evidence\s+ledger/im);
     if (ledgerIdx !== -1) {
         const ledgerSection = reportMarkdown.slice(ledgerIdx);
@@ -422,6 +452,66 @@ function localDay(tz: string, at: Date = new Date()): string {
     }
 }
 
+/** Wall-clock offset of `tz` at instant `at`, ms east of UTC (0674 R2). */
+function tzOffsetMs(tz: string, at: Date): number {
+    const parts = Object.fromEntries(
+        new Intl.DateTimeFormat('en-US', {
+            timeZone: tz,
+            hour12: false,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+        })
+            .formatToParts(at)
+            .filter((p) => p.type !== 'literal')
+            .map((p) => [p.type, p.value]),
+    );
+    const asUtc = Date.UTC(
+        Number(parts.year),
+        Number(parts.month) - 1,
+        Number(parts.day),
+        parts.hour === '24' ? 0 : Number(parts.hour),
+        Number(parts.minute),
+        Number(parts.second),
+    );
+    // Millisecond-truncate the comparison instant — Intl parts carry second precision, and an
+    // untruncated .999 epoch would leak into the offset (0674).
+    const atSec = Math.floor(at.getTime() / 1000) * 1000;
+    return asUtc - atSec;
+}
+
+/** First instant of local calendar day `ymd` (two-pass so the offset guess survives DST edges). */
+function zonedDayStart(tz: string, ymd: string): Date {
+    const [y, m, d] = ymd.split('-').map(Number);
+    const utcMidnight = Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1);
+    const guess = new Date(utcMidnight - tzOffsetMs(tz, new Date(utcMidnight)));
+    return new Date(utcMidnight - tzOffsetMs(tz, guess));
+}
+
+/** Instant rendered in `tz` wall clock with explicit offset: YYYY-MM-DDTHH:mm:ss.sss±HH:MM. */
+function formatZonedIso(tz: string, at: Date): string {
+    const off = tzOffsetMs(tz, at);
+    const abs = Math.abs(off);
+    const pad = (n: number): string => String(n).padStart(2, '0');
+    const offStr = `${off < 0 ? '-' : '+'}${pad(Math.floor(abs / 3_600_000))}:${pad(Math.floor((abs % 3_600_000) / 60_000))}`;
+    // Shifting by the offset then formatting as UTC yields the zone's own wall clock.
+    return `${new Date(at.getTime() + off).toISOString().slice(0, 23)}${offStr}`;
+}
+
+/** Inclusive bounds of one local calendar day; a DST day is 23/24/25h and both ends carry the real offset. */
+function dayBounds(tz: string, ymd: string): { since: string; until: string } {
+    const start = zonedDayStart(tz, ymd);
+    // start + 30h always lands inside the NEXT calendar day regardless of 23/24/25h lengths.
+    const nextYmd = localDay(tz, new Date(start.getTime() + 30 * 3_600_000));
+    return {
+        since: formatZonedIso(tz, start),
+        until: formatZonedIso(tz, new Date(zonedDayStart(tz, nextYmd).getTime() - 1)),
+    };
+}
+
 /**
  * Resolve the run's fixed paths once (0660 R4/R15): the skill directory beside the helper, the
  * effective local date, and the publication target. Emitted as an env file so every downstream
@@ -433,14 +523,31 @@ export function resolvePaths(opts: {
     date?: string;
     output?: string;
     now?: Date;
+    /** IANA zone override (test hook); defaults to the process zone. */
+    tz?: string;
+    mode?: string;
+    since?: string;
+    until?: string;
 }): string {
     const pluginRoot = opts.helper.replace(/\/scripts\/[^/]+$/, '');
     const skill = `${pluginRoot}/skills/history-anatomy`;
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+    const tz = opts.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
     const date = opts.date !== undefined && opts.date !== '' ? opts.date : localDay(tz, opts.now ?? new Date());
     const target =
         opts.output !== undefined && opts.output !== '' ? opts.output : `${opts.reportDir}/${date}-history-anatomy.md`;
-    return `HA_HELPER=${opts.helper}\nHA_SKILL=${skill}\nHA_TARGET=${target}\nHA_DATE=${date}\n`;
+    // 0674 R1/R2: daily bounds are derived here — date arithmetic in a named zone is exactly
+    // the "exceeds the shell composition threshold" case (ADR-069 R1), and DST makes a local
+    // day 23/24/25h. Ad-hoc (0674 R3): operator bounds pass through untouched, no baseline pair.
+    const adHoc = opts.mode === 'ad-hoc' && !!opts.since && !!opts.until;
+    let env = `HA_HELPER=${opts.helper}\nHA_SKILL=${skill}\nHA_TARGET=${target}\nHA_DATE=${date}\n`;
+    if (adHoc) {
+        return `${env}HA_SINCE=${opts.since}\nHA_UNTIL=${opts.until}\n`;
+    }
+    const current = dayBounds(tz, date);
+    const baseline = dayBounds(tz, localDay(tz, new Date(zonedDayStart(tz, date).getTime() - 12 * 3_600_000)));
+    env += `HA_SINCE=${current.since}\nHA_UNTIL=${current.until}\n`;
+    env += `HA_BASELINE_SINCE=${baseline.since}\nHA_BASELINE_UNTIL=${baseline.until}\n`;
+    return env;
 }
 
 export interface ProbeOptions {
@@ -658,7 +765,23 @@ export interface CacheCliResult {
     stderr: string;
 }
 
-const VALID_COMMANDS = 'digest, check, paths, probe, stamp, refresh, publish';
+/** Parse a `git status --porcelain` text into its path set. */
+export function porcelainPaths(text: string): Set<string> {
+    return new Set(
+        text
+            .split('\n')
+            .map((line) => line.replace(/^\S+\s+/, '').trim())
+            .filter((line) => line.length > 0),
+    );
+}
+
+/** Paths present now but absent from the baseline and not declared outputs (0676 R3). */
+export function diffPorcelain(before: string, now: string, expects: Set<string>): string[] {
+    const beforePaths = porcelainPaths(before);
+    return [...porcelainPaths(now)].filter((p) => !beforePaths.has(p) && !expects.has(p)).sort();
+}
+
+const VALID_COMMANDS = 'digest, check, paths, assert-clean, probe, stamp, refresh, publish';
 const PROBE_USAGE =
     '<script> probe --artifact <a.json> --target <report.md> [--baseline <b.json>] [--mode daily|ad-hoc] ' +
     '[--date <YYYY-MM-DD>] [--recompute true] [--out <prov.json>] [--skill-dir <d>] [--contract <f>] [--workflow <f>]';
@@ -716,13 +839,49 @@ export function runCacheCli(argv: string[]): CacheCliResult {
             publishAtomically(a, b);
             return { exitCode: 0, stdout: '', stderr: '' };
         }
+        case 'assert-clean': {
+            // 0676 R3: fingerprint diff around a model stage. `--baseline` holds the
+            // pre-stage `git status --porcelain`; every path present now but absent there
+            // must be one of the stage's declared outputs, else exit 1 naming each.
+            const f = parseFlags(argv.slice(1));
+            if (f.baseline === undefined) {
+                return {
+                    exitCode: 1,
+                    stdout: '',
+                    stderr: 'usage: <script> assert-clean --baseline <porcelain.txt> [--expect <path>]...\n',
+                };
+            }
+            const expects = new Set<string>();
+            for (const arg of argv.slice(1)) {
+                if (arg.startsWith('--expect=')) expects.add(arg.slice('--expect='.length));
+            }
+            let now: string;
+            try {
+                now =
+                    spawnSync('git', ['status', '--porcelain'], {
+                        encoding: 'utf8',
+                        ...(f.cwd !== undefined ? { cwd: f.cwd } : {}),
+                    }).stdout ?? '';
+            } catch {
+                return { exitCode: 0, stdout: '', stderr: 'assert-clean: git unavailable; skipped\n' };
+            }
+            const undeclared = diffPorcelain(readFileSync(f.baseline, 'utf8'), now, expects);
+            if (undeclared.length > 0) {
+                return {
+                    exitCode: 1,
+                    stdout: '',
+                    stderr: undeclared.map((p) => `undeclared write: ${p}\n`).join(''),
+                };
+            }
+            return { exitCode: 0, stdout: 'clean\n', stderr: '' };
+        }
         case 'paths': {
             const f = parseFlags(argv.slice(1));
             if (f.helper === undefined || f.out === undefined) {
                 return {
                     exitCode: 1,
                     stdout: '',
-                    stderr: 'usage: <script> paths --helper <p> --out <env> [--report-dir <d>] [--date <d>] [--output <p>]\n',
+                    stderr: 'usage: <script> paths --helper <p> --out <env> [--report-dir <d>] [--date <d>] [--output <p>] [--mode <m>] [--since <s>] [--until <u>]\n',
                 };
             }
             writeFileSync(
@@ -732,6 +891,9 @@ export function runCacheCli(argv: string[]): CacheCliResult {
                     reportDir: f['report-dir'] ?? 'docs/report',
                     date: f.date,
                     output: f.output,
+                    mode: f.mode,
+                    since: f.since,
+                    until: f.until,
                 }),
             );
             return { exitCode: 0, stdout: '', stderr: '' };

@@ -8,6 +8,7 @@ import {
     type CacheProvenance,
     checkReportStructure,
     decideCache,
+    diffPorcelain,
     importedSnapshotAsOf,
     logicDigest,
     parseProvenance,
@@ -390,6 +391,7 @@ describe('checkReportStructure (R5)', () => {
         'Remediation options',
         'Performance analysis',
         'Workflow and process improvements',
+        'Report-only advisories',
         'Positive patterns',
         'Evidence ledger',
     ];
@@ -418,7 +420,7 @@ describe('checkReportStructure (R5)', () => {
     // R5/R26: the anchor gate must inspect *every* claim, and must not mistake a table's own
     // header row for an unanchored claim — the two halves of the same defect.
     const head = sections
-        .slice(0, 10)
+        .slice(0, 11)
         .map((s) => `## ${s}\n\nbody`)
         .join('\n\n');
     const ledger = (rows: string) => `${head}\n\n## Evidence ledger\n\n| Claim | Anchor |\n| --- | --- |\n${rows}`;
@@ -447,6 +449,20 @@ describe('checkReportStructure (R5)', () => {
         );
         expect(r.ok).toBe(false);
         expect(r.problems).toContain('evidence-claim-without-anchor');
+    });
+});
+
+describe('diffPorcelain (0676 R3)', () => {
+    test('names paths gained since baseline, excluding declared outputs', () => {
+        const before = ' M docs/tasks/0001.md\n?? .spur/run/x.env\n';
+        const now = ' M docs/tasks/0001.md\n?? .spur/run/x.env\n?? history-anatomy..md\n';
+        const undeclared = diffPorcelain(before, now, new Set(['.spur/run/candidate.md']));
+        expect(undeclared).toEqual(['history-anatomy..md']);
+    });
+    test('declared outputs and pre-existing dirt are not violations', () => {
+        const before = '?? already-dirty.txt\n';
+        const now = '?? already-dirty.txt\n?? .spur/run/candidate.md\n';
+        expect(diffPorcelain(before, now, new Set(['.spur/run/candidate.md']))).toEqual([]);
     });
 });
 
@@ -778,11 +794,232 @@ describe('provenance + full cache cycle (0660 R3, R5, R7)', () => {
         ).toContain('HA_TARGET=/tmp/x.md');
     });
 
+    // 0674 R1/R2/R3: the resolved window reaches analyze via the env file. A local calendar
+    // day is 23/24/25h under DST, so bounds are asserted on epoch ordering, not wall-clock text.
+    const parse = (s: string): number => Date.parse(s);
+
+    test('daily bounds cover exactly one normal (non-DST) local day and order before them a preceding day', () => {
+        const env = resolvePaths({ helper: '/p/h.mjs', reportDir: 'r', date: '2026-08-24', tz: 'America/Los_Angeles' });
+        const get = (k: string): string =>
+            env
+                .split('\n')
+                .find((l) => l.startsWith(`${k}=`))
+                ?.slice(k.length + 1) ?? '';
+        expect(get('HA_SINCE')).toBe('2026-08-24T00:00:00.000-07:00');
+        expect(get('HA_UNTIL')).toBe('2026-08-24T23:59:59.999-07:00');
+        expect(get('HA_BASELINE_SINCE')).toBe('2026-08-23T00:00:00.000-07:00');
+        expect(get('HA_BASELINE_UNTIL')).toBe('2026-08-23T23:59:59.999-07:00');
+        // ordered + disjoint: baseline pair strictly precedes current pair
+        expect(parse(get('HA_BASELINE_UNTIL'))).toBeLessThan(parse(get('HA_SINCE')));
+    });
+
+    test('spring-forward day keeps 24 distinct instants with correct offsets (PST morning, PDT night)', () => {
+        const env = resolvePaths({ helper: '/p/h.mjs', reportDir: 'r', date: '2026-03-08', tz: 'America/Los_Angeles' });
+        const get = (k: string): string =>
+            env
+                .split('\n')
+                .find((l) => l.startsWith(`${k}=`))
+                ?.slice(k.length + 1) ?? '';
+        expect(get('HA_SINCE')).toBe('2026-03-08T00:00:00.000-08:00');
+        expect(get('HA_UNTIL')).toBe('2026-03-08T23:59:59.999-07:00');
+        expect(parse(get('HA_UNTIL')) - parse(get('HA_SINCE')) + 1).toBe(23 * 3_600_000);
+    });
+
+    test('fall-back day spans 25 hours and the preceding-day pair stays ordered and disjoint', () => {
+        const env = resolvePaths({ helper: '/p/h.mjs', reportDir: 'r', date: '2026-11-01', tz: 'America/Los_Angeles' });
+        const get = (k: string): string =>
+            env
+                .split('\n')
+                .find((l) => l.startsWith(`${k}=`))
+                ?.slice(k.length + 1) ?? '';
+        expect(get('HA_BASELINE_SINCE')).toBe('2026-10-31T00:00:00.000-07:00');
+        expect(get('HA_UNTIL')).toBe('2026-11-01T23:59:59.999-08:00');
+        expect(parse(get('HA_UNTIL')) - parse(get('HA_SINCE')) + 1).toBe(25 * 3_600_000);
+        expect(parse(get('HA_BASELINE_UNTIL'))).toBeLessThan(parse(get('HA_SINCE')));
+    });
+
+    test('ad-hoc passes operator bounds through untouched and emits no baseline pair', () => {
+        const env = resolvePaths({
+            helper: '/p/h.mjs',
+            reportDir: 'r',
+            mode: 'ad-hoc',
+            since: '2026-08-01T09:30:00.000+05:30',
+            until: '2026-08-05T18:00:00.000+05:30',
+            tz: 'UTC',
+        });
+        expect(env).toContain('HA_SINCE=2026-08-01T09:30:00.000+05:30');
+        expect(env).toContain('HA_UNTIL=2026-08-05T18:00:00.000+05:30');
+        expect(env).not.toContain('HA_BASELINE_');
+    });
+
     test('unknown and malformed invocations report the full verb list without throwing', () => {
-        expect(runCacheCli(['nope']).stderr).toContain('digest, check, paths, probe, stamp, refresh, publish');
+        expect(runCacheCli(['nope']).stderr).toContain(
+            'digest, check, paths, assert-clean, probe, stamp, refresh, publish',
+        );
         expect(runCacheCli(['probe']).exitCode).toBe(1);
         expect(runCacheCli(['stamp']).exitCode).toBe(1);
         expect(runCacheCli(['refresh']).exitCode).toBe(1);
         expect(runCacheCli(['paths']).exitCode).toBe(1);
+    });
+});
+
+describe('CLI assert-clean (0676 R3)', () => {
+    test('usage error without --baseline', () => {
+        expect(runCacheCli(['assert-clean']).exitCode).toBe(1);
+        expect(runCacheCli(['assert-clean']).stderr).toContain('--baseline');
+    });
+
+    test('clean tree passes; undeclared write fails naming the path', async () => {
+        const { mkdirSync, mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+        const { execFileSync } = await import('node:child_process');
+        const dir = mkdtempSync(join(tmpdir(), 'assert-clean-'));
+        try {
+            const git = (...args: string[]): void =>
+                execFileSync('git', args, {
+                    cwd: dir,
+                    env: {
+                        ...process.env,
+                        GIT_AUTHOR_NAME: 't',
+                        GIT_COMMITTER_NAME: 't',
+                        GIT_AUTHOR_EMAIL: 't@t',
+                        GIT_COMMITTER_EMAIL: 't@t',
+                    },
+                });
+            git('init', '-q');
+            // Mirror the real repo: .spur/ run glue is gitignored, so porcelain reports only
+            // genuinely undeclared writes outside the sanctioned namespace (0676 R3 scope).
+            mkdirSync(join(dir, '.spur'), { recursive: true });
+            writeFileSync(join(dir, '.gitignore'), '.spur/\n');
+            writeFileSync(join(dir, 'committed.txt'), 'x');
+            git('add', '.');
+            git('commit', '-qm', 'init');
+            // Baseline lives OUTSIDE the watched tree so its own untracked presence never counts.
+            const baseline = join(mkdtempSync(join(tmpdir(), 'ac-baseline-')), 'baseline.txt');
+            writeFileSync(baseline, '');
+            const ok = runCacheCli([
+                'assert-clean',
+                '--baseline',
+                baseline,
+                '--expect=.spur/run/candidate.md',
+                '--cwd',
+                dir,
+            ]);
+            expect(ok.exitCode).toBe(0);
+
+            writeFileSync(join(dir, 'history-anatomy..md'), 'leak');
+            const bad = runCacheCli([
+                'assert-clean',
+                '--baseline',
+                baseline,
+                '--expect=.spur/run/candidate.md',
+                '--cwd',
+                dir,
+            ]);
+            expect(bad.exitCode).toBe(1);
+            expect(bad.stderr).toContain('undeclared write: history-anatomy..md');
+
+            mkdirSync(join(dir, '.spur/run'), { recursive: true });
+            rmSync(join(dir, 'history-anatomy..md'));
+            writeFileSync(join(dir, '.spur/run/candidate.md'), 'report');
+            const declaredOk = runCacheCli([
+                'assert-clean',
+                '--baseline',
+                baseline,
+                '--expect=.spur/run/candidate.md',
+                '--cwd',
+                dir,
+            ]);
+            expect(declaredOk.exitCode).toBe(0);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('checkReportStructure triage fields + advisory section (0680)', () => {
+    // A finding row must now carry the three triage fields — the gate fails one missing any.
+    const sections = [
+        'Scope and provenance',
+        'Executive summary',
+        'Baseline comparison',
+        'Findings',
+        'Recurrence ledger',
+        'Telemetry gaps',
+        'Remediation options',
+        'Performance analysis',
+        'Workflow and process improvements',
+        'Report-only advisories',
+        'Positive patterns',
+        'Evidence ledger',
+    ];
+    const head = sections.map((s) => `## ${s}\n\nbody`).join('\n\n');
+
+    // Finding blocks live INSIDE the `## Findings` section — build it that way.
+    const findingBlock = (bullets: string): string => {
+        const i = sections.indexOf('Findings');
+        const before = sections
+            .slice(0, i + 1)
+            .map((s) => `## ${s}\n\nbody`)
+            .join('\n\n');
+        const after = sections
+            .slice(i + 1)
+            .map((s) => `## ${s}\n\nbody`)
+            .join('\n\n');
+        return `${before}\n\n### A finding\n\n${bullets}\n\n${after}`;
+    };
+
+    test('a bullet finding with all triage fields passes', () => {
+        const fields =
+            '- `key`: `coverage:analytics:pairs`\n- `category`: `coverage`\n' +
+            '- `impact`: i\n- `trend`: `new`\n' +
+            '- `observation`: o\n- `inference`: inf\n- `confidence`: high\n' +
+            '- `contradictions`: none\n- `evidenceAnchor`: `a.md`\n' +
+            '- `severity`: `P2`\n- `reproCommand`: `bun run x`\n- `ownerSurface`: `packages/domain/src/analytics/pairings.ts`';
+        expect(checkReportStructure(findingBlock(fields)).ok).toBe(true);
+    });
+
+    test('missing severity / reproCommand / ownerSurface each fail by name', () => {
+        const lines = [
+            '- `key`: `coverage:analytics:pairs`',
+            '- `category`: `coverage`',
+            '- `observation`: o',
+            '- `inference`: inf',
+            '- `confidence`: high',
+            '- `contradictions`: none',
+            '- `evidenceAnchor`: `a.md`',
+            '- `severity`: `P2`',
+            '- `reproCommand`: `bun run x`',
+            '- `ownerSurface`: `pairings.ts`',
+        ];
+        for (const drop of ['severity', 'reproCommand', 'ownerSurface']) {
+            const without = lines.filter((l) => !l.startsWith(`- \`${drop}\``)).join('\n');
+            const r = checkReportStructure(findingBlock(without));
+            expect(r.ok).toBe(false);
+            expect(r.problems).toContain(`finding-missing-field:${drop}`);
+        }
+    });
+
+    test('an out-of-vocabulary severity fails the gate', () => {
+        const r = checkReportStructure(
+            findingBlock(
+                [
+                    '- `key`: `coverage:analytics:pairs`',
+                    '- `category`: `coverage`',
+                    '- `observation`: o',
+                    '- `inference`: inf',
+                    '- `confidence`: high',
+                    '- `contradictions`: none',
+                    '- `evidenceAnchor`: `a.md`',
+                    '- `severity`: `critical`',
+                    '- `reproCommand`: `bun run x`',
+                    '- `ownerSurface`: `pairings.ts`',
+                ].join('\n'),
+            ),
+        );
+        expect(r.problems).toContain('finding-invalid-severity');
+    });
+
+    test('non-finding blocks under Findings are not policed (positive-patterns style prose)', () => {
+        expect(checkReportStructure(head).ok).toBe(true);
     });
 });

@@ -31,6 +31,10 @@
 #   date      — YYYY-MM-DD for --date (daily); empty for ad-hoc
 #   since     — inclusive ISO lower bound (ad-hoc; also normalizes daily via the DST-aware rule)
 #   until     — inclusive ISO upper bound (ad-hoc)
+#   baselineSince — declared home for the baseline-leg lower bound the analyze stage references;
+#               actual values flow through the run-scoped env file emitted by resolve-paths
+#               (0674 R2/R5 — a referenced var must have a declared home, never an implicit one)
+#   baselineUntil — baseline-leg upper bound, same contract as baselineSince
 #   focus     — ad-hoc focus string (required in ad-hoc mode, rejected in daily)
 #   recompute — "true" forces the full analyze/render/enrich/validate path (cache disposition
 #               forced-recompute)
@@ -57,10 +61,14 @@ vars:
   date: ""
   since: ""
   until: ""
+  baselineSince: ""
+  baselineUntil: ""
   focus: ""
   recompute: "false"
   output: ""
-  agent: "omp"
+  # 0676 R5: omp went quota-dead (HTTP 429) in the 2026-08-25 dogfood. The literal names a
+  # currently-reachable executor; `agent.default` in config still overrides via the precedence chain.
+  agent: "claude"
   spurBin: "spur"
   __runId: ""
   stepTimeoutMs: "1800000"
@@ -110,7 +118,8 @@ states:
           command: >-
             h=$(superskill script path sp history-anatomy-cache.mjs);
             node "$h" paths --helper "$h" --report-dir "$reportDir" --date "$date"
-            --output "$output" --out .spur/run/$__runId-paths.txt
+            --output "$output" --mode "$mode" --since "$since" --until "$until"
+            --out .spur/run/$__runId-paths.txt
 
   - id: analyze
     description: >
@@ -122,11 +131,13 @@ states:
         options:
           command: >-
             mkdir -p .spur/run;
-            $spurBin history analyze --out .spur/run/$__runId-history-anatomy-current.json --since "$since" --until "$until" --json
+            . .spur/run/$__runId-paths.env;
+            $spurBin history analyze --out .spur/run/$__runId-history-anatomy-current.json --since "$HA_SINCE" --until "$HA_UNTIL" --json
       - kind: shell
         options:
           command: >-
-            $spurBin history analyze --out .spur/run/$__runId-history-anatomy-baseline.json --since "$baselineSince" --until "$until" --json 2>/dev/null || true
+            . .spur/run/$__runId-paths.env;
+            $spurBin history analyze --out .spur/run/$__runId-history-anatomy-baseline.json --since "$HA_BASELINE_SINCE" --until "$HA_BASELINE_UNTIL" --json 2>/dev/null || true
 
   - id: cache-probe
     description: >
@@ -161,8 +172,14 @@ states:
   - id: enrich
     description: >
       Model enrichment via the skill operation sp:history-anatomy enrich (0658 operations.md).
-      Consumes the two artifacts; authors the model half of the report.
+      Consumes the two artifacts; authors the model half of the report. A porcelain baseline
+      is captured before dispatch and asserted after: any working-tree file created outside the
+      declared output fails the run (0676 R3).
     onEnter:
+      - kind: shell
+        options:
+          command: >-
+            git status --porcelain > .spur/run/$__runId-baseline-enrich.txt || true
       - kind: agent.run
         options:
           agent: ${vars.agent}
@@ -171,6 +188,10 @@ states:
           role: reviewer
           expectFile: .spur/run/${vars.__runId}-candidate.md
           timeoutMs: ${vars.stepTimeoutMs}
+      - kind: shell
+        options:
+          command: >-
+            node "$(superskill script path sp history-anatomy-cache.mjs)" assert-clean --baseline .spur/run/$__runId-baseline-enrich.txt --expect .spur/run/$__runId-candidate.md
 
   - id: structure-gate
     description: >
@@ -187,8 +208,12 @@ states:
   - id: validate
     description: >
       Independent evidence validation via the skill operation sp:history-anatomy validate.
-      Publication is reachable only from a PASS here.
+      Publication is reachable only from a PASS here. Same undeclared-write assertion as enrich (0676 R3).
     onEnter:
+      - kind: shell
+        options:
+          command: >-
+            git status --porcelain > .spur/run/$__runId-baseline-validate.txt || true
       - kind: agent.run
         options:
           agent: ${vars.agent}
@@ -197,6 +222,10 @@ states:
           role: reviewer
           expectFile: .spur/run/${vars.__runId}-validation.txt
           timeoutMs: ${vars.stepTimeoutMs}
+      - kind: shell
+        options:
+          command: >-
+            node "$(superskill script path sp history-anatomy-cache.mjs)" assert-clean --baseline .spur/run/$__runId-baseline-validate.txt --expect .spur/run/$__runId-validation.txt
 
   - id: correct
     description: >

@@ -274,7 +274,7 @@ describe('extractPhases', () => {
                 argsRaw: JSON.stringify({ todos: [{ content: 'A', status: 'completed' }] }),
             },
         ];
-        const phases = extractPhases(calls);
+        const { phases } = extractPhases(calls);
         expect(phases).toEqual([{ name: 'A', startedAt: T10, endedAt: T110, source: 'todo' }]);
     });
 
@@ -295,8 +295,10 @@ describe('extractPhases', () => {
                 argsRaw: JSON.stringify({ todos: [{ content: 'B', status: 'in_progress' }] }),
             },
         ];
-        const phases = extractPhases(calls);
-        expect(phases).toEqual([{ name: 'B', startedAt: T110, endedAt: T110, source: 'todo' }]);
+        // 0677: completed-without-in_progress gets startedAt=null (absent), NOT a fabricated
+        // late start from the session's last call — that substitution manufactured reversals.
+        const { phases } = extractPhases(calls);
+        expect(phases).toEqual([{ name: 'B', startedAt: T110, endedAt: null, source: 'todo' }]);
     });
 
     test('phases stay per-session — same content in two sessions yields two phases', () => {
@@ -316,7 +318,7 @@ describe('extractPhases', () => {
                 argsRaw: JSON.stringify({ todos: [{ content: 'A', status: 'completed' }] }),
             },
         ];
-        expect(extractPhases(calls)).toHaveLength(2);
+        expect(extractPhases(calls).phases).toHaveLength(2);
     });
 });
 
@@ -342,7 +344,9 @@ describe('computeDerived via SQL', () => {
         expect(llmMs).toBe(5000);
         expect(toolMs).toBe(1500);
         expect(unattributedMs).toBe(0);
-        expect(llmMs + toolMs + idleMs + unattributedMs).toBe(spanMs);
+        expect(llmMs ?? 0).toBe(5000);
+        expect(toolMs ?? 0).toBe(1500);
+        expect(llmMs === null || toolMs === null ? 0 : llmMs + toolMs + idleMs + unattributedMs).toBe(spanMs);
         expect(idleMs).toBe(103_500);
 
         // Bottlenecks: only ms > 0 entries, ranked desc, share = ms/span.
@@ -356,7 +360,10 @@ describe('computeDerived via SQL', () => {
         const phaseA = derived.phases.phases.find((p) => p.name === 'phase A');
         const phaseB = derived.phases.phases.find((p) => p.name === 'phase B');
         expect(phaseA).toEqual({ name: 'phase A', startedAt: T10, endedAt: T110, source: 'todo' });
-        expect(phaseB?.endedAt).toBe(T110);
+        // 0677: B never completed in the signal, so its end is absent — not a fabricated
+        // copy of the session's last todo-call timestamp.
+        expect(phaseB?.endedAt).toBeNull();
+        expect(derived.phases.invalidPhaseCount).toBe(0);
 
         // Fully-measured ⇒ no derived warnings.
         expect(derivedWarnings(derived)).toEqual([]);
@@ -384,9 +391,10 @@ describe('computeDerived via SQL', () => {
 
         expect(derived.timeDecomposition.unattributedMs).toBe(110_000);
         expect(derived.timeDecomposition.idleMs).toBe(0);
-        // Sum invariant still holds.
-        const { llmMs, toolMs, idleMs, unattributedMs, spanMs } = derived.timeDecomposition;
-        expect(llmMs + toolMs + idleMs + unattributedMs).toBe(spanMs);
+        // 0677 R3: every assistant/tool duration here was NULL — the components are ABSENT,
+        // not fabricated zeros (the old code counted them as 0ms of measured work).
+        expect(derived.timeDecomposition.llmMs).toBeNull();
+        expect(derived.timeDecomposition.toolMs).toBeNull();
 
         const warnings = derivedWarnings(derived);
         expect(warnings).toHaveLength(1);
@@ -496,7 +504,8 @@ describe('sessionSpans timestamp sanitization (0579)', () => {
             derived.timeDecomposition.idleMs,
             derived.timeDecomposition.unattributedMs,
         ]) {
-            expect(Number.isFinite(total)).toBe(true);
+            // 0677: an unmeasured component may be null (absent); when present it must be finite.
+            if (total !== null) expect(Number.isFinite(total)).toBe(true);
         }
         expect(derived.timeDecomposition.spanMs).toBe(0);
     });
@@ -513,5 +522,61 @@ describe('artifact compatibility', () => {
         expect(HISTORY_ARTIFACT_SCHEMA_VERSION).toBe(1);
         expect(() => assertArtifactVersion(1, 'old-artifact.json')).not.toThrow();
         expect(emptyDerived().phases.phaseSupport).toBe('unsupported');
+    });
+});
+
+// 0677 — phase-boundary honesty + absent-not-zero telemetry
+
+describe('extractPhases boundary honesty (0677)', () => {
+    test('completed-without-in_progress carries startedAt=null, never a fabricated reversal', () => {
+        const calls = [
+            {
+                sessionId: 's1',
+                source: 'claude',
+                ts: T110,
+                toolName: 'TodoWrite',
+                argsRaw: JSON.stringify({ todos: [{ content: 'C', status: 'completed' }] }),
+            },
+        ];
+        const { phases, invalidPhaseCount } = extractPhases(calls);
+        expect(phases).toEqual([{ name: 'C', startedAt: null, endedAt: T110, source: 'todo' }]);
+        expect(invalidPhaseCount).toBe(0);
+    });
+
+    test('both boundaries unobserved renders both fields null, not lastCallTs twice', () => {
+        const calls = [
+            {
+                sessionId: 's1',
+                source: 'claude',
+                ts: T10,
+                toolName: 'TodoWrite',
+                argsRaw: JSON.stringify({ todos: [{ content: 'D', status: 'pending' }] }),
+            },
+        ];
+        const { phases } = extractPhases(calls);
+        expect(phases[0]).toMatchObject({ startedAt: null, endedAt: null });
+    });
+
+    test('genuinely out-of-order observed boundaries are excluded and counted, not emitted', () => {
+        // A real second cause would produce this shape from observed timestamps alone.
+        const calls = [
+            {
+                sessionId: 's1',
+                source: 'claude',
+                ts: T110,
+                toolName: 'TodoWrite',
+                argsRaw: JSON.stringify({ todos: [{ content: 'E', status: 'in_progress' }] }),
+            },
+            {
+                sessionId: 's1',
+                source: 'claude',
+                ts: T10,
+                toolName: 'TodoWrite',
+                argsRaw: JSON.stringify({ todos: [{ content: 'E', status: 'completed' }] }),
+            },
+        ];
+        const { phases, invalidPhaseCount } = extractPhases(calls);
+        expect(phases).toHaveLength(0); // 'E' excluded
+        expect(invalidPhaseCount).toBe(1);
     });
 });

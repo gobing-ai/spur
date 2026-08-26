@@ -706,6 +706,18 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         id: '0023_spur_cli_history_message_request_id_idx',
         sql: HISTORY_MESSAGE_REQUEST_ID_INDEX_SCHEMA_SQL,
     },
+    {
+        // 0675: file identity for the incremental import short-circuit (ts-libs importer).
+        // Two guard-edged entries because addColumnIfMissing takes one column per migration.
+        id: '0024_spur_cli_history_checkpoint_identity',
+        sql: 'ALTER TABLE history_import_checkpoint ADD COLUMN source_size INTEGER',
+        addColumnIfMissing: { table: 'history_import_checkpoint', column: 'source_size' },
+    },
+    {
+        id: '0025_spur_cli_history_checkpoint_identity_mtime',
+        sql: 'ALTER TABLE history_import_checkpoint ADD COLUMN source_mtime_ms REAL',
+        addColumnIfMissing: { table: 'history_import_checkpoint', column: 'source_mtime_ms' },
+    },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -727,7 +739,8 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
 
         // Legacy foundations were journaled before importer tables joined CLI_SCHEMA_SQL.
         // Migration 0009 cannot create its history_message index until that idempotent
-        // package-owned schema has been provisioned.
+        // package-owned schema has been provisioned. 0024/0025's guarded ALTERs need the
+        // same provisioning when the importer table is absent (0678).
         if (
             migration.id === '0009_spur_cli_history_message_run_idx' &&
             !(await tableExists(adapter, 'history_message'))
@@ -735,6 +748,19 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             for (const statement of splitSqlStatements(HISTORY_IMPORT_SCHEMA_SQL)) {
                 await adapter.exec(statement);
             }
+        }
+        if (
+            (migration.id === '0024_spur_cli_history_checkpoint_identity' ||
+                migration.id === '0025_spur_cli_history_checkpoint_identity_mtime') &&
+            !(await tableExists(adapter, 'history_import_checkpoint'))
+        ) {
+            // Journaled as applied: the fresh-database path never needs the guard — the
+            // importer seeds the checkpoint table with both identity columns already in place.
+            await adapter.run('INSERT INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)', [
+                migration.id,
+                Date.now(),
+            ]);
+            continue;
         }
 
         const addColumnGuard = migration.addColumnIfMissing;

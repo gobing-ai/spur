@@ -57,14 +57,18 @@ async function insertExit(
     at: string,
     opts: { executionId: string; outcome: 'done' | 'failed' | 'cancelled'; durationMs?: number },
 ): Promise<void> {
+    // 0679 R9: the exit payload mirrors the WRITER's real shape — correlation.executionId
+    // join key, numeric exitCode. The old fixture used the reader's broken paths, which is
+    // exactly how the drift shipped.
+    const exitCode = opts.outcome === 'done' ? 0 : 1;
     await new SystemEventDao(db).insert({
         id,
         event_name: 'agent.invoke.exit',
         occurred_at: at,
         payload_json: envelope({
             runId: `run-${opts.executionId}`,
-            executionId: opts.executionId,
-            outcome: opts.outcome,
+            correlation: { executionId: opts.executionId },
+            exitCode,
             ...(opts.durationMs !== undefined ? { durationMs: opts.durationMs } : {}),
         }),
         run_id: `run-${opts.executionId}`,
@@ -503,5 +507,62 @@ describe('pairingSummary (feature J8 / task 0573)', () => {
         // hit their no-such-table catch and return [].
         const pairings = await pairingSummary(db, WINDOW);
         expect(pairings).toEqual([]);
+    });
+});
+
+// 0679 R3/R4 — unknown outcomes are distinct from failures and kept legible.
+describe('pairingSummary unknown-outcome honesty (0679)', () => {
+    test('a dispatch with no exit row reads as unknown, not failure; successRate uses known denominator', async () => {
+        const db = await setupDb();
+        await insertStart(db, 's1', '2026-08-13T01:00:00.000Z', {
+            executionId: 'e1',
+            executor: 'exec',
+            role: 'coder',
+            runId: 'run-e1',
+        });
+        await insertStart(db, 's2', '2026-08-13T01:01:00.000Z', {
+            executionId: 'e2',
+            executor: 'exec',
+            role: 'coder',
+            runId: 'run-e2',
+        });
+        await insertExit(db, 'x1', '2026-08-13T02:00:00.000Z', {
+            executionId: 'e1',
+            outcome: 'failed',
+            durationMs: 1000,
+        });
+        // e2 has no exit row → unknown outcome.
+
+        const stats = await pairingSummary(db);
+        expect(stats).toHaveLength(1);
+        expect(stats).toHaveLength(1);
+        const [s] = stats;
+        if (s === undefined) throw new Error('expected one pairing');
+        expect(s.dispatches).toBe(2);
+        expect(s.failures).toBe(1);
+        expect(s.unknownOutcomes).toBe(1);
+        // Denominator = 1 known outcome (the failed one) → success rate 0, but the
+        // unknownCount makes the gap legible instead of reading "0% success".
+        expect(s.successRate).toBe(0);
+    });
+
+    test('model attribution falls back to routing.model when no top-level model exists', async () => {
+        const db = await setupDb();
+        // Start payload with ONLY routing.model (the invoke bridge stamps it).
+        await new SystemEventDao(db).insert({
+            id: 'd9',
+            event_name: 'agent.invoke.start',
+            occurred_at: '2026-08-13T03:00:00.000Z',
+            payload_json: envelope({
+                agent: 'pi',
+                routing: { executor: 'sol', role: 'coder', model: 'luna-5' },
+                runId: 'run-9',
+                executionId: 'e9',
+            }),
+            run_id: 'run-9',
+        });
+        await insertExit(db, 'x9', '2026-08-13T04:00:00.000Z', { executionId: 'e9', outcome: 'done', durationMs: 500 });
+        const stats = await pairingSummary(db);
+        expect(stats[0]?.model).toBe('luna-5');
     });
 });
