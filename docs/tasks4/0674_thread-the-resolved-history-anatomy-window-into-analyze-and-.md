@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Thread the resolved history-anatomy window into analyze and give the baseline leg its own bounds"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-26T05:38:44.860Z
-updated_at: "2026-08-26T05:47:12.651Z"
+updated_at: "2026-08-26T06:43:30.998Z"
 feature_id: I81
 priority: P1
 tags: ["history-anatomy", "workflow", "performance", "correctness"]
@@ -24,12 +24,12 @@ The same defect is the dominant performance cost. Measured on the current 1.82 M
 1. `probe()` builds the published provenance bounds directly from the artifact — `bounds: { since: String(raw.selector?.since ?? ''), until: String(raw.selector?.until ?? '') }` at `:499`. The empty published `identity.bounds` is therefore not a separate stamping defect; it resolves the moment the artifact carries a real selector. No extra stamping work is needed.
 2. Two of the cache invalidation signals are currently inert. `decide()` compares `identity:bounds` (`:285`) and the semantic `artifactDigest` (`:288`). With bounds permanently `''`/`''` and the digest computed over the same unbounded corpus every day, neither can ever fire — the daily cache is held together by the `identity:date` comparison alone. Bounding restores both signals.
 ### Requirements
-- [ ] R1. Export the bounds `resolve-scope` resolves (from `.spur/run/<runId>-selector.json`) into the workflow vars the `analyze` stage reads, so the current leg analyzes exactly the requested local calendar day.
-- [ ] R2. Give the baseline leg its own ordered inclusive bounds for the immediately preceding local calendar day, and declare every var the stage references in the `vars:` block — `baselineSince` is currently referenced at `:129` and declared nowhere.
-- [ ] R3. Keep ad-hoc mode's operator-supplied bounds untouched: no calendar-day normalization is applied to them.
-- [ ] R4. Make the resolved window reach the provenance stamp so published `identity.bounds.since` / `identity.bounds.until` carry the audited window instead of empty strings.
-- [ ] R5. Add a workflow-level check that no `analyze` stage var is undeclared, so the `baselineSince` class of defect cannot silently recur.
-- [ ] R6. Record the before/after payload measurement (artifact bytes and analyze wall-clock, per leg) as evidence that the bounded path is at least an order of magnitude smaller.
+- [x] R1. Export the bounds `resolve-scope` resolves (from `.spur/run/<runId>-selector.json`) into the workflow vars the `analyze` stage reads, so the current leg analyzes exactly the requested local calendar day.
+- [x] R2. Give the baseline leg its own ordered inclusive bounds for the immediately preceding local calendar day, and declare every var the stage references in the `vars:` block — `baselineSince` is currently referenced at `:129` and declared nowhere.
+- [x] R3. Keep ad-hoc mode's operator-supplied bounds untouched: no calendar-day normalization is applied to them.
+- [x] R4. Make the resolved window reach the provenance stamp so published `identity.bounds.since` / `identity.bounds.until` carry the audited window instead of empty strings.
+- [x] R5. Add a workflow-level check that no `analyze` stage var is undeclared, so the `baselineSince` class of defect cannot silently recur.
+- [x] R6. Record the before/after payload measurement (artifact bytes and analyze wall-clock, per leg) as evidence that the bounded path is at least an order of magnitude smaller.
 ### Acceptance Criteria
 ```gherkin
 @core
@@ -122,19 +122,47 @@ HA_BASELINE_UNTIL=<preceding local day 23:59:59.999 with offset>
 8. Measure and record artifact bytes and analyze wall-clock per leg, bounded vs unbounded, into the task's Solution section.
 9. Run `bun run lint`, `bun run test`, `bun run script-contract-check`, and `spur workflow validate config/workflows/history-anatomy.yaml`.
 ### Solution
+Bounds derivation moved into the deterministic helper; analyze sources the env file. The helper gains `tzOffsetMs`, `zonedDayStart`, `formatZonedIso` and `dayBounds` (DST-safe date arithmetic in a named zone — exceeds the shell composition threshold per ADR-069 R1; a two-pass offset resolution survives spring-forward and fall-back), and `resolvePaths()` now emits HA_SINCE, HA_UNTIL, HA_BASELINE_SINCE, HA_BASELINE_UNTIL — daily legs get exact bounds; ad-hoc passes operator bounds through verbatim and emits no baseline pair (R1/R2/R3). The CLI paths verb forwards --mode/--since/--until so the mode contract reaches the helper without new subcommands or public flags.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| Change | Why |
+| --- | --- |
+| packages/app/src/services/workflow-service.ts:1353 | R5: undeclared shell-var references now fail workflow validate repo-wide |
 
+config/workflows/history-anatomy.yaml declares `baselineSince`/`baselineUntil` in the vars block (R5/R2 — `$baselineSince` was referenced at the old analyze:129 but declared nowhere), and both analyze legs source `.spur/run/$__runId-paths.env` passing the HA_* values per leg with the baseline `|| true` tolerance preserved. Provenance needs no stamping change: probe() already reads identity.bounds from the artifact selector at plugins/sp/scripts/history-anatomy-cache.ts:576.
+
+Measurement (R6, 1.82M-message corpus, main-tree DB): bounded single-day artifact **59,743 B** at **1.3 s** (warm) vs unbounded whole-corpus artifact **4,118,941 B (~3.9 MB)** at **22.6 s** — a ~69× payload reduction, satisfying the order-of-magnitude AC.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | analyze sources `.spur/run/$__runId-paths.env` and passes `$HA_SINCE`/`$HA_UNTIL`; helper derives them from the resolved local day (config/workflows/history-anatomy.yaml analyze; history-anatomy-cache.ts:481) |
+| R2 | MET | baseline leg passes `$HA_BASELINE_SINCE`/`$HA_BASELINE_UNTIL` = preceding local day; `baselineSince`/`baselineUntil` declared in vars block |
+| R3 | MET | ad-hoc branch returns operator bounds verbatim, emits no HA_BASELINE_* (unit test: ad-hoc passes operator bounds through) |
+| R4 | MET | `probe()` provenance reads artifact selector (history-anatomy-cache.ts:576); selector now non-null so identity.bounds carries real bounds + timezone |
+| R5 | MET | `collectUndeclaredShellVarViolations` fails validate() on undeclared refs; all 11 repo workflows sweep green; regression tests in packages/app/tests/workflow/undeclared-shell-vars.test.ts |
+| R6 | MET | Solution records bounded 59,743 B @ 1.3 s warm vs unbounded 4,118,941 B @ 22.6 s (~69x) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R20 ad-hoc unchanged | MET | test | ad-hoc pass-through unit test, no normalization applied |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Functional traceability** — all six requirements MET: R1/R2/R3 via `resolvePaths` bound derivation + analyze sourcing (plugins/sp/scripts/history-anatomy-cache.ts:511, config/workflows/history-anatomy.yaml analyze stage); R4 via artifact-selector passthrough to `probe()` provenance (no extra stamping needed, as refinement predicted); R5 via `collectUndeclaredShellVarViolations` wired into validate() with an 11-workflow repo-wide green sweep; R6 measurement recorded in Solution (~69x payload cut, 1.3 s warm bounded leg).
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P3 | Validator exempts UPPER_SNAKE identifiers (ambient/sourced-env namespace); an undeclared UPPER_SNAKE workflow var would not be flagged | Accept — documented ceiling at the function; repo workflow vars are lowercase/camelCase so the defect class stays covered; upgrade path is parsing sourced .env files |
+| P4 | Bounded-leg wall-clock measurement is startup/load sensitive (36 s cold vs 1.3 s warm on a busy box) | Accept — AC bound is met warm; bytes ratio (69x) is the load-independent signal |
 
+SECUA — no new trust boundaries (helper emits trusted repo-glue env; validator reads tracked YAML only). Correctness: DST spring/fall unit tests caught and fixed a millisecond leak in offset computation before landing. Architecture: follows the established post-schema validator pattern (role-check mirror) and keeps zone arithmetic in the helper per ADR-069 R1.
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-26T06:31:13.852Z todo → wip (system)
+- 2026-08-26T06:37:44.499Z wip → testing (system)
+- 2026-08-26T06:43:30.998Z testing → done (system)

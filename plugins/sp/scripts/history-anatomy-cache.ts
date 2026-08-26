@@ -422,6 +422,66 @@ function localDay(tz: string, at: Date = new Date()): string {
     }
 }
 
+/** Wall-clock offset of `tz` at instant `at`, ms east of UTC (0674 R2). */
+function tzOffsetMs(tz: string, at: Date): number {
+    const parts = Object.fromEntries(
+        new Intl.DateTimeFormat('en-US', {
+            timeZone: tz,
+            hour12: false,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+        })
+            .formatToParts(at)
+            .filter((p) => p.type !== 'literal')
+            .map((p) => [p.type, p.value]),
+    );
+    const asUtc = Date.UTC(
+        Number(parts.year),
+        Number(parts.month) - 1,
+        Number(parts.day),
+        parts.hour === '24' ? 0 : Number(parts.hour),
+        Number(parts.minute),
+        Number(parts.second),
+    );
+    // Millisecond-truncate the comparison instant — Intl parts carry second precision, and an
+    // untruncated .999 epoch would leak into the offset (0674).
+    const atSec = Math.floor(at.getTime() / 1000) * 1000;
+    return asUtc - atSec;
+}
+
+/** First instant of local calendar day `ymd` (two-pass so the offset guess survives DST edges). */
+function zonedDayStart(tz: string, ymd: string): Date {
+    const [y, m, d] = ymd.split('-').map(Number);
+    const utcMidnight = Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1);
+    const guess = new Date(utcMidnight - tzOffsetMs(tz, new Date(utcMidnight)));
+    return new Date(utcMidnight - tzOffsetMs(tz, guess));
+}
+
+/** Instant rendered in `tz` wall clock with explicit offset: YYYY-MM-DDTHH:mm:ss.sss±HH:MM. */
+function formatZonedIso(tz: string, at: Date): string {
+    const off = tzOffsetMs(tz, at);
+    const abs = Math.abs(off);
+    const pad = (n: number): string => String(n).padStart(2, '0');
+    const offStr = `${off < 0 ? '-' : '+'}${pad(Math.floor(abs / 3_600_000))}:${pad(Math.floor((abs % 3_600_000) / 60_000))}`;
+    // Shifting by the offset then formatting as UTC yields the zone's own wall clock.
+    return `${new Date(at.getTime() + off).toISOString().slice(0, 23)}${offStr}`;
+}
+
+/** Inclusive bounds of one local calendar day; a DST day is 23/24/25h and both ends carry the real offset. */
+function dayBounds(tz: string, ymd: string): { since: string; until: string } {
+    const start = zonedDayStart(tz, ymd);
+    // start + 30h always lands inside the NEXT calendar day regardless of 23/24/25h lengths.
+    const nextYmd = localDay(tz, new Date(start.getTime() + 30 * 3_600_000));
+    return {
+        since: formatZonedIso(tz, start),
+        until: formatZonedIso(tz, new Date(zonedDayStart(tz, nextYmd).getTime() - 1)),
+    };
+}
+
 /**
  * Resolve the run's fixed paths once (0660 R4/R15): the skill directory beside the helper, the
  * effective local date, and the publication target. Emitted as an env file so every downstream
@@ -433,14 +493,31 @@ export function resolvePaths(opts: {
     date?: string;
     output?: string;
     now?: Date;
+    /** IANA zone override (test hook); defaults to the process zone. */
+    tz?: string;
+    mode?: string;
+    since?: string;
+    until?: string;
 }): string {
     const pluginRoot = opts.helper.replace(/\/scripts\/[^/]+$/, '');
     const skill = `${pluginRoot}/skills/history-anatomy`;
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+    const tz = opts.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
     const date = opts.date !== undefined && opts.date !== '' ? opts.date : localDay(tz, opts.now ?? new Date());
     const target =
         opts.output !== undefined && opts.output !== '' ? opts.output : `${opts.reportDir}/${date}-history-anatomy.md`;
-    return `HA_HELPER=${opts.helper}\nHA_SKILL=${skill}\nHA_TARGET=${target}\nHA_DATE=${date}\n`;
+    // 0674 R1/R2: daily bounds are derived here — date arithmetic in a named zone is exactly
+    // the "exceeds the shell composition threshold" case (ADR-069 R1), and DST makes a local
+    // day 23/24/25h. Ad-hoc (0674 R3): operator bounds pass through untouched, no baseline pair.
+    const adHoc = opts.mode === 'ad-hoc' && !!opts.since && !!opts.until;
+    let env = `HA_HELPER=${opts.helper}\nHA_SKILL=${skill}\nHA_TARGET=${target}\nHA_DATE=${date}\n`;
+    if (adHoc) {
+        return `${env}HA_SINCE=${opts.since}\nHA_UNTIL=${opts.until}\n`;
+    }
+    const current = dayBounds(tz, date);
+    const baseline = dayBounds(tz, localDay(tz, new Date(zonedDayStart(tz, date).getTime() - 12 * 3_600_000)));
+    env += `HA_SINCE=${current.since}\nHA_UNTIL=${current.until}\n`;
+    env += `HA_BASELINE_SINCE=${baseline.since}\nHA_BASELINE_UNTIL=${baseline.until}\n`;
+    return env;
 }
 
 export interface ProbeOptions {
@@ -722,7 +799,7 @@ export function runCacheCli(argv: string[]): CacheCliResult {
                 return {
                     exitCode: 1,
                     stdout: '',
-                    stderr: 'usage: <script> paths --helper <p> --out <env> [--report-dir <d>] [--date <d>] [--output <p>]\n',
+                    stderr: 'usage: <script> paths --helper <p> --out <env> [--report-dir <d>] [--date <d>] [--output <p>] [--mode <m>] [--since <s>] [--until <u>]\n',
                 };
             }
             writeFileSync(
@@ -732,6 +809,9 @@ export function runCacheCli(argv: string[]): CacheCliResult {
                     reportDir: f['report-dir'] ?? 'docs/report',
                     date: f.date,
                     output: f.output,
+                    mode: f.mode,
+                    since: f.since,
+                    until: f.until,
                 }),
             );
             return { exitCode: 0, stdout: '', stderr: '' };

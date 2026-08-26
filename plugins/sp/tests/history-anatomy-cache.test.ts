@@ -778,6 +778,64 @@ describe('provenance + full cache cycle (0660 R3, R5, R7)', () => {
         ).toContain('HA_TARGET=/tmp/x.md');
     });
 
+    // 0674 R1/R2/R3: the resolved window reaches analyze via the env file. A local calendar
+    // day is 23/24/25h under DST, so bounds are asserted on epoch ordering, not wall-clock text.
+    const parse = (s: string): number => Date.parse(s);
+
+    test('daily bounds cover exactly one normal (non-DST) local day and order before them a preceding day', () => {
+        const env = resolvePaths({ helper: '/p/h.mjs', reportDir: 'r', date: '2026-08-24', tz: 'America/Los_Angeles' });
+        const get = (k: string): string =>
+            env
+                .split('\n')
+                .find((l) => l.startsWith(`${k}=`))
+                ?.slice(k.length + 1) ?? '';
+        expect(get('HA_SINCE')).toBe('2026-08-24T00:00:00.000-07:00');
+        expect(get('HA_UNTIL')).toBe('2026-08-24T23:59:59.999-07:00');
+        expect(get('HA_BASELINE_SINCE')).toBe('2026-08-23T00:00:00.000-07:00');
+        expect(get('HA_BASELINE_UNTIL')).toBe('2026-08-23T23:59:59.999-07:00');
+        // ordered + disjoint: baseline pair strictly precedes current pair
+        expect(parse(get('HA_BASELINE_UNTIL'))).toBeLessThan(parse(get('HA_SINCE')));
+    });
+
+    test('spring-forward day keeps 24 distinct instants with correct offsets (PST morning, PDT night)', () => {
+        const env = resolvePaths({ helper: '/p/h.mjs', reportDir: 'r', date: '2026-03-08', tz: 'America/Los_Angeles' });
+        const get = (k: string): string =>
+            env
+                .split('\n')
+                .find((l) => l.startsWith(`${k}=`))
+                ?.slice(k.length + 1) ?? '';
+        expect(get('HA_SINCE')).toBe('2026-03-08T00:00:00.000-08:00');
+        expect(get('HA_UNTIL')).toBe('2026-03-08T23:59:59.999-07:00');
+        expect(parse(get('HA_UNTIL')) - parse(get('HA_SINCE')) + 1).toBe(23 * 3_600_000);
+    });
+
+    test('fall-back day spans 25 hours and the preceding-day pair stays ordered and disjoint', () => {
+        const env = resolvePaths({ helper: '/p/h.mjs', reportDir: 'r', date: '2026-11-01', tz: 'America/Los_Angeles' });
+        const get = (k: string): string =>
+            env
+                .split('\n')
+                .find((l) => l.startsWith(`${k}=`))
+                ?.slice(k.length + 1) ?? '';
+        expect(get('HA_BASELINE_SINCE')).toBe('2026-10-31T00:00:00.000-07:00');
+        expect(get('HA_UNTIL')).toBe('2026-11-01T23:59:59.999-08:00');
+        expect(parse(get('HA_UNTIL')) - parse(get('HA_SINCE')) + 1).toBe(25 * 3_600_000);
+        expect(parse(get('HA_BASELINE_UNTIL'))).toBeLessThan(parse(get('HA_SINCE')));
+    });
+
+    test('ad-hoc passes operator bounds through untouched and emits no baseline pair', () => {
+        const env = resolvePaths({
+            helper: '/p/h.mjs',
+            reportDir: 'r',
+            mode: 'ad-hoc',
+            since: '2026-08-01T09:30:00.000+05:30',
+            until: '2026-08-05T18:00:00.000+05:30',
+            tz: 'UTC',
+        });
+        expect(env).toContain('HA_SINCE=2026-08-01T09:30:00.000+05:30');
+        expect(env).toContain('HA_UNTIL=2026-08-05T18:00:00.000+05:30');
+        expect(env).not.toContain('HA_BASELINE_');
+    });
+
     test('unknown and malformed invocations report the full verb list without throwing', () => {
         expect(runCacheCli(['nope']).stderr).toContain('digest, check, paths, probe, stamp, refresh, publish');
         expect(runCacheCli(['probe']).exitCode).toBe(1);

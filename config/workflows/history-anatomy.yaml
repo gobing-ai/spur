@@ -31,6 +31,10 @@
 #   date      — YYYY-MM-DD for --date (daily); empty for ad-hoc
 #   since     — inclusive ISO lower bound (ad-hoc; also normalizes daily via the DST-aware rule)
 #   until     — inclusive ISO upper bound (ad-hoc)
+#   baselineSince — declared home for the baseline-leg lower bound the analyze stage references;
+#               actual values flow through the run-scoped env file emitted by resolve-paths
+#               (0674 R2/R5 — a referenced var must have a declared home, never an implicit one)
+#   baselineUntil — baseline-leg upper bound, same contract as baselineSince
 #   focus     — ad-hoc focus string (required in ad-hoc mode, rejected in daily)
 #   recompute — "true" forces the full analyze/render/enrich/validate path (cache disposition
 #               forced-recompute)
@@ -57,6 +61,8 @@ vars:
   date: ""
   since: ""
   until: ""
+  baselineSince: ""
+  baselineUntil: ""
   focus: ""
   recompute: "false"
   output: ""
@@ -110,7 +116,8 @@ states:
           command: >-
             h=$(superskill script path sp history-anatomy-cache.mjs);
             node "$h" paths --helper "$h" --report-dir "$reportDir" --date "$date"
-            --output "$output" --out .spur/run/$__runId-paths.env
+            --output "$output" --mode "$mode" --since "$since" --until "$until"
+            --out .spur/run/$__runId-paths.env
 
   - id: analyze
     description: >
@@ -122,11 +129,13 @@ states:
         options:
           command: >-
             mkdir -p .spur/run;
-            $spurBin history analyze --out .spur/run/$__runId-history-anatomy-current.json --since "$since" --until "$until" --json
+            . .spur/run/$__runId-paths.env;
+            $spurBin history analyze --out .spur/run/$__runId-history-anatomy-current.json --since "$HA_SINCE" --until "$HA_UNTIL" --json
       - kind: shell
         options:
           command: >-
-            $spurBin history analyze --out .spur/run/$__runId-history-anatomy-baseline.json --since "$baselineSince" --until "$until" --json 2>/dev/null || true
+            . .spur/run/$__runId-paths.env;
+            $spurBin history analyze --out .spur/run/$__runId-history-anatomy-baseline.json --since "$HA_BASELINE_SINCE" --until "$HA_BASELINE_UNTIL" --json 2>/dev/null || true
 
   - id: cache-probe
     description: >

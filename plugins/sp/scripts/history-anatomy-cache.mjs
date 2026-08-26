@@ -319,17 +319,68 @@ function localDay(tz, at = new Date) {
     return at.toISOString().slice(0, 10);
   }
 }
+function tzOffsetMs(tz, at) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).formatToParts(at).filter((p) => p.type !== "literal").map((p) => [p.type, p.value]));
+  const asUtc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), parts.hour === "24" ? 0 : Number(parts.hour), Number(parts.minute), Number(parts.second));
+  const atSec = Math.floor(at.getTime() / 1000) * 1000;
+  return asUtc - atSec;
+}
+function zonedDayStart(tz, ymd) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const utcMidnight = Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1);
+  const guess = new Date(utcMidnight - tzOffsetMs(tz, new Date(utcMidnight)));
+  return new Date(utcMidnight - tzOffsetMs(tz, guess));
+}
+function formatZonedIso(tz, at) {
+  const off = tzOffsetMs(tz, at);
+  const abs = Math.abs(off);
+  const pad = (n) => String(n).padStart(2, "0");
+  const offStr = `${off < 0 ? "-" : "+"}${pad(Math.floor(abs / 3600000))}:${pad(Math.floor(abs % 3600000 / 60000))}`;
+  return `${new Date(at.getTime() + off).toISOString().slice(0, 23)}${offStr}`;
+}
+function dayBounds(tz, ymd) {
+  const start = zonedDayStart(tz, ymd);
+  const nextYmd = localDay(tz, new Date(start.getTime() + 30 * 3600000));
+  return {
+    since: formatZonedIso(tz, start),
+    until: formatZonedIso(tz, new Date(zonedDayStart(tz, nextYmd).getTime() - 1))
+  };
+}
 function resolvePaths(opts) {
   const pluginRoot = opts.helper.replace(/\/scripts\/[^/]+$/, "");
   const skill = `${pluginRoot}/skills/history-anatomy`;
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  const tz = opts.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
   const date = opts.date !== undefined && opts.date !== "" ? opts.date : localDay(tz, opts.now ?? new Date);
   const target = opts.output !== undefined && opts.output !== "" ? opts.output : `${opts.reportDir}/${date}-history-anatomy.md`;
-  return `HA_HELPER=${opts.helper}
+  const adHoc = opts.mode === "ad-hoc" && !!opts.since && !!opts.until;
+  let env = `HA_HELPER=${opts.helper}
 HA_SKILL=${skill}
 HA_TARGET=${target}
 HA_DATE=${date}
 `;
+  if (adHoc) {
+    return `${env}HA_SINCE=${opts.since}
+HA_UNTIL=${opts.until}
+`;
+  }
+  const current = dayBounds(tz, date);
+  const baseline = dayBounds(tz, localDay(tz, new Date(zonedDayStart(tz, date).getTime() - 12 * 3600000)));
+  env += `HA_SINCE=${current.since}
+HA_UNTIL=${current.until}
+`;
+  env += `HA_BASELINE_SINCE=${baseline.since}
+HA_BASELINE_UNTIL=${baseline.until}
+`;
+  return env;
 }
 function buildProvenance(opts) {
   let raw;
@@ -549,7 +600,7 @@ ${result.problems.map((p) => `- ${p}
         return {
           exitCode: 1,
           stdout: "",
-          stderr: `usage: <script> paths --helper <p> --out <env> [--report-dir <d>] [--date <d>] [--output <p>]
+          stderr: `usage: <script> paths --helper <p> --out <env> [--report-dir <d>] [--date <d>] [--output <p>] [--mode <m>] [--since <s>] [--until <u>]
 `
         };
       }
@@ -557,7 +608,10 @@ ${result.problems.map((p) => `- ${p}
         helper: f.helper,
         reportDir: f["report-dir"] ?? "docs/report",
         date: f.date,
-        output: f.output
+        output: f.output,
+        mode: f.mode,
+        since: f.since,
+        until: f.until
       }));
       return { exitCode: 0, stdout: "", stderr: "" };
     }
