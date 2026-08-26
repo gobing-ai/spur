@@ -13,6 +13,7 @@ tags: ["history-anatomy", "workflow", "performance", "correctness"]
 ## 0674. Thread the resolved history-anatomy window into analyze and give the baseline leg its own bounds
 
 ### Background
+
 The daily history-anatomy workflow resolves a DST-aware calendar-day window in `resolve-scope` and writes it to `.spur/run/<runId>-selector.json`, but nothing exports it back into workflow vars. `config/workflows/history-anatomy.yaml:125` therefore runs `spur history analyze --since "$since" --until "$until"` with the vars-block defaults (empty strings), and `:129` references `$baselineSince`, which is never declared in the `vars:` block at all.
 
 Both published reports (`docs/report/2026-08-24-history-anatomy.md`, `2026-08-25-history-anatomy.md`) show the consequence: `selector.since`/`selector.until` null in both artifacts, `artifactDigest == baselineArtifactDigest` (`51e5414f…`), every recurrence key `not-comparable`, and `identity.bounds` published as empty strings. Two independent dogfood runs on different dates reproduce it identically, so it is a plumbing gap and not a data fluke.
@@ -23,14 +24,18 @@ The same defect is the dominant performance cost. Measured on the current 1.82 M
 
 1. `probe()` builds the published provenance bounds directly from the artifact — `bounds: { since: String(raw.selector?.since ?? ''), until: String(raw.selector?.until ?? '') }` at `:499`. The empty published `identity.bounds` is therefore not a separate stamping defect; it resolves the moment the artifact carries a real selector. No extra stamping work is needed.
 2. Two of the cache invalidation signals are currently inert. `decide()` compares `identity:bounds` (`:285`) and the semantic `artifactDigest` (`:288`). With bounds permanently `''`/`''` and the digest computed over the same unbounded corpus every day, neither can ever fire — the daily cache is held together by the `identity:date` comparison alone. Bounding restores both signals.
+
 ### Requirements
+
 - [ ] R1. Export the bounds `resolve-scope` resolves (from `.spur/run/<runId>-selector.json`) into the workflow vars the `analyze` stage reads, so the current leg analyzes exactly the requested local calendar day.
 - [ ] R2. Give the baseline leg its own ordered inclusive bounds for the immediately preceding local calendar day, and declare every var the stage references in the `vars:` block — `baselineSince` is currently referenced at `:129` and declared nowhere.
 - [ ] R3. Keep ad-hoc mode's operator-supplied bounds untouched: no calendar-day normalization is applied to them.
 - [ ] R4. Make the resolved window reach the provenance stamp so published `identity.bounds.since` / `identity.bounds.until` carry the audited window instead of empty strings.
 - [ ] R5. Add a workflow-level check that no `analyze` stage var is undeclared, so the `baselineSince` class of defect cannot silently recur.
 - [ ] R6. Record the before/after payload measurement (artifact bytes and analyze wall-clock, per leg) as evidence that the bounded path is at least an order of magnitude smaller.
+
 ### Acceptance Criteria
+
 ```gherkin
 @core
 Scenario: R1 — Daily mode analyzes exactly its resolved local calendar day
@@ -74,6 +79,7 @@ Scenario: R3 — Recurrence classification produces real verdicts once both wind
   Then no stable key is classified "not-comparable" for the reason that window bounds are unavailable
   And each stable key carries one of "new", "recurring", "regressed", "improved", or "resolved"
 ```
+
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
@@ -81,6 +87,7 @@ Scenario: R3 — Recurrence classification produces real verdicts once both wind
      is not ready to hand off. Keep empty if none. -->
 
 ### Design
+
 **Derive the bounds deterministically in the helper — do not plumb them out of the agent stage.**
 
 Refinement found that `resolvePaths()` (`plugins/sp/scripts/history-anatomy-cache.ts:430-444`) already does most of this work: it reads the IANA zone with `Intl.DateTimeFormat().resolvedOptions().timeZone`, resolves the effective local day through `localDay(tz, now)` (`:417`), and emits `HA_HELPER` / `HA_SKILL` / `HA_TARGET` / `HA_DATE` into the run-scoped `.env` file that `cache-probe`, `stamp`, `refresh-provenance`, and `publish` already source.
@@ -94,9 +101,9 @@ HA_BASELINE_SINCE=<preceding local day 00:00:00.000 with offset>
 HA_BASELINE_UNTIL=<preceding local day 23:59:59.999 with offset>
 ```
 
-`analyze` then sources `.spur/run/$__runId-paths.env` — exactly as three other states already do — and passes `$HA_SINCE` / `$HA_UNTIL` for the current leg and `$HA_BASELINE_SINCE` / `$HA_BASELINE_UNTIL` for the baseline leg.
+`analyze` then sources `.spur/run/$__runId-paths.txt` — exactly as three other states already do — and passes `$HA_SINCE` / `$HA_UNTIL` for the current leg and `$HA_BASELINE_SINCE` / `$HA_BASELINE_UNTIL` for the baseline leg.
 
-**Why this beats reading the selector sidecar.** The original sketch had a new helper subcommand parse `<runId>-selector.json`. That makes a deterministic fact (what "2026-08-24 in America/Los_Angeles" means) depend on an `agent.run` stage's output, which is both slower and less trustworthy. `resolve-scope` keeps its real job — validating the *mode contract* per `references/modes.md` — while the bound arithmetic stays deterministic and unit-testable in the helper. This also means `resolve-paths` needs no new ordering: it already runs before `analyze`.
+**Why this beats reading the selector sidecar.** The original sketch had a new helper subcommand parse `<runId>-selector.json`. That makes a deterministic fact (what "2026-08-24 in America/Los*Angeles" means) depend on an `agent.run` stage's output, which is both slower and less trustworthy. `resolve-scope` keeps its real job — validating the \_mode contract* per `references/modes.md` — while the bound arithmetic stays deterministic and unit-testable in the helper. This also means `resolve-paths` needs no new ordering: it already runs before `analyze`.
 
 **DST is why this belongs in the helper and not in shell.** A local calendar day is 23, 24, or 25 hours long. Computing the preceding day's bounds is date arithmetic in a named zone, which is precisely the "would exceed the shell composition threshold" case ADR-069 R1 puts in the helper.
 
@@ -111,16 +118,19 @@ HA_BASELINE_UNTIL=<preceding local day 23:59:59.999 with offset>
 **Handoff to 0680.** Once this lands, `identity.bounds` is populated and recurrence classification produces real verdicts; 0680's contract work (which mandates severity ranking) depends on that, which is why it declares this task as its dependency.
 
 **Reversibility.** Additive env keys plus two argument substitutions; reverting restores the current unbounded behavior with no data rewrite.
+
 ### Plan
+
 1. Reproduce: run the workflow for a fixed `--date` and capture `selector.json`, both artifact `selector` blocks, and both digests as the failing baseline.
 2. Extend `resolvePaths()` in `plugins/sp/scripts/history-anatomy-cache.ts` to emit `HA_SINCE`, `HA_UNTIL`, `HA_BASELINE_SINCE`, `HA_BASELINE_UNTIL`, deriving the current and preceding local calendar days in the resolved zone. Pass the operator's bounds through unchanged in ad-hoc mode and emit no baseline pair there.
 3. Regenerate the committed `.mjs` twin per ADR-065 (`bun run build:scripts` / `superskill script convert sp history-anatomy-cache.ts`) so `script-contract-check` stays green.
-4. Declare `baselineSince` and `baselineUntil` in the workflow `vars:` block; change the `analyze` stage's two shell actions to source `.spur/run/$__runId-paths.env` and pass the resolved values.
+4. Declare `baselineSince` and `baselineUntil` in the workflow `vars:` block; change the `analyze` stage's two shell actions to source `.spur/run/$__runId-paths.txt` and pass the resolved values.
 5. Add the undeclared-var check (R5): cross-reference every `$name` a stage references against the `vars:` block, as a `spur workflow validate` extension or a repo check wired into the fast gate.
 6. Unit-test the bound derivation: a DST-spring day, a DST-fall day, a normal day, and an ad-hoc pass-through; assert the preceding-day pair is ordered and disjoint from the current pair.
 7. Run the workflow end to end for a fixed date; assert both artifacts carry non-null distinct selectors, the two digests differ, published `identity.bounds` is populated, and no recurrence key reads `not-comparable` for missing bounds.
 8. Measure and record artifact bytes and analyze wall-clock per leg, bounded vs unbounded, into the task's Solution section.
 9. Run `bun run lint`, `bun run test`, `bun run script-contract-check`, and `spur workflow validate config/workflows/history-anatomy.yaml`.
+
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
