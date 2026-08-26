@@ -130,10 +130,10 @@ function renderTimeDecomposition(derived: DerivedVariables | null): string[] {
     lines.push(
         '| Component | Time | Share of wall |',
         '| --- | ---: | ---: |',
-        `| LLM latency (assistant duration) | ${fmtWall(d.llmMs)} | ${pct(d.llmMs)} |`,
-        `| Tool execution | ${fmtWall(d.toolMs)} | ${pct(d.toolMs)} |`,
+        `| LLM latency (assistant duration) | ${naOrValue(d.llmMs, fmtWall)} | ${d.llmMs === null ? 'not available' : pct(d.llmMs)} |`,
+        `| Tool execution | ${naOrValue(d.toolMs, fmtWall)} | ${d.toolMs === null ? 'not available' : pct(d.toolMs)} |`,
         `| Idle / overhead | ${fmtWall(d.idleMs)} | ${pct(d.idleMs)} |`,
-        `| Unattributed (unmeasured durations) | ${fmtWall(d.unattributedMs)} | ${pct(d.unattributedMs)} |`,
+        `| Unattributed (unmeasured durations) | ${fmtWall(d.unattributedMs)} | ${pct(d.unattributedMs)} — check the Section Support matrix below; an instrumentation gap reads as unattributed work. |`,
         `| **Wall clock (span)** | **${fmtWall(d.spanMs)}** | 100% |`,
         '',
         d.spanExcludedSessions > 0
@@ -163,11 +163,24 @@ function renderPhases(derived: DerivedVariables | null): string[] {
     }
     lines.push('| # | Phase | Started | Wall |', '| ---: | --- | --- | ---: |');
     derived.phases.phases.forEach((phase, i) => {
-        const wallMs = Date.parse(phase.endedAt) - Date.parse(phase.startedAt);
-        lines.push(`| ${i} | ${phase.name} | ${phase.startedAt} | ${Number.isNaN(wallMs) ? 'n/a' : fmtWall(wallMs)} |`);
+        // Null boundary = never observed in the todo signal (0677): absent, not fabricated.
+        // Both boundaries observed is the only state with an elapsed duration.
+        const wallMs =
+            phase.startedAt !== null && phase.endedAt !== null
+                ? Date.parse(phase.endedAt) - Date.parse(phase.startedAt)
+                : null;
+        lines.push(
+            `| ${i} | ${phase.name} | ${phase.startedAt ?? 'not available'} | ${wallMs === null ? 'not available' : fmtWall(wallMs)} |`,
+        );
     });
     if (derived.phases.phases.length === 0) {
         lines.push('| (todo signal present but no phases extracted) | | | |');
+    }
+    if ((derived.phases.invalidPhaseCount ?? 0) > 0) {
+        lines.push(
+            '',
+            `> ${derived.phases.invalidPhaseCount} further phase(s) were excluded: their observed boundaries are out of order and must not enter elapsed-duration analysis as positive intervals.`,
+        );
     }
     lines.push('');
     return lines;
@@ -427,6 +440,11 @@ function fmtTopOf(population: number | undefined, appliedTop: number | undefined
         return `top ${appliedTop} of ${population.toLocaleString('en-US')}`;
     }
     return population.toLocaleString('en-US');
+}
+
+/** Absent-not-zero rendering (0677 R4): a null measurement is `not available`, never zero. */
+export function naOrValue(v: number | null, fmt: (n: number) => string): string {
+    return v === null ? 'not available' : fmt(v);
 }
 
 /** Wall-clock formatting for forensics scales: `86ms` → `1.2s` → `3.4m` → `5.2h`. */

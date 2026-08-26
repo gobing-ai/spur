@@ -34,6 +34,7 @@ function derived(): DerivedVariables {
     return {
         phases: {
             phaseSupport: 'supported',
+            invalidPhaseCount: 0,
             phases: [
                 { name: 'recon', startedAt: '2026-08-13T10:00:00Z', endedAt: '2026-08-13T10:02:30Z', source: 'todo' },
                 {

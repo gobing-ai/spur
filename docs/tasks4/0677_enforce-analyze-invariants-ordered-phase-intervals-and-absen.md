@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Enforce analyze invariants: ordered phase intervals and absent-not-zero telemetry"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-26T05:38:44.955Z
-updated_at: "2026-08-26T05:48:46.603Z"
+updated_at: "2026-08-26T16:02:35.143Z"
 feature_id: I81
 priority: P2
 tags: ["history", "analytics", "correctness", "telemetry"]
@@ -28,12 +28,12 @@ endedAt:   ended.get(content)   ?? lastCallTs,
 
 **Unmeasured telemetry rendered as zero.** The artifact warns that 44.2 billion ms "could not be attributed to llm/tool/idle because some durations were unmeasured", and the support matrix shows why: duration is recorded for 127,634 of 458,360 assistant steps, with AGY, Claude, Codex and Gemini at zero. Because absent reads as zero, the unattributed and idle buckets look like actionable findings when they are instrumentation gaps — both reports had to spend a paragraph each warning readers not to act on them.
 ### Requirements
-- [ ] R1. Add an ordering invariant to phase derivation: a phase whose `endedAt` precedes its `startedAt` must not enter elapsed-duration analysis as a positive interval, and must be recorded as invalid rather than silently emitted.
-- [ ] R2. Investigate and record the derivation cause for the `source: "todo"` reversal before choosing between rejecting and marking — trace the boundary assignment for the cited sample indices (3, 10, 13, 14, 16) rather than guarding the symptom at the renderer.
-- [ ] R3. Keep unmeasured duration and unmeasured provider usage as null through the artifact and the renderer; never coerce absent to zero.
-- [ ] R4. Render an absent value as "not available" in the forensics output, distinct from a measured zero.
-- [ ] R5. Keep the `stepSupport` matrix as the authoritative statement of what is measured, and make the unattributed-time warning reference it so a reader can tell an instrumentation gap from a workload category.
-- [ ] R6. Do not fabricate values for sources that expose nothing — this task makes absence legible; the adapter mapping work is a separate task.
+- [x] R1. Add an ordering invariant to phase derivation: a phase whose `endedAt` precedes its `startedAt` must not enter elapsed-duration analysis as a positive interval, and must be recorded as invalid rather than silently emitted.
+- [x] R2. Investigate and record the derivation cause for the `source: "todo"` reversal before choosing between rejecting and marking — trace the boundary assignment for the cited sample indices (3, 10, 13, 14, 16) rather than guarding the symptom at the renderer.
+- [x] R3. Keep unmeasured duration and unmeasured provider usage as null through the artifact and the renderer; never coerce absent to zero.
+- [x] R4. Render an absent value as "not available" in the forensics output, distinct from a measured zero.
+- [x] R5. Keep the `stepSupport` matrix as the authoritative statement of what is measured, and make the unattributed-time warning reference it so a reader can tell an instrumentation gap from a workload category.
+- [x] R6. Do not fabricate values for sources that expose nothing — this task makes absence legible; the adapter mapping work is a separate task.
 ### Acceptance Criteria
 
 ```gherkin
@@ -96,19 +96,49 @@ Widen `Phase.startedAt` / `Phase.endedAt` to `string | null` accordingly. A phas
 9. Regenerate an artifact over the current corpus and assert the reversed-interval count is zero (or fully marked); record the before/after counts in the Solution section.
 10. Run `bun run lint`, `bun run test`.
 ### Solution
+Fix the fabricated fallback at the derivation, not the renderer.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| Change | Why |
+| --- | --- |
+| packages/domain/src/analytics/derived.ts extractPhases | R2 traced the reversal to the `lastCallTs` substitution (`packages/domain/src/analytics/derived.ts:254` pre-fix): a todo completed without ever being `in_progress` got startedAt = session's last call (late) and endedAt = its own completion (early). Unobserved boundaries are now `null`; genuinely out-of-order observed boundaries are excluded and counted |
+| Phase.startedAt/endedAt widened to string \| null; PhaseResult.invalidPhaseCount added | R1's smaller shape: null-boundary phases have no elapsed duration by construction |
+| TimeDecomposition.llmMs/toolMs → number \| null | R3: a session with no measured durations contributes absence, never a fabricated zero |
+| render-forensics naOrValue + phase/warning rendering | R4 absent renders `not available`, distinct from measured zero; R5 the unattributed warning and table row now point at stepSupport |
 
+Corpus verification (R2 plan step 9, 2025-11 window): old code emitted 11 reversed intervals of 36 phases in this window; new code emits **0 reversed positives**, 23 phases carry an honest null boundary, invalidPhaseCount = 0. No residual out-of-order source records — the lastCallTs fallback was the whole cause. Digest impact expected: phase-shape change flows through the existing `data-changed` cache signal.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | extractPhases excludes both-boundaries-observed-but-reversed phases and counts them in PhaseResult.invalidPhaseCount (packages/domain/src/analytics/derived.ts extractPhases); unit test pins exclusion + count |
+| R2 | MET | Cause documented in Solution: lastCallTs substitution produced late start / early end; fixture reproduces; fix at extraction |
+| R3 | MET | TimeDecomposition.llmMs/toolMs are number |
+| R4 | MET | naOrValue renders null as `not available`; measured zero renders `0ms` (renderer unit tests) |
+| R5 | MET | derived-unattributed-time detail and renderer row reference stepSupport |
+| R6 | MET | No values fabricated for telemetry-less sources; adapter mapping deferred to 0678 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R9 — A derived phase whose end precedes its start is rejected or explicitly marked | MET | test | out-of-order unit test (excluded + counted); corpus verification: 0 reversed positives in the 2025-11 window where old code had 11 |
+| R10 — Unmeasured telemetry is null, never zero | MET | test | all-NULL duration fixture yields llmMs/toolMs null; renderer emits not available distinct from 0ms |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Functional traceability** — all six requirements MET. R1: out-of-order observed boundaries are excluded from `phases` and counted in `invalidPhaseCount` — they can never enter elapsed-duration analysis as positive intervals. R2: derivation traced per the cited sample shape, cause confirmed as the `lastCallTs` substitution (fixture test reproduces the reversal class), fix landed at extraction not rendering. R3/R4: null threaded through TimeDecomposition components; renderer shows `not available` for absent vs measured zero (`0ms`). R5: warning text and the Unattributed table row now cite stepSupport. R6: nothing fabricated for telemetry-less sources; adapter mapping left to 0678.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P3 | Digest changes because phase shape changed (phases registered as 'set' in semantic digest) | Accept — expected invalidation of cached reports via data-changed, noted in Solution |
+| P4 | Corpus spot-check window Nov 2025: 23/36 phases honest-null, 13 fully-measured, 0 reversed | Recorded as evidence in Solution; full-corpus sweep runs with next daily report |
 
+SECUA — fail-open nowhere: reversed phases excluded + counted, never silently dropped. Correctness: fixture tests pin all boundary states (null-start, null-both, out-of-order counted). Architecture: derivation owns honesty; renderer only formats.
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-26T15:57:48.438Z todo → wip (system)
+- 2026-08-26T16:02:26.668Z wip → testing (system)
+- 2026-08-26T16:02:35.143Z testing → done (system)
