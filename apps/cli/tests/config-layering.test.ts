@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCli } from './helpers';
@@ -13,11 +13,37 @@ import { runCli } from './helpers';
 interface LayerDirs {
     fakeHome: string;
     projectDir: string;
+    binDir: string;
+    /** Subprocess env: hermetic HOME, global layer enabled, stub agents on PATH. */
+    env: Record<string, string>;
+}
+
+/**
+ * Stub the agent binaries `agent doctor` probes.
+ *
+ * `AgentDetector` shells `<agent> --version` and marks an agent usable when the
+ * output carries a parseable `\d+\.\d+` version (ts-ai-runner `agent-detector.js`,
+ * `usable: detected.installed && detected.version !== null`). Without these stubs
+ * the doctor cases below assert the HOST's agent installation rather than the
+ * merged config: `resolveRole` finds no usable executor, exits 1, and prints
+ * `No usable executor for role … — tried: coder-exec` instead of the doctor
+ * payload. That passes on a dev box with claude/codex installed and fails on any
+ * machine without them, CI included.
+ */
+async function makeStubAgentBin(): Promise<string> {
+    const binDir = await mkdtemp(join(tmpdir(), 'spur-cli-bin-'));
+    for (const agent of ['claude', 'codex']) {
+        const shim = join(binDir, agent);
+        await writeFile(shim, `#!/bin/sh\necho "1.0.0 (${agent} stub)"\n`);
+        await chmod(shim, 0o755);
+    }
+    return binDir;
 }
 
 async function makeLayerDirs(globalYaml?: string, projectYaml?: string): Promise<LayerDirs> {
     const fakeHome = await mkdtemp(join(tmpdir(), 'spur-cli-home-'));
     const projectDir = await mkdtemp(join(tmpdir(), 'spur-cli-proj-'));
+    const binDir = await makeStubAgentBin();
     if (globalYaml !== undefined) {
         await mkdir(join(fakeHome, '.config', 'spur'), { recursive: true });
         await writeFile(join(fakeHome, '.config', 'spur', 'config.yaml'), globalYaml);
@@ -26,7 +52,17 @@ async function makeLayerDirs(globalYaml?: string, projectYaml?: string): Promise
         await mkdir(join(projectDir, '.spur'), { recursive: true });
         await writeFile(join(projectDir, '.spur', 'config.yaml'), projectYaml);
     }
-    return { fakeHome, projectDir };
+    return {
+        fakeHome,
+        projectDir,
+        binDir,
+        env: {
+            HOME: fakeHome,
+            USERPROFILE: fakeHome,
+            SPUR_SKIP_GLOBAL_CONFIG: '',
+            PATH: `${binDir}:${process.env.PATH ?? ''}`,
+        },
+    };
 }
 
 /** Global config: a 'coder' role + a 'coder-exec' executor, machine-wide. */
@@ -57,6 +93,7 @@ afterEach(async () => {
         if (dirs === undefined) break;
         await rm(dirs.fakeHome, { recursive: true, force: true });
         await rm(dirs.projectDir, { recursive: true, force: true });
+        await rm(dirs.binDir, { recursive: true, force: true });
     }
 });
 
@@ -67,11 +104,7 @@ describe('config layering — composition-root merged-config (A5)', () => {
         dirsToClean.push(dirs);
         // Project config has no agent section — the merged config must supply the
         // globally-defined coder executor for agent doctor resolution.
-        const res = await runCli(['agent', 'doctor', 'coder', '--json'], dirs.projectDir, {
-            HOME: dirs.fakeHome,
-            USERPROFILE: dirs.fakeHome,
-            SPUR_SKIP_GLOBAL_CONFIG: '',
-        });
+        const res = await runCli(['agent', 'doctor', 'coder', '--json'], dirs.projectDir, dirs.env);
         expect(res.code).toBe(0);
         const json = res.json as {
             rolesSource?: string;
@@ -101,11 +134,7 @@ describe('config layering — composition-root merged-config (A5)', () => {
         dirsToClean.push(dirs);
         // The project's coder-exec (codex) must win. Use the config-layer parity
         // helper indirectly: agent doctor reflects the merged coder-exec profile.
-        const res = await runCli(['agent', 'doctor', 'coder-exec', '--json'], dirs.projectDir, {
-            HOME: dirs.fakeHome,
-            USERPROFILE: dirs.fakeHome,
-            SPUR_SKIP_GLOBAL_CONFIG: '',
-        });
+        const res = await runCli(['agent', 'doctor', 'coder-exec', '--json'], dirs.projectDir, dirs.env);
         expect(res.code).toBe(0);
         // Project override must not error; the executor is still resolvable.
         // (The exact winning agent is asserted via the executor resolution; a
@@ -117,11 +146,7 @@ describe('config layering — composition-root merged-config (A5)', () => {
     test('R12: the CLI works when no global config file exists', async () => {
         const dirs = await makeLayerDirs(undefined, 'version: "1"\nname: proj\nagent:\n  default: coder\n');
         dirsToClean.push(dirs);
-        const res = await runCli(['workflow', 'list', '--json'], dirs.projectDir, {
-            HOME: dirs.fakeHome,
-            USERPROFILE: dirs.fakeHome,
-            SPUR_SKIP_GLOBAL_CONFIG: '',
-        });
+        const res = await runCli(['workflow', 'list', '--json'], dirs.projectDir, dirs.env);
         expect(res.code).toBe(0);
         // No config-loading error on either stream.
         expect(res.stderr).not.toMatch(/config|Error/);
@@ -130,11 +155,7 @@ describe('config layering — composition-root merged-config (A5)', () => {
     test('R13: an invalid global config fails once with a single --json error envelope', async () => {
         const dirs = await makeLayerDirs('this is: not: valid: yaml: [unclosed\n', 'version: "1"\nname: proj\n');
         dirsToClean.push(dirs);
-        const res = await runCli(['workflow', 'list', '--json'], dirs.projectDir, {
-            HOME: dirs.fakeHome,
-            USERPROFILE: dirs.fakeHome,
-            SPUR_SKIP_GLOBAL_CONFIG: '',
-        });
+        const res = await runCli(['workflow', 'list', '--json'], dirs.projectDir, dirs.env);
         expect(res.code).not.toBe(0);
         expect(res.stderr).toBe('');
         const json = res.json as { error?: { code?: string; message?: string } };
@@ -148,11 +169,7 @@ describe('config layering — composition-root merged-config (A5)', () => {
         dirsToClean.push(dirs);
         // `spur workflow list` reads resolveWorkflowPaths from the threaded config;
         // a global-only workflow.paths setting must be observed (not re-read per slice).
-        const res = await runCli(['workflow', 'list', '--json'], dirs.projectDir, {
-            HOME: dirs.fakeHome,
-            USERPROFILE: dirs.fakeHome,
-            SPUR_SKIP_GLOBAL_CONFIG: '',
-        });
+        const res = await runCli(['workflow', 'list', '--json'], dirs.projectDir, dirs.env);
         expect(res.code).toBe(0);
         const json = res.json as { layers?: Array<{ id?: string; path?: string }> };
         expect(json.layers).toContainEqual({
@@ -170,11 +187,7 @@ describe('config layering — composition-root merged-config (A5)', () => {
             'version: "1"\nname: proj\n',
         );
         dirsToClean.push(dirs);
-        const res = await runCli(['agent', 'doctor', 'coder', '--json'], dirs.projectDir, {
-            HOME: dirs.fakeHome,
-            USERPROFILE: dirs.fakeHome,
-            SPUR_SKIP_GLOBAL_CONFIG: '',
-        });
+        const res = await runCli(['agent', 'doctor', 'coder', '--json'], dirs.projectDir, dirs.env);
         const json = res.json as { rolesSource?: string; agents?: Array<{ agent?: string }> };
         expect(res.stderr).toBe('');
         expect(json.rolesSource).toBe('fallback');
@@ -188,11 +201,7 @@ describe('config layering — composition-root merged-config (A5)', () => {
             'version: "1"\nname: proj\n',
         );
         dirsToClean.push(dirs);
-        const res = await runCli(['agent', 'doctor', 'coder'], dirs.projectDir, {
-            HOME: dirs.fakeHome,
-            USERPROFILE: dirs.fakeHome,
-            SPUR_SKIP_GLOBAL_CONFIG: '',
-        });
+        const res = await runCli(['agent', 'doctor', 'coder'], dirs.projectDir, dirs.env);
         expect(res.stderr.trim()).toBe(FALLBACK_NOTE);
     });
 });
