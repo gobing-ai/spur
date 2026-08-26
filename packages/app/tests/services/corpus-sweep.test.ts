@@ -1,8 +1,9 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { type BufferTarget, createBufferTarget, setDefaultOutputTargets } from '@gobing-ai/ts-utils';
 import { classifyFallback, printSweepResult, runCorpusSweep, type SweepBucket } from '../../src/services/corpus-sweep';
 import type { ParseVerdictOutcome, VerdictRowStatus } from '../../src/services/verify-verdict';
 
@@ -170,7 +171,23 @@ describe('runCorpusSweep — measured durable-evidence sweep (0673 R1/R2)', () =
 });
 
 describe('printSweepResult — output seam renders both forms (0673 R1/R6)', () => {
-    test('renders json and human forms without throwing', () => {
+    let stdout: BufferTarget;
+    let restore: () => void;
+
+    beforeAll(() => {
+        stdout = createBufferTarget();
+        restore = setDefaultOutputTargets({ stdout });
+    });
+
+    afterEach(() => {
+        stdout.clear();
+    });
+
+    afterAll(() => {
+        restore();
+    });
+
+    test('renders the json form as parseable sweep output', () => {
         const minimal = {
             doneTasks: 0,
             withArtifact: 0,
@@ -180,7 +197,24 @@ describe('printSweepResult — output seam renders both forms (0673 R1/R6)', () 
             evidenceNotRecoverable: 0,
             outcomes: [],
         };
-        expect(() => printSweepResult(minimal, true)).not.toThrow();
-        expect(() => printSweepResult(minimal, false)).not.toThrow();
+        printSweepResult(minimal, true);
+        expect(JSON.parse(stdout.text())).toEqual(minimal);
+    });
+
+    test('renders the human form with the corpus-sweep banner', () => {
+        const minimal = {
+            doneTasks: 2,
+            withArtifact: 1,
+            withoutArtifact: 1,
+            verified: 1,
+            recoveredNotPass: 0,
+            evidenceNotRecoverable: 0,
+            outcomes: [],
+        };
+        printSweepResult(minimal, false);
+        const out = stdout.text();
+        expect(out).toContain('corpus-sweep (durable-evidence fallback, deterministic):');
+        expect(out).toContain('done tasks:                 2');
+        expect(out).toContain('with verdict artifact:      1');
     });
 });
