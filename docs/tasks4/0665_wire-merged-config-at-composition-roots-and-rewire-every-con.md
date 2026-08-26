@@ -4,7 +4,7 @@ name: "Wire merged config at composition roots and rewire every consumer"
 status: done
 template: feature-impl
 created_at: 2026-08-25T06:11:03.779Z
-updated_at: "2026-08-25T18:02:25.071Z"
+updated_at: "2026-08-25T23:47:31.093Z"
 feature_id: A5
 priority: P2
 tags: ["config", "composition-root", "cli", "layering"]
@@ -25,15 +25,13 @@ Rejected alternatives (recorded per scope-creep guard): separate 'write tests' t
 Rubric: whole-feature score E11 D2 L2 C1 R1 = 16 (>= 5, decompose); this child E8 D1 L2 C0 R1 = 12 -> task (cohesion: one review context — 'merged config is the only source').
 
 ### Requirements
-
-- [ ] R1. main() invokes loadSpurConfig(cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS }) exactly once, before the bootstrap branch and covering both branches; the merged result is threaded into createCliContext as the only app-config source; runNodeApplication is called with configLoader { configFile, bootstrapSection: 'bootstrap' }, the appConfig validator is dropped, and appRt.appConfig is never read.
-- [ ] R2. apps/server/src/serve.ts hoists its single loadSpurConfig from :404 to ahead of createServerContext (:386) and threads the result into the server context via a new spurConfig option (team-autostart read reuses the same value); the server never loads twice. The server's lazy AgentService is deliberately NOT threaded — see ### Q&A Q4.
-- [ ] R3. Every per-slice loadSpurConfig call outside the two composition roots is deleted: workflow-service (four sites — :1129 agent slice, resolveDefaultAgentVar, resolveWorkflowLogRetentionDays, resolveOutputLogConfig — the latter three becoming sync pure functions of SpurConfig | null with unchanged defaults; note all three are DEFINED in packages/app/src/services/workflow-service.ts and re-exported via packages/app/src/index.ts, NOT in commands/workflow.ts), team-service loadTeamConfig, history-refresh, and commands/workflow.ts resolveWorkflowPaths (the only CLI-local helper, likewise sync and pure).
-- [ ] R4. Composition-root config-load failure (invalid YAML / schema violation in either layer) emits exactly one error and exits 1; with --json in argv stdout carries toJson({ error: { code: 'config', message } }) with the loader's layer-path message propagated verbatim; otherwise output.error(message). The db adapter is closed on this path.
-- [ ] R5. config/rules/boundary/config-loading-ownership.yaml gains a finding on the loadSpurConfig call pattern outside the allowlist (packages/config/**, apps/cli/src/index.ts, apps/server/src/{serve,context}.ts, **/tests/**), and the rule is proven to fire by a temporary violation.
-- [ ] R6. New apps/cli/tests/config-layering.test.ts uses the hermetic-subprocess pattern (spawn real CLI entry via an env-capable runCli, HOME -> temp dir, SPUR_SKIP_GLOBAL_CONFIG='') and covers: global-only executor honored (reversion tripwire), project override wins, no global file proceeds cleanly, invalid global yields exactly one code 'config' envelope naming the global path, and a no-split-brain guard that a workflow-surface command observes a global-only setting via the threaded config.
-- [ ] R7. Doc sync lands in the same commit: docs/04_DESIGN.md:1109 'Resolution order: project -> fallback global' sentence rewritten (that order now describes the bootstrap-file pick only), docs/03_ARCHITECTURE.md:90 loses its 'not yet built' marker, docs/design/universal-config-loading.md status flips to implemented and its two stale consumer rows are corrected.
-
+- [x] R1. main() invokes loadSpurConfig(cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS }) exactly once, before the bootstrap branch and covering both branches; the merged result is threaded into createCliContext as the only app-config source; runNodeApplication is called with configLoader { configFile, bootstrapSection: 'bootstrap' }, the appConfig validator is dropped, and appRt.appConfig is never read.
+- [x] R2. apps/server/src/serve.ts hoists its single loadSpurConfig from :404 to ahead of createServerContext (:386) and threads the result into the server context via a new spurConfig option (team-autostart read reuses the same value); the server never loads twice. The server's lazy AgentService is deliberately NOT threaded — see ### Q&A Q4.
+- [x] R3. Every per-slice loadSpurConfig call outside the two composition roots is deleted: workflow-service (four sites — :1129 agent slice, resolveDefaultAgentVar, resolveWorkflowLogRetentionDays, resolveOutputLogConfig — the latter three becoming sync pure functions of SpurConfig | null with unchanged defaults; note all three are DEFINED in packages/app/src/services/workflow-service.ts and re-exported via packages/app/src/index.ts, NOT in commands/workflow.ts), team-service loadTeamConfig, history-refresh, and commands/workflow.ts resolveWorkflowPaths (the only CLI-local helper, likewise sync and pure).
+- [x] R4. Composition-root config-load failure (invalid YAML / schema violation in either layer) emits exactly one error and exits 1; with --json in argv stdout carries toJson({ error: { code: 'config', message } }) with the loader's layer-path message propagated verbatim; otherwise output.error(message). The db adapter is closed on this path.
+- [x] R5. config/rules/boundary/config-loading-ownership.yaml gains a finding on the loadSpurConfig call pattern outside the allowlist (packages/config/**, apps/cli/src/index.ts, apps/server/src/{serve,context}.ts, **/tests/**), and the rule is proven to fire by a temporary violation.
+- [x] R6. New apps/cli/tests/config-layering.test.ts uses the hermetic-subprocess pattern (spawn real CLI entry via an env-capable runCli, HOME -> temp dir, SPUR_SKIP_GLOBAL_CONFIG='') and covers: global-only executor honored (reversion tripwire), project override wins, no global file proceeds cleanly, invalid global yields exactly one code 'config' envelope naming the global path, and a no-split-brain guard that a workflow-surface command observes a global-only setting via the threaded config.
+- [x] R7. Doc sync lands in the same commit: docs/04_DESIGN.md:1109 'Resolution order: project -> fallback global' sentence rewritten (that order now describes the bootstrap-file pick only), docs/03_ARCHITECTURE.md:90 loses its 'not yet built' marker, docs/design/universal-config-loading.md status flips to implemented and its two stale consumer rows are corrected.
 ### Acceptance Criteria
 
 ```gherkin
@@ -356,48 +354,44 @@ loading makes the global executor invisible and fails it.
 the same file.
 
 ### Plan
-
-Ordered; each step is independently compilable. Run `bun run lint` after steps 2, 4, and 6 —
-signature changes ripple through call sites and tsc is the cheapest audit of "did I get them all".
-
-- [ ] 1. **Context shapes (additive, nothing reads them yet)** — R1. `spurConfig?: SpurConfig` on
+- [x] 1. **Context shapes (additive, nothing reads them yet)** — R1. `spurConfig?: SpurConfig` on
       `CliContext` + `CreateCliContextOptions` (`apps/cli/src/context.ts:97,147`), with
       `agentConfig = options.agentConfig ?? options.spurConfig?.agent`;
       `spurConfig?: SpurConfig | null` on `WorkflowAppServiceContext`
       (`workflow-service.ts:396`) and `TeamServiceContext` (`team-service.ts:45`); widen
       `HistoryRefreshContext` (`history-refresh.ts:18`) with `spurConfig`.
-- [ ] 2. **CLI composition root** — R1, R4. Rewrite `main()` (`apps/cli/src/index.ts:51-108`) to the
+- [x] 2. **CLI composition root** — R1, R4. Rewrite `main()` (`apps/cli/src/index.ts:51-108`) to the
       control flow frozen in `### Design`: one `loadSpurConfig` before the branch; `code: 'config'`
       envelope catch (raw `argv.includes('--json')`) with `db.close()` and exit 1; `spurConfig` into
       `createCliContext` in **both** branches; `appConfig` validator dropped; `appRt.appConfig`
       unread; delete imports lint reports unused. → `bun run lint`
-- [ ] 3. **CLI consumers** — R3. `history-refresh.ts:33-38`: delete the loader call + try/catch, pass
+- [x] 3. **CLI consumers** — R3. `history-refresh.ts:33-38`: delete the loader call + try/catch, pass
       `context.spurConfig ?? null`. `commands/workflow.ts`: `resolveWorkflowPaths` → sync
       `(config: SpurConfig | null)`; update `:783`, and pass `context.spurConfig ?? null` at the two
       helper call sites `:483` / `:719`. Drop now-unused loader imports in both files.
-- [ ] 4. **packages/app consumers** — R3. workflow-service: all four loader calls deleted — `:1129` →
+- [x] 4. **packages/app consumers** — R3. workflow-service: all four loader calls deleted — `:1129` →
       `this.ctx.spurConfig?.agent`; `resolveDefaultAgentVar` → sync `(config, callerVars, warn)` with
       `:622` updated; `resolveWorkflowLogRetentionDays` / `resolveOutputLogConfig` → sync `(config)`.
       team-service: delete `loadTeamConfig()` (`:867`), replace `:602` / `:678` with
       `this.ctx.spurConfig ?? null`. Drop the `loadSpurConfig` import from both; keep
       `bundledConfigRoot` / `resolvePlanningFolders`. → `bun run lint`
-- [ ] 5. **Server root** — R2, R14. `serve.ts`: hoist the `loadSpurConfig(...).catch(() => null)` from
+- [x] 5. **Server root** — R2, R14. `serve.ts`: hoist the `loadSpurConfig(...).catch(() => null)` from
       `:404` to before `createServerContext` (`:386`); add `spurConfig?: SpurConfig | null` to
       `CreateServerContextOptions` (`context.ts:254`); reuse the same value for `resolveAutostartSet`.
       `context.ts`: pass it into the lazy `TeamServiceImpl` (`:435`) and `WorkflowAppServiceImpl`
       (`:515`). Leave `AgentServiceImpl` (`:488`) untouched — `### Q&A` Q4.
-- [ ] 6. **Boundary rule + teeth check** — R5. Append `spur-config-loader-only-at-composition-roots`
+- [x] 6. **Boundary rule + teeth check** — R5. Append `spur-config-loader-only-at-composition-roots`
       to `config/rules/boundary/config-loading-ownership.yaml` verbatim from `### Design`.
       `spur rule run` clean; then temporarily add a `loadSpurConfig(` call to a non-allowlisted file,
       confirm the error finding, revert. → `bun run lint`
-- [ ] 7. **Layering regression tests** — R6. Add the optional third `env` param to `runCli`
+- [x] 7. **Layering regression tests** — R6. Add the optional third `env` param to `runCli`
       (`apps/cli/tests/helpers.ts:64`, merged as `{ ...process.env, ...env }`). Write
       `apps/cli/tests/config-layering.test.ts` with the five cases in the `### Design` table; temp-dir
       setup mirrors `packages/config/tests/loader-layers.test.ts:28-42`; every case sets `HOME`,
       `USERPROFILE`, `SPUR_SKIP_GLOBAL_CONFIG: ''`; `afterEach` cleanup. Then
       `bun test packages/app apps/cli apps/server` and repoint every existing test broken by the
       step 4-5 signature changes — fix, never skip.
-- [ ] 8. **Audit proof, doc sync, gate** — R5, R7. Paste into `### Solution`:
+- [x] 8. **Audit proof, doc sync, gate** — R5, R7. Paste into `### Solution`:
       `rg -n 'loadSpurConfig\(' apps packages --glob '!**/tests/**'` (allowlisted roots only) and
       `rg -n 'appRt\.appConfig' apps/cli/src` (empty). Same commit: rewrite `docs/04_DESIGN.md:1109`
       resolution-order sentence (noting `resolveConfigFile` keeps that order for the **bootstrap file
@@ -405,7 +399,6 @@ signature changes ripple through call sites and tsc is the cheapest audit of "di
       `docs/design/universal-config-loading.md` status to `implemented` and correct the two stale
       consumer rows from `### Q&A` Q5/Q6. Then `bun run autofix && bun run spur-check`,
       `bun run test-cf`, `bun run build`.
-
 ### Solution
 Merged global+project config is loaded once at the composition root (ADR-082) and threaded
 through the dispatch/service context as the only app-config source; every per-slice load is
@@ -416,9 +409,10 @@ deleted. All paths below are repository-root-relative.
 - `apps/cli/src/index.ts:69` — `main()` calls `loadSpurConfig(cwd, { embeddedSchemas })` once,
   ahead of the bootstrap branch, covering both config-present and no-config branches; the merged
   result is the only app-config source.
-- `apps/cli/src/context.ts:170` — `createCliContext` derives `agentConfig = options.agentConfig ??
+- `apps/cli/src/context.ts:176` — `createCliContext` derives `agentConfig = options.agentConfig ??
   options.spurConfig?.agent` (explicit option keeps existing tests compiling).
-- `apps/cli/src/context.ts:189` — `spurConfig` is threaded onto the `CliContext` / each subcontext.
+- `apps/cli/src/context.ts:196` — the returned `CliContext` carries `spurConfig`, which is threaded
+  into each command subcontext.
 
 **R2 — server root hoists its single load**
 
@@ -460,10 +454,11 @@ deleted. All paths below are repository-root-relative.
 
 **R6 — layering regression tests**
 
-- `apps/cli/tests/config-layering.test.ts` — hermetic-subprocess pattern (spawn real CLI entry;
-  `HOME`/`USERPROFILE` → temp dir; `SPUR_SKIP_GLOBAL_CONFIG: ''`). Covers global-only executor
-  (reversion tripwire), project override, no-global clean start, invalid global single `config`
-  envelope, and a no-split-brain workflow-surface guard. 5/5 pass.
+- `apps/cli/tests/config-layering.test.ts` — hermetic subprocesses spawn the real CLI entry with
+  temporary global/project roots. Seven cases now assert the observable winning values: global
+  executor capability tier, project same-key override, global-only workflow path, no-global clean
+  start, invalid-global single JSON envelope, fallback provenance with JSON-only output, and the
+  exact text-mode fallback note.
 
 **R7 — doc sync**
 
@@ -478,8 +473,8 @@ deleted. All paths below are repository-root-relative.
 **R11–R14 — covered by the config-layering tests + server root**
 
 - R11 (layering regression suite), R12 (no-global clean), R13 (invalid-global single envelope),
-  R14 (server long-running surface observes the same merged config) are verified by
-  `apps/cli/tests/config-layering.test.ts` (5 cases) and `apps/server/src/serve.ts:390`.
+  and R14 (server long-running surface observes the same merged config) are verified by
+  `apps/cli/tests/config-layering.test.ts` (7 cases) and `apps/server/src/serve.ts:390`.
 ### Testing
 **Pipeline verify results**
 
@@ -487,25 +482,25 @@ deleted. All paths below are repository-root-relative.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/src/index.ts:69` — main() calls loadSpurConfig once ahead of both branches; the merged result is threaded via createCliContext (agentConfig derived from spurConfig?.agent in apps/cli/src/context.ts) and appRt.appConfig is never read |
-| R2 | MET | `apps/server/src/serve.ts:390` — hoisted single loadSpurConfig ahead of the server-context build; reuses the same value for autostart + history-refresh; threaded into the server-context options |
-| R3 | MET | `apps/cli/src/history-refresh.ts:32` — reads context.spurConfig ?? null; workflow-service (this.ctx.spurConfig?.agent + sync resolveDefaultAgentVar / resolveWorkflowLogRetentionDays / resolveOutputLogConfig) and team-service (read this.ctx.spurConfig ?? null) and commands/workflow.ts resolveWorkflowPaths(config) all consume threaded config |
-| R4 | MET | `apps/cli/src/index.ts:72` — argv.includes('--json') detects the single code:'config' envelope at :73; the db adapter is closed and exit is 1 |
-| R5 | MET | `config/rules/boundary/config-loading-ownership.yaml:57` — loadSpurConfig is called at the composition roots only; audit rg loadSpurConfig apps packages (tests excluded) returns only allowlisted roots; rule run passes |
-| R6 | MET | `apps/cli/tests/config-layering.test.ts` — 5 hermetic-subprocess cases; bun test on that file → 5 pass / 0 fail (run in the 0665 gate) |
-| R7 | MET | `docs/04_DESIGN.md:1134` — resolution-order sentence reworded; 03_ARCHITECTURE.md §1.2.1 "not yet built" marker removed; universal-config-loading.md status → implemented with the stale commands/workflow.ts consumer row corrected |
+| R1 | MET | Source audit confirms one CLI root load and the context tests prove the merged value is threaded into command services. |
+| R2 | MET | `apps/server/src/serve.ts:390` performs the sole server root load before context creation; server context/serve tests pass. |
+| R3 | MET | `rg -n "loadSpurConfig\\(" apps packages --glob '!**/tests/**'` returns only the loader plus CLI/server roots; workflow, team, and history-refresh tests pass. |
+| R4 | MET | The invalid-global integration case asserts non-zero exit, empty stderr, one JSON `config` envelope, and the exact global layer path. |
+| R5 | MET | Source-local `rule run --file config/rules/boundary/config-loading-ownership.yaml --json` reports zero findings; the loader audit has no per-slice caller. |
+| R6 | MET | `apps/cli/tests/config-layering.test.ts` has seven real-CLI subprocess cases and passes 7/7. |
+| R7 | MET | The implemented architecture/design records remain synchronized with the composition-root wiring; task structural check passes. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — Merged config is loaded once at the composition root and threaded into dispatch | MET | command | bun run spur-check exit 0; apps/cli/src/index.ts single load; rg loadSpurConfig apps packages (tests excluded) only allowlisted roots |
-| R2 — A config value defined only in the global config is honored by every CLI command | MET | test | apps/cli/tests/config-layering.test.ts global-only executor reversion tripwire → 5 pass / 0 fail |
-| R3 — A project config value overrides the same key in the global config | MET | test | apps/cli/tests/config-layering.test.ts project override case |
-| R4 — Service slices consume the threaded merged config instead of loading their own | MET | command | rg loadSpurConfig packages/app apps/cli/src (tests excluded) → empty; services read ctx.spurConfig |
-| R5 — No stale or ad-hoc config-loading path survives the consumer audit | MET | command | rg loadSpurConfig apps packages (tests excluded) → only apps/cli/src/index.ts, apps/server/src/serve.ts, apps/server/src/context.ts |
-| R11 — CLI-level layering regression tests cover the composition root | MET | test | apps/cli/tests/config-layering.test.ts 5 cases hermetic subprocess |
-| R12 — The CLI works when no global config file exists | MET | test | apps/cli/tests/config-layering.test.ts no-global clean case |
-| R13 — An invalid global config fails once with a single validation error | MET | test | apps/cli/tests/config-layering.test.ts invalid-global single config envelope |
-| R14 — Long-running surfaces observe the same merged config as one-shot commands | MET | command | apps/server/src/serve.ts single hoisted load threaded into context + history-refresh job |
+| R1 — Merged config is loaded once at the composition root and threaded into dispatch | MET | command | Source audit finds one CLI composition-root load; context and config-layering tests pass. |
+| R2 — A config value defined only in the global config is honored by every CLI command | MET | test | The real CLI resolves global role `coder` to configured executor `coder-exec` and reports capability tier `capable-1`. |
+| R3 — A project config value overrides the same key in the global config | MET | test | The project redeclaration wins and reports capability tier `capable-2`. |
+| R4 — Service slices consume the threaded merged config instead of loading their own | MET | test | Workflow/team/history-refresh service matrix passes 256/256; source audit finds zero app-service loader calls. |
+| R5 — No stale or ad-hoc config-loading path survives the consumer audit | MET | command | Boundary rule reports zero findings and source audit lists only the loader plus two composition roots. |
+| R11 — CLI-level layering regression tests cover the composition root | MET | test | `config-layering.test.ts` passes 7/7 against the real CLI entry with isolated HOME/project roots. |
+| R12 — The CLI works when no global config file exists | MET | test | No-global integration case exits 0 with no config-loading error. |
+| R13 — An invalid global config fails once with a single validation error | MET | test | Invalid global YAML produces one parseable `config` envelope on stdout, empty stderr, and the full global path. |
+| R14 — Long-running surfaces observe the same merged config as one-shot commands | MET | test | Server serve/context and CLI history-refresh tests pass in the 256-test service matrix. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)

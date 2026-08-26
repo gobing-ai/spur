@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCli } from './helpers';
@@ -38,12 +38,16 @@ const GLOBAL_EXECUTOR = [
     '  executors:',
     '    - name: coder-exec',
     '      agent: claude',
-    '      tier: standard',
+    '      tier: capable-1',
     '  roles:',
     '    coder:',
     '      tier: standard',
     '      stages: [implement, test, wrap]',
+    'workflows:',
+    '  paths: [global-only-workflows]',
 ].join('\n');
+
+const FALLBACK_NOTE = 'agent.roles: no config layer defines a table — built-in DEFAULT_AGENT_ROLES fallback in effect';
 
 const dirsToClean: LayerDirs[] = [];
 
@@ -63,17 +67,18 @@ describe('config layering — composition-root merged-config (A5)', () => {
         dirsToClean.push(dirs);
         // Project config has no agent section — the merged config must supply the
         // globally-defined coder executor for agent doctor resolution.
-        const res = await runCli(['agent', 'doctor', 'coder-exec', '--json'], dirs.projectDir, {
+        const res = await runCli(['agent', 'doctor', 'coder', '--json'], dirs.projectDir, {
             HOME: dirs.fakeHome,
             USERPROFILE: dirs.fakeHome,
             SPUR_SKIP_GLOBAL_CONFIG: '',
         });
         expect(res.code).toBe(0);
-        const json = res.json as { agents?: Array<{ agent?: string; usable?: boolean }> };
-        expect(Array.isArray(json.agents)).toBe(true);
-        // The globally-declared executor name resolves (a return to single-file
-        // dispatch loading would make the global executor invisible and fail this).
-        expect(json.agents?.some((a) => a.agent === 'coder-exec')).toBe(true);
+        const json = res.json as {
+            rolesSource?: string;
+            agents?: Array<{ agent?: string; capabilityTier?: string }>;
+        };
+        expect(json.rolesSource).toBe('config');
+        expect(json.agents?.find((a) => a.agent === 'coder-exec')?.capabilityTier).toBe('capable-1');
     });
 
     test('R3: a project config value overrides the same global key', async () => {
@@ -86,7 +91,7 @@ describe('config layering — composition-root merged-config (A5)', () => {
             '  executors:',
             '    - name: coder-exec',
             '      agent: codex',
-            '      tier: standard',
+            '      tier: capable-2',
             '  roles:',
             '    coder:',
             '      tier: standard',
@@ -105,8 +110,8 @@ describe('config layering — composition-root merged-config (A5)', () => {
         // Project override must not error; the executor is still resolvable.
         // (The exact winning agent is asserted via the executor resolution; a
         // project-overridden coder-exec means dispatch resolves codex, not claude.)
-        const json = res.json as { agents?: Array<{ agent?: string }> };
-        expect(json.agents?.some((a) => a.agent === 'coder-exec')).toBe(true);
+        const json = res.json as { agents?: Array<{ agent?: string; capabilityTier?: string }> };
+        expect(json.agents?.find((a) => a.agent === 'coder-exec')?.capabilityTier).toBe('capable-2');
     });
 
     test('R12: the CLI works when no global config file exists', async () => {
@@ -131,10 +136,11 @@ describe('config layering — composition-root merged-config (A5)', () => {
             SPUR_SKIP_GLOBAL_CONFIG: '',
         });
         expect(res.code).not.toBe(0);
+        expect(res.stderr).toBe('');
         const json = res.json as { error?: { code?: string; message?: string } };
         expect(json.error?.code).toBe('config');
         // The message names the global (home-layer) path, not one error per consumer.
-        expect(json.error?.message ?? '').toContain('config.yaml');
+        expect(json.error?.message ?? '').toContain(join(dirs.fakeHome, '.config', 'spur', 'config.yaml'));
     });
 
     test('R1/R5: a workflow-surface command observes a global-only setting via the threaded config (no split-brain)', async () => {
@@ -148,8 +154,11 @@ describe('config layering — composition-root merged-config (A5)', () => {
             SPUR_SKIP_GLOBAL_CONFIG: '',
         });
         expect(res.code).toBe(0);
-        // No split-brain: dispatch must not throw a per-slice config error.
-        expect(res.stderr).not.toMatch(/loadSpurConfig|config/);
+        const json = res.json as { layers?: Array<{ id?: string; path?: string }> };
+        expect(json.layers).toContainEqual({
+            id: 'project',
+            path: join(await realpath(dirs.projectDir), 'global-only-workflows'),
+        });
     });
 
     test('R7: no config layer defines agent.roles → doctor reports rolesSource: fallback (explicit fallback proven)', async () => {
@@ -167,6 +176,7 @@ describe('config layering — composition-root merged-config (A5)', () => {
             SPUR_SKIP_GLOBAL_CONFIG: '',
         });
         const json = res.json as { rolesSource?: string; agents?: Array<{ agent?: string }> };
+        expect(res.stderr).toBe('');
         expect(json.rolesSource).toBe('fallback');
         // The coder role still resolves (fallback table), so doctor is usable.
         expect(Array.isArray(json.agents)).toBe(true);
@@ -183,6 +193,6 @@ describe('config layering — composition-root merged-config (A5)', () => {
             USERPROFILE: dirs.fakeHome,
             SPUR_SKIP_GLOBAL_CONFIG: '',
         });
-        expect(res.stderr).toMatch(/DEFAULT_AGENT_ROLES fallback in effect/);
+        expect(res.stderr.trim()).toBe(FALLBACK_NOTE);
     });
 });

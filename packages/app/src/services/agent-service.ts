@@ -450,7 +450,7 @@ export class AgentService {
         // `{usable:false}`) and never stop at the first eligible without a
         // usability check (a quota-exhausted or missing executor must fall through
         // to the next rung, exactly as dispatch would).
-        if (this.ctx.rolesSource === 'fallback') {
+        if (this.ctx.rolesSource === 'fallback' && !args.json) {
             this.ctx.output.error(
                 'agent.roles: no config layer defines a table — built-in DEFAULT_AGENT_ROLES fallback in effect',
             );

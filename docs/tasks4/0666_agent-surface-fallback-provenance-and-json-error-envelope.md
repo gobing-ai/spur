@@ -4,7 +4,7 @@ name: "Agent-surface fallback provenance and --json error envelope"
 status: done
 template: feature-impl
 created_at: 2026-08-25T06:11:03.806Z
-updated_at: "2026-08-25T18:13:42.881Z"
+updated_at: "2026-08-25T23:47:33.642Z"
 feature_id: A5
 priority: P2
 tags: ["config", "agent-surface", "json-error-contract"]
@@ -26,14 +26,12 @@ Rejected alternatives (recorded per scope-creep guard): splitting fallback-prove
 Rubric: this child E4 D1 L1 C0 R0 = 6 -> task (cohesion: one review context — agent-surface output behavior).
 
 ### Requirements
-
-- [ ] R1. CliContext gains non-optional agentRolesSource: 'config' | 'fallback' computed at the CLI root from the merged agent?.roles (fallback iff no layer supplied an agent.roles table at all — whole-table, not per-role); AgentServiceContext gains optional rolesSource?: 'config' | 'fallback' and the CLI passes it through agentService(). CLI-only: the server's lazy AgentService is deliberately NOT threaded — see ### Q&A Q6.
-- [ ] R2. spur agent doctor coder resolves the role against the merged config: with a globally defined executor for coder and no project agent: section, doctor reports the coder executor as configured. Expected to need no code change once 0665 lands — verify against 0665's tripwire case rather than adding a load here.
-- [ ] R3. When no config layer defines agent.roles, doctor reports the active fallback: text mode writes one note line to the error stream ('agent.roles: no config layer defines a table — built-in DEFAULT_AGENT_ROLES fallback in effect'); --json mode instead adds top-level rolesSource: 'config' | 'fallback' to the doctor payload; the note never changes exit codes and never fires when a layer supplies agent.roles.
-- [ ] R4. Verify the decision to retain DEFAULT_AGENT_ROLES as an explicit fallback is recorded in docs/00_ADR.md — the ADR-078 amendment is ALREADY LANDED at docs/00_ADR.md:1150. Confirm it still matches what ships (note wording, rolesSource field name); amend only on divergence, and do not author a second amendment.
-- [ ] R5. agent doctor with an unresolvable role and agent run dispatch failures under --json print toJson({ error: { code: 'agent-resolution', message } }) on stdout with non-zero exit and nothing plain-text on either stream; the two real plain-text sites are packages/app/src/services/agent-service.ts:456 (doctor !resolved.ok) and :525 (run !outcome.ok) — NOT agent.ts:746, which is the already-conforming waitUsageError (see ### Q&A Q1). Post-dispatch exits at :539/:542 stay plain-text. Exit codes unchanged; reuse the module-private toJson at agent-service.ts:1996.
-- [ ] R6. spur message send argument/usage failures under --json print toJson({ error: { code: 'usage', message } }) on stdout with non-zero exit; the real plain-text site is apps/cli/src/commands/message.ts:114 (empty body, exit 2) — NOT message.ts:415, which is the already-conforming sendWaitFail (see ### Q&A Q2). message watch (:72) and message reply (:263) are out of scope.
-
+- [x] R1. CliContext gains non-optional agentRolesSource: 'config' | 'fallback' computed at the CLI root from the merged agent?.roles (fallback iff no layer supplied an agent.roles table at all — whole-table, not per-role); AgentServiceContext gains optional rolesSource?: 'config' | 'fallback' and the CLI passes it through agentService(). CLI-only: the server's lazy AgentService is deliberately NOT threaded — see ### Q&A Q6.
+- [x] R2. spur agent doctor coder resolves the role against the merged config: with a globally defined executor for coder and no project agent: section, doctor reports the coder executor as configured. Expected to need no code change once 0665 lands — verify against 0665's tripwire case rather than adding a load here.
+- [x] R3. When no config layer defines agent.roles, doctor reports the active fallback: text mode writes one note line to the error stream ('agent.roles: no config layer defines a table — built-in DEFAULT_AGENT_ROLES fallback in effect'); --json mode instead adds top-level rolesSource: 'config' | 'fallback' to the doctor payload; the note never changes exit codes and never fires when a layer supplies agent.roles.
+- [x] R4. Verify the decision to retain DEFAULT_AGENT_ROLES as an explicit fallback is recorded in docs/00_ADR.md — the ADR-078 amendment is ALREADY LANDED at docs/00_ADR.md:1150. Confirm it still matches what ships (note wording, rolesSource field name); amend only on divergence, and do not author a second amendment.
+- [x] R5. agent doctor with an unresolvable role and agent run dispatch failures under --json print toJson({ error: { code: 'agent-resolution', message } }) on stdout with non-zero exit and nothing plain-text on either stream; the two real plain-text sites are packages/app/src/services/agent-service.ts:456 (doctor !resolved.ok) and :525 (run !outcome.ok) — NOT agent.ts:746, which is the already-conforming waitUsageError (see ### Q&A Q1). Post-dispatch exits at :539/:542 stay plain-text. Exit codes unchanged; reuse the module-private toJson at agent-service.ts:1996.
+- [x] R6. spur message send argument/usage failures under --json print toJson({ error: { code: 'usage', message } }) on stdout with non-zero exit; the real plain-text site is apps/cli/src/commands/message.ts:114 (empty body, exit 2) — NOT message.ts:415, which is the already-conforming sendWaitFail (see ### Q&A Q2). message watch (:72) and message reply (:263) are out of scope.
 ### Acceptance Criteria
 
 ```gherkin
@@ -251,35 +249,32 @@ on any machine whose global layer alone defines `agent.roles`.
 **Leaves for dependents:** nothing. A5 closes with this task.
 
 ### Plan
-
-Ordered. Start only on a tree where 0665 has landed — step 1 reads config that 0665 makes merged.
-
-- [ ] 1. **Provenance at the CLI root** — R1. `apps/cli/src/context.ts`: add non-optional
+- [x] 1. **Provenance at the CLI root** — R1. `apps/cli/src/context.ts`: add non-optional
       `agentRolesSource: 'config' | 'fallback'` to `CliContext` (`:97`); compute it in
       `createCliContext` right after `agentConfig` is derived, as
       `agentConfig?.roles === undefined ? 'fallback' : 'config'`; pass
       `rolesSource: context.agentRolesSource` at the `agentService()` construction site (`:185`).
       `packages/app/src/services/agent-service.ts:283`: add optional
       `rolesSource?: 'config' | 'fallback'` to `AgentServiceContext`. → `bun run lint`
-- [ ] 2. **Doctor fallback note** — R3. In `doctor()` (`agent-service.ts:438`), emit the frozen note
+- [x] 2. **Doctor fallback note** — R3. In `doctor()` (`agent-service.ts:438`), emit the frozen note
       line via `this.ctx.output.error(...)` when `this.ctx.rolesSource === 'fallback'` **and**
       `args.json` is false — once per invocation, before any `renderDoctor` call, on all three
       dispatch paths (`args.agent` undefined, role hit, executor hit). Thread `rolesSource` into
       `renderDoctor` (`:465`) and emit `toJson({ agents: rows, rolesSource })` at `:501`. Leave the
       exit-code expression at `:511` alone.
-- [ ] 3. **Prove R2 (global-only executor)** — R2. No code change expected: `doctor` reads
+- [x] 3. **Prove R2 (global-only executor)** — R2. No code change expected: `doctor` reads
       `this.ctx.agentConfig`, which 0665 makes merged. Confirm by running the 0665 tripwire case; if
       it fails, the defect is in 0665's threading, not here — fix there, do not add a second load.
-- [ ] 4. **Agent envelope sites** — R5. `agent-service.ts:456` (doctor `!resolved.ok`) and `:525`
+- [x] 4. **Agent envelope sites** — R5. `agent-service.ts:456` (doctor `!resolved.ok`) and `:525`
       (run `!outcome.ok`): branch on `args.json` / `booleanFlag(flags, 'json')` to
       `this.ctx.output.write(toJson({ error: { code: 'agent-resolution', message } }))`, else keep
       `output.error(message)`. Reuse the module-private `toJson` at `:1996`. Return values unchanged.
       Do not touch `:539` / `:542`.
-- [ ] 5. **Message envelope site** — R6. `apps/cli/src/commands/message.ts:114`: branch on
+- [x] 5. **Message envelope site** — R6. `apps/cli/src/commands/message.ts:114`: branch on
       `options.json` to `context.output.write(toJson({ error: { code: 'usage', message } }))`, else
       `context.output.error(message)`. `return 2` unchanged. Do not touch `:72` or `:263`.
       → `bun run lint`
-- [ ] 6. **Tests.** Append to `apps/cli/tests/config-layering.test.ts` (0665's file): neither layer
+- [x] 6. **Tests.** Append to `apps/cli/tests/config-layering.test.ts` (0665's file): neither layer
       defines `agent.roles` → `agent doctor coder --json` payload carries `rolesSource: "fallback"`,
       and text mode writes the frozen note to stderr with an unchanged exit code; a layer defining
       `agent.roles` → `rolesSource: "config"` and **no** note. In
@@ -288,16 +283,15 @@ Ordered. Start only on a tree where 0665 has landed — step 1 reads config that
       and assert the exit codes are unchanged. In `apps/cli/tests/commands/message.test.ts`, the same
       pair for the empty-body path. Then `bun test apps/cli packages/app` and repoint anything the
       `renderDoctor` signature change breaks.
-- [ ] 7. **Verify the ADR record** — R4. Read `docs/00_ADR.md:1150` (the 2026-08-24 ADR-078
+- [x] 7. **Verify the ADR record** — R4. Read `docs/00_ADR.md:1150` (the 2026-08-24 ADR-078
       amendment) and confirm it matches what shipped — specifically the note wording and the
       `rolesSource` field name. Amend **only** on divergence; do not add a second amendment. Record
       the verification (file:line + verdict) in `### Solution`.
-- [ ] 8. **Doc sync + gate** — T3. `docs/04_DESIGN.md`: document `rolesSource` on the `agent doctor`
+- [x] 8. **Doc sync + gate** — T3. `docs/04_DESIGN.md`: document `rolesSource` on the `agent doctor`
       `--json` payload and the three newly conforming envelope sites with their codes, in the same
       commit. `docs/design/universal-config-loading.md`: correct the stale `agent.ts:746` /
       `message.ts:415` anchors to the real sites from `### Q&A` Q1/Q2. Then
       `bun run autofix && bun run spur-check`, `bun run test-cf`, `bun run build`.
-
 ### Solution
 Agent-surface fallback provenance (R1/R3) and `--json` error envelope (R5/R6); ADR-078 amendment verified (R4).
 
@@ -310,12 +304,16 @@ Agent-surface fallback provenance (R1/R3) and `--json` error envelope (R5/R6); A
 
 **R2 — global-only executor resolves for doctor (proved by 0665's tripwire + 0666 fallback case)**
 
-- `apps/cli/tests/config-layering.test.ts` — the 0665 global-only-executor case + this task's `rolesSource: 'fallback'` doctor case both run against the real CLI entry; no code change was needed (per design, R2 is proved, not re-implemented).
+- `apps/cli/tests/config-layering.test.ts` — the global-only-executor case and the
+  `rolesSource: 'fallback'` doctor case both run against the real CLI entry; the executor's
+  configured capability tier is asserted so a missing global layer cannot pass vacuously.
 
-**R3 — doctor reports the active fallback**
+**R3 — doctor reports the active fallback without contaminating JSON mode**
 
-- `packages/app/src/services/agent-service.ts:455` — text mode writes the frozen note to the error stream (`agent.roles: no config layer defines a table — built-in DEFAULT_AGENT_ROLES fallback in effect`) when `this.ctx.rolesSource === 'fallback'`.
-- `packages/app/src/services/agent-service.ts:515` — json mode adds top-level `rolesSource: this.ctx.rolesSource ?? 'config'` to the doctor payload. The note never fires when a layer supplies `agent.roles` and never changes the exit code.
+- `packages/app/src/services/agent-service.ts:443-455` — `AgentService.doctor` writes the frozen note to
+  the error stream only when `this.ctx.rolesSource === 'fallback' && !args.json`.
+- `packages/app/src/services/agent-service.ts:515` — JSON mode adds top-level
+  `rolesSource: this.ctx.rolesSource ?? 'config'`; it emits no plain text on either stream.
 
 **R4 — ADR-078 amendment verified**
 
@@ -332,9 +330,12 @@ Agent-surface fallback provenance (R1/R3) and `--json` error envelope (R5/R6); A
 
 **Tests**
 
-- `packages/app/tests/services/agent-service.test.ts` — the 5 previously-text-envelope agent-error tests re-targeted to read the `agent-resolution` envelope (`lines`), plus a new doctor `!resolved.ok` envelope test. 163 pass / 0 fail.
-- `apps/cli/tests/commands/message.test.ts` — new `--json` empty-body `usage` envelope test.
-- `apps/cli/tests/config-layering.test.ts` — two new fallback cases (`rolesSource: 'fallback'` json + text-mode note). 7 pass / 0 fail.
+- `packages/app/tests/services/agent-service.test.ts` — doctor and run dispatch-failure cases assert
+  both the `agent-resolution` envelope and an empty error stream.
+- `apps/cli/tests/commands/message.test.ts` — covers the JSON empty-body `usage` envelope.
+- `apps/cli/tests/config-layering.test.ts` — seven real-CLI cases include fallback JSON provenance
+  with an empty stderr assertion and the exact text-mode note, plus non-vacuous global/project
+  layering assertions.
 ### Testing
 **Pipeline verify results**
 
@@ -342,20 +343,20 @@ Agent-surface fallback provenance (R1/R3) and `--json` error envelope (R5/R6); A
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/src/context.ts:178` — agentRolesSource computed at the CLI root (fallback iff agentConfig?.roles === undefined); passed to agentService() as rolesSource at :206; AgentServiceContext.rolesSource at agent-service.ts:297 |
-| R2 | MET | `apps/cli/tests/config-layering.test.ts` — the 0665 global-only-executor tripwire case + this task's rolesSource:'fallback' doctor case run against the real CLI entry; no code change needed (design: R2 is proved, not re-implemented) |
-| R3 | MET | `packages/app/src/services/agent-service.ts:515` — json mode adds top-level rolesSource to the doctor payload; text mode (:455) emits the frozen default-fallback note on the error stream; never fires when a layer supplies agent.roles, exit code unchanged |
-| R4 | MET | `docs/00_ADR.md:1169` — amendment names rolesSource + the error-stream note; matches what ships, no new amendment authored |
-| R5 | MET | `packages/app/src/services/agent-service.ts:467` — doctor !resolved.ok emits toJson({error:{code:'agent-resolution'}}) under json; :540 run !outcome.ok same envelope; exit codes unchanged; post-dispatch text stays plain-text |
-| R6 | MET | `apps/cli/src/commands/message.ts:116` — empty body with options.json emits toJson({error:{code:'usage'}}); return 2 unchanged; watch/reply out of scope |
+| R1 | MET | `apps/cli/src/context.ts:178-206` derives whole-table provenance and threads it to `AgentService`; context/config-layering tests pass. |
+| R2 | MET | The real CLI resolves global role `coder` to configured executor `coder-exec` with no project `agent` section. |
+| R3 | MET | `packages/app/src/services/agent-service.ts:443-455` emits the frozen note only in text mode; JSON returns top-level `rolesSource` with empty stderr. |
+| R4 | MET | `rg -n "fallback is explicit\|rolesSource" docs/00_ADR.md` finds the existing ADR-078 amendment and matching field name. |
+| R5 | MET | Doctor and run dispatch-failure tests assert `agent-resolution` JSON envelopes, non-zero behavior, and empty error streams. |
+| R6 | MET | Message command tests cover the empty-body `usage` JSON envelope and unchanged exit code. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R6 — `spur agent doctor` resolves a globally defined executor when the project config has no `agent:` section | MET | test | apps/cli/tests/config-layering.test.ts global-only executor case → 7 pass / 0 fail |
-| R7 — The DEFAULT_AGENT_ROLES fallback is explicit when no config defines the role | MET | test | apps/cli/tests/config-layering.test.ts rolesSource:'fallback' json case + text-mode note case |
-| R8 — The DEFAULT_AGENT_ROLES fallback decision is recorded [docs-only] | MET | static-ref | `docs/00_ADR.md:1169` — amendment naming rolesSource + the error-stream note, matching what ships |
-| R9 — Agent-surface failures emit the standard `--json` error envelope | MET | test | packages/app/tests/services/agent-service.test.ts agent-resolution envelope (doctor + run) → 163 pass / 0 fail |
-| R10 — Message-surface failures emit the standard `--json` error envelope | MET | test | apps/cli/tests/commands/message.test.ts --json empty body usage envelope |
+| R6 — `spur agent doctor` resolves a globally defined executor when the project config has no `agent:` section | MET | test | Real-CLI layering test resolves role `coder` to global executor `coder-exec` and asserts its configured capability tier. |
+| R7 — The DEFAULT_AGENT_ROLES fallback is explicit when no config defines the role | MET | test | JSON case asserts `rolesSource: fallback` and empty stderr; text case asserts exactly one frozen fallback note. |
+| R8 — The DEFAULT_AGENT_ROLES fallback decision is recorded | MET | command | ADR grep confirms the existing explicit-fallback amendment and `rolesSource` contract. |
+| R9 — Agent-surface failures emit the standard `--json` error envelope | MET | test | Agent-service doctor/run failure tests assert `agent-resolution` envelopes and empty error streams; targeted file matrix passes. |
+| R10 — Message-surface failures emit the standard `--json` error envelope | MET | test | Message tests assert the empty-body `usage` envelope; targeted A5 matrix passes 206/206. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)

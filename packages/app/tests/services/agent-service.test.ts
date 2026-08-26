@@ -544,7 +544,7 @@ describe('AgentService.doctor', () => {
     });
 
     test('--json: a role that resolves to no usable executor emits a single agent-resolution envelope (R5)', async () => {
-        const { lines, output } = captureOutput();
+        const { lines, errors, output } = captureOutput();
         const cfg: AgentConfig = {
             default: 'coder',
             executors: [{ name: 'cap1-exec', agent: 'claude', tier: 'capable-1' }],
@@ -560,6 +560,7 @@ describe('AgentService.doctor', () => {
         expect(code).not.toBe(0);
         const envelope = JSON.parse(lines.find((l) => l.includes('"error"')) ?? '{}');
         expect(envelope.error?.code).toBe('agent-resolution');
+        expect(errors).toEqual([]);
         // Message propagated verbatim from the resolve failure.
         expect(envelope.error?.message).toBeTruthy();
     });
@@ -1987,13 +1988,14 @@ describe('AgentService executor-aware explicit --agent (0346)', () => {
     });
 
     test('R8 (task 0413): unknown --agent error message lists every configured executor', async () => {
-        const { lines, output } = captureOutput();
+        const { lines, errors, output } = captureOutput();
         const svc = new AgentService({ cwd: process.cwd(), env: {}, output, agentConfig: cfg });
         const { deps } = mockResolutionDeps();
         await svc.run('plain prompt', { agent: 'not-a-name', json: true }, deps);
         // Under --json, the dispatch failure is a single agent-resolution envelope (R5).
         const envelope = JSON.parse(lines[0] ?? '{}');
         expect(envelope.error?.code).toBe('agent-resolution');
+        expect(errors).toEqual([]);
         // The message must name the offending value AND list available executors
         // so a typo is recoverable rather than an opaque "Unknown agent".
         const diag = envelope.error?.message ?? '';
