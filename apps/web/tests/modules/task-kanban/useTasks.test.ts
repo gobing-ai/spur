@@ -77,6 +77,15 @@ describe('deriveSubtaskProgress (F72 R1)', () => {
     });
 });
 
+test('TaskStore derives subtask progress when its task state changes', () => {
+    const store = new TaskStore(async () => ({ data: [] }));
+    store.setTasks([
+        { wbs: '0002', name: 'done child', status: 'done', parentWbs: '0001', filePath: '/t/0002.md' },
+        { wbs: '0003', name: 'open child', status: 'todo', parentWbs: '0001', filePath: '/t/0003.md' },
+    ]);
+    expect(store.getState().subtaskProgress.get('0001')).toEqual({ done: 1, total: 2 });
+});
+
 describe('useTasks', () => {
     afterAll(teardownHappyDom);
 

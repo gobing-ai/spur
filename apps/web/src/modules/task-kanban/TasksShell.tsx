@@ -7,7 +7,6 @@ import { BOOTSTRAP_FOLDER } from './KanbanBoard';
 import NewTaskPanel from './NewTaskPanel';
 import { TASKS_TABS } from './tabs';
 import { useTaskParams } from './useTaskParams';
-import { useTasks } from './useTasks';
 
 /**
  * §4 combined-input parse rule (F72): a bare four-digit WBS navigates to that
@@ -32,15 +31,19 @@ export function parseCombinedInput(
  */
 export default function TasksShell() {
     const { selectTask, setFilter, filters } = useTaskParams();
-    const [folder, setFolder] = useState(BOOTSTRAP_FOLDER);
+    const [defaultFolder, setDefaultFolder] = useState(BOOTSTRAP_FOLDER);
     const [folders, setFolders] = useState<{ path: string; label?: string }[]>([]);
-    const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set(['blocked', 'cancelled']));
     const [activeTab, setActiveTab] = useState('kanban');
     const [showNewPanel, setShowNewPanel] = useState(false);
     const [query, setQuery] = useState('');
-    // Ref-counted singleton store: the chip reads the SSE connected flag without
-    // adding request load (the board's own folder-scoped store drives the lanes).
-    const { connected } = useTasks();
+    const [connected, setConnected] = useState(false);
+    const folder = filters.folder ?? defaultFolder;
+    const visibleStatuses = new Set(
+        filters.status === undefined
+            ? TASK_STATUSES.filter((status) => status !== 'blocked' && status !== 'cancelled')
+            : filters.status.split(',').filter((status) => TASK_STATUSES.some((candidate) => candidate === status)),
+    );
+    const hiddenColumns = new Set(TASK_STATUSES.filter((status) => !visibleStatuses.has(status)));
 
     // Combined input mirrors the active URL filter (feature or parent WBS).
     useEffect(() => {
@@ -58,7 +61,7 @@ export default function TasksShell() {
                 };
                 const active = activeFolder ?? data?.[0]?.path;
                 if (data) setFolders(data);
-                if (active !== undefined) setFolder(active);
+                if (active !== undefined) setDefaultFolder(active);
             })
             .catch(() => {
                 // Fall back to the bootstrap folder list.
@@ -66,12 +69,10 @@ export default function TasksShell() {
     }, []);
 
     const toggleColumn = (status: string) => {
-        setHiddenColumns((prev) => {
-            const next = new Set(prev);
-            if (next.has(status)) next.delete(status);
-            else next.add(status);
-            return next;
-        });
+        const next = new Set(visibleStatuses);
+        if (next.has(status)) next.delete(status);
+        else next.add(status);
+        setFilter('status', TASK_STATUSES.filter((candidate) => next.has(candidate)).join(','));
     };
 
     // §4 parse rule: bare 4-digit WBS → navigate (+ path-WBS popup); dotted → parent
@@ -116,7 +117,7 @@ export default function TasksShell() {
                         size="xs"
                         className="text-xs"
                         value={folder}
-                        onChange={(e) => setFolder(e.target.value)}
+                        onChange={(e) => setFilter('folder', e.target.value)}
                         aria-label="Task phase folder"
                     >
                         {folders.map((f) => (
@@ -181,9 +182,9 @@ export default function TasksShell() {
                 <ActiveTab
                     onSelectTask={selectTask}
                     filters={filters}
-                    onFilterChange={setFilter}
                     folder={folder}
                     hiddenColumns={hiddenColumns}
+                    onConnectionChange={setConnected}
                 />
             </div>
 

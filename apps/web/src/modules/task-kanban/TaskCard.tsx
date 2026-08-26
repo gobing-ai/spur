@@ -52,7 +52,7 @@ export default function TaskCard({ task, onClick }: Props) {
         ? { transform: CSS.Transform.toString(transform), zIndex: isDragging ? 50 : undefined }
         : undefined;
 
-    // F72 R2: read the store-derived subtask map (shared no-arg store, as TaskDetail does).
+    // F72 R2: read the active board store's derived map through the existing hook.
     const { subtaskProgress } = useTasks();
     const progress = subtaskProgress.get(task.wbs);
     const accent = task.priority ? PRIORITY_ACCENT[task.priority] : undefined;

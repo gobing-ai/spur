@@ -18,11 +18,11 @@ export function transition(wbs: string, toStatus: string): void {
  * board. Exported so the Workspace module can embed the headerless current-
  * project Task Kanban (task 0197 R6) — no module shell header inside the embed. */
 export function TaskKanbanView() {
-    const { filters, selectTask, setFilter } = useTaskParams();
+    const { filters, selectTask } = useTaskParams();
     return (
         <div className="task-kanban flex flex-col h-full">
             <div data-kanban-board className="flex-1 overflow-hidden">
-                <KanbanBoard onSelectTask={selectTask} filters={filters} onFilterChange={setFilter} />
+                <KanbanBoard onSelectTask={selectTask} filters={filters} />
             </div>
         </div>
     );

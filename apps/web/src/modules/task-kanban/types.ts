@@ -17,4 +17,5 @@ export interface TaskListFilters {
     featureId?: string;
     parentWbs?: string;
     assignee?: string;
+    folder?: string;
 }

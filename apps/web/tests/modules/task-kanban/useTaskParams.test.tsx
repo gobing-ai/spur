@@ -20,14 +20,17 @@ function wrapper(initialEntries: string[]) {
 describe('useTaskParams', () => {
     test('parses selection from query string (legacy compat)', () => {
         const { result } = renderHook(() => useTaskParams(), {
-            wrapper: wrapper(['/board/tasks?selected=0007&status=wip&feature=W3&parent=0001&assignee=robin']),
+            wrapper: wrapper([
+                '/board/tasks?selected=0007&folder=docs%2Ftasks2&status=todo%2Cwip&feature=W3&parent=0001&assignee=robin',
+            ]),
         });
         expect(result.current.selected).toBe('0007');
         expect(result.current.filters).toEqual({
-            status: 'wip',
+            status: 'todo,wip',
             featureId: 'W3',
             parentWbs: '0001',
             assignee: 'robin',
+            folder: 'docs/tasks2',
         });
     });
 
@@ -59,5 +62,21 @@ describe('useTaskParams', () => {
         expect(result.current.filters.status).toBe('done');
         act(() => result.current.setFilter('status', null));
         expect(result.current.filters.status).toBeUndefined();
+    });
+
+    test('feature and parent filters replace each other instead of intersecting', () => {
+        const { result } = renderHook(() => useTaskParams(), {
+            wrapper: wrapper(['/board/tasks?parent=0663.1']),
+        });
+        act(() => result.current.setFilter('feature', 'F72'));
+        expect(result.current.filters).toEqual({ featureId: 'F72' });
+        act(() => result.current.setFilter('feature', null));
+        expect(result.current.filters).toEqual({});
+    });
+
+    test('preserves an explicitly empty status selection', () => {
+        const { result } = renderHook(() => useTaskParams(), { wrapper: wrapper(['/board/tasks']) });
+        act(() => result.current.setFilter('status', ''));
+        expect(result.current.filters.status).toBe('');
     });
 });

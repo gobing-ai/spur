@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 
 // Shared full-surface rpc-client mock — prevents "last mock wins" starvation
@@ -48,6 +48,57 @@ describe('TaskKanbanView scoping', () => {
         // custom-property block in global.css does not leak the DESIGN.md surface
         // ladder onto the shared palette (which would regress Teams + Observability).
         expect(container.firstElementChild?.className).toContain('task-kanban');
+    });
+
+    test('module shell restores phase, status visibility, and query from the URL', async () => {
+        const { api } = await import('../../../src/lib/rpc-client');
+        const originalFolders = api.task.folders;
+        const originalList = api.task.list;
+        const listCalls: unknown[] = [];
+        api.task.folders = (async () => ({
+            data: [
+                { path: 'docs/tasks', label: 'Primary' },
+                { path: 'docs/tasks2', label: 'Phase 2' },
+            ],
+            activeFolder: 'docs/tasks',
+        })) as typeof originalFolders;
+        api.task.list = (async (input) => {
+            listCalls.push(input);
+            return originalList(input);
+        }) as typeof originalList;
+
+        try {
+            const mod = await import('../../../src/modules/task-kanban');
+            const View = mod.module.component;
+            const { container, getAllByRole, getByLabelText, getByRole, getByTestId } = render(
+                <MemoryRouter initialEntries={['/board/tasks?folder=docs%2Ftasks2&status=todo%2Cwip&feature=F72']}>
+                    <View />
+                </MemoryRouter>,
+            );
+
+            expect(getByRole('heading', { name: 'Tasks' })).toBeDefined();
+            expect(getByTestId('tasks-live-chip')).toBeDefined();
+            expect(getByRole('button', { name: 'Kanban' })).toBeDefined();
+            expect(getAllByRole('textbox')).toHaveLength(1);
+            expect(getAllByRole('checkbox')).toHaveLength(7);
+            expect((container.querySelector('#tasks-status-todo') as HTMLInputElement).checked).toBe(true);
+            expect((container.querySelector('#tasks-status-wip') as HTMLInputElement).checked).toBe(true);
+            expect((container.querySelector('#tasks-status-blocked') as HTMLInputElement).checked).toBe(false);
+            expect(container.querySelector('[class*="max-w-"]')).toBeNull();
+            expect((container.firstElementChild?.firstElementChild as HTMLElement).className).toContain('px-4');
+            await waitFor(() => expect(container.querySelector('[data-kanban-board] .p-4')).not.toBeNull());
+
+            await waitFor(() =>
+                expect((getByLabelText('Task phase folder') as HTMLSelectElement).value).toBe('docs/tasks2'),
+            );
+            await waitFor(() =>
+                expect((getByLabelText('Filter by WBS or feature') as HTMLInputElement).value).toBe('F72'),
+            );
+            expect(listCalls).toEqual([{ folder: 'docs/tasks2' }]);
+        } finally {
+            api.task.folders = originalFolders;
+            api.task.list = originalList;
+        }
     });
 });
 

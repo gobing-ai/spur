@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { createContext, useContext, useEffect, useRef, useSyncExternalStore } from 'react';
 import { api, resolveApiUrl } from '../../lib/rpc-client';
 import type { TaskSummary } from './types';
 
@@ -30,13 +30,18 @@ export function createRefresh(
 }
 
 // ─── Module-level singleton store ───────────────────────────────────────────
-// KanbanBoard and TaskKanbanDetail are sibling components under BoardLayout
-// with no shared React parent state. The singleton ensures a single polling
-// interval feeds both — halving the request load. The SSE stream (0097) is a
-// drop-in that feeds the same store; polling is the safety net.
+// Each KanbanBoard owns its folder-scoped store and provides it to cards/detail.
+// The module singleton remains the fallback for consumers outside a board.
+
+/** Subtask progress for one parent WBS: done counts `status === 'done'` children. */
+interface SubtaskProgress {
+    done: number;
+    total: number;
+}
 
 interface TaskState {
     tasks: TaskSummary[];
+    subtaskProgress: ReadonlyMap<string, SubtaskProgress>;
     loading: boolean;
     error: Error | null;
     connected: boolean;
@@ -45,14 +50,20 @@ interface TaskState {
 type Listener = () => void;
 
 /**
- * Ref-counted singleton task store with SSE stream + polling fallback.
+ * Ref-counted task store with SSE stream + polling fallback.
  *
  * On first subscriber: opens an EventSource against `/api/events/planning`,
  * starts a 5s polling interval as a safety net, and triggers an initial refresh.
  * On last unsubscribe: closes the SSE connection and clears the interval.
  */
 export class TaskStore {
-    private state: TaskState = { tasks: [], loading: true, error: null, connected: false };
+    private state: TaskState = {
+        tasks: [],
+        subtaskProgress: new Map(),
+        loading: true,
+        error: null,
+        connected: false,
+    };
     private listeners: Listener[] = [];
     private interval: ReturnType<typeof setInterval> | undefined;
     private eventSource: EventSource | undefined;
@@ -102,8 +113,10 @@ export class TaskStore {
             const r = await this.listFn();
             // SAFETY: the oRPC list envelope's `data` is typed `unknown` by the JSONified
             // transport, but the contract handler always returns a task array under `data`.
+            const tasks = (r.data as unknown as TaskSummary[]) ?? [];
             this.state = {
-                tasks: (r.data as unknown as TaskSummary[]) ?? [],
+                tasks,
+                subtaskProgress: deriveSubtaskProgress(tasks),
                 loading: false,
                 error: null,
                 connected: this.state.connected,
@@ -116,7 +129,7 @@ export class TaskStore {
 
     setTasks = (updater: TaskSummary[] | ((prev: TaskSummary[]) => TaskSummary[])) => {
         const next = typeof updater === 'function' ? updater(this.state.tasks) : updater;
-        this.state = { ...this.state, tasks: next };
+        this.state = { ...this.state, tasks: next, subtaskProgress: deriveSubtaskProgress(next) };
         this.emit();
     };
 
@@ -160,23 +173,19 @@ export class TaskStore {
     }
 }
 
+/** The active board store; descendants keep using the no-argument `useTasks()` hook. */
+export const TaskStoreContext = createContext<TaskStore | null>(null);
+
 let _sharedStore: TaskStore | null = null;
 function getSharedStore(): TaskStore {
     if (!_sharedStore) _sharedStore = new TaskStore();
     return _sharedStore;
 }
 
-/** Subtask progress for one parent WBS: done counts `status === 'done'` children. */
-interface SubtaskProgress {
-    done: number;
-    total: number;
-}
-
 /**
  * Derive a subtask-progress map from the loaded tasks (F72 R1): group children by
  * `parentWbs`, count `status === 'done'` per group. Tasks with an absent `parentWbs`
- * join no group. Computed once per store update (memoized on the tasks array), never
- * once per card — cards read the map through the same store hook.
+ * join no group. The store computes it when task state changes, never once per card.
  */
 export function deriveSubtaskProgress(tasks: TaskSummary[]): Map<string, SubtaskProgress> {
     const map = new Map<string, SubtaskProgress>();
@@ -199,21 +208,21 @@ export function deriveSubtaskProgress(tasks: TaskSummary[]): Map<string, Subtask
  * and the store's `connected` flag reflects the stream state.
  *
  * Returns tasks/loading/error/connected plus `setTasks`, and the F72 derived
- * `subtaskProgress` map (computed once per store update). Without a `listFn`
- * argument, all callers share a single module-level store (one polling interval
- * + one SSE connection). Pass `listFn` to use an isolated store that is
- * recreated when `listFn` changes (e.g. for folder switching).
+ * `subtaskProgress` map (computed once per store update). Without a `listFn`,
+ * callers use the nearest board-provided store, then fall back to the module
+ * singleton. Pass `listFn` to own an isolated folder-switchable store.
  */
 export function useTasks(listFn?: ListFn) {
     // With a listFn, use a stable isolated store kept for the hook's lifetime and
     // re-pointed via setListFn when listFn changes (e.g. folder switch) — this
     // avoids tearing down the SSE/poll connection on every change. Without one,
-    // share the module-level store.
+    // consume the nearest board store before falling back to the singleton.
+    const inheritedStore = useContext(TaskStoreContext);
     const localStore = useRef<TaskStore | null>(null);
     if (listFn && !localStore.current) {
         localStore.current = new TaskStore(listFn);
     }
-    const store = localStore.current ?? getSharedStore();
+    const store = localStore.current ?? inheritedStore ?? getSharedStore();
 
     useEffect(() => {
         if (listFn && localStore.current) {
@@ -222,8 +231,5 @@ export function useTasks(listFn?: ListFn) {
     }, [listFn]);
 
     const state = useSyncExternalStore(store.subscribe, store.getState);
-    // Derived per store update (F72 R1): the same tasks array feeds the board lanes
-    // and the cards' subtask counts, so the map is computed once, not once per card.
-    const subtaskProgress = useMemo(() => deriveSubtaskProgress(state.tasks), [state.tasks]);
-    return { ...state, setTasks: store.setTasks, subtaskProgress };
+    return { ...state, setTasks: store.setTasks, store };
 }

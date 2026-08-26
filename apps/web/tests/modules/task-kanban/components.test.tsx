@@ -1,7 +1,7 @@
 registerHappyDom();
 
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, waitFor } from '@testing-library/react';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
@@ -46,6 +46,7 @@ mock.module('@dnd-kit/core', () => ({
 import KanbanColumn from '../../../src/modules/task-kanban/KanbanColumn';
 import TaskCard from '../../../src/modules/task-kanban/TaskCard';
 import TaskDetail from '../../../src/modules/task-kanban/TaskDetail';
+import { useTasks } from '../../../src/modules/task-kanban/useTasks';
 
 afterAll(teardownHappyDom);
 
@@ -83,6 +84,24 @@ describe('TaskCard', () => {
         const badges = container.querySelectorAll('.badge');
         const badgeTexts = Array.from(badges).map((b) => b.textContent);
         expect(badgeTexts).not.toContain('todo');
+    });
+
+    test('R7 — renders subtask progress from the task store', async () => {
+        const store = renderHook(() => useTasks());
+        await waitFor(() => expect(store.result.current.loading).toBe(false));
+        act(() =>
+            store.result.current.setTasks([
+                task(),
+                task({ wbs: '0002', name: 'Done child', status: 'done', parentWbs: '0001' }),
+                task({ wbs: '0003', name: 'Open child', status: 'todo', parentWbs: '0001' }),
+            ]),
+        );
+
+        const card = render(<TaskCard task={task()} onClick={() => {}} />);
+        expect(card.getByTestId('subtask-progress').textContent).toBe('1/2');
+        card.unmount();
+        act(() => store.result.current.setTasks([]));
+        store.unmount();
     });
 
     test('clicking the card reports the WBS so the detail panel can open', () => {

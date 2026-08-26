@@ -6,7 +6,7 @@ import type { TaskListFilters } from './types';
  * Single source of truth for kanban view state held in the URL:
  * - Path-based selection: `/board/tasks/0016` selects task 0016 (preferred for clean URLs)
  * - Query-param fallback: `?selected=0016` also works (legacy compat)
- * - Filters: `?status=&feature=&parent=&assignee=` drive the board filters (R6 — shareable URLs)
+ * - Filters: `?folder=&status=&feature=&parent=&assignee=` drive the board filters (R6 — shareable URLs)
  *
  * Board and TaskDetail are sibling components under BoardLayout with no shared React
  * state, so the URL is the seam that links a card click to the detail panel.
@@ -31,10 +31,12 @@ export function useTaskParams() {
         const featureId = params.get('feature');
         const parentWbs = params.get('parent');
         const assignee = params.get('assignee');
-        if (status) f.status = status;
+        const folder = params.get('folder');
+        if (status !== null) f.status = status;
         if (featureId) f.featureId = featureId;
         if (parentWbs) f.parentWbs = parentWbs;
         if (assignee) f.assignee = assignee;
+        if (folder) f.folder = folder;
         return f;
     }, [params]);
 
@@ -47,11 +49,13 @@ export function useTaskParams() {
         navigate(`${basePath}${qs ? `?${qs}` : ''}`, { replace: true });
     };
 
-    const setFilter = (key: 'status' | 'feature' | 'parent' | 'assignee', value: string | null) => {
+    const setFilter = (key: 'folder' | 'status' | 'feature' | 'parent' | 'assignee', value: string | null) => {
         setParams(
             (prev) => {
                 const next = new URLSearchParams(prev);
-                if (value) next.set(key, value);
+                if (key === 'feature') next.delete('parent');
+                if (key === 'parent') next.delete('feature');
+                if (value !== null) next.set(key, value);
                 else next.delete(key);
                 return next;
             },

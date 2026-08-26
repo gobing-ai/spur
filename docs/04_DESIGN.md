@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.50.0
+version: 1.52.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-24
+updated_at: 2026-08-25
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -68,7 +68,7 @@ When collaborating with the design team:
 | [`harness-surface-governance.md`](design/harness-surface-governance.md)                                 | Composition measures, four-surface script placement, and dated ADR-051 consent applications (feature A3/0613; explicit feature-refresh breadth/0625)                                                 | authority landed; current through 0625                                                                                                                         |
 | [`features-board-layout-refactor.md`](design/features-board-layout-refactor.md)                         | Features Board — History layout alignment, collapsible tree/metadata panels, markdown width constraints, dynamic action bar, and floating agent prompt bar (feature F84)                           | design                                                                                                                                                         |
 | [`universal-config-loading.md`](design/universal-config-loading.md)                                       | Composition-root merged-config wiring — single load threaded to all consumers, role-fallback provenance, agent-surface `--json` error envelope (ADR-082, ADR-078 amendment, feature A5)             | accepted design                                                                                                                                                |
-| [`tasks-module-shell-parity.md`](design/tasks-module-shell-parity.md)                                   | Tasks Board — History-parity shell: one-row header, inline filters (phase/status/combined WBS-feature), append-only tabs, full-bleed density, enriched cards (ADR-081, feature F72)                 | shell built (0663); enriched cards landed by 0664                                                                                                             |
+| [`tasks-module-shell-parity.md`](design/tasks-module-shell-parity.md)                                   | Tasks Board — History-parity shell: one-row header, inline filters, append-only tabs, full-bleed density, enriched cards, board-owned folder store (ADR-081, feature F72)                          | verified (0663/0664; 2026-08-25)                                                                                                                              |
 | [`history-anatomy.md`](design/history-anatomy.md)                                                     | History-anatomy diagnostic — daily/ad-hoc report mode, closed finding taxonomy, eleven-section report contract, cache branch + semantic digest (ADR-079/080), atomic publication, HA-S1 issue-finding migration gate (feature I8 / 0657–0661) | built (0657–0661)                                                                                                                                             |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans

@@ -19,12 +19,13 @@ const tasks: TaskSummary[] = [
     { wbs: '0001', name: 'Alpha', status: 'todo', priority: 'P1', featureId: 'W3', filePath: 'a.md' },
     { wbs: '0002', name: 'Beta', status: 'wip', priority: 'P2', featureId: 'W4', filePath: 'b.md' },
 ];
+let listedTasks = tasks;
 
 const defaultBoardApi = {
     task: {
         list: async (input?: { folder?: string }) => {
             listCalls.push(input ?? {});
-            return { data: tasks };
+            return { data: listedTasks };
         },
         transition: (input: { wbs: string; toStatus: string }) => {
             transitionCalls.push(input);
@@ -68,6 +69,7 @@ const restoreMock = () => {
 };
 
 beforeEach(() => {
+    listedTasks = tasks;
     restoreMock();
 });
 
@@ -143,6 +145,18 @@ describe('KanbanBoard', () => {
         const { getByText, queryByText } = renderBoard({ filters: { status: 'wip' } });
         await waitFor(() => expect(getByText('Beta')).toBeDefined());
         expect(queryByText('Alpha')).toBeNull();
+    });
+
+    test('accepts comma-separated status filters from the shareable URL state', async () => {
+        const { getByText } = renderBoard({ filters: { status: 'todo,wip' } });
+        await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+        expect(getByText('Beta')).toBeDefined();
+    });
+
+    test('matches feature filters by substring', async () => {
+        const { getByText, queryByText } = renderBoard({ filters: { featureId: 'w3' } });
+        await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+        expect(queryByText('Beta')).toBeNull();
     });
 
     test('sort toggle cycles through off → asc → desc → off', async () => {
@@ -237,6 +251,34 @@ describe('KanbanBoard', () => {
         await waitFor(() => expect(getByText('Alpha')).toBeDefined());
         // The folder-scoped list call carries the controlled folder.
         await waitFor(() => expect(listCalls.some((c) => c.folder === 'docs/tasks2')).toBe(true));
+    });
+
+    test('shares one folder-scoped store with cards and reports its connection state', async () => {
+        listedTasks = [
+            { wbs: '0001', name: 'Parent', status: 'todo', filePath: 'a.md' },
+            { wbs: '0002', name: 'Done child', status: 'done', parentWbs: '0001', filePath: 'b.md' },
+            { wbs: '0003', name: 'Open child', status: 'wip', parentWbs: '0001', filePath: 'c.md' },
+        ];
+        const connectionStates: boolean[] = [];
+
+        const { getByTestId, getByText } = renderBoard({
+            folder: 'docs/tasks2',
+            onConnectionChange: (connected) => connectionStates.push(connected),
+        });
+
+        await waitFor(() => expect(getByText('Parent')).toBeDefined());
+        expect(getByTestId('subtask-progress').textContent).toBe('1/2');
+        expect(listCalls).toEqual([{ folder: 'docs/tasks2' }]);
+        expect(connectionStates).toContain(false);
+    });
+
+    test('opens task detail from a path-WBS URL', async () => {
+        const { getByRole } = render(
+            <MemoryRouter initialEntries={['/board/tasks/0001']}>
+                <KanbanBoard onSelectTask={() => {}} />
+            </MemoryRouter>,
+        );
+        await waitFor(() => expect(getByRole('dialog', { name: 'Task detail' })).toBeDefined());
     });
 });
 

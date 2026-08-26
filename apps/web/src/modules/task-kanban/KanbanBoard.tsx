@@ -8,7 +8,7 @@ import { api } from '../../lib/rpc-client';
 import KanbanColumn from './KanbanColumn';
 import TaskCard from './TaskCard';
 import type { TaskListFilters, TaskSummary } from './types';
-import { useTasks } from './useTasks';
+import { TaskStoreContext, useTasks } from './useTasks';
 
 const TaskDetail = lazy(() => import('./TaskDetail'));
 const KANBAN_COLUMNS = TASK_STATUSES;
@@ -41,25 +41,26 @@ type TaskStatus = (typeof TASK_STATUSES)[number];
 interface Props {
     onSelectTask: (wbs: string) => void;
     filters?: TaskListFilters;
-    onFilterChange?: (key: 'status' | 'feature' | 'parent' | 'assignee', value: string | null) => void;
     /** Controlled phase folder (module route). Omitted → board resolves its own default. */
     folder?: string;
     /** Controlled lane visibility. Omitted → board defaults `blocked`/`cancelled` hidden. */
     hiddenColumns?: ReadonlySet<string>;
+    /** Reports this board store's live connection state to its optional shell. */
+    onConnectionChange?: (connected: boolean) => void;
 }
 
 function applyFilters(tasks: TaskSummary[], filters?: TaskListFilters): TaskSummary[] {
     if (!filters) return tasks;
     return tasks.filter((t) => {
-        if (filters.status && t.status !== filters.status) return false;
-        if (filters.featureId && t.featureId !== filters.featureId) return false;
+        if (filters.status !== undefined && !filters.status.split(',').includes(t.status)) return false;
+        if (filters.featureId && !t.featureId?.toLowerCase().includes(filters.featureId.toLowerCase())) return false;
         if (filters.parentWbs && t.parentWbs !== filters.parentWbs) return false;
         return true;
     });
 }
 
 export default function KanbanBoard(props: Props) {
-    const { onSelectTask, filters, folder: folderProp, hiddenColumns: hiddenProp } = props;
+    const { onSelectTask, filters, folder: folderProp, hiddenColumns: hiddenProp, onConnectionChange } = props;
     const [sortState, setSortState] = useState<Record<string, 'asc' | 'desc'>>({});
     // Uncontrolled default folder — server active folder adopted on mount; used only
     // when the shell doesn't pass a controlled `folder` (Workspace embed).
@@ -84,8 +85,12 @@ export default function KanbanBoard(props: Props) {
     const hiddenColumns = hiddenProp ?? DEFAULT_HIDDEN;
 
     const listWithFolder = useCallback(() => api.task.list({ folder }), [folder]);
-    const { tasks, loading, error, setTasks } = useTasks(listWithFolder);
+    const { tasks, loading, error, connected, setTasks, store } = useTasks(listWithFolder);
     const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
+    useEffect(() => {
+        onConnectionChange?.(connected);
+    }, [connected, onConnectionChange]);
 
     // Adopt the server's active folder as the uncontrolled default (embed / no prop).
     useEffect(() => {
@@ -205,115 +210,117 @@ export default function KanbanBoard(props: Props) {
     }
 
     return (
-        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className="flex flex-col h-full">
-                <div className="flex gap-3 overflow-x-auto h-full p-4">
-                    {KANBAN_COLUMNS.filter((s) => !hiddenColumns.has(s)).map((status: string) => (
-                        <KanbanColumn
-                            key={status}
-                            status={status}
-                            label={status}
-                            tasks={tasksByStatus(status)}
-                            onCardClick={(wbs) => {
-                                setPopupTaskWbs(wbs);
-                                onSelectTask(wbs);
-                            }}
-                            sortDir={sortState[status]}
-                            onSortToggle={() => toggleSort(status)}
-                        />
-                    ))}
-                </div>
-                {popupTaskWbs && (
-                    <>
-                        <button
-                            type="button"
-                            aria-label="Close task detail"
-                            className="fixed inset-0 z-50 bg-black/40 border-0 p-0 cursor-default"
-                            onClick={() => setPopupTaskWbs(null)}
-                        />
-                        <div
-                            role="dialog"
-                            aria-modal="true"
-                            aria-label="Task detail"
-                            className="fixed top-0 right-0 h-full z-50 bg-spur-surface border-l border-spur-border shadow-2xl flex"
-                            style={{ width: 'var(--detail-w)', minWidth: '36rem', maxWidth: '80vw' }}
-                        >
-                            <ResizeHandle
-                                targetVar="--detail-w"
-                                onResizeEnd={(px) => {
-                                    const clamped = Math.max(576, Math.min(px, window.innerWidth * 0.8));
-                                    setDetailWidth(clamped);
-                                    try {
-                                        window.localStorage.setItem(DETAIL_WIDTH_KEY, String(clamped));
-                                    } catch {
-                                        // localStorage unavailable — width still applies for this session.
-                                    }
+        <TaskStoreContext.Provider value={store}>
+            <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                <div className="flex flex-col h-full">
+                    <div className="flex gap-3 overflow-x-auto h-full p-4">
+                        {KANBAN_COLUMNS.filter((s) => !hiddenColumns.has(s)).map((status: string) => (
+                            <KanbanColumn
+                                key={status}
+                                status={status}
+                                label={status}
+                                tasks={tasksByStatus(status)}
+                                onCardClick={(wbs) => {
+                                    setPopupTaskWbs(wbs);
+                                    onSelectTask(wbs);
                                 }}
-                                direction="horizontal"
-                                invert
+                                sortDir={sortState[status]}
+                                onSortToggle={() => toggleSort(status)}
                             />
-                            <div className="flex flex-col flex-1 overflow-hidden">
-                                <div className="flex-1 overflow-y-auto" data-testid="detail-body">
-                                    {(() => {
-                                        const popupTask = tasks.find((t) => t.wbs === popupTaskWbs);
-                                        if (!popupTask) return null;
-                                        return (
-                                            <Suspense
-                                                fallback={
-                                                    <div className="flex items-center justify-center h-32 text-spur-text-muted text-sm">
-                                                        Loading detail...
-                                                    </div>
-                                                }
-                                            >
-                                                <TaskDetail
-                                                    task={popupTask}
-                                                    onClose={() => setPopupTaskWbs(null)}
-                                                    onTransition={(wbs, toStatus) => {
-                                                        setTasks((prev) =>
-                                                            prev.map((t) =>
-                                                                t.wbs === wbs ? { ...t, status: toStatus } : t,
-                                                            ),
-                                                        );
-                                                        api.task
-                                                            .transition({ wbs, toStatus: toStatus as TaskStatus })
-                                                            .catch((err: unknown) => {
-                                                                const msg =
-                                                                    err instanceof Error
-                                                                        ? err.message
-                                                                        : 'Transition failed';
-                                                                if (typeof window !== 'undefined') {
-                                                                    window.dispatchEvent(
-                                                                        new CustomEvent('api-error', {
-                                                                            detail: { message: msg },
-                                                                        }),
-                                                                    );
-                                                                }
-                                                            });
-                                                    }}
-                                                />
-                                            </Suspense>
-                                        );
-                                    })()}
+                        ))}
+                    </div>
+                    {popupTaskWbs && (
+                        <>
+                            <button
+                                type="button"
+                                aria-label="Close task detail"
+                                className="fixed inset-0 z-50 bg-black/40 border-0 p-0 cursor-default"
+                                onClick={() => setPopupTaskWbs(null)}
+                            />
+                            <div
+                                role="dialog"
+                                aria-modal="true"
+                                aria-label="Task detail"
+                                className="fixed top-0 right-0 h-full z-50 bg-spur-surface border-l border-spur-border shadow-2xl flex"
+                                style={{ width: 'var(--detail-w)', minWidth: '36rem', maxWidth: '80vw' }}
+                            >
+                                <ResizeHandle
+                                    targetVar="--detail-w"
+                                    onResizeEnd={(px) => {
+                                        const clamped = Math.max(576, Math.min(px, window.innerWidth * 0.8));
+                                        setDetailWidth(clamped);
+                                        try {
+                                            window.localStorage.setItem(DETAIL_WIDTH_KEY, String(clamped));
+                                        } catch {
+                                            // localStorage unavailable — width still applies for this session.
+                                        }
+                                    }}
+                                    direction="horizontal"
+                                    invert
+                                />
+                                <div className="flex flex-col flex-1 overflow-hidden">
+                                    <div className="flex-1 overflow-y-auto" data-testid="detail-body">
+                                        {(() => {
+                                            const popupTask = tasks.find((t) => t.wbs === popupTaskWbs);
+                                            if (!popupTask) return null;
+                                            return (
+                                                <Suspense
+                                                    fallback={
+                                                        <div className="flex items-center justify-center h-32 text-spur-text-muted text-sm">
+                                                            Loading detail...
+                                                        </div>
+                                                    }
+                                                >
+                                                    <TaskDetail
+                                                        task={popupTask}
+                                                        onClose={() => setPopupTaskWbs(null)}
+                                                        onTransition={(wbs, toStatus) => {
+                                                            setTasks((prev) =>
+                                                                prev.map((t) =>
+                                                                    t.wbs === wbs ? { ...t, status: toStatus } : t,
+                                                                ),
+                                                            );
+                                                            api.task
+                                                                .transition({ wbs, toStatus: toStatus as TaskStatus })
+                                                                .catch((err: unknown) => {
+                                                                    const msg =
+                                                                        err instanceof Error
+                                                                            ? err.message
+                                                                            : 'Transition failed';
+                                                                    if (typeof window !== 'undefined') {
+                                                                        window.dispatchEvent(
+                                                                            new CustomEvent('api-error', {
+                                                                                detail: { message: msg },
+                                                                            }),
+                                                                        );
+                                                                    }
+                                                                });
+                                                        }}
+                                                    />
+                                                </Suspense>
+                                            );
+                                        })()}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </>
-                )}
-            </div>
+                        </>
+                    )}
+                </div>
 
-            <DragOverlay dropAnimation={null}>
-                {activeDragId
-                    ? (() => {
-                          const card = findCard(activeDragId);
-                          if (!card) return null;
-                          return (
-                              <div className="opacity-90">
-                                  <TaskCard task={card} onClick={() => {}} />
-                              </div>
-                          );
-                      })()
-                    : null}
-            </DragOverlay>
-        </DndContext>
+                <DragOverlay dropAnimation={null}>
+                    {activeDragId
+                        ? (() => {
+                              const card = findCard(activeDragId);
+                              if (!card) return null;
+                              return (
+                                  <div className="opacity-90">
+                                      <TaskCard task={card} onClick={() => {}} />
+                                  </div>
+                              );
+                          })()
+                        : null}
+                </DragOverlay>
+            </DndContext>
+        </TaskStoreContext.Provider>
     );
 }

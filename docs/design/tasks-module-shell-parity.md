@@ -3,7 +3,7 @@ doc: design/tasks-module-shell-parity
 feature_id: F72
 owns: SURFACE + mechanism for the Tasks Board module — History-shell parity (one-row header, inline filters, append-only tabs, full-bleed density, enriched cards)
 authority: derived (ADR-081 wins on conflict)
-updated_at: 2026-08-24
+updated_at: 2026-08-25
 ---
 
 # Tasks Module — History-Shell Parity (F72)
@@ -32,9 +32,10 @@ apps/web/src/modules/task-kanban/
 │                        #   path-WBS auto-popup stay as-is)
 ├── NewTaskPanel.tsx     # UNCHANGED — now rendered by TasksShell (§3)
 ├── KanbanColumn.tsx     # UNCHANGED
-├── useTaskParams.tsx    # UNCHANGED — filters stay URL-driven
-├── useTasks.ts          # UNCHANGED — singleton store (SSE + 5 s poll fallback)
-└── types.ts             # UNCHANGED
+├── useTaskParams.tsx    # phase/status/query filters stay URL-driven
+├── useTasks.ts          # board-provided folder store + fallback singleton +
+│                        #   per-update subtask-progress map
+└── types.ts             # TaskListFilters includes the phase folder
 ```
 
 ## 2. Module Registration & Entry Points
@@ -61,15 +62,14 @@ One row, `flex flex-wrap items-center justify-between gap-4 border-b border-base
 full-width with the same horizontal padding as the body (`px-4`) so lanes align under the header.
 Left → right:
 
-1. **Identity block** — `📋` + `Tasks` title + live chip (Live/Polling dot from the shared
-   `useTasks` store `connected` flag; the store is a ref-counted singleton, so the shell's
-   subscription adds no request load).
+1. **Identity block** — `📋` + `Tasks` title + live chip (Live/Polling dot reported by the
+   active board's folder-scoped `TaskStore`; the shell does not subscribe to a second store).
 2. **Inline filters** (in order):
    - **Phase `Select`** — options from `api.task.folders`, value = active folder. Controls the
-     board's `folder` (§7).
+     board's `folder` (§7) through `?folder=`.
    - **Status checkboxes** — one per `TASK_STATUSES` entry (`taskStatusIcon` + label); default
      hidden: `blocked`, `cancelled`. Drive **lane visibility** (the existing `hiddenColumns`
-     mechanic), not the URL `status` filter.
+     mechanic) through the comma-separated `?status=` value.
    - **Combined WBS/feature input** — one text input; parse rule in §4.
 3. **`+ New Task` button** — compact `Button size="sm"`; opens `NewTaskPanel` rendered by the
    shell. `folder` comes from shell state; `onCreated` lets the SSE/poll store propagate the new
@@ -90,8 +90,9 @@ One input replaces the three `TaskFilters` inputs (feature / parent-WBS / assign
 | contains `.` (dotted WBS) | `setFilter('parent', value)` |
 | anything else | `setFilter('feature', value)` (substring match stays server/client-side as today) |
 
-All filter state remains URL-driven via `useTaskParams` (`?parent=`, `?feature=`, `?status=`) —
-shareable URLs unchanged. Clearing the input clears the param it last set. The `assignee` filter
+All filter state remains URL-driven via `useTaskParams` (`?folder=`, `?parent=`, `?feature=`,
+`?status=`). Setting a parent or feature filter clears its mutually exclusive counterpart; clearing
+the input therefore clears either query mode. The `assignee` filter
 input is dropped (client-side-only field, lowest signal); the URL param remains accepted by
 `useTaskParams` for link compatibility.
 
@@ -107,17 +108,17 @@ input is dropped (client-side-only field, lowest signal); the URL param remains 
 export interface TasksTab {
     readonly id: string;
     readonly label: string;
-    readonly component: ComponentType;
+    readonly component: ComponentType<TasksTabProps>;
 }
 
 export const TASKS_TABS: readonly TasksTab[] = [
-    { id: 'kanban', label: 'Kanban', component: KanbanBoardTab },
+    { id: 'kanban', label: 'Kanban', component: KanbanBoard },
 ];
 ```
 
-`KanbanBoardTab` is the shell-local adapter that wires shell state (folder, lane visibility,
-filters) into `KanbanBoard`. Future tabs (List / Swimlanes / Analytics) are **additive entries
-only** — designing them is out of F72's scope.
+`TasksShell` passes the shared tab props (folder, lane visibility, filters, connection reporter) to the active component.
+Future tabs (List / Swimlanes / Analytics) are **additive entries only** — designing them is out of
+F72's scope.
 
 ## 6. Full-Bleed Layout & Tokens
 
@@ -139,14 +140,16 @@ pattern; the embed behaves exactly as today minus the toolbar):
 interface KanbanBoardProps {
     onSelectTask: (wbs: string) => void;
     filters?: TaskListFilters;
-    onFilterChange?: (key: 'status' | 'feature' | 'parent' | 'assignee', value: string | null) => void;
-    // NEW — all optional; when omitted the board falls back to its current internal state:
-    folder?: string;                                        // controlled phase
-    onFolderChange?: (folder: string) => void;
-    hiddenColumns?: ReadonlySet<string>;                    // controlled lane visibility
-    onToggleColumn?: (status: string) => void;
+    folder?: string;                       // controlled phase; omitted → server default
+    hiddenColumns?: ReadonlySet<string>;   // controlled lane visibility; omitted → defaults
+    onConnectionChange?: (connected: boolean) => void; // board store → shell live chip
 }
 ```
+
+The board owns one folder-scoped `TaskStore` and provides it through `TaskStoreContext` to cards,
+the drag overlay, and task detail. Their existing no-argument `useTasks()` calls resolve that
+provider before the module-level fallback. This keeps task data, subtask progress, optimistic
+updates, polling, and SSE state on one store and one initial `task.list` request per board.
 
 Embed behavior change (explicit, operator-visible): the Workspace `Tasks` tab renders **pure
 lanes** — no filter inputs, folder switch, lane toggles, or `+ New Task` button (those are
@@ -159,9 +162,9 @@ All additions derive from fields already on `TaskSummary` — **no contract chan
 
 | Addition | Derivation |
 |---|---|
-| Subtask progress `done/total` | group the already-loaded `tasks` array by `parentWbs`; count children of this card's `wbs` and their `status === 'done'` share. Rendered only when `total > 0`. |
+| Subtask progress `done/total` | The active board `TaskStore` groups its loaded task set by `parentWbs` once when state changes; cards read their parent entry through the provider-aware `useTasks()` hook. Rendered only when `total > 0`. |
 | Priority accent | `priority` field → colored left border on the card (`P1` error / `P2` warning / `P3` muted, resolved through `spur-*` semantic tokens). Existing priority badge stays. |
-| Staleness tint | age from `updatedAt` (already rendered as relative time): > 7 d → `text-spur-text-muted` tint on the timestamp; threshold constant in `TaskCard.tsx`. |
+| Staleness tint | age from `updatedAt` (already rendered as relative time): > 7 d → `text-spur-text-faint` tint on the timestamp; threshold constant in `TaskCard.tsx`. |
 
 Feature badge, type badge, WBS, name, relative time: unchanged. **Assignee chip: excluded** —
 would require growing the task-list contract (`packages/contracts` + server); not approved.

@@ -6,9 +6,9 @@ import type { TaskListFilters } from './types';
 export interface TasksTabProps {
     onSelectTask: (wbs: string) => void;
     filters: TaskListFilters;
-    onFilterChange: (key: 'status' | 'feature' | 'parent' | 'assignee', value: string | null) => void;
     folder: string;
     hiddenColumns: ReadonlySet<string>;
+    onConnectionChange: (connected: boolean) => void;
 }
 
 /**
