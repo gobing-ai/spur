@@ -4,7 +4,7 @@ name: "Make model health probing opt-in and cache doctor detection with a dated 
 status: done
 template: feature-impl
 created_at: 2026-08-26T18:52:01.265Z
-updated_at: "2026-08-26T21:49:55.411Z"
+updated_at: "2026-08-26T23:03:01.099Z"
 feature_id: B4
 priority: P2
 tags: ["cli", "agent", "doctor", "performance"]
@@ -207,13 +207,12 @@ now?: () => number;
 - Tests: 9 cache/fingerprint pins in packages/app/tests/services/agent-service.test.ts + 3 CLI flag-parse pins in apps/cli/tests/commands/agent.test.ts; app suite 177 pass; gate rc=0.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
+|-------------|--------|----------|
 | R1 | MET | Constructor receives stripped executors without --probe-health (modelStatus absent) and full models with it; DoctorRunner itself unchanged. Pins in packages/app/tests/services/agent-service.test.ts probe/opt-in block. |
 | R2 | MET | MODEL column driven by config executors in buildDoctorRows regardless of flag; pinned model renders both ways (app pins + CLI smoke). |
 | R3 | MET | .spur/run/agent-doctor.json written schemaVersion 1 with sha256 fingerprint incl. tier; executorFingerprint pins (reorder==same, field-change!=same); TTL 60s enforced (age 60_001ms miss pin). |
@@ -222,24 +221,31 @@ now?: () => number;
 | R6 | MET | Malformed JSON, schemaVersion 0, foreign fingerprint, stale capturedAt: all exit 0, runAll once, rewrite valid file; unwritable path exits 0 with stderr warning (R14/R6 pins). |
 | R7 | MET | --probe-health neither reads nor writes cache: capturedAt untouched, runAll invoked despite fresh cache present (R7 pin). |
 | R8 | MET | Selector serve-on-hit runs no probe (runOne/runAll uncalled); selector miss calls runOne exactly for the requested name and leaves no cache file (R8 pin). Shared adapter cast at cachedDoctorRunner; resolveRole unmodified (rg). |
+| R9 | MET | Same-commit doc sync (T3) verified this run: docs/04_DESIGN.md:397 flags in the doctor signature + :408 --probe-health opt-in + :423-425 cache contract; plugins/sp/skills/spur-cli/references/agent.md:28 doctor row carries --probe-health --force-refresh; docs/design/run-record-contract.md:79 adds the agent-doctor.json row (first run-id-independent .spur/run artifact); docs/design/agent-doctor-inspection-surface.md:162-167 §5.2 carries the corrected measured baseline. Re-audit also repaired a run-together sentence at docs/04_DESIGN.md:426. |
+| R10 | MET | ADR-051 consent record added this run at docs/00_ADR.md:529 — Amendment (2026-08-26, feature B4 / task 0683) recording operator consent for --probe-health and --force-refresh as flag expansions of the existing doctor verb. Was UNMET at re-audit: the task References line asserted consent but no ADR-051 amendment existed (grep of docs/00_ADR.md for B4/probe-health/force-refresh returned nothing), while the 2026-08-16 / 2026-08-20 / 2026-08-21 amendments establish docs/00_ADR.md as the record location. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
+|---------------------|--------|---------------|----------|
 | R9 | MET | test | Opt-in probing verified end-to-end: default json shows no modelStatus; --probe-health populates it. |
 | R10 | MET | test | Cache written then served (runAll called once across two calls), dated footer + structural cache fact. |
 | R11 | MET | test | --force-refresh bypass pin + live capturedAt-advance smoke. |
 | R14 | MET | test | Corruption quartet + unwritable-path degrade to live exit 0 with valid rewrite or warning. |
-
+| Model health probing is opt-in | MET | code+test | MODEL health probe runs only behind --probe-health; default doctor output never invokes model-health-probe (packages/app/src/services/model-health-probe consumption gated in agent-service.ts) |
+| Detection results are cached and the cache is visibly dated | MET | code+test | DOCTOR_CACHE_REL=.spur/run/agent-doctor.json written atomically; footer prints cached age + --force-refresh hint |
+| --force-refresh bypasses the cache and rewrites it | MET | code+test | serveCached gated on !args.forceRefresh; live smoke showed capturedAt advance ~5.7s vs 0.28s warm |
+| A corrupt or unreadable cache file degrades to a live run | MET | code+test | corruption quartet tests rewrite valid cache; unwritable dir logs stderr warning and proceeds |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
-
-**SECU findings** (pipeline verify step — verdict: UNKNOWN)
+**SECUA findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
-
+| P2 | Correctness (traceability) | `.spur/run/0683-verdict.json`, § Testing | Found and repaired in the 2026-08-26 re-audit: the verdict artifact and the Testing table covered R1–R8 only, silently omitting **R9** (same-commit doc sync) and **R10** (ADR-051 consent record). R10 was genuinely UNMET — `docs/00_ADR.md` carried no B4 / `--probe-health` / `--force-refresh` amendment, though the 2026-08-16 / 2026-08-20 / 2026-08-21 amendments establish that file as the record location. Fixed by adding the amendment at `docs/00_ADR.md:529` and re-recording both rows. |
+| P3 | Usability (docs) | `docs/04_DESIGN.md:426` | Two sentences had run together in the doctor surface description ("…rewrites the file under a role selector entries are ordered elected-first…"). Repunctuated in this re-audit. |
+| P4 | Correctness | `packages/app/src/services/agent-service.ts:479` | The `--probe-health` gate withholds `model` from the runner's executor copy only (`executors?.map(({ name, agent }) => ({ name, agent }))`); `renderDoctor` keeps the unmodified config array, so the MODEL column is provably independent of the flag (R2). |
+| P4 | Security | `packages/app/src/services/agent-service.ts:2158-2213` | Cache key is a sha256 over name/agent/model/tier — config-derived, no credential material. Atomic tmp+rename write; unreadable/malformed/stale/wrong-fingerprint/unwritable all degrade to a live run rather than failing or serving stale truth. |
+| P4 | Correctness | `packages/app/src/services/agent-service.ts:515`, `:574` | Selector paths serve from a fresh covering cache but never *write* one, so a partial row set cannot be persisted under a full-set fingerprint (R8). |
+| P4 | Efficiency | — | Measured this run: `agent doctor --force-refresh --json` at 0.87 s wall, `--json` warm hit at `ageMs` reported structurally. No P1 findings. |
 ### References
 
 - Parent feature: `docs/features/B4_agent-doctor-as-the-routing-inspection-surface-capability-tier-rendering-full-eligible-ladder-auth-removal-and-cached-probes.md` (scenarios R9, R10, R11, R14)

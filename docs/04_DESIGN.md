@@ -423,8 +423,8 @@ summary. `--json` emits `{ agents: [...], cache? }`, each entry adding `capabili
 60 s at `.spur/run/agent-doctor.json` keyed by an executor-set fingerprint (name/agent/model/tier), served
 only on an exact fresh match, and corrupted/stale/unwritable states degrade silently to a live run; text
 mode prints a dated footer note on a hit; `--probe-health` never reads or writes the cache and
-`--force-refresh` skips the read, re-runs detection live, and rewrites the file under a role selector entries are ordered elected-first then resolution order
-(`agents[0]` is the electee). Auth is neither table column nor surfaced shape (liveness-only gate,
+`--force-refresh` skips the read, re-runs detection live, and rewrites the file. Under a role selector,
+entries are ordered elected-first then resolution order (`agents[0]` is the electee). Auth is neither table column nor surfaced shape (liveness-only gate,
 ADR/0127). For **grok**, liveness is tri-state from `XAI_API_KEY` and/or non-empty `~/.grok/auth.json`
 (no CLI auth-status verb). Exit 1 if any **tier-1** agent is not usable. Backed by `ts-ai-runner` `DoctorRunner`.
 Selector precedence inside the arg: exact executor/agent name first, role id second.

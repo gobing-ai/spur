@@ -4,7 +4,7 @@ name: "Add a probeAuth option to ts-ai-runner DoctorRunner and wire Spur to stop
 status: done
 template: feature-impl
 created_at: 2026-08-26T18:52:01.284Z
-updated_at: "2026-08-26T22:32:02.916Z"
+updated_at: "2026-08-26T23:02:35.199Z"
 feature_id: B4
 priority: P2
 tags: ["ts-libs", "agent", "doctor", "performance"]
@@ -200,13 +200,12 @@ Two-repo change per Q1 (full-family lockstep release).
 Doctor health surface no longer spawns per-executor auth probes on any path (list / resolve / run-dispatch); warm latency target met with headroom (1.03 s vs ~6.2 s baseline). CLI doctor JSON shape unchanged; `authenticated` reports `unknown` under the new default wiring.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
+|-------------|--------|----------|
 | R1 | MET | ts-libs commit 394ae67: DoctorRunnerOptions.probeAuth (default true) + ctor '?? true' + buildResult short-circuit to 'unknown' before installed/canonical check |
 | R2 | MET | suppressed path yields 'unknown', never 'unauthenticated'; pinned by doctor-runner.test.ts probeAuth describe block (claim-vs-unknown comment inline) |
 | R3 | MET | packages/ai-runner/tests/doctor-runner.test.ts: probeAuth:false -> zero non---version executor calls + usable:true; default path -> auth call present; package suite 183 pass, monorepo 1980 pass / 0 fail, tsc clean |
@@ -220,10 +219,9 @@ Doctor health surface no longer spawns per-executor auth probes on any path (lis
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC-R8 | MET |  | doctor path spawns no authentication probe on any of the three constructions under default wiring; verified by zero non---version executor calls under probeAuth:false pin and by construction-site inspection agent-service.ts:418/:494/:878 |
-
+| AC-R8 | MET | test | doctor path spawns no authentication probe on any of the three constructions under default wiring; verified by zero non---version executor calls under probeAuth:false pin and by construction-site inspection agent-service.ts:418/:494/:878 |
+| The doctor path spawns no authentication probe | MET | code+test | all three DoctorRunner constructions pass probeAuth:false (agent-service.ts:418/:494/:878); ts-libs pin asserts zero non---version executor calls under the flag |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **SECU findings** (pipeline verify step — verdict: PASS)

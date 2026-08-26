@@ -526,6 +526,16 @@ is already crowded.
   `docs/design/harness-surface-governance.md` §4 and
   `docs/design/lifecycle-projection-integrity.md`.
 
+  **Amendment (2026-08-26, feature B4 / task 0683):** Consent granted for two flags on the existing
+  `spur agent doctor` verb — `--probe-health` (opt into model health probing; without it no model
+  health request is issued) and `--force-refresh` (bypass the 60 s detection cache at
+  `.spur/run/agent-doctor.json`, re-run detection, rewrite the file). Both are flag expansions of an
+  existing verb, not a new noun or verb, and both change observable output of an existing verb — the
+  class the 2026-08-16 amendment brought under this gate. Consent was given by the operator in the B4
+  planning session of 2026-08-26 and is recorded here so landing tasks cite the record rather than
+  re-litigating the gate. **Detail:** `docs/design/agent-doctor-inspection-surface.md` §5.1–§5.2;
+  surface shape in `docs/04_DESIGN.md` § `spur agent doctor`.
+
 ## ADR-052: Team-Scoped Board Composition with Separate Control and Message Planes
 
 - **Status:** Accepted (design) · **Date:** 2026-08-11 · **Feature:** G3 · **Supersedes:** ADR-042
