@@ -110,7 +110,7 @@ states:
           command: >-
             h=$(superskill script path sp history-anatomy-cache.mjs);
             node "$h" paths --helper "$h" --report-dir "$reportDir" --date "$date"
-            --output "$output" --out .spur/run/$__runId-paths.env
+            --output "$output" --out .spur/run/$__runId-paths.txt
 
   - id: analyze
     description: >
@@ -138,7 +138,7 @@ states:
       - kind: shell
         options:
           command: >-
-            . .spur/run/$__runId-paths.env;
+            . .spur/run/$__runId-paths.txt;
             node "$HA_HELPER" probe --artifact .spur/run/$__runId-history-anatomy-current.json
             --baseline .spur/run/$__runId-history-anatomy-baseline.json --target "$HA_TARGET"
             --mode "$mode" --date "$HA_DATE" --recompute "$recompute" --executor "$agent"
@@ -219,7 +219,7 @@ states:
       - kind: shell
         options:
           command: >-
-            . .spur/run/$__runId-paths.env;
+            . .spur/run/$__runId-paths.txt;
             node "$HA_HELPER" refresh --report "$HA_TARGET"
             --out .spur/run/$__runId-publishable.md --disposition hit
 
@@ -233,7 +233,7 @@ states:
       - kind: shell
         options:
           command: >-
-            . .spur/run/$__runId-paths.env;
+            . .spur/run/$__runId-paths.txt;
             node "$HA_HELPER" stamp --candidate .spur/run/$__runId-candidate.md
             --provenance .spur/run/$__runId-provenance.json
             --out .spur/run/$__runId-publishable.md
@@ -247,7 +247,7 @@ states:
       - kind: shell
         options:
           command: >-
-            . .spur/run/$__runId-paths.env;
+            . .spur/run/$__runId-paths.txt;
             mkdir -p "$(dirname "$HA_TARGET")";
             node "$HA_HELPER" publish .spur/run/$__runId-publishable.md "$HA_TARGET"
 
