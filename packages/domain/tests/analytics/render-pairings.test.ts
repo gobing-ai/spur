@@ -36,6 +36,8 @@ function pairing(overrides: Partial<PairingStat>): PairingStat {
         model: 'model',
         dispatches: 10,
         successRate: 0.8,
+        failures: 2,
+        unknownOutcomes: 0,
         escalations: {},
         totalCostUsd: 1.0,
         meanDurationMs: 2000,
