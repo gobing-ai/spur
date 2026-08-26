@@ -7,7 +7,7 @@
     "plugins": [
         {
             "name": "sp",
-            "version": "0.3.61",
+            "version": "0.3.62",
             "source": "./plugins/sp"
         }
     ]
