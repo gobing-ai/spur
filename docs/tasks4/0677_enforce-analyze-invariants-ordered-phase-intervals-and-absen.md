@@ -4,7 +4,7 @@ name: "Enforce analyze invariants: ordered phase intervals and absent-not-zero t
 status: todo
 template: feature-impl
 created_at: 2026-08-26T05:38:44.955Z
-updated_at: "2026-08-26T05:39:24.595Z"
+updated_at: "2026-08-26T05:48:46.603Z"
 feature_id: I81
 priority: P2
 tags: ["history", "analytics", "correctness", "telemetry"]
@@ -13,13 +13,20 @@ tags: ["history", "analytics", "correctness", "telemetry"]
 ## 0677. Enforce analyze invariants: ordered phase intervals and absent-not-zero telemetry
 
 ### Background
-
 Two analyze-side defects make the forensics artifact quietly untrustworthy, and both reports named them.
 
-First, derived phase intervals include reversed timestamps. Measured on the current corpus: of 4,545 rendered phase records, **1,185 have `endedAt` earlier than `startedAt`**, 1,732 are zero-length, and only 1,628 are positively ordered. Every reversed sample carries `source: "todo"` — for example index 3, `startedAt 2025-11-16T04:06:03.855Z` against `endedAt 2025-11-16T04:03:59.672Z`. `render-forensics.ts:166` computes `Date.parse(endedAt) - Date.parse(startedAt)` with no ordering guard, so those rows enter elapsed-duration analysis as negative durations.
+**Reversed phase intervals.** Of 4,545 rendered phase records, **1,185 have `endedAt` earlier than `startedAt`**, 1,732 are zero-length, and only 1,628 are positively ordered. Every reversed sample carries `source: "todo"` — for example index 3, `startedAt 2025-11-16T04:06:03.855Z` against `endedAt 2025-11-16T04:03:59.672Z`. `render-forensics.ts:166` computes `Date.parse(endedAt) - Date.parse(startedAt)` with no ordering guard, so those rows enter elapsed-duration analysis as negative durations.
 
-Second, unmeasured telemetry is rendered as zero rather than absent. The artifact warns that 44.2 billion ms "could not be attributed to llm/tool/idle because some durations were unmeasured", and the support matrix shows why: duration is recorded for 127,634 of 458,360 assistant steps, with AGY, Claude, Codex and Gemini at zero. Because absent reads as zero, the unattributed and idle buckets look like actionable findings when they are instrumentation gaps, and both reports had to spend a paragraph each warning readers not to act on them.
+**Refinement traced the cause to `extractPhases` (`packages/domain/src/analytics/derived.ts:232-277`), and it is not out-of-order boundary assignment.** The function tracks, per todo-item content string, the first `in_progress` timestamp and the first `completed` timestamp, then emits one phase per content seen:
 
+```ts
+startedAt: started.get(content) ?? lastCallTs,
+endedAt:   ended.get(content)   ?? lastCallTs,
+```
+
+`lastCallTs` is the **session's last** todo-call timestamp. So a todo item that reaches `completed` without ever having been observed `in_progress` gets `startedAt = lastCallTs` (late) and `endedAt = its own completion timestamp` (early) — a guaranteed reversal whenever the item completed before the session ended. That single fallback explains the 1,185 reversed rows, and the symmetric case (an item never `in_progress` and never `completed`, so both fields collapse to `lastCallTs`) explains the 1,732 zero-length ones. The sampled ~2-minute reversal at index 3 is consistent with exactly this.
+
+**Unmeasured telemetry rendered as zero.** The artifact warns that 44.2 billion ms "could not be attributed to llm/tool/idle because some durations were unmeasured", and the support matrix shows why: duration is recorded for 127,634 of 458,360 assistant steps, with AGY, Claude, Codex and Gemini at zero. Because absent reads as zero, the unattributed and idle buckets look like actionable findings when they are instrumentation gaps — both reports had to spend a paragraph each warning readers not to act on them.
 ### Requirements
 - [ ] R1. Add an ordering invariant to phase derivation: a phase whose `endedAt` precedes its `startedAt` must not enter elapsed-duration analysis as a positive interval, and must be recorded as invalid rather than silently emitted.
 - [ ] R2. Investigate and record the derivation cause for the `source: "todo"` reversal before choosing between rejecting and marking — trace the boundary assignment for the cited sample indices (3, 10, 13, 14, 16) rather than guarding the symptom at the renderer.
@@ -52,28 +59,42 @@ Scenario: R10 — Unmeasured telemetry is null, never zero
      is not ready to hand off. Keep empty if none. -->
 
 ### Design
+**Fix the fabricated fallback, not the renderer.** Adding `Math.max(0, …)` at `render-forensics.ts:166` would hide 1,185 broken rows rather than fix them, and every other consumer of `derived.phases` would still see the reversal. The defect is that `extractPhases` invents a boundary it does not have.
 
-**Fix the derivation, not the renderer.** Adding `Math.max(0, …)` at `render-forensics.ts:166` would hide 1,185 broken rows rather than fix them, and every other consumer of `derived.phases` would still see the reversal. The guard belongs where the boundaries are assigned — that is the root-cause fix and the smaller diff across all callers, which is why R2 requires tracing the derivation before writing the guard.
+**The change is small and precise.** In `packages/domain/src/analytics/derived.ts:265-273`, stop substituting `lastCallTs` for a boundary that was never observed:
 
-The reversal is uniform in `source: "todo"`, which points at how todo-list records are paired into phase boundaries — most likely adjacent boundaries assigned from records that are not monotonically ordered by timestamp. The likely correct shape is to sort boundary candidates by timestamp before pairing, at which point the reversal cannot be constructed. If some inputs are genuinely unordered in the source data, then marking (an explicit `invalid: true` on the phase) is the honest outcome and the renderer skips them.
+- Item observed `in_progress` → `startedAt` is that timestamp.
+- Item observed `completed` → `endedAt` is that timestamp.
+- Either boundary unobserved → that field is **absent**, not `lastCallTs`.
 
-**Absent-not-zero is a type discipline, not a formatting choice.** The row columns are already nullable in SQLite; the coercion happens on the way out. The fix is to keep `number | null` through the aggregation and artifact types and let the renderer decide presentation, which also makes R4 a single formatting helper rather than a scatter of conditionals.
+Widen `Phase.startedAt` / `Phase.endedAt` to `string | null` accordingly. A phase with a null boundary has no elapsed duration and is excluded from duration analysis by construction — no separate `invalid` flag is needed for that case, which is the smaller shape.
 
-**Why this is worth doing before the adapter work.** Once absent renders as "not available", the next task's audit has a truthful baseline to measure against — and if it turns out a source genuinely emits nothing, the report already says so correctly without any adapter change.
+**Keep one explicit invalid marker for the residual.** If, after removing the fabrication, any phase still has both boundaries observed and `endedAt < startedAt` (a genuinely out-of-order source record), mark it rather than emit it — R1 requires it not enter elapsed-duration analysis as a positive interval. Assert in a test that the current corpus produces zero such rows once the fallback is gone; if it does not, that residual is a real second cause and belongs in the Solution write-up.
 
-**Reversibility.** Both changes are additive guards; reverting restores the current (wrong) output with no data rewrite.
+**`lastCallTs` was load-bearing for one legitimate case.** The comment at `:264` calls it a fallback for "sessions with calls but no in_progress status". That case does not become an error — it becomes a phase with a known end and an unknown start, which is the honest representation and exactly what R3/R4 ask for.
 
+**Absent-not-zero is a type discipline, not a formatting choice.** The underlying `history_message` columns are already nullable (`duration_ms`, `input_tokens`, `cache_read_tokens`, … all `INTEGER` with no `NOT NULL`). The coercion happens in aggregation and rendering. Keep `number | null` through `packages/domain/src/analytics/` — `query.ts`, `derived.ts`, `artifact.ts`, `types.ts` — and let the renderer decide presentation, which makes R4 one formatting helper rather than a scatter of conditionals.
+
+**Frozen names.** One renderer helper, `naOrValue(v: number | null, fmt)`, returning the literal `not available` for null. That string is already the report contract's vocabulary for absence, so it needs no new term.
+
+**Digest impact.** `artifact-digest.ts:63` registers `phases: 'set'` in the semantic digest. Changing phase shape changes the digest, which correctly invalidates cached history-anatomy reports through the existing `data-changed` signal. Expected, not a regression.
+
+**Anti-patterns.** Do not clamp negatives at the renderer. Do not drop reversed phases silently — a dropped row and an absent boundary are different claims. Do not coerce a null to 0 anywhere on the way out. Do not fabricate telemetry for sources that expose nothing — this task makes absence legible; the adapter mapping is 0678's job.
+
+**Handoff to 0678 and 0679.** Both declare this task as a dependency because they need the absent-not-zero contract in place first: 0678's audit measures coverage against a truthful baseline, and 0679 applies the same discipline to pairing rows.
+
+**Reversibility.** Both changes are additive guards over nullable fields; reverting restores the current (wrong) output with no data rewrite.
 ### Plan
-
-1. Trace phase derivation for sample indices 3, 10, 13, 14, 16 and record the actual boundary-assignment cause in the task's Solution section.
-2. Apply the ordering fix at the derivation seam; if some inputs are irreducibly unordered, mark those phases invalid instead.
-3. Update the forensics renderer to skip or explicitly label invalid phases rather than printing a negative duration.
-4. Walk the aggregation and artifact types for duration and provider usage; keep `null` end to end where it is currently coerced to `0`.
-5. Add the "not available" rendering helper and apply it to the affected columns.
-6. Make the unattributed-time warning cite `stepSupport` so the gap is attributable.
-7. Tests: a reversed-boundary input produces no positive interval; a null duration renders "not available" and a measured zero renders "0"; the warning names the support matrix.
-8. Regenerate an artifact over the current corpus and confirm the reversed-interval count is zero (or fully marked); run `bun run lint`, `bun run test`.
-
+1. Add a failing test that reproduces the reversal from todo-call fixtures: one item completed without ever being `in_progress`, in a session whose last call is later than that completion.
+2. Change `extractPhases` (`packages/domain/src/analytics/derived.ts:265-273`) to stop substituting `lastCallTs` for unobserved boundaries; widen `Phase.startedAt` / `Phase.endedAt` to `string | null`.
+3. Add the explicit invalid marker for any phase whose two observed boundaries are still out of order, and exclude marked phases from elapsed-duration analysis.
+4. Update `render-forensics.ts:166` to render a phase with a null boundary or an invalid marker as `not available` rather than computing a duration.
+5. Walk `packages/domain/src/analytics/` (`query.ts`, `derived.ts`, `artifact.ts`, `types.ts`) for duration and provider-usage values coerced from null to 0; keep `number | null` end to end.
+6. Add the `naOrValue` rendering helper and apply it to the affected columns.
+7. Make the `derived-unattributed-time` warning cite `stepSupport`, so a reader can tell an instrumentation gap from a workload category.
+8. Tests: reversed-boundary input produces no positive interval; a null duration renders `not available` while a measured zero renders `0`; the warning names the support matrix.
+9. Regenerate an artifact over the current corpus and assert the reversed-interval count is zero (or fully marked); record the before/after counts in the Solution section.
+10. Run `bun run lint`, `bun run test`.
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->

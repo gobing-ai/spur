@@ -4,7 +4,7 @@ name: "Audit and map source-adapter duration and step usage where the raw record
 status: todo
 template: feature-impl
 created_at: 2026-08-26T05:38:44.976Z
-updated_at: "2026-08-26T05:39:29.133Z"
+updated_at: "2026-08-26T05:50:38.287Z"
 feature_id: I81
 priority: P2
 tags: ["history", "importer", "telemetry", "ts-libs", "cross-repo"]
@@ -46,17 +46,21 @@ Scenario: R11 — Duration and step usage are mapped wherever the raw record car
      is not ready to hand off. Keep empty if none. -->
 
 ### Design
+**Audit before mapping — a hard gate, not a formality.** The reports establish *that* coverage is uneven, not *why* per source. Writing adapter code before knowing which fields exist in each raw shape risks either fabricating values or missing them. R1 gates R2. The audit output is a per-source, per-field table that goes into the Solution section and stays as the standing answer to "why is source X still absent?".
 
-**Audit before mapping.** The reports establish *that* coverage is uneven, not *why* per source. Writing adapter code before knowing which fields exist in each raw shape risks either fabricating values or missing ones — R1 is therefore a hard prerequisite gate on R2, not a formality. The audit output is a per-source, per-field table that goes into the task's Solution section and stays as the answer to "why is source X still absent?".
+**Where the change lands.** `~/xprojects/ts-libs/packages/llm-jsonl-importer` — the source definitions in `src/sources.ts` and the record mappers in `src/mappers.ts`. Published, then `bun update` in the dependent Spur workspaces. Land 0675 first if both are in flight, so re-import wall-clock measurements are not confounded.
 
-**Codex is the highest-value single lead.** 11.36 billion input tokens at source-total granularity against zero step-level usage rows is not an absent signal — it is a signal reaching a different code path. That asymmetry probably explains AGY too, and it is the one investigation most likely to move the coverage number materially.
+**Codex is the highest-value single lead.** 11,360,397,215 input tokens at source-total granularity against **0 of 53,406** step-level usage rows is not an absent signal — it is a signal reaching a different code path. Whatever produces the source total is reading usage the step-level mapper skips. That one investigation probably explains AGY (0 of 58,716) too and is the change most likely to move the coverage number materially. Start there.
 
-**Derived duration is a semantics question, not a convenience.** For a source that records only timestamps, the interval between consecutive assistant records is a *plausible* duration but not a *measured* one. R5 forces that distinction to be argued explicitly rather than assumed, because the previous task just spent its effort making absence honest and this task must not undo it.
+**Measured baseline to move.** Duration: OMP 100,664/101,046 and OpenCode 10,908/10,911 near-complete; Grok 15,720/95,363; Pi 342/100,744; AGY, Claude, Codex, Gemini zero. Usage: Claude, OMP, OpenCode, Pi substantially or fully covered; Gemini 1,383/1,389; Grok 466/95,363; AGY and Codex zero. Record the same matrix after the change.
 
-**Where the change lands.** `@gobing-ai/ts-llm-jsonl-importer` adapters in `~/xprojects/ts-libs`, with a publish plus `bun update` round-trip. Depends on the absent-not-zero task landing first, so the audit measures against a truthful baseline.
+**Derived duration is a semantics question, not a convenience.** For a source that records only timestamps, the interval between consecutive assistant records is a *plausible* duration, not a *measured* one. R5 forces that distinction to be argued explicitly, because 0677 has just spent its effort making absence honest and this task must not undo it. If a source's own format documents that interval as its step duration, mapping it is correct and the Solution says so; otherwise the field stays absent.
+
+**Anti-patterns.** Do not synthesize duration to make a coverage number rise. Do not map a field the audit did not find in the raw shape. Do not change the analyze or render layers — 0677 owns absent-not-zero there; this task only changes what the importer writes.
+
+**Depends on 0677** so the audit measures against a truthful baseline.
 
 **Reversibility.** Per-source mappings revert independently.
-
 ### Plan
 
 1. For each of the nine sources, sample raw records and record which of duration, input/output tokens, cache read/write, and cost are present in the raw shape.

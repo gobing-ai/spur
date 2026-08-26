@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-08-26T05:33:47.266Z"
-updated_at: "2026-08-26T05:34:50.220Z"
+updated_at: "2026-08-26T05:49:59.986Z"
 ---
 
 # I81: History-anatomy remediation: bounded daily windows, incremental import short-circuit, honest telemetry, and an actionable report contract
@@ -204,6 +204,12 @@ Feature: History-anatomy remediation: bounded daily windows, incremental import 
     When the analyze stage runs
     Then the current artifact's selector equals the operator-supplied bounds
     And no daily calendar-day normalization is applied to them
+  @core
+  Scenario: R21 — Pairing analytics read the payload paths the dispatch writer actually emits
+    Given agent dispatch and exit events recorded in their real emitted payload shape
+    When the pairing aggregation joins dispatches to their exit rows
+    Then the join key and the outcome field resolve against those payloads rather than matching zero rows
+    And a test fails when an extracted path no longer appears in a real emitted payload
 ```
 ## Tasks
 

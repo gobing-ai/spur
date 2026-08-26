@@ -4,7 +4,7 @@ name: "Make the find-issue surface honest about --agent and fail the run on unde
 status: todo
 template: feature-impl
 created_at: 2026-08-26T05:38:44.933Z
-updated_at: "2026-08-26T05:39:24.304Z"
+updated_at: "2026-08-26T05:48:10.904Z"
 feature_id: I81
 priority: P2
 tags: ["history-anatomy", "sp-plugin", "contract", "hygiene"]
@@ -61,28 +61,32 @@ Scenario: R17 — The workflow's default executor is not a quota-dead one
      is not ready to hand off. Keep empty if none. -->
 
 ### Design
+**R1: drop, do not translate.** Translating `inline` to `auto` at the seam would silently give the operator a different execution surface than the one they asked for, which is precisely the failure `AGENT_INLINE_HEADLESS_MESSAGE` exists to prevent — `cross-cutting.md` § Inline-default execution surface states explicit `--agent inline` is a *hard* host-session guarantee. The honest fix is for the flag table in `plugins/sp/commands/dev-find-issue.md` to stop advertising a mode this target rejects. Omission is the correct default for a headless target; it resolves through the executor precedence chain to `agent.default`, then the YAML literal.
 
-**R1: drop, do not translate.** Translating `inline` to `auto` at the seam would silently give the operator a different execution surface than the one they asked for, which is precisely the failure mode the `AGENT_INLINE_HEADLESS_MESSAGE` contract exists to prevent (cross-cutting.md: explicit `--agent inline` is a *hard* host-session guarantee). The honest fix is for the flag table to stop advertising a mode this target rejects. The default for a headless target is omission, which resolves through the executor precedence chain to `agent.default`.
+**R2 scope.** `/sp:dev-idea` is the confirmed second instance — its own flag table lists `--agent <inline|auto|name>` while `dev-operations.md` § idea states the pipeline's `agent.run` stages reject explicit `inline` with exit 2. Grep the `plugins/sp/commands/` tree for `inline` in a flag table and check each against whether its target is a headless `spur workflow run` or an interactive host driver. Only correct the headless ones — `dev-run`, `dev-runall`, and `dev-refine` legitimately support inline via the host driver.
 
-**R3: assert, do not sandbox.** The lazy correct shape is a fingerprint diff — capture `git status --porcelain` before the stage, compare after, and fail on any new path that is not the declared `expectFile`. This is exactly what the dogfood protocol's workspace fingerprint already does, so the mechanism is proven in this repo and needs no new concept. Sandboxing the executor's filesystem would be a much larger change for the same signal.
+**R3: assert, do not sandbox.** The lazy correct shape is a fingerprint diff — capture `git status --porcelain` before the stage, compare after, and fail on any new path that is not the stage's declared `expectFile`. The dogfood protocol already uses exactly this mechanism in this repo (`workspace_fingerprint` / `porcelain_hash_baseline` in both dogfood reports), so it is proven and needs no new concept. Sandboxing the executor's filesystem would be a far larger change for the same signal.
 
-The check belongs in the `history-anatomy-cache` helper (ADR-069 R1: this is a program, not glue) invoked as a shell action after each `agent.run` stage.
+**Frozen names.** A new `assert-clean` subcommand on `plugins/sp/scripts/history-anatomy-cache.ts`, sitting alongside the existing `digest` / `check` / `publish` / `paths` / `probe` / `stamp` / `refresh` cases in the same `switch` (`:691-800`). Signature: `assert-clean --baseline <porcelain.txt> --expect <declared-output-path> [--expect <path>…]`, exit 0 clean, exit 1 naming each undeclared path. A `.mjs` twin regeneration is mandatory (ADR-065, enforced by `bun run script-contract-check`).
 
-**R5: pick the default from what the project already declares.** Rather than hard-coding another executor name that can go quota-dead in turn, prefer resolving through `agent.default` and keep the YAML literal as the last-resort fallback per the executor precedence chain. A literal that is already known dead is worse than no literal.
+**Wiring.** One shell action capturing the baseline before `enrich` and before `validate`, one shell action running `assert-clean` after each. On failure the run takes an edge to `failed` — the existing `structure-gate -> failed` transition is the shape to copy.
 
-**Blast radius.** Documentation and workflow config; no product code path changes, and R3 adds a gate that can only refuse to publish, never publish something it otherwise would not.
+**R5: prefer the precedence chain over another literal.** `config/workflows/history-anatomy.yaml:63` pins `agent: "omp"`, which returned HTTP 429 during the 2026-08-25 dogfood run. Hard-coding a different executor name only moves the problem to whichever one goes quota-dead next. The executor precedence chain (`cross-cutting.md` § R7) already resolves `agent.default` from `.spur/config.yaml` ahead of the YAML literal, so the literal should be the project's current healthy default rather than a stale pin — and the fail-loud error already names the sanctioned alternatives, so no error-message work is needed.
 
+**Anti-patterns.** Do not add an `--agent` translation shim. Do not make `assert-clean` a warning — an undeclared write must block publication. Do not touch any public `spur` CLI noun or verb (ADR-051 consent gate); this task changes plugin-surface docs, a plugin script, and workflow config only.
+
+**Reversibility.** Documentation and config; `assert-clean` can only refuse to publish, never publish something the run otherwise would not.
 ### Plan
-
-1. Read the `AGENT_INLINE_HEADLESS_MESSAGE` contract and the executor precedence chain in `cross-cutting.md` to confirm the sanctioned wording.
-2. Correct the `--agent` row in `plugins/sp/commands/dev-find-issue.md`; grep the sibling `/sp:dev-*` command files for the same over-promise and correct each.
-3. Add an undeclared-write check to the `history-anatomy-cache` helper (and its committed `.mjs` twin per ADR-065); wire it as a shell action after `enrich` and after `validate`.
-4. Add a transition from the check's failure to `failed`, so an undeclared write cannot reach `publish`.
-5. Delete the leaked `history-anatomy..md` from the repository root.
-6. Change the workflow's executor fallback per the design note.
-7. Tests: the check passes on a clean stage, fails and names the path on a stray write; the corrected flag table matches the headless contract.
-8. Run `bun run lint`, `bun run test`, `bun run script-contract-check`, and `spur workflow validate`.
-
+1. Read `cross-cutting.md` § Inline-default execution surface for the exact `AGENT_INLINE_HEADLESS_MESSAGE` wording and the R7 executor precedence chain, so the corrected flag tables quote the sanctioned contract rather than paraphrasing it.
+2. Correct the `--agent` row in `plugins/sp/commands/dev-find-issue.md`: drop `inline` for this headless target and state the resolved default.
+3. Grep `plugins/sp/commands/` for `inline` in flag tables; classify each command by whether its target is a headless `spur workflow run` or an interactive host driver; correct only the headless ones (`/sp:dev-idea` is a known instance). Leave `dev-run` / `dev-runall` / `dev-refine` alone — they support inline through the host driver.
+4. Add the `assert-clean` subcommand to `plugins/sp/scripts/history-anatomy-cache.ts` beside the existing cases, and regenerate the committed `.mjs` twin.
+5. Wire baseline-capture shell actions before `enrich` and `validate`, and `assert-clean` shell actions after each, in `config/workflows/history-anatomy.yaml`.
+6. Add the failure edges to `failed`, mirroring the existing `structure-gate -> failed` transition shape.
+7. Delete the leaked `history-anatomy..md` from the repository root.
+8. Change the workflow's executor literal at `:63` per the design note.
+9. Tests: `assert-clean` passes on a clean stage; fails and names the path on a stray write; the corrected flag tables match the headless contract (extend `validate-flag-contracts.ts` if it already covers this shape).
+10. Run `bun run lint`, `bun run test`, `bun run script-contract-check`, and `spur workflow validate config/workflows/history-anatomy.yaml`.
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->

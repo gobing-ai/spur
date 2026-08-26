@@ -4,7 +4,7 @@ name: "Short-circuit unchanged files in the incremental JSONL importer and batch
 status: todo
 template: feature-impl
 created_at: 2026-08-26T05:38:44.911Z
-updated_at: "2026-08-26T05:39:24.000Z"
+updated_at: "2026-08-26T05:48:10.367Z"
 feature_id: I81
 priority: P1
 tags: ["history", "importer", "performance", "ts-libs", "cross-repo"]
@@ -66,30 +66,36 @@ Scenario: R19 — A file rewritten in place within one modification-time tick is
      is not ready to hand off. Keep empty if none. -->
 
 ### Design
+**Where the change lands.** `~/xprojects/ts-libs/packages/llm-jsonl-importer` (published as `@gobing-ai/ts-llm-jsonl-importer`, currently `0.4.42`), not a Spur workaround — AGENTS.md is explicit that ts-libs facades are the place to fix importer behavior. Spur's part is the migration for the additive columns and the dependency bump.
 
-**Where the change lands.** `@gobing-ai/ts-llm-jsonl-importer` in `~/xprojects/ts-libs`, not a Spur workaround — AGENTS.md is explicit that ts-libs facades are the place to fix importer behavior. Spur's part is the migration for the two additive columns and the dependency bump.
+**The port already carries what is needed.** Refinement confirmed `FileStat` in `@gobing-ai/ts-runtime` (`src/file-system.ts:2-7`) is `{ isFile(); isDirectory(); size: number; mtimeMs: number }`, and the Node backend populates both from `statSync` (`src/file-system-node.ts:102-115`). `FileSystem.stat` is already non-optional on the interface (`:59`). **No port change is required** — the earlier assumption that the port might need extending is wrong.
 
-**Identity, not content hashing.** Hashing every file to prove it is unchanged costs the same read the short-circuit is trying to avoid. `(size, mtimeMs)` is the standard cheap proxy — it is what build tools and rsync use by default — and `fileSystem.stat` is already in the `FileSystem` port (`importer.ts:549` uses it for roots). The residual risk is R4's in-place rewrite within one mtime tick at identical size, which is vanishingly rare for append-only JSONL logs; a `--mode full` run is the escape hatch and should be named as such in the docs rather than defended with a hash.
+**Identity, not content hashing.** Hashing every file to prove it is unchanged costs the same read the short-circuit is trying to avoid. `(size, mtimeMs)` is the standard cheap proxy — what build tools and rsync use by default. The residual risk is R4's in-place rewrite within one mtime tick at an identical size, which is vanishingly rare for append-only JSONL logs; `--mode full` is the documented escape hatch, not a hash.
 
-**Why not store the line count instead.** Line count is only knowable by reading the file, which defeats the purpose.
+**Frozen names.** Two nullable columns on `history_import_checkpoint`: `source_size INTEGER` and `source_mtime_ms REAL`. `REAL` because `mtimeMs` is fractional. Nullable matters: existing rows carry no identity, so the first run after the migration falls through to the current read-everything path and populates them — the migration is self-healing and needs no backfill.
 
-**Batching the checkpoint read.** `readCheckpoint` per file is an N-query pattern over a table already keyed `(source, source_file)`. One `SELECT source_file, last_imported_line, size, mtime FROM history_import_checkpoint WHERE source = ?` per source, materialized into a `Map`, is the whole change — the table is 17,781 rows total, so a per-source load is trivially bounded.
+**Where the DDL lives, in two places.** `HISTORY_IMPORT_SCHEMA_SQL` in the importer's `src/schema-sql.ts:11-17` creates the table for fresh databases. An existing Spur database needs a Drizzle migration; the current maximum prefix is `0022` (`drizzle/0022_spur_cli_history_performance_indexes.sql`), so this one is **`0023`**, with the `_spur_cli_` marker the migrator requires. Both must move together.
 
-**Schema shape.** Two nullable columns (`source_size`, `source_mtime_ms`) added to `history_import_checkpoint`. Nullable matters: existing rows carry no identity, so the first run after the migration must fall through to the current read-everything path and populate them. That makes the migration self-healing and needs no backfill.
+**The two call sites.** `src/importer.ts:158` is `const checkpoint = mode === 'incremental' ? await readCheckpoint(options.db, resolvedSource, file) : 0;` inside `for (const file of files)`, and `:160` is `for await (const rawLine of readLines(fileSystem, file))`. The batched load replaces the first; the short-circuit is a `continue` before the second. `readCheckpoint` itself is `jsonl-importer-dao.ts:134-138`; add a sibling that loads all rows for one source into a `Map<string, {line, size, mtimeMs}>` — the whole table is 17,781 rows, so a per-source load is trivially bounded.
+
+**Skip predicate.** Skip only when *all* hold: mode is `incremental`; a checkpoint row exists; both stored identity fields are non-null; and `stat()` returns a `FileStat` whose `size` and `mtimeMs` both equal the stored values. Any null, any mismatch, or a null `stat` falls through to the current read path. Fail open, never closed.
+
+**Anti-patterns.** Do not skip on mtime alone. Do not skip in `full` or `force-file` mode. Do not delete the line-level checkpoint — it stays the correctness mechanism for a file that *has* grown. Do not backfill the new columns in the migration.
+
+**Handoff to 0678.** That task touches the same adapters in the same package; if both are in flight, land this one first so 0678's re-import measurements are not confounded by import wall-clock changes.
 
 **Reversibility.** Ignoring the two columns restores current behavior; no data rewrite.
-
 ### Plan
-
-1. Reproduce and record the baseline: two back-to-back no-op imports with the source-local binary, capturing wall-clock, file counts, and the provenance header.
-2. In ts-libs, add `source_size` and `source_mtime_ms` (nullable) to the importer's checkpoint schema SQL and to the checkpoint DAO read/upsert paths.
-3. Replace the per-file `readCheckpoint` with a per-source batched load into a `Map`.
-4. Add the file-level short-circuit in the `for (const file of files)` loop: `stat` the file, compare against the map entry, skip when both identity fields match and are non-null.
-5. Preserve full/`force-file` semantics; assert the short-circuit is incremental-only.
-6. Unit tests: unchanged file is not read; changed size is read; changed mtime is read; null identity falls through; full mode always reads; batched lookup issues one query per source.
-7. Publish the importer, `bun update` the dependent Spur workspaces, and add the Spur migration at `max(prefix)+1`.
-8. Re-measure the no-op import and record the delta; run `bun run lint`, `bun run test`, `bun run build`.
-
+1. Reproduce and record the baseline: two back-to-back no-op imports with the source-local binary (`bun run apps/cli/src/index.ts history import --json`), capturing wall-clock, per-source file counts, and the printed provenance header per the monorepo real-data contract.
+2. In `~/xprojects/ts-libs/packages/llm-jsonl-importer`, add `source_size INTEGER` and `source_mtime_ms REAL` to the `history_import_checkpoint` DDL in `src/schema-sql.ts`, and thread both through the checkpoint read/upsert paths in `src/jsonl-importer-dao.ts` (`readCheckpoint` :134, the upsert :155, `checkpointUpsertOp` :244, and the realpath-normalization collapse :411-449).
+3. Add a per-source batched checkpoint loader returning `Map<sourceFile, {line, size, mtimeMs}>`; replace the per-file `readCheckpoint` call at `src/importer.ts:158`.
+4. Add the file-level short-circuit ahead of `readLines` at `:160`: `stat()` the file, `continue` only when a checkpoint row exists with both identity fields non-null and both matching. Fail open on any null or mismatch.
+5. Assert the short-circuit is incremental-only — `full` and `force-file` keep reading everything.
+6. Unit tests: unchanged file is not read; changed size is read; changed mtime is read; null stored identity falls through; `stat` returning null falls through; full mode always reads; the batched loader issues one query per source.
+7. Publish the importer, then `bun update` the dependent Spur workspaces and confirm the resolved version in the import provenance header reflects the rebuild.
+8. Add `drizzle/0023_spur_cli_history_checkpoint_identity.sql` with the two `ALTER TABLE … ADD COLUMN` statements and the `_spur_cli_` marker; run `spur self migrate` against a copy of the real database.
+9. Re-measure the no-op import and record the before/after delta in the Solution section.
+10. Run `bun run lint`, `bun run test`, `bun run build`.
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->

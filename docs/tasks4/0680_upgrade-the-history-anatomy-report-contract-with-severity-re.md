@@ -4,7 +4,7 @@ name: "Upgrade the history-anatomy report contract with severity, repro, owner s
 status: todo
 template: feature-impl
 created_at: 2026-08-26T05:38:45.026Z
-updated_at: "2026-08-26T05:39:56.082Z"
+updated_at: "2026-08-26T05:50:38.545Z"
 feature_id: I81
 priority: P2
 tags: ["history-anatomy", "report-contract", "sp-plugin", "dogfood"]
@@ -65,19 +65,23 @@ Scenario: R18 — The report carries a report-only repeated-call advisory
      is not ready to hand off. Keep empty if none. -->
 
 ### Design
+**Borrow the shape, not the protocol.** The dogfood report's value is that a reader can triage it: severity orders the work, a repro makes a claim checkable in one command, and an owner surface routes it. Those three are additive fields on the per-finding block, which `plugins/sp/skills/history-anatomy/references/report-contract.md` § "Per-finding field set" (`:46-60`) already defines with nine entries — `key`, `category`, `impact`, `trend`, `observation`, `inference`, `confidence`, `contradictions`, `evidenceAnchor`. This is an extension of a working contract, not a redesign; the evidence discipline that made both published reports honest stays exactly as it is.
 
-**Borrow the shape, not the protocol.** The dogfood report's value is that a reader can triage it: severity orders the work, repro makes a claim checkable in one command, owner surface routes it. Those three are additive fields on the existing per-finding block, which already has `key`, `category`, `impact`, `trend`, `observation`, `inference`, `confidence`, `contradictions`, `evidenceAnchor`. This is an extension of a working contract, not a redesign — the evidence discipline that made both reports honest stays exactly as it is.
+**Severity is not confidence.** `confidence` says how sure the finding is; severity says how much it matters. They are orthogonal — the phase-reversal finding is `high` confidence and P2, while a `low`-confidence P1 would be the most urgent thing to investigate.
 
-**Severity is not confidence.** The existing `confidence` field says how sure the finding is; severity says how much it matters. Both are needed and they are orthogonal — the phase-reversal finding is high confidence and P2, while a low-confidence P1 would be the most urgent thing to investigate.
+**The owner surface is already half-built.** The stable key is `<category>:<owner-surface>:<signal>` (`report-contract.md:31`), so every finding already names its owner surface *inside the key* — `telemetry:history-analyze:duration-coverage-gap`, `repetition:agent-sessions:repeated-tool-calls`. The new field promotes that segment to a first-class entry with a concrete target (a file, a package, a command) rather than a slug. Do not invent a second vocabulary; derive from the key's middle segment.
 
-**The handoff is a printed invocation, not an automatic write.** Auto-creating tasks from a diagnostic report would put an unreviewed model judgment straight into the corpus, and the corpus is CLI-gated for exactly that reason. Printing the `spur task` invocation keeps the operator as the gate while removing the re-derivation work. The stable key in the created task is what makes the next report able to classify the finding as `resolved`.
+**The contract vocabulary lives in two places, deliberately.** `plugins/sp/scripts/history-anatomy-cache.ts` keeps a local frozen copy — `ELEVEN_SECTIONS` at `:92` and the finding field names around `:113-115` — with a comment stating it is intentionally not imported from `packages/` so the deterministic script stays self-contained. R7's "one commit" therefore means three files move together: the contract reference, the helper (plus its `.mjs` twin), and the enrich/validate rubrics in `references/operations.md`. That duplication is by design; do not try to unify it.
 
-**Why R6 belongs here.** Both report kinds are blind to what a run cost, and both dogfood ledgers had to write "~unknown" with LOW confidence. Cost is a first-class column in a diagnostic report; surfacing it is what makes the performance section able to state a run's own cost rather than only the corpus's.
+**The handoff is a printed invocation, not an automatic write.** Auto-creating tasks from a diagnostic report would put an unreviewed model judgment straight into the corpus, which is exactly what the CLI-gated write contract exists to prevent. Printing the `spur task` invocation keeps the operator as the gate while removing the re-derivation work — the work this very session did by hand across four reports. The stable key carried into the created task is what lets the next report classify the finding as `resolved`.
 
-**Ordering.** This task should land after the bounds-threading task, because a report contract that mandates severity is only useful once recurrence classification actually works — otherwise every finding is `not-comparable` and severity has nothing to rank against.
+**Why R6 belongs here.** Both dogfood ledgers had to record chained `agent.run` cost as "~unknown" with LOW confidence. A diagnostic report that cannot state its own run cost is missing a first-class column; surfacing it is what lets the Performance analysis section talk about the run, not only the corpus.
+
+**Ordering.** Depends on 0674: a contract that mandates severity ranking is only useful once recurrence classification works. While every finding renders `not-comparable`, severity has nothing to rank against.
+
+**Anti-patterns.** Do not make the new fields advisory — the structure gate must fail a candidate missing any of them, or they will be omitted under time pressure. Do not auto-write to the task corpus. Do not replace `confidence` with severity. Do not add a severity scale beyond the P1/P2/P3 vocabulary the dogfood protocol already uses in this repo.
 
 **Reversibility.** The gate additions are refusals only; reverting the contract restores the current nine-field finding block.
-
 ### Plan
 
 1. Extend `plugins/sp/skills/history-anatomy/references/report-contract.md` with the severity, repro-command, and owner-surface fields, and define the closed severity vocabulary.
