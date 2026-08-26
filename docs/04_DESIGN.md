@@ -394,19 +394,40 @@ alias of `antigravity-cli`). With `--specs`, lists the team agent specs under `.
 role renders `unset`, 0544 R2/R4; `--json` includes the spec path plus `role`/`executor` fields,
 omitted when unset).
 
-#### `spur agent doctor [agent] [--json]`
+#### `spur agent doctor [agent] [--json] [--probe-health] [--force-refresh]`
 
 Readiness check per agent (same `DISPLAY_ORDER` as list). Text mode prints an aligned table —
-`<✓|✗> <usable|missing> <agent> <tier> <auth:yes|no|?> <version>` with a
-`STATUS AGENT TIER AUTH VERSION` header and an `N usable, M missing (tier-1)` footer; `--json`
-emits `{ agents: [...] }`, each row carrying `capabilityTier` (task 0487 R3 — the executor's
-**capability** tier `cheap|standard|capable-*`, distinct from the row's `tier`, which is the agent's
-support tier 1/2/3; consumed by the pipeline size precheck). It is the declared
-`agent.executors[].tier` when the probed name matches a configured executor, else inferred from the
-name. Auth is informational (its own column, not a state label —
-liveness-only gate, ADR/0127). For **grok**, auth is tri-state from `XAI_API_KEY` and/or
-non-empty `~/.grok/auth.json` (no CLI auth-status verb). Exit 1 if any **tier-1** agent is not
-usable. Backed by `ts-ai-runner` `DoctorRunner`.
+`<✓|✗> <usable|missing> <executor-name> <agent-binary> <pinned-model> <capability-tier> <version>` with a
+`STATUS EXECUTOR AGENT MODEL TIER VERSION ROLES` header and an `N usable, M missing` footer
+(feature B4 / 0681). Details per column:
+
+- **EXECUTOR** carries the configured `agent.executors[].name`; the **AGENT** cell carries the underlying
+  binary (`omp`, `pi`, …) so aliasing is visible; rows outside any executor config fall back to the agent name.
+- **MODEL** shows the *pinned* config model (`agent.executors[].model`) or `—`; probed live model health is
+  not a table concern — the single-executor detail view disambiguates via `pinned:` (config) vs `health:`
+  (probe) lines. Health probing is **opt-in** (feature B4 / 0683): `--probe-health` passes pinned models
+  through to the runner so it probes them; without the flag the models are withheld from the probe set and
+  no network/model check runs. The MODEL column always reflects config either way.
+- **TIER** renders the executor's capability tier (`cheap|standard|capable-*`), distinct from support tier 1/2/3
+  (consumed by the pipeline size precheck) which never appears in the table. Declared `agent.executors[].tier`
+  wins when the probed name matches a configured executor, else inferred from the name.
+- **ROLES** lists pipeline roles this executor could serve (`cheap→scribe`; standard adds coder/reviewer/planner),
+  with `*` marking roles where it is the elected (cheapest-usable-by-tier, resolution-order-tiebreak) executor;
+  a footer legend explains the star when any row has one.
+
+Arg semantics: a bare **agent/exec name** prints that executor's detail block; a **pipeline role id**
+(`coder`, `reviewer`, …) instead renders the full eligible ladder for that role — one line per eligible
+agent with the ELECTED marker and per-row failure reasons plus an `N eligible, M usable, elected: X`
+summary. `--json` emits `{ agents: [...], cache? }`, each entry adding `capabilityTier`, `model` (pinned or null),
+`roles`, and `elected`; a full-set run adds `cache: {hit, ageMs, path}` — detection results are cached for
+60 s at `.spur/run/agent-doctor.json` keyed by an executor-set fingerprint (name/agent/model/tier), served
+only on an exact fresh match, and corrupted/stale/unwritable states degrade silently to a live run; text
+mode prints a dated footer note on a hit; `--probe-health` never reads or writes the cache and
+`--force-refresh` skips the read, re-runs detection live, and rewrites the file under a role selector entries are ordered elected-first then resolution order
+(`agents[0]` is the electee). Auth is neither table column nor surfaced shape (liveness-only gate,
+ADR/0127). For **grok**, liveness is tri-state from `XAI_API_KEY` and/or non-empty `~/.grok/auth.json`
+(no CLI auth-status verb). Exit 1 if any **tier-1** agent is not usable. Backed by `ts-ai-runner` `DoctorRunner`.   
+Selector precedence inside the arg: exact executor/agent name first, role id second.
 
 #### `spur agent create <id> --type <agent-type> [--json] [flags]` · `spur agent edit <id>` · `spur agent delete <id> [--force]`
 
@@ -1854,7 +1875,9 @@ therefore reaches the implement hop too, where it previously lost to `agent.defa
 one divergence line when the two resolved executors differ. **Precheck auth gate (task 0487 R2):**
 precheck probes both `$agent` and `$implementAgent` via `spur agent doctor <exec> --json` and writes
 FAIL when either reports `authenticated: "unauthenticated"` or the doctor call exits non-zero;
-`unknown` stays soft, and the `spur agent doctor` CLI exit-code contract is unchanged.
+`unknown` stays soft (task 0684: the shared doctor constructs DoctorRunner with `probeAuth: false`, so
+`authenticated` is always `unknown` and FAIL effectively rests on exit status), and the
+`spur agent doctor` CLI exit-code contract is unchanged.
 **Size precheck (0454, extended 0487 R3):** `maxImplementReqs` (default `5`) and
 `maxImplementPlanItems` (default `8`) feed `plugins/sp/scripts/task-size-precheck.ts`, now also
 passed `--executor "$implementAgent"`: a task past the **default** caps routed to an executor whose

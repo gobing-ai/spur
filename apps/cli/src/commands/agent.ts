@@ -43,9 +43,19 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .description('Check agent readiness.')
         .option(...SHARED_OPTIONS.json)
         .argument('[agent]', 'Agent to check')
+        .option('--probe-health', 'Opt into model health probing (liveness questions are never cached)')
+        .option('--force-refresh', 'Bypass the detection cache, re-run, and rewrite it')
         .action(async (agentName, options) => {
             const svc = context.agentService();
-            const code = await svc.doctor({ json: options.json === true, agent: agentName }, undefined);
+            const code = await svc.doctor(
+                {
+                    json: options.json === true,
+                    agent: agentName,
+                    probeHealth: options.probeHealth === true,
+                    forceRefresh: options.forceRefresh === true,
+                },
+                undefined,
+            );
             context.setExitCode(code);
         });
 

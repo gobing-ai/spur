@@ -161,7 +161,10 @@ No runner change is needed. `DoctorRunner` probes iff `executor.model` is set, s
 
 ### 5.2 Detection cache — `.spur/run/agent-doctor.json`
 
-Detection (`detectAll`, ~1.3 s) is the residual cost once auth probing is gone. It is cached:
+Detection (`detectAll`) is the residual cost once auth probing is gone. It is cached. Measured on the
+B4/0683 baseline (2026-08-26, 15 executors / 7 provider keys exported): a full-set `doctor --json` runs
+~6.1 s live (6.12 / 6.25 / 5.93) and ~0.28 s warm — detection dominates, so the cache turns doctor
+from a multi-second command into a near-instant one inside the TTL.
 
 | Aspect | Contract |
 | --- | --- |
@@ -170,8 +173,8 @@ Detection (`detectAll`, ~1.3 s) is the residual cost once auth probing is gone. 
 | TTL | 60 s |
 | Bypass | `--force-refresh` re-runs detection and rewrites the file |
 | Visibility | a cache hit prints its age in the footer |
-| Degradation | unreadable / malformed / stale-schema → live run, then rewrite |
-| Never cached | `--probe-health` results — a health probe is a liveness question by definition |
+| Degradation | unreadable / malformed / stale-schema / unwritable path → live run; a write failure only warns on stderr |
+| Never cached | `--probe-health` results — a health probe is a liveness question by definition; a set flag neither reads nor writes |
 
 The visibility rule is the point. A readiness report is only useful if the reader knows whether it is
 live; a silently cached `usable` for a dead executor is a worse failure than a slow command. 60 s is

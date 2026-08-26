@@ -25,7 +25,7 @@ that before using `run` for fan-out dispatch.
 | `loop` | Persistent self-draining inbox loop for a team member (supervisor-managed) | `--spec <id>` `--agent <id>` `--poll <ms>` |
 | `wait <specId>` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2) | `--run <runId>` `--until <state>...` `--timeout <ms>` `--json` |
 | `list` | List detected coding agents, or team agent specs with `--specs` | `--specs` `--json` |
-| `doctor [agent]` | Check agent readiness | `--json` |
+| `doctor [agent]` | Check agent readiness | `--json` `--probe-health` `--force-refresh` |
 | `create <id>` | Write a team agent spec to `.spur/agents/<id>.yaml` | `--type` `--tags` `--model` `--autonomy` `--system-prompt` `--name` `--workspace` `--purpose` `--auto-start` `--no-identity-preamble` `--json` |
 | `edit <id>` | Open an agent spec in `$EDITOR`, or print its path | - |
 | `delete <id>` | Remove an agent spec | `--force` |
@@ -149,12 +149,15 @@ lists team agent specs (`.spur/agents/*.yaml`).
 
 ```bash
 spur agent doctor            # all detected agents
-spur agent doctor claude     # one agent
-spur agent doctor --json     # machine-readable
+spur agent doctor claude     # one agent (executor/agent name → detail block)
+spur agent doctor coder      # pipeline role id → eligible ladder with ELECTED marker
+spur agent doctor --json     # machine-readable (role selector: elected-first ordering)
 ```
 
-Checks whether each agent is installed and ready to run. Returns exit `1` if any checked agent is
-not ready.
+Checks whether each agent is installed and ready to run. Text mode renders a capability table —
+`STATUS EXECUTOR AGENT MODEL TIER VERSION ROLES` where TIER is the executor's *capability* tier
+(`cheap|standard|capable-*`), MODEL the pinned config model (`—` when undeclared), and ROLES lists
+candidate pipeline roles with `*` on the elected one. Exit `1` if any checked agent is not ready.
 
 ## `create` - author a team agent spec
 
