@@ -14,6 +14,7 @@ dependencies: ["0681"]
 ## 0682. Remove the authentication signal from the doctor surface and collapse the doctor.probe classifier that existed to neutralize it
 
 ### Background
+
 Task 0621 removed the AUTH column from the doctor table because the signal cannot distinguish "not authenticated" from "no probe exists for this provider". `plugins/sp/skills/spur-dev/references/cross-cutting.md:188-192` tells operators outright not to read provider quota or auth from `spur agent doctor` — the CLI process cannot see an agent-owned credential store, so the row degrades to `auth: no` for every relay executor.
 
 The field nevertheless survives in three places: `renderDoctorDetail` still prints an `auth:` line (`packages/app/src/services/agent-service.ts:2209`; live: `omp-dsv4-flash-volc`, the elected `coder` executor, reads `auth: no`), `renderAuth` still exists to format it (`agent-service.ts:2126-2130`), and `--json` still carries `authenticated` on every entry — not by an explicit key, but because the payload is spread straight from `DoctorResult` at `agent-service.ts:507-514`.
@@ -23,7 +24,9 @@ It has one consumer, and that consumer exists only to work around it. `packages/
 **The collapse is not purely subtractive.** `parseDoctorJson` (`doctor-probe.ts:39-57`) reads only `authenticated`, `modelStatus.detail`, and `agent` — never `usable`. With the auth gate gone the action's only remaining FAIL condition would be `res.exitCode !== 0` (`doctor-probe.ts:149`), and `renderDoctor`'s exit code fires only for `!usable && tier === 1` (`agent-service.ts:522`) — so a missing **tier-2** executor would silently PASS. Classifying "on usability alone" therefore requires `parseDoctorJson` to start reading `usable` from `.agents[0]`.
 
 Design: `docs/design/agent-doctor-inspection-surface.md` §4.
+
 ### Requirements
+
 - [x] R1. `renderDoctorDetail` no longer emits an `auth:` line (`packages/app/src/services/agent-service.ts:2209`), and the `renderAuth` helper (`agent-service.ts:2126-2130`) is deleted along with its `AuthState` import if it becomes unused.
 
 - [x] R2. The `--json` payload no longer carries `authenticated` on any `agents[]` entry. Because the payload is spread from `DoctorResult` (`agent-service.ts:507-514`), the field must be **explicitly omitted** from the spread — it does not disappear by deleting a key.
@@ -41,12 +44,16 @@ Design: `docs/design/agent-doctor-inspection-surface.md` §4.
 - [x] R8. Same-commit doc sync (T3): `plugins/sp/skills/spur-dev/references/cross-cutting.md:188-192` — the paragraph instructing operators not to read quota/auth from `spur agent doctor` cites a row shape `status: usable · auth: no · model: unknown` that no longer exists; rewrite it to describe a surface with no auth field at all. `docs/04_DESIGN.md` and `plugins/sp/skills/spur-cli/references/agent.md` drop `authenticated` from the documented `--json` shape.
 
 - [x] R9. **Out of scope for this task:** suppressing the auth *probe* itself. `isAuthenticated` is called inside `DoctorRunner.buildResult` in published `@gobing-ai/ts-ai-runner@0.4.42` (`~/xprojects/ts-libs/packages/ai-runner/src/doctor-runner.ts:212-226`); sibling task 0684 owns that. This task removes the field from Spur's surface and its consumer — correct and complete on its own.
+
 ### Acceptance Criteria
+
 Covers these feature B4 scenarios (titles are the traceability keys — byte-identical to `docs/features/B4_*.md`):
 
 - [x] R6 — No authentication field appears anywhere in the doctor output
 - [x] R7 — Removing the auth signal removes the classifier that existed to neutralize it
+
 ### Q&A
+
 **Q1. With the auth gate gone, what can still make `doctor.probe` FAIL?**
 **Closed — a non-zero doctor exit, or `usable === false` on the resolved row.** The original task text
 said "classifies on usability alone" without naming where usability comes from; `parseDoctorJson`
@@ -77,7 +84,9 @@ the ts-libs option turns it into a constant; it must follow 0681 so the `auth:` 
 other and may land in either order.
 
 **Deferred:** nothing. No open decision blocks implementation.
+
 ### Design
+
 **WHAT:** A deletion, in two layers, plus one small addition the deletion forces. Layer one removes `authenticated` from the doctor's output contract (detail view, `--json`, the `renderAuth` helper). Layer two removes the only code that consumed it, which turns out to be code whose entire purpose was to undo it — and replaces its input with the signal the action should always have read (`usable`).
 
 **WHERE (primary targets):**
@@ -129,7 +138,9 @@ No other new type, helper, flag, or option. Everything else in this task is a de
 - **Assumes from 0681:** `renderDoctorDetail` and the `--json` builder are already in their post-rename shape, and the `--json` wire key `agent` is unchanged — `parseDoctorJson`'s `resolvedAgent` extraction depends on it.
 - **Leaves for 0684:** zero Spur readers of `authenticated`. Once this lands, `DoctorRunnerOptions.probeAuth = false` turning the field into a constant `'unknown'` is unobservable in Spur — which is precisely the precondition 0684 R6 names.
 - **Leaves for 0683:** nothing; the two are independent and may land in either order relative to each other.
+
 ### Plan
+
 1. [ ] **(R1) Delete the detail-view auth line** — remove `agent-service.ts:2209` and the `renderAuth` helper at `:2126-2130`. Drop `authenticated` from the `DoctorRow` type and remove the `AuthState` import if `tsc --noEmit` reports it orphaned (it may still be referenced by the runner's `DoctorResult` type import — check before deleting).
 2. [ ] **(R2) Omit `authenticated` from `--json`** — in `renderDoctor` (`agent-service.ts:507-514`) the row is spread from `DoctorResult`, so destructure the field away rather than expecting a key deletion to suffice: `const { authenticated: _drop, ...rest } = result;`. Assert in a test that `'authenticated' in agents[0]` is `false`, not merely that it is undefined.
 3. [ ] **(R3) Strip the classifier** — delete `doctor-probe.ts:21-37` (`RELAY_FAMILY`, `ENV_MISS_PATTERN`, `AUTH_FAIL_PATTERN`, `ProbeClass`, `classifyDoctorProbe`) and the `classifyAgainst` / `probe` locals at `:163-168`.
@@ -141,7 +152,9 @@ No other new type, helper, flag, or option. Everything else in this task is a de
 9. [ ] **(R8) T3 doc sync in the same commit** — rewrite `plugins/sp/skills/spur-dev/references/cross-cutting.md:188-192` (the `status: usable · auth: no · model: unknown` row shape it cites no longer exists; the guidance that quota is undetectable preflight still holds and stays). Drop `authenticated` from the `--json` shape in `docs/04_DESIGN.md` and `plugins/sp/skills/spur-cli/references/agent.md`.
 10. [ ] **(R9) Scope check** — `git diff --stat` must show no file under `~/xprojects/ts-libs`, no `package.json` version change, and no `probeAuth`. Those belong to 0684.
 11. [ ] **Verification** — targeted first: `bun test packages/app/tests/workflow/actions/doctor-probe.test.ts` and `bun test packages/app/tests/services/agent-service.test.ts`. Then `bun run autofix && bun run spur-check`. Grep the tree for residual readers: `rg -n "authenticated" packages apps plugins docs` must return only ts-libs type re-exports and history, no live Spur consumer.
+
 ### Solution
+
 Collapse `doctor.probe` to usability-only classification and strip the auth signal from every doctor surface.
 
 - `packages/app/src/services/agent-service.ts:2238` — `withoutAuthenticated<T>` strips `authenticated` from a DoctorResult row; both `--json` builders spread it at :499 and :547 so the published field cannot leak through either payload.
@@ -151,13 +164,15 @@ Collapse `doctor.probe` to usability-only classification and strip the auth sign
 - Soft-probe contract unchanged in `packages/app/src/workflow/actions/doctor-probe.ts:126-163`: divergence line (:118), splitLaunchCommand-gated probe, status-file write at :160 (`writeFile(normalized, ...)`), and the soft-probe return `ok: true` at :163 keep the recorded-FAIL-not-abort routing intact.
 
 Verification: `bun run format && bun run spur-check` rc=0 (~102s); packages/app edited suites 178 pass / 0 fail; cli agent suite 43 pass / 0 fail; plugins/sp resilience suite 7 pass / 0 fail. Verdict artifact `.spur/run/0682-verdict.json` (PASS). Docs synced same commit (T3): cross-cutting guidance rewritten, surface docs carry no auth claims.
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | renderAuth deleted; AuthState import removed from packages/app/src/services/agent-service.ts (rg 'renderAuth\|type AuthState' → no matches in src); renderDoctorDetail emits pinned:/health:/version lines with no auth line. Pin: agent-service.test.ts detail-mode tests assert 'pinned:' and ':health:' (B4/0681) and contain no auth expectation. |
 | R2 | MET | Both --json builders spread ...withoutAuthenticated(result) — agent-service.ts:499 and :547, helper at :2238 destructures `authenticated` out of the DoctorResult before emission, so a field living on the published DoctorResult cannot leak through either path. Pin: agent-service.test.ts:303 renames the 0621 R16 assertion to `parsed.agents.every(a => !('authenticated' in a))` (:347); migrate-stubs.test.ts:74 asserts absence for the real CLI main() flow. |
 | R3 | MET | doctor-probe.ts drops RELAY_FAMILY, ENV_MISS_PATTERN, AUTH_FAIL_PATTERN, classifyDoctorProbe, ProbeClass and parseDoctorJson's auth/detail reads — file now has a single usability classifier; rg over src finds zero references. Log line 'precheck: <exe> usable=<bool>' at doctor-probe.ts:149. |
@@ -172,21 +187,28 @@ Verification: `bun run format && bun run spur-check` rc=0 (~102s); packages/app 
 |---------------------|--------|---------------|----------|
 | R6 — No authentication field appears anywhere in the doctor output | MET |  | Table (07-column layout, no AUTH), detail view, role ladder, and --json all auth-free — agent-service.ts table/detail paths plus :499/:547 spreads; regression pins agent-service.test.ts:303+, migrate-stubs.test.ts:74, doctor CLI suite 43 pass / 0 fail. |
 | R7 — Removing the auth signal removes the classifier that existed to neutralize it | MET |  | doctor-probe.ts lost RELAY_FAMILY/env-miss/auth-fail/ProbeClass entirely (deleted ~60 LOC) with usability-only classification substituted; survivor tests prove soft/hard routing still correct via usable flag, including exit-0-but-unusable FAIL pin. |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
+
 **SECU findings** (pipeline verify step — verdict: UNKNOWN)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
+
 ### References
+
 - Parent feature: `docs/features/B4_agent-doctor-as-the-routing-inspection-surface-capability-tier-rendering-full-eligible-ladder-auth-removal-and-cached-probes.md` (scenarios R6, R7)
 - Design: `docs/design/agent-doctor-inspection-surface.md` §4 (removing the auth signal), §4.1 (why the probe half is split out)
 - Siblings: 0681 (rendering — lands first), 0683 (`--probe-health` / cache), 0684 (ts-libs `probeAuth` — depends on this task)
 - Prior art: task 0621 (AUTH column removal — this task finishes it), 0487 R2 / 0503 R2 (the classifier's origin), 0608 / feature D6 R4–R5 (`doctor.probe` replacing the shell classifier), 0622 R1 (resolved-executor classification)
 - Constitution: T3 (surface + design doc same commit), T10 (removing a field obliges reconciling its fallout in the same commit)
 - Surfaces touched: `packages/app/src/services/agent-service.ts`, `packages/app/src/workflow/actions/doctor-probe.ts`, `packages/app/tests/workflow/actions/doctor-probe.test.ts`, `packages/app/tests/services/agent-service.test.ts`, `plugins/sp/skills/spur-dev/references/cross-cutting.md`, `docs/04_DESIGN.md`, `plugins/sp/skills/spur-cli/references/agent.md`
+
 ### History
+
 - 2026-08-26T20:30:47.758Z todo → wip (system)
 - 2026-08-26T20:44:13.299Z wip → testing (system)
 - 2026-08-26T20:44:17.602Z testing → done (system)

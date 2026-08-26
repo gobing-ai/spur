@@ -12,6 +12,7 @@ updated_at: "2026-08-26T22:42:03.976Z"
 # B4: Agent doctor as the routing inspection surface: capability-tier rendering, full eligible ladder, auth removal, and cached probes
 
 ## Goal
+
 `spur agent doctor` is the documented preflight for executor routing, but it renders the pre-0343
 axis and hides the ladder. Make it show the routing model Spur actually implements — capability tier,
 every eligible executor, the elected one, and the pinned model — and delete the auth signal that
@@ -29,42 +30,46 @@ The 4.6 s delta is **not** LLM provider traffic — `probeModel` short-circuits 
 `{status:'unknown'}` before any HTTP when the provider key is absent, which is also why every MODEL
 cell reads `unknown`. It is `isAuthenticated`, called once per executor row in `buildResult`, so a
 config with nine `omp` executors spawns nine identical `omp` auth probes.
+
 ## Scope
+
 - In:
-    - `renderDoctorTable` — replace the agent support tier (1/2) with the capability tier
+  - `renderDoctorTable` — replace the agent support tier (1/2) with the capability tier
       (`cheap|standard|capable-1..3`) as the `TIER` column; add `AGENT` (underlying binary),
       `MODEL` (pinned config string), and `ROLES` (eligible roles, elected one starred) columns;
       retire the `missing (tier-1)` footer for a count keyed on the same axis the table shows.
-    - `doctor <role>` — render every eligible executor cheapest-first with the elected one marked
+  - `doctor <role>` — render every eligible executor cheapest-first with the elected one marked
       and a skip reason on each row above it, instead of the single elected row.
-    - Removal of the auth signal from the doctor path: `isAuthenticated` call in `buildResult`
+  - Removal of the auth signal from the doctor path: `isAuthenticated` call in `buildResult`
       consumption, the `authenticated` field in `--json`, `renderAuth`, and the `auth:` line in
       `renderDoctorDetail`.
-    - `packages/app/src/workflow/actions/doctor-probe.ts` — delete the `RELAY_FAMILY` /
+  - `packages/app/src/workflow/actions/doctor-probe.ts` — delete the `RELAY_FAMILY` /
       `ENV_MISS_PATTERN` / `AUTH_FAIL_PATTERN` classifier and the `auth === 'unauthenticated'` gate
       that exist only to neutralize the removed signal; the probe becomes a usability check.
-    - `--probe-health` opt-in flag: model health probing stops firing implicitly when a provider key
+  - `--probe-health` opt-in flag: model health probing stops firing implicitly when a provider key
       happens to be exported.
-    - Detection cache at `.spur/run/agent-doctor.json` with a TTL and `--force-refresh`, plus a
+  - Detection cache at `.spur/run/agent-doctor.json` with a TTL and `--force-refresh`, plus a
       cache-age line in the output so a cached `usable` is never read as a live one.
-    - `--json` additions: `model` (pinned string), `roles`, `elected`; `.agents[0]` stays the elected
+  - `--json` additions: `model` (pinned string), `roles`, `elected`; `.agents[0]` stays the elected
       executor so `doctor-probe`'s existing parse keeps working.
-    - Same-commit updates to `docs/04_DESIGN.md`, the `sp:spur-cli` agent reference, and the pinned
+  - Same-commit updates to `docs/04_DESIGN.md`, the `sp:spur-cli` agent reference, and the pinned
       output assertions in `apps/cli/tests/commands/agent.test.ts` and
       `packages/app/tests/services/agent-service.test.ts`.
 
 - Out:
-    - `resolveRole` resolution semantics (`agent-service.ts:1783-1823`). First-usable-wins is correct
+  - `resolveRole` resolution semantics (`agent-service.ts:1783-1823`). First-usable-wins is correct
       for dispatch; this feature changes rendering only.
-    - `TeamService.materializeTeam`'s `[0]` selection (`team-service.ts:737`) — config-time, no
+  - `TeamService.materializeTeam`'s `[0]` selection (`team-service.ts:737`) — config-time, no
       liveness probe, unaffected by a display change.
-    - The stage fallback / escalation ladder at runtime (task 0482 R1) — already correct.
-    - New CLI nouns or verbs. `--probe-health` and `--force-refresh` are flags on the existing
+  - The stage fallback / escalation ladder at runtime (task 0482 R1) — already correct.
+  - New CLI nouns or verbs. `--probe-health` and `--force-refresh` are flags on the existing
       `agent doctor` verb (ADR-051: expansion via flags, operator consent recorded in this session).
-    - Changing `DoctorResult.tier` (support tier) itself, or removing it from `--json` — it still
+  - Changing `DoctorResult.tier` (support tier) itself, or removing it from `--json` — it still
       backs the exit code.
-    - Reinstating any provider-credential or local-config-file read for authentication.
+  - Reinstating any provider-credential or local-config-file read for authentication.
+
 ## Acceptance Criteria
+
 ```gherkin
 Feature: Agent doctor as the routing inspection surface
 
@@ -192,6 +197,7 @@ Feature: Agent doctor as the routing inspection surface
     Then that row's MODEL column renders the em-dash placeholder
     And the "--json" entry's "model" field is null
 ```
+
 ## Tasks
 
 <!-- AUTO-GENERATED by spur feature refresh -->
@@ -206,6 +212,7 @@ Feature: Agent doctor as the routing inspection surface
 ## Notes
 
 ## History
+
 - 2026-08-26T22:37:26.838Z backlog → active (system)
 - 2026-08-26T22:37:27.062Z active → verifying (system)
 - 2026-08-26T22:42:03.976Z verifying → done (system)

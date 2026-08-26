@@ -403,7 +403,7 @@ Readiness check per agent (same `DISPLAY_ORDER` as list). Text mode prints an al
 
 - **EXECUTOR** carries the configured `agent.executors[].name`; the **AGENT** cell carries the underlying
   binary (`omp`, `pi`, …) so aliasing is visible; rows outside any executor config fall back to the agent name.
-- **MODEL** shows the *pinned* config model (`agent.executors[].model`) or `—`; probed live model health is
+- **MODEL** shows the _pinned_ config model (`agent.executors[].model`) or `—`; probed live model health is
   not a table concern — the single-executor detail view disambiguates via `pinned:` (config) vs `health:`
   (probe) lines. Health probing is **opt-in** (feature B4 / 0683): `--probe-health` passes pinned models
   through to the runner so it probes them; without the flag the models are withheld from the probe set and
@@ -426,7 +426,7 @@ mode prints a dated footer note on a hit; `--probe-health` never reads or writes
 `--force-refresh` skips the read, re-runs detection live, and rewrites the file under a role selector entries are ordered elected-first then resolution order
 (`agents[0]` is the electee). Auth is neither table column nor surfaced shape (liveness-only gate,
 ADR/0127). For **grok**, liveness is tri-state from `XAI_API_KEY` and/or non-empty `~/.grok/auth.json`
-(no CLI auth-status verb). Exit 1 if any **tier-1** agent is not usable. Backed by `ts-ai-runner` `DoctorRunner`.   
+(no CLI auth-status verb). Exit 1 if any **tier-1** agent is not usable. Backed by `ts-ai-runner` `DoctorRunner`.
 Selector precedence inside the arg: exact executor/agent name first, role id second.
 
 #### `spur agent create <id> --type <agent-type> [--json] [flags]` · `spur agent edit <id>` · `spur agent delete <id> [--force]`

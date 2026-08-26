@@ -14,6 +14,7 @@ dependencies: ["0681"]
 ## 0683. Make model health probing opt-in and cache doctor detection with a dated cache and --force-refresh
 
 ### Background
+
 `spur agent doctor` takes 6.20 s against the 15-executor global config (boot floor 0.28 s; `spur agent list`, which does detection only, 1.62 s). Measured 2026-08-26 at HEAD `212972e74`.
 
 The cost is **not** provider traffic, contrary to appearance: `DoctorRunner.probeModel` short-circuits to `{status:'unknown', detail:"API key not found for provider '<p>'"}` before issuing any HTTP when `{PROVIDER}_API_KEY` is absent (`~/xprojects/ts-libs/packages/ai-runner/src/doctor-runner.ts` → `probeModel`, verified in the installed build at `node_modules/@gobing-ai/ts-ai-runner/dist/doctor-runner.js:96-117`) — which is also why all 15 MODEL cells read `unknown`. The ~4.6 s is per-executor auth probing, owned by sibling task 0684. What remains after that lands is detection (~1.3 s of `--version` subprocesses), which this task caches.
@@ -23,7 +24,9 @@ Two separate hazards are addressed here. First, `probeModel` fires the moment a 
 `spur agent doctor` currently accepts only `--json` (`apps/cli/src/commands/agent.ts:40-49`), and `AgentService.doctor` only `{ json, agent }` (`packages/app/src/services/agent-service.ts:443`) — both signatures widen here. `AgentServiceContext` carries `cwd` but no injected `FileSystem`; the established in-service pattern is `createNodeFileSystem(this.ctx.cwd)` (`agent-service.ts:1875`, `:1945`).
 
 Design: `docs/design/agent-doctor-inspection-surface.md` §5.
+
 ### Requirements
+
 - [x] R1. A `--probe-health` flag gates model health probing. Without it, **no** model health request is issued regardless of environment. With it, health is probed and reported as today. Implementation needs no `DoctorRunner` change: the runner probes iff `executor.model` is set (`doctor-runner.js:75`, `:89`), so Spur passes a `model`-stripped copy of the `executors` array to the `DoctorRunner` constructor unless the flag was given.
 
 - [x] R2. The MODEL *column* is unaffected by `--probe-health` — it reads Spur's own config, not the probe result (sibling task 0681 owns the column). The stripped array goes **only** to the `DoctorRunner` constructor; `renderDoctor` keeps receiving the unmodified `this.ctx.agentConfig?.executors`.
@@ -43,14 +46,18 @@ Design: `docs/design/agent-doctor-inspection-surface.md` §5.
 - [x] R9. Same-commit doc sync (T3): both flags in `docs/04_DESIGN.md` and `plugins/sp/skills/spur-cli/references/agent.md:28`; a row for `agent-doctor.json` in the `.spur/run/` artifact-kind disposition (`docs/design/run-record-contract.md`), which today lists only per-run and per-WBS artifacts — this is the first run-id-independent one; and the corrected §5.2 rationale in `docs/design/agent-doctor-inspection-surface.md`.
 
 - [x] R10. ADR-051 consent for both flags is recorded: they are flags on the existing `doctor` verb (expansion via flags, not a new noun/verb), consented by the operator in the B4 planning session 2026-08-26.
+
 ### Acceptance Criteria
+
 Covers these feature B4 scenarios (titles are the traceability keys — byte-identical to `docs/features/B4_*.md`):
 
 - [x] R9 — Model health probing is opt-in
 - [x] R10 — Detection results are cached and the cache is visibly dated
 - [x] R11 — --force-refresh bypasses the cache and rewrites it
 - [x] R14 — A corrupt or unreadable cache file degrades to a live run
+
 ### Q&A
+
 **Q1. Where does the cache I/O seam live, so it is testable without disk?**
 **Closed — `AgentRunDeps`.** `AgentServiceContext` carries `cwd` but no `FileSystem`, and the
 in-service pattern is `createNodeFileSystem(this.ctx.cwd)` (`agent-service.ts:1875`, `:1945`).
@@ -90,7 +97,9 @@ not fail because a cache could not be persisted. Write atomically (temp + rename
 `.state.json` convention in the run-record contract.
 
 **Deferred:** nothing. No open decision blocks implementation.
+
 ### Design
+
 **WHAT:** Two independent cost controls on the same command, sharing one code path.
 
 **WHERE (primary targets):**
@@ -167,7 +176,9 @@ now?: () => number;
 
 - **Assumes from 0681:** the MODEL column already reads `AgentExecutorConfig.model` rather than `modelStatus`. Without that, stripping `model` for the runner would blank the column. If 0683 lands before 0681 for any reason, that coupling must be re-checked first.
 - **Leaves for 0684:** the cache bounds repeat cost for interactive runs; it does **not** address the pipeline precheck. 0684's `probeAuth: false` is the only thing that does, and its R5 timing measurement must be taken with `--force-refresh` so a warm cache cannot flatter the number.
+
 ### Plan
+
 1. [ ] **Baseline capture** — time `bun run apps/cli/src/index.ts agent doctor` three times against the 15-executor global config with and without a provider key exported; record both in `## Solution` as the before-state for R1 and R3.
 2. [ ] **(R1, R10) Declare the flags** — add `--probe-health` and `--force-refresh` to `apps/cli/src/commands/agent.ts:40-49` and thread them into `svc.doctor({ json, agent, probeHealth, forceRefresh })`. Widen the `doctor()` signature at `agent-service.ts:443`.
 3. [ ] **(R1, R2) Strip `model` for the runner** — at `agent-service.ts:444-445`, build `const runnerExecutors = probeHealth ? executors : executors?.map(({ name, agent }) => ({ name, agent }))` and pass that to the `DoctorRunner` constructor. Leave every `renderDoctor(results, executors, …)` call site reading the unmodified array.
@@ -184,7 +195,9 @@ now?: () => number;
 14. [ ] **(R8) Selector-path behavior** — test that `doctor <executor>` served from a fresh matching cache does not invoke `runOne`, and that on a miss it invokes `runOne` and writes **no** cache file.
 15. [ ] **(R9) T3 doc sync in the same commit** — both flags and the `cache` JSON field in `docs/04_DESIGN.md` and `plugins/sp/skills/spur-cli/references/agent.md:28`; an `agent-doctor.json` row in the `.spur/run/` disposition table in `docs/design/run-record-contract.md` noting it is the first run-id-independent artifact; and replace the "1–2 calls per pipeline precheck hit warm" line in `docs/design/agent-doctor-inspection-surface.md` §5.2 per Q&A Q2.
 16. [ ] **Verification** — targeted first: `bun test packages/app/tests/services/agent-service.test.ts` and `bun test apps/cli/tests/commands/agent.test.ts`. Then `bun run autofix && bun run spur-check`. Re-run the step-1 timings cold (`--force-refresh`) and warm; paste both into `## Solution` and state plainly that the auth probe still dominates until 0684 lands.
+
 ### Solution
+
 - `--probe-health` / `--force-refresh` declared in apps/cli/src/commands/agent.ts and threaded into `svc.doctor`.
 - packages/app/src/services/agent-service.ts:478 — without the flag, pinned models are withheld from the executor array passed to DoctorRunner (`probeModel` never fires); the MODEL column keeps reading config. With it, models flow through and health probes run.
 - packages/app/src/services/agent-service.ts:2129–2230 — detection cache: `.spur/run/agent-doctor.json`, sha256 executor-set fingerprint (name|agent|model|tier, name-ascending), 60 s TTL, atomic tmp+rename write; corrupted/malformed/stale/wrong-fingerprint/unwritable states degrade silently to a live run (write failure warns on stderr). Role/executor selectors serve from a fresh covering cache via the cachedDoctorRunner adapter; resolveRole untouched.
@@ -192,13 +205,15 @@ now?: () => number;
 - Baseline (2026-08-26, 15 executors, 7 provider keys): full-set `doctor --json` ~6.1 s live vs ~0.28 s cached.
 - Docs synced same-commit: docs/04_DESIGN.md (doctor surface flags + cache contract), plugins/sp/skills/spur-cli/references/agent.md:26, docs/design/agent-doctor-inspection-surface.md §5.2 (measured baseline), docs/design/run-record-contract.md §2.4 (first run-id-independent shared-state artifact).
 - Tests: 9 cache/fingerprint pins in packages/app/tests/services/agent-service.test.ts + 3 CLI flag-parse pins in apps/cli/tests/commands/agent.test.ts; app suite 177 pass; gate rc=0.
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | Constructor receives stripped executors without --probe-health (modelStatus absent) and full models with it; DoctorRunner itself unchanged. Pins in packages/app/tests/services/agent-service.test.ts probe/opt-in block. |
 | R2 | MET | MODEL column driven by config executors in buildDoctorRows regardless of flag; pinned model renders both ways (app pins + CLI smoke). |
 | R3 | MET | .spur/run/agent-doctor.json written schemaVersion 1 with sha256 fingerprint incl. tier; executorFingerprint pins (reorder==same, field-change!=same); TTL 60s enforced (age 60_001ms miss pin). |
@@ -209,19 +224,24 @@ now?: () => number;
 | R8 | MET | Selector serve-on-hit runs no probe (runOne/runAll uncalled); selector miss calls runOne exactly for the requested name and leaves no cache file (R8 pin). Shared adapter cast at cachedDoctorRunner; resolveRole unmodified (rg). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
+| --------------------- | -------- | --------------- | ---------- |
 | R9 | MET | test | Opt-in probing verified end-to-end: default json shows no modelStatus; --probe-health populates it. |
 | R10 | MET | test | Cache written then served (runAll called once across two calls), dated footer + structural cache fact. |
 | R11 | MET | test | --force-refresh bypass pin + live capturedAt-advance smoke. |
 | R14 | MET | test | Corruption quartet + unwritable-path degrade to live exit 0 with valid rewrite or warning. |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
+
 **SECU findings** (pipeline verify step — verdict: UNKNOWN)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
+
 ### References
+
 - Parent feature: `docs/features/B4_agent-doctor-as-the-routing-inspection-surface-capability-tier-rendering-full-eligible-ladder-auth-removal-and-cached-probes.md` (scenarios R9, R10, R11, R14)
 - Design: `docs/design/agent-doctor-inspection-surface.md` §5 (cost control), §5.1 (`--probe-health`), §5.2 (detection cache — §5.2's precheck rationale is corrected by this task, Q&A Q2)
 - `.spur/run/` artifact inventory: `docs/design/run-record-contract.md` (R9 adds the `agent-doctor.json` row)
@@ -229,7 +249,9 @@ now?: () => number;
 - ADR-051 (CLI surface governance — flags on an existing verb; operator consent recorded 2026-08-26)
 - Upstream behavior verified in: `node_modules/@gobing-ai/ts-ai-runner/dist/doctor-runner.js:75`, `:89`, `:96-117` (source `~/xprojects/ts-libs/packages/ai-runner/src/doctor-runner.ts`)
 - Surfaces touched: `apps/cli/src/commands/agent.ts`, `packages/app/src/services/agent-service.ts`, `apps/cli/tests/commands/agent.test.ts`, `packages/app/tests/services/agent-service.test.ts`, `docs/04_DESIGN.md`, `plugins/sp/skills/spur-cli/references/agent.md`, `docs/design/run-record-contract.md`
+
 ### History
+
 - 2026-08-26T20:45:25.590Z todo → wip (system)
 - 2026-08-26T21:49:54.823Z wip → testing (system)
 - 2026-08-26T21:49:55.411Z testing → done (system)

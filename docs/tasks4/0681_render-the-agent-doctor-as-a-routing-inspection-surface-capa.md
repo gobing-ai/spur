@@ -13,6 +13,7 @@ tags: ["cli", "agent", "doctor", "rendering"]
 ## 0681. Render the agent doctor as a routing inspection surface: capability tier, executor/agent/model/roles columns, and the full role ladder
 
 ### Background
+
 `spur agent doctor` is the documented preflight for executor routing, but its text output renders the pre-0343 axis and only one rung of the ladder.
 
 `renderDoctorTable` (`packages/app/src/services/agent-service.ts:2155-2198`) prints `DoctorResult.tier` — the agent *support* tier (1 = direct CLI, 2 = gateway/TUI). Against the 15-executor global config every row reads `1`. The axis that decides every routing call since 0343 is the *capability* tier (`cheap|standard|capable-1..3`), which `renderDoctor` already computes but emits only under `--json` as `capabilityTier` (`packages/app/src/services/agent-service.ts:506-514`). The `missing (tier-1)` footer keys off the same dead axis (`agent-service.ts:2188-2194`).
@@ -24,7 +25,9 @@ The MODEL column shows model *health status* (`unknown` for every relay executor
 The `AGENT` column header is also a misnomer: `DoctorRunner.runAllWithExecutors` overwrites `result.agent` with the **executor** name (`node_modules/@gobing-ai/ts-ai-runner/dist/doctor-runner.js:73`, source `~/xprojects/ts-libs/packages/ai-runner/src/doctor-runner.ts:156-158`), so the cell has always held the executor, never the binary. The binary is never displayed at all.
 
 Design: `docs/design/agent-doctor-inspection-surface.md` §3.
+
 ### Requirements
+
 - [x] R1. `renderDoctorTable` renders the **capability tier** (`getExecutorTier`) in the `TIER` column, not `DoctorResult.tier`. No row shows the support-tier values `1`/`2` in that column. The footer reports usable/missing counts without naming a support tier (replacing `missing (tier-1)` at `agent-service.ts:2188-2194`).
 
 - [x] R2. Each row gains an `AGENT` column (the underlying binary from `AgentExecutorConfig.agent`) and a `MODEL` column carrying the **pinned model string** from config. The existing `AGENT` column is renamed `EXECUTOR` — the cell always held the executor name (`DoctorRunner.runAllWithExecutors` overwrites `result.agent` with `executor.name`). An executor with no declared model renders the em-dash placeholder; the value is never fabricated. The rename is display-only: the `--json` wire key stays `agent`.
@@ -42,7 +45,9 @@ Design: `docs/design/agent-doctor-inspection-surface.md` §3.
 - [x] R8. `resolveRole` (`agent-service.ts:1766-1830`) and `TeamService.materializeTeam` (`packages/app/src/services/team-service.ts:737-738`) are **not modified**. A regression test asserts role dispatch still resolves to exactly one executor and team materialization still takes the first eligible entry.
 
 - [x] R9. Same-commit doc sync (T3): the `agent doctor` output shape in `docs/04_DESIGN.md`, the parity-gated `plugins/sp/skills/spur-cli/references/agent.md`, and the `ROLES` column note in `docs/design/agent-doctor-inspection-surface.md` §3.1 (corrected per Q&A Q1).
+
 ### Acceptance Criteria
+
 Covers these feature B4 scenarios (titles are the traceability keys — byte-identical to `docs/features/B4_*.md`):
 
 - [x] R1 — The doctor table renders capability tier, not agent support tier
@@ -53,7 +58,9 @@ Covers these feature B4 scenarios (titles are the traceability keys — byte-ide
 - [x] R12 — The --json payload carries the routing fields the text view shows
 - [x] R13 — Role resolution semantics are unchanged by the rendering work
 - [x] R15 — An executor with no declared model renders a placeholder, not a fabricated value
+
 ### Q&A
+
 **Q1. Does the `ROLES` column list tier-eligible roles for a *non-usable* executor?**
 **Closed — no.** The design doc's column table says "tier eligibility over `ctx.roles`" while its own
 example renders `—` for the missing `agy-gemini` row (`docs/design/agent-doctor-inspection-surface.md`
@@ -83,7 +90,9 @@ line removal from the same function belongs to task 0682, which lands after this
 pre-emptively remove it here.
 
 **Deferred:** nothing. No open decision blocks implementation.
+
 ### Design
+
 **WHAT:** A projection layer over data `renderDoctor` and `resolveRole` already compute. Two render paths change shape (`renderDoctorTable`, and a new ladder renderer for role selectors); `renderDoctorDetail` keeps its shape for executor selectors and gains a pinned-`model:` line. The `--json` builder gains three additive fields.
 
 **WHERE (primary targets):**
@@ -158,7 +167,9 @@ function renderRoleLadder(role: string, roleTier: CapabilityTier, ladder: readon
 - **Assumes from deps:** nothing. This task is first in feature B4 and depends on no sibling.
 - **Leaves for 0682:** `renderDoctorDetail` and the `--json` builder in their post-rename shape; 0682 removes the `auth:` line and the `authenticated` key from exactly those two places. Do not pre-remove them here — a half-removed field in an intermediate commit is what T10 reconciliation exists to prevent.
 - **Leaves for 0683:** the MODEL *column* reads `AgentExecutorConfig.model` from Spur's own config, never `modelStatus`. 0683 depends on that decoupling to make `--probe-health` opt-in without blanking the column.
+
 ### Plan
+
 1. [ ] **Baseline capture** — run `bun run apps/cli/src/index.ts agent doctor` and `… agent doctor coder --json` against the 15-executor global config; paste both outputs into `## Solution` as the before-state the diff is judged against.
 2. [ ] **(R2, R6) Widen the display row** — replace the `DoctorRow` structural subset (`agent-service.ts:2131-2139`) with the frozen `DoctorRow` shape from `## Design`, and add `buildDoctorRows(results, executors, roles)` next to it. Join each `DoctorResult` with `executorByName` (the map already built at `agent-service.ts:506`) for `agentBinary`/`model`, and with `getExecutorTier` for `capabilityTier`. Unmatched rows follow the Design step-5 fallback.
 3. [ ] **(R3) Compute eligibility and election** — inside `buildDoctorRows`, fill `roles[]` from `isTierEligible(getExecutorTier(executor), roleDef.tier)` over `ctx.roles`, then walk `cheapestEligibleExecutors(executors, roleDef.tier)` per role and set `elected[]` on the first row with `usable === true`. No new probe: election reads only the rows already returned by `runAll()`.
@@ -174,15 +185,19 @@ function renderRoleLadder(role: string, roleTier: CapabilityTier, ladder: readon
 13. [ ] **(R15) Edge test** — an executor entry with no `model`: text cell renders `—`, `--json` `model` is `null`, and no `(unknown)` or fabricated string appears anywhere.
 14. [ ] **(R9) T3 doc sync in the same commit** — `docs/04_DESIGN.md` `agent doctor` output shape; `plugins/sp/skills/spur-cli/references/agent.md:28` flag/output table and §`doctor`; and correct the `ROLES` column note in `docs/design/agent-doctor-inspection-surface.md` §3.1 per Q&A Q1.
 15. [ ] **Verification** — `bun test packages/app/tests/services/agent-service.test.ts` and `bun test apps/cli/tests/commands/agent.test.ts` green first (targeted-test-first), then `bun run autofix && bun run spur-check`. Re-run the step-1 baseline commands and paste the after-state into `## Solution`.
+
 ### Solution
+
 **R1–R7, R9** — `packages/app/src/services/agent-service.ts:2199`: new `DoctorRow` display type + `buildDoctorRows` (elections via `cheapestEligibleExecutors` first-usable walk per role). `packages/app/src/services/agent-service.ts:2251`: `renderDoctorTable` → `STATUS|EXECUTOR|AGENT|MODEL(pinned)|TIER(capability)|VERSION|ROLES(*elected)` + legend footer; new `renderRolesCell` (:2238, `—` when unusable/no roles); new `renderRoleLadder` (:2306) for role selectors (ELECTED + per-row reasons + summary). `packages/app/src/services/agent-service.ts:444`: doctor() — one `doctorRunner.runAll()` per invocation; failure ladder text-only before non-zero return (JSON keeps single `{error:{code:'agent-resolution'}}` envelope); success JSON orders elected-first with added `capabilityTier`/`model`/`roles`/`elected`; wire key `agent` unchanged; exit code still support-tier based. `renderDoctorDetail` gains `pinned:` vs `health:` lines; unused `renderModelStatus` deleted.
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | packages/app/src/services/agent-service.ts:2251 renderDoctorTable — TIER cell = row.capabilityTier (getExecutorTier over executor config, buildDoctorRows :2199); footer 'N usable, M missing' (:2285) with no tier naming. Pin agent-service.test.ts:582 asserts cell text and that no bare '1'/'2' cell renders. |
 | R2 | MET | buildDoctorRows :2205 executes executorByName.get(result.agent) so runAllWithExecutors rows keep executor-name keys; EXECUTOR/AGENT/MODEL columns rendered at :2251+; pin test.ts:604 (omp-zai → binary omp + pinned zai/glm-5.2). Wire key `agent` unchanged in --json (:520 spread of DoctorResult). |
 | R3 | MET | renderRolesCell :2238 — `—` when unusable or no eligible roles, starred ids otherwise; eligibility via isTierEligible over ctx.roles (:2227); elections map from cheapestEligibleExecutors first usable per role (:2214-2219); legend footer in renderDoctorTable when stars exist. Pins test.ts:629. |
@@ -194,7 +209,7 @@ function renderRoleLadder(role: string, roleTier: CapabilityTier, ladder: readon
 | R9 | MET | Same-commit sync: docs/04_DESIGN.md doctor section rewritten (header/columns/ladder/json fields), plugins/sp/skills/spur-cli/references/agent.md doctor block updated, docs/design/agent-doctor-inspection-surface.md §3.1 already matched implemented Q&A-Q1 behavior (`—` for unusable text cell, eligible set still in JSON). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
+| --------------------- | -------- | --------------- | ---------- |
 | R1 — The doctor table renders capability tier, not agent support tier | MET | test | agent-service.test.ts:582 |
 | R2 — Each executor row names its underlying agent binary and pinned model | MET | test | agent-service.test.ts:604 |
 | R3 — Each executor row lists the roles it can serve and stars the roles that elect it | MET | test | agent-service.test.ts:629 |
@@ -203,8 +218,11 @@ function renderRoleLadder(role: string, roleTier: CapabilityTier, ladder: readon
 | R12 — The --json payload carries the routing fields the text view shows | MET | test | agent-service.test.ts:691 (capabilityTier/model/roles/elected) |
 | R13 — Role resolution semantics are unchanged by the rendering work | MET | test | resolveRole untouched; 168 pass app suite + 43 pass cli suite this run |
 | R15 — An executor with no declared model renders a placeholder, not a fabricated value | MET | test | agent-service.test.ts:604 (bare-claude row contains em-dash); :691 JSON null |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
+
 **SECUA review (P1–P4):**
 
 | Priority | Dimension | Verdict | Notes |
@@ -213,14 +231,18 @@ function renderRoleLadder(role: string, roleTier: CapabilityTier, ladder: readon
 | P2 | Contract stability | PASS | Wire key `agent` unchanged; exit codes unchanged; resolveRole/materializeTeam untouched (R8). |
 | P3 | Honesty/safety | PASS | No fabricated values (em-dash/null placeholders), JSON stderr purity preserved on failure path. |
 | P4 | Scope | PASS | T3 doc sync same-commit; main-tree lint advisories (history-anatomy.yaml etc.) belong to a parallel session — out of scope, logged. |
+
 ### References
+
 - Parent feature: `docs/features/B4_agent-doctor-as-the-routing-inspection-surface-capability-tier-rendering-full-eligible-ladder-auth-removal-and-cached-probes.md` (scenarios R1–R5, R12, R13, R15)
 - Design: `docs/design/agent-doctor-inspection-surface.md` §3 (output contract), §6 (what does not change)
 - Siblings: 0682 (auth removal — lands after this task), 0683 (`--probe-health` / detection cache), 0684 (ts-libs `probeAuth`)
 - ADR-051 (CLI surface governance — no new noun/verb; expansion via flags), ADR-061 (`DEFAULT_AGENT_ROLES` SSOT)
 - Prior art: task 0343 (capability tiers), 0487 R3 (`capabilityTier` in `--json`), 0482 R1 (stage fallback ladder), 0572 (role table), 0621 (AUTH column removal), 0622 R1 (role selector doctor-walk)
 - Surfaces touched: `packages/app/src/services/agent-service.ts`, `apps/cli/tests/commands/agent.test.ts`, `packages/app/tests/services/agent-service.test.ts`, `docs/04_DESIGN.md`, `plugins/sp/skills/spur-cli/references/agent.md`
+
 ### History
+
 - 2026-08-26T20:29:37.178Z todo → wip (system)
 - 2026-08-26T20:29:37.855Z wip → testing (system)
 - 2026-08-26T20:29:38.282Z testing → done (system)
