@@ -175,15 +175,17 @@ docs/.ftree/
 /apps/web/.coverage
 # Local dogfood run reports (gitignored); keep README tracked for always-on delivery docs
 /docs/dogfood/*
-!/docs/dogfood/README.md
+/docs/session-forensics-report-generation.md
+/docs/design/prototypes/
+/docs/report/*-history-anatomy.md
 /docs/memo.md
+!/docs/dogfood/README.md
 
 .scratch/
 /.pi-subagents/
-/docs/session-forensics-report-generation.md
 
 # pipeline-eval fixture scratch (task 0595): must stay git-visible during runs —
 # the implement no-op guard probes git, and the global gitignore ignores scratch/
 !tests/fixtures/pipeline-eval/scratch/
 
-/docs/design/prototypes/
+/history-anatomy..md
