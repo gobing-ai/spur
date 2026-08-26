@@ -72,7 +72,13 @@ Counts are a live `ls .spur/run/` grouping (1,576 files). The ~30 kinds fold int
 | `-pre-action.snapshot` (3), `-implement-pre-snapshot.txt` (4), `-pre-implement-snapshot.txt` (3), `-snapshot` (3) | ~13 | pre-action snapshots are transient comparison baselines; derive from git + cache on demand |
 | `-test-gate.log` dedup, `*.patch`, `*.err`, `*.bin`, `*.capnp`, `*.tsv`, `*.ts`, `*.test.ts`, `*.sh`, `*.toml`, `*.yaml`, `split`, `handoff`, `host-session-id`, `task-authoring-*`, `dogfood`, one-off UUID-named files | ~90 | scratch/debug artifacts; the durable facts (verdict, session, diff) are already in markdown+cache |
 
-**Net:** every durable fact lands in one of the two files; the drops are all derived or transient. No artifact kind is silently lost — each drop names the surviving home of its durable content.
+### 2.4 Run-independent shared state (→ **kept**)
+
+| Kind | Count | Disposition |
+| --- | --- | --- |
+| `agent-doctor.json` (B4/0683) | new | Detection cache keyed by executor-set fingerprint, NOT by run id — the first `.spur/run` artifact that is shared warm state across invocations rather than a per-run record. Disposition: keep as-is (TTL 60 s, atomic rewrite, degrades to live run); excluded from the two-file run record and from History import. |
+
+**Net:** every durable fact lands in one of the two files; the drops are all derived or transient. No artifact kind is silently lost — each drop names the surviving home of its durable content. Run-scoped artifacts and `agent-doctor.json` are disjoint: the cache never carries run linkage, so run-record consolidation ignores it.
 
 ### 2.4 `.spur/runs/workflow/` disposition — **remove the facility**
 

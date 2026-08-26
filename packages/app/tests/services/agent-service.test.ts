@@ -65,18 +65,20 @@ function mockDoctorResult(
         authenticated: AuthState;
         usable: boolean;
         tier: 1 | 2;
+        version: string | null;
+        error: string | null;
         modelStatus: { status: string; detail?: string; checkedAt: string };
     }> = {},
 ) {
     return {
         agent: overrides.agent ?? 'pi',
         installed: overrides.installed ?? true,
-        version: '1.0.0',
+        version: overrides.version !== undefined ? overrides.version : '1.0.0',
         authenticated: overrides.authenticated ?? 'authenticated',
         usable: overrides.usable ?? true,
         tier: (overrides.tier ?? 1) as 1 | 2,
         channels: [],
-        error: null,
+        error: overrides.error ?? null,
         ...(overrides.modelStatus !== undefined ? { modelStatus: overrides.modelStatus } : {}),
     };
 }
@@ -298,10 +300,11 @@ describe('AgentService.doctor', () => {
         expect(exitCode).toBe(1);
     });
 
-    test('R1/R12 (0621): text table omits the AUTH column; --json keeps authenticated', async () => {
+    test('R1/R12 (0621) + B4/0682 R2: no auth column, and --json carries no authenticated field', async () => {
         // The auth signal cannot distinguish "not authenticated" from "no probe
-        // registered" — the column misreported usable agents and is gone. The
-        // `authenticated` field stays in --json for the doctor.probe classifier.
+        // registered" — the column misreported usable agents and is gone. 0682
+        // removed the field from --json too: DoctorResult spreads are explicitly
+        // stripped so a probe-only value can never leak to consumers.
         const { lines, output } = captureOutput();
         const svc = makeService({}, output);
         const doctorRunner = {
@@ -324,15 +327,15 @@ describe('AgentService.doctor', () => {
         const tableLines = lines.join('').split('\n');
         const header = tableLines.find((l) => l.includes('STATUS'));
         expect(header).toBeDefined();
-        expect(header?.split(/\s{2,}/).filter(Boolean)).toHaveLength(5); // STATUS|AGENT|TIER|VERSION|MODEL
+        expect(header?.split(/\s{2,}/).filter(Boolean)).toHaveLength(7); // STATUS|EXECUTOR|AGENT|MODEL|TIER|VERSION|ROLES
         const row = tableLines.find((l) => l.includes('claude'));
         expect(row).toBeDefined();
-        // glyph+state share the first cell, so the row has the same 5 cells as the header
-        expect(row?.split(/\s{2,}/).filter(Boolean)).toHaveLength(5);
+        // glyph+state share the first cell, so the row has the same 7 cells as the header
+        expect(row?.split(/\s{2,}/).filter(Boolean)).toHaveLength(7);
         // Tier-1 summary footer unchanged (R3).
         expect(tableLines.some((l) => /^\d+ usable, \d+ missing/.test(l))).toBe(true);
 
-        // R16: --json still emits authenticated for every agent.
+        // B4/0682 R16-inverse: --json emits no authenticated key on any agent.
         const jsonLines: string[] = [];
         const jsonOutput = {
             write: (s: string) => jsonLines.push(s),
@@ -340,7 +343,8 @@ describe('AgentService.doctor', () => {
         const svc2 = makeService({}, jsonOutput);
         await svc2.doctor({ json: true }, { doctorRunner });
         const parsed = JSON.parse(jsonLines.join(''));
-        expect(parsed.agents.every((a: { authenticated: string }) => typeof a.authenticated === 'string')).toBe(true);
+        expect(parsed.agents.length).toBeGreaterThan(0);
+        expect(parsed.agents.every((a: Record<string, unknown>) => !('authenticated' in a))).toBe(true);
     });
 
     // --- Task 0239: model health probe integration (cases 11–16) ---
@@ -379,7 +383,7 @@ describe('AgentService.doctor', () => {
         expect(ompRow).toContain('—');
     });
 
-    test('text table renders full model status for available model (R4/AC1)', async () => {
+    test('text table renders full model status in executor detail mode (R4/AC1)', async () => {
         const { lines, output } = captureOutput();
         const svc = makeService({}, output);
         const doctorRunner = {
@@ -391,13 +395,21 @@ describe('AgentService.doctor', () => {
                     }),
                 ]),
             ),
-            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+            runOne: mock(() =>
+                Promise.resolve(
+                    mockDoctorResult({
+                        agent: 'omp-zai',
+                        modelStatus: { status: 'available', checkedAt: '2026-07-09T00:00:00Z' },
+                    }),
+                ),
+            ),
         } as unknown as AgentRunDeps['doctorRunner'];
-        await svc.doctor({ json: false }, { doctorRunner });
+        // B4/0681: probed model health lives in the executor-selector detail view.
+        await svc.doctor({ json: false, agent: 'omp-zai' }, { doctorRunner });
         expect(lines.some((l) => l.includes('available'))).toBe(true);
     });
 
-    test('text table renders full quota_exhausted status (R4/AC1)', async () => {
+    test('text table no longer prints probed health status (B4/0681 — MODEL column is config-pinned)', async () => {
         const { lines, output } = captureOutput();
         const svc = makeService({}, output);
         const doctorRunner = {
@@ -416,7 +428,7 @@ describe('AgentService.doctor', () => {
             runOne: mock(() => Promise.resolve(mockDoctorResult())),
         } as unknown as AgentRunDeps['doctorRunner'];
         await svc.doctor({ json: false }, { doctorRunner });
-        expect(lines.some((l) => l.includes('quota_exhausted'))).toBe(true);
+        expect(lines.some((l) => l.includes('quota_exhausted'))).toBe(false);
     });
 
     test('--json includes modelStatus in the output envelope', async () => {
@@ -465,7 +477,9 @@ describe('AgentService.doctor', () => {
         await svc.doctor({ json: false, agent: 'omp-zai' }, { doctorRunner });
         const text = lines.join('\n');
         expect(text).toContain('omp-zai');
-        expect(text).toContain('model:');
+        // B4/0681: pinned config model gets its own line; probed health is `health:`.
+        expect(text).toContain('pinned:');
+        expect(text).toContain('health:');
         expect(text).toContain('available');
         expect(text).toContain('checked:');
     });
@@ -553,7 +567,9 @@ describe('AgentService.doctor', () => {
         // reviewer is capable-1 -> cap1-exec; but the doctor deems it unusable, so
         // resolveRole returns !ok and R5 wraps the message in an agent-resolution envelope.
         const doctorRunner = {
-            runAll: mock(() => Promise.resolve([mockDoctorResult()])),
+            runAll: mock(() =>
+                Promise.resolve([mockDoctorResult({ agent: 'cap1-exec', usable: false, error: 'not found' })]),
+            ),
             runOne: mock(() => Promise.resolve(mockDoctorResult({ agent: 'cap1-exec', usable: false }))),
         } as unknown as AgentRunDeps['doctorRunner'];
         const code = await svc.doctor({ json: true, agent: 'reviewer' }, { doctorRunner });
@@ -563,6 +579,160 @@ describe('AgentService.doctor', () => {
         expect(errors).toEqual([]);
         // Message propagated verbatim from the resolve failure.
         expect(envelope.error?.message).toBeTruthy();
+    });
+
+    test('B4/0681 R1: TIER renders the capability tier, never the support tier', async () => {
+        const { lines, output } = captureOutput();
+        const cfg: AgentConfig = {
+            default: 'coder',
+            executors: [{ name: 'cap1-exec', agent: 'claude', tier: 'capable-1' }],
+        };
+        const svc = makeConfiguredService(cfg, {}, roleMap(), output);
+        const doctorRunner = {
+            runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: 'cap1-exec', tier: 2 })])),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        await svc.doctor({ json: false }, { doctorRunner });
+        const row = lines
+            .join('\n')
+            .split('\n')
+            .find((l) => l.includes('cap1-exec'));
+        const cells = (row ?? '').split(/\s{2,}/).filter(Boolean);
+        expect(cells).toContain('capable-1');
+        // Support-tier values never render as their own cell.
+        expect(cells.some((c) => c === '1' || c === '2')).toBe(false);
+    });
+
+    test('B4/0681 R2: AGENT/MODEL columns carry binary + pinned model; bare executor gets em-dash (R15)', async () => {
+        const { lines, output } = captureOutput();
+        const cfg: AgentConfig = {
+            default: 'coder',
+            executors: [
+                { name: 'omp-zai', agent: 'omp', model: 'zai/glm-5.2' },
+                { name: 'bare-claude', agent: 'claude' },
+            ],
+        };
+        const svc = makeConfiguredService(cfg, {}, roleMap(), output);
+        const doctorRunner = {
+            runAll: mock(() =>
+                Promise.resolve([mockDoctorResult({ agent: 'omp-zai' }), mockDoctorResult({ agent: 'bare-claude' })]),
+            ),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        await svc.doctor({ json: false }, { doctorRunner });
+        const text = lines.join('\n');
+        const ompRow = text.split('\n').find((l) => l.includes('omp-zai'));
+        expect(ompRow).toContain('omp'); // AGENT cell shows the underlying binary
+        expect(ompRow).toContain('zai/glm-5.2'); // pinned model string
+        const bareRow = text.split('\n').find((l) => l.includes('bare-claude'));
+        expect(bareRow).toContain('—'); // undeclared model → placeholder, never fabricated
+    });
+
+    test('B4/0681 R3: ROLES stars the elected role and footers a legend; unusable rows show —', async () => {
+        const { lines, output } = captureOutput();
+        const cfg: AgentConfig = {
+            default: 'coder',
+            executors: [
+                { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
+                { name: 'std-exec', agent: 'omp', tier: 'standard' },
+            ],
+        };
+        const svc = makeConfiguredService(cfg, {}, roleMap(), output);
+        const doctorRunner = {
+            runAll: mock(() =>
+                Promise.resolve([mockDoctorResult({ agent: 'cheap-exec' }), mockDoctorResult({ agent: 'std-exec' })]),
+            ),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        await svc.doctor({ json: false }, { doctorRunner });
+        const textLines = lines.join('\n').split('\n');
+        // scribe is cheap-only: cheap-exec serves it AND is elected for it.
+        const cheapRow = textLines.find((l) => l.includes('cheap-exec'));
+        expect(cheapRow).toContain('scribe*'); // elected for the only role its tier reaches
+        expect(cheapRow?.includes('coder')).toBe(false); // cheap tier cannot serve standard+
+        const stdRow = textLines.find((l) => l.includes('std-exec'));
+        expect(stdRow).toContain('coder*');
+        const footer = textLines.find((l) => /elected executor/.test(l));
+        expect(footer).toBeDefined();
+    });
+
+    test('B4/0681 R4: role selector renders the full eligible ladder with ELECTED + summary', async () => {
+        const { lines, output } = captureOutput();
+        const cfg: AgentConfig = {
+            default: 'coder',
+            executors: [
+                { name: 'dead-cheap', agent: 'pi', tier: 'standard' },
+                { name: 'std-exec', agent: 'omp', tier: 'standard' },
+            ],
+        };
+        const svc = makeConfiguredService(cfg, {}, roleMap(), output);
+        const doctorRunner = {
+            runAll: mock(() =>
+                Promise.resolve([
+                    mockDoctorResult({ agent: 'dead-cheap', usable: false, version: null, error: 'not found' }),
+                    mockDoctorResult({ agent: 'std-exec' }),
+                ]),
+            ),
+            // resolveRole walks CONFIGS but probes canonical agent names.
+            runOne: mock((name: string) =>
+                Promise.resolve(
+                    name === 'pi'
+                        ? mockDoctorResult({ agent: 'pi', usable: false, version: null, error: 'not found' })
+                        : mockDoctorResult({ agent: 'omp', usable: true }),
+                ),
+            ),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        await svc.doctor({ json: false, agent: 'coder' }, { doctorRunner });
+        const text = lines.join('\n');
+        expect(text).toContain('eligible ladder');
+        expect(text).toContain('ELECTED'); // std-exec wins the walk
+        expect(text).toContain('not found'); // dead-cheap carries its per-row reason
+        expect(text).toMatch(/2 eligible, 1 usable, elected: std-exec/);
+    });
+
+    test('B4/0681 R7: --json under a role selector keeps agents[0] = elected (not cheapest eligible)', async () => {
+        const { lines, output } = captureOutput();
+        const cfg: AgentConfig = {
+            default: 'coder',
+            executors: [
+                { name: 'dead-cheap', agent: 'pi', tier: 'standard' },
+                { name: 'std-exec', agent: 'omp', tier: 'standard', model: 'zai/glm-5.2' },
+            ],
+        };
+        const svc = makeConfiguredService(cfg, {}, roleMap(), output);
+        const doctorRunner = {
+            runAll: mock(() =>
+                Promise.resolve([
+                    mockDoctorResult({ agent: 'dead-cheap', usable: false, version: null }),
+                    mockDoctorResult({ agent: 'std-exec' }),
+                ]),
+            ),
+            runOne: mock((name: string) =>
+                Promise.resolve(
+                    name === 'pi'
+                        ? mockDoctorResult({ agent: 'pi', usable: false, version: null, error: 'not found' })
+                        : mockDoctorResult({ agent: 'omp', usable: true }),
+                ),
+            ),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        await svc.doctor({ json: true, agent: 'coder' }, { doctorRunner });
+        const parsed = JSON.parse(lines.join('')) as {
+            agents: Array<{
+                agent: string;
+                usable: boolean;
+                model: string | null;
+                roles: string[];
+                elected: string[];
+                capabilityTier: string;
+            }>;
+        };
+        expect(parsed.agents).toHaveLength(2);
+        expect(parsed.agents[0]?.agent).toBe('std-exec'); // elected, not resolution-head dead-cheap
+        expect(parsed.agents[0]?.usable).toBe(true);
+        expect(parsed.agents[0]?.roles.length).toBeGreaterThan(0);
+        expect(parsed.agents[0]?.model).toBe('zai/glm-5.2'); // R6 routing fields present
+        expect(parsed.agents[1]?.model).toBeNull(); // undeclared stays null (R15)
+        expect(Array.isArray(parsed.agents[0]?.elected)).toBe(true);
     });
 });
 
@@ -3503,5 +3673,210 @@ describe('AgentService tier fallback under real failure (0540)', () => {
         expect(unreachable).toBeDefined();
         expect(unreachable).toContain("Stage 'plan'");
         expect(unreachable).toContain('capable-2');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: AgentService.doctor — detection cache & --probe-health (B4/0683)
+// ---------------------------------------------------------------------------
+
+import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { executorFingerprint } from '../../src/services/agent-service';
+
+function memoryFs(): FileSystem {
+    const files = new Map<string, string>();
+    const fs = {
+        exists: (p: string) => files.has(p),
+        readFile: (p: string) => {
+            const body = files.get(p);
+            if (body === undefined) throw new Error(`ENOENT: ${p}`);
+            return body;
+        },
+        writeFile: (p: string, content: string) => {
+            files.set(p, content);
+        },
+        rename: (src: string, dest: string) => {
+            const body = files.get(src);
+            if (body === undefined) throw new Error(`ENOENT rename: ${src}`);
+            files.set(dest, body);
+            files.delete(src);
+        },
+        resolve: (...segments: string[]) => join('/cache-root', ...segments),
+    };
+    return fs as unknown as FileSystem;
+}
+
+const CACHE_PATH = '/cache-root/.spur/run/agent-doctor.json';
+
+function cacheDeps(fs: FileSystem = memoryFs(), clock = { t: 1_000_000 }) {
+    const runAll = mock(() =>
+        Promise.resolve([mockDoctorResult({ agent: 'a-one', tier: 2 }), mockDoctorResult({ agent: 'b-two', tier: 2 })]),
+    );
+    const runOne = mock((name: string) => Promise.resolve(mockDoctorResult({ agent: name, tier: 2 })));
+    const deps = {
+        doctorRunner: { runAll, runOne },
+        fileSystem: fs,
+        now: () => clock.t,
+    } as unknown as AgentRunDeps;
+    return { fs, clock, runAll, runOne, deps };
+}
+
+function readCache(fs: FileSystem): { capturedAt: string; schemaVersion: number } {
+    return JSON.parse(fs.readFile(CACHE_PATH) as string);
+}
+
+describe('AgentService.doctor — detection cache & --probe-health (B4/0683)', () => {
+    test('R3: fingerprint is order-independent and field-sensitive', () => {
+        const z = { name: 'z', agent: 'omp' };
+        expect(executorFingerprint([z, { name: 'a', agent: 'pi', model: 'x/y' }])).toBe(
+            executorFingerprint([{ name: 'a', agent: 'pi', model: 'x/y' }, z]),
+        );
+        expect(executorFingerprint([z, { name: 'a', agent: 'pi', model: 'x/y' }])).not.toBe(
+            executorFingerprint([z, { name: 'a', agent: 'pi', model: 'q/w' }]),
+        );
+        expect(executorFingerprint([z, { name: 'a', agent: 'pi', tier: 'capable-2' }])).not.toBe(
+            executorFingerprint([z, { name: 'a', agent: 'pi' }]),
+        );
+        expect(executorFingerprint(undefined)).toBe(executorFingerprint([]));
+    });
+
+    test('R10: second full-set call serves the cache (runAll once) with a dated footer note', async () => {
+        const { lines, output } = captureOutput();
+        const svc = makeService({}, output);
+        const h = cacheDeps();
+        await svc.doctor({ json: false }, h.deps);
+        expect(h.runAll).toHaveBeenCalledTimes(1);
+        await svc.doctor({ json: false }, h.deps);
+        expect(h.runAll).toHaveBeenCalledTimes(1);
+        const note = lines.find((l) => l.includes('cached'));
+        expect(note).toContain('.spur/run/agent-doctor.json');
+        expect(note).toContain('--force-refresh to re-detect');
+    });
+
+    test('R10: --json reports cache structurally — miss first, hit second with ageMs', async () => {
+        const jsonLines: string[] = [];
+        const jsonOut = { write: (s: string) => jsonLines.push(s), error: () => {} };
+        const svc = makeService({}, jsonOut as AgentServiceOutput);
+        const h = cacheDeps();
+        await svc.doctor({ json: true }, h.deps);
+        const first = JSON.parse(jsonLines.at(-1) ?? '{}') as {
+            cache: { hit: boolean; ageMs: number | null; path: string };
+        };
+        expect(first.cache.hit).toBe(false);
+        expect(first.cache.ageMs).toBeNull();
+
+        h.clock.t += 5_000;
+        await svc.doctor({ json: true }, h.deps);
+        const second = JSON.parse(jsonLines.at(-1) ?? '{}') as { cache: { hit: boolean; ageMs: number | null } };
+        expect(second.cache.hit).toBe(true);
+        expect(second.cache.ageMs).toBe(5_000);
+    });
+
+    test('TTL: a cached entry older than 60s is a miss', async () => {
+        const svc = makeService();
+        const h = cacheDeps();
+        await svc.doctor({ json: false }, h.deps);
+        h.clock.t += 60_001;
+        await svc.doctor({ json: false }, h.deps);
+        expect(h.runAll).toHaveBeenCalledTimes(2);
+    });
+
+    test('R11/--force-refresh: skips the read, re-runs, advances capturedAt', async () => {
+        const svc = makeService();
+        const h = cacheDeps();
+        await svc.doctor({ json: false }, h.deps);
+        const before = readCache(h.fs);
+        h.clock.t += 1_000;
+        await svc.doctor({ json: true, forceRefresh: true }, h.deps);
+        expect(h.runAll).toHaveBeenCalledTimes(2);
+        expect(readCache(h.fs).capturedAt > before.capturedAt).toBe(true);
+    });
+
+    test('R14: corrupt/stale/wrong-fingerprint caches degrade to a live run and rewrite a valid file', async () => {
+        for (const body of ['not json at all', JSON.stringify({ schemaVersion: 0 })]) {
+            const h = cacheDeps();
+            h.fs.writeFile(CACHE_PATH, body);
+            const exit = await makeService().doctor({ json: false }, h.deps);
+            expect(exit).toBe(0);
+            expect(h.runAll).toHaveBeenCalledTimes(1);
+            expect(readCache(h.fs).schemaVersion).toBe(1);
+        }
+        // Wrong fingerprint.
+        const h2 = cacheDeps();
+        h2.fs.writeFile(
+            CACHE_PATH,
+            JSON.stringify({
+                schemaVersion: 1,
+                fingerprint: 'different',
+                capturedAt: new Date().toISOString(),
+                results: [],
+            }),
+        );
+        expect(await makeService().doctor({ json: false }, h2.deps)).toBe(0);
+        expect(h2.runAll).toHaveBeenCalledTimes(1);
+
+        // Stale capturedAt (fp matches the empty executor set but age exceeds TTL).
+        const h3 = cacheDeps();
+        h3.clock.t = Date.parse('2020-01-01T00:00:00Z');
+        h3.fs.writeFile(
+            CACHE_PATH,
+            JSON.stringify({
+                schemaVersion: 1,
+                fingerprint: executorFingerprint(undefined),
+                capturedAt: '2019-01-01T00:00:00Z',
+                results: [],
+            }),
+        );
+        expect(await makeService().doctor({ json: false }, h3.deps)).toBe(0);
+        expect(h3.runAll).toHaveBeenCalledTimes(1);
+    });
+
+    test('R6: unwritable cache path still returns the live result', async () => {
+        const failingFs = memoryFs();
+        Object.assign(failingFs, {
+            writeFile: () => {
+                throw new Error('EACCES: denied');
+            },
+        });
+        const { lines, errors, output } = captureOutput();
+        const svc = makeService({}, output);
+        const h = cacheDeps(failingFs);
+        const exit = await svc.doctor({ json: false }, h.deps);
+        expect(exit).toBe(0);
+        expect(lines.join('\n')).toContain('2 usable, 0 missing');
+        expect(errors.join('') + lines.join('')).toContain('could not update .spur/run/agent-doctor.json');
+    });
+
+    test('R7/--probe-health: never reads or writes the cache', async () => {
+        const svc = makeService();
+        const h = cacheDeps();
+        await svc.doctor({ json: false }, h.deps); // populate
+        const before = readCache(h.fs);
+        h.clock.t += 1_000;
+        await svc.doctor({ json: false, probeHealth: true }, h.deps);
+        expect(h.runAll).toHaveBeenCalledTimes(2); // probed live
+        expect(readCache(h.fs).capturedAt).toBe(before.capturedAt); // untouched
+    });
+
+    test('R8: fresh cache covers the selector → served without probe; miss runs one probe and writes nothing', async () => {
+        const svc = makeService({}, nullOutput(), {
+            executors: [
+                { name: 'a-one', agent: 'claude' },
+                { name: 'b-two', agent: 'omp' },
+            ],
+        } as AgentConfig);
+        const h = cacheDeps();
+        await svc.doctor({ json: false }, h.deps); // cache holds rows for a-one/b-two
+
+        const hit = cacheDeps(h.fs, h.clock);
+        await svc.doctor({ json: false, agent: 'a-one' }, hit.deps);
+        expect(hit.runAll).not.toHaveBeenCalled();
+        expect(hit.runOne).not.toHaveBeenCalled();
+
+        const miss = cacheDeps(memoryFs());
+        await svc.doctor({ json: false, agent: 'a-one' }, miss.deps);
+        expect(miss.runAll).not.toHaveBeenCalled();
+        expect(miss.runOne).toHaveBeenCalledWith('a-one');
+        expect(miss.fs.exists(CACHE_PATH)).toBe(false);
     });
 });

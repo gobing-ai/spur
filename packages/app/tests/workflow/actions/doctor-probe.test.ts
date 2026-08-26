@@ -29,16 +29,14 @@ function stubExecutor(handler: (opts: { command: string; args: string[] }) => Pa
     return { executor: executor as unknown as ProcessExecutor, calls };
 }
 
-const okAuth = (agent: string) =>
-    JSON.stringify({
-        agents: [{ name: agent, authenticated: 'authenticated', modelStatus: { status: 'ok', detail: '' } }],
-    });
+const okRow = (agent: string, usable = true) =>
+    JSON.stringify({ agents: [{ name: agent, agent, usable, modelStatus: { status: 'ok', detail: '' } }] });
 
 describe('DoctorProbeActionRunner', () => {
-    test('writes PASS to resultFile when the executor is authenticated (soft probe returns ok)', async () => {
+    test('writes PASS to resultFile when the executor row is usable (soft probe returns ok)', async () => {
         const workdir = join(tmpdir(), `doctor-${crypto.randomUUID()}`);
         const fs = createNodeFileSystem(workdir);
-        const { executor } = stubExecutor(() => ({ stdout: okAuth('omp') }));
+        const { executor } = stubExecutor(() => ({ stdout: okRow('omp') }));
         const runner = new DoctorProbeActionRunner(executor, fs);
         const res = await runner.execute(
             { resultFile: '.spur/run/precheck-doctor.status', spurBin: 'spur', agent: 'omp' },
@@ -49,64 +47,30 @@ describe('DoctorProbeActionRunner', () => {
         expect((await fs.readFile(join(workdir, '.spur/run/precheck-doctor.status'))).trim()).toBe('PASS');
     });
 
-    test('writes FAIL when a non-relay executor is unauthenticated with an explicit auth failure', async () => {
+    test('writes FAIL on a usable:false doctor row even though the command exited 0 (B4/0682 R4)', async () => {
         const workdir = join(tmpdir(), `doctor-${crypto.randomUUID()}`);
         const fs = createNodeFileSystem(workdir);
-        const { executor } = stubExecutor(() => ({
-            stdout: JSON.stringify({
-                agents: [
-                    {
-                        name: 'claude',
-                        authenticated: 'unauthenticated',
-                        modelStatus: { status: 'error', detail: 'invalid API key' },
-                    },
-                ],
-            }),
-        }));
+        // Without the usable read (R4), removing the auth gate would let a missing
+        // tier-2 executor silently PASS here — renderDoctor exits non-zero only
+        // for !usable && tier===1.
+        const { executor } = stubExecutor(() => ({ stdout: okRow('claude', false) }));
         const runner = new DoctorProbeActionRunner(executor, fs);
         const res = await runner.execute(
             { resultFile: '.spur/run/precheck-doctor.status', spurBin: 'spur', agent: 'claude' },
             { runId: 'r1', stateOrNodeId: 'precheck', workdir, vars: {}, env: {} },
         );
-        expect(res.ok).toBe(true);
+        expect(res.ok).toBe(true); // soft probe still succeeds
         expect((res.data as { status: string }).status).toBe('FAIL');
         const output = (res.data as { output: string[] }).output.join('\n');
-        expect(output).toContain('precheck: claude auth=unauthenticated probe=auth-fail');
-        expect(output).toContain('precheck: FAIL - executor claude is unauthenticated');
+        expect(output).toContain('precheck: claude usable=false');
+        expect(output).toContain('precheck: FAIL - executor claude is not usable per doctor');
         expect((await fs.readFile(join(workdir, '.spur/run/precheck-doctor.status'))).trim()).toBe('FAIL');
-    });
-
-    test('omp env-key miss stays soft (PASS) because the CLI cannot see relay-owned credentials', async () => {
-        const workdir = join(tmpdir(), `doctor-${crypto.randomUUID()}`);
-        const fs = createNodeFileSystem(workdir);
-        const { executor } = stubExecutor(() => ({
-            stdout: JSON.stringify({
-                agents: [
-                    {
-                        name: 'omp',
-                        authenticated: 'unauthenticated',
-                        modelStatus: { status: 'error', detail: 'API key not found for provider volc' },
-                    },
-                ],
-            }),
-        }));
-        const runner = new DoctorProbeActionRunner(executor, fs);
-        const res = await runner.execute(
-            { resultFile: '.spur/run/precheck-doctor.status', spurBin: 'spur', agent: 'omp' },
-            { runId: 'r1', stateOrNodeId: 'precheck', workdir, vars: {}, env: {} },
-        );
-        expect(res.ok).toBe(true);
-        expect((res.data as { status: string }).status).toBe('PASS');
-        const output = (res.data as { output: string[] }).output.join('\n');
-        expect(output).toContain('probe=env-miss');
-        expect(output).toContain('SOFT - executor omp auth probe cannot see agent-owned credentials');
-        expect((await fs.readFile(join(workdir, '.spur/run/precheck-doctor.status'))).trim()).toBe('PASS');
     });
 
     test('probes both executors with a divergence line when implementAgent differs', async () => {
         const workdir = join(tmpdir(), `doctor-${crypto.randomUUID()}`);
         const fs = createNodeFileSystem(workdir);
-        const { executor, calls } = stubExecutor(() => ({ stdout: okAuth('x') }));
+        const { executor, calls } = stubExecutor(() => ({ stdout: okRow('x') }));
         const runner = new DoctorProbeActionRunner(executor, fs);
         const res = await runner.execute(
             {
@@ -128,7 +92,7 @@ describe('DoctorProbeActionRunner', () => {
     test('probes a single executor when implementAgent equals agent', async () => {
         const workdir = join(tmpdir(), `doctor-${crypto.randomUUID()}`);
         const fs = createNodeFileSystem(workdir);
-        const { executor, calls } = stubExecutor(() => ({ stdout: okAuth('omp') }));
+        const { executor, calls } = stubExecutor(() => ({ stdout: okRow('omp') }));
         const runner = new DoctorProbeActionRunner(executor, fs);
         const res = await runner.execute(
             {
@@ -186,7 +150,7 @@ describe('DoctorProbeActionRunner', () => {
     test('splits a multi-token spurBin launch string into argv without a shell', async () => {
         const workdir = join(tmpdir(), `doctor-${crypto.randomUUID()}`);
         const fs = createNodeFileSystem(workdir);
-        const { executor, calls } = stubExecutor(() => ({ stdout: okAuth('omp') }));
+        const { executor, calls } = stubExecutor(() => ({ stdout: okRow('omp') }));
         const runner = new DoctorProbeActionRunner(executor, fs);
         const res = await runner.execute(
             {
@@ -211,7 +175,7 @@ describe('DoctorProbeActionRunner', () => {
         expect(res.error).toContain('shell metacharacters');
     });
 
-    test('unparseable doctor output degrades to unknown auth without failing the run', async () => {
+    test('unparseable doctor output defaults usable=true and does not fail the run (soft probe)', async () => {
         const workdir = join(tmpdir(), `doctor-${crypto.randomUUID()}`);
         const fs = createNodeFileSystem(workdir);
         const { executor } = stubExecutor(() => ({ stdout: 'not json' }));
@@ -222,6 +186,6 @@ describe('DoctorProbeActionRunner', () => {
         );
         expect(res.ok).toBe(true);
         expect((res.data as { status: string }).status).toBe('PASS');
-        expect((res.data as { output: string[] }).output.join('\n')).toContain('auth=unknown probe=unknown');
+        expect((res.data as { output: string[] }).output.join('\n')).toContain('usable=true');
     });
 });

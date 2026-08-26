@@ -185,11 +185,13 @@ recovery (0482 R1). To confirm recovery is wired, watch the run log for
 `Escalating: <executor> (tier <t>) failed with resource-exhaustion; retrying on <executor>` — that
 line, not quota state, is the signal that the fallback ladder fired.
 
-Do not read provider quota from `spur agent doctor`. The doctor resolves provider keys from
+Do not read provider auth or quota from `spur agent doctor`. The doctor resolves provider keys from
 `${PROVIDER}_API_KEY` env vars and cannot see an agent-owned credential store (e.g. omp's models
-config), so its row degrades to `status: usable · auth: no · model: unknown` for GLM-style executors
-and is useless as a preflight gate. Exhaustion is detected mid-run by the escalation classifier, not
-by any preflight probe.
+config), so it historically degraded to `status: usable · auth: no · model: unknown` for GLM-style
+executors and was useless as a preflight gate. Feature B4 removed the auth signal from the surface
+entirely (no column, no `authenticated` in `--json`) precisely so nothing can read it by mistake;
+the precheck probe classifies on usability alone. Exhaustion is detected mid-run by the escalation
+classifier, not by any preflight probe.
 
 ### Explicit subprocess surfaces are unchanged
 

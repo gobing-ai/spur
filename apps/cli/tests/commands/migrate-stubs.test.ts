@@ -65,13 +65,14 @@ describe('CLI migrate and extracted domains', () => {
             dbUrl: ':memory:',
         });
         const doctorResult = JSON.parse(output.messages.at(-1) ?? '{}') as {
-            agents: { agent: string; tier: number; usable: boolean; authenticated: string }[];
+            agents: { agent: string; tier: number; usable: boolean }[];
         };
         expect(doctorResult.agents[0]).toMatchObject({ agent: 'antigravity-cli', tier: 1 });
         const antigravityUsable = doctorResult.agents[0]?.usable === true;
         expect(doctorJsonExit).toBe(antigravityUsable ? 0 : 1);
         if (antigravityUsable) {
-            expect(doctorResult.agents[0]).toMatchObject({ usable: true, authenticated: 'unknown' });
+            expect(doctorResult.agents[0]).toMatchObject({ usable: true });
+            expect('authenticated' in (doctorResult.agents[0] ?? {})).toBe(false); // B4/0682 R2
         }
 
         const doctorTextExit = await main(['agent', 'doctor', 'antigravity'], { cwd, output, dbUrl: ':memory:' });

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { isatty } from 'node:tty';
 import {
@@ -20,7 +21,7 @@ import {
     type AgentName,
     type AgentRunResult,
     AiRunner,
-    type AuthState,
+    type DoctorResult,
     DoctorRunner,
     getAgentShim,
     isClaudeStyleSlashCommand,
@@ -32,6 +33,7 @@ import {
     translateSlashCommand,
 } from '@gobing-ai/ts-ai-runner';
 import type { EventBus } from '@gobing-ai/ts-infra';
+import type { FileSystem } from '@gobing-ai/ts-runtime';
 import {
     createNodeFileSystem,
     NodeProcessExecutor,
@@ -68,6 +70,10 @@ export interface AgentRunDeps {
     runner?: AiRunner;
     detector?: AgentDetector;
     doctorRunner?: DoctorRunner;
+    /** Test seam (B4/0683 Q1): filesystem for the detection cache; defaults to the context cwd. */
+    fileSystem?: FileSystem;
+    /** Test seam (B4/0683 Q1): clock for cache TTL; defaults to Date.now. */
+    now?: () => number;
     /**
      * Test seam (feature E6): override the run→session observer factory.
      * Receives the minted run id; default constructs a RunSessionObserver
@@ -408,7 +414,8 @@ export class AgentService {
             });
         const detector = deps?.detector ?? new AgentDetector({ runner });
         const doctorRunner =
-            deps?.doctorRunner ?? new DoctorRunner({ agentDetector: detector, runner, env: this.ctx.env });
+            deps?.doctorRunner ??
+            new DoctorRunner({ agentDetector: detector, runner, env: this.ctx.env, probeAuth: false });
         // Public resolve() has no prompt → no stage (0536 R4: prompt text never
         // derives a stage): auto resolution falls through default → priority.
         return this.resolveAgent(flags, doctorRunner);
@@ -440,9 +447,20 @@ export class AgentService {
     // Public: doctor
     // -------------------------------------------------------------------------
 
-    async doctor(args: { json: boolean; agent?: string }, deps?: AgentRunDeps): Promise<number> {
+    async doctor(
+        args: {
+            json: boolean;
+            agent?: string;
+            /** B4/0683 R1: opt into model health probing; without it no probe fires. */
+            probeHealth?: boolean;
+            /** B4/0683 R5: bypass the detection cache, re-run, rewrite it. */
+            forceRefresh?: boolean;
+        },
+        deps?: AgentRunDeps,
+    ): Promise<number> {
         const executors = this.ctx.agentConfig?.executors;
-        const doctorRunner = deps?.doctorRunner ?? new DoctorRunner({ env: this.ctx.env, executors });
+        const now = deps?.now ?? ((): number => Date.now());
+        const fileSystem = deps?.fileSystem ?? createNodeFileSystem(this.ctx.cwd);
         // R1 (0622 F2/F4 residue): a Layer-1 role (`coder`, `planner`, …) is not an
         // executor. Resolve it through the SAME ranked doctor-walk dispatch uses
         // (`resolveRole`): cheapest eligible → most expensive, checking each until
@@ -455,26 +473,117 @@ export class AgentService {
                 'agent.roles: no config layer defines a table — built-in DEFAULT_AGENT_ROLES fallback in effect',
             );
         }
+        // R1: DoctorRunner probes iff `executor.model` is set (doctor-runner.js:75/:89),
+        // so handing it a model-stripped copy suppresses probing without touching the
+        // runner. renderDoctor keeps reading the UNMODIFIED config array (R2).
+        const runnerExecutors = args.probeHealth ? executors : executors?.map(({ name, agent }) => ({ name, agent }));
+        const fingerprint = executorFingerprint(executors);
+        let cacheInfo: DoctorCacheInfo = { hit: false, ageMs: null, path: DOCTOR_CACHE_REL };
+        // Cache is active by default in production; an injected doctorRunner WITHOUT an
+        // fs seam opts out (existing unit tests assert fresh stubbed runs and must not
+        // see disk-cached rows), while an explicitly provided fileSystem always opts in
+        // regardless of injections.
+        // R7: --probe-health results are never cached and a set flag neither reads nor writes.
+        // R5: --force-refresh skips the read too (re-runs and rewrites).
+        const cacheOn = deps?.fileSystem !== undefined || deps?.doctorRunner === undefined;
+        const serveCached =
+            cacheOn && !args.probeHealth && !args.forceRefresh
+                ? readFreshDoctorCache(fileSystem, fingerprint, now)
+                : null;
+        let doctorRunner =
+            deps?.doctorRunner ?? new DoctorRunner({ env: this.ctx.env, executors: runnerExecutors, probeAuth: false });
         if (args.agent === undefined) {
+            if (serveCached !== null) {
+                cacheInfo = { hit: true, ageMs: serveCached.ageMs, path: DOCTOR_CACHE_REL };
+                return this.renderDoctor(serveCached.results, executors, args.json, undefined, cacheInfo);
+            }
             const results = await doctorRunner.runAll();
-            return this.renderDoctor(results, executors, args.json, args.agent);
+            if (cacheOn && !args.probeHealth) {
+                // R5: a forced refresh rewrites the file so capturedAt advances.
+                const writeErr = await writeDoctorCacheFile(fileSystem, fingerprint, results, now);
+                if (writeErr !== null) {
+                    this.ctx.output.error(`Warning: could not update ${DOCTOR_CACHE_REL}: ${writeErr}`);
+                }
+            }
+            return this.renderDoctor(results, executors, args.json, undefined, cacheInfo);
         }
         const roleDef = this.ctx.roles?.get(args.agent);
         if (roleDef !== undefined) {
+            // R8: a role selector is served from a fresh, fingerprint-matching cache
+            // covering every eligible executor; a miss runs what it needs and writes
+            // nothing (a partial/full-but-unrequested rowset must not be persisted).
+            if (serveCached !== null && roleCoveredByCache(serveCached.results, executors, roleDef.tier)) {
+                cacheInfo = { hit: true, ageMs: serveCached.ageMs, path: DOCTOR_CACHE_REL };
+                doctorRunner = cachedDoctorRunner(serveCached.results);
+            }
+            // R4: the role selector renders the FULL eligible ladder. One runAll()
+            // returns every executor row; resolveRole picks the elected one via the
+            // same doctor-walk dispatch uses. R8: resolveRole itself is untouched.
             const resolved = await this.resolveRole(args.agent, roleDef.tier, doctorRunner);
+            const results = await doctorRunner.runAll();
+            const rows = buildDoctorRows(results, executors, this.ctx.roles);
+            const rowByName = new Map(rows.map((row) => [row.executor, row]));
+            // Ladder rows in resolution order (cheapest eligible first).
+            const executorsConfigured = this.ctx.agentConfig?.executors ?? [];
+            const ladderRows = cheapestEligibleExecutors(executorsConfigured, roleDef.tier)
+                .map((e) => rowByName.get(e.name))
+                .filter((row): row is DoctorRow => row !== undefined);
             if (!resolved.ok) {
+                // R5: the full tried ladder renders BEFORE the failure return —
+                // per-row reasons supersede resolveRole's single joined `tried:`
+                // line. Text surface only: --json stays stderr-clean (machine
+                // consumers parse the single error envelope, R5 0609).
                 if (args.json) {
                     this.ctx.output.write(toJson({ error: { code: 'agent-resolution', message: resolved.message } }));
                 } else {
-                    this.ctx.output.error(resolved.message);
+                    this.ctx.output.error(renderRoleLadder(args.agent, roleDef.tier, ladderRows, undefined));
                 }
                 return resolved.exitCode;
             }
-            const results = [await doctorRunner.runOne(resolved.executor ?? resolved.agent)];
-            return this.renderDoctor(results, executors, args.json, resolved.executor ?? resolved.agent);
+            const electedName = resolved.executor ?? resolved.agent;
+            if (args.json) {
+                // R7: agents[0] is the elected executor, then the remainder in
+                // resolution order — doctor-probe.ts reads `.agents[0].agent`.
+                const ordered = [
+                    ...ladderRows.filter((row) => row.executor === electedName),
+                    ...ladderRows.filter((row) => row.executor !== electedName),
+                ];
+                const entries = ordered.map((row) => {
+                    const result = results.find((r) => r.agent === row.executor) as DoctorResult;
+                    return {
+                        ...withoutAuthenticated(result),
+                        capabilityTier: row.capabilityTier,
+                        model: row.model,
+                        roles: row.roles,
+                        elected: row.elected,
+                    };
+                });
+                this.ctx.output.write(
+                    toJson({ agents: entries, rolesSource: this.ctx.rolesSource ?? 'config', cache: cacheInfo }),
+                );
+                return 0;
+            }
+            this.ctx.output.write(renderRoleLadder(args.agent, roleDef.tier, ladderRows, electedName));
+            this.appendCacheNote(cacheInfo, args.json);
+            return 0;
+        }
+        // R8: single-executor selector — served from a fresh matching cache when one
+        // covers the name; on a miss run only what the selector needs and write nothing.
+        const cachedSelectorRow = serveCached?.results.find((r) => r.agent === args.agent);
+        if (cachedSelectorRow !== undefined) {
+            cacheInfo = { hit: true, ageMs: serveCached?.ageMs ?? null, path: DOCTOR_CACHE_REL };
+            return this.renderDoctor([cachedSelectorRow], executors, args.json, args.agent, cacheInfo);
         }
         const results = [await doctorRunner.runOne(args.agent)];
-        return this.renderDoctor(results, executors, args.json, args.agent);
+        return this.renderDoctor(results, executors, args.json, args.agent, cacheInfo);
+    }
+
+    /** R4: a cache hit prints its age — text surfaces get a trailing line, JSON carries it structurally. */
+    private appendCacheNote(cache: DoctorCacheInfo, json: boolean): void {
+        if (json || !cache.hit || cache.ageMs === null) return;
+        this.ctx.output.write(
+            `· cached ${Math.round(cache.ageMs / 1000)}s ago (${cache.path}) — --force-refresh to re-detect`,
+        );
     }
 
     private renderDoctor(
@@ -482,6 +591,7 @@ export class AgentService {
         executors: readonly AgentExecutorConfig[] | undefined,
         json: boolean,
         agent?: string,
+        cache?: DoctorCacheInfo,
     ): number {
         // R6/AC5: warn (not block) when an executor's model is quota_exhausted or unavailable.
         const modelByExecutor = new Map(
@@ -503,21 +613,27 @@ export class AgentService {
             // callers (the pipeline size precheck) can gate a large task on executor
             // strength without re-implementing the inference regex. Distinct from the
             // row's existing `tier`, which is the agent's support tier (1/2/3).
-            const executorByName = new Map((executors ?? []).map((e) => [e.name, e]));
-            const rows = results.map((result) => {
-                // No matching executor entry (a bare agent binary, or a project with no
-                // `agent.executors` block) still gets the name-based inference rather
-                // than an absent tier — the consumer's fallback is `standard`, which
-                // would block a large task on a plainly capable agent.
-                const executor = executorByName.get(result.agent) ?? { name: result.agent, agent: result.agent };
-                return { ...result, capabilityTier: getExecutorTier(executor) };
+            // B4/0681 adds the routing fields the text view shows: model/roles/elected.
+            const rows = buildDoctorRows(results, executors, this.ctx.roles);
+            const entries = rows.map((row, i) => {
+                const result = results[i] as DoctorResult;
+                return {
+                    ...withoutAuthenticated(result),
+                    capabilityTier: row.capabilityTier,
+                    model: row.model,
+                    roles: row.roles,
+                    elected: row.elected,
+                };
             });
-            this.ctx.output.write(toJson({ agents: rows, rolesSource: this.ctx.rolesSource ?? 'config' }));
-        } else if (agent !== undefined) {
-            // Single-executor mode: show full model detail when available.
-            this.ctx.output.write(renderDoctorDetail(results[0] ?? null));
+            const cacheField: DoctorCacheInfo = cache ?? { hit: false, ageMs: null, path: DOCTOR_CACHE_REL };
+            this.ctx.output.write(
+                toJson({ agents: entries, rolesSource: this.ctx.rolesSource ?? 'config', cache: cacheField }),
+            );
         } else {
-            this.ctx.output.write(renderDoctorTable(results));
+            const rows = buildDoctorRows(results, executors, this.ctx.roles);
+            // Single-executor mode keeps the detail view; full mode renders the table.
+            this.ctx.output.write(agent !== undefined ? renderDoctorDetail(rows[0] ?? null) : renderDoctorTable(rows));
+            this.appendCacheNote(cache ?? { hit: false, ageMs: null, path: DOCTOR_CACHE_REL }, false);
         }
         return results.some((result) => !result.usable && result.tier === 1) ? 1 : 0;
     }
@@ -758,7 +874,8 @@ export class AgentService {
 
         const detector = deps?.detector ?? new AgentDetector({ runner });
         const doctorRunner =
-            deps?.doctorRunner ?? new DoctorRunner({ agentDetector: detector, runner, env: this.ctx.env });
+            deps?.doctorRunner ??
+            new DoctorRunner({ agentDetector: detector, runner, env: this.ctx.env, probeAuth: false });
 
         // resolve agent — prompt text never derives a stage (0536 R4)
         const resolved = await this.resolveAgent(flags, doctorRunner);
@@ -2015,6 +2132,117 @@ function toJson(value: unknown): string {
     return JSON.stringify(value, null, 2);
 }
 
+// --- Detection cache (B4/0683) ----------------------------------------------
+
+const DOCTOR_CACHE_REL = '.spur/run/agent-doctor.json';
+const DOCTOR_CACHE_TTL_MS = 60_000;
+
+interface DoctorCacheInfo {
+    hit: boolean;
+    ageMs: number | null;
+    path: string;
+}
+
+interface DoctorCacheFile {
+    schemaVersion: 1;
+    fingerprint: string;
+    capturedAt: string;
+    results: DoctorResult[];
+}
+
+/**
+ * Executor-set identity (R3): name-ascending `name|agent|model?|tier` lines hashed
+ * with sha256. Sorting makes the key independent of config ordering; including tier
+ * invalidates when inference changes. Exported for direct unit pins.
+ */
+export function executorFingerprint(executors: readonly AgentExecutorConfig[] | undefined): string {
+    const lines = [...(executors ?? [])]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((e) => `${e.name}|${e.agent}|${e.model ?? ''}|${getExecutorTier(e)}`);
+    return createHash('sha256').update(lines.join('\n')).digest('hex');
+}
+
+/** Any read failure, malformed payload, wrong schema/fingerprint, or expired entry → miss (R6). */
+function readFreshDoctorCache(
+    fileSystem: FileSystem,
+    fingerprint: string,
+    now: () => number,
+): { results: DoctorResult[]; ageMs: number } | null {
+    try {
+        const path = fileSystem.resolve(DOCTOR_CACHE_REL);
+        if (fileSystem.exists(path) !== true) return null;
+        const parsed = JSON.parse(fileSystem.readFile(path) as string) as DoctorCacheFile;
+        if (
+            parsed === null ||
+            typeof parsed !== 'object' ||
+            parsed.schemaVersion !== 1 ||
+            typeof parsed.fingerprint !== 'string' ||
+            typeof parsed.capturedAt !== 'string' ||
+            !Array.isArray(parsed.results)
+        ) {
+            return null;
+        }
+        if (parsed.fingerprint !== fingerprint) return null;
+        const ageMs = now() - Date.parse(parsed.capturedAt);
+        if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs >= DOCTOR_CACHE_TTL_MS) return null;
+        return { results: parsed.results, ageMs };
+    } catch {
+        return null;
+    }
+}
+
+/** Atomic write (temp + rename); returns an error note on failure — never throws out of the cache layer (R6). */
+async function writeDoctorCacheFile(
+    fileSystem: FileSystem,
+    fingerprint: string,
+    results: readonly DoctorResult[],
+    now: () => number,
+): Promise<string | null> {
+    try {
+        const path = fileSystem.resolve(DOCTOR_CACHE_REL);
+        const tmp = `${path}.tmp`;
+        const body: DoctorCacheFile = {
+            schemaVersion: 1,
+            fingerprint,
+            capturedAt: new Date(now()).toISOString(),
+            results: [...results],
+        };
+        await fileSystem.writeFile(tmp, JSON.stringify(body));
+        await fileSystem.rename(tmp, path);
+        return null;
+    } catch (err) {
+        return err instanceof Error ? err.message : String(err);
+    }
+}
+
+/** A role selector is served only when every eligible executor has a cached row (R8). */
+function roleCoveredByCache(
+    results: readonly DoctorResult[],
+    executors: readonly AgentExecutorConfig[] | undefined,
+    tier: CapabilityTier,
+): boolean {
+    const needed = cheapestEligibleExecutors(executors ?? [], tier).map((e) => e.name);
+    return needed.every((name) => results.some((r) => r.agent === name));
+}
+
+/** Wraps cached rows in the DoctorRunner surface resolveRole/runAll consume — no probe, no write. */
+function cachedDoctorRunner(results: DoctorResult[]): DoctorRunner {
+    const runAll = (): Promise<DoctorResult[]> => Promise.resolve([...results]);
+    const runOne = (agent: string): Promise<DoctorResult> => {
+        const row = results.find((r) => r.agent === agent);
+        return Promise.resolve(
+            row ??
+                ({
+                    agent,
+                    usable: false,
+                    tier: 3 as DoctorResult['tier'],
+                    error: 'not covered by cache',
+                } as DoctorResult),
+        );
+    };
+    return { runAll, runOne } as unknown as DoctorRunner;
+}
+
 const TRACE_SAFE_SLASH_COMMAND = /^(?:\/skill:(?:sp|rd3)-|\/(?:sp|rd3)[:-]|\$(?:sp|rd3)-)[A-Za-z0-9._-]+(?:\s|$)/;
 const TRACE_SAFE_SLASH_TOKEN =
     /^(?:\d{4}|--(?:auto|next|force|bdd)|--(?:mode|fix|focus)|implement|test|review|verify|all|none|blockers-first|quick|requirements|background|constraints|acceptance)$/;
@@ -2122,35 +2350,93 @@ export function _resetAgentServiceShimsForTest(): void {
     warnedAgentDefaultExecutor.clear();
 }
 
-/** Compact tri-state auth label for the doctor text table (display-only). */
-function renderAuth(authenticated: AuthState): string {
-    if (authenticated === 'authenticated') return 'yes';
-    if (authenticated === 'unauthenticated') return 'no';
-    return '?';
-}
-/** The doctor-result fields the text table reads (structural subset — display-only). */
+/** Display row: DoctorResult joined with its executor config and role eligibility (B4/0681). */
 type DoctorRow = {
-    agent: string;
+    /** Executor name — the cell always held this; the old column header said AGENT. */
+    executor: string;
+    /** Underlying binary from AgentExecutorConfig.agent; falls back to the row name. */
+    agentBinary: string;
     usable: boolean;
+    /** Support tier (1/2) — backs the exit code only; never rendered as TIER. */
     tier: number;
-    authenticated: AuthState;
+    capabilityTier: CapabilityTier;
+    /** Pinned config model string; null when undeclared (never fabricated). */
+    model: string | null;
+    /** Tier-eligible role ids, usability-independent. */
+    roles: string[];
+    /** Role ids this executor is elected for (requires usable). */
+    elected: string[];
     version: string | null;
+    /** Probe error when unavailable — the ladder's per-row reason. */
+    error: string | null;
     modelStatus?: ModelHealthResult | null;
 };
 
-/** Model-status label for the doctor text table (R4/AC1 — full status enum or —). */
-function renderModelStatus(status: ModelHealthResult | null | undefined): string {
-    if (status === null || status === undefined) return '—';
-    return status.status;
+/**
+ * Join raw doctor results with executor configs and the role table: eligibility
+ * is a pure tier function computed regardless of usability; election walks
+ * `cheapestEligibleExecutors` (the dispatch order) per role and takes the first
+ * usable row. No extra probe is spawned — everything derives from the rows.
+ */
+function buildDoctorRows(
+    results: readonly DoctorResult[],
+    executors: readonly AgentExecutorConfig[] | undefined,
+    roles: ReadonlyMap<string, AgentRoleDefinition> | undefined,
+): DoctorRow[] {
+    const executorByName = new Map((executors ?? []).map((e) => [e.name, e]));
+    const joined = results.map((result) => {
+        // No matching executor entry (a bare binary, or no `agent.executors`
+        // block) keeps the name-based inference rather than an absent tier.
+        const executor = executorByName.get(result.agent) ?? { name: result.agent, agent: result.agent };
+        return { result, capabilityTier: getExecutorTier(executor), model: executor.model ?? (null as string | null) };
+    });
+    // Election: roleId -> winning executor name. Usable lookup across all rows
+    // so a role elects exactly one star carrier (no star when none usable).
+    const usableByName = new Set(joined.filter((j) => j.result.usable).map((j) => j.result.agent));
+    const elections = new Map<string, string>();
+    if (roles !== undefined && executors !== undefined && executors.length > 0) {
+        for (const [roleId, roleDef] of roles) {
+            const winner = cheapestEligibleExecutors(executors, roleDef.tier).find((e) => usableByName.has(e.name));
+            if (winner !== undefined) elections.set(roleId, winner.name);
+        }
+    }
+    return joined.map(({ result, capabilityTier, model }) => ({
+        executor: result.agent,
+        agentBinary: executorByName.get(result.agent)?.agent ?? result.agent,
+        usable: result.usable,
+        tier: result.tier,
+        capabilityTier,
+        model,
+        roles: roles ? [...roles].filter(([, rd]) => isTierEligible(capabilityTier, rd.tier)).map(([id]) => id) : [],
+        elected: [...elections].filter(([, executorName]) => executorName === result.agent).map(([id]) => id),
+        version: result.version,
+        error: result.error,
+        modelStatus: result.modelStatus,
+    }));
+}
+
+/** ROLES cell: `—` when the executor can serve no role (or is unusable), starred ids otherwise. */
+function renderRolesCell(row: DoctorRow): string {
+    if (!row.usable || row.roles.length === 0) return '—';
+    return row.roles.map((id) => (row.elected.includes(id) ? `${id}*` : id)).join(',');
 }
 
 /**
- * Render the `spur agent doctor` text output as an aligned table with a header,
- * a ✓/✗ state glyph, and a tier-1 summary footer. `--json` output is unaffected
- * and keeps `authenticated` for every agent (0621: the AUTH column was removed —
- * the signal cannot distinguish "not authenticated" from "no probe for provider").
- * A missing agent (no version) renders `—` for version. The MODEL column shows
- * compact model health when a probe was run.
+ * B4/0682 R2: `authenticated` is a probe-only signal the surface no longer
+ * carries — strip it explicitly from every `--json` spread so it cannot leak.
+ */
+function withoutAuthenticated<T extends { authenticated?: unknown }>(row: T): Omit<T, 'authenticated'> {
+    const { authenticated: _drop, ...rest } = row;
+    void _drop;
+    return rest;
+}
+
+/** Render the `spur agent doctor` text output as an aligned table with a header,
+ * a ✓/✗ state glyph, and a usage summary footer. `--json` output is unaffected
+ * and keeps no auth field at all (0621 removed the column; 0682 dropped `authenticated`).
+ * Columns (B4/0681): EXECUTOR holds the executor name, AGENT the underlying
+ * binary, MODEL the pinned config model (`—` when undeclared), TIER the
+ * capability tier, ROLES the eligible roles with `*` marking election.
  */
 function renderDoctorTable(results: DoctorRow[]): string {
     const dash = '—';
@@ -2159,39 +2445,75 @@ function renderDoctorTable(results: DoctorRow[]): string {
         return {
             glyph: usable ? '✓' : '✗',
             state: usable ? 'usable' : 'missing',
-            agent: result.agent,
-            tier: String(result.tier),
+            executor: result.executor,
+            agentBinary: result.agentBinary,
+            model: result.model ?? dash,
+            tier: String(result.capabilityTier),
             version: result.version ?? dash,
-            model: renderModelStatus(result.modelStatus),
+            roles: renderRolesCell(result),
         };
     });
 
     const header = {
         glyph: ' ',
         state: 'STATUS',
-        agent: 'AGENT',
+        executor: 'EXECUTOR',
+        agentBinary: 'AGENT',
+        model: 'MODEL',
         tier: 'TIER',
         version: 'VERSION',
-        model: 'MODEL',
+        roles: 'ROLES',
     };
     const all = [header, ...rows];
     const width = (key: keyof typeof header) => Math.max(...all.map((row) => row[key].length));
     const wState = width('state');
-    const wAgent = width('agent');
+    const wExecutor = width('executor');
+    const wAgent = width('agentBinary');
+    const wModel = width('model');
     const wTier = width('tier');
     const wVersion = width('version');
 
     const line = (row: (typeof all)[number]) =>
-        `${row.glyph} ${row.state.padEnd(wState)}  ${row.agent.padEnd(wAgent)}  ${row.tier.padEnd(wTier)}  ${row.version.padEnd(wVersion)}  ${row.model}`.trimEnd();
+        `${row.glyph} ${row.state.padEnd(wState)}  ${row.executor.padEnd(wExecutor)}  ${row.agentBinary.padEnd(wAgent)}  ${row.model.padEnd(wModel)}  ${row.tier.padEnd(wTier)}  ${row.version.padEnd(wVersion)}  ${row.roles}`.trimEnd();
 
     const usableCount = rows.filter((row) => row.state === 'usable').length;
-    const missingTier1 = results.filter((result) => !result.usable && result.tier === 1).length;
-    const footer =
-        missingTier1 > 0
-            ? `${usableCount} usable, ${missingTier1} missing (tier-1)`
-            : `${usableCount} usable, ${rows.length - usableCount} missing`;
+    // Support tier keeps its one remaining consumer: the footer counts are plain
+    // (no support-tier naming — that confusion is what TIER now prevents).
+    const missing = rows.length - usableCount;
+    const footerLines = [
+        `${usableCount} usable, ${missing} missing`,
+        ...(results.some((result) => result.elected.length > 0) ? ['(* = elected executor for that role)'] : []),
+    ];
 
-    return [line(header), ...rows.map(line), '', footer].join('\n');
+    return [line(header), ...rows.map(line), '', ...footerLines].join('\n');
+}
+
+/**
+ * Render a role selector's full eligible ladder in resolution order
+ * (`cheapestEligibleExecutors`): elected executor marked, per-row reason on
+ * each non-usable entry, summary line reporting eligible/usable/elected.
+ */
+function renderRoleLadder(
+    role: string,
+    roleTier: CapabilityTier,
+    ladder: readonly DoctorRow[],
+    electedExecutor: string | undefined,
+): string {
+    const lines = [`${role} (min tier ${roleTier}) — eligible ladder`, ''];
+    if (ladder.length === 0) {
+        lines.push('(no eligible executor)', '');
+    }
+    const wName = Math.max(...ladder.map((row) => row.executor.length));
+    for (const row of ladder) {
+        const glyph = row.usable ? '✓' : '✗';
+        const status = row.usable ? 'usable' : 'missing';
+        const note =
+            row.executor === electedExecutor ? 'ELECTED' : row.usable ? 'eligible' : (row.error ?? 'not installed');
+        lines.push(`${glyph} ${row.executor.padEnd(wName)}  ${status}${note.length > 0 ? `  ${note}` : ''}`);
+    }
+    const usableCount = ladder.filter((row) => row.usable).length;
+    lines.push('', `${ladder.length} eligible, ${usableCount} usable, elected: ${electedExecutor ?? 'none'}`);
+    return lines.join('\n');
 }
 
 /**
@@ -2203,12 +2525,14 @@ function renderDoctorDetail(result: DoctorRow | null): string {
     if (result === null) return 'No result.';
     const lines: string[] = [];
     const glyph = result.usable ? '✓' : '✗';
-    lines.push(`${glyph} ${result.agent}  (tier ${result.tier})`);
+    lines.push(`${glyph} ${result.executor}  (${result.capabilityTier})`);
+    lines.push(`  agent:      ${result.agentBinary}`);
     lines.push(`  status:     ${result.usable ? 'usable' : 'missing'}`);
     lines.push(`  version:    ${result.version ?? '—'}`);
-    lines.push(`  auth:       ${renderAuth(result.authenticated)}`);
+    // Pinned config model — distinct from the probed model health below.
+    lines.push(`  pinned:     ${result.model ?? '—'}`);
     if (result.modelStatus) {
-        lines.push(`  model:      ${result.modelStatus.status}`);
+        lines.push(`  health:     ${result.modelStatus.status}`);
         lines.push(`  checked:    ${result.modelStatus.checkedAt}`);
         if (result.modelStatus.detail) {
             lines.push(`  detail:     ${result.modelStatus.detail}`);

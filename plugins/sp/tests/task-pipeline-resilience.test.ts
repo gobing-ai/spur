@@ -101,12 +101,18 @@ function runShell(command: string, cwd: string, env: Record<string, string>): { 
 }
 
 describe('0503 task-pipeline resilience', () => {
-    test('omp env-probe auth miss is soft while a non-omp unauthenticated executor fails with remediation', async () => {
+    test('usable executor passes while an unusable one fails with remediation (B4/0682 usability-only probe)', async () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0503-doctor-'));
         const doctor = executable(
             dir,
             'spur-doctor',
-            `printf '%s\\n' '{"agents":[{"authenticated":"unauthenticated","modelStatus":{"detail":"API key not found for provider volc"}}]}'`,
+            [
+                'if [ "$3" = "codex" ]; then',
+                `  printf '%s\\n' '{"agents":[{"agent":"codex","usable":false}]}'`,
+                'else',
+                `  printf '%s\\n' '{"agents":[{"agent":"omp-dsv4-flash-volc","usable":true,"modelStatus":{"detail":"API key not found for provider volc"}}]}'`,
+                'fi',
+            ].join('\n'),
         );
         // Behavior parity (task 0608 / D6 R5): the precheck doctor probe moved from the
         // extracted shell program to the `doctor.probe` built-in action kind, so this
@@ -125,8 +131,11 @@ describe('0503 task-pipeline resilience', () => {
         );
         expect(omp.ok).toBe(true);
         expect((omp.data as { status: string }).status).toBe('PASS');
-        expect((omp.data as { output: string[] }).output.join('\n')).toContain('probe=env-miss');
-        expect((omp.data as { output: string[] }).output.join('\n')).toContain('precheck: SOFT');
+        // Auth no longer classifies anything — a usable relay row passes even though
+        // the CLI cannot see its agent-owned credentials.
+        expect((omp.data as { output: string[] }).output.join('\n')).toContain(
+            'precheck: omp-dsv4-flash-volc usable=true',
+        );
         expect(readFileSync(join(dir, '.spur/run/0503-precheck-doctor.status'), 'utf8').trim()).toBe('PASS');
 
         const codex = await runner.execute(
@@ -135,8 +144,12 @@ describe('0503 task-pipeline resilience', () => {
         );
         expect(codex.ok).toBe(true);
         expect((codex.data as { status: string }).status).toBe('FAIL');
-        expect((codex.data as { output: string[] }).output.join('\n')).toContain('fix agent.default or pass --vars');
-        expect((codex.data as { output: string[] }).output.join('\n')).toContain('agent doctor codex --json');
+        expect((codex.data as { output: string[] }).output.join('\n')).toContain(
+            'precheck: FAIL - executor codex is not usable per doctor',
+        );
+        expect((codex.data as { output: string[] }).output.join('\n')).toContain(
+            'pass --vars \'{"agent":"<usable-executor>"}\'',
+        );
         expect(readFileSync(join(dir, '.spur/run/0504-precheck-doctor.status'), 'utf8').trim()).toBe('FAIL');
     });
 
