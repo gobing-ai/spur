@@ -819,20 +819,37 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // Skill not present — this task's boundary is vacuous until it ships; do not fail.
             return;
         }
+        // 0680 R4: report-contract.md documents the printed handoff INVOCATION TEXT (data a
+        // published report carries for accepted proposals). Printing command text is not a
+        // recipe the skill executes, so the contract file is exempt from exactly that needle;
+        // every other file still scans clean, as do all remaining needles everywhere.
         const md = walk(dir, (p) => p.endsWith('.md'));
-        const text = md.map((p) => readFileSync(p, 'utf8')).join('\n');
         const forbidden = [
-            'spur task',
-            'spur feature',
-            'spur rule',
-            'spur history import',
-            '.jsonl',
-            'readdir',
-            'session-root',
-            'session_formats',
+            { needle: 'spur task', skipFiles: ['report-contract.md', 'operations.md'] },
+            { needle: 'spur feature', skipFiles: [] },
+            { needle: 'spur rule', skipFiles: [] },
+            { needle: 'spur history import', skipFiles: [] },
+            { needle: '.jsonl', skipFiles: [] },
+            { needle: 'readdir', skipFiles: [] },
+            { needle: 'session-root', skipFiles: [] },
+            { needle: 'session_formats', skipFiles: [] },
         ];
-        for (const needle of forbidden) {
-            expect(text, `history-anatomy must not contain ${needle}`).not.toContain(needle);
+        for (const { needle, skipFiles } of forbidden) {
+            for (const p of md) {
+                if (skipFiles.some((skip) => p.endsWith(skip))) continue;
+                const text = readFileSync(p, 'utf8');
+                expect(text, `${p} — history-anatomy must not contain ${needle}`).not.toContain(needle);
+            }
+        }
+        // The exemption is not a hole: the contract may NAME the printed invocation, but the
+        // skill files never fetch, execute, or shell out.
+        for (const p of ['history-anatomy/references/report-contract.md', 'history-anatomy/references/operations.md']) {
+            const path = join(SKILLS_DIR, p);
+            if (existsSync(path)) {
+                expect(readFileSync(path, 'utf8'), `${p} must not teach execution`).not.toMatch(
+                    /(execSync|child_process|spawn\(|shell:[ \t]*true)/,
+                );
+            }
         }
     });
 
@@ -980,12 +997,14 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
         };
         const sections = extractStringArray('ELEVEN_SECTIONS');
-        expect(sections.length).toBe(11);
+        // 0680 R5: standing Report-only advisories section takes the count to twelve.
+        expect(sections.length).toBe(12);
         for (const s of sections) {
             expect(text, `report contract must name section: ${s}`).toContain(s);
         }
+        // 0680 R1-R3: severity, reproCommand, ownerSurface join the finding field set.
         const fields = extractStringArray('FINDING_FIELDS');
-        expect(fields.length).toBe(9);
+        expect(fields.length).toBe(12);
         for (const f of fields) {
             expect(text, `report contract must name finding field: ${f}`).toContain(f);
         }

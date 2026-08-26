@@ -100,6 +100,9 @@ const ELEVEN_SECTIONS = [
     'Remediation options',
     'Performance analysis',
     'Workflow and process improvements',
+    // 0680 R5: standing report-only advisory slot (repeated tool-and-argument
+    // signatures propose no automatic interruption).
+    'Report-only advisories',
     'Positive patterns',
     'Evidence ledger',
 ];
@@ -114,6 +117,10 @@ const FINDING_FIELDS = [
     'confidence',
     'contradictions',
     'evidenceAnchor',
+    // 0680 R1-R3: triage fields — the gate fails a finding missing any of them.
+    'severity',
+    'reproCommand',
+    'ownerSurface',
 ];
 
 // ── 1. Semantic artifact digest ────────────────────────────────────────────────────────────
@@ -338,6 +345,28 @@ export function checkReportStructure(reportMarkdown: string): { ok: boolean; pro
     for (const row of findingRows ?? []) {
         for (const field of FINDING_FIELDS) {
             if (!row.toLowerCase().includes(field)) problems.push(`finding-missing-field:${field}`);
+        }
+    }
+
+    // 0680 R1-R3: findings are authored as bullet blocks under `## Findings` (one `### <title>`
+    // block per finding, key-value bullets). Scan each block that carries a stable key and fail
+    // it missing any triage field — including the three new ones. Without this scan a bullet
+    // finding never matches the legacy pipe-row regex and the triage gate was vacuous.
+    const findingsIdx = reportMarkdown.search(/^##\s+Findings\s*$/im);
+    if (findingsIdx !== -1) {
+        const tail = reportMarkdown.slice(findingsIdx);
+        const nextSection = tail.slice(1).search(/^##\s+/im);
+        const findingsBody = nextSection === -1 ? tail : tail.slice(0, nextSection + 1);
+        const blocks = findingsBody.split(/^###\s+/m).slice(1);
+        for (const block of blocks) {
+            if (!block.includes('`key`') && !/\|\s*key\s*:/.test(block)) continue;
+            for (const field of FINDING_FIELDS) {
+                if (!block.includes(field)) problems.push(`finding-missing-field:${field}`);
+            }
+            // Severity vocabulary is closed (0680 R1): P1/P2/P3 only (symbolic placeholders allowed).
+            if (!/(^|[\s`])P[123]([\s`.]|$)/.test(block) && !block.includes('symbolic-severity')) {
+                problems.push('finding-invalid-severity');
+            }
         }
     }
 

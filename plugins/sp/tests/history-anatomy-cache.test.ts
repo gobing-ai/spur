@@ -391,6 +391,7 @@ describe('checkReportStructure (R5)', () => {
         'Remediation options',
         'Performance analysis',
         'Workflow and process improvements',
+        'Report-only advisories',
         'Positive patterns',
         'Evidence ledger',
     ];
@@ -419,7 +420,7 @@ describe('checkReportStructure (R5)', () => {
     // R5/R26: the anchor gate must inspect *every* claim, and must not mistake a table's own
     // header row for an unanchored claim — the two halves of the same defect.
     const head = sections
-        .slice(0, 10)
+        .slice(0, 11)
         .map((s) => `## ${s}\n\nbody`)
         .join('\n\n');
     const ledger = (rows: string) => `${head}\n\n## Evidence ledger\n\n| Claim | Anchor |\n| --- | --- |\n${rows}`;
@@ -932,5 +933,93 @@ describe('CLI assert-clean (0676 R3)', () => {
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
+    });
+});
+
+describe('checkReportStructure triage fields + advisory section (0680)', () => {
+    // A finding row must now carry the three triage fields — the gate fails one missing any.
+    const sections = [
+        'Scope and provenance',
+        'Executive summary',
+        'Baseline comparison',
+        'Findings',
+        'Recurrence ledger',
+        'Telemetry gaps',
+        'Remediation options',
+        'Performance analysis',
+        'Workflow and process improvements',
+        'Report-only advisories',
+        'Positive patterns',
+        'Evidence ledger',
+    ];
+    const head = sections.map((s) => `## ${s}\n\nbody`).join('\n\n');
+
+    // Finding blocks live INSIDE the `## Findings` section — build it that way.
+    const findingBlock = (bullets: string): string => {
+        const i = sections.indexOf('Findings');
+        const before = sections
+            .slice(0, i + 1)
+            .map((s) => `## ${s}\n\nbody`)
+            .join('\n\n');
+        const after = sections
+            .slice(i + 1)
+            .map((s) => `## ${s}\n\nbody`)
+            .join('\n\n');
+        return `${before}\n\n### A finding\n\n${bullets}\n\n${after}`;
+    };
+
+    test('a bullet finding with all triage fields passes', () => {
+        const fields =
+            '- `key`: `coverage:analytics:pairs`\n- `category`: `coverage`\n' +
+            '- `impact`: i\n- `trend`: `new`\n' +
+            '- `observation`: o\n- `inference`: inf\n- `confidence`: high\n' +
+            '- `contradictions`: none\n- `evidenceAnchor`: `a.md`\n' +
+            '- `severity`: `P2`\n- `reproCommand`: `bun run x`\n- `ownerSurface`: `packages/domain/src/analytics/pairings.ts`';
+        expect(checkReportStructure(findingBlock(fields)).ok).toBe(true);
+    });
+
+    test('missing severity / reproCommand / ownerSurface each fail by name', () => {
+        const lines = [
+            '- `key`: `coverage:analytics:pairs`',
+            '- `category`: `coverage`',
+            '- `observation`: o',
+            '- `inference`: inf',
+            '- `confidence`: high',
+            '- `contradictions`: none',
+            '- `evidenceAnchor`: `a.md`',
+            '- `severity`: `P2`',
+            '- `reproCommand`: `bun run x`',
+            '- `ownerSurface`: `pairings.ts`',
+        ];
+        for (const drop of ['severity', 'reproCommand', 'ownerSurface']) {
+            const without = lines.filter((l) => !l.startsWith(`- \`${drop}\``)).join('\n');
+            const r = checkReportStructure(findingBlock(without));
+            expect(r.ok).toBe(false);
+            expect(r.problems).toContain(`finding-missing-field:${drop}`);
+        }
+    });
+
+    test('an out-of-vocabulary severity fails the gate', () => {
+        const r = checkReportStructure(
+            findingBlock(
+                [
+                    '- `key`: `coverage:analytics:pairs`',
+                    '- `category`: `coverage`',
+                    '- `observation`: o',
+                    '- `inference`: inf',
+                    '- `confidence`: high',
+                    '- `contradictions`: none',
+                    '- `evidenceAnchor`: `a.md`',
+                    '- `severity`: `critical`',
+                    '- `reproCommand`: `bun run x`',
+                    '- `ownerSurface`: `pairings.ts`',
+                ].join('\n'),
+            ),
+        );
+        expect(r.problems).toContain('finding-invalid-severity');
+    });
+
+    test('non-finding blocks under Findings are not policed (positive-patterns style prose)', () => {
+        expect(checkReportStructure(head).ok).toBe(true);
     });
 });

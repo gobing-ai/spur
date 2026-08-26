@@ -74,6 +74,7 @@ var ELEVEN_SECTIONS = [
   "Remediation options",
   "Performance analysis",
   "Workflow and process improvements",
+  "Report-only advisories",
   "Positive patterns",
   "Evidence ledger"
 ];
@@ -86,7 +87,10 @@ var FINDING_FIELDS = [
   "inference",
   "confidence",
   "contradictions",
-  "evidenceAnchor"
+  "evidenceAnchor",
+  "severity",
+  "reproCommand",
+  "ownerSurface"
 ];
 function parseScalar(raw) {
   const t = raw.trim();
@@ -269,6 +273,24 @@ function checkReportStructure(reportMarkdown) {
     for (const field of FINDING_FIELDS) {
       if (!row.toLowerCase().includes(field))
         problems.push(`finding-missing-field:${field}`);
+    }
+  }
+  const findingsIdx = reportMarkdown.search(/^##\s+Findings\s*$/im);
+  if (findingsIdx !== -1) {
+    const tail = reportMarkdown.slice(findingsIdx);
+    const nextSection = tail.slice(1).search(/^##\s+/im);
+    const findingsBody = nextSection === -1 ? tail : tail.slice(0, nextSection + 1);
+    const blocks = findingsBody.split(/^###\s+/m).slice(1);
+    for (const block of blocks) {
+      if (!block.includes("`key`") && !/\|\s*key\s*:/.test(block))
+        continue;
+      for (const field of FINDING_FIELDS) {
+        if (!block.includes(field))
+          problems.push(`finding-missing-field:${field}`);
+      }
+      if (!/(^|[\s`])P[123]([\s`.]|$)/.test(block) && !block.includes("symbolic-severity")) {
+        problems.push("finding-invalid-severity");
+      }
     }
   }
   const ledgerIdx = reportMarkdown.search(/^#{2,3}\s+Evidence\s+ledger/im);

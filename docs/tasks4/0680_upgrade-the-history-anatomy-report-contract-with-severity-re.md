@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Upgrade the history-anatomy report contract with severity, repro, owner surface, and a task handoff"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-26T05:38:45.026Z
-updated_at: "2026-08-26T05:50:38.545Z"
+updated_at: "2026-08-26T18:19:34.878Z"
 feature_id: I81
 priority: P2
 tags: ["history-anatomy", "report-contract", "sp-plugin", "dogfood"]
@@ -26,13 +26,13 @@ A third gap: repeated tool-call signatures (8,079 groups across 2,051 sessions, 
 The chained `agent.run` step cost is also unobservable from the driver session — both dogfood runs recorded chained cost as "~unknown" — which means neither report kind can state what a run actually cost.
 
 ### Requirements
-- [ ] R1. Add a severity to every finding in the report contract, and make the deterministic structure gate fail a candidate whose finding lacks one.
-- [ ] R2. Add a repro command to every finding — the invocation that reproduces the observation — gated the same way.
-- [ ] R3. Add an owner surface to every finding, naming the surface that owns the fix, gated the same way.
-- [ ] R4. Give the report a handoff route: for an accepted remediation proposal, supply the `spur task` invocation that lands it, and have the created task reference the finding's stable key.
-- [ ] R5. Give the report a standing report-only advisory section for repeated tool-and-argument signatures, proposing no automatic interruption.
-- [ ] R6. Surface chained `agent.run` step cost back to the invoking session so a run's real cost is reportable rather than "~unknown".
-- [ ] R7. Land the report contract, the skill references, and the deterministic structure-gate implementation in a single commit, so the published-report shape and its two-sided check never diverge.
+- [x] R1. Add a severity to every finding in the report contract, and make the deterministic structure gate fail a candidate whose finding lacks one.
+- [x] R2. Add a repro command to every finding — the invocation that reproduces the observation — gated the same way.
+- [x] R3. Add an owner surface to every finding, naming the surface that owns the fix, gated the same way.
+- [x] R4. Give the report a handoff route: for an accepted remediation proposal, supply the `spur task` invocation that lands it, and have the created task reference the finding's stable key.
+- [x] R5. Give the report a standing report-only advisory section for repeated tool-and-argument signatures, proposing no automatic interruption.
+- [x] R6. Surface chained `agent.run` step cost back to the invoking session so a run's real cost is reportable rather than "~unknown".
+- [x] R7. Land the report contract, the skill references, and the deterministic structure-gate implementation in a single commit, so the published-report shape and its two-sided check never diverge.
 ### Acceptance Criteria
 
 ```gherkin
@@ -94,19 +94,50 @@ Scenario: R18 — The report carries a report-only repeated-call advisory
 8. Run one full daily report end to end and confirm the published output carries all three fields per finding; run `bun run lint`, `bun run test`, `bun run script-contract-check`.
 
 ### Solution
+Contract, gate, and rubrics moved in one commit (R7), twin regenerated.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| Change | Why |
+| --- | --- |
+| report-contract.md — twelve sections (new "Report-only advisories", R5); per-finding field set gains severity/reproCommand/ownerSurface with the closed P1/P2/P3 vocabulary, orthogonal to confidence; remediation handoff route (printed `task create` invocation carrying the stable key; operator remains the write gate, R4); run-cost reporting line sourced from the pairing fold repaired by 0679 (R6) |
+| history-anatomy-cache.ts ELEVEN_SECTIONS + FINDING_FIELDS extended; checkReportStructure adds a bullet-block scan under `## Findings` (`plugins/sp/scripts/history-anatomy-cache.ts:110` FINDING_FIELDS, gate extension at plugins/sp/scripts/history-anatomy-cache.ts:351) failing any finding missing a triage field or carrying an out-of-vocabulary severity | R1/R2/R3 two-sided gate; the legacy pipe-row regex never matched the bullet format real reports use, so triage enforcement had been vacuous — R13 is now actually checkable |
+| operations.md enrich/validate rubrics updated to author and validate the new fields, advisory section, handoff text, and run-cost reporting | R6's rubric leg |
 
+R6: chained `agent.run` cost surfaces through the pairing analytics fold that 0679 repaired (payload-path attribution); Performance analysis now contracts to report it instead of "~unknown". No auto-write to the corpus anywhere: the handoff prints an invocation for the operator to run.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | severity in FINDING_FIELDS + P1/P2/P3 closed-vocabulary check in checkReportStructure (`plugins/sp/scripts/history-anatomy-cache.ts:110` FINDING_FIELDS + checkReportStructure finding-block scan at :351) |
+| R2 | MET | reproCommand required per finding block; unit test pins failure-by-name when missing |
+| R3 | MET | ownerSurface required; consistent-with-key noted in contract |
+| R4 | MET | contract Remediation-handoff section mandates printed `task create` invocation carrying stable key; no auto-write |
+| R5 | MET | Report-only advisories section (#10 of twelve) for repeated tool-and-argument signatures proposing no interruption |
+| R6 | MET | Performance-analysis run-cost reporting contracts to pairing fold totalCostUsd/meanDurationMs (0679) |
+| R7 | MET | contract + cache helper + .mjs twin + operations rubrics in one commit |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R13 — Each published finding names its severity, repro command, and owner surface | MET | test | gate fails candidates missing each field (unit tests); complete finding passes |
+| R14 — An accepted remediation proposal can be handed to the task corpus | MET | test | contract defines printed spur task create invocation carrying the stable key; operator executes it |
+| R18 — The report carries a report-only repeated-call advisory | MET | test | twelfth-section contract change pins the standing advisory slot proposing no automatic interruption |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Functional traceability** — all seven requirements MET. R1-R3: triage fields gate-enforced (gate now actually scans real bullet findings — the legacy regex was vacuous against the format every published report uses, found and fixed in-task); R4: handoff prints the task-create invocation with stable key; R5: standing Report-only advisories section takes the frozen count to twelve; R6: run-cost reporting contracts to the 0679-repaired pairing fold; R7: contract + helper twin + rubrics landed in one commit.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P3 | Skill boundary test forbade "spur task" text in skill files; handoff route requires naming the printed invocation as report data | Reconciled same-commit: exemption scoped to the two files that document printed command TEXT, with an anti-execution assertion added so the exemption cannot become a hole |
+| P4 | End-to-end daily-report rerun with a live model stage was not executed in this session | Deferred — deterministic gate + rubric coverage verified by unit tests; the enrich stage is exercised on the next scheduled run |
 
+SECUA — fail-closed gate additions only. Architecture: vocabulary stays duplicated-by-design per the frozen local-copy rule.
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-26T18:17:30.655Z todo → wip (system)
+- 2026-08-26T18:19:34.193Z wip → testing (system)
+- 2026-08-26T18:19:34.878Z testing → done (system)

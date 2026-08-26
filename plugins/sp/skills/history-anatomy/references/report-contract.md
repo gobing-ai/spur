@@ -4,7 +4,7 @@ The published report is the skill's contract. This reference owns the eleven sec
 the per-finding field set, the closed category vocabulary, the stable-key grammar, the evidence
 rules, comparison semantics, recurrence classes, and the positive-pattern / remediation standards.
 
-## Eleven required sections (in order, frozen)
+## Twelve required sections (in order, frozen)
 
 1. Scope and provenance
 2. Executive summary
@@ -15,8 +15,9 @@ rules, comparison semantics, recurrence classes, and the positive-pattern / reme
 7. Remediation options
 8. Performance analysis
 9. Workflow and process improvements
-10. Positive patterns
-11. Evidence ledger
+10. Report-only advisories (0680 R5)
+11. Positive patterns
+12. Evidence ledger
 
 These names are consumed verbatim by 0659's structure gate and 0660's validation stage. Do not
 rename, reorder, omit, or restate them.
@@ -58,6 +59,9 @@ Every finding — problem and positive alike — carries the full field set:
 | `confidence` | Per-finding: `high` / `medium` / `low`. Never one blanket report-level score. |
 | `contradictions` | Any contradicting signal shown beside the finding, not silently reconciled. |
 | `evidenceAnchor` | At least one anchor to the forensics artifact or cited `file:line`. An entry with no anchor is invalid. |
+| `severity` | Closed vocabulary `P1` / `P2` / `P3` — how much the finding matters. Orthogonal to `confidence`: severity orders work, confidence says how sure we are (0680 R1). The structure gate fails a finding without one. |
+| `reproCommand` | The invocation that reproduces the observation — one command a reader can run verbatim (0680 R2). Gate-enforced. |
+| `ownerSurface` | The concrete surface that owns the fix (a file path, package, or command), consistent with the key's `<owner-surface>` segment but named as a target rather than a slug (0680 R3). Gate-enforced. |
 
 ## Evidence rules
 
@@ -119,6 +123,28 @@ Each option is a **proposal** that names:
 
 The report must contain **no applied change, no diff, and no command it claims to have run**. The
 skill never applies a fix; it proposes one.
+
+### Remediation handoff route (0680 R4)
+
+For each proposal an operator accepts, the report supplies — printed in the report itself, never
+executed — the `spur task create` invocation that lands it, carrying the proposal's finding
+`key` in the task body so the next report classifies that finding as `resolved`. Auto-writing
+to the task corpus from a model-authored report would bypass the CLI-gated write contract; the
+operator remains the gate.
+
+### Report-only advisories (0680 R5)
+
+Section 10 is the standing home for observations that inform workflow hygiene but must never
+trigger automatic interruption: repeated identical tool-and-argument signatures are surfaced
+here with their repetition counts, proposing at most human-decided process changes. Nothing in
+this section may drive automated behavior.
+
+### Run-cost reporting (0680 R6)
+
+Performance analysis states what the run itself cost: per-pairing `totalCostUsd` /
+`meanDurationMs` figures flow from the pairing analytics fold (0679 repaired the payload
+paths), so chained `agent.run` stages are reportable instead of "~unknown". Where no cost
+signal exists for a pairing it renders `not available`, never zero.
 
 ## Evidence ledger
 
