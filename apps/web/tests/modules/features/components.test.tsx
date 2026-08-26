@@ -970,7 +970,26 @@ describe('FeaturesShell', () => {
         fireEvent.click(collapsed);
         expect(getByLabelText('Collapse feature tree').getAttribute('aria-expanded')).toBe('true');
         expect(container.querySelector('#feature-tree-dock')?.hasAttribute('hidden')).toBe(false);
+    });
+
+    test('layout: tree dock overlays the detail workspace right edge, aligned below the header', async () => {
+        installFeatureFetchMock();
+        const { getByText, container } = render(<FeaturesShell />);
+
         await waitFor(() => expect(getByText('Root')).toBeDefined());
+
+        const dock = container.querySelector('#feature-tree-dock');
+        const workspace = container.querySelector('[data-testid="detail-workspace"]');
+        expect(dock).not.toBeNull();
+        expect(workspace).not.toBeNull();
+        // The dock is an absolute overlay pinned to the detail workspace's right edge and
+        // top/bottom boundaries — right side of the body, below the module header.
+        expect(workspace?.contains(dock)).toBe(true);
+        const dockClass = dock?.getAttribute('class') ?? '';
+        expect(dockClass).toContain('right-0');
+        expect(dockClass).toContain('top-0');
+        expect(dockClass).toContain('bottom-0');
+        expect(dockClass).not.toContain('left-4');
     });
 
     /**
@@ -1195,7 +1214,7 @@ describe('FloatingAgentBar', () => {
 // ── F841 Acceptance Criteria Scenarios (R1-R15) ──
 
 describe('F841 Acceptance Criteria', () => {
-    test('R1: Feature Tree opens as a left overlay without resizing detail workspace', async () => {
+    test('R1: Feature Tree opens as a right overlay aligned to the detail workspace without resizing it', async () => {
         installFeatureFetchMock();
         const { getByText, getByLabelText, container } = render(<FeaturesShell />);
         await waitFor(() => expect(getByText('Root')).toBeDefined());
@@ -1205,14 +1224,19 @@ describe('F841 Acceptance Criteria', () => {
         await waitFor(() => expect(container.querySelector('[data-testid="body-preview"]')).not.toBeNull());
 
         const treeDock = container.querySelector('#feature-tree-dock');
-        // Tree dock is outside the detail workspace container
+        // Tree dock is an absolute overlay inside the detail workspace, pinned to its
+        // right edge and top/bottom boundaries — right of the body, below the header.
         const detailWorkspace = container.querySelector('[data-testid="detail-workspace"]');
         expect(detailWorkspace).not.toBeNull();
-        expect(detailWorkspace?.contains(treeDock)).toBe(false);
+        expect(detailWorkspace?.contains(treeDock)).toBe(true);
 
         // The dock is an absolute overlay, not a flex sibling that consumes workspace width
         expect(treeDock?.className).toContain('absolute');
         expect(treeDock?.className).not.toContain('shrink-0');
+        // Right-aligned to the body panel (aligned with its top/bottom, no header overlap)
+        expect(treeDock?.className).toContain('right-0');
+        expect(treeDock?.className).toContain('top-0');
+        expect(treeDock?.className).toContain('bottom-0');
 
         // The workspace column owns its own width independently of the overlay
         const workspace = container.querySelector('[data-features-workspace]');

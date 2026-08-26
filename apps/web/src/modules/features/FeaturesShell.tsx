@@ -32,9 +32,10 @@ function FilterIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
 /**
  * Shell for the features board module (task 0194 / 0326).
  *
- * Left column: ID-derived tree with status badges and filter menu (FeatureTree).
- * Right column: detail panel when a feature is selected (FeatureDetail). SSE
- * subscription to `feature.*` events keeps the tree + selected detail live
+ * Full-width detail panel when a feature is selected (FeatureDetail), with the
+ * ID-derived tree (status badges + filter menu, FeatureTree) as a right-side
+ * overlay aligned to the detail panel's top/bottom edge, below the module header.
+ * SSE subscription to `feature.*` events keeps the tree + selected detail live
  * without refresh.
  */
 export default function FeaturesShell() {
@@ -167,30 +168,6 @@ export default function FeaturesShell() {
     return (
         <>
             <div className="relative h-full w-full p-4 overflow-hidden" data-features-shell>
-                {/* Left Feature Tree overlay — floats above the workspace so toggling it never resizes or shifts the detail column (F841 R1) */}
-                <div
-                    id="feature-tree-dock"
-                    hidden={!isTreeOpen}
-                    className="absolute left-4 top-4 bottom-4 z-20 w-72 lg:w-80 flex flex-col overflow-hidden rounded-lg border border-spur-border bg-base-200 shadow-xl"
-                >
-                    <div className="flex items-center justify-between px-3 py-2 border-b border-spur-border bg-base-300/60 shrink-0">
-                        <span className="text-xs font-semibold text-spur-text flex items-center gap-1.5">
-                            <span>🌳</span> Feature Tree
-                        </span>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-1">
-                        {features.length === 0 ? (
-                            <div className="p-3 text-xs text-spur-text-muted italic">No features found.</div>
-                        ) : filteredFeatures.length === 0 ? (
-                            <div className="p-3 text-xs text-spur-text-muted italic">
-                                No features match status filter "{statusFilter}".
-                            </div>
-                        ) : (
-                            <FeatureTree features={filteredFeatures} selectedId={selectedId} onSelect={setSelectedId} />
-                        )}
-                    </div>
-                </div>
-
                 {/* Central Container — contains BOTH the module header AND the main body, sharing the exact same max-w-[1600px] width constraint as History. Width and position stay independent of overlay state (F841 R1). */}
                 <div className="flex flex-col h-full w-full max-w-[1600px] mx-auto gap-3" data-features-workspace>
                     {/* Module header — R1/R2 */}
@@ -314,6 +291,33 @@ export default function FeaturesShell() {
                         className="w-full flex-1 min-h-0 overflow-hidden rounded-lg border border-spur-border bg-base-100 relative"
                         data-testid="detail-workspace"
                     >
+                        {/* Right Feature Tree overlay — floats over the detail workspace aligned to its top/bottom edge, so it never intersects the module header and toggling it never resizes or shifts the detail column (F841 R1) */}
+                        <div
+                            id="feature-tree-dock"
+                            hidden={!isTreeOpen}
+                            className="absolute right-0 top-0 bottom-0 z-20 w-72 lg:w-80 flex flex-col overflow-hidden rounded-lg border border-spur-border bg-base-200 shadow-xl"
+                        >
+                            <div className="flex items-center justify-between px-3 py-2 border-b border-spur-border bg-base-300/60 shrink-0">
+                                <span className="text-xs font-semibold text-spur-text flex items-center gap-1.5">
+                                    <span>🌳</span> Feature Tree
+                                </span>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-1">
+                                {features.length === 0 ? (
+                                    <div className="p-3 text-xs text-spur-text-muted italic">No features found.</div>
+                                ) : filteredFeatures.length === 0 ? (
+                                    <div className="p-3 text-xs text-spur-text-muted italic">
+                                        No features match status filter "{statusFilter}".
+                                    </div>
+                                ) : (
+                                    <FeatureTree
+                                        features={filteredFeatures}
+                                        selectedId={selectedId}
+                                        onSelect={setSelectedId}
+                                    />
+                                )}
+                            </div>
+                        </div>
                         <div className="w-full h-full overflow-y-auto">
                             {selectedId ? (
                                 <FeatureDetail

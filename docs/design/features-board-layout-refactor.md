@@ -7,7 +7,7 @@
 The `Features` board module (`apps/web/src/modules/features/`) provides interactive feature hierarchy inspection, status transitions, planning event tailing, and Markdown editing.
 
 Feature **F841** refines the layout and interactions:
-1. **Overlay panels**: Left Feature Tree and right Metadata panels operate as absolute non-modal overlays around a single full-width detail workspace. Opening/closing either panel never shifts or resizes the central workspace, header, preview, or editor.
+1. **Overlay panels**: Right Feature Tree and right Metadata panels operate as absolute non-modal overlays around a single full-width detail workspace; the tree aligns to the detail body's top/bottom edge, below the module header. Opening/closing either panel never shifts or resizes the central workspace, header, preview, or editor.
 2. **Header-integrated editing**: Removed the in-body `BODY` row; `Edit` is positioned in the detail header immediately before `Metadata`; while editing, that slot substitutes `Save` followed by `Cancel`.
 3. **Full-width reading & editing**: Markdown preview and editor canvases span the full width of the detail container (`w-full`), aligned directly with the header boundaries without arbitrary `max-w-4xl` caps.
 4. **Wider, folded-by-default prompt bar**: `FloatingAgentBar` initializes folded to a compact spirit icon dock (`bottom-6 right-6`). When expanded, it centers with `w-[calc(100vw-2rem)] max-w-[84rem]`, preserving 1rem viewport gutters without horizontal overflow.
@@ -19,26 +19,26 @@ Feature **F841** refines the layout and interactions:
 ## 2. Component Hierarchy & Layout Anatomy
 
 ```
-┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ FeaturesShell (relative w-full h-full p-4 overflow-hidden)                                             │
-│                                                                                                        │
-│  ┌─ [Left Feature Tree overlay] ┐   ┌─ Central Container (w-full max-w-[1600px] mx-auto flex-col)   ┐  │
-│  │                              │   │                                                                │  │
-│  │ [🌳 Feature Tree]            │   │ ┌─ Module Header (w-full) ───────────────────────────────────┐ │  │
-│  │ [▶] F  Root                  │   │ │ [ 🎯 Features ]   Hierarchical roadmap   [ Filter ▾ ] [ + ]│ │  │
-│  │   [▼] F1 Child               │   │ └────────────────────────────────────────────────────────────┘ │  │
-│  │     F1A Grandchild           │   │                                                                │  │
-│  │                              │   │ ┌─ Main Detail Workspace (rounded-lg border bg-base-100) ────┐ │  │
-│  │ (w-72 / w-80 absolute z-20   │   │ │ ┌─ Detail Header ────────────────────────────────────────┐ │ │  │
-│  │  overlay above the workspace;│   │ │ │ [◍ F84] Title ...                [Verify] [Edit] [ℹMeta]│ │ │ │
-│  │  consumes no layout width;   │   │ │ └────────────────────────────────────────────────────────┘ │ │  │
-│  │  hidden when closed)         │   │ │                                                            │ │  │
-│  │                              │   │ │ ┌─ Full-Width Markdown Canvas ───────────────────────────┐ │ │  │
-│  │                              │   │ │ │ Preview / MDEditor spanning container                  │ │ │ │
-│  │                              │   │ │ └────────────────────────────────────────────────────────┘ │ │  │
-│  │                              │   │ └────────────────────────────────────────────────────────────┘ │ │  │
-│  │                              │   └────────────────────────────────────────────────────────────────┘  │
-│  └──────────────────────────────┘                                                                       │
+│  ┌─ Central Container (w-full max-w-[1600px] mx-auto flex-col) ──────────────────────────────────────┐ │
+│  │                                                                                                    │ │
+│  │  ┌─ Module Header (w-full) ──────────────────────────────────────────────────────────────────────┐ │ │
+│  │  │  [ 🎯 Features ]   Hierarchical roadmap                    [ ◧ Tree ] [ Filter ▾ ] [ + ]      │ │ │
+│  │  └───────────────────────────────────────────────────────────────────────────────────────────────┘ │ │
+│  │                                                                                                    │ │
+│  │  ┌─ Main Detail Workspace (rounded-lg border bg-base-100 relative) ─────────────────────────────┐ │ │
+│  │  │  ┌─ Detail Header ────────────────────────────────────────────────┐  ┌─ [Right Feature Tree]  ┐ │ │ │
+│  │  │  │  [◍ F84] Title ...                  [Verify] [Edit] [ℹMeta]  │  │  [🌳 Feature Tree]     │ │ │ │
+│  │  │  └───────────────────────────────────────────────────────────────┘  │  [▶] F  Root           │ │ │ │
+│  │  │                                                                     │    [▼] F1 Child        │ │ │ │
+│  │  │  ┌─ Full-Width Markdown Canvas ──────────────────────────────────┐  │      F1A Grandchild    │ │ │ │
+│  │  │  │  Preview / MDEditor spanning container                       │  │  (w-72 / w-80 absolute │ │ │ │
+│  │  │  └───────────────────────────────────────────────────────────────┘  │   right-0 top-0       │ │ │ │
+│  │  │                                                                     │   bottom-0 z-20;      │ │ │ │
+│  │  │                                                                     │   aligned to the body,│ │ │ │
+│  │  │                                                                     │   below the header)   │ │ │ │
+│  │  └───────────────────────────────────────────────────────────────────────────────────────────────┘ │ │
+│  │                                                                                                    │ │
+│  └────────────────────────────────────────────────────────────────────────────────────────────────────┘ │
 │                                                                                                        │
 │ ┌─ Floating Agent Bar (Folded by default to ✨ spirit dock at bottom-6 right-6) ────────┐               │
 │ │ [Expanded: w-[calc(100vw-2rem)] max-w-[84rem] glassmorphic prompt bar]              │               │
@@ -59,8 +59,8 @@ Feature **F841** refines the layout and interactions:
   - Status filter dropdown menu (All, Backlog, Active, Verifying, Done, Cancelled, Blocked).
   - Add root feature button (`+`).
 
-### 3.2 Left Feature Tree Overlay with Branch Folding
-- **Overlay behavior:** Outer card overlay (`absolute left-4 top-4 bottom-4 z-20 w-72 lg:w-80 flex flex-col overflow-hidden rounded-lg border border-spur-border bg-base-200 shadow-xl`), positioned outside the central container and floating above the workspace's left edge. Because it is absolutely positioned it consumes no layout width, so toggling it never resizes or shifts the central container (R1). It includes a dedicated panel header with title (`🌳 Feature Tree`) and is unclosable from the panel itself, toggling via the module header button with native `hidden={!isTreeOpen}` attribute.
+### 3.2 Right Feature Tree Overlay with Branch Folding
+- **Overlay behavior:** Outer card overlay (`absolute right-0 top-0 bottom-0 z-20 w-72 lg:w-80 flex flex-col overflow-hidden rounded-lg border border-spur-border bg-base-200 shadow-xl`), rendered inside the main detail workspace and pinned to its right edge and top/bottom boundaries — so it sits at the body panel's right side, aligned with it and below the module header, never intersecting the header. Because it is absolutely positioned it consumes no layout width, so toggling it never resizes or shifts the central container (R1). It includes a dedicated panel header with title (`🌳 Feature Tree`) and is unclosable from the panel itself, toggling via the module header button with native `hidden={!isTreeOpen}` attribute.
 - **Branch folding:**
   - `FeatureTree` manages root `collapsedIds: Set<string>` state (empty default = all expanded).
   - Parent nodes render a dedicated fold button before the row button (`aria-label="Collapse|Expand <id>: <name>"`, `aria-expanded`, `aria-controls="feature-tree-children-<id>"`).
