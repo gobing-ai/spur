@@ -4,7 +4,7 @@ name: "Measured corpus sweep: report recovery, unblock features, and reconcile t
 status: done
 template: feature-impl
 created_at: 2026-08-25T18:05:19.670Z
-updated_at: "2026-08-25T23:00:22.882Z"
+updated_at: "2026-08-25T23:08:32.356Z"
 feature_id: F93
 priority: P2
 dependencies: ["0671", "0672"]
@@ -191,27 +191,32 @@ No parser tolerance changed. The measurement remains an app-local executable mod
 | Scenario: R10 — No new storage, schema, or public CLI surface | MET | command | Task-scope `git diff --name-only` plus empty diffs for `drizzle`, CLI commands, `.gitignore`, and `task-record.ts` confirm the boundary. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
-**SECU findings** (pipeline review step — verdict: PASS)
+**Coordinated review** (`/sp:dev-review 0673 --focus all`)
 
 | Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | Correctness | `packages/app/src/services/corpus-sweep.ts:103` | `fs.readFile` failures abort the sweep; only `readDir` and document-parse failures are caught. Failing loudly is acceptable for a measurement, but a single unreadable file could be hardened to a parse-error outcome. |
-| P4 | Architecture | `packages/app/src/services/corpus-sweep.ts:158` | `import.meta.main` CLI entry in a library service is unconventional but harmless (runs only when executed directly) and is the runnable measurement surface. |
-| P4 | — | — | No P1–P3 findings; review verdict PASS |
+|----------|-----------|----------|---------|
+| P4 | Correctness | `packages/app/src/services/corpus-sweep.ts:98-107` | No open finding. Configured-folder, task-file, and task-document read failures now propagate, so the measurement cannot silently publish partial counts; `packages/app/tests/services/corpus-sweep.test.ts:162-169` pins the fail-loud path. |
+| P4 | Architecture | `packages/app/src/services/corpus-sweep.ts:136-154` | The testable output seam plus `import.meta.main` is the deliberately app-local one-off measurement surface required by R7. It adds no public CLI or storage seam, and extracting another wrapper would only add indirection. |
 
-**Functional traceability** (per-requirement, 0673)
+**Functional traceability**
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `runCorpusSweep` sweeps done tasks lacking an artifact; measured 2026-08-25: 78 verified / 2 recovered-not-pass / 235 evidence-not-recoverable of 315 |
-| R2 | MET | sweep is deterministic (sorted, no timestamps/network); two runs byte-identical; reproducibility test at `corpus-sweep.test.ts:152` |
-| R3 | MET | feature check: E6/E9 zero findings, M3 orphan-scenario only; corpus-check STALE = E6/E9/M3 scenario-unverified cleared |
-| R4 | MET | `config/corpus-baseline.json` — removed 3 stale scenario-unverified (E6/E9/M3), added 14 evidence-not-recoverable; post-reconciliation corpus-check: 0 evidence-durability NEW, 0 scenario-unverified STALE |
-| R5 | MET | two-sidedness demo: unlisted A1 still fails (NEW), stale E6 still fails (STALE); restored |
-| R6 | MET | recovery counts reported with denominator and date (78/2/235 of 315, 2026-08-25); no parser tolerance change (`parseTesting` untouched) |
-| R7 | MET | boundary sweep: no migration, no new artifact dir, no new CLI noun/verb/flag; `task-record.ts` / `renderTesting` unchanged |
+| R1 | MET | `packages/app/src/services/corpus-sweep.ts:85-129` classifies every done task without an artifact; fresh live sweep measured 78 verified, 2 recovered-not-pass, and 235 evidence-not-recoverable of 315. |
+| R2 | MET | `packages/app/src/services/corpus-sweep.ts:98-127` uses deterministic traversal and sorted outcomes; `packages/app/tests/services/corpus-sweep.test.ts:156-159` asserts repeat equality, and two fresh live runs were byte-identical. |
+| R3 | MET | Fresh source-local feature checks returned E6 PASS with no findings, E9 PASS with no findings, and M3 PASS with only `L4.uncovered-feature-scenario`, unrelated to evidence durability. |
+| R4 | MET | `config/corpus-baseline.json:14959-15070` records the F93 delta; the remaining corpus backlog is explicitly owned by 0670 and contains no F93 evidence-durability residue. |
+| R5 | MET | `packages/app/tests/services/corpus-check.test.ts:22` exercises both unlisted-finding and stale-baseline failure directions. |
+| R6 | MET | Fresh reproducible outcome: 78 verified / 2 recovered-not-pass / 235 unrecoverable of 315, measured 2026-08-25; `packages/app/src/services/task-record.ts:185-188` remains the unchanged parser boundary. |
+| R7 | MET | `packages/app/src/services/corpus-sweep.ts:20-23,150-154` keeps the measurement app-local; the task diff adds no migration, artifact directory, public CLI surface, or `renderTesting` change. |
 
-Review verdict: PASS
+**SECUA:** no security, authorization, network, database, or command-injection surface. The sweep is linear in corpus size, fail-closed on evidence consistency, and fail-loud on unreadable configured inputs. No blocker, major, or minor finding remains.
+
+**Architecture:** `runCorpusSweep` reuses the canonical task parser and verdict aggregator through the existing app boundary. The module is directly testable and has no speculative interface, adapter, dependency, or persistent store. No deepening candidate remains.
+
+**Residual risk:** reproducibility is intentionally scoped to an unchanged tracked corpus and unchanged `.spur/run` state. Any mutation between runs legitimately changes the measurement.
+
+**Disposition:** approve. No blockers; Review is current after the fail-loud repair.
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
