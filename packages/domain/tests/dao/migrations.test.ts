@@ -118,8 +118,8 @@ describe('db migrations', () => {
             );
         });
 
-        test('has foundation through History Board indexes, rollups, and request-id index', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(24);
+        test('has foundation through History Board indexes, rollups, and checkpoint identity', () => {
+            expect(CLI_MIGRATIONS).toHaveLength(26);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -144,6 +144,9 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[21]?.id).toBe('0021_spur_cli_history_board_rollups');
             expect(CLI_MIGRATIONS[22]?.id).toBe('0022_spur_cli_history_performance_indexes');
             expect(CLI_MIGRATIONS[23]?.id).toBe('0023_spur_cli_history_message_request_id_idx');
+            // 0675/0678: guarded file-identity columns for the incremental import short-circuit.
+            expect(CLI_MIGRATIONS[24]?.id).toBe('0024_spur_cli_history_checkpoint_identity');
+            expect(CLI_MIGRATIONS[25]?.id).toBe('0025_spur_cli_history_checkpoint_identity_mtime');
         });
 
         test('run-pid migration adds a pid column to runs', () => {
@@ -214,6 +217,8 @@ describe('db migrations', () => {
             // (journaled, skipped: the stub lacks their source columns), 0021 rollups,
             // and 0022 performance indexes (journaled, skipped: stub history_message
             // lacks ts/model and history_tool_call is absent).
+            // 0024/0025 checkpoint identity are guarded: the stub never creates
+            // history_import_checkpoint, so they skip without error (0678).
             const applied = await applyCliMigrations(adapter);
             expect(applied).toBe(22);
             // 0005 and 0007 backfilled columns on the legacy runs table.
@@ -255,7 +260,8 @@ describe('db migrations', () => {
             // retirements (0016 nullable-ts skips: CLI_SCHEMA_SQL's history_message
             // is already nullable) + 0018 request_id + 0019 etl drop + 0020 indexes
             // + 0021 rollups + 0022 performance indexes + 0023 request_id index
-            expect(applied).toBe(23);
+            // + 0675/0678 guarded checkpoint identity columns (0024, 0025)
+            expect(applied).toBe(25);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -447,8 +453,8 @@ describe('db migrations', () => {
             // + 0017 completed→done status retirements + 0018 request_id
             // (history_message now exists, guarded apply runs) + 0019 etl drop
             // + 0020 History Board indexes + 0021 rollups + 0022 performance
-            // indexes + 0023 request_id index.
-            expect(await applyCliMigrations(adapter)).toBe(15);
+            // indexes + 0023 request_id index + 0024/0025 checkpoint identity.
+            expect(await applyCliMigrations(adapter)).toBe(17);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );
@@ -505,10 +511,10 @@ describe('db migrations', () => {
             adapter.close();
         });
 
-        test('upgraded DB journaled through 0021 receives 0022-0023 and converges with a fresh DB', async () => {
+        test('upgraded DB journaled through 0021 receives 0022-0025 and converges with a fresh DB', async () => {
             const upgraded = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(upgraded, CLI_MIGRATIONS.slice(0, 22));
-            expect(await applyCliMigrations(upgraded)).toBe(2);
+            expect(await applyCliMigrations(upgraded)).toBe(4);
 
             const fresh = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(fresh);
