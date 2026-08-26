@@ -53,7 +53,7 @@ describe('renderWorkflowMermaid', () => {
         const out = renderWorkflowMermaid(stateMachine());
         expect(out.startsWith('```mermaid')).toBe(true);
         expect(out.endsWith('```')).toBe(true);
-        expect(out).toContain('flowchart LR');
+        expect(out).toContain('flowchart TD');
         for (const s of ['start', 'mid', 'done', 'failed']) {
             expect(out).toContain(`["${s}"]`);
         }

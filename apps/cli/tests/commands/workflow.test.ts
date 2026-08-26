@@ -2208,7 +2208,7 @@ describe('spur workflow show', () => {
         const res = await runCli(['workflow', 'show', wf], dir);
         expect(res.code).toBe(0);
         expect(res.stdout).toContain('```mermaid');
-        expect(res.stdout).toContain('flowchart LR');
+        expect(res.stdout).toContain('flowchart TD');
         expect(res.stdout).toContain('start["start"]');
         expect(res.stdout).toContain('done(["done"])');
         expect(res.stdout).toContain('class done terminal;');

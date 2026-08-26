@@ -35,7 +35,7 @@ function classLine(id: string, cls: string): string {
 export function renderWorkflowMermaid(def: WorkflowDef): string {
     const lines: string[] = [];
     lines.push('```mermaid');
-    lines.push('flowchart LR');
+    lines.push('flowchart TD');
     lines.push('    classDef terminal fill:#d4edda,stroke:#1e7e34,color:#0a3d1f;');
     lines.push('    classDef failure fill:#f8d7da,stroke:#c62828,color:#5f1414;');
     lines.push('    classDef initial fill:#fff3cd,stroke:#b8860b,color:#5a4a00;');
