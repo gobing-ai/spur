@@ -33,10 +33,11 @@ function FilterIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
  * Shell for the features board module (task 0194 / 0326).
  *
  * Full-width detail panel when a feature is selected (FeatureDetail), with the
- * ID-derived tree (status badges + filter menu, FeatureTree) as a right-side
- * overlay aligned to the detail panel's top/bottom edge, below the module header.
- * SSE subscription to `feature.*` events keeps the tree + selected detail live
- * without refresh.
+ * ID-derived tree (status badges + filter menu, FeatureTree) as a floating
+ * overlay in the work area below the module header — anchored to the left margin
+ * with its right edge clear of the body (no overlap), so the body keeps the full
+ * header width. SSE subscription to `feature.*` events keeps the tree + selected
+ * detail live without refresh.
  */
 export default function FeaturesShell() {
     const [features, setFeatures] = useState<FeatureSummary[] | null>(null);
@@ -168,7 +169,7 @@ export default function FeaturesShell() {
     return (
         <>
             <div className="relative h-full w-full p-4 overflow-hidden" data-features-shell>
-                {/* Central Container — contains BOTH the module header AND the main body, sharing the exact same max-w-[1600px] width constraint as History. Width and position stay independent of overlay state (F841 R1). */}
+                {/* Central Container — contains the module header AND the full-width body, sharing the exact same max-w-[1600px] width constraint as History so the body matches the header width. The tree is a floating overlay docked at the body's left side; it consumes no layout width, so toggling it never resizes the body. */}
                 <div className="flex flex-col h-full w-full max-w-[1600px] mx-auto gap-3" data-features-workspace>
                     {/* Module header — R1/R2 */}
                     <header className="flex flex-wrap items-center justify-between gap-4 border-b border-spur-border pb-3 shrink-0">
@@ -286,16 +287,12 @@ export default function FeaturesShell() {
                         </div>
                     </header>
 
-                    {/* Main detail container — matching header width */}
-                    <div
-                        className="w-full flex-1 min-h-0 overflow-hidden rounded-lg border border-spur-border bg-base-100 relative"
-                        data-testid="detail-workspace"
-                    >
-                        {/* Right Feature Tree overlay — floats over the detail workspace aligned to its top/bottom edge, so it never intersects the module header and toggling it never resizes or shifts the detail column (F841 R1) */}
+                    {/* Body area — relative so the floating tree aligns to the body panel (below the header). The body keeps the full header width. The tree floats in the left margin, its right edge clear of the body (no overlap). */}
+                    <div className="relative flex-1 min-h-0">
                         <div
                             id="feature-tree-dock"
                             hidden={!isTreeOpen}
-                            className="absolute right-0 top-0 bottom-0 z-20 w-72 lg:w-80 flex flex-col overflow-hidden rounded-lg border border-spur-border bg-base-200 shadow-xl"
+                            className="absolute right-[calc(100%_+_12px)] top-0 bottom-0 z-20 w-72 lg:w-80 flex flex-col overflow-hidden rounded-lg border border-spur-border bg-base-200 shadow-xl"
                         >
                             <div className="flex items-center justify-between px-3 py-2 border-b border-spur-border bg-base-300/60 shrink-0">
                                 <span className="text-xs font-semibold text-spur-text flex items-center gap-1.5">
@@ -318,20 +315,25 @@ export default function FeaturesShell() {
                                 )}
                             </div>
                         </div>
-                        <div className="w-full h-full overflow-y-auto">
-                            {selectedId ? (
-                                <FeatureDetail
-                                    featureId={selectedId}
-                                    refreshKey={detailRefreshKey}
-                                    onClose={() => setSelectedId(null)}
-                                    childFeatures={selectedChildren}
-                                    onSelectFeature={setSelectedId}
-                                />
-                            ) : (
-                                <div className="flex items-center justify-center h-full text-sm text-spur-text-muted italic">
-                                    Select a feature to view details
-                                </div>
-                            )}
+                        <div
+                            className="w-full h-full overflow-hidden rounded-lg border border-spur-border bg-base-100 relative"
+                            data-testid="detail-workspace"
+                        >
+                            <div className="w-full h-full overflow-y-auto">
+                                {selectedId ? (
+                                    <FeatureDetail
+                                        featureId={selectedId}
+                                        refreshKey={detailRefreshKey}
+                                        onClose={() => setSelectedId(null)}
+                                        childFeatures={selectedChildren}
+                                        onSelectFeature={setSelectedId}
+                                    />
+                                ) : (
+                                    <div className="flex items-center justify-center h-full text-sm text-spur-text-muted italic">
+                                        Select a feature to view details
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
