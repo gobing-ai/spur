@@ -90,7 +90,7 @@ export interface CacheDecision {
 
 // Frozen vocabulary from 0658's references/report-contract.md, kept local (not imported from
 // `packages/`, not re-read from the skill) so this deterministic script is self-contained.
-const ELEVEN_SECTIONS = [
+const REPORT_SECTIONS = [
     'Scope and provenance',
     'Executive summary',
     'Baseline comparison',
@@ -320,7 +320,7 @@ function escapeRe(s: string): string {
 }
 
 /**
- * Check a candidate report against the frozen report contract — the eleven sections in order,
+ * Check a candidate report against the frozen report contract — the twelve sections in order,
  * the nine per-finding fields, no placeholders/TODOs/empty bodies, and evidence-ledger anchors.
  */
 export function checkReportStructure(reportMarkdown: string): { ok: boolean; problems: string[] } {
@@ -329,7 +329,7 @@ export function checkReportStructure(reportMarkdown: string): { ok: boolean; pro
     if (/TODO|PLACEHOLDER|FIXME|^\|\s*\|/im.test(reportMarkdown)) problems.push('placeholder-or-todo-present');
 
     let lastIdx = -1;
-    for (const section of ELEVEN_SECTIONS) {
+    for (const section of REPORT_SECTIONS) {
         const re = new RegExp(`^#{2,3}\\s+${escapeRe(section)}\\s*$`, 'm');
         const m = reportMarkdown.match(re);
         if (m === null || (m.index ?? -1) <= lastIdx) {

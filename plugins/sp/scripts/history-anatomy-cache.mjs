@@ -64,7 +64,7 @@ function semanticArtifactDigest(artifactJson) {
 }
 
 // plugins/sp/scripts/history-anatomy-cache.ts
-var ELEVEN_SECTIONS = [
+var REPORT_SECTIONS = [
   "Scope and provenance",
   "Executive summary",
   "Baseline comparison",
@@ -259,7 +259,7 @@ function checkReportStructure(reportMarkdown) {
   if (/TODO|PLACEHOLDER|FIXME|^\|\s*\|/im.test(reportMarkdown))
     problems.push("placeholder-or-todo-present");
   let lastIdx = -1;
-  for (const section of ELEVEN_SECTIONS) {
+  for (const section of REPORT_SECTIONS) {
     const re = new RegExp(`^#{2,3}\\s+${escapeRe(section)}\\s*$`, "m");
     const m = reportMarkdown.match(re);
     if (m === null || (m.index ?? -1) <= lastIdx) {

@@ -975,13 +975,13 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         );
     });
 
-    // HA-S1 (0658 R4): the report contract freezes the eleven section names and the per-finding
+    // HA-S1 (0658 R4): the report contract freezes the section names and the per-finding
     // field names. 0659's structure gate and 0660's validation stage consume them verbatim, so
     // this test pins them here so the vocabulary cannot drift.
-    // Task 0669 (R5): the script-side `ELEVEN_SECTIONS` / `FINDING_FIELDS` constants are the
+    // Task 0669 (R5): the script-side `REPORT_SECTIONS` / `FINDING_FIELDS` constants are the
     // executable owner; this test reads THEM (not a third literal copy) and requires the markdown
     // contract to name every entry — so the two can no longer drift silently in either direction.
-    test('history-anatomy report contract carries the frozen eleven sections and finding fields (HA-S1 0658 R4, 0669 R5)', () => {
+    test('history-anatomy report contract carries the frozen twelve sections and finding fields (HA-S1 0658 R4, 0669 R5)', () => {
         const contract = join(SKILLS_DIR, 'history-anatomy/references/report-contract.md');
         if (!existsSync(contract)) {
             return;
@@ -996,7 +996,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             }
             return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
         };
-        const sections = extractStringArray('ELEVEN_SECTIONS');
+        const sections = extractStringArray('REPORT_SECTIONS');
         // 0680 R5: standing Report-only advisories section takes the count to twelve.
         expect(sections.length).toBe(12);
         for (const s of sections) {

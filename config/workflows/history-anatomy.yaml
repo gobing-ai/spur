@@ -195,7 +195,7 @@ states:
 
   - id: structure-gate
     description: >
-      Deterministic structure gate via the helper (0659). Asserts the eleven sections in order,
+      Deterministic structure gate via the helper (0659). Asserts the twelve sections in order,
       per-finding fields, no placeholders, evidence anchors. Not reachable on the hit path from
       enrich — always gated before validation.
     onEnter:

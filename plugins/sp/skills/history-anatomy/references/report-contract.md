@@ -1,6 +1,6 @@
 # Report contract — `sp:history-anatomy` (HA-S1, 0658)
 
-The published report is the skill's contract. This reference owns the eleven sections (in order),
+The published report is the skill's contract. This reference owns the twelve sections (in order),
 the per-finding field set, the closed category vocabulary, the stable-key grammar, the evidence
 rules, comparison semantics, recurrence classes, and the positive-pattern / remediation standards.
 

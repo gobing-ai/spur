@@ -131,7 +131,7 @@ Correction is capped at exactly one pass. A second validation failure terminates
 
 ## Report contract
 
-Every published report, in both modes, contains these eleven sections:
+Every published report, in both modes, contains these twelve sections:
 
 1. **Scope and provenance** — selector, normalized bounds, timezone, window state, cache
    disposition, source coverage, and artifact digests.
@@ -145,8 +145,10 @@ Every published report, in both modes, contains these eleven sections:
 8. **Performance analysis** — wall time, LLM/tool/unattributed time split, tool errors,
    tokens and cache waste, per-step outliers, repeated work.
 9. **Workflow and process improvements** — gated (below).
-10. **Positive patterns** — same evidence standard as problems.
-11. **Evidence ledger** — every claim to its anchor.
+10. **Report-only advisories** — standing slot for repeated tool-and-argument signatures;
+    proposes no automatic interruption (0680 R5).
+11. **Positive patterns** — same evidence standard as problems.
+12. **Evidence ledger** — every claim to its anchor.
 
 Daily mode additionally compares the immediately preceding local calendar day. Ad-hoc mode opens with
 the operator's question and builds a bounded causal narrative, comparing the immediately preceding

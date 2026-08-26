@@ -70,7 +70,7 @@ When collaborating with the design team:
 | [`universal-config-loading.md`](design/universal-config-loading.md)                                       | Composition-root merged-config wiring — single load threaded to all consumers, role-fallback provenance, agent-surface `--json` error envelope (ADR-082, ADR-078 amendment, feature A5)             | accepted design                                                                                                                                                |
 | [`agent-doctor-inspection-surface.md`](design/agent-doctor-inspection-surface.md)                       | `spur agent doctor` inspection contract — capability-tier table, full eligible ladder per role, pinned-model column, auth-probe removal (and its `doctor.probe` classifier), opt-in `--probe-health`, cached detection with `--force-refresh` (feature B4)                        | accepted design                                                                                                                                                |
 | [`tasks-module-shell-parity.md`](design/tasks-module-shell-parity.md)                                   | Tasks Board — History-parity shell: one-row header, inline filters, append-only tabs, full-bleed density, enriched cards, board-owned folder store (ADR-081, feature F72)                          | verified (0663/0664; 2026-08-25)                                                                                                                              |
-| [`history-anatomy.md`](design/history-anatomy.md)                                                     | History-anatomy diagnostic — daily/ad-hoc report mode, closed finding taxonomy, eleven-section report contract, cache branch + semantic digest (ADR-079/080), atomic publication, HA-S1 issue-finding migration gate (feature I8 / 0657–0661) | built (0657–0661)                                                                                                                                             |
+| [`history-anatomy.md`](design/history-anatomy.md)                                                     | History-anatomy diagnostic — daily/ad-hoc report mode, closed finding taxonomy, twelve-section report contract, cache branch + semantic digest (ADR-079/080), atomic publication, HA-S1 issue-finding migration gate (feature I8 / 0657–0661) | built (0657–0661)                                                                                                                                             |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -853,7 +853,7 @@ remains packaged and directly invocable under the bounded coexistence and retire
 `plugins/sp/README.md`; no logic is shared with the new skill.
 
 **History-anatomy surfaces (HA-S1 0658/0660):** skill `plugins/sp/skills/history-anatomy/` owns
-interpretation (mode contract, finding taxonomy, eleven-section report contract, `enrich`/`validate`
+interpretation (mode contract, finding taxonomy, twelve-section report contract, `enrich`/`validate`
 rubrics); workflow `config/workflows/history-anatomy.yaml` owns the cache branch, deterministic stage
 ordering, one bounded correction pass, and atomic publication — the cache/digest/structure/publish
 determinism is `plugins/sp/scripts/history-anatomy-cache.ts` (+ committed `.mjs` twin, ADR-065
@@ -874,7 +874,7 @@ consequently the domain module has exactly one consumer reached through a genera
 import. Consequences that are deliberate: no hand-maintained enumeration of artifact array keys may
 exist in `plugins/sp/scripts/`; the twin's bare-`node` fixture test (R2) backstops the twin-staleness
 hole (script-contract-check compares mtimes only against the direct source); and
-`ELEVEN_SECTIONS`/`FINDING_FIELDS` stay local to the script with `skill-structure.test.ts` requiring
+`REPORT_SECTIONS`/`FINDING_FIELDS` stay local to the script with `skill-structure.test.ts` requiring
 `report-contract.md` to name every entry of both — full single-owner treatment of the report
 vocabulary was deferred as it has never drifted.
 

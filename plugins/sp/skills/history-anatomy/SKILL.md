@@ -1,6 +1,6 @@
 ---
 name: history-anatomy
-description: "Independent owner of diagnostic interpretation over already-imported history — the daily/ad-hoc mode contract, a closed finding taxonomy, the eleven-section report contract, and the enrich/validate rubrics. Triggers: history-anatomy, run the daily report, ad-hoc diagnosis, find issues over history."
+description: "Independent owner of diagnostic interpretation over already-imported history — the daily/ad-hoc mode contract, a closed finding taxonomy, the twelve-section report contract, and the enrich/validate rubrics. Triggers: history-anatomy, run the daily report, ad-hoc diagnosis, find issues over history."
 license: Apache-2.0
 version: 1.0.0
 metadata:
@@ -37,7 +37,7 @@ fresh skill cannot be added to the BASELINE exemption map).
 **Choose the mode first.** The single entry is `--mode daily|ad-hoc` (default `daily`):
 `references/modes.md`.
 
-**Then hold the report to the contract.** Every report must contain the eleven sections and every
+**Then hold the report to the contract.** Every report must contain the twelve sections and every
 finding the full field set, with evidence rules and an explicit comparability verdict:
 `references/report-contract.md`.
 
@@ -63,5 +63,5 @@ finding the full field set, with evidence rules and an explicit comparability ve
 | Reference | Owns |
 | --- | --- |
 | [`references/modes.md`](references/modes.md) | The daily/ad-hoc mode matrix, bounds normalization, the DST-aware calendar-day rule, and the fail-loud message shape. |
-| [`references/report-contract.md`](references/report-contract.md) | The eleven sections (in order), the per-finding field set, the closed category vocabulary, the stable-key grammar, the evidence rules, comparison semantics, recurrence classes, and the positive-pattern / remediation standards. |
+| [`references/report-contract.md`](references/report-contract.md) | The twelve sections (in order), the per-finding field set, the closed category vocabulary, the stable-key grammar, the evidence rules, comparison semantics, recurrence classes, and the positive-pattern / remediation standards. |
 | [`references/operations.md`](references/operations.md) | The `enrich` and `validate` operation rubrics; neither launches a workflow. |
