@@ -9,6 +9,7 @@ export interface TasksTabProps {
     folder: string;
     hiddenColumns: ReadonlySet<string>;
     onConnectionChange: (connected: boolean) => void;
+    onSyncChange: (lastSyncAt: number | undefined) => void;
 }
 
 /**

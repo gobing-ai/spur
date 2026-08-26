@@ -1222,7 +1222,11 @@ change, and the backward-compatibility rule for pre-addition artifacts.
 
 ## ADR-081: Board Module Shell Convention — One-Row Header, Append-Only Tabs, Density-First Full-Bleed
 
-**Status:** Proposed · **Date:** 2026-08-24 · **Feature:** F72
+**Amendment (2026-08-26).** The full-bleed rule now applies to the **board body only**; the
+module **header** rides the shared centered `max-w-[1600px]` rail (History/Observability parity),
+so the two modules' headers align at the same width while Tasks' lanes keep every available
+pixel below. `index.test.tsx` pins this split: `max-w-[1600px]` appears only in the header, never
+inside `[data-kanban-board]`.
 
 **Decision.** Every multi-view Board module composes a shell: a `<Module>Shell.tsx` owning a single
 header row — icon + module name + live chip on the left, module-specific inline filters in the

@@ -45,6 +45,7 @@ interface TaskState {
     loading: boolean;
     error: Error | null;
     connected: boolean;
+    lastSyncAt: number | undefined;
 }
 
 type Listener = () => void;
@@ -63,6 +64,7 @@ export class TaskStore {
         loading: true,
         error: null,
         connected: false,
+        lastSyncAt: undefined,
     };
     private listeners: Listener[] = [];
     private interval: ReturnType<typeof setInterval> | undefined;
@@ -120,6 +122,7 @@ export class TaskStore {
                 loading: false,
                 error: null,
                 connected: this.state.connected,
+                lastSyncAt: Date.now(),
             };
         } catch (e) {
             this.state = { ...this.state, loading: false, error: e as Error };
@@ -129,7 +132,12 @@ export class TaskStore {
 
     setTasks = (updater: TaskSummary[] | ((prev: TaskSummary[]) => TaskSummary[])) => {
         const next = typeof updater === 'function' ? updater(this.state.tasks) : updater;
-        this.state = { ...this.state, tasks: next, subtaskProgress: deriveSubtaskProgress(next) };
+        this.state = {
+            ...this.state,
+            tasks: next,
+            subtaskProgress: deriveSubtaskProgress(next),
+            lastSyncAt: Date.now(),
+        };
         this.emit();
     };
 

@@ -122,8 +122,10 @@ F72's scope.
 
 ## 6. Full-Bleed Layout & Tokens
 
-- Header and body are both full-width: **no** `max-w-[1600px] mx-auto` wrapper (the recorded
-  ADR-081 divergence from History/Observability). Shared `px-4` on header and body.
+- **Header rides the shared centered `max-w-[1600px] mx-auto` rail** (History/Observability
+  parity, ADR-081 amendment 2026-08-26): `<header class="mx-auto w-full max-w-[1600px] px-4">`,
+  border-bottom on the inner row. Only the **board body** stays full-bleed — **no**
+  `max-w-[1600px]` below the header (pinned by `index.test.tsx`).
 - Body: `flex-1 overflow-hidden`; lanes row keeps `flex gap-3 overflow-x-auto h-full p-4`
   (horizontal scroll only when lane count exceeds viewport; vertical scroll stays inside lanes).
 - No re-theming: the module keeps resolving the `DESIGN.md` ladder through the `.task-kanban`

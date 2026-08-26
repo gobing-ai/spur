@@ -37,6 +37,7 @@ export default function TasksShell() {
     const [showNewPanel, setShowNewPanel] = useState(false);
     const [query, setQuery] = useState('');
     const [connected, setConnected] = useState(false);
+    const [lastSyncAt, setLastSyncAt] = useState<number | undefined>(undefined);
     const folder = filters.folder ?? defaultFolder;
     const visibleStatuses = new Set(
         filters.status === undefined
@@ -92,91 +93,101 @@ export default function TasksShell() {
 
     return (
         <div className="task-kanban flex flex-col h-full">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-spur-border px-4 pb-3 pt-3 shrink-0">
-                <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-2xl" aria-hidden="true">
-                        📋
-                    </span>
-                    <h1 className="text-xl font-bold tracking-tight text-spur-text">Tasks</h1>
-                    <span
-                        className="inline-flex items-center gap-1.5 rounded-full border border-spur-border px-2 py-0.5 text-xs text-spur-text-muted font-mono"
-                        role="status"
-                        data-testid="tasks-live-chip"
-                    >
-                        <span
-                            className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-spur-success' : 'bg-spur-error'}`}
-                            aria-hidden="true"
-                        />
-                        {connected ? 'Live' : 'Polling'}
-                    </span>
-                </div>
+            <header className="mx-auto w-full max-w-[1600px] shrink-0 px-4 pt-3">
+                {/* ADR-081 (amended 2026-08-26): the header rides History's centered 1600px
+                    rail; only the board body below stays full-bleed. */}
+                <div className="flex flex-nowrap items-center justify-between gap-4 border-b border-base-content/10 pb-3">
+                    <div className="flex shrink-0 items-center gap-3">
+                        <span className="text-2xl" aria-hidden="true">
+                            📋
+                        </span>
+                        <div>
+                            <h1 className="text-xl font-bold tracking-tight text-spur-text">Tasks</h1>
+                            <p className="text-xs text-spur-text-muted">Task corpus, kanban lanes, and phase filters</p>
+                            <p
+                                className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-spur-border px-2 py-0.5 text-xs text-spur-text-muted font-mono"
+                                role="status"
+                                data-testid="tasks-live-chip"
+                            >
+                                <span
+                                    className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-spur-success' : 'bg-spur-error'}`}
+                                    aria-hidden="true"
+                                />
+                                last sync {lastSyncAt ? new Date(lastSyncAt).toLocaleString() : '—'}
+                            </p>
+                        </div>
+                    </div>
 
-                <div className="flex flex-wrap items-center gap-3">
-                    <Select
-                        variant="ghost"
-                        size="xs"
-                        className="text-xs"
-                        value={folder}
-                        onChange={(e) => setFilter('folder', e.target.value)}
-                        aria-label="Task phase folder"
-                    >
-                        {folders.map((f) => (
-                            <option key={f.path} value={f.path}>
-                                {f.label ? `${f.label} (${f.path})` : f.path}
-                            </option>
-                        ))}
-                    </Select>
-                    {TASK_STATUSES.map((status) => (
-                        <label
-                            key={status}
-                            htmlFor={`tasks-status-${status}`}
-                            className="flex items-center gap-1 cursor-pointer"
-                        >
-                            <Checkbox
-                                id={`tasks-status-${status}`}
-                                size="xs"
-                                checked={!hiddenColumns.has(status)}
-                                onChange={() => toggleColumn(status)}
-                            />
-                            <span className="text-[10px] text-spur-text-muted">
-                                {taskStatusIcon(status)} {status}
-                            </span>
-                        </label>
-                    ))}
-                    <form onSubmit={submit} className="flex items-center">
-                        <Input
-                            aria-label="Filter by WBS or feature"
-                            type="text"
-                            placeholder="WBS or feature"
-                            variant="bordered"
+                    {/* One non-wrapping cluster: filters sit just before the tab strip so the
+                        identity block and tabs always share a single header row. */}
+                    <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto">
+                        <Select
+                            variant="ghost"
                             size="xs"
-                            className="w-40"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                        />
-                    </form>
-                    <Button variant="primary" size="sm" onClick={() => setShowNewPanel(true)}>
-                        + New Task
-                    </Button>
-                </div>
-
-                <div className="flex items-center gap-1 bg-base-300 p-1 rounded-xl">
-                    {TASKS_TABS.map((tab) => (
-                        <button
-                            key={tab.id}
-                            type="button"
-                            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                                activeTab === tab.id
-                                    ? 'bg-primary text-primary-content font-bold shadow-sm'
-                                    : 'text-base-content/70 hover:bg-base-content/10'
-                            }`}
-                            onClick={() => setActiveTab(tab.id)}
+                            className="text-xs shrink-0 w-44"
+                            value={folder}
+                            onChange={(e) => setFilter('folder', e.target.value)}
+                            aria-label="Task phase folder"
                         >
-                            {tab.label}
-                        </button>
-                    ))}
+                            {folders.map((f) => (
+                                <option key={f.path} value={f.path}>
+                                    {f.label ? `${f.label} (${f.path})` : f.path}
+                                </option>
+                            ))}
+                        </Select>
+                        <div className="flex shrink-0 items-center gap-1">
+                            {TASK_STATUSES.map((status) => (
+                                <label
+                                    key={status}
+                                    htmlFor={`tasks-status-${status}`}
+                                    className="flex items-center gap-1 cursor-pointer"
+                                >
+                                    <Checkbox
+                                        id={`tasks-status-${status}`}
+                                        size="xs"
+                                        checked={!hiddenColumns.has(status)}
+                                        onChange={() => toggleColumn(status)}
+                                    />
+                                    <span className="text-[10px] text-spur-text-muted">
+                                        {taskStatusIcon(status)} {status}
+                                    </span>
+                                </label>
+                            ))}
+                        </div>
+                        <form onSubmit={submit} className="flex shrink-0 items-center">
+                            <Input
+                                aria-label="Filter by WBS or feature"
+                                type="text"
+                                placeholder="WBS or feature"
+                                variant="bordered"
+                                size="xs"
+                                className="w-36"
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                            />
+                        </form>
+                        <Button variant="primary" size="sm" className="shrink-0" onClick={() => setShowNewPanel(true)}>
+                            + New Task
+                        </Button>
+                        <div className="flex shrink-0 items-center gap-1 bg-base-300 p-1 rounded-xl">
+                            {TASKS_TABS.map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    type="button"
+                                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                                        activeTab === tab.id
+                                            ? 'bg-primary text-primary-content font-bold shadow-sm'
+                                            : 'text-base-content/70 hover:bg-base-content/10'
+                                    }`}
+                                    onClick={() => setActiveTab(tab.id)}
+                                >
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                 </div>
-            </div>
+            </header>
 
             <div data-kanban-board className="flex-1 overflow-hidden">
                 <ActiveTab
@@ -185,6 +196,7 @@ export default function TasksShell() {
                     folder={folder}
                     hiddenColumns={hiddenColumns}
                     onConnectionChange={setConnected}
+                    onSyncChange={setLastSyncAt}
                 />
             </div>
 

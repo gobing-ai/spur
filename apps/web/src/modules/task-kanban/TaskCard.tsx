@@ -17,6 +17,25 @@ const PRIORITY_ACCENT: Record<string, string> = {
     P3: 'border-l-2 border-l-spur-text-muted',
 };
 
+/** Priority badge daisyUI variant (F72 card density pass) — falls back to outline. */
+const PRIORITY_BADGE: Record<string, 'error' | 'warning' | 'neutral'> = {
+    P1: 'error',
+    P2: 'warning',
+    P3: 'neutral',
+};
+
+/** Status dot color — mirrors the lane identity so cards stay readable when
+    columns are narrow, scrolled, or during drag (no status text: R7). */
+const STATUS_DOT: Record<string, string> = {
+    backlog: 'bg-spur-text-faint',
+    todo: 'bg-spur-info',
+    wip: 'bg-spur-warning',
+    testing: 'bg-spur-accent',
+    done: 'bg-spur-success',
+    blocked: 'bg-spur-error',
+    cancelled: 'bg-spur-text-faint',
+};
+
 function relativeTime(iso: string, now: number): string {
     const then = new Date(iso).getTime();
     const diff = now - then;
@@ -62,7 +81,7 @@ export default function TaskCard({ task, onClick }: Props) {
         <Card
             variant="compact"
             asChild
-            className={`bg-spur-surface-2 hover:bg-spur-surface-3 rounded-xl border border-spur-border cursor-pointer transition-colors w-full text-left ${accent ?? ''} ${
+            className={`bg-spur-surface-2 hover:bg-spur-surface-3 rounded-xl border border-spur-border hover:border-spur-accent/40 cursor-pointer transition-colors w-full text-left ${accent ?? ''} ${
                 isDragging ? 'opacity-30' : ''
             }`}
         >
@@ -77,24 +96,38 @@ export default function TaskCard({ task, onClick }: Props) {
             >
                 <CardBody className="p-3 gap-1">
                     <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-mono text-spur-text-muted">{task.wbs}</span>
+                        <span className="flex items-center gap-1.5 text-xs font-mono font-semibold text-spur-text">
+                            <span
+                                className={`h-1.5 w-1.5 rounded-full shrink-0 ${STATUS_DOT[task.status] ?? 'bg-spur-text-faint'}`}
+                                data-status={task.status}
+                                aria-hidden="true"
+                            />
+                            {task.wbs}
+                        </span>
                         {task.priority && (
-                            <Badge variant="outline" size="xs">
+                            <Badge variant={PRIORITY_BADGE[task.priority] ?? 'outline'} size="xs">
                                 {task.priority}
                             </Badge>
                         )}
                     </div>
-                    <p className="text-sm font-medium text-spur-text leading-snug">{task.name}</p>
+                    <p className="text-sm font-medium text-spur-text leading-snug line-clamp-2">{task.name}</p>
                     <div className="flex gap-1 flex-wrap items-center">
                         {progress && progress.total > 0 && (
-                            <Badge
-                                variant="outline"
-                                size="xs"
+                            <div
+                                className="flex items-center gap-1.5"
                                 data-testid="subtask-progress"
                                 title="subtasks done/total"
                             >
-                                {progress.done}/{progress.total}
-                            </Badge>
+                                <div className="h-1 flex-1 rounded-full bg-spur-border overflow-hidden">
+                                    <div
+                                        className="h-full bg-spur-success"
+                                        style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+                                    />
+                                </div>
+                                <span className="text-[10px] font-mono text-spur-text-muted shrink-0">
+                                    {progress.done}/{progress.total}
+                                </span>
+                            </div>
                         )}
                         {task.type && task.type !== 'task' && (
                             <Badge variant="outline" size="xs">

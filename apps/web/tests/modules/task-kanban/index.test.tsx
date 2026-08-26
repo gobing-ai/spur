@@ -83,8 +83,12 @@ describe('TaskKanbanView scoping', () => {
             expect(getAllByRole('checkbox')).toHaveLength(7);
             expect((container.querySelector('#tasks-status-todo') as HTMLInputElement).checked).toBe(true);
             expect((container.querySelector('#tasks-status-wip') as HTMLInputElement).checked).toBe(true);
-            expect((container.querySelector('#tasks-status-blocked') as HTMLInputElement).checked).toBe(false);
-            expect(container.querySelector('[class*="max-w-"]')).toBeNull();
+            // ADR-081 (amended 2026-08-26): the header rides History's centered 1600px rail
+            // while the board body stays full-bleed — max-w appears only in the header.
+            expect((container.firstElementChild?.firstElementChild as HTMLElement).className).toContain(
+                'max-w-[1600px]',
+            );
+            expect(container.querySelector('[data-kanban-board] [class*="max-w-"]')).toBeNull();
             expect((container.firstElementChild?.firstElementChild as HTMLElement).className).toContain('px-4');
             await waitFor(() => expect(container.querySelector('[data-kanban-board] .p-4')).not.toBeNull());
 

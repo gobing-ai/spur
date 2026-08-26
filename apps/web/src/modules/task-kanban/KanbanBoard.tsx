@@ -47,6 +47,8 @@ interface Props {
     hiddenColumns?: ReadonlySet<string>;
     /** Reports this board store's live connection state to its optional shell. */
     onConnectionChange?: (connected: boolean) => void;
+    /** Reports the store's last successful sync time (epoch ms) to the shell header. */
+    onSyncChange?: (lastSyncAt: number | undefined) => void;
 }
 
 function applyFilters(tasks: TaskSummary[], filters?: TaskListFilters): TaskSummary[] {
@@ -60,7 +62,14 @@ function applyFilters(tasks: TaskSummary[], filters?: TaskListFilters): TaskSumm
 }
 
 export default function KanbanBoard(props: Props) {
-    const { onSelectTask, filters, folder: folderProp, hiddenColumns: hiddenProp, onConnectionChange } = props;
+    const {
+        onSelectTask,
+        filters,
+        folder: folderProp,
+        hiddenColumns: hiddenProp,
+        onConnectionChange,
+        onSyncChange,
+    } = props;
     const [sortState, setSortState] = useState<Record<string, 'asc' | 'desc'>>({});
     // Uncontrolled default folder — server active folder adopted on mount; used only
     // when the shell doesn't pass a controlled `folder` (Workspace embed).
@@ -85,12 +94,15 @@ export default function KanbanBoard(props: Props) {
     const hiddenColumns = hiddenProp ?? DEFAULT_HIDDEN;
 
     const listWithFolder = useCallback(() => api.task.list({ folder }), [folder]);
-    const { tasks, loading, error, connected, setTasks, store } = useTasks(listWithFolder);
+    const { tasks, loading, error, connected, lastSyncAt, setTasks, store } = useTasks(listWithFolder);
     const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
     useEffect(() => {
         onConnectionChange?.(connected);
     }, [connected, onConnectionChange]);
+    useEffect(() => {
+        onSyncChange?.(lastSyncAt);
+    }, [lastSyncAt, onSyncChange]);
 
     // Adopt the server's active folder as the uncontrolled default (embed / no prop).
     useEffect(() => {
