@@ -421,6 +421,15 @@ isolated git worktree instead of the operator's working directory. This section 
 lifecycle for the sequential batch loop. Per-task worktrees and `--mode parallel` isolation stay out
 of scope (task 0142 Slice A); `--worktree --mode parallel` is rejected.
 
+**Single-task `dev-run` (batch of one).** `/sp:dev-run <wbs> --worktree [<name>]` runs this same
+lifecycle with a one-task loop: WT-1…WT-6 apply unchanged, the marker's `command` is `dev-run` and
+its `selector` is the `<wbs>` (so WT-6's command+selector fallback resolves the resume), and the
+derived branch/directory slug is the WBS — `sp/run-<wbs>-<short-id>`. The WT-4 success condition
+"no failed task" reads as "the task reached terminal `done` with no failed stage"; a failing gate, a
+non-PASS verify verdict, or a HITL pause that ends the run take the WT-5 retention path. Only the
+full pipeline is eligible — `--worktree --mode implement` is rejected (WT-7), because that mode is
+the pipeline's implement stage and already runs in the driver's tree.
+
 One flag, two modes (see the glossary entry for the ownership rule). Bare `--worktree` is **create
 mode** (cut a fresh branch + sibling tree). `--worktree <name>` is **reuse mode** (attach to a tree
 that already exists); name resolution (§ WT-2 below) runs before WT-1. The deltas each mode applies
@@ -714,9 +723,13 @@ fallback, because `<name>` was explicit and unambiguous intent.
 ### WT-7 — Exclusions (R8)
 
 - **`dev-next`** does not get `--worktree` — it dispatches a single step; per-step isolation is not
-  worth the worktree cost.
+  worth the worktree cost. `dev-run` is different: it drives a whole task pipeline, so it does get
+  the flag.
 - **`--mode parallel`** is rejected when combined with `--worktree` — per-task worktrees and
   parallel isolation remain task 0142 Slice A.
+- **`--mode implement`** is rejected when combined with `--worktree` on `dev-run` — that mode *is*
+  the pipeline's implement stage (bug-742) and runs in whatever tree the driver set up; a second
+  worktree would split one task's evidence across two trees.
 - **No** create-with-name (`--worktree <name>` never creates; an unresolvable name is an error),
   no `--worktree-keep` variant, no auto-cleanup of stale worktrees or markers from prior runs.
 

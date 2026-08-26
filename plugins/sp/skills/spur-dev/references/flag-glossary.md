@@ -368,8 +368,9 @@ flag sets both.
 
 **Anchor:** `#flag-worktree`.
 
-Batch commands only (`dev-refineall`, `dev-runall`, `dev-verifyall`): run the entire driver loop
-inside an isolated git worktree instead of the operator's working directory. One flag, two modes:
+Batch commands plus single-task `dev-run` (`dev-refineall`, `dev-runall`, `dev-verifyall`,
+`dev-run`): run the entire driver loop inside an isolated git worktree instead of the operator's
+working directory. One flag, two modes:
 
 - **Create mode** — bare `--worktree` (no value). Cut a fresh branch from the current HEAD's ref,
   create a sibling worktree with a derived name, run the batch there. On a fully successful batch
@@ -394,8 +395,10 @@ merges but never removes. This keeps the continue-the-work loop stable — after
 **Value binding.** The following token is consumed as `<name>` **only when it does not begin with
 `-`**, so `--worktree --auto` is the bare create form and `--agent`/`--feature`/etc. are never
 swallowed as the name. `--worktree=<name>` is the unambiguous spelling. `/sp:dev-next` does not get
-the flag (single step; not worth the worktree cost), and `--worktree --mode parallel` is rejected
-(per-task parallel isolation stays task 0142). The full lifecycle — name resolution, dirty-tree
+the flag (single *step*; not worth the worktree cost — unlike `dev-run`, which isolates a whole
+task pipeline), `--worktree --mode parallel` is rejected (per-task parallel isolation stays task
+0142), and `--worktree --mode implement` is rejected on `dev-run` (that mode *is* the pipeline's
+implement stage and runs in the driver's tree). The full lifecycle — name resolution, dirty-tree
 precheck, creation or adoption, crash-safe marker, merge-or-retain, and `--continue` re-entry — is
 specified in [execution-batch.md § Worktree isolation](execution-batch.md#worktree-isolation---worktree-name).
 Portable `git worktree` commands only; the git mechanics are reused from

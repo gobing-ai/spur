@@ -100,6 +100,13 @@ cache-conservation discipline (`plugins/sp/skills/dogfood-testing/references/mon
 > - Without `--auto`: warn the operator before calling `spur workflow run` and prompt for confirmation or a plan-item override via `--vars '{"maxImplementPlanItems":"<count>"}'`.
 > - With `--auto`: automatically append `"maxImplementPlanItems": "<count>"` to `--vars` and log a single-line notice (e.g. `Notice: task <wbs> has N plan items (>8 default cap); injecting maxImplementPlanItems override`).
 
+**`--worktree [<name>]` wraps Step 2, on either surface.** When `/sp:dev-run --mode full` carries
+[`--worktree`](flag-glossary.md#flag-worktree), create or adopt the worktree *before* launching the
+pipeline, `cd` into it (`spur workflow run` and the inline driver both resolve cwd from the process),
+and merge-or-retain after the run reports. The lifecycle is
+[execution-batch.md § Worktree isolation](execution-batch.md#worktree-isolation---worktree-name)
+applied to a batch of one. Rejected with `--mode implement`.
+
 **Choose the surface before execution.** In an interactive `/sp:dev-run --mode full` invocation,
 omit/`--agent inline` selects the [inline pipeline driver](inline-pipeline-driver.md). Read the YAML
 at invocation time, allocate the inline run id/session provenance, record `task run-link`, and walk

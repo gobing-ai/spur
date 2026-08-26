@@ -220,13 +220,14 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
 
     // ---------- task 0496 (feature H1): --worktree [<name>] placeholder ----------
     //
-    // The three batch commands (dev-runall, dev-refineall, dev-verifyall) must all document
-    // the optional <name> argument to --worktree consistently. extractFlags still captures
+    // Every command declaring --worktree must document the optional <name> argument consistently. extractFlags still captures
     // --worktree (the regex stops at `[`), so R8 parity passes either way — this test pins
     // the placeholder spelling so the three commands cannot drift.
 
-    const WORKTREE_BATCH_COMMANDS = ['dev-runall', 'dev-refineall', 'dev-verifyall'];
-    for (const command of WORKTREE_BATCH_COMMANDS) {
+    // dev-run joined the set: it drives a whole task pipeline (a batch of one), unlike dev-next
+    // which dispatches a single step and stays excluded below.
+    const WORKTREE_COMMANDS = ['dev-runall', 'dev-refineall', 'dev-verifyall', 'dev-run'];
+    for (const command of WORKTREE_COMMANDS) {
         test(`R7 — ${command} documents optional --worktree name as [<name>]`, () => {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
             const hint = argumentHint(raw);
