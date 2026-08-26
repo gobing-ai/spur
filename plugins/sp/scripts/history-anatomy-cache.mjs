@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
 // plugins/sp/scripts/history-anatomy-cache.ts
-import { createHash } from "node:crypto";
+import { createHash as createHash2 } from "node:crypto";
 import {
   closeSync,
   existsSync,
@@ -17,6 +17,52 @@ import {
   writeFileSync
 } from "node:fs";
 import { join } from "node:path";
+
+// plugins/sp/lib/artifact-digest.generated.mjs
+import { createHash } from "node:crypto";
+var ARTIFACT_ARRAY_CLASSIFICATION = {
+  byTool: "ranked",
+  bySession: "ranked",
+  topStepsByTokens: "ranked",
+  topStepsByDuration: "ranked",
+  topSteps: "ranked",
+  bottlenecks: "ranked",
+  coverage: "set",
+  daily: "set",
+  loops: "set",
+  warnings: "set",
+  pairings: "set",
+  ladderSnapshot: "set",
+  stepSupport: "set",
+  phases: "set",
+  tools: "set",
+  skills: "set",
+  sources: "set",
+  models: "set"
+};
+var RANKED_ARTIFACT_KEYS = new Set(Object.entries(ARTIFACT_ARRAY_CLASSIFICATION).filter(([, kind]) => kind === "ranked").map(([key]) => key));
+function canonicalize(value, key) {
+  if (key === "generatedAt" || key === "validatedAt" || key === "baselineArtifactDigest")
+    return null;
+  if (Array.isArray(value)) {
+    const raw = value.map((v) => JSON.stringify(canonicalize(v, "")));
+    return RANKED_ARTIFACT_KEYS.has(key) ? raw : [...raw].sort();
+  }
+  if (value !== null && typeof value === "object") {
+    const out = {};
+    for (const k of Object.keys(value).sort()) {
+      out[k] = canonicalize(value[k], k);
+    }
+    return out;
+  }
+  return value;
+}
+function semanticArtifactDigest(artifactJson) {
+  const material = JSON.stringify(canonicalize(artifactJson, "root"));
+  return createHash("sha256").update(material).digest("hex");
+}
+
+// plugins/sp/scripts/history-anatomy-cache.ts
 var ELEVEN_SECTIONS = [
   "Scope and provenance",
   "Executive summary",
@@ -41,34 +87,6 @@ var FINDING_FIELDS = [
   "contradictions",
   "evidenceAnchor"
 ];
-var RANKED_ARTIFACT_KEYS = new Set([
-  "byTool",
-  "bySession",
-  "topStepsByTokens",
-  "topStepsByDuration",
-  "topSteps",
-  "bottlenecks"
-]);
-function canonicalize(value, key) {
-  if (key === "generatedAt" || key === "validatedAt" || key === "baselineArtifactDigest")
-    return null;
-  if (Array.isArray(value)) {
-    const raw = value.map((v) => JSON.stringify(canonicalize(v, "")));
-    return RANKED_ARTIFACT_KEYS.has(key) ? raw : [...raw].sort();
-  }
-  if (value !== null && typeof value === "object") {
-    const out = {};
-    for (const k of Object.keys(value).sort()) {
-      out[k] = canonicalize(value[k], k);
-    }
-    return out;
-  }
-  return value;
-}
-function semanticArtifactDigest(artifactJson) {
-  const material = JSON.stringify(canonicalize(artifactJson, "root"));
-  return createHash("sha256").update(material).digest("hex");
-}
 function parseScalar(raw) {
   const t = raw.trim();
   if (t.startsWith('"') && t.endsWith('"'))
@@ -273,7 +291,7 @@ function logicDigest(path) {
   if (path === undefined || path === "" || !existsSync(path))
     return NOT_AVAILABLE;
   try {
-    const h = createHash("sha256");
+    const h = createHash2("sha256");
     if (statSync(path).isDirectory()) {
       const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? walk(join(dir, e.name)) : /\.(md|ya?ml)$/.test(e.name) ? [join(dir, e.name)] : []).sort();
       for (const f of walk(path)) {
@@ -314,7 +332,12 @@ HA_DATE=${date}
 `;
 }
 function buildProvenance(opts) {
-  const raw = JSON.parse(readFileSync(opts.artifact, "utf8"));
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(opts.artifact, "utf8"));
+  } catch (err) {
+    throw new Error(`could not parse fresh analyze artifact at ${opts.artifact}: ${err.message}`);
+  }
   const coverage = (raw.coverage ?? []).map((c) => ({
     source: String(c.source ?? ""),
     status: String(c.status ?? ""),
@@ -338,7 +361,15 @@ function buildProvenance(opts) {
     generatedAt: nowIso,
     validatedAt: nowIso,
     artifactDigest: semanticArtifactDigest(raw),
-    baselineArtifactDigest: opts.baseline !== undefined && existsSync(opts.baseline) ? semanticArtifactDigest(JSON.parse(readFileSync(opts.baseline, "utf8"))) : null,
+    baselineArtifactDigest: (() => {
+      if (!(opts.baseline !== undefined && existsSync(opts.baseline)))
+        return null;
+      try {
+        return semanticArtifactDigest(JSON.parse(readFileSync(opts.baseline, "utf8")));
+      } catch (err) {
+        throw new Error(`could not parse baseline artifact at ${opts.baseline}: ${err.message}`);
+      }
+    })(),
     contractDigest: logicDigest(opts.contractFile),
     skillDigest: logicDigest(opts.skillDir),
     workflowDigest: logicDigest(opts.workflowFile),

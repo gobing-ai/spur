@@ -14,6 +14,12 @@ export {
     selectorDigest,
     type ToolStat,
 } from './artifact';
+export {
+    ARTIFACT_ARRAY_CLASSIFICATION,
+    type ArtifactArrayKey,
+    RANKED_ARTIFACT_KEYS,
+    semanticArtifactDigest,
+} from './artifact-digest';
 export { cacheHitRatio, computeRecordCost, formatRatio, formatSummary } from './costs';
 export {
     type Bottleneck,

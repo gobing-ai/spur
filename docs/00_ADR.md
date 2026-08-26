@@ -1188,6 +1188,14 @@ evidence, which is the one failure a diagnostic report cannot survive.
 cache branch (0659/0660). The deterministic half — semantic artifact digest, invalidation matrix,
 structure gate, atomic publication — is installed code, not a design.
 
+**Amendment (2026-08-25, task 0669).** Digest authority moved beside the type it canonicalizes:
+`semanticArtifactDigest`, its canonicalization, and the ranked-versus-set classification now live in
+`packages/domain/src/analytics/artifact-digest.ts` (`ARTIFACT_ARRAY_CLASSIFICATION` is derived from
+the `HistoryArtifact` type; an unclassified array field fails `tsc`). The plugin script consumes a
+generated committed copy (`plugins/sp/lib/artifact-digest.generated.mjs`, `bun run build:plugin-lib`)
+so the ADR-065 twin keeps running under bare node with no monorepo dependency; digests are unchanged
+(proven by fixture parity), so no published report's recorded `artifactDigest` is invalidated.
+
 **Detail:** `docs/design/history-anatomy.md` §Cache contract — identity tuple, frontmatter
 provenance fields, provisional-versus-closed day semantics, and the invalidation matrix.
 

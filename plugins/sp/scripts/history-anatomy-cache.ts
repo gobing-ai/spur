@@ -41,6 +41,10 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+// Task 0669: the digest authority (classification + canonicalization + hash) lives beside
+// `HistoryArtifact` in packages/domain; this script consumes the GENERATED plugin-side copy so
+// the ADR-065 twin keeps running under bare node with no monorepo dependency.
+import { semanticArtifactDigest } from '../lib/artifact-digest.generated.mjs';
 
 // ── Local types (match the 0658/0660 frozen vocabulary; no package import) ───────────────
 
@@ -116,54 +120,7 @@ const FINDING_FIELDS = [
 /** JSON-compatible value — the domain type for canonicalized artifact material and YAML scalars. */
 type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
 
-/**
- * Artifact arrays whose ORDER is part of the evidence (bounded leaderboards and ranked lists), so
- * canonicalization must not sort them. Everything else is a set — sorting is what makes the digest
- * stable across runs.
- *
- * ⚠️ Hand-maintained enumeration of `HistoryArtifact` shape, living outside `packages/domain`.
- * Nothing keeps it in sync: `cacheWaste.topSteps` and `derived.bottlenecks` were both ranked from
- * the day they landed (0581/0554) and were both missing here until 2026-08-25. Neither drift was
- * exploitable — every entry in those lists carries its own sort key, so `analyze` cannot emit the
- * same entries in a different order — but the next ranked array whose order is NOT determined by
- * its entries would be silently mis-canonicalized. Fixing the seam is task 0668.
- */
-const RANKED_ARTIFACT_KEYS = new Set([
-    'byTool',
-    'bySession',
-    'topStepsByTokens',
-    'topStepsByDuration',
-    'topSteps', // CacheWasteStat.topSteps — "largest offenders", artifact.ts
-    'bottlenecks', // DerivedVariables.bottlenecks — "by ms descending", derived.ts
-]);
-
-/** Recursively canonicalize so equivalent evidence digests identically (sorted keys, undefined→null). */
-function canonicalize(value: unknown, key: string): JsonValue {
-    // Exclude only volatile generation fields — never derive validity from them.
-    if (key === 'generatedAt' || key === 'validatedAt' || key === 'baselineArtifactDigest') return null;
-    if (Array.isArray(value)) {
-        const raw = (value as unknown[]).map((v) => JSON.stringify(canonicalize(v, '')));
-        // Rankings keep order; plain lists sort.
-        return RANKED_ARTIFACT_KEYS.has(key) ? raw : [...raw].sort();
-    }
-    if (value !== null && typeof value === 'object') {
-        const out: { [k: string]: JsonValue } = {};
-        for (const k of Object.keys(value as Record<string, unknown>).sort()) {
-            out[k] = canonicalize((value as Record<string, unknown>)[k], k);
-        }
-        return out;
-    }
-    return value as JsonValue;
-}
-
-/**
- * SHA-256 over the canonicalized artifact. `population` (0657) is included — a change in true
- * selection count is a change in evidence.
- */
-export function semanticArtifactDigest(artifactJson: unknown): string {
-    const material = JSON.stringify(canonicalize(artifactJson, 'root'));
-    return createHash('sha256').update(material).digest('hex');
-}
+export { semanticArtifactDigest };
 
 // ── 2. Provenance parsing ───────────────────────────────────────────────────────────────────
 
@@ -510,11 +467,16 @@ export interface ProbeOptions {
  * report, which is the thing being judged.
  */
 export function buildProvenance(opts: ProbeOptions): CacheProvenance {
-    const raw = JSON.parse(readFileSync(opts.artifact, 'utf8')) as {
+    let raw: {
         selector?: { since?: string | null; until?: string | null };
         coverage?: Array<{ source?: unknown; status?: unknown; lastImportedAt?: unknown }>;
         schemaVersion?: unknown;
     };
+    try {
+        raw = JSON.parse(readFileSync(opts.artifact, 'utf8'));
+    } catch (err) {
+        throw new Error(`could not parse fresh analyze artifact at ${opts.artifact}: ${(err as Error).message}`);
+    }
     const coverage = (raw.coverage ?? []).map((c) => ({
         source: String(c.source ?? ''),
         status: String(c.status ?? ''),
@@ -541,10 +503,14 @@ export function buildProvenance(opts: ProbeOptions): CacheProvenance {
         generatedAt: nowIso,
         validatedAt: nowIso,
         artifactDigest: semanticArtifactDigest(raw),
-        baselineArtifactDigest:
-            opts.baseline !== undefined && existsSync(opts.baseline)
-                ? semanticArtifactDigest(JSON.parse(readFileSync(opts.baseline, 'utf8')))
-                : null,
+        baselineArtifactDigest: ((): string | null => {
+            if (!(opts.baseline !== undefined && existsSync(opts.baseline))) return null;
+            try {
+                return semanticArtifactDigest(JSON.parse(readFileSync(opts.baseline, 'utf8')));
+            } catch (err) {
+                throw new Error(`could not parse baseline artifact at ${opts.baseline}: ${(err as Error).message}`);
+            }
+        })(),
         contractDigest: logicDigest(opts.contractFile),
         skillDigest: logicDigest(opts.skillDir),
         workflowDigest: logicDigest(opts.workflowFile),

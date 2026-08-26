@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ARTIFACT_ARRAY_CLASSIFICATION, RANKED_ARTIFACT_KEYS } from '../lib/artifact-digest.generated.mjs';
 import {
     type CacheCliResult,
     type CacheProvenance,
@@ -65,12 +66,13 @@ describe('semanticArtifactDigest (R1)', () => {
         );
     });
 
-    // The ranked-key list is a hand-maintained mirror of `HistoryArtifact`'s shape (see
-    // RANKED_ARTIFACT_KEYS). Every ranked array on the artifact must be covered, or a reordering
-    // that IS evidence gets sorted away. `topSteps` and `bottlenecks` were both missing until
-    // 2026-08-25; task 0668 removes the mirror. Until then this pins every known ranking.
+    // Task 0669: the ranked-versus-set classification lives beside `HistoryArtifact` in
+    // packages/domain (artifact-digest.ts) and reaches this test through the generated plugin copy —
+    // no hand-maintained mirror. The drift guard derives its key list from that classification, so a
+    // new ranked array without a classification fails tsc, and a mis-classification fails here.
     test('every ranked artifact array preserves order in the digest (drift guard)', () => {
-        const rankedKeys = ['byTool', 'bySession', 'topStepsByTokens', 'topStepsByDuration', 'topSteps', 'bottlenecks'];
+        const rankedKeys = [...RANKED_ARTIFACT_KEYS];
+        expect(rankedKeys.length).toBeGreaterThan(0);
         for (const key of rankedKeys) {
             const a = {
                 [key]: [
@@ -89,12 +91,199 @@ describe('semanticArtifactDigest (R1)', () => {
             );
         }
         // Counterexample: a set-valued array must still sort, or the digest is unstable.
-        for (const key of ['coverage', 'warnings', 'loops', 'stepSupport', 'pairings']) {
+        const setKeys = Object.entries(ARTIFACT_ARRAY_CLASSIFICATION)
+            .filter(([, kind]) => kind === 'set')
+            .map(([key]) => key);
+        for (const key of setKeys) {
             const a = { [key]: [{ id: 'A' }, { id: 'B' }] };
             const b = { [key]: [{ id: 'B' }, { id: 'A' }] };
             expect(semanticArtifactDigest(a), `${key} is a set — order must not change the digest`).toBe(
                 semanticArtifactDigest(b),
             );
+        }
+    });
+
+    // R3 gate made test-visible: the classification must cover every ArtifactArrayKey. In the
+    // domain this is enforced at compile time (exhaustive Record over the recursive array-key type),
+    // so adding an array field to HistoryArtifact without classifying it fails `tsc --noEmit` naming
+    // the field — and fails here too, naming it, per the AC.
+    test('classification covers every artifact array key (R3)', () => {
+        const keys = Object.keys(ARTIFACT_ARRAY_CLASSIFICATION);
+        expect(keys.length).toBeGreaterThan(0);
+        expect(new Set(keys).size).toBe(keys.length);
+        for (const [key, kind] of Object.entries(ARTIFACT_ARRAY_CLASSIFICATION)) {
+            expect(
+                ['ranked', 'set'],
+                `${key} must be classified ranked or set — order-as-evidence must be declared`,
+            ).toContain(kind);
+        }
+    });
+
+    // R4: the move from plugins/sp/scripts to packages/domain must not change any digest value,
+    // or every published report's recorded artifactDigest would be invalidated. This fixture
+    // exercises all six ranked arrays and all twelve set arrays (including selector sources/tools/
+    // skills/models and nested derived.phases.phases), plus the excluded volatile fields.
+    // The hex literal was captured from the PRE-MOVE implementation before it was deleted; if this
+    // ever fails, canonicalization behavior drifted — that is a regression, not a refactor.
+    test('post-move implementation reproduces the pre-move digest byte-for-byte (R4)', () => {
+        const fixture = {
+            schemaVersion: 1,
+            generatedAt: '2026-08-25T00:00:00Z',
+            spurVersion: '0.0.0-test',
+            validatedAt: '2026-08-25T01:00:00Z',
+            baselineArtifactDigest: 'deadbeef',
+            population: { sessions: 2, tools: 3, loops: 4, warnings: 5, appliedTop: 10 },
+            totals: { messages: 42, toolCalls: 7 },
+            bySource: { claude: { messages: 20 }, codex: { messages: 22 } },
+            byModel: { m1: { messages: 30 }, m2: { messages: 12 } },
+            selector: {
+                since: '2026-08-24T00:00:00-07:00',
+                until: '2026-08-25T00:00:00-07:00',
+                sources: ['codex', 'claude'],
+                models: ['m2', 'm1'],
+                tools: ['Bash', 'Edit'],
+                skills: ['zeta', 'alpha'],
+                sessionId: null,
+                runId: null,
+                taskWbs: '0669',
+            },
+            coverage: [
+                { source: 'codex', status: 'ok', files: 3 },
+                { source: 'claude', status: 'ok', files: 2 },
+            ],
+            daily: [
+                { date: '2026-08-25', messages: 12 },
+                { date: '2026-08-24', messages: 30 },
+            ],
+            byTool: [
+                { toolName: 'Bash', calls: 5 },
+                { toolName: 'Edit', calls: 2 },
+            ],
+            bySession: [
+                { sessionId: 's-b', tokens: 100 },
+                { sessionId: 's-a', tokens: 200 },
+            ],
+            topStepsByTokens: [
+                { sessionId: 's-a', inputTokens: 900 },
+                { sessionId: 's-b', inputTokens: 300 },
+            ],
+            topStepsByDuration: [
+                { sessionId: 's-b', durationMs: 5000 },
+                { sessionId: 's-a', durationMs: 1000 },
+            ],
+            loops: [
+                { sessionId: 's-a', repeats: 3 },
+                { sessionId: 's-b', repeats: 9 },
+            ],
+            warnings: [
+                { code: 'w2', detail: 'two' },
+                { code: 'w1', detail: 'one' },
+            ],
+            pairings: [{ executor: 'omp', role: 'coder', dispatches: 4 }],
+            ladderSnapshot: [
+                { name: 'omp', tier: 'standard', order: 0 },
+                { name: 'pi', tier: 'capable-1', order: 1 },
+            ],
+            derived: {
+                phases: {
+                    phaseSupport: 'supported',
+                    phases: [
+                        {
+                            name: 'p2',
+                            startedAt: '2026-08-24T01:00:00Z',
+                            endedAt: '2026-08-24T02:00:00Z',
+                            source: 'todo',
+                        },
+                        {
+                            name: 'p1',
+                            startedAt: '2026-08-24T03:00:00Z',
+                            endedAt: '2026-08-24T04:00:00Z',
+                            source: 'todo',
+                        },
+                    ],
+                },
+                timeDecomposition: {
+                    llmMs: 100,
+                    toolMs: 50,
+                    idleMs: 25,
+                    unattributedMs: 5,
+                    spanMs: 180,
+                    spanExcludedSessions: 0,
+                },
+                bottlenecks: [
+                    { label: 'llm', ms: 100, share: 0.55 },
+                    { label: 'tool', ms: 50, share: 0.28 },
+                ],
+            },
+            cacheWaste: {
+                steps: 6,
+                inputTokens: 1234,
+                topSteps: [
+                    { sessionId: 's-c', cacheReadTokens: 700 },
+                    { sessionId: 's-d', cacheReadTokens: 200 },
+                ],
+            },
+            stepSupport: [
+                { source: 'codex', assistantSteps: 9 },
+                { source: 'claude', assistantSteps: 4 },
+            ],
+        };
+        expect(semanticArtifactDigest(fixture)).toBe(
+            'c7df4f4deb63fb4d267365fda07f8fda52558aae142437938c2e4e1f72f83271',
+        );
+
+        // Reordering every ranked array must change the digest...
+        const reordered = structuredClone(fixture);
+        reordered.byTool.reverse();
+        reordered.bySession.reverse();
+        reordered.topStepsByTokens.reverse();
+        reordered.topStepsByDuration.reverse();
+        reordered.cacheWaste.topSteps.reverse();
+        reordered.derived.bottlenecks.reverse();
+        expect(semanticArtifactDigest(reordered)).not.toBe(semanticArtifactDigest(fixture));
+
+        // ...while shuffling every set array must not.
+        const shuffled = structuredClone(fixture);
+        shuffled.coverage.reverse();
+        shuffled.daily.reverse();
+        shuffled.loops.reverse();
+        shuffled.warnings.reverse();
+        shuffled.pairings.reverse();
+        shuffled.ladderSnapshot.reverse();
+        shuffled.stepSupport.reverse();
+        shuffled.derived.phases.phases.reverse();
+        shuffled.selector.sources = [...shuffled.selector.sources].reverse();
+        shuffled.selector.models = [...shuffled.selector.models].reverse();
+        shuffled.selector.tools = [...shuffled.selector.tools].reverse();
+        shuffled.selector.skills = [...shuffled.selector.skills].reverse();
+        expect(semanticArtifactDigest(shuffled)).toBe(semanticArtifactDigest(fixture));
+    });
+
+    // R2 backstop (task 0669 Q&A): script-contract-check compares the twin only against its direct
+    // .ts source, so a regenerated lib with a stale twin goes unnoticed there. This invokes the
+    // committed .mjs twin's `digest` verb under bare node and requires the same hex as the
+    // in-process implementation over an identical fixture.
+    test('.mjs twin runs under bare node and digests identically (R2)', () => {
+        const twin = join(import.meta.dir, '../scripts/history-anatomy-cache.mjs');
+        expect(existsSync(twin)).toBeTrue();
+        const twinText = readFileSync(twin, 'utf8');
+        expect(twinText, 'ADR-065 twin must not import from packages/').not.toMatch(/packages\//);
+
+        const dir = mkdtempSync(join(tmpdir(), 'ha-twin-'));
+        const fixturePath = join(dir, 'fixture.json');
+        const fixtureJson = JSON.stringify({
+            totals: { messages: 42 },
+            byTool: [{ id: 'A' }, { id: 'B' }],
+        });
+        writeFileSync(fixturePath, fixtureJson);
+        try {
+            const proc = Bun.spawnSync(['node', twin, 'digest', fixturePath]);
+            if (proc.exitCode !== 0) {
+                throw new Error(`bare-node twin run failed: ${proc.stderr.toString()}`);
+            }
+            expect(proc.stdout.toString().trim()).toBe(semanticArtifactDigest(JSON.parse(fixtureJson)));
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
         }
     });
 });

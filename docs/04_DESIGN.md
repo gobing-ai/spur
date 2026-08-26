@@ -860,12 +860,29 @@ standard contract, ADR-079 digest-truth). Publication is reachable only from a p
 state; a hit reuses model enrichment only and refreshes `validated_at` + the imported-snapshot banner
 without claiming a later import.
 
+**Artifact-digest ownership boundary (task 0669).** The semantic artifact digest and its ranked-
+versus-set canonicalization rules live in **`packages/domain/src/analytics/artifact-digest.ts`**,
+beside the `HistoryArtifact` type they canonicalize. The classification
+(`ARTIFACT_ARRAY_CLASSIFICATION`) is type-derived: a recursive array-key type over the artifact plus
+an exhaustive `Record<ArtifactArrayKey, 'ranked' | 'set'>` makes an unclassified new array field a
+`tsc` error naming the field — order-as-evidence must be declared, closing the drift class that hid
+`topSteps`/`bottlenecks` for months. The plugin script consumes this authority through a **generated**
+copy (`plugins/sp/lib/artifact-digest.generated.mjs`, built by `bun run build:plugin-lib` and
+committed) because ADR-065 forbids a monorepo import surviving into the script's `.mjs` twin;
+consequently the domain module has exactly one consumer reached through a generated file, not an
+import. Consequences that are deliberate: no hand-maintained enumeration of artifact array keys may
+exist in `plugins/sp/scripts/`; the twin's bare-`node` fixture test (R2) backstops the twin-staleness
+hole (script-contract-check compares mtimes only against the direct source); and
+`ELEVEN_SECTIONS`/`FINDING_FIELDS` stay local to the script with `skill-structure.test.ts` requiring
+`report-contract.md` to name every entry of both — full single-owner treatment of the report
+vocabulary was deferred as it has never drifted.
+
 **Helper verb surface and stage order (0659/0660, corrected 2026-08-25).** The helper's CLI is
 `paths | probe | stamp | refresh | digest | check | publish` — every stage in the workflow is one
 invocation of one of these (ADR-069 R1 glue length). Stage order is
 `resolve-scope → resolve-paths → analyze → cache-probe → {hit: refresh-provenance | miss: render →
 enrich → structure-gate → validate → stamp} → publish`. **`analyze` precedes `cache-probe`
-deliberately:** ADR-079 makes validity a *derived* fact, so the semantic digest must come from the
+deliberately:** ADR-079 makes validity a _derived_ fact, so the semantic digest must come from the
 fresh artifact, never from the cached report being judged. Publication is reachable only via `stamp`
 (guarded on `Verdict: PASS`) or `refresh-provenance` (whose model half was itself published through
 a passing validation).

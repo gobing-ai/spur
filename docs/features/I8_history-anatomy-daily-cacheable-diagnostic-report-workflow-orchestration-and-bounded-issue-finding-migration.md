@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-25T04:01:01.272Z"
-updated_at: "2026-08-25T17:48:35.951Z"
+updated_at: "2026-08-26T00:20:50.014Z"
 ---
 
 # I8: History anatomy: daily cacheable diagnostic report, workflow orchestration, and bounded issue-finding migration
@@ -430,6 +430,8 @@ Feature: History anatomy: daily cacheable diagnostic report, workflow orchestrat
 | 0659 | History-anatomy cache helper: semantic artifact digest, invalidation matrix, structure gate, atomic publish | done |
 | 0660 | history-anatomy.yaml workflow: cache branch, deterministic stage ordering, bounded correction, atomic publication | done |
 | 0661 | Repoint /sp:dev-find-issue, remove /sp:dev-history-load, and land the coexistence and surface documentation | done |
+| 0668 | Move semanticArtifactDigest into packages/domain and retire the ranked-key mirror | cancelled |
+| 0669 | Move semanticArtifactDigest into packages/domain and retire the ranked-key mirror | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -439,3 +441,6 @@ Feature: History anatomy: daily cacheable diagnostic report, workflow orchestrat
 - 2026-08-25T06:40:38.841Z backlog → active (system)
 - 2026-08-25T06:40:39.271Z active → verifying (system)
 - 2026-08-25T17:48:35.951Z verifying → done (system)
+- 2026-08-25T22:02:02.215Z done → active (system)
+- 2026-08-26T00:20:49.503Z active → verifying (system)
+- 2026-08-26T00:20:50.014Z verifying → done (system)

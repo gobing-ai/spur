@@ -19,7 +19,8 @@
             "!docs/.tasks",
             "!drizzle",
             "!**/.spur",
-            "!plugins/sp/scripts/**/*.mjs"
+            "!plugins/sp/scripts/**/*.mjs",
+            "!plugins/sp/lib"
         ]
     },
     "formatter": {

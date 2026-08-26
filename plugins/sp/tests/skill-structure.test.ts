@@ -961,39 +961,31 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
     // HA-S1 (0658 R4): the report contract freezes the eleven section names and the per-finding
     // field names. 0659's structure gate and 0660's validation stage consume them verbatim, so
     // this test pins them here so the vocabulary cannot drift.
-    test('history-anatomy report contract carries the frozen eleven sections and finding fields (HA-S1 0658 R4)', () => {
+    // Task 0669 (R5): the script-side `ELEVEN_SECTIONS` / `FINDING_FIELDS` constants are the
+    // executable owner; this test reads THEM (not a third literal copy) and requires the markdown
+    // contract to name every entry — so the two can no longer drift silently in either direction.
+    test('history-anatomy report contract carries the frozen eleven sections and finding fields (HA-S1 0658 R4, 0669 R5)', () => {
         const contract = join(SKILLS_DIR, 'history-anatomy/references/report-contract.md');
         if (!existsSync(contract)) {
             return;
         }
         const text = readFileSync(contract, 'utf8');
-        const sections = [
-            'Scope and provenance',
-            'Executive summary',
-            'Baseline comparison',
-            'Findings',
-            'Recurrence ledger',
-            'Telemetry gaps',
-            'Remediation options',
-            'Performance analysis',
-            'Workflow and process improvements',
-            'Positive patterns',
-            'Evidence ledger',
-        ];
+
+        const scriptSource = readFileSync(join(PLUGIN_ROOT, 'scripts/history-anatomy-cache.ts'), 'utf8');
+        const extractStringArray = (name: string): string[] => {
+            const match = scriptSource.match(new RegExp(`const ${name} = \\[((?:.|\\n)*?)\\];`));
+            if (!match?.[1]) {
+                throw new Error(`history-anatomy-cache.ts must keep exporting const ${name}`);
+            }
+            return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+        };
+        const sections = extractStringArray('ELEVEN_SECTIONS');
+        expect(sections.length).toBe(11);
         for (const s of sections) {
             expect(text, `report contract must name section: ${s}`).toContain(s);
         }
-        const fields = [
-            'key',
-            'category',
-            'impact',
-            'trend',
-            'observation',
-            'inference',
-            'confidence',
-            'contradictions',
-            'evidenceAnchor',
-        ];
+        const fields = extractStringArray('FINDING_FIELDS');
+        expect(fields.length).toBe(9);
         for (const f of fields) {
             expect(text, `report contract must name finding field: ${f}`).toContain(f);
         }
