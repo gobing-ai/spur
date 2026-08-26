@@ -12,9 +12,18 @@
 
 import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 
-/** Escape a node id / label for use inside a mermaid `flowchart` block. */
+/**
+ * Escape a node id / label for use inside a mermaid `flowchart` block.
+ * Parens are escaped too: unquoted mermaid edge/node labels reject them
+ * (`got 'PS'` parse error), e.g. descriptions like "(ADR-079)".
+ */
 function esc(text: string): string {
-    return text.replace(/"/g, '&quot;').replace(/\[/g, '&#91;').replace(/\]/g, '&#93;');
+    return text
+        .replace(/"/g, '&quot;')
+        .replace(/\[/g, '&#91;')
+        .replace(/\]/g, '&#93;')
+        .replace(/\(/g, '&#40;')
+        .replace(/\)/g, '&#41;');
 }
 
 /** Render a `class X classname` assignment. */

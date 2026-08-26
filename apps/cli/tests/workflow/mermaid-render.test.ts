@@ -97,4 +97,17 @@ describe('renderWorkflowMermaid', () => {
         expect(out).toContain('&#91;');
         expect(out).toContain('&#93;');
     });
+
+    test('escapes parens in edge labels (mermaid rejects them unquoted)', () => {
+        const def: WorkflowDef = {
+            kind: 'transition-flow',
+            name: 'x',
+            initialNode: 'a',
+            terminalNodes: ['b'],
+            nodes: [{ id: 'a' }, { id: 'b' }],
+            edges: [{ from: 'a', to: 'b', description: 'rerun the half (ADR-079).' }],
+        };
+        const out = renderWorkflowMermaid(def);
+        expect(out).toContain('&#40;ADR-079&#41;');
+    });
 });
