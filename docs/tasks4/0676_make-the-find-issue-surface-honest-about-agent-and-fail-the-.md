@@ -4,7 +4,7 @@ name: "Make the find-issue surface honest about --agent and fail the run on unde
 status: done
 template: feature-impl
 created_at: 2026-08-26T05:38:44.933Z
-updated_at: "2026-08-26T15:43:41.584Z"
+updated_at: "2026-08-26T20:17:22.332Z"
 feature_id: I81
 priority: P2
 tags: ["history-anatomy", "sp-plugin", "contract", "hygiene"]
@@ -94,42 +94,43 @@ Scenario: R17 — The workflow's default executor is not a quota-dead one
 10. Run `bun run lint`, `bun run test`, `bun run script-contract-check`, and `spur workflow validate config/workflows/history-anatomy.yaml`.
 
 ### Solution
-
 Plugin docs, one helper subcommand, and workflow config — no public spur noun/verb touched (R6).
 
 | Change | Why |
 | --- | --- |
 | plugins/sp/commands/dev-find-issue.md | R1: flag table and argument-hint no longer advertise `inline` (was the documented default on a headless target that exits 2 on it); options now `auto\|name`, default omitted |
 | plugins/sp/commands/dev-idea.md | R2: same over-promise corrected; rejection sentence retained for operators who pass it anyway. dev-run/dev-runall/dev-refine keep inline legitimately (host driver); dev-wrap/wrapall already document the rejection explicitly |
-| history-anatomy-cache.ts `assert-clean` verb + pure `diffPorcelain` (`plugins/sp/scripts/history-anatomy-cache.ts:813`) + .mjs twin regen | R3: porcelain fingerprint diff around model stages; undeclared writes exit 1 naming each path |
+| history-anatomy-cache.ts pure `diffPorcelain` (`plugins/sp/scripts/history-anatomy-cache.ts:779`) + `assert-clean` verb (`plugins/sp/scripts/history-anatomy-cache.ts:842`) + .mjs twin regen | R3: porcelain fingerprint diff around model stages; undeclared writes exit 1 naming each path |
 | config/workflows/history-anatomy.yaml enrich/validate states capture a pre-dispatch baseline and assert-clean after | R3: an undeclared write fails the run before publication |
 | repo-root leaked `history-anatomy..md` deleted from main tree | R4 |
 
 R5: workflow fallback literal `agent: "omp"` → `agent: "claude"` (omp returned HTTP 429 quota-dead in the 2026-08-25 dogfood; claude verified usable/capable by `spur agent doctor` in this batch's precheck). `config.agent.default` still overrides via the precedence chain, so no new stale pin is created beyond the project's current healthy default.
 
+<!-- Anchor corrected by verifyall 2026-08-26 (I81 re-audit, --fix all): the R3 row cited a single
+     anchor at line 813, which `spur task check` reported as L4.anchor-subject-mismatch — line 813
+     sits inside runCacheCli's `digest` case and names neither subject. Re-read this run: the pure
+     diffPorcelain function is line 779 and the assert-clean switch case is line 842, so the row
+     now carries both. No change-map content was altered. -->
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | plugins/sp/commands/dev-find-issue.md flag table options are `auto |
-| R2 | MET | plugins/sp/commands/dev-idea.md same correction; sweep of plugins/sp/commands/ confirms wrap/wrapall document rejection explicitly and run/runall/refine keep host-driver inline |
-| R3 | MET | history-anatomy-cache.ts assert-clean verb + diffPorcelain; enrich/validate states capture baseline then assert; failing action routes run to failed before publish |
-| R4 | MET | leaked history-anatomy..md removed from main-tree repo root |
-| R5 | MET | config/workflows/history-anatomy.yaml agent literal claude (doctor-verified reachable); comment records omp 429 precedent and agent.default override |
-| R6 | MET | no public spur noun/verb changed — plugin docs, plugin script, workflow config only |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/commands/dev-find-issue.md` flag table and argument-hint no longer advertise `inline` on a headless target; pinned by `plugins/sp/tests/inline-execution-contract.test.ts` (green this run) |
+| R2 | MET | `plugins/sp/commands/dev-idea.md` same correction, rejection sentence retained; same contract test |
+| R3 | MET | `plugins/sp/scripts/history-anatomy-cache.ts:779` pure `diffPorcelain` + `plugins/sp/scripts/history-anatomy-cache.ts:842` `assert-clean` verb; covered by the `diffPorcelain (0676 R3)` describe block at `plugins/sp/tests/history-anatomy-cache.test.ts:455-467`, green this run |
+| R4 | MET | repo-root leaked `history-anatomy..md` removed from the main tree |
+| R5 | MET | `config/workflows/history-anatomy.yaml` fallback literal is `claude`, not quota-dead `omp`; `config.agent.default` still overrides via the precedence chain |
+| R6 | MET | No public spur noun or verb changed — plugin docs, one plugin script, workflow config only (ADR-051 consent gate not crossed) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
-| R15 — A headless surface never advertises an execution mode it rejects | MET | test | doc change pinned by HEADLESS_NO_INLINE_ADVERTISED assertions in plugins/sp/tests/inline-execution-contract.test.ts; default no longer produces the rejection error |
-| R16 — A model stage that writes outside its declared output path fails the run | MET | test | assert-clean unit tests (clean passes, stray write exits 1 naming path, declared output exempt); workflow asserts after enrich and validate before publication |
-| R17 — The workflow's default executor is not a quota-dead one | MET | command | doctor probe in this batch's precheck shows claude installed/usable/capable-3; yaml literal updated |
-
+|---------------------|--------|---------------|----------|
+| R15 — A headless surface never advertises an execution mode it rejects | MET | test | `plugins/sp/tests/inline-execution-contract.test.ts` HEADLESS_NO_INLINE_ADVERTISED assertions green this run (129/129 across the three plugin suites) |
+| R16 — A model stage that writes outside its declared output path fails the run | MET | test | The `diffPorcelain (0676 R3)` describe block at `plugins/sp/tests/history-anatomy-cache.test.ts:455-467` — one case names paths gained since baseline, one exempts declared outputs and pre-existing dirt; both green this run. `config/workflows/history-anatomy.yaml` asserts after enrich and validate, before publication |
+| R17 — The workflow's default executor is not a quota-dead one | MET | command | `config/workflows/history-anatomy.yaml:71` pins fallback `agent: "claude"`; re-probed this run: `spur agent doctor claude --json` reports usable=true, version 2.1.246 (Claude Code), capabilityTier capable-3 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Functional traceability** — all six requirements MET. R1: `dev-find-issue.md` no longer presents `inline` as usable (options `auto|name`, default omitted); invoking the documented default now resolves through the precedence chain, never hitting the headless rejection. R2: `dev-idea.md` corrected; repo-wide audit found dev-wrap/wrapall already document the explicit rejection honestly (kept), dev-run/runall/refine keep inline legitimately (host driver). R3: porcelain fingerprint diff (`assert-clean` verb + pure `diffPorcelain`) wired as baseline-capture/assert actions around enrich and validate; undeclared writes exit 1 naming each path and halt before publication; unit tests cover clean/undeclared/declared paths with a gitignored-run-dir mirror of the real repo. R4: leaked root file deleted. R5: fallback literal moved from quota-dead `omp` to currently-reachable `claude` with `agent.default` still overriding via the precedence chain.

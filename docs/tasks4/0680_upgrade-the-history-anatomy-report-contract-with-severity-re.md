@@ -4,7 +4,7 @@ name: "Upgrade the history-anatomy report contract with severity, repro, owner s
 status: done
 template: feature-impl
 created_at: 2026-08-26T05:38:45.026Z
-updated_at: "2026-08-26T18:19:34.878Z"
+updated_at: "2026-08-26T20:17:23.277Z"
 feature_id: I81
 priority: P2
 tags: ["history-anatomy", "report-contract", "sp-plugin", "dogfood"]
@@ -110,29 +110,26 @@ Contract, gate, and rubrics moved in one commit (R7), twin regenerated.
 R6: chained `agent.run` cost surfaces through the pairing analytics fold that 0679 repaired (payload-path attribution); Performance analysis now contracts to report it instead of "~unknown". No auto-write to the corpus anywhere: the handoff prints an invocation for the operator to run.
 
 ### Testing
-
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PARTIAL (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | severity in FINDING_FIELDS + P1/P2/P3 closed-vocabulary check in checkReportStructure (`plugins/sp/scripts/history-anatomy-cache.ts:110` FINDING_FIELDS + checkReportStructure finding-block scan at :351) |
-| R2 | MET | reproCommand required per finding block; unit test pins failure-by-name when missing |
-| R3 | MET | ownerSurface required; consistent-with-key noted in contract |
-| R4 | MET | contract Remediation-handoff section mandates printed `task create` invocation carrying stable key; no auto-write |
-| R5 | MET | Report-only advisories section (#10 of twelve) for repeated tool-and-argument signatures proposing no interruption |
-| R6 | MET | Performance-analysis run-cost reporting contracts to pairing fold totalCostUsd/meanDurationMs (0679) |
-| R7 | MET | contract + cache helper + .mjs twin + operations rubrics in one commit |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/scripts/history-anatomy-cache.ts:110` `FINDING_FIELDS` carries `severity`; the finding-block scan at `plugins/sp/scripts/history-anatomy-cache.ts:351` fails a block missing any triage field. `plugins/sp/tests/skill-structure.test.ts:1005-1006` asserts the `FINDING_FIELDS` set has 12 entries |
+| R2 | MET | `reproCommand` required per finding block by the same scan; unit test pins failure-by-name when the field is absent |
+| R3 | MET | `ownerSurface` required by the same scan; consistency with the stable key noted in the contract |
+| R4 | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md:127-130` — the Remediation handoff route mandates a printed `spur task create` invocation carrying the proposal's finding key; no automatic corpus write |
+| R5 | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md:18` lists `Report-only advisories` as section 10 of twelve; `plugins/sp/skills/history-anatomy/references/report-contract.md:135` defines it as report-only for repeated tool-and-argument signatures, proposing no interruption |
+| R6 | MET | Performance-analysis run-cost reporting contracts to the pairing fold's `totalCostUsd`/`meanDurationMs` delivered by task 0679 |
+| R7 | MET | Contract, cache helper, `.mjs` twin, and operations rubrics landed in one commit; `bun run script-contract-check` is the standing twin gate (ADR-065) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
-| R13 — Each published finding names its severity, repro command, and owner surface | MET | test | gate fails candidates missing each field (unit tests); complete finding passes |
-| R14 — An accepted remediation proposal can be handed to the task corpus | MET | test | contract defines printed spur task create invocation carrying the stable key; operator executes it |
-| R18 — The report carries a report-only repeated-call advisory | MET | test | twelfth-section contract change pins the standing advisory slot proposing no automatic interruption |
-
+|---------------------|--------|---------------|----------|
+| R13 — Each published finding names its severity, repro command, and owner surface | MET | test | `plugins/sp/tests/skill-structure.test.ts:1005-1008` asserts `FINDING_FIELDS` has 12 entries and that the contract names every field; the finding-block scan fails a candidate missing any of them. 129/129 plugin tests green this run |
+| R14 — An accepted remediation proposal can be handed to the task corpus | PARTIAL | static-ref | `plugins/sp/skills/history-anatomy/references/report-contract.md:127-130` defines the printed `spur task create` invocation carrying the stable key, executed by the operator. Contract-only by design — no runtime path exists to test |
+| R18 — The report carries a report-only repeated-call advisory | PARTIAL | static-ref | The *contract* half is test-pinned: `plugins/sp/tests/skill-structure.test.ts:999-1001` asserts the section list has 12 entries, with the standing `Report-only advisories` slot named in the assertion comment; `plugins/sp/skills/history-anatomy/references/report-contract.md:18` places it at section 10 of twelve and `plugins/sp/skills/history-anatomy/references/report-contract.md:135` defines it. The *report* half — that a published report actually carries the advisory — is authored by the model-bearing enrich stage and is unobserved: no run artifact and no dogfood record for I81 exists in this tree |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Functional traceability** — all seven requirements MET. R1-R3: triage fields gate-enforced (gate now actually scans real bullet findings — the legacy regex was vacuous against the format every published report uses, found and fixed in-task); R4: handoff prints the task-create invocation with stable key; R5: standing Report-only advisories section takes the frozen count to twelve; R6: run-cost reporting contracts to the 0679-repaired pairing fold; R7: contract + helper twin + rubrics landed in one commit.

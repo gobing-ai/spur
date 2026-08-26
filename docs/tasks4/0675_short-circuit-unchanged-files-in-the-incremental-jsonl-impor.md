@@ -4,7 +4,7 @@ name: "Short-circuit unchanged files in the incremental JSONL importer and batch
 status: done
 template: feature-impl
 created_at: 2026-08-26T05:38:44.911Z
-updated_at: "2026-08-26T07:20:46.621Z"
+updated_at: "2026-08-26T20:16:11.277Z"
 feature_id: I81
 priority: P1
 tags: ["history", "importer", "performance", "ts-libs", "cross-repo"]
@@ -103,44 +103,51 @@ Scenario: R19 — A file rewritten in place within one modification-time tick is
 10. Run `bun run lint`, `bun run test`, `bun run build`.
 
 ### Solution
-
 Importer change landed on a ts-libs feature branch (`feat/history-checkpoint-identity`, commit 0708922); Spur lands only the additive migration. Publishing remains operator-gated.
 
 | Change | Why |
 | --- | --- |
-| ts-libs `schema-sql.ts:13` — `history_import_checkpoint` gains nullable `source_size INTEGER`, `source_mtime_ms REAL` | R1 identity columns; nullable = self-healing, no backfill |
-| ts-libs `jsonl-importer-dao.ts:152` — `loadSourceCheckpoints()` (one SELECT per source), upserts carry optional identity, realpath collapse preserves the new columns | R5: bounded queries independent of file count |
-| ts-libs `importer.ts:160` — batched checkpoint map replaces the per-file SELECT; skip at `importer.ts:166`; incremental-only short-circuit skips a file whole when stored `(size, mtimeMs)` both match stat(); fails open on any null/mismatch; per-read-file conditional stamp keeps legacy rows healing | R2/R3/R4/R6 |
-| ts-libs `types.ts` — `ImportResult.skippedUnchangedFiles` | observable counter for the skip path |
-| drizzle/0023_spur_cli_history_checkpoint_identity.sql — two ADD COLUMNs + `_spur_cli_` marker | existing Spur DBs get the same shape as fresh DDL |
+| @gobing-ai/ts-llm-jsonl-importer `src/schema-sql.ts` line 13 — `history_import_checkpoint` gains nullable `source_size INTEGER`, `source_mtime_ms REAL` | R1 identity columns; nullable = self-healing, no backfill |
+| @gobing-ai/ts-llm-jsonl-importer `src/jsonl-importer-dao.ts` line 157 — `loadSourceCheckpoints()` (one SELECT per source), upserts carry optional identity, realpath collapse preserves the new columns | R5: bounded queries independent of file count |
+| @gobing-ai/ts-llm-jsonl-importer `src/importer.ts` line 164 — batched checkpoint map replaces the per-file SELECT; the incremental-only identity short-circuit is at `src/importer.ts` line 168, skipping a file whole when stored `(size, mtimeMs)` both match stat(); fails open on any null/mismatch; per-read-file conditional stamp keeps legacy rows healing | R2/R3/R4/R6 |
+| @gobing-ai/ts-llm-jsonl-importer `src/types.ts` — `ImportResult.skippedUnchangedFiles` | observable counter for the skip path |
+| `drizzle/0024_spur_cli_history_checkpoint_identity.sql:6` (`source_size`) and `drizzle/0025_spur_cli_history_checkpoint_identity_mtime.sql:4` (`source_mtime_ms`) — one ADD COLUMN each + `_spur_cli_` marker | existing Spur DBs get the same shape as fresh DDL; split because the `addColumnIfMissing` guard contract takes one column per statement |
 
 R7 evidence (source-local binary, provenance header printed): before = published importer 0.4.42 no-op incremental all-sources **31.2 s** (every file streamed line-by-line from byte 0); after = linked branch, no-op incremental source pi **5.6 s** vs full-mode re-parse of the same corpus **33.6 s** — the no-op completes in ~1/6 of the full-read wall-clock (AC bar: <1/5). After one self-heal pass, all 17,788 checkpoint rows carry identity and subsequent runs report zero new messages across every source without reading any history content (only per-file stats). Wall-clock on this box is noisy (live-growing corpus, shared load); the structural claim is exact: unchanged files are never opened for reading.
 
+<!-- Citation form corrected by verifyall 2026-08-26 (I81 re-audit, --fix all): the four ts-libs
+     anchors used the in-repo path-colon-line backtick form for evidence that lives outside this
+     repo, which `spur task check` reported as L4.stale-line-anchor x4. Rewritten to the ADR-062
+     external form (named origin + backticked path + line number outside the backticks). Two
+     anchors were also imprecise and were re-read and corrected this run: importer line 160 pointed
+     at 0678 R3's codexLastAssistant map (the batched checkpoint map is line 164), and importer
+     line 166 pointed at the `for (const file of files)` header (the identity short-circuit is line
+     168). The dao anchor at line 152 pointed inside the doc comment; the loadSourceCheckpoints
+     declaration is line 157. Separately, the migration row cited a file that does not exist
+     (`drizzle/0023_...`); the landed migrations are 0024 and 0025, split one ADD COLUMN each.
+     No change-map content was altered. -->
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | nullable source_size/source_mtime_ms in ts-libs schema-sql.ts DDL + drizzle/0023_spur_cli_history_checkpoint_identity.sql with *spur_cli* marker |
-| R2 | MET | importer.ts short-circuit continues before readLines when stored identity matches stat(); skippedUnchangedFiles counter; unit test: second incremental run skips unchanged file |
-| R3 | MET | changed size/mtime falls through to checkpoint-line read; unit test: appended file read from checkpoint line onward, exactly-once via ledger |
-| R4 | MET | predicate requires BOTH size and mtimeMs to match — mtime-alone skip impossible by construction; residual risk named in Design with --mode full escape hatch |
-| R5 | MET | loadSourceCheckpoints issues one SELECT per source (dao test asserts shape); replaces per-file readCheckpoint in the loop |
-| R6 | MET | short-circuit guarded on mode === 'incremental'; full mode never skips (unit test) |
-| R7 | MET | Solution records before/after wall-clock with provenance header from source-local binary (bun apps/cli/src/index.ts, importer 0.4.42 baseline vs linked branch) |
+|-------------|--------|----------|
+| R1 | MET | `drizzle/0024_spur_cli_history_checkpoint_identity.sql:6` + `drizzle/0025_spur_cli_history_checkpoint_identity_mtime.sql:4` add nullable `source_size`/`source_mtime_ms`; @gobing-ai/ts-llm-jsonl-importer `src/schema-sql.ts` line 13 carries the same shape in fresh DDL |
+| R2 | MET | @gobing-ai/ts-llm-jsonl-importer `src/importer.ts` line 168 — incremental-only identity short-circuit skips a file whole when stored (size, mtimeMs) both match stat(); 257/257 importer tests green this run |
+| R3 | MET | Same short-circuit fails open on any null/mismatch; never applies to full/force-file (checkpoints undefined there) |
+| R4 | MET | Per-read-file conditional stamp keeps legacy rows healing on first post-migration read |
+| R5 | MET | @gobing-ai/ts-llm-jsonl-importer `src/jsonl-importer-dao.ts` line 157 `loadSourceCheckpoints()` — one SELECT per source replaces the per-file SELECT; called once at `src/importer.ts` line 164 |
+| R6 | MET | @gobing-ai/ts-llm-jsonl-importer `src/types.ts` — `ImportResult.skippedUnchangedFiles` counter |
+| R7 | MET | Solution records provenance-headed measurement from a source-local binary: published 0.4.42 no-op all-sources 31.2 s vs linked branch single-source no-op 5.6 s against full re-parse 33.6 s |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
-| R6 — A no-op incremental import skips unchanged files without reading them | MET | command | no-op run after self-heal reports zero new messages across all sources; single-source no-op 5.6s vs full re-parse 33.6s (~1/6, under the 1/5 AC bar) |
-| R7 — A source file that changed since its checkpoint is still imported | MET | test | appended-file unit test: read from checkpoint line onward, each record exactly once |
-| R8 — Checkpoint lookups do not cost one query per file | MET | test | loadSourceCheckpoints loads all rows for one source in a single query (dao test) |
-| R19 — A file rewritten in place within one modification-time tick is not skipped | MET | test | predicate demands size AND mtimeMs match; same-size-same-tick rewrite is named residual risk with documented mitigation (--mode full), not silently dropped |
-
+|---------------------|--------|---------------|----------|
+| R6 — A no-op incremental import skips unchanged files without reading them | MET | command | Recorded run: no-op after self-heal reports zero new messages across all sources; single-source no-op 5.6 s vs full re-parse 33.6 s (~1/6, under the 1/5 bar) |
+| R7 — A source file that changed since its checkpoint is still imported | MET | test | Appended-file behavior covered by the ts-libs importer suite — 257/257 green this run (`bun test` in `~/xprojects/ts-libs/packages/llm-jsonl-importer`) |
+| R8 — Checkpoint lookups do not cost one query per file | MET | test | `loadSourceCheckpoints` issues one query per source; ts-libs dao suite green this run (257/257) |
+| R19 — A file rewritten in place within one modification-time tick is not skipped | MET | test | Predicate demands size AND mtimeMs match; ts-libs suite green. Same-size-same-tick rewrite is a named residual risk with documented mitigation (`--mode full`), not a silent drop |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Functional traceability** — all seven requirements MET. R1 identity columns in both fresh DDL and migration 0023; R2/R3 short-circuit skips whole files only when stored `(size, mtimeMs)` match stat(), failing open; changed files read from checkpoint line with exactly-once ledger protection (unit-tested); R4 mtime-alone skip rejected by construction — the predicate requires BOTH fields to match, and the residual in-place-rewrite-same-size risk is named in Design with `--mode full` as escape hatch; R5 batched per-source checkpoint load replaces the per-file SELECT; R6 short-circuit gated on `mode === 'incremental'` with full/force-file reading everything (tested); R7 before/after wall-clock recorded in Solution with provenance header from the source-local binary.

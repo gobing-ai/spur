@@ -4,7 +4,7 @@ name: "Audit and map source-adapter duration and step usage where the raw record
 status: done
 template: feature-impl
 created_at: 2026-08-26T05:38:44.976Z
-updated_at: "2026-08-26T17:08:39.828Z"
+updated_at: "2026-08-26T20:16:12.163Z"
 feature_id: I81
 priority: P2
 tags: ["history", "importer", "telemetry", "ts-libs", "cross-repo"]
@@ -97,26 +97,23 @@ R3 finding: confirmed (ts-libs mappers.ts carrier emit at src/mappers.ts:748; im
 Integration hardening (packages/domain/src/migrations.ts:709 registers guarded 0024/0025): the earlier drizzle 0675 file collided with the already-registered `0023` id and silently never applied; identity-column SELECT/upserts also fail open on pre-migration databases.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | per-source × field audit table in Solution, built from real raw records (codex rollout files, gemini brain transcripts, antigravity brain logs, grok session updates, pi/claude session lines) |
-| R2 | MET | codex token_count→assistant attribution (ts-libs mappers.ts carrier + importer.ts:384); grok apiDurationMs mapped; unit tests pin both contracts |
-| R3 | MET | confirmed aggregate derives from token_count events the step-level path dropped onto meta rows; attribution now targets the assistant row that produced each turn |
-| R4 | MET | agy (both), claude/pi/gemini durations documented unsupported after verified raw-shape absence |
-| R5 | MET | zero synthesis; codex unattributable carriers stay dropped; grok mapping is producer-measured apiDurationMs |
-| R6 | MET | before/after matrix in Solution (codex 0→36,608 of 53,497) measured on fresh DB over same corpus |
+|-------------|--------|----------|
+| R1 | MET | Per-source x field audit table in `## Solution`, built from real raw records (codex rollout files, gemini brain transcripts, antigravity brain logs, grok session updates, pi/claude session lines) |
+| R2 | MET | codex token_count to assistant attribution: @gobing-ai/ts-llm-jsonl-importer `src/importer.ts` line 384 (`codexLastAssistant.set`) with the carrier declared at `src/mappers.ts` line 11; grok `apiDurationMs` mapped at `src/mappers.ts` line 1279. 257/257 importer tests green this run |
+| R3 | MET | Confirmed the aggregate derives from token_count events the step-level path dropped onto meta rows; attribution now targets the assistant row that produced each turn (`src/importer.ts` line 377 comment names the mechanism) |
+| R4 | MET | agy (both), claude/pi/gemini durations documented unsupported after verified raw-shape absence — recorded as audit rows, not silent gaps |
+| R5 | MET | Zero synthesis: codex unattributable carriers stay dropped; grok mapping is producer-measured `apiDurationMs`, never derived |
+| R6 | MET | Before/after matrix in Solution (codex assistant-with-usage 0 to 36,608 of 53,497) measured on a fresh DB over the same corpus |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R11 — Duration and step usage are mapped wherever the raw record carries them | MET | test | codex attribution unit test; corpus measurement showing codex assistant-with-usage 0→36,608; silent-empty class ended by documented-unsupported audit rows |
-
+| R11 — Duration and step usage are mapped wherever the raw record carries them | MET | test | codex attribution and grok duration mapping covered by the ts-libs importer suite — 257/257 green this run (`bun test` in `~/xprojects/ts-libs/packages/llm-jsonl-importer`); corpus measurement 0 to 36,608 recorded in Solution; the silent-empty class is closed by documented-unsupported audit rows |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Functional traceability** — all six requirements MET. R1: audit table (Solution) built from real raw records probed per source on this machine, not from code assumptions. R2: codex usage mapped (carrier + import-time attribution), grok apiDurationMs mapped; unit tests pin both. R3: Codex asymmetry root-caused — token_count event_msg rows carried the numbers on meta rows that stepSupport never counts. R4: claude/pi(duration), gemini(duration), agy both fields documented unsupported after verified absence in raw shapes — recorded facts, not open questions. R5: nothing synthesized; turn-level signals map to their own rows only; codex attribution drops rather than guesses when no assistant target exists. R6: before/after matrix recorded (codex 0 → 36,608 of 53,497).

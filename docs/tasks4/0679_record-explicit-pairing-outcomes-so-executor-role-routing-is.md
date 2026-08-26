@@ -4,7 +4,7 @@ name: "Record explicit pairing outcomes so executor-role routing is evidence-bas
 status: done
 template: feature-impl
 created_at: 2026-08-26T05:38:45.003Z
-updated_at: "2026-08-26T17:53:42.393Z"
+updated_at: "2026-08-26T20:16:12.453Z"
 feature_id: I81
 priority: P2
 tags: ["history", "observability", "pairing", "telemetry"]
@@ -122,30 +122,27 @@ R6 (writer coverage): verified the dispatch lifecycle already synthesizes correl
 R9 regression tests: the exit fixture was rewritten to mirror the WRITER's real payload (correlation.executionId + numeric exitCode), plus two new tests pinning unknown-outcome accounting and routing.model fallback — reader/writer drift now fails a test instead of rendering zeros.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | join key COALESCEd over both writer paths on dispatch leg, exit leg, and filter (packages/domain/src/analytics/pairings.ts:179) |
-| R2 | MET | success derives from `$.data.exitCode` = 0 (pairings.ts:197) |
-| R3 | MET | PairingStat.failures + unknownOutcomes distinguish non-zero exit from no-exit |
-| R4 | MET | successRate denominator = successes+failures; unknownOutcomes carried and rendered |
-| R5 | MET | n/a rendering for unmeasured mean duration / absent model preserved |
-| R6 | MET | correlation synthesis fallback verified at packages/app/src/observability/agent-execution.ts:161 — every current dispatch emits the join key on start and exit |
-| R7 | MET | buildRoutingAttribution emits resolved model from AgentResolveResult.model; reader COALESCEs data.model with routing.model; unit test pins fallback |
-| R8 | MET | empty escalation map/ladder stays honest absence (0 escalated rows corpus-wide) |
-| R9 | MET | exit fixture rewritten to writer shape + unknown-outcome + routing-model regression tests |
+|-------------|--------|----------|
+| R1 | MET | `packages/domain/src/analytics/pairings.ts:179` COALESCEs `$.data.executionId` with `$.data.correlation.executionId` on the dispatch leg; the same dual-path key is applied on the exit leg and the filter |
+| R2 | MET | `packages/domain/src/analytics/pairings.ts:199` reads `$.data.exitCode` — success is exitCode = 0, never an absent `outcome` field |
+| R3 | MET | `PairingStat.failures` and `PairingStat.unknownOutcomes` distinguish a non-zero exit from no exit at all |
+| R4 | MET | successRate denominator is successes + failures; `unknownOutcomes` is carried separately and rendered |
+| R5 | MET | n/a rendering preserved for unmeasured mean duration and absent model |
+| R6 | MET | `packages/app/src/observability/agent-execution.ts:157-160` synthesizes `runId`/`executionId` when no correlation is supplied, so every current dispatch emits the join key on start and exit |
+| R7 | MET | `buildRoutingAttribution` emits the resolved model from `AgentResolveResult.model`; the reader COALESCEs `data.model` with `routing.model` |
+| R8 | MET | Empty escalation map/ladder stays honest absence — 0 escalated rows corpus-wide, rendered as absence rather than zero |
+| R9 | MET | Exit fixture rewritten to the writer's payload shape; unknown-outcome and routing-model regression tests added |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R12 — A pairing dispatch records an explicit outcome | MET | test | dispatches without exits count as unknownOutcomes, distinct from failures; known-outcome denominator |
-| R21 — Pairing analytics read the payload paths the dispatch writer actually emits | MET | test | exit fixture mirrors writer payloads (correlation.executionId + exitCode); drift fails pairings.test.ts |
-
+| R12 — A pairing dispatch records an explicit outcome | MET | test | `packages/domain/tests/analytics/pairings.test.ts` — dispatches without exits count as `unknownOutcomes`, distinct from `failures`; known-outcome denominator asserted. 84/84 domain analytics tests green this run |
+| R21 — Pairing analytics read the payload paths the dispatch writer actually emits | MET | test | Exit fixture mirrors writer payloads (`correlation.executionId` + `exitCode`); reader/writer drift fails `packages/domain/tests/analytics/pairings.test.ts`. Green this run |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Functional traceability** — all nine requirements MET. R1/R2: exit join + outcome derivation repaired with fixture parity (exit payload now mirrors the writer's real shape; the old fixture encoded the reader's broken paths, which is how the drift shipped). R3/R4: failures/unknownOutcomes carried separately; successRate over known outcomes only; renderer shows the unknown column. R5: absent telemetry keeps n/a semantics. R6: dispatch lifecycle synthesizes correlation.executionId when callers omit it — verified in code, so new rows all carry the join key; legacy rows unrepaired by design. R7: model resolved into routing attribution and read via COALESCE. R8: empty ladder stays as honest absence. R9: three regression tests pin reader/writer path parity.

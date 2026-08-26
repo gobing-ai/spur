@@ -4,7 +4,7 @@ name: "Thread the resolved history-anatomy window into analyze and give the base
 status: done
 template: feature-impl
 created_at: 2026-08-26T05:38:44.860Z
-updated_at: "2026-08-26T06:43:30.998Z"
+updated_at: "2026-08-26T20:17:21.258Z"
 feature_id: I81
 priority: P1
 tags: ["history-anatomy", "workflow", "performance", "correctness"]
@@ -144,26 +144,28 @@ config/workflows/history-anatomy.yaml declares `baselineSince`/`baselineUntil` i
 Measurement (R6, 1.82M-message corpus, main-tree DB): bounded single-day artifact **59,743 B** at **1.3 s** (warm) vs unbounded whole-corpus artifact **4,118,941 B (~3.9 MB)** at **22.6 s** — a ~69× payload reduction, satisfying the order-of-magnitude AC.
 
 ### Testing
-
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PARTIAL (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | analyze sources `.spur/run/$__runId-paths.env` and passes `$HA_SINCE`/`$HA_UNTIL`; helper derives them from the resolved local day (config/workflows/history-anatomy.yaml analyze; history-anatomy-cache.ts:481) |
-| R2 | MET | baseline leg passes `$HA_BASELINE_SINCE`/`$HA_BASELINE_UNTIL` = preceding local day; `baselineSince`/`baselineUntil` declared in vars block |
-| R3 | MET | ad-hoc branch returns operator bounds verbatim, emits no HA_BASELINE_* (unit test: ad-hoc passes operator bounds through) |
-| R4 | MET | `probe()` provenance reads artifact selector (history-anatomy-cache.ts:576); selector now non-null so identity.bounds carries real bounds + timezone |
-| R5 | MET | `collectUndeclaredShellVarViolations` fails validate() on undeclared refs; all 11 repo workflows sweep green; regression tests in packages/app/tests/workflow/undeclared-shell-vars.test.ts |
+|-------------|--------|----------|
+| R1 | MET | `config/workflows/history-anatomy.yaml:135` passes `$HA_SINCE`/`$HA_UNTIL` to the current leg; day bounds derived by `plugins/sp/scripts/history-anatomy-cache.ts:486` (`zonedDayStart`, DST two-pass) |
+| R2 | MET | `config/workflows/history-anatomy.yaml:64-65` declares `baselineSince`/`baselineUntil`; `:140` passes `$HA_BASELINE_SINCE`/`$HA_BASELINE_UNTIL` on the baseline leg |
+| R3 | MET | ad-hoc branch returns operator bounds verbatim and emits no HA_BASELINE_* — no calendar-day normalization applied |
+| R4 | MET | `plugins/sp/scripts/history-anatomy-cache.ts:576-578` — `buildProvenance` reads `selector.since` / `selector.until` from the fresh analyze artifact into the identity stamp |
+| R5 | MET | `packages/app/src/services/workflow-service.ts:1353` `collectUndeclaredShellVarViolations`, called from `packages/app/src/services/workflow-service.ts:555`; 8 regression tests in `packages/app/tests/workflow/undeclared-shell-vars.test.ts` green this run |
 | R6 | MET | Solution records bounded 59,743 B @ 1.3 s warm vs unbounded 4,118,941 B @ 22.6 s (~69x) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R20 ad-hoc unchanged | MET | test | ad-hoc pass-through unit test, no normalization applied |
-
+| R1 — Daily mode analyzes exactly its resolved local calendar day | PARTIAL | test | Undeclared-var clause proven: `packages/app/tests/workflow/undeclared-shell-vars.test.ts` 8/8 green this run. The "artifact carries non-null selector.since/until equal to the resolved bounds" clause has no executable test — static-ref only at `config/workflows/history-anatomy.yaml:135` |
+| R2 — The baseline leg analyzes the immediately preceding local calendar day | PARTIAL | static-ref | Bounds wiring verified at `config/workflows/history-anatomy.yaml:64-65` and `:140`; the "baseline artifact digest differs from the current artifact digest" clause is unobserved — no test and no run artifact in this tree |
+| R3 — Recurrence classification produces real verdicts once both windows are bounded | PARTIAL | static-ref | The enabling mechanism (distinct bounded windows) is implemented and verifiable; the asserted outcome is not. `not-comparable` exists only as report-contract vocabulary (`plugins/sp/skills/history-anatomy/references/report-contract.md:103`) with no deterministic classifier and no test — the ledger is authored by the model-bearing enrich stage, so only an end-to-end daily run proves this scenario |
+| R4 — The published report makes its audited window auditable | PARTIAL | test | Provenance round-trip pinned by the test named "R7: the published report carries the full provenance block and it parses back" in `plugins/sp/tests/history-anatomy-cache.test.ts` (green this run). It proves the block parses back; it does not prove `identity.bounds` are non-empty for a real bounded run, which no artifact in this tree shows |
+| R5 — A bounded daily run costs materially less than an unbounded one | PARTIAL | manual-review | Recorded measurement in Solution: 59,743 B @ 1.3 s bounded vs 4,118,941 B @ 22.6 s unbounded (~69x, order-of-magnitude bar cleared; analyze half under 5 s per leg) |
+| R20 — Ad-hoc mode keeps its operator-supplied bounds unchanged | MET | test | Ad-hoc pass-through: operator bounds returned verbatim, no normalization; `plugins/sp/tests/history-anatomy-cache.test.ts:677` pins ad-hoc never taking the cache-hit branch |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Functional traceability** — all six requirements MET: R1/R2/R3 via `resolvePaths` bound derivation + analyze sourcing (plugins/sp/scripts/history-anatomy-cache.ts:511, config/workflows/history-anatomy.yaml analyze stage); R4 via artifact-selector passthrough to `probe()` provenance (no extra stamping needed, as refinement predicted); R5 via `collectUndeclaredShellVarViolations` wired into validate() with an 11-workflow repo-wide green sweep; R6 measurement recorded in Solution (~69x payload cut, 1.3 s warm bounded leg).

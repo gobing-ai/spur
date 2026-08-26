@@ -4,7 +4,7 @@ name: "Enforce analyze invariants: ordered phase intervals and absent-not-zero t
 status: done
 template: feature-impl
 created_at: 2026-08-26T05:38:44.955Z
-updated_at: "2026-08-26T16:02:35.143Z"
+updated_at: "2026-08-26T20:16:11.864Z"
 feature_id: I81
 priority: P2
 tags: ["history", "analytics", "correctness", "telemetry"]
@@ -117,27 +117,24 @@ Fix the fabricated fallback at the derivation, not the renderer.
 Corpus verification (R2 plan step 9, 2025-11 window): old code emitted 11 reversed intervals of 36 phases in this window; new code emits **0 reversed positives**, 23 phases carry an honest null boundary, invalidPhaseCount = 0. No residual out-of-order source records — the lastCallTs fallback was the whole cause. Digest impact expected: phase-shape change flows through the existing `data-changed` cache signal.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | extractPhases excludes both-boundaries-observed-but-reversed phases and counts them in PhaseResult.invalidPhaseCount (packages/domain/src/analytics/derived.ts extractPhases); unit test pins exclusion + count |
-| R2 | MET | Cause documented in Solution: lastCallTs substitution produced late start / early end; fixture reproduces; fix at extraction |
-| R3 | MET | TimeDecomposition.llmMs/toolMs are number |
-| R4 | MET | naOrValue renders null as `not available`; measured zero renders `0ms` (renderer unit tests) |
-| R5 | MET | derived-unattributed-time detail and renderer row reference stepSupport |
-| R6 | MET | No values fabricated for telemetry-less sources; adapter mapping deferred to 0678 |
+|-------------|--------|----------|
+| R1 | MET | `packages/domain/src/analytics/derived.ts:21` — phases whose observed boundaries are out of order are excluded and counted in `PhaseResult.invalidPhaseCount`; surfaced at `packages/domain/src/analytics/render-forensics.ts:179` |
+| R2 | MET | Root cause recorded in Solution: `lastCallTs` substitution produced late start / early end; fixture reproduces; fix applied at extraction, not at render |
+| R3 | MET | `TimeDecomposition.llmMs`/`toolMs` typed `number \| null` — null is the unmeasured case, never coerced to 0 |
+| R4 | MET | `packages/domain/src/analytics/render-forensics.ts:446` `naOrValue` renders null as `not available`; `:133-134` keep a measured zero rendering as `0ms` |
+| R5 | MET | derived-unattributed-time detail and the renderer row both reference `stepSupport` |
+| R6 | MET | No values fabricated for telemetry-less sources; per-source adapter mapping deferred to task 0678 and stated as such |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R9 — A derived phase whose end precedes its start is rejected or explicitly marked | MET | test | out-of-order unit test (excluded + counted); corpus verification: 0 reversed positives in the 2025-11 window where old code had 11 |
-| R10 — Unmeasured telemetry is null, never zero | MET | test | all-NULL duration fixture yields llmMs/toolMs null; renderer emits not available distinct from 0ms |
-
+| R9 — A derived phase whose end precedes its start is rejected or explicitly marked | MET | test | `packages/domain/tests/analytics/derived.test.ts` out-of-order exclusion + count; `packages/domain/tests/analytics/render-forensics.test.ts` renders the exclusion notice. 84/84 domain analytics tests green this run |
+| R10 — Unmeasured telemetry is null, never zero | MET | test | All-NULL duration fixture yields `llmMs`/`toolMs` null; `naOrValue` emits `not available`, distinct from `0ms`. Same suite, 84/84 green this run |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Functional traceability** — all six requirements MET. R1: out-of-order observed boundaries are excluded from `phases` and counted in `invalidPhaseCount` — they can never enter elapsed-duration analysis as positive intervals. R2: derivation traced per the cited sample shape, cause confirmed as the `lastCallTs` substitution (fixture test reproduces the reversal class), fix landed at extraction not rendering. R3/R4: null threaded through TimeDecomposition components; renderer shows `not available` for absent vs measured zero (`0ms`). R5: warning text and the Unattributed table row now cite stepSupport. R6: nothing fabricated for telemetry-less sources; adapter mapping left to 0678.
