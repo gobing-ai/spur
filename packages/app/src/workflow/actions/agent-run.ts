@@ -10,6 +10,7 @@ import {
     type AgentRunTracedResult,
     type AgentService,
 } from '../../services/agent-service';
+import { permissionFailureEvidence } from '../../services/failure-classification';
 import { TaskLocator } from '../../services/task-locator';
 import type { WorkflowObservabilityBus } from '../observability';
 import { parseSteeringPolicy, type WorkflowSteeringController } from '../steering';
@@ -390,7 +391,17 @@ export class AgentRunActionRunner implements ActionRunner {
             // R2 (task 0424): subprocess failures name the partial-work artifact
             // path and the resume action — a timed-out implement must not be a dead
             // end that leaves the partial tree undiscoverable.
-            const partialWorkHint = `partial work (if any) preserved at .spur/run/${context.runId}-${stepLabel}-partial.md; resume from that tree per the timed-out-implement runbook (plugins/sp/skills/spur-dev/references/execution-workflow.md)`;
+            // The timed-out-implement runbook framing only fits a signal termination; a plain
+            // non-zero exit (executor startup / permission / auth failure) is not a resumable
+            // partial implement, and naming that runbook sent the 2026-08-26 dogfood chasing a
+            // timeout that never happened.
+            const partialWorkPath = `.spur/run/${context.runId}-${stepLabel}-partial.md`;
+            const partialWorkHint = `partial work (if any) preserved at ${partialWorkPath}; resume from that tree per the timed-out-implement runbook (plugins/sp/skills/spur-dev/references/execution-workflow.md)`;
+            const exitWorkHint = `partial work (if any) preserved at ${partialWorkPath}; the executor exited on its own, so inspect that tree and the executor's stderr before retrying (plugins/sp/skills/spur-dev/references/execution-workflow.md)`;
+            // 0687 R9: an OS permission denial is the whole story — name it verbatim rather
+            // than leaving the operator with a bare exit code and a runbook that does not
+            // apply. The classifier suppresses escalation for the same evidence.
+            const permissionEvidence = permissionFailureEvidence(`${traced.stderr ?? ''}\n${traced.stdout ?? ''}`);
             const error = ok
                 ? undefined
                 : traced.signal !== undefined
@@ -399,7 +410,9 @@ export class AgentRunActionRunner implements ActionRunner {
                       : `agent.run '${stepLabel}' (${agentLabel}) was cancelled by signal ${traced.signal}; ${partialWorkHint}`
                   : traced.message !== undefined
                     ? `agent.run '${stepLabel}' (${agentLabel}) dispatch failed: ${traced.message}`
-                    : `agent.run '${stepLabel}' (${agentLabel}) exited with code ${exitCode}; ${partialWorkHint}`;
+                    : permissionEvidence !== undefined
+                      ? `agent.run '${stepLabel}' (${agentLabel}) exited with code ${exitCode}: the executor was denied an OS permission — ${permissionEvidence}. This is an environment constraint, not a model or quota failure; grant the executor its state directory and any local socket bind it needs, then retry`
+                      : `agent.run '${stepLabel}' (${agentLabel}) exited with code ${exitCode}; ${exitWorkHint}`;
 
             // R2 (0451): key __agentSessionAgent off the resolved invocation.agent
             const resolvedAgent = invocation?.agent ?? targetAgentDir;

@@ -224,11 +224,19 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             secretValues: configuredSecretValues(context.env),
             warn: (message) => context.output.error(`Warning: ${message}`),
             getDb: () => context.getDb(),
-            // Intentionally leave AgentService without a server-style events bus: the
-            // workflow-dispatched agent lifecycle is the single `workflow.agent` series
-            // (0365 R9 / 0370 R4). Wiring AiRunner.events here would dual-emit
-            // `agent.invoke.*` for the same execution.
-            agentService: () => context.agentService(),
+            // Task 0687 R10: thread the ledger bus into AgentService so workflow-dispatched
+            // agents write `agent.invoke.*` like the `spur agent run` path does
+            // (`commands/agent.ts`). The prior comment here withheld the bus to avoid
+            // dual-emitting against a single `workflow.agent` series — but that series was
+            // never written, so from 2026-08-20 (when dispatches moved into pipelines)
+            // until this change NO agent dispatch reached `system_events` at all, and every
+            // consumer keyed on `agent.invoke.start`/`.exit` — `pairingSummary`,
+            // `roleTokenSummary`, `retroCorrelation`, and therefore the history-anatomy
+            // report's run-cost dimension — silently read empty. One dispatch still emits
+            // exactly one start/exit pair; the workflow's own `workflow.action.*` series is
+            // a different grain (action, not dispatch) and does not double-count.
+            agentService: () =>
+                bus ? context.agentService({ events: bus as unknown as SystemEventBus }) : context.agentService(),
             ruleService: () => context.ruleService(),
             hitlResponder: () => context.hitlResponder(json),
             // Resolve bundled-workflow `$schema` refs from the embedded map rather than
