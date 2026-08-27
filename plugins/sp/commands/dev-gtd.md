@@ -62,25 +62,14 @@ The real GitHub CI runner passes. **Do not** modify the build infrastructure to 
 Then stop the run (this stage failed). The operator can proceed by re-running without `--act`.
 
 **3 — Generate a conventional commit message.** Follow the gitmsg procedure (the same one
-`/sp:dev-gitmsg` runs). Run `git diff --cached --stat` (add `-- <path>` when `--scope` is given) for
-the outline; if it is empty, stage the intended changes first and report "no staged changes" if
-nothing was meant to be committed. Capture the full diff to a temp file
-(`TEMP_FILE="/tmp/gitdiff_$(date +%s)"; git diff --cached > "$TEMP_FILE" 2>&1`). Read it and write
-**one sentence per changed file** — what changed and why. Group the per-file sentences by concern;
-for each group derive its commit type (`feat` · `fix` · `refactor` · `docs` · `chore` · `perf` ·
-`test` · `style`), scope (affected module/package, or the `--scope` value), and message:
-
-```
-<type>(<scope>): <summary>
-
-<body — optional bullets from the group's per-file sentences>
-```
-
-Summary: imperative mood, ≤72 chars, lowercase first word, no period. Body only when the change is
-non-obvious. Resolve groups: one group → emit its message; multiple groups → emit one message per
-group plus a split recommendation (stage per concern, re-run); under this all-in-one flow, prefer a
-single combined message (dominant type/scope, per-file bullets) so the push is atomic. Delete the
-temp file (`rm "$TEMP_FILE"`) — no `/tmp` diff residue.
+`/sp:dev-gitmsg` runs) — see
+[dev-operations.md](../skills/spur-dev/references/dev-operations.md#9-gitmsg): one bounded diff
+capture, concern grouping, conventional `<type>(<scope>): <summary>` formatting. Two deviations
+belong to this flow: read the change set with `--all` semantics (this stage commits everything the
+gate just proved green, not only what happens to be staged), and resolve multiple concerns to a
+**single combined message** (dominant type/scope, one body bullet per concern) so the push is
+atomic. `--scope <path>` bounds the capture as usual. If the change set is empty, report
+"no changes to commit" and stop.
 
 **4 — Commit.** Stage all intended changes (`git add`) and commit with the resolved message
 (`git commit -m "$MESSAGE"`). When `--dry-run`, print the message and the copy-paste `git commit` /
