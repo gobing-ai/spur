@@ -237,6 +237,36 @@ downstream task creation does not inherit an unactionable acceptance criterion:
 
 The tag is a prompt to whoever turns findings into tasks: `[stale]` → drop, `[unverifiable]` →
 reframe or defer, `[feasible]` → proceed. A finding without a tag is treated as `[feasible]`.
+
+**Optional class tag (environment lens, task 0686).** A finding line may carry one closed class
+tag — `environment` | `testee` | `waste` — positioned immediately after the em dash and distinct
+from the trailing feasibility tag:
+
+```
+- **P2** — [environment] <what's wrong>. → **Action:** <concrete change>.  (`file:line`, ~effort)  `[feasible]`
+```
+
+Omitting the class preserves the current line shape; untagged findings remain valid and the
+protocol stays `sp:dogfood-testing@1.2` (the validator gains no required field; the cache-health
+P3 above needs no class).
+
+- `testee` — a defect in the testee's contract (the protocol the run grades). Bounded fix-mode
+  may repair it, unchanged.
+- `environment` — a steering/placement/check-shaped observation projected from the
+  [environment-improvement lens](../../../references/environment-lens.md), which owns the
+  category table and the placement rule. **Proposal-only:** even under `--max-retry N`, bounded
+  retries never `Edit` or `Write` `AGENTS.md`, `CLAUDE.md`, skills, rules, numbered docs, or
+  plugin references for an environment-tagged finding — it stays a recommended action here.
+- `waste` — a token/tool-waste diagnostic with no missing environment affordance behind it.
+
+Class, not the cited file path, decides whether bounded fix may mutate. A session mistake a
+linter, typechecker, test, or filesystem gate could have caught is `environment`, and its
+recommended action proposes a new-or-tighter automated check — never another sentence in an
+always-loaded steering file. Missed coding standards are `environment` owned by a review path
+(`sp:code-verification`, `sp:code-review`, or pipeline review) — never the implementer skill;
+navigation friction and dead always-loaded instructions are likewise `environment`, not
+`testee`.
+
 Severity scale:
 
 - **P1** — blocks correct use or causes drift/wrong output; fix before shipping the testee.

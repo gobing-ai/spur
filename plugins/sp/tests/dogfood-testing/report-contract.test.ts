@@ -198,3 +198,34 @@ describe('dogfood @1.2 report contract (task 0276)', () => {
         }
     });
 });
+
+describe('environment-lens class tags (task 0686, R3-R5/R14)', () => {
+    // §6 Findings is "(none)" in the shared fixture — inject a finding line per case.
+    const inject = (line: string): string =>
+        passFixture.replace('### 6. Findings\n\n(none)', `### 6. Findings\n\n${line}\n\n(none)`);
+    const tagged = (cls: string | null): string => {
+        const tag = cls ? `[${cls}] ` : '';
+        return `- **P3** — ${tag}Pinned agent config drift left the doc path ambiguous. → **Action:** add a see_also pointer. (\`docs/x.md:10\`, ~5m) \`[feasible]\``;
+    };
+
+    test('environment / testee / waste tags all validate under the unchanged @1.2 protocol', () => {
+        for (const cls of ['environment', 'testee', 'waste']) {
+            const result = validateReport(inject(tagged(cls)));
+            expect(result.ok).toBe(true);
+        }
+    });
+
+    test('class position is after the em dash and distinct from the trailing feasibility tag', () => {
+        const line = inject(tagged('environment'));
+        expect(line).toContain('— [environment] ');
+        expect(line.indexOf('[environment]')).toBeLessThan(line.indexOf('[feasible]'));
+    });
+
+    test('an untagged finding still validates — omitting the class preserves the @1.2 line shape', () => {
+        expect(validateReport(inject(tagged(null))).ok).toBe(true);
+    });
+
+    test('a report with no findings still validates — no new required field exists', () => {
+        expect(validateReport(passFixture).ok).toBe(true);
+    });
+});

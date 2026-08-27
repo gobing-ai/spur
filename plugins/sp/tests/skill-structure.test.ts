@@ -1782,3 +1782,48 @@ describe('task 0519 — idea-pipeline planning guidance names canonical artifact
         expect(step).toContain('otherwise `/sp:dev-runall --feature <id> --auto`');
     });
 });
+
+describe('environment-lens single source of truth (task 0686 / R44-adjacent)', () => {
+    // R1: exactly one mapping file owns the seven canonical retro names. Any other shipped
+    // markdown enumerating all seven creates a second table to keep in sync.
+    const SEVEN = [
+        'navigation',
+        'automated checks',
+        'coding standards',
+        'AGENTS.md placement',
+        'tool economy',
+        'no-ops',
+        'information access',
+    ];
+    const mdFiles = walk(PLUGIN_ROOT, (p) => p.endsWith('.md'));
+    const enumeratingAllSeven = mdFiles.filter((p) => {
+        const text = readFileSync(p, 'utf8');
+        return SEVEN.every((name) => text.includes(name));
+    });
+
+    test('exactly one shipped markdown lists all seven canonical names — the mapping itself', () => {
+        expect(enumeratingAllSeven).toEqual([join(PLUGIN_ROOT, 'references', 'environment-lens.md')]);
+    });
+
+    test('both projection references link the mapping and do not restate its table', () => {
+        const projections = ['dogfood-testing', 'history-anatomy'].map((s) => join(SKILLS_DIR, s, 'references'));
+        for (const dir of projections) {
+            const files = readdirSync(dir).filter((f) => ['report-template.md', 'report-contract.md'].includes(f));
+            expect(files.length).toBeGreaterThanOrEqual(1);
+            for (const f of files) {
+                const text = readFileSync(join(dir, f), 'utf8');
+                expect(text).toContain('../../../references/environment-lens.md');
+                // The projection defers to the mapping — it may name one or two categories
+                // inline, never the full seven-name enumeration.
+                expect(SEVEN.every((name) => text.includes(name))).toBe(false);
+            }
+        }
+    });
+
+    test('no skill body restates the seven-name table (R44 stays the byte-budget owner)', () => {
+        for (const skill of ['dogfood-testing', 'history-anatomy', 'issue-finding']) {
+            const body = readFileSync(join(SKILLS_DIR, skill, 'SKILL.md'), 'utf8');
+            expect(SEVEN.every((name) => body.includes(name))).toBe(false);
+        }
+    });
+});

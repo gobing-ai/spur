@@ -27,7 +27,13 @@ rename, reorder, omit, or restate them.
 - Categories: `reliability` | `repetition` | `workflow` | `performance` | `coverage` |
   `telemetry` | `positive`.
 
-Every finding's category is drawn from this closed set. No category is invented.
+Every finding's category is drawn from this closed set. No category is invented — explicit
+`category` values outside it fail the structure gate (`finding-invalid-category:<value>`), and so
+do stable keys whose first segment falls outside it (`finding-invalid-key-category:<value>`,
+task 0686). Environment-lens retro category names are encoded only in `<signal>` or the
+owner-surface segment — never as a category. The authoritative seven-name projection table lives
+in the [environment-improvement mapping](../../../references/environment-lens.md), which this
+reference defers to rather than restates.
 
 ## Stable finding key (frozen)
 
@@ -145,6 +151,24 @@ Performance analysis states what the run itself cost: per-pairing `totalCostUsd`
 `meanDurationMs` figures flow from the pairing analytics fold (0679 repaired the payload
 paths), so chained `agent.run` stages are reportable instead of "~unknown". Where no cost
 signal exists for a pairing it renders `not available`, never zero.
+
+## Projected candidates — section 9 (environment lens, task 0686)
+
+Section 9 (Workflow and process improvements) stays additive report grammar: unprojected numbered
+prose remains valid and gains no required fields. A candidate **projected** through the
+[environment-improvement lens](../../../references/environment-lens.md) is a bullet beginning with
+a backticked stable key (retro name in `<signal>` or owner surface, closed category first — e.g.
+`workflow:agents-md:navigation`) and carries four bold fields, the same names remediation options
+use:
+
+```text
+- `workflow:agents-md:navigation` — **owner surface:** `AGENTS.md` see_also. **expected impact:**
+  shorter file hunt. **verification method:** subsequent daily report key `resolved` or absent.
+  **reversibility:** revert the pointer.
+```
+
+A projected candidate cites its section-4 finding `key` when one exists. Reports remain
+proposal-only: no applied change, no diff, and no command the report claims to have run.
 
 ## Evidence ledger
 

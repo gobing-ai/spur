@@ -319,6 +319,17 @@ function escapeRe(s: string): string {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Closed finding categories (0686/I9). Kept next to FINDING_FIELDS — the gate parses them. */
+const FINDING_CATEGORIES = [
+    'reliability',
+    'repetition',
+    'workflow',
+    'performance',
+    'coverage',
+    'telemetry',
+    'positive',
+] as const;
+
 /**
  * Check a candidate report against the frozen report contract — the twelve sections in order,
  * the nine per-finding fields, no placeholders/TODOs/empty bodies, and evidence-ledger anchors.
@@ -339,24 +350,37 @@ export function checkReportStructure(reportMarkdown: string): { ok: boolean; pro
         }
     }
 
-    const findingRows = reportMarkdown.match(
-        /^\|\s*(reliability|repetition|workflow|performance|coverage|telemetry|positive):[^|]+/gm,
-    );
-    for (const row of findingRows ?? []) {
-        for (const field of FINDING_FIELDS) {
-            if (!row.toLowerCase().includes(field)) problems.push(`finding-missing-field:${field}`);
-        }
-    }
-
     // 0680 R1-R3: findings are authored as bullet blocks under `## Findings` (one `### <title>`
     // block per finding, key-value bullets). Scan each block that carries a stable key and fail
     // it missing any triage field — including the three new ones. Without this scan a bullet
     // finding never matches the legacy pipe-row regex and the triage gate was vacuous.
+    // 0686/I9: category parsing is scoped to that same body — an explicit category outside the
+    // closed vocabulary (FINDING_CATEGORIES) or a stable key whose first segment does so fails
+    // rather than passing vacuously.
     const findingsIdx = reportMarkdown.search(/^##\s+Findings\s*$/im);
     if (findingsIdx !== -1) {
         const tail = reportMarkdown.slice(findingsIdx);
         const nextSection = tail.slice(1).search(/^##\s+/im);
         const findingsBody = nextSection === -1 ? tail : tail.slice(0, nextSection + 1);
+
+        const catAlt = FINDING_CATEGORIES.join('|');
+        const knownRows = findingsBody.match(new RegExp(`^\\|\\s*(?:${catAlt}):[^|]+`, 'gm')) ?? [];
+        const invalidRows = findingsBody.match(/^\|\s*([^|:\s][^|:]*):[^|]+/gm) ?? [];
+        for (const row of [...new Set([...knownRows, ...invalidRows])]) {
+            // 0686/I9: a pipe row outside the closed first-segment set fails by name instead of
+            // being skipped silently by the legacy regex.
+            const segMatch = row.match(/^\|\s*([^:|]+):/);
+            if (segMatch && !(FINDING_CATEGORIES as readonly string[]).includes(segMatch[1].trim())) {
+                problems.push(`finding-invalid-key-category:${segMatch[1].trim()}`);
+            }
+            // Case-insensitive on BOTH sides — camelCase triage fields otherwise never match a
+            // lowercased row.
+            const rowLower = row.toLowerCase();
+            for (const field of FINDING_FIELDS) {
+                if (!rowLower.includes(field.toLowerCase())) problems.push(`finding-missing-field:${field}`);
+            }
+        }
+
         const blocks = findingsBody.split(/^###\s+/m).slice(1);
         for (const block of blocks) {
             if (!block.includes('`key`') && !/\|\s*key\s*:/.test(block)) continue;
@@ -366,6 +390,16 @@ export function checkReportStructure(reportMarkdown: string): { ok: boolean; pro
             // Severity vocabulary is closed (0680 R1): P1/P2/P3 only (symbolic placeholders allowed).
             if (!/(^|[\s`])P[123]([\s`.]|$)/.test(block) && !block.includes('symbolic-severity')) {
                 problems.push('finding-invalid-severity');
+            }
+            // 0686/I9 closed-category enforcement on bullet findings.
+            const catValue = block.match(/`category`\s*[:=]\s*`?([^`\n]+?)`?\s*(?:\n|$)/)?.[1];
+            if (catValue && !(FINDING_CATEGORIES as readonly string[]).includes(catValue.trim())) {
+                problems.push(`finding-invalid-category:${catValue.trim()}`);
+            }
+            const keyValue = block.match(/`key`\s*[:=]\s*`?([^`\n]+?)`?\s*(?:\n|$)/)?.[1] ?? '';
+            const firstSegment = keyValue.split(':')[0]?.trim() ?? '';
+            if (keyValue !== '' && !(FINDING_CATEGORIES as readonly string[]).includes(firstSegment)) {
+                problems.push(`finding-invalid-key-category:${firstSegment}`);
             }
         }
     }

@@ -287,6 +287,47 @@ describe('semanticArtifactDigest (R1)', () => {
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+    // 0686/I9 AC: the closed-category gate must also hold when the twin runs under bare node.
+    test('.mjs twin check fails a retro-named category and passes a closed one under bare node', () => {
+        const twin = join(import.meta.dir, '../scripts/history-anatomy-cache.mjs');
+        const dir = mkdtempSync(join(tmpdir(), 'ha-twin-check-'));
+        const sections = [
+            'Scope and provenance',
+            'Executive summary',
+            'Baseline comparison',
+            'Findings',
+            'Recurrence ledger',
+            'Telemetry gaps',
+            'Remediation options',
+            'Performance analysis',
+            'Workflow and process improvements',
+            'Report-only advisories',
+            'Positive patterns',
+            'Evidence ledger',
+        ];
+        const finding =
+            '- `key`: `workflow:agents-md:navigation`\n- `category`: `<cat>`\n- `impact`: i\n- `trend`: `new`\n' +
+            '- `observation`: o\n- `inference`: inf\n- `confidence`: high\n- `contradictions`: none\n' +
+            '- `evidenceAnchor`: `a.md`\n- `severity`: `P2`\n- `reproCommand`: `bun run x`\n- `ownerSurface`: `s.ts`';
+        const report = (cat: string) =>
+            sections
+                .map((s) => `## ${s}\n\nbody`)
+                .join('\n\n')
+                .replace('## Findings\n\nbody', `## Findings\n\n### f\n\n${finding.replace('<cat>', cat)}\n`);
+        const goodPath = join(dir, 'good.md');
+        const badPath = join(dir, 'bad.md');
+        writeFileSync(goodPath, report('workflow'));
+        writeFileSync(badPath, report('navigation'));
+        try {
+            expect(Bun.spawnSync(['node', twin, 'check', goodPath]).exitCode).toBe(0);
+            const proc = Bun.spawnSync(['node', twin, 'check', badPath]);
+            expect(proc.exitCode).toBe(1);
+            expect(proc.stdout.toString()).toContain('finding-invalid-category:navigation');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
 });
 
 describe('parseProvenance (R3)', () => {
@@ -1021,5 +1062,105 @@ describe('checkReportStructure triage fields + advisory section (0680)', () => {
 
     test('non-finding blocks under Findings are not policed (positive-patterns style prose)', () => {
         expect(checkReportStructure(head).ok).toBe(true);
+    });
+});
+
+describe('checkReportStructure closed category vocabulary (0686/I9)', () => {
+    const sections = [
+        'Scope and provenance',
+        'Executive summary',
+        'Baseline comparison',
+        'Findings',
+        'Recurrence ledger',
+        'Telemetry gaps',
+        'Remediation options',
+        'Performance analysis',
+        'Workflow and process improvements',
+        'Report-only advisories',
+        'Positive patterns',
+        'Evidence ledger',
+    ];
+    const findingBlock = (bullets: string): string => {
+        const i = sections.indexOf('Findings');
+        const before = sections
+            .slice(0, i + 1)
+            .map((s) => `## ${s}\n\nbody`)
+            .join('\n\n');
+        const after = sections
+            .slice(i + 1)
+            .map((s) => `## ${s}\n\nbody`)
+            .join('\n\n');
+        return `${before}\n\n### A finding\n\n${bullets}\n\n${after}`;
+    };
+
+    // Full 13-field bullet set so only vocabulary varies — field gates stay satisfied.
+    const fullFinding = (key: string, cat: string): string =>
+        [
+            `- \`key\`: \`${key}\``,
+            `- \`category\`: \`${cat}\``,
+            '- `impact`: i',
+            '- `trend`: `new`',
+            '- `observation`: o',
+            '- `inference`: inf',
+            '- `confidence`: high',
+            '- `contradictions`: none',
+            '- `evidenceAnchor`: `a.md`',
+            '- `severity`: `P2`',
+            '- `reproCommand`: `bun run x`',
+            '- `ownerSurface`: `pairings.ts`',
+        ].join('\n');
+
+    test('a report whose findings use only closed categories still passes', () => {
+        expect(
+            checkReportStructure(
+                findingBlock(fullFinding('telemetry:history-analyze:duration-coverage-gap', 'telemetry')),
+            ).problems.filter((p) => p.startsWith('finding-')),
+        ).toEqual([]);
+    });
+
+    test('an environment-signal key (workflow:agents-md:navigation) passes — retro names live in <signal>', () => {
+        expect(
+            checkReportStructure(
+                findingBlock(fullFinding('workflow:agents-md:navigation', 'workflow')),
+            ).problems.filter((p) => p.startsWith('finding-')),
+        ).toEqual([]);
+    });
+
+    test('an out-of-vocabulary explicit category fails by name', () => {
+        const r = checkReportStructure(findingBlock(fullFinding('workflow:agents-md:navigation', 'navigation')));
+        expect(r.problems).toContain('finding-invalid-category:navigation');
+    });
+
+    test('a stable key whose first segment falls outside the closed set fails by name', () => {
+        const r = checkReportStructure(findingBlock(fullFinding('navigation:agents-md:pointer', 'workflow')));
+        expect(r.problems).toContain('finding-invalid-key-category:navigation');
+    });
+
+    test('spaced or kebab-case retro names fail automatically because neither is in the closed set', () => {
+        const r1 = checkReportStructure(
+            findingBlock(fullFinding('workflow:review:coding-standards', 'coding standards')),
+        );
+        expect(r1.problems).toContain('finding-invalid-category:coding standards');
+        const r2 = checkReportStructure(
+            findingBlock(fullFinding('automated-checks:typecheck:new-rule', 'reliability')),
+        );
+        expect(r2.problems).toContain('finding-invalid-key-category:automated-checks');
+    });
+
+    test('legacy pipe rows keep their field gate and gain the same closed first-segment rule', () => {
+        const i = sections.indexOf('Findings');
+        const body = [...sections]
+            .slice(0, i + 1)
+            .map((s) => `## ${s}\n\nbody`)
+            .join('\n\n');
+        const withRow = `${body}\n\n| workflow:category:key impact trend observation inference confidence contradictions evidenceAnchor severity reproCommand ownerSurface |\n\n${sections
+            .slice(i + 1)
+            .map((s) => `## ${s}\n\nbody`)
+            .join('\n\n')}`;
+        // Valid row: no finding problems.
+        expect(checkReportStructure(withRow).problems.filter((p) => p.startsWith('finding-'))).toEqual([]);
+        // Retro name as the first segment: fails by name instead of passing vacuously.
+        const bad = withRow.replace('workflow:category:key', 'navigation:category:key');
+        expect(checkReportStructure(bad).problems).toContain('finding-invalid-key-category:navigation');
     });
 });
