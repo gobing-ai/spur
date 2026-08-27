@@ -31,6 +31,12 @@ export {
     type WorkflowRunLogConfig,
     WorkflowRunLogSink,
 } from './observability/workflow-run-log-sink';
+export {
+    createFileAgentInstanceStore,
+    type RoleTargetResolution,
+    resolveAgentSelector,
+    resolveRoleTarget,
+} from './services/agent-instance-store';
 export type {
     AgentConfig,
     AgentExecutorConfig,

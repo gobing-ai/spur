@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TeamService } from '@gobing-ai/spur-app';
@@ -59,8 +59,9 @@ describe('spur message send', () => {
         const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {
             const code = await main(['message', 'send', 'hi'], { cwd, output: out, dbUrl });
-            expect(code).toBe(1);
-            expect(out.errors.join('\n')).toMatch(/--to/);
+            // 0685 R6: missing address is a usage-domain error (exit 2) naming both forms.
+            expect(code).toBe(2);
+            expect(out.errors.join('\n')).toMatch(/--to <id> or --role <name>/);
         } finally {
             await cleanup();
         }
@@ -586,6 +587,101 @@ async function seedSendOccupant(opts: {
     }
     db.close();
 }
+
+describe('spur message send --role (0685 R6)', () => {
+    /** Seed materialized spec files the role/executor store can project. */
+    async function seedSpecs(
+        cwd: string,
+        specs: { id: string; type: string; executor: string; role?: string }[],
+    ): Promise<void> {
+        const dir = join(cwd, '.spur', 'agents');
+        await mkdir(dir, { recursive: true });
+        for (const s of specs) {
+            const yaml = [
+                `id: ${s.id}`,
+                `name: ${s.id}`,
+                `type: ${s.type}`,
+                `executor: ${s.executor}`,
+                `workspace: ${cwd}`,
+                `purpose: role fixture`,
+                'tags:',
+                '  - spur:test-fixture',
+                'config:',
+                ...(s.role ? [`  role: ${s.role}`] : []),
+            ].join('\n');
+            await writeFile(join(dir, `${s.id}.yaml`), `${yaml}\n`, 'utf8');
+        }
+    }
+
+    test('--to and --role together is a usage error (exit 2)', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
+        try {
+            const code = await main(['message', 'send', '--to', 'a', '--role', 'reviewer', 'hi'], {
+                cwd,
+                output: out,
+                dbUrl,
+            });
+            expect(code).toBe(2);
+            expect(out.errors.join('\n')).toMatch(/accepts --to or --role, not both/);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('--role outside the vocabulary exits 2 naming accepted names', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
+        try {
+            const code = await main(['message', 'send', '--json', '--role', 'nope', 'hi'], {
+                cwd,
+                output: out,
+                dbUrl,
+            });
+            expect(code).toBe(2);
+            const payload = JSON.parse(out.messages[0] ?? '{}');
+            expect(payload.error.code).toBe('unknown_selector');
+            expect(payload.error.message).toMatch(/reviewer/);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('--role with zero matching instances exits 1 as selector_unmatched', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
+        try {
+            const code = await main(['message', 'send', '--json', '--role', 'reviewer', 'hi'], {
+                cwd,
+                output: out,
+                dbUrl,
+            });
+            expect(code).toBe(1);
+            const payload = JSON.parse(out.messages[0] ?? '{}');
+            expect(payload.error.code).toBe('selector_unmatched');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('--role matching multiple instances exits 1 naming count and candidates', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
+        await seedSpecs(cwd, [
+            { id: 'rev-a', type: 'claude', executor: 'claude', role: 'reviewer' },
+            { id: 'rev-b', type: 'claude', executor: 'claude', role: 'reviewer' },
+        ]);
+        try {
+            const code = await main(['message', 'send', '--json', '--role', 'reviewer', 'hi'], {
+                cwd,
+                output: out,
+                dbUrl,
+            });
+            expect(code).toBe(1);
+            const payload = JSON.parse(out.messages[0] ?? '{}');
+            expect(payload.error.code).toBe('selector_ambiguous');
+            expect(payload.error.message).toMatch(/2 instances|rev-a.*rev-b/s);
+        } finally {
+            await cleanup();
+        }
+    });
+});
 
 describe('spur message send --wait — seeded occupant resolves (G4 wave 2, R5)', () => {
     test('--wait --until invoke-exit resolves when the pinned run already exited', async () => {

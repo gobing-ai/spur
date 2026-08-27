@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.28.0
+version: 1.29.0
 owner: Robin Min
-updated_at: 2026-08-24
+updated_at: 2026-08-26
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -1069,6 +1069,16 @@ pin is written before proceed, and no fan-out is introduced (D6 R3/R4).
 **Detail:** `docs/design/spur-team-mode-design.md`; ADR-051 (public-surface consent),
 ADR-057 (identity-pinned control plane), ADR-061 (role→tier SSOT in `packages/config`).
 
+**Amendment (2026-08-26 · Task 0685):** Reopened exactly as this entry's evidence clause (2)+(3)
+anticipated: task 0685 demonstrated operator flow needing one-role-one-recipient addressing where
+the concrete spec id is not knowable in advance, landing `message send --role` / `agent wait
+--role` as exactly-one resolution over the frozen instance shapes (`AgentInstanceStore.byRole` /
+`byExecutor`, vocabulary = AGENT_ROLE_NAMES ∪ executor names). The resolution collapses onto the
+SAME `{specId, runId, generation}` identity pin snapshotted before proceed — identity pinning stays
+authoritative; `--to` remains the default surface; zero/multi matches are hard errors naming the
+count and candidates; no fan-out (D6 R3/R4 preserved). This amendment does NOT weaken the wave-2
+pin semantics; it adds the resolution layer in front of them.
+
 ## ADR-076: Retire the D5-N Promotion Bar — Delete task-pipeline2 Rather Than Promote It
 
 **Status:** Accepted · **Date:** 2026-08-20 · **Feature:** D5 · **Task:** 0606 · **Amends:** ADR-072
@@ -1354,3 +1364,54 @@ bun run apps/cli/src/index.ts task check --corpus --json > /tmp/corpus.json
 # probe 2 (window widening): edit the cited-window slice in checkLineAnchors to ±20,
 # re-run the sweep, compare new-mismatch and stale-entry counts against the above.
 ```
+
+## ADR-084: Environment-Improvement Lens Projects Into Existing Report Owners
+
+**Status:** Accepted (design) · **Date:** 2026-08-26 · **Feature:** I9
+
+**Decision.** Harvest vendor `vendors/misc/retro` as one plugin-level environment-improvement mapping projected into `sp:dogfood-testing` report §6 and `sp:history-anatomy` report section 9. Do not add a third analysis skill, `/sp:dev-retro`, or a public CLI noun. History-anatomy's closed category vocabulary stays frozen — retro names occupy `<signal>` or owner-surface only. The mapping is the single category table and carries the implementer-versus-reviewer placement rule.
+
+**Why.** The harvestable value is a compact taxonomy plus a placement rule; a third skill would overlap two live report contracts and fail ADR-016's command test.
+
+**Detail:** `docs/03_ARCHITECTURE.md` §22; `docs/design/environment-improvement-lens.md`.
+
+## ADR-085: Environment Remediations Remain Operator Proposals
+
+**Status:** Accepted (design) · **Date:** 2026-08-26 · **Feature:** I9
+
+**Decision.** Environment-lens remediations are operator proposals only. Dogfood fix-mode must not `Edit`/`Write` `AGENTS.md`, skills, rules, or other environment sources for an environment-tagged finding. History-anatomy already forbids applied changes; I9 does not add a second mutation source.
+
+**Why.** Retro suggests environment changes; mixing those into dogfood fix-mode would mutate harness files on the same path that repairs the testee.
+
+**Detail:** `docs/03_ARCHITECTURE.md` §22; `docs/design/environment-improvement-lens.md`.
+
+## ADR-086: Materialized Agent Instances Are Runtime State, Not Committed Spec Files
+
+**Status:** Accepted · **Date:** 2026-08-26 · **Task:** 0685
+
+**Decision.** Agent-team state is a three-layer taxonomy:
+
+1. **Capability catalog** (`agent.roles`, `agent.executors` in `.spur/config.yaml`) is *config* —
+   hand-authored and committed. It defines what CAN run.
+2. **Team rosters** (`agent.team.<id>.members`) are *config* — declared intent for what SHOULD run,
+   committed with the project.
+3. **Materialized agent instances** (deterministic `<teamId>-<memberKey>` ids, executor bindings,
+   resolved Layer-1 roles) are *runtime state*: after the `0026_spur_cli_agent_instances` cutover
+   they are rows written by the composition root (`team up`) into the project's CLI database.
+   Today they are the files under `.spur/agents/`, which are untracked scratch (`.gitignore`
+   `.spur/agents/*`, 0685 R3) — never a source of truth and never committed shapes. The read shape
+   is frozen ahead of the cutover in `AgentInstance` / `AgentInstanceStore` (`packages/domain`, 0685
+   R2); the migration DDL stays a reserved draft until its writer exists. No `0026_*.sql` is
+   registered before then.
+
+`~/.config/spur/projects.json` is rejected as the instance home for three reasons (task 0685):
+(1) wrong granularity — it is the cross-project machine registry (`{name,path,port}` only), while
+instances are per-project and scoped to that project's composition root and DB; (2) conflation —
+adding per-team mutable instance rows to a schema-versioned, advisory-locked pointer file turns one
+process's lock artifact into another's config SSOT; (3) transactional needs — instance writes join
+team-state mutations (occupancy, inbox) the project SQLite DB already owns atomically, which a JSON
+pointer file cannot provide.
+
+Untracked generated specs also imply the demo-story fix: an example roster ships as the commented-in
+`agent.team.demo` block in `.spur/config.yaml`, not as tracked spec files.
+

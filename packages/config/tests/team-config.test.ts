@@ -113,6 +113,27 @@ describe('memberLocalId (0543 R3)', () => {
     test('a member declaring neither role nor executor yields "" (R4 rejects it)', () => {
         expect(memberLocalId({ purpose: 'ghost' }, [{ purpose: 'ghost' }], 0)).toBe('');
     });
+
+    test('0685 R4: first executor-declared occurrence keeps the bare name (byte-compatible)', () => {
+        expect(memberLocalId(roster[0] as NormalizedTeamMember, roster, 0)).toBe('claude');
+    });
+
+    test('0685 R4: duplicate executors disambiguate deterministically -2, -3, …', () => {
+        const dupes: NormalizedTeamMember[] = [{ executor: 'omp' }, { executor: 'omp' }, { executor: 'omp' }];
+        expect(memberLocalId(dupes[0] as NormalizedTeamMember, dupes, 0)).toBe('omp');
+        expect(memberLocalId(dupes[1] as NormalizedTeamMember, dupes, 1)).toBe('omp-2');
+        expect(memberLocalId(dupes[2] as NormalizedTeamMember, dupes, 2)).toBe('omp-3');
+    });
+
+    test('0685 R4: suffix counting skips explicit-id and role-only members', () => {
+        const mixed: NormalizedTeamMember[] = [
+            { executor: 'omp' },
+            { id: 'noise', executor: 'other' },
+            { role: 'coder' },
+            { executor: 'omp' },
+        ];
+        expect(memberLocalId(mixed[3] as NormalizedTeamMember, mixed, 3)).toBe('omp-2');
+    });
 });
 
 // ---- TeamConfigSchema shape (R2) ----
@@ -186,7 +207,10 @@ describe('AgentConfigSchema team validation', () => {
         }
     });
 
-    test('AC2: shorthand members collide on executor name', () => {
+    test('0685 R4: duplicate shorthand members no longer collide — they compose unique ids', () => {
+        // R4 replaced the hard-fail for derived (executor-composed) collisions
+        // with deterministic -2/-3 suffixing; the composed ids stay unique and
+        // stable. Only EXPLICIT id collisions remain load errors.
         const result = AgentConfigSchema.safeParse({
             team: {
                 'devops-01': {
@@ -196,7 +220,7 @@ describe('AgentConfigSchema team validation', () => {
                 },
             },
         });
-        expect(result.success).toBe(false);
+        expect(result.success).toBe(true);
     });
 
     test('AC3: an uppercase team key produces an invalid composed id → load error naming the part', () => {

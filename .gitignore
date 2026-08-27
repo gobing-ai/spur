@@ -131,6 +131,10 @@ spur.js
 /docs/**/.spur/
 /.spur/run
 /.spur/backups/
+# Agent spec files are runtime scratch materialized by `spur team up` (ADR-086);
+# the committed source of truth is the agent.team roster in .spur/config.yaml.
+/.spur/agents/*
+!/.spur/agents/.gitkeep
 /.spur/context/.session*.json
 /.spur/context/token-ledger.jsonl
 /.spur/memory/sessions/*-checkpoint.md

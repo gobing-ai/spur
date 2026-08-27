@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.52.0
+version: 1.53.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-25
+updated_at: 2026-08-26
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -71,6 +71,7 @@ When collaborating with the design team:
 | [`agent-doctor-inspection-surface.md`](design/agent-doctor-inspection-surface.md)                       | `spur agent doctor` inspection contract — capability-tier table, full eligible ladder per role, pinned-model column, auth-probe removal (and its `doctor.probe` classifier), opt-in `--probe-health`, cached detection with `--force-refresh` (feature B4)                        | accepted design                                                                                                                                                |
 | [`tasks-module-shell-parity.md`](design/tasks-module-shell-parity.md)                                   | Tasks Board — History-parity shell: one-row header, inline filters, append-only tabs, full-bleed density, enriched cards, board-owned folder store (ADR-081, feature F72)                          | verified (0663/0664; 2026-08-25)                                                                                                                              |
 | [`history-anatomy.md`](design/history-anatomy.md)                                                     | History-anatomy diagnostic — daily/ad-hoc report mode, closed finding taxonomy, twelve-section report contract, cache branch + semantic digest (ADR-079/080), atomic publication, HA-S1 issue-finding migration gate (feature I8 / 0657–0661) | built (0657–0661)                                                                                                                                             |
+| [`environment-improvement-lens.md`](design/environment-improvement-lens.md)                           | Environment-improvement lens — plugin-level mapping SSOT, dogfood §6 optional class tags, history-anatomy closed-category keys + section 9 projection, present-don't-apply (ADR-084/085, feature I9)                                                              | accepted design                                                                                                                                               |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -459,9 +460,16 @@ and the app-layer `TeamService`).
 - `edit` — open the spec in `$EDITOR`, or print its path when `$EDITOR` is unset. Errors if missing.
 - `delete` — remove the spec; refuses (exit 2) without `--force`; errors (exit 1) if missing.
 
-#### `spur agent wait <specId> [--run <runId>] [--until <state>...] [--timeout <ms>] [--json]` · `spur message send --to <id> <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
+#### `spur agent wait [<specId>] [--role <name>] [--run <runId>] [--until <state>...] [--timeout <ms>] [--json]` · `spur message send (--to <id>|--role <name>) <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
 
-Identity-pinned wait on an occupant run (ADR-057 wave 2 / G4 R4–R5). `agent wait` pins the occupant
+Identity-pinned wait on an occupant run (ADR-057 wave 2 / G4 R4–R5; role-addressed selector per the
+ADR-075 amendment, 0685). Addressing is by spec id **or** `--role` — never both: `--role` resolves
+against materialized instances (`AgentInstanceStore`, vocabulary = `AGENT_ROLE_NAMES` ∪ configured
+executor names) and MUST match exactly one instance. Zero matches → exit 1
+(`selector_unmatched`); multiple → exit 1 (`selector_ambiguous`) naming count + candidates;
+unknown name → exit 2 naming the accepted vocabulary. The resolution collapses onto the SAME
+identity pin below — pinning semantics are unchanged.
+`agent wait` pins the occupant
 (`specId`+`runId`+`generation`) and resolves when the first `--until` (OR) is satisfied; default
 `idle`. `--run` pins an explicit run (default: latest). Replacement / generation bump / disappearance
 fails fast. `message send --wait` snapshots the occupant **before** enqueue, then waits on that pin

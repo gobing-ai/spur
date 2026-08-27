@@ -19,7 +19,7 @@ use it well*.
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
-| `send <body>` | Enqueue a message for an agent | `--to <id>` `--from <id>` `--wait` `--until <state>` `--timeout <ms>` `--json` |
+| `send <body>` | Enqueue a message for an agent | `--to <id>` `--role <name>` `--from <id>` `--wait` `--until <state>` `--timeout <ms>` `--json` |
 | `inbox` | List messages addressed to an agent | `--agent <id>` `--json` |
 | `reply <msg-id> <body>` | Thread a reply to a message | `--json` |
 | `watch` | Follow an agent inbox - surface new messages as they arrive | `--agent <id>` `--interval <ms>` `--json` |
@@ -34,6 +34,7 @@ spur message send "Please review PR 42" --to reviewer
 spur message send "Task 0040 is blocked" --to worker-1 --from operator
 spur message send "Done" --to planner --json
 spur message send "Review 0042" --to reviewer --wait --until invoke-exit --timeout 30000
+spur message send "Start the pass" --role reviewer          # resolves to exactly one instance
 ```
 
 Enqueues a durable message addressed to `--to <id>`. The recipient drains it on its next `agent run
@@ -47,7 +48,8 @@ wait; enqueue is **not** rolled back if the wait later fails.
 
 | Flag | Purpose |
 | ------ | --------- |
-| `--to <id>` | **Required.** Recipient agent id. |
+| `--to <id>` | Recipient agent id. Mutually exclusive with `--role`; exactly one of the two is required. |
+| `--role <name>` | Address by Layer-1 role or executor name. Must resolve to exactly one materialized instance; zero/multi matches are hard errors naming count + candidates (exit 1); unknown name exits 2 naming the accepted vocabulary (`AGENT_ROLE_NAMES` ∪ executor names). Resolution collapses onto the same identity pin as `--to`. (0685 R6 / ADR-075 amendment) |
 | `--from <id>` | Sender id (default: `operator`). |
 | `--wait` | Block until the recipient reaches `--until` (snapshots occupant before send). |
 | `--until <state>` | Wait target: `injected` \| `invoke-exit` (repeatable OR). Default `invoke-exit`. |

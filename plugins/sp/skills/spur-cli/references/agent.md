@@ -23,7 +23,7 @@ that before using `run` for fan-out dispatch.
 | ---- | ------- | --------- |
 | `run <prompt>` | Execute a prompt or slash command via a coding agent | `--agent <name>` `--spec <id>` `--model <name>` `--mode <mode>` `--continue` `--cwd <path>` `--drain` `--json` |
 | `loop` | Persistent self-draining inbox loop for a team member (supervisor-managed) | `--spec <id>` `--agent <id>` `--poll <ms>` |
-| `wait <specId>` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2) | `--run <runId>` `--until <state>...` `--timeout <ms>` `--json` |
+| `wait [<specId>]` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2; `--role` selector per 0685) | `--role <name>` `--run <runId>` `--until <state>...` `--timeout <ms>` `--json` |
 | `list` | List detected coding agents, or team agent specs with `--specs` | `--specs` `--json` |
 | `doctor [agent]` | Check agent readiness | `--json` `--probe-health` `--force-refresh` |
 | `create <id>` | Write a team agent spec to `.spur/agents/<id>.yaml` | `--type` `--tags` `--model` `--autonomy` `--system-prompt` `--name` `--workspace` `--purpose` `--auto-start` `--no-identity-preamble` `--json` |
@@ -108,12 +108,17 @@ into `run` with `--drain` -> else sleep for `--poll` ms.
 spur agent wait reviewer                          # default --until idle
 spur agent wait reviewer --run R3 --until invoke-exit
 spur agent wait reviewer --until working --until invoke-exit --timeout 30000 --json
+spur agent wait --role reviewer                   # role-addressed: resolves to exactly one instance
 ```
 
 `wait` pins an occupant's identity (`specId` + `runId` + `generation`) from the snapshot at wait
 start, then polls until the first satisfied `--until` (OR). `--run` pins an explicit run; default
 is the spec's latest run. Replacement, generation bump, or disappearance fails fast; a non-working
 occupant that makes no progress inside the stall budget fails `wait_stalled`.
+Addressing takes `<specId>` **or** `--role` — never both. `--role` resolves against materialized
+instances (vocabulary = `AGENT_ROLE_NAMES` ∪ executor names); zero/multi matches are hard errors
+naming count + candidates (`selector_unmatched` / `selector_ambiguous`, exit 1), an unknown name
+exits 2 naming the accepted vocabulary. Resolution collapses onto the same identity pin.
 
 ### Flags
 

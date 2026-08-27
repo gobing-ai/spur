@@ -5,6 +5,7 @@ import {
     AgentService,
     type AgentSpecInput,
     followSystemEventsAfter,
+    resolveAgentSelector,
     type SystemEventBus,
     TeamService,
     WaitError,
@@ -103,14 +104,50 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
 
     agent
         .command('wait')
-        .description('Wait for a pinned occupant run to reach a lifecycle state (G4 wave 2).')
-        .argument('<specId>', 'Agent spec id whose occupant to wait on')
+        .description(
+            'Wait for a pinned occupant run to reach a lifecycle state (G4 wave 2). Address by spec id or --role.',
+        )
+        .argument('[specId]', 'Agent spec id whose occupant to wait on (mutually exclusive with --role)')
+        .option(
+            '--role <name>',
+            'Address by Layer-1 role or executor name; must resolve to exactly one materialized instance',
+        )
         .option(...SHARED_OPTIONS.runAgentPin)
         .option(...SHARED_OPTIONS.untilAgent, collectUntil, [])
         .option(...SHARED_OPTIONS.timeout, parseTimeout)
         .option(...SHARED_OPTIONS.json)
         .action(async (specId, options) => {
-            const code = await runAgentWait(context, specId, options);
+            // 0685 R6: --role resolves to exactly one materialized instance spec id;
+            // the wait itself stays identity-pinned on the resolved id.
+            if (options.role !== undefined && specId !== undefined) {
+                context.setExitCode(
+                    waitUsageError(context, options, 'agent wait accepts a spec id or --role, not both'),
+                );
+                return;
+            }
+            let targetId = specId;
+            if (options.role !== undefined) {
+                const resolution = await resolveAgentSelector(
+                    () => new TeamService(context).listAgentSpecs(),
+                    context.agentConfig,
+                    options.role,
+                );
+                if (!resolution.ok) {
+                    context.setExitCode(resolution.code === 'unknown_selector' ? 2 : 1);
+                    if (options.json) {
+                        context.output.write(toJson({ error: { code: resolution.code, message: resolution.message } }));
+                    } else {
+                        context.output.error(resolution.message);
+                    }
+                    return;
+                }
+                targetId = resolution.specId;
+            }
+            if (targetId === undefined) {
+                context.setExitCode(waitUsageError(context, options, 'agent wait requires a spec id or --role <name>'));
+                return;
+            }
+            const code = await runAgentWait(context, targetId, options);
             context.setExitCode(code);
         });
 

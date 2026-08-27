@@ -4,6 +4,7 @@ import {
     DEFAULT_STALL_MS,
     followSystemEventsAfter,
     type InboxEntry,
+    resolveAgentSelector,
     type SendWaitUntil,
     TeamService,
     WaitError,
@@ -27,7 +28,11 @@ export function registerMessageCommand(program: Command, context: CliContext): v
     noun.command('send')
         .description('Enqueue a message for an agent. Use --wait to block until the recipient reaches a state.')
         .argument('<body>', 'Message body')
-        .requiredOption('--to <id>', 'Recipient agent id')
+        .option('--to <id>', 'Recipient agent id (mutually exclusive with --role)')
+        .option(
+            '--role <name>',
+            'Address by Layer-1 role or executor name; must resolve to exactly one materialized instance',
+        )
         .option('--from <id>', 'Sender id', DEFAULT_FROM)
         .option('--wait', 'Block until the recipient occupant reaches --until (default: invoke-exit)')
         .option(...SHARED_OPTIONS.untilMessage, collectSendUntil, [])
@@ -35,7 +40,40 @@ export function registerMessageCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.json)
         .action(async (body, options) => {
             const svc = new TeamService(context);
-            const code = await runMessageSend(svc, context, body, options);
+            // 0685 R6: resolve --role to exactly one materialized instance spec id
+            // before anything else; the rest of the flow stays identity-pinned.
+            let toId = options.to;
+            if (options.role !== undefined && options.to !== undefined) {
+                const message = 'message send accepts --to or --role, not both';
+                if (options.json) {
+                    context.output.write(toJson({ error: { code: 'usage', message } }));
+                } else {
+                    context.output.error(message);
+                }
+                context.setExitCode(2);
+                return;
+            }
+            if (options.role !== undefined) {
+                const resolution = await resolveAgentSelector(
+                    () => svc.listAgentSpecs(),
+                    context.agentConfig,
+                    options.role,
+                );
+                if (!resolution.ok) {
+                    if (options.json) {
+                        context.output.write(toJson({ error: { code: resolution.code, message: resolution.message } }));
+                    } else {
+                        context.output.error(resolution.message);
+                    }
+                    context.setExitCode(resolution.code === 'unknown_selector' ? 2 : 1);
+                    return;
+                }
+                toId = resolution.specId;
+            }
+            const code = await runMessageSend(svc, context, body, {
+                ...options,
+                to: toId ?? '',
+            });
             context.setExitCode(code);
         });
 
@@ -95,7 +133,7 @@ export function registerMessageCommand(program: Command, context: CliContext): v
         });
 }
 
-/** `spur message send --to <agent-id> <body> [--from <agent-id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]` */
+/** `spur message send (--to <agent-id>|--role <name>) <body> [--from <agent-id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]` */
 async function runMessageSend(
     svc: TeamService,
     context: CliContext,
@@ -117,6 +155,16 @@ async function runMessageSend(
             );
         } else {
             context.output.error('message send requires a non-empty body');
+        }
+        return 2;
+    }
+    if (options.to === '') {
+        if (options.json) {
+            context.output.write(
+                toJson({ error: { code: 'usage', message: 'message send requires --to <id> or --role <name>' } }),
+            );
+        } else {
+            context.output.error('message send requires --to <id> or --role <name>');
         }
         return 2;
     }

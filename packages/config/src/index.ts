@@ -342,7 +342,20 @@ export function memberLocalId(
     index: number,
 ): string {
     if (member.id !== undefined) return member.id;
-    if (member.executor !== undefined) return member.executor;
+    if (member.executor !== undefined) {
+        // 0685 R4: duplicate-executor members disambiguate deterministically —
+        // first occurrence keeps the bare executor name, later ones append
+        // `-<position>` (2, 3, …). Rosters without duplicates are byte-identical
+        // to the pre-0685 derivation; the rosters that previously hard-failed in
+        // the composed-id guard now compose stable unique ids.
+        const base = member.executor;
+        let n = 0;
+        for (let i = 0; i < index; i++) {
+            const m = roster[i];
+            if (m !== undefined && m.id === undefined && m.executor === base) n += 1;
+        }
+        return n === 0 ? base : `${base}-${n + 1}`;
+    }
     const role = member.role;
     if (role === undefined) return '';
     let n = 0;

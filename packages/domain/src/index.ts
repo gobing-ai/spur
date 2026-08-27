@@ -1,3 +1,4 @@
+export * from './agent-instance';
 export * from './analytics';
 export * from './bdd';
 export * from './dao';
