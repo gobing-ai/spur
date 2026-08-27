@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.29.0
+version: 1.30.0
 owner: Robin Min
 updated_at: 2026-08-26
 read_before: any structural change; before diverging from a decision
@@ -1079,6 +1079,11 @@ authoritative; `--to` remains the default surface; zero/multi matches are hard e
 count and candidates; no fan-out (D6 R3/R4 preserved). This amendment does NOT weaken the wave-2
 pin semantics; it adds the resolution layer in front of them.
 
+**Amendment (2026-08-26 · Task 0685 verification correction):** Exact-one `--role` resolution
+first yields a concrete `specId`. `agent wait` and `message send --wait` then snapshot the existing
+occupant pin; an unwaited `message send` queues to that resolved id without requiring an occupant,
+matching the unchanged `--to` path. Detail: `docs/design/inter-agent-control-plane.md` §6.
+
 ## ADR-076: Retire the D5-N Promotion Bar — Delete task-pipeline2 Rather Than Promote It
 
 **Status:** Accepted · **Date:** 2026-08-20 · **Feature:** D5 · **Task:** 0606 · **Amends:** ADR-072
@@ -1414,3 +1419,10 @@ pointer file cannot provide.
 
 Untracked generated specs also imply the demo-story fix: an example roster ships as the commented-in
 `agent.team.demo` block in `.spur/config.yaml`, not as tracked spec files.
+
+**Amendment (2026-08-26 · Task 0685 verification correction):** The capability catalog
+(`agent.roles`, `agent.executors`, `agent.default`) stays machine-global in
+`~/.config/spur/config.yaml`; `.spur/config.yaml` owns the project roster and optional project
+overrides through the merged loader. The blanket scratch rule cannot inspect YAML tags, so
+hand-authored specs remain opt-in trackable with `git add -f`; only `spur:generated` specs are
+runtime state by contract. Detail: `docs/03_ARCHITECTURE.md` §17 and `docs/04_DESIGN.md` §2.1/§3.1.

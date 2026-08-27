@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.33.0
+version: 1.34.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-08-26
@@ -908,6 +908,10 @@ stall / timeout still heartbeat at 100 ms). Lifecycle is derived by a pure proje
 (`working` = latest `agent.invoke.start`; `idle` = latest `agent.invoke.exit` + empty queued
 inbox; `blocked` requires a first-class signal, none yet). First-class `blocked` remains
 accepted design.
+Task 0685 adds an exact-one selector above this unchanged pin layer: `--role` resolves a configured
+Layer-1 role or executor name through `AgentInstanceStore.byRole` / `byExecutor`; zero or multiple
+matches fail with count + candidates. `agent wait` and `message send --wait` snapshot the resolved
+spec's occupant; an unwaited send queues to the resolved `specId` without requiring an occupant.
 The Board Inbox `mergeTimeline` remains display-only; G3 (ADR-052) still owns un-merging it and
 is not this section's work.
 

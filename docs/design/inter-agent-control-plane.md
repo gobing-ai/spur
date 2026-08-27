@@ -3,7 +3,8 @@
 **Area:** Occupant identity, coordination-facing run artifacts, pinned wait, caller env.
 **Status:** Waves 1–2 **landed** (tasks 0529/0530, 2026-08-13). Wave 3's snapshot-then-follow
 helper **landed** (task 0531). Spec addressing extended 0537/0542: `--spec <id>` is the canonical
-carrier; drain rewrites to the spec's executor binding (feature B2). First-class `blocked` /
+carrier; drain rewrites to the spec's executor binding (feature B2). Task 0685 adds exact-one
+`--role` resolution above the existing occupant pin. First-class `blocked` /
 `agent report-state` remain accepted design.
 **Decision:** ADR-057 (complements ADR-052).
 **Feature:** G4.
@@ -46,7 +47,8 @@ spec's **executor name** when the spec records one (task 0537: restores the oper
 `{ agent, model }` + tier through `resolveExecutor`), falling back to the spec's coding-agent type
 only via the `spec-without-executor-field` shim. A spec whose executor is absent from
 `agent.executors` fails loudly at drain, spawning nothing (0537 R5). The occupant record **retains**
-`specId`. A wait or send that names only `agentKind` is invalid.
+`specId`. Wait/send addressing is a concrete spec id or an exact-one `--role` selector; a bare
+coding-agent kind remains invalid.
 
 **Pin match:** two refs match when `specId`, `runId`, and `generation` are equal. `agentKind` mismatch or a higher `generation` is `run_replaced` / `occupant_gone`.
 
@@ -140,19 +142,20 @@ No screen-manifest detector. No OSC/spinner matching.
 `sp:spur-cli` (`agent.md` / `message.md`).
 
 ```text
-spur agent wait <specId> [--run <runId>] --until idle|working|invoke-exit|blocked [--timeout <ms>] [--json]
-spur message send <body> --to <specId> [--from <id>] --wait --until injected|invoke-exit [--timeout <ms>] [--json]
+spur agent wait (<specId>|--role <name>) [--run <runId>] --until idle|working|invoke-exit|blocked [--timeout <ms>] [--json]
+spur message send <body> (--to <specId>|--role <name>) [--from <id>] --wait --until injected|invoke-exit [--timeout <ms>] [--json]
 ```
 
 `until` values are exact. Repeating `--until` is allowed (OR). Default for standalone wait: `idle`. Default for `send --wait`: `invoke-exit`.
 
 **Algorithm (both commands):**
 
-1. Snapshot `OccupantRef` + current `system_events` sequence (or EventBus sequence when the server is the caller).
-2. Mutate (no-op for bare wait; enqueue for send).
-3. If the snapshot already satisfies `until`, return success (wait) / include occupant (send).
-4. Follow cataloged events after that sequence. Re-probe occupant only on a relevant event.
-5. Identity mismatch → `occupant_gone` or `run_replaced`.
+1. Resolve `--role` to exactly one `specId` when supplied; zero/multiple matches fail with count + candidates.
+2. Snapshot `OccupantRef` + current `system_events` sequence (or EventBus sequence when the server is the caller).
+3. Mutate (no-op for bare wait; enqueue for send).
+4. If the snapshot already satisfies `until`, return success (wait) / include occupant (send).
+5. Follow cataloged events after that sequence. Re-probe occupant only on a relevant event.
+6. Identity mismatch → `occupant_gone` or `run_replaced`.
 6. No relevant event and no status change within `timeout_ms` → `wait_stalled` when the wait started from a non-working occupant and `--until` is not already true; otherwise `timeout`.
 7. Client disconnect / SIGINT ends the wait; it does not roll back an already-enqueued message.
 

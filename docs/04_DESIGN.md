@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.53.0
+version: 1.54.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-26
@@ -466,9 +466,10 @@ Identity-pinned wait on an occupant run (ADR-057 wave 2 / G4 R4–R5; role-addre
 ADR-075 amendment, 0685). Addressing is by spec id **or** `--role` — never both: `--role` resolves
 against materialized instances (`AgentInstanceStore`, vocabulary = `AGENT_ROLE_NAMES` ∪ configured
 executor names) and MUST match exactly one instance. Zero matches → exit 1
-(`selector_unmatched`); multiple → exit 1 (`selector_ambiguous`) naming count + candidates;
+(`selector_unmatched`, `count=0`, candidates `none`); multiple → exit 1
+(`selector_ambiguous`) naming `count=N` + candidates;
 unknown name → exit 2 naming the accepted vocabulary. The resolution collapses onto the SAME
-identity pin below — pinning semantics are unchanged.
+spec-id path below; wait-bearing commands snapshot the same identity pin — pinning semantics are unchanged.
 `agent wait` pins the occupant
 (`specId`+`runId`+`generation`) and resolves when the first `--until` (OR) is satisfied; default
 `idle`. `--run` pins an explicit run (default: latest). Replacement / generation bump / disappearance
@@ -1453,6 +1454,7 @@ standard scripts as `node "$(superskill script path sp <rel>.mjs)"`. Repo-only s
 | `history_etl_<source>`                                     | importer                  | Generic/custom-source payload rows, created lazily only when an accepted record targets the table. Built-in typed imports leave no empty ETL tables; migration `0019_spur_cli_history_etl_tables_drop` retires the ten vestigial built-in tables. |
 | `inbox_messages`                                           | ts-db (`InboxMessageDao`) | Durable inter-agent message queue; indexed on `(to_id, status)`. Added by migration `0001_spur_cli_team_inbox`; composed into `CLI_SCHEMA_SQL` via `INBOX_MESSAGES_SCHEMA_SQL`. |
 | `coordination_runs`                                        | ts-db (`CoordinationRunDao`) | Occupant pin + path-only artifact refs for spec-addressed runs (ADR-057 wave 1). PK `run_id`; indexed `(spec_id, generation DESC)`. Added by migration `0010_spur_cli_coordination_runs`. Never stores stdout/stderr bodies. |
+| `agent_instances` (reserved draft)                         | CLI                       | Future DB home for materialized instances (ADR-086): `spec_id` PK; `team_id`, `member_key`, `executor`, nullable `role`, `workspace`, `status` (`stopped\|running\|exited\|errored`), nullable `pid`/pin fields, JSON `tags`/`config`, integer timestamps; indexes on role, executor, and team. Draft id `0026_spur_cli_agent_instances` is intentionally absent from `CLI_MIGRATIONS`. |
 | `history_run_session`                                      | CLI (`RunSessionDao`)        | Run→session mapping (feature E6): `run_id` → `(source, session_id)` with `exactness` (`exact` \| `unresolved` \| `estimated`) and `mechanism` (`observed` \| `supplied` \| `inferred`). `RunSessionObserver` writes boundary observations; import may promote an unresolved row to exact when a session is observed inside that run's `.spur/run/<runId>/agent-sessions/` directory (task 0624). `RetroCorrelator` writes estimated/inferred rows and never shadows exact. Indexed on `run_id` and `(source, session_id)`. |
 | `rule_runs`, `rule_eval_runs`                              | ts-rule-engine (≥0.3.15)  | Persisted rule-run history powering `spur rule trace`; added by migration `0002_spur_cli_rule_history`. `applied_fix_count` is re-stamped by Spur after `applyFixes`.           |
 

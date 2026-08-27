@@ -111,7 +111,9 @@ only through Spur (`spur message`, `spur agent`). Occupant pin + `coordination_r
 (`SPUR_SPEC_ID` / `SPUR_RUN_ID` / `SPUR_TEAM_ID` / `SPUR_SERVE_URL`) are shipped, as are
 identity-pinned `agent wait` and atomic `message send --wait` (0530) and snapshot-then-follow
 over `system_events` (`followSystemEventsAfter`, 0531). Do not scrape terminals, inject
-keystrokes, or add a third IPC socket. First-class `blocked` remains accepted design. Shapes:
+keystrokes, or add a third IPC socket. Exact-one `--role` addressing (0685) resolves through
+`AgentInstanceStore` to a concrete spec id before the unchanged pin path. First-class `blocked`
+remains accepted design. Shapes:
 `docs/design/inter-agent-control-plane.md`.
 
 ---
