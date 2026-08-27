@@ -4,7 +4,7 @@ name: "Project the environment-improvement lens into dogfood and history-anatomy
 status: done
 template: feature-impl
 created_at: 2026-08-27T00:28:30.651Z
-updated_at: "2026-08-27T02:27:55.302Z"
+updated_at: "2026-08-27T02:57:03.768Z"
 feature_id: I9
 priority: P2
 tags: ["environment-lens", "dogfood-testing", "history-anatomy"]
@@ -234,30 +234,44 @@ Change map (0686-owned paths only). The first `record --solution-from-diff` pass
 | `plugins/sp/tests/skill-structure.test.ts:1785+` | Exactly-one-file seven-name assertion across shipped markdowns; both projections carry exact relative link; SKILL.mds restatement ban; no BODY_BUDGET table added (64/64) (R2, R13) |
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | plugins/sp/references/environment-lens.md owns the seven-name table + placement rule; skill-structure.test.ts asserts exactly-one enumerator across walk(PLUGIN_ROOT) of shipped markdowns |
-| R2 | MET | report-template.md §6 and report-contract.md both contain exact link ../../../references/environment-lens.md; structure tests assert no second seven-name table and no SKILL.md restatement |
-| R3 | MET | report-template.md §6 class grammar `- [environment\|testee\|waste]` immediately after em dash, distinct from trailing feasibility tag; protocol @1.2 unchanged; no validator field added (validate-report.ts/mjs untouched) |
-| R4 | MET | report-contract.test.ts 'environment-lens class tags' + full suite 19/19: tagged, untagged, and cache-health-P3 reports all pass validateReport |
-| R5 | MET | report-template.md §6 states environment = proposal-only, never an Edit/Write target; testee repair path unchanged; class-not-path mutation rule documented |
-| R6 | MET | history-anatomy-cache.ts FINDING_CATEGORIES const (7 frozen names); bullet + legacy pipe rows reject invalid explicit category / key first segment; suite 62/62 incl. bare-node twin check |
-| R7 | MET | report-contract.md section-9 projected-candidate shape (backticked key + owner surface / expected impact / verification method / reversibility); numbered prose remains valid; proposal-only stated |
-| R8 | MET | report-template.md classification rules: environment not testee; coding standards routed to sp:code-verification/sp:code-review/pipeline review, never implementer skill |
-| R9 | MET | environment-lens.md placement rule: automated check over always-loaded prose (AGENTS.md pointer-only) |
-| R10 | MET | git diff empty for plugins/sp/skills/issue-finding/** ; issue-finding/SKILL.md 27052 ≤ 27060 |
-| R11 | MET | dogfood-testing/SKILL.md 37435 ≤ 37452; history-anatomy/SKILL.md 3434 < 20000; no BODY_BUDGET change |
-| R12 | MET | history-anatomy-cache.test.ts closed-vocab describe (62/62): valid-only passes, invalid category/key fails, workflow:agents-md:navigation later-segment passes, legacy dense pipe row parses |
-| R13 | MET | skill-structure.test.ts dispatcher-shape + seven-name-absence assertion for history-anatomy/SKILL.md |
-| R14 | MET | report-contract.test.ts untagged cache-health P3 accepted under @1.2 |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/references/environment-lens.md:20-28` — the one canonical seven-name projection table |
+| R2 | MET | `plugins/sp/tests/skill-structure.test.ts:1808-1821` — both projections carry the exact relative link and neither restates the table |
+| R3 | MET | `plugins/sp/skills/dogfood-testing/references/report-template.md:241-250` — optional class grammar after the em dash, protocol unchanged, no required field |
+| R4 | MET | `plugins/sp/tests/dogfood-testing/report-contract.test.ts:202-244` — tagged, untagged, and untagged cache-health findings all validate |
+| R5 | MET | `plugins/sp/skills/dogfood-testing/references/report-template.md:255-263` — environment findings are proposal-only, never an edit target; class, not path, decides mutation |
+| R6 | MET | `plugins/sp/scripts/history-anatomy-cache.ts:322-403` — closed category constant plus rejection of an out-of-set explicit category or key first segment |
+| R7 | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md:155-171` — section 9 projected-candidate shape with owner surface, expected impact, verification method, reversibility; proposal-only |
+| R8 | MET | `plugins/sp/skills/dogfood-testing/references/report-template.md:262-268` — navigation and dead always-loaded instructions are environment, and coding standards route to a review owner |
+| R9 | MET | `plugins/sp/references/environment-lens.md:41-47` — automatable observations become a check, not a reminder sentence in an always-loaded steering file |
+| R10 | MET | `git diff -- plugins/sp/skills/issue-finding` empty and `git show --name-only fa4fb0b59` lists no path under it; body 27052 bytes against the 27060 baseline |
+| R11 | MET | `plugins/sp/tests/skill-structure.test.ts:1823-1828` — no skill body restates the table; measured bodies 37435 and 27052 bytes against 37452 and 27060, no baseline raised |
+| R12 | MET | `plugins/sp/tests/history-anatomy-cache.test.ts:1113-1170` — closed-only passes, unprojected numbered section 9 prose passes, retro name in a later segment passes, invalid category and key fail |
+| R13 | MET | `plugins/sp/tests/skill-structure.test.ts:1823-1828` — the dispatcher body restates none of the seven names; measured at 3434 bytes, under the 20000 default |
+| R14 | MET | `plugins/sp/tests/dogfood-testing/report-contract.test.ts:234-244` — the untagged cache-health finding is accepted unchanged |
 
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — A single plugin-level mapping owns the seven retro categories and the placement rule | MET | test | `plugins/sp/tests/skill-structure.test.ts:1798-1806` — exactly one shipped markdown enumerates all seven names |
+| R2 — Dogfood and history-anatomy projections point at the mapping rather than duplicating it | MET | test | `plugins/sp/tests/skill-structure.test.ts:1808-1821` — exact relative link asserted, seven-name restatement asserted absent |
+| R3 — A dogfood section 6 finding may carry an optional environment, testee, or waste tag without leaving protocol @1.2 | MET | test | `plugins/sp/tests/dogfood-testing/report-contract.test.ts:211-222` — all three class tags validate and the class precedes the trailing feasibility tag |
+| R4 — An untagged dogfood report remains valid under protocol @1.2 | MET | test | `plugins/sp/tests/dogfood-testing/report-contract.test.ts:224-231` — an untagged finding and a findings-free report both validate |
+| R5 — Dogfood fix-mode does not apply environment-tagged findings as tree mutations | MET | test | `plugins/sp/tests/skill-structure.test.ts:1833-1848` — the never-edit and class-not-path clauses are pinned in the report template |
+| R6 — History-anatomy encodes retro names as signal or owner-surface values and rejects them as categories | MET | test | `plugins/sp/tests/history-anatomy-cache.test.ts:1129-1150` — a retro name in a later key segment passes while an out-of-set category or key first segment fails by name |
+| R7 — History-anatomy environment remediations remain operator proposals | MET | test | `plugins/sp/tests/skill-structure.test.ts:1850-1858` — the four projected fields and the proposal-only clause are pinned in the report contract |
+| R8 — Steering, navigation, and coding-standards remediations are classified as environment changes, not implementer bugs | MET | test | `plugins/sp/tests/skill-structure.test.ts:1833-1848` — the environment-not-testee and review-owner clauses are pinned |
+| R9 — An automated-check candidate proposes a gate rather than a new always-loaded sentence | MET | test | `plugins/sp/tests/skill-structure.test.ts:1833-1848` — the check-first clause is pinned against the report template |
+| R10 — sp:issue-finding stays a coexistence-window non-target | MET | command | `git diff -- plugins/sp/skills/issue-finding` returned empty and the implementation commit touches no path under it; body 27052 bytes against 27060 |
+| R11 — The two named SKILL.md bodies do not grow past their BODY_BUDGET baselines | MET | test | `plugins/sp/tests/skill-structure.test.ts:1823-1828` — no skill body restates the table; the byte gate ran green at 66 of 66 |
+| R12 — A history-anatomy fixture that uses only the closed category vocabulary still passes the structure gate | MET | test | `plugins/sp/tests/history-anatomy-cache.test.ts:1113-1132` — a closed-only report passes and unprojected numbered section 9 prose passes alongside it |
+| R13 — history-anatomy SKILL.md stays a dispatcher and does not absorb the mapping | MET | test | `plugins/sp/tests/skill-structure.test.ts:1823-1828` — no restatement of the seven names; the body measured 3434 bytes, under 20000, with a grep count of zero |
+| R14 — Existing cache-health P3 findings remain valid without a waste tag | MET | test | `plugins/sp/tests/dogfood-testing/report-contract.test.ts:234-244` — the untagged cache-health finding is accepted unchanged |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Inline review** (host session mtat5zb9-zg2cj4gy, auto profile): no blocking findings.

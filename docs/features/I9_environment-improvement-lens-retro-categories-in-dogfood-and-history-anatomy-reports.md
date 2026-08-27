@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I9"
 name: "Environment-improvement lens: retro categories in dogfood and history-anatomy reports"
-status: verifying
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-27T00:15:00.420Z"
-updated_at: "2026-08-27T02:27:55.953Z"
+updated_at: "2026-08-27T03:04:14.060Z"
 ---
 
 # I9: Environment-improvement lens: retro categories in dogfood and history-anatomy reports
@@ -168,3 +168,4 @@ Feature: Environment-improvement lens: retro categories in dogfood and history-a
 - 2026-08-27T00:15:21.528Z moved L → I9 (system)
 - 2026-08-27T02:11:33.460Z backlog → active (system)
 - 2026-08-27T02:27:55.953Z active → verifying (system)
+- 2026-08-27T03:04:14.060Z verifying → done (system)

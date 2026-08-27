@@ -15390,22 +15390,6 @@
         },
         {
             "kind": "feature",
-            "id": "I9",
-            "code": "L4.dogfood-missing",
-            "severity": "warning",
-            "reason": "Feature I9 is active and task 0686 is still in progress; its dogfood artifact is a completion gate and does not exist yet.",
-            "since": "2026-08-26"
-        },
-        {
-            "kind": "feature",
-            "id": "I9",
-            "code": "L4.scenario-unverified",
-            "severity": "warning",
-            "reason": "Feature I9 is active and linked task 0686 is not yet verified; the two-sided entry must be removed when its canonical PASS verdict lands.",
-            "since": "2026-08-26"
-        },
-        {
-            "kind": "feature",
             "id": "J4",
             "code": "L4.scenario-unverified",
             "severity": "warning",
