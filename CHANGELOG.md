@@ -1,5 +1,59 @@
 # Changelog
 
+## [0.3.63] - 2026-08-26
+
+### Added
+
+- feat(agent): instance storage shapes, deterministic id suffixes, --role addressing (66e43cee8)
+- feat(agent): complete instance shape and reserve db migration draft (69b05f497)
+- feat(agent-doctor): land B4 batch from runall worktree (0681-0684) (bb5fc3fb4)
+- feat(b4): merge agent-doctor B4 batch from sp/runall-feature-b4-bc1588 (0681-0684) (29f84604d)
+- feat(history-anatomy): land I81 batch from worktree (0674-0680, sp/runall-i81-4f94) (da315389a)
+- feat(workflow): thread resolved history-anatomy window into analyze legs and gate undeclared shell vars (0674) (06bc07801)
+- feat(history): checkpoint identity migration for incremental import short-circuit (0675) (624b8b5c8)
+- feat(history): codex usage attribution + guarded checkpoint-identity migrations (0678) (151086969)
+- feat(history-anatomy): triage fields, standing advisory section, remediation handoff (0680) (966560207)
+- feat(web): align Tasks header with History rail and enrich task cards (204425a03)
+- feat(web): float feature tree overlay in the detail workspace left margin (8ef0fc417)
+- feat(web): dock feature tree overlay to detail workspace right edge (00ffb4aa2)
+- feat(web): dock metadata panel as right-side mirror of the feature tree (7b3082e1d)
+- feat(cli): render workflow mermaid diagrams top-down (666d93fa1)
+- feat(history-anatomy): extend report contract to twelve sections (c7a14163c)
+- feat(sp): add environment-improvement lens to report contracts (fa4fb0b59)
+
+### Fixed
+
+- fix(workflow): rename history-anatomy paths artifact from .env to .txt (1be6e0e85)
+- fix(cli): escape parens in mermaid flowchart labels (57c8441b5)
+- fix(plugin): find-issue/idea stop advertising inline on headless targets; assert-clean undeclared-write gate (0676) (e9dca64e9)
+- fix(analytics): honest phase boundaries and absent-not-zero telemetry (0677) (149fbd61e)
+- fix(analytics): pairing stats read writer payload paths, honest unknown outcomes (0679) (2ca0cfee2)
+
+### Changed
+
+- style(docs): markdownlint blank-line fixes on I81 task files (post-merge auto-format) (dc69f6dda)
+- docs(corpus): register I81 in the features index under I8 (de847744b)
+- chore: ignore history-anatomy run artifacts and leaked report files (018ccfd03)
+- docs(corpus): refine I81 tasks with verified cache-helper findings and R21 pairing AC (4f94682c3)
+- docs(corpus): add feature I81 and tasks 0674-0680 for history-anatomy remediation (b926f7729)
+- chore: drop stale gitignore entry and reflow history-anatomy task records (9623b6442)
+- test(app): capture corpus-sweep print output instead of leaking to stdout (9ff953022)
+- style(web): remove priority left-border accent from task cards (212972e74)
+- style(docs): normalize I81 feature-file heading spacing (auto-format) (45ea7e788)
+- docs(task): add new task file (b8197fc25)
+- docs(corpus): plan B4 agent-doctor inspection surface, tasks 0681-0684 (622183e9c)
+- chore(features): mark B4 done after dogfood gate (133f47699)
+- docs(task): update task status after verification (668183863)
+- docs(docs): record agent-doctor feature B4 task completion (8287c545f)
+- docs(docs): record agent-doctor B4 post-landing re-audit (46d214b79)
+- docs(docs): document accepted I9 environment-improvement lens across planning layers (5a5a513e0)
+- docs(corpus): refine feature I9 and task 0686 to ready depth (876d48e6e)
+- docs(docs): sync control-plane layers for exact-one --role addressing (5e00d4d82)
+- docs(corpus): record task 0686 done and 0685 verification state (8a6522ceb)
+- chore(config): clarify agent-spec ignore comment and roster example name (a185ee088)
+- test(sp): pin environment-lens contract clauses in report gates (a0cc031ef)
+- docs(corpus): close feature I9 with verify evidence and drop stale baseline entries (84ed170d6)
+
 ## [0.3.62] - 2026-08-25
 
 ### Added
