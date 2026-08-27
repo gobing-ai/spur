@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.3.64] - 2026-08-27
+
+### Added
+
+- feat(sp): register redesign-web-ui in README and structure tests (69bb042cb)
+- feat(sp): add redesign-web-ui technique skill with audit and upgrade references (e7120426d)
+- feat(sp): add --all flag to dev-gitmsg (9c262ff8a)
+- feat(app): --agent inline is one honest selector; headless surfaces substitute instead of rejecting (658dfa0db)
+
+### Fixed
+
+- fix(app): close 0688 verify leftovers and force-done 0687 (19287b0a2)
+- fix(task-check): strip code spans from status-claim lines (task 0688 fallout) (f60e5aec1)
+- fix(task-check): right-size post-implementation gate (task 0688, ADR-088) (f7402c218)
+- fix(ts-ai-runner): upgrade upstream package (a1dadfe51)
+- fix(ts-ai-runner): upgrade upstream package (fbb7f64bc)
+- fix(app): append absolute artifact path to expectFile dispatches (82a17f0c4)
+- fix(workflow): source history-anatomy paths from .txt not .env (53fe32420)
+- fix(sp): resolve history-anatomy skill path on installed plugin layouts (b63cb9d0a)
+- fix(app): stop OS permission denials escalating and restore agent telemetry (01076353d)
+
+### Changed
+
+- docs(corpus): retire unused tasks, renumber 0703-0706 -> 0691-0694 (operator directive) (68f107151)
+- docs(corpus): merge 0688 friction tasks 12->4, cancel F96 (operator review) (ba119694f)
+- docs(corpus): baseline dated F94-F96 filing residue (21 class entries) (c1679eb71)
+- docs(corpus): file F92-F93-F94 from 0688 friction review (5596874e2)
+- docs(sp): pin backticked anchor format in history-anatomy contract (8901a8b64)
+- docs(tasks): refresh 0687 evidence and refine 0689 shim task (4709ac023)
+- docs(sp): wire workflow fit gate into spur-cli refs and expert-spur (cab40477e)
+- docs(sp): add workflow fit-and-tuning reference for spur-cli workflows (c1916ffd7)
+- docs(tasks): add issue 0690 for history-anatomy enrich structure-gate flakiness (393802f50)
+- docs(0687): verify verdict PARTIAL — selector contract proven, AC3/AC4/AC9 blocked by agy shim (0689) (c90f11c7e)
+- docs(task): update task status after refinement on task 0688 (8d88cd6c6)
+- refactor(sp): delegate dev-gtd commit step to shared gitmsg procedure (f0d07bb0e)
+- docs(sp): 0687 residue — dev-run/dev-runall selector wording unified; task R12 marked done (eb93dfdaa)
+- docs(sp): finish 0687 purge — all live surfaces unified on inline-default contract (a37155a8c)
+- chore(config): widen sandbox allowlists for agent executor state dirs (4d3739b72)
+- docs(corpus): record 0687 solution and testing evidence (42950ef21)
+- docs(corpus): add task 0687 for --agent selector simplification (fa294e2b6)
+- chore(project): remove .spur/agents/.gitkeep (d51877081)
+
 ## [0.3.63] - 2026-08-26
 
 ### Added
