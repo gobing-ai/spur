@@ -1464,3 +1464,37 @@ motive behind both is satisfied by the mandatory substitution warning, not by re
 
 **Detail:** `docs/04_DESIGN.md` §2.1/§3.2 (selector table, agent.run flow);
 `docs/design/agent-inline-host-session.md` (G5 history, superseded); task 0687.
+
+## ADR-088: The Anchor-Subject Gate Is a Warning Signal, Not an Error Verdict
+
+**Status:** Accepted · **Date:** 2026-08-27 · **Task:** 0688
+
+**Decision.** The dogfood `L4.anchor-subject-mismatch: error` severity override
+(`.spur/config.yaml` `tasks.severity`) is removed; the check runs at its default warning severity
+and reconciles two-sided in the corpus ratchet. Supersedes the promotion intent recorded in the
+2026-08-18 wave (task 0583 R6) and the 2026-08-25 frozen-set note (task 0670, ADR-083), which
+conditioned promotion on "the qualification migration is APPLIED and this residue is worked down".
+
+**Why.** Task 0688 (feature F91) fixed the matcher the promotion was waiting for: citations now
+match against the anchor's cited lines plus an ±20-line window (`ANCHOR_WINDOW_LINES = 20`), and
+row subject tokens exclude every backticked anchor in the row, so multi-anchor rows stop
+self-reporting. Measured effect (R5 before/after sweep, `.spur/run/0688-{before,after}.json`):
+corpus observed mismatch findings 2015 → 982 (−51%); sections pinned at the 5-finding cap
+304 → 124; ADR-083 probe 2 measured new-code mismatches 42 → 10. The migration is applied and the
+residue halved — but the remaining 982 are frozen legacy drift with no repair campaign. Promoting
+to error now would mint ~840 dated error entries for drift the corpus has explicitly declined to
+repair, converting a live drift signal into permanent ratchet debt — the exact anti-pattern the
+baseline constitution warns against. A warning reconciles two-sided (new or vanished warning keys
+still fail `task check --corpus`), so demotion costs loudness at task transitions, not gate force.
+
+**Consequences.** (1) All 435 error-severity baseline entries staled under the new matcher and
+were re-keyed at warning severity; 115 no longer reproduce at all. (2) `L3.testing-coverage` is
+retired — bunfig.toml machine-enforces 90/90 coverage on every `bun run test`, so the
+human-obligation check is redundant double-keeping; its 54 baseline entries are removed.
+(3) Replacing it, `L3.status-claim-contradiction` (error) fires when a Requirements checkbox
+contradicts a done/open status claim in the same sentence-ish clause of Solution/Testing prose;
+ambiguity is silent by construction, and its measured residue (32 legacy findings, the eb93dfdaa
+class) is baselined as a dated set. (4) 04_DESIGN §2.1 and
+`docs/design/lifecycle-projection-integrity.md` §2 carry the widened-window tokenization contract.
+
+**Detail:** task 0688; feature F91; `config/corpus-baseline.json` note § 2026-08-27.

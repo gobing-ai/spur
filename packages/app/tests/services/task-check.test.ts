@@ -1027,67 +1027,6 @@ describe('TaskCheckService', () => {
         expect(solErrors.length).toBeGreaterThan(0);
     });
 
-    test('L3: Testing without coverage claim warns', async () => {
-        const content = [
-            '---',
-            'schema_version: 1',
-            'name: "Test no cov"',
-            'status: backlog',
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Test no cov',
-            '',
-            '### Background',
-            '',
-            'text',
-            '',
-            '### Testing',
-            '',
-            'We ran the tests and they passed.',
-        ].join('\n');
-        const { fs, path, cleanup } = seedFile(content);
-        const svc = new TaskCheckService(fs, matrix);
-        const result = await svc.check(path, '0001');
-        cleanup();
-
-        const testWarnings = result.findings.filter(
-            (f) => f.layer === 'L3' && f.section === 'Testing' && f.severity === 'warning',
-        );
-        expect(testWarnings.length).toBeGreaterThan(0);
-        expect(testWarnings[0]?.message).toContain('coverage');
-    });
-
-    test('L3: Testing with N/A coverage produces no warning', async () => {
-        const content = [
-            '---',
-            'schema_version: 1',
-            'name: "Test na"',
-            'status: backlog',
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Test na',
-            '',
-            '### Background',
-            '',
-            'text',
-            '',
-            '### Testing',
-            '',
-            'N/A',
-        ].join('\n');
-        const { fs, path, cleanup } = seedFile(content);
-        const svc = new TaskCheckService(fs, matrix);
-        const result = await svc.check(path, '0001');
-        cleanup();
-
-        const testWarnings = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Testing');
-        expect(testWarnings).toHaveLength(0);
-    });
-
     test('L3: Plan as free-form prose warns', async () => {
         const content = [
             '---',
@@ -2905,7 +2844,7 @@ describe('subject-token exclusion (0583 R5 verify)', () => {
     // minimal, correct evidence row reported every time — 262 of the corpus's
     // anchor-subject warnings were this shape.
     test('a minimal correct evidence row does not report', () => {
-        const tokens = extractSubjectTokens(`| R1 | MET | \`${cite}\` |`, cite);
+        const tokens = extractSubjectTokens(`| R1 | MET | \`${cite}\` |`);
         expect(tokens).not.toContain(cite.toLowerCase());
         expect(tokens).not.toContain('met');
         expect(citedLinesNameSubject(tokens, cited)).toBe(true);
@@ -2913,13 +2852,110 @@ describe('subject-token exclusion (0583 R5 verify)', () => {
 
     test('a row naming an identifier present in the cited lines does not report', () => {
         const row = `| R1 | MET | \`${cite}\` (\`probedAny\` separates denied from exhaustion) |`;
-        expect(citedLinesNameSubject(extractSubjectTokens(row, cite), cited)).toBe(true);
+        expect(citedLinesNameSubject(extractSubjectTokens(row), cited)).toBe(true);
     });
 
-    // The rule must stay sharp: a real subject that is absent still reports.
     test('a row naming an identifier absent from the cited lines still reports', () => {
         const row = `| R1 | MET | \`${cite}\` (\`renderForensics\` builds the report) |`;
-        expect(citedLinesNameSubject(extractSubjectTokens(row, cite), cited)).toBe(false);
+        expect(citedLinesNameSubject(extractSubjectTokens(row), cited)).toBe(false);
+    });
+});
+
+describe('L3.status-claim-contradiction (0688 R7)', () => {
+    function claimTask(sections: { solution: string; testing: string; checked: string }): string {
+        return [
+            '---',
+            'schema_version: 1',
+            'name: "Claim task"',
+            'status: done',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Claim task',
+            '',
+            '### Background',
+            'text',
+            '',
+            '### Requirements',
+            `- [${sections.checked}] R1. **Do the thing.**`,
+            '- [ ] R2. **Other thing.**',
+            '',
+            '### Solution',
+            sections.solution,
+            '',
+            '### Testing',
+            sections.testing,
+            '',
+            '### Review',
+            '| P1 | path | finding | fix |',
+        ].join('\n');
+    }
+
+    async function check(sections: { solution: string; testing: string; checked: string }) {
+        const env = seedEnv({ taskContent: claimTask(sections) });
+        const result = await new TaskCheckService(env.fs, matrix).check(env.path, '0001');
+        env.cleanup();
+        return result.findings.filter((f) => f.code === FINDING_CODES.L3_STATUS_CLAIM_CONTRADICTION);
+    }
+
+    test('a checked requirement claimed open in Solution reports an error', async () => {
+        const findings = await check({
+            solution: 'R1 remains open — deferred to a follow-up task.',
+            testing: 'All paths exercised.',
+            checked: 'x',
+        });
+        expect(findings).toHaveLength(1);
+        expect(findings[0]?.severity).toBe('error');
+        expect(findings[0]?.section).toBe('Solution');
+    });
+
+    test('a checked requirement claimed open in Testing reports an error', async () => {
+        const findings = await check({
+            solution: ' Implemented in task-check.ts. ',
+            testing: 'R1 still pending — coverage suite not wired.',
+            checked: 'x',
+        });
+        expect(findings).toHaveLength(1);
+        expect(findings[0]?.section).toBe('Testing');
+    });
+
+    test('an unchecked requirement claimed done reports an error', async () => {
+        const findings = await check({
+            solution: 'R2 was implemented alongside the parser rework.',
+            testing: 'Both paths covered.',
+            checked: ' ',
+        });
+        expect(findings).toHaveLength(1);
+        expect(findings[0]?.section).toBe('Solution');
+    });
+
+    test('consistent states produce no finding', async () => {
+        const findings = await check({
+            solution: 'R1 was implemented; R2 remains open for a follow-up.',
+            testing: 'R1 done — suite green.',
+            checked: 'x',
+        });
+        expect(findings).toHaveLength(0);
+    });
+
+    // AC8: an R-id with no claim word in the same clause is not a claim.
+    test('prose that merely mentions the id without a claim word is silent', async () => {
+        const findings = await check({
+            solution: 'R1 touches the parser; the registry stays untouched.',
+            testing: 'Exercised via unit tests.',
+            checked: 'x',
+        });
+        expect(findings).toHaveLength(0);
+    });
+
+    test('"not implemented" is an open claim, not a done claim', async () => {
+        const findings = await check({
+            solution: 'R2 is not implemented in this change.',
+            testing: 'R1 covered.',
+            checked: ' ',
+        });
+        expect(findings).toHaveLength(0);
     });
 });
 
@@ -3409,5 +3445,49 @@ describe('0625 R4 — Solution change-map anchor drift detection', () => {
 
         const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
         expect(mismatch).toHaveLength(0);
+    });
+
+    // 0688 R1 / AC1: the subject window is the cited range ± ANCHOR_WINDOW_LINES.
+    // A point anchor inside a long symbol can never contain the symbol's name; a
+    // citation >5 lines from the symbol used to report, the window now covers it.
+    test('a citation whose subject sits 12 lines above the cited line reports no mismatch', async () => {
+        const fileContent = [
+            'export function registerCancel() {}',
+            ...Array.from({ length: 19 }, (_, i) => `const filler${i} = ${i};`),
+            '',
+        ].join('\n');
+        const { fs, path, cleanup } = seedChangeMap('`workflow.ts:12` — closes `registerCancel`', fileContent);
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
+        expect(mismatch).toHaveLength(0);
+    });
+
+    // 0688 R2 / AC2: every anchor in the row is excluded from subject tokens, not
+    // just the one under test — a sibling anchor's path can never appear in this
+    // citation's source, so a correct multi-anchor row used to report.
+    test('an evidence row carrying two anchors does not report when the subject is present', async () => {
+        const { fs, path, cleanup } = seedChangeMap(
+            '`workflow.ts:1` and `workflow2.ts:3` — closes `registerCancel`',
+            'export function registerCancel() {}\nconst unused = 1;\n',
+        );
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
+        expect(mismatch).toHaveLength(0);
+    });
+
+    test('exclusion does not blunt detection — an absent subject with sibling anchors still reports', async () => {
+        const { fs, path, cleanup } = seedChangeMap(
+            '`workflow.ts:1` and `workflow2.ts:3` — closes `renderForensics`',
+            'export function registerCancel() {}\nconst unused = 1;\n',
+        );
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
+        expect(mismatch).toHaveLength(1);
     });
 });

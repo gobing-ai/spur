@@ -324,21 +324,38 @@ export function classifyExternalEvidence(
  * requirement's subject → mismatch (R4). Never re-reads the whole file: the caller
  * already holds the in-range window.
  */
-export function extractSubjectTokens(row: string, excludeCitation?: string): string[] {
+/**
+ * ADR-083 probe 2 (task 0688): subject matching reads the cited range widened by
+ * ±20 lines, clamped to file bounds. A point anchor inside a long symbol can
+ * never contain the symbol's own name; the enclosing window can. One measured
+ * constant (corpus new mismatches 42 → 10), not a config knob.
+ */
+export const ANCHOR_WINDOW_LINES = 20;
+
+/**
+ * Subject tokens from a citing row — the identifier-like words a citation's
+ * evidence text carries, so the anchor-checker can require the cited window to
+ * name them (task 0583 R4/R5; the exclude-citation argument was removed by 0688).
+ * Row metadata (status words, the citation itself) never becomes a token.
+ */
+export function extractSubjectTokens(row: string): string[] {
     const tokens = new Set<string>();
 
     // Tokens that can never appear in cited SOURCE lines, so keeping them only
     // guarantees a mismatch on well-formed rows:
-    //   - the citation itself — code never contains its own `path:line`;
+    //   - every backticked line-anchor in the row — code never contains its own
+    //     `path:line`, and a sibling anchor's path is not in this citation's
+    //     source either (task 0688 R2: excluding only the anchor under test left
+    //     multi-anchor evidence rows guaranteed to mismatch);
     //   - verdict-table metadata (`MET`, `PARTIAL`, …) — row status, not subject.
     // A minimal, correct evidence row (`| R1 | MET | \`path.ts:12-20\` |`) yields
     // exactly these and nothing else, so without the exclusion every such row
     // reports (task 0583 R5 verify).
     const ROW_METADATA = new Set(['met', 'partial', 'unmet', 'n/a', 'na', 'pass', 'fail', 'todo', 'done']);
     const excluded = new Set<string>();
-    if (excludeCitation !== undefined && excludeCitation !== '') {
-        excluded.add(excludeCitation.toLowerCase());
-        excluded.add(excludeCitation.replace(/:(\d+)(?:-(\d+))?$/, '').toLowerCase());
+    for (const anchor of extractBacktickLineAnchors(row)) {
+        excluded.add(anchor.raw.toLowerCase());
+        excluded.add(anchor.path.toLowerCase());
     }
     // Backticked symbols/identifiers in the row (the strongest subject signal).
     for (const m of row.matchAll(/`([^`]+)`/g)) {
@@ -399,6 +416,32 @@ export function citedLinesNameSubject(subjectTokens: string[], cited: string): b
 }
 
 /**
+ * Status-claim lexicons for `L3.status-claim-contradiction` (task 0688 / ADR-083,
+ * the eb93dfdaa defect class). A claim attaches to an `R<n>` id only when both sit
+ * in the same sentence-ish clause — no `.`/`;` between, ≤80 chars in either direction.
+ * Prose that merely mentions an id with no claim word is deliberately silent
+ * (ambiguity → no finding). `ponytail:` negations beyond `not |never ` unhandled;
+ * extend the lookbehind if a corpus false positive appears.
+ */
+const OPEN_CLAIM_WORDS = 'remains open|still open|pending|unfinished|unimplemented|not implemented|outstanding|todo';
+const DONE_CLAIM_WORDS = 'done|landed|implemented|completed|shipped|closed|resolved|fixed';
+
+function claimsOpen(line: string, id: string): boolean {
+    return (
+        new RegExp(`\\bR${id}\\b[^.;]{0,80}?\\b(?:${OPEN_CLAIM_WORDS})\\b`, 'i').test(line) ||
+        new RegExp(`\\b(?:${OPEN_CLAIM_WORDS})\\b[^.;]{0,80}?\\bR${id}\\b`, 'i').test(line)
+    );
+}
+
+function claimsDone(line: string, id: string): boolean {
+    const word = `(?<!not |never )(?:${DONE_CLAIM_WORDS})`;
+    return (
+        new RegExp(`\\bR${id}\\b[^.;]{0,80}?\\b${word}\\b`, 'i').test(line) ||
+        new RegExp(`\\b${word}\\b[^.;]{0,80}?\\bR${id}\\b`, 'i').test(line)
+    );
+}
+
+/**
  * Identifier tokens from a `## Solution` change-map row's own path (task 0625 R4).
  *
  * A bare change-map row (`| \`apps/cli/src/commands/workflow.ts:744\` |`) carries
@@ -410,6 +453,10 @@ export function citedLinesNameSubject(subjectTokens: string[], cited: string): b
  * existing `citedLinesNameSubject` matcher. The whole-path basename (`workflow.ts`)
  * is a weak subject — it names the file, not the symbol — so it is deliberately
  * NOT a token; only the delimited identifier pieces are.
+ *
+ * 0688 R1 disposition: kept. The ±20-line window rescues prose rows; a bare
+ * row still carries zero subject tokens, and this fallback is the sole thing
+ * that makes its drift (0620) matchable at all.
  */
 export function extractPathSubjectTokens(path: string): string[] {
     const basename = path.split('/').pop() ?? '';
@@ -815,18 +862,51 @@ export class TaskCheckService extends PlanningCheckService {
             });
         }
 
-        // Testing: results + coverage claim or N/A (warning)
-        const testBody = doc.getSection('Testing');
-        if (testBody !== null && !isPlaceholderBody(testBody)) {
-            const hasCoverage = /coverage|≥\d+%|\d+\.\d+%|N\/A/i.test(testBody);
-            if (!hasCoverage) {
-                findings.push({
-                    layer: 'L3',
-                    code: FINDING_CODES.L3_TESTING_COVERAGE,
-                    severity: 'warning',
-                    section: 'Testing',
-                    message: 'Testing should include numeric coverage claim or N/A',
-                });
+        // Status-claim contradiction (task 0688 R7 / ADR-083): Requirements
+        // checkboxes vs Solution/Testing prose. eb93dfdaa shipped with its
+        // checkboxes claiming done while the Solution prose still named the work
+        // open — no check looked across that seam. Fires only on a positive claim
+        // word about the id in the same clause; ambiguity is silent by
+        // construction, so error severity (a fire is a verified true positive).
+        const checkboxBody = doc.getSection('Requirements');
+        if (checkboxBody !== null && !isPlaceholderBody(checkboxBody)) {
+            const checked = new Set<string>();
+            const unchecked = new Set<string>();
+            for (const cbLine of checkboxBody.split('\n')) {
+                const m = /^\s*[-*]\s*\[([ xX])\]\s*[`*_]{0,2}R(\d+)\b/.exec(cbLine);
+                if (m === null) continue;
+                (m[1]?.toLowerCase() === 'x' ? checked : unchecked).add(m[2] ?? '');
+            }
+            if (checked.size > 0 || unchecked.size > 0) {
+                for (const claimSection of ['Solution', 'Testing'] as const) {
+                    const claimBody = doc.getSection(claimSection);
+                    if (claimBody === null || isPlaceholderBody(claimBody)) continue;
+                    for (const claimLine of claimBody.split('\n')) {
+                        const excerpt = claimLine.trim().slice(0, 100);
+                        for (const id of checked) {
+                            if (claimsOpen(claimLine, id)) {
+                                findings.push({
+                                    layer: 'L3',
+                                    code: FINDING_CODES.L3_STATUS_CLAIM_CONTRADICTION,
+                                    severity: 'error',
+                                    section: claimSection,
+                                    message: `R${id} is checked in Requirements but ${claimSection} claims it is still open — reconcile: "${excerpt}"`,
+                                });
+                            }
+                        }
+                        for (const id of unchecked) {
+                            if (claimsDone(claimLine, id)) {
+                                findings.push({
+                                    layer: 'L3',
+                                    code: FINDING_CODES.L3_STATUS_CLAIM_CONTRADICTION,
+                                    severity: 'error',
+                                    section: claimSection,
+                                    message: `R${id} is unchecked in Requirements but ${claimSection} claims it is done — reconcile: "${excerpt}"`,
+                                });
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -1364,18 +1444,18 @@ export class TaskCheckService extends PlanningCheckService {
                         // from the citing row (the line that carries this citation) and
                         // require one to appear in the cited window. Warning until the
                         // R1 qualification pass has landed (severity-override promotes).
-                        const rawLow = raw.toLowerCase();
-                        const basename = cite.path.split('/').pop() ?? '';
+                        const start = Math.max(1, cite.startLine - ANCHOR_WINDOW_LINES);
+                        const end = Math.min(lineCount, (cite.endLine ?? cite.startLine) + ANCHOR_WINDOW_LINES);
                         const citedWindow =
-                            (raw
+                            raw
                                 .split('\n')
-                                .slice(cite.startLine - 1, cite.endLine ?? cite.startLine)
-                                .join('\n') || '') + (rawLow.includes(basename.toLowerCase()) ? ` ${basename}` : '');
+                                .slice(start - 1, end)
+                                .join('\n') || '';
                         const citingRow =
                             body.split('\n').find((l) => l.includes(`\`${cite.raw}\``)) ??
                             body.split('\n').find((l) => l.includes(cite.raw)) ??
                             '';
-                        const tokens = extractSubjectTokens(citingRow, cite.raw);
+                        const tokens = extractSubjectTokens(citingRow);
                         // R4 (0625): a bare Solution change-map row carries no
                         // subject tokens, so subject-matching had nothing to match
                         // and a drifted anchor passed (0620: `workflow.ts:744` vs

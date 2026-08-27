@@ -34,8 +34,12 @@ feature lifecycle status; `sync` owns status alignment.
 
 ### Path-derived subject tokens
 
-`checkLineAnchors` normally derives subject tokens from the prose in the row containing a citation.
-For a `Solution` row with no such tokens, it derives them from the cited path basename:
+`checkLineAnchors` normally derives subject tokens from the prose in the row containing a citation,
+excluding every backticked anchor in that row (so an id the row merely cites as evidence is not its
+own subject). The matcher reads the cited lines plus an ±`ANCHOR_WINDOW_LINES` (20) surrounding
+window — a single-line anchor inside a symbol can lexically miss the symbol's name (task 0688).
+For a `Solution` row with no such tokens, it still derives them from the cited path basename
+(0688 disposition: kept — prose-free rows carry zero tokens to widen):
 
 1. remove the final extension;
 2. split on `-`, `_`, and `.`;

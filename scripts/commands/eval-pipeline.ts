@@ -242,7 +242,9 @@ export async function createEvalRun(): Promise<EvalRun> {
         ].join('\n');
         const localConfig = config.includes(`${fixturePath}:`)
             ? config
-            : config.replace('  severity:\n', `${fixtureConfig}\n  severity:\n`);
+            : // ponytail: anchored before the mandatory top-level `features:` so the fixture block
+              // extends the tasks.folders map; invariant — folders stays the last sub-key of tasks:.
+              config.replace('\nfeatures:', `\n${fixtureConfig}\n\nfeatures:`);
         if (localConfig === config && !config.includes(`${fixturePath}:`)) {
             throw new Error('eval-pipeline: could not inject fixture task folder into worktree config');
         }
@@ -296,8 +298,13 @@ export function parseArgs(argv: string[]): Args {
         else if (a === '--runs') args.runs = Number.parseInt(next(), 10);
         else if (a === '--keep') args.keep = true;
         else if (a === '--dry') args.dry = true;
-        else if (a === '--vars') args.vars = { ...args.vars, ...JSON.parse(next()) };
-        else throw new Error(`eval-pipeline: unknown argument ${a}`);
+        else if (a === '--vars') {
+            try {
+                args.vars = { ...args.vars, ...JSON.parse(next()) };
+            } catch (error) {
+                throw new Error(`eval-pipeline: --vars expects a JSON object: ${(error as Error).message}`);
+            }
+        } else throw new Error(`eval-pipeline: unknown argument ${a}`);
     }
     if (args.pipelines.length === 0) args.pipelines.push(DEFAULT_PIPELINE);
     if (args.fixtures.length === 0) args.fixtures.push('fixture-minimal');
@@ -438,7 +445,15 @@ async function createFixture(templateName: string, run: EvalRun): Promise<string
     if (created.exitCode !== 0) {
         throw new Error(`eval-pipeline: fixture create failed for ${templateName}: ${created.stdout}`);
     }
-    const wbs = (JSON.parse(created.stdout) as { wbs: string }).wbs;
+    let wbs: string;
+    try {
+        wbs = (JSON.parse(created.stdout) as { wbs: string }).wbs;
+    } catch {
+        throw new Error(
+            `eval-pipeline: fixture create returned non-JSON output for ${templateName}: ${created.stdout}`,
+        );
+    }
+    if (!wbs) throw new Error(`eval-pipeline: fixture create output missing wbs for ${templateName}`);
     // Fill sections by splitting the template on its ### headings.
     const sections = body.split(/^### /m).slice(1);
     for (const section of sections) {
@@ -642,6 +657,7 @@ export async function evalPipeline(argv: string[]): Promise<number> {
     }
     for (const p of args.pipelines) {
         const b = breakdown[p];
+        if (!b) throw new Error(`eval-pipeline: no breakdown recorded for pipeline ${p}`);
         console.log(
             `breakdown ${p.split('/').pop()}: modelHops=${b.modelHops} deterministicActions=${b.deterministicActions} gateStates=${b.gateStates}`,
         );
