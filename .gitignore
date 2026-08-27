@@ -131,8 +131,11 @@ spur.js
 /docs/**/.spur/
 /.spur/run
 /.spur/backups/
-# Agent spec files are runtime scratch materialized by `spur team up` (ADR-086);
+# Team-generated specs are runtime scratch materialized by `spur team up` (ADR-086);
 # the committed source of truth is the agent.team roster in .spur/config.yaml.
+# ponytail: gitignore cannot inspect the spur:generated YAML tag; hand-authored
+# specs remain explicitly trackable with `git add -f`. Split filenames only if
+# normal `git add` visibility becomes a demonstrated need.
 /.spur/agents/*
 !/.spur/agents/.gitkeep
 /.spur/context/.session*.json
