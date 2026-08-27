@@ -599,7 +599,7 @@ paused run ids back to the operator.
 | `/sp:dev-review` | (no pipeline) | `<wbs>`, `--focus`, `--fix`, `--auto`, `--agent` | SECUA review via `sp:code-verification review`. |
 | `/sp:dev-verify` | (no pipeline) | `<wbs>`, `--fix`, `--focus`, `--bdd`, `--auto`, `--force`, `--next`, `--agent` | Requirements traceability + verdict via `sp:code-verification verify`. `--next` chains to `done`. |
 | `/sp:dev-changelog` | (inline) | `[--since, --until, --version]` | Conventional-commit changelog. |
-| `/sp:dev-gitmsg` | (inline) | `[--commit, --squash, --scope]` | Conventional commit message(s). |
+| `/sp:dev-gitmsg` | (inline) | `[--commit, --squash, --all, --scope]` | Conventional commit message(s). |
 | `/sp:dev-fixall` | (inline) | `[--scope, --gate-log]` | Lint + test fix loop. |
 | `/sp:dev-handover` | (inline) | `"<blocker>"` | Structured handover document. |
 | `/sp:dev-dogfood` | (no pipeline) | `<target>` | Backing skill `sp:dogfood-testing` drives end-to-end validation. |
