@@ -854,6 +854,15 @@ describe('provenance + full cache cycle (0660 R3, R5, R7)', () => {
         expect(parse(get('HA_BASELINE_UNTIL'))).toBeLessThan(parse(get('HA_SINCE')));
     });
 
+    test('paths resolves the superskill-installed layout (scripts/<plugin>/<file> → skills/<plugin>-history-anatomy)', () => {
+        const env = resolvePaths({
+            helper: '/home/u/.agents/scripts/sp/history-anatomy-cache.mjs',
+            reportDir: 'docs/report',
+            date: '2026-08-24',
+        });
+        expect(env).toContain('HA_SKILL=/home/u/.agents/skills/sp-history-anatomy');
+    });
+
     test('spring-forward day keeps 24 distinct instants with correct offsets (PST morning, PDT night)', () => {
         const env = resolvePaths({ helper: '/p/h.mjs', reportDir: 'r', date: '2026-03-08', tz: 'America/Los_Angeles' });
         const get = (k: string): string =>

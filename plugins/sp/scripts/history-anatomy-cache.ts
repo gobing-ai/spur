@@ -563,8 +563,13 @@ export function resolvePaths(opts: {
     since?: string;
     until?: string;
 }): string {
-    const pluginRoot = opts.helper.replace(/\/scripts\/[^/]+$/, '');
-    const skill = `${pluginRoot}/skills/history-anatomy`;
+    // Layouts: monorepo `<root>/scripts/<file>` → skill `<root>/skills/history-anatomy`;
+    // superskill-installed `<root>/scripts/<plugin>/<file>` → skill `<root>/skills/<plugin>-history-anatomy`.
+    // (0660 dogfood 2026-08-26: the single-segment strip left HA_SKILL bogus on installed layouts,
+    // silently degrading probe contract/skill digests to "not available".)
+    const m = opts.helper.match(/\/scripts\/(?:([^/]+)\/)?[^/]+$/);
+    const pluginRoot = m ? opts.helper.slice(0, m.index) : opts.helper;
+    const skill = `${pluginRoot}/skills/${m?.[1] ? `${m[1]}-history-anatomy` : 'history-anatomy'}`;
     const tz = opts.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
     const date = opts.date !== undefined && opts.date !== '' ? opts.date : localDay(tz, opts.now ?? new Date());
     const target =

@@ -404,8 +404,9 @@ function dayBounds(tz, ymd) {
   };
 }
 function resolvePaths(opts) {
-  const pluginRoot = opts.helper.replace(/\/scripts\/[^/]+$/, "");
-  const skill = `${pluginRoot}/skills/history-anatomy`;
+  const m = opts.helper.match(/\/scripts\/(?:([^/]+)\/)?[^/]+$/);
+  const pluginRoot = m ? opts.helper.slice(0, m.index) : opts.helper;
+  const skill = `${pluginRoot}/skills/${m?.[1] ? `${m[1]}-history-anatomy` : "history-anatomy"}`;
   const tz = opts.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
   const date = opts.date !== undefined && opts.date !== "" ? opts.date : localDay(tz, opts.now ?? new Date);
   const target = opts.output !== undefined && opts.output !== "" ? opts.output : `${opts.reportDir}/${date}-history-anatomy.md`;
