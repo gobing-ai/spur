@@ -329,6 +329,28 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         statSync(join(skillDir, 'references', 'result-synthesis.md'));
     });
 
+    test('redesign-web-ui ships as a dispatcher with disclosed audit references', () => {
+        const skillDir = join(SKILLS_DIR, 'redesign-web-ui');
+        const skill = readFileSync(join(skillDir, 'SKILL.md'), 'utf8');
+        statSync(join(skillDir, 'references', 'audit-checklist.md'));
+        statSync(join(skillDir, 'references', 'upgrade-techniques.md'));
+        expect(skill).toContain('references/audit-checklist.md');
+        expect(skill).toContain('references/upgrade-techniques.md');
+        for (const marker of [
+            '### Step 1 — Scan',
+            '### Step 2 — Diagnose',
+            '### Step 3 — Plan',
+            '### Step 4 — Apply',
+            '### Step 5 — Verify',
+            'DESIGN.md',
+            '## Verification',
+            '## Common Rationalizations',
+            '## Red Flags',
+        ]) {
+            expect(skill, `redesign-web-ui SKILL.md must contain "${marker}"`).toContain(marker);
+        }
+    });
+
     test('R24b — issue-finding skill, session-formats reference, and correct GENERATE CLI recipes', () => {
         const skillDir = join(SKILLS_DIR, 'issue-finding');
         const skill = readFileSync(join(skillDir, 'SKILL.md'), 'utf8');
@@ -737,7 +759,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const ROUTER_SKILLS = new Set(['spur-dev', 'spur-cli']);
         const NON_ROUTER_BUDGET = 350;
         const ROUTER_BUDGET = 600;
-        const AGGREGATE_BUDGET = 8550; // scales with skill count (30 skills incl. pr-reviewing and history-anatomy); per-skill caps below are the real bloat guard
+        const AGGREGATE_BUDGET = 8900; // scales with skill count (31 skills incl. redesign-web-ui); per-skill caps below are the real bloat guard
 
         let aggregate = 0;
         const offenders: string[] = [];
