@@ -1,0 +1,105 @@
+---
+schema_version: 1
+id: "F94"
+name: "Pipeline close-out and gate friction: baseline reconcile verb, anchor-drift detection, verified-box auto-flip, and FSM denial guidance"
+status: backlog
+priority: P1
+tags: []
+created_at: "2026-08-27T19:43:44.288Z"
+updated_at: "2026-08-27T19:44:43.661Z"
+---
+
+# F94: Pipeline close-out and gate friction: baseline reconcile verb, anchor-drift detection, verified-box auto-flip, and FSM denial guidance
+
+## Goal
+
+Close the four confirmed core frictions from the task-0688 post-run friction review (session
+2026-08-27, commits f7402c21 / f60e5aec1), plus three confirmed riders. All four core frictions
+are close-out and gate mechanics that forced hand-work or carried silent risk during the 0688 run:
+
+| # | Friction | Evidence from the 0688 run |
+| --- | --- | --- |
+| G-1 | Reconciling `config/corpus-baseline.json` is hand-rolled jq | An agent's inverted filter silently dropped the baseline **1907 → 18** entries; caught only by a 408-new-error gate blowup — the two-sided ratchet (ADR-088) did its job the hard way |
+| G-2 | Source edits silently rot line-number citations in done tasks | 0606's `eval-pipeline.ts:528` drifted to `:562` after 0688's +34 lines; caught only post-commit |
+| G-3 | Pipeline completion leaves Requirements/AC boxes unchecked | **21** unchecked boxes left in done task 0688; `L3.unchecked-checklist` then forces post-close flips (a history rewrite) |
+| G-4 | FSM denials do not say what is legal | `feature update F91 done` denied ("No transition from active to done") with no hint that `feature sync` derives the legal hop path; task transitions share the same silent-denial shape |
+
+Riders from the same run (lower priority, S-size each): a symbol-anchor citation convention
+(`path:line` is the rot source G-2 exploits), a sweep-once discipline doc (17 `--corpus` sweeps ×
+~60s were burned in one session), and the pre-existing `resolveRepoRoot` cwd-dependence bug
+(verified via stash during 0688).
+
+## Scope
+
+**In:** a baseline reconcile verb hosted under the `task` noun (exact verb naming per existing CLI
+conventions; no new noun without operator consent — ADR-051; hosting under `task` is the operator's
+stated preference); anchor-drift re-resolution inside `task check`; Requirements/AC checkbox
+auto-flip in the `task record`/verify path; `GuardDeniedError` message enrichment naming legal
+paths; symbol-anchor authoring guidance plus a corpus note; the sweep-once discipline in the
+verification-gate docs; the `resolveRepoRoot` cwd fix.
+
+**Out:** any change to the two-sided ratchet semantics (ADR-088 preserved exactly — reconcile only
+automates what the operator already does by hand); new CLI nouns; the CLI JSON envelope (F95);
+claim-matcher association (F96).
+
+## Acceptance Criteria
+
+```gherkin
+Feature: Pipeline close-out and gate friction
+
+  Scenario: R1 — Baseline reconciliation is a verb, not hand-rolled jq
+    Given a `task check --corpus --json` output whose new findings and stale entries differ from `config/corpus-baseline.json`
+    When the reconcile verb runs
+    Then new dated entries are applied and stale entries are removed in one deterministic pass
+    And dry-run is the default and prints a summary diff before any write
+    And two-sided semantics are preserved and unit tests cover both directions
+
+  Scenario: R2 — Line-number anchor drift is caught at commit-prep, not post-commit
+    Given a done task citing `path:line` anchors and a source edit that moved those lines
+    When `task check` re-resolves the anchors against the current tree
+    Then the drift is reported as a finding or a report section
+
+  Scenario: R3 — A verdict that marks a requirement MET/PASS leaves its boxes checked
+    Given a verify verdict whose requirement verdicts mark Requirements and AC boxes MET/PASS
+    When `task record`/verify writes the task record
+    Then the corresponding checklist boxes are flipped to checked
+    And no post-close manual flips or history rewrite are needed
+
+  Scenario: R4 — A denied transition names the legal path
+    Given a lifecycle transition the FSM denies
+    When the denial is raised
+    Then the `GuardDeniedError` message names the legal path(s) or the command that reaches them
+
+  Scenario: R5 — New citations prefer symbols over line numbers
+    Given the symbol-anchor convention documentation and corpus note
+    When new task citations or test evidence are authored
+    Then `path:symbol` is the preferred form over `path:line`
+
+  Scenario: R6 — The corpus sweep runs once per commit
+    Given the sweep-once discipline codified in the verification-gate docs
+    When an agent iterates on a task
+    Then single-task check drives the loop and `task check --corpus` runs once before commit
+
+  Scenario: R7 — Repo-root resolution does not depend on cwd
+    Given `resolveRepoRoot` invoked from a nested working directory
+    When the repo root is resolved
+    Then the same root is found regardless of the invoking cwd
+```
+
+## Tasks
+
+<!-- AUTO-GENERATED by spur feature refresh -->
+| WBS | Task | Status |
+| --- | ---- | ------ |
+| 0691 | Baseline reconcile verb: apply and prune corpus-baseline.json from task check --corpus output | todo |
+| 0692 | Anchor-drift detection: task check re-resolves line-number anchors against the current tree | todo |
+| 0693 | Auto-flip verified checklist boxes when the verdict marks them MET/PASS | todo |
+| 0694 | FSM denial guidance: GuardDeniedError names the legal path or the command that reaches it | todo |
+| 0695 | Symbol-anchor convention: prefer path:symbol over path:line in new task citations and test evidence | todo |
+| 0696 | Sweep-once discipline: iterate with single-task check, run one --corpus sweep before commit | todo |
+| 0697 | Fix resolveRepoRoot cwd-dependence: repo-root resolution must not depend on the invoking directory | todo |
+<!-- END AUTO-GENERATED -->
+
+## Notes
+
+## History
