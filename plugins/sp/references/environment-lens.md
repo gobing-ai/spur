@@ -9,7 +9,8 @@ shipped or invoked by anything in this plugin.)
 Neither report projection restates the table below; each links here as its category table
 (task 0686 / feature I9; accepted design `docs/design/environment-improvement-lens.md`,
 ADR-084/085). There is deliberately no `/sp:dev-retro` command, no CLI change, and no protocol
-bump behind this mapping.
+bump behind this mapping. `sp:session-review` consumes only the placement rule for supported
+live-session proposals; it adds no category projection or imported-history analysis owner (ADR-089).
 
 ## Canonical categories and projections
 
@@ -58,7 +59,8 @@ create` handoff, manual edit), which remain explicit human gates.
 ## Keep / drop boundary
 
 Kept here because both live reports consume it: the seven names above, their projections, and
-this placement rule. Dropped (each needs its own operator decision): installing or invoking the
+this placement rule. The active-session reviewer may apply the placement rule without copying the
+table. Dropped (each needs its own operator decision): installing or invoking the
 out-of-tree retro practice, a standalone retro command, `CODING_STANDARDS.md` as a file, runtime
 parsing of this markdown by validators, automatic remediation of environment findings, and
 folding the lens into wrap-up learnings or `.spur/context/` memory.

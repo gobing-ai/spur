@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.34.0
+version: 1.35.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-26
+updated_at: 2026-08-27
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -1212,11 +1212,12 @@ Enforceable invariants:
 Detailed DTO, source mapping, follower sequence, and fixture matrix:
 `docs/design/workflow-observability.md` §D5 detailed progress projection.
 
-## 22. Environment-Improvement Lens (accepted design — ADR-084/085; not yet built)
+## 22. Environment-Improvement Lens and Active Session Review (ADR-084/085/089)
 
 One plugin-level mapping projects vendor retro's seven-category environment-improvement taxonomy
-into two **live** report contracts. There is no third analysis skill and no new command. Vendor
-`vendors/misc/retro/SKILL.md` stays inspiration; it is not installed or invoked.
+into two imported-history/testee report contracts. It does not create a standalone retro analyzer.
+ADR-089 adds a separate active-context reviewer whose broader job is immediate session outcome and
+issue-state synthesis; it consumes the mapping only for improvement placement.
 
 ```text
 plugins/sp/references/environment-lens.md     mapping SSOT (seven categories + placement rule)
@@ -1230,17 +1231,24 @@ plugins/sp/references/environment-lens.md     mapping SSOT (seven categories + p
               section 9: operator-facing environment/process candidates
               section 7: remediations stay proposals
               closed categories unchanged
+
+active host conversation
+        │
+        └─► sp:session-review
+              compact outcome / resolved / open / improvements / next-actions report
+              inline, read-only, no history import or workflow
 ```
 
 `sp:issue-finding` is a coexistence-window non-target (`/sp:dev-find-issue` already wraps
 history-anatomy). Wrap-up learnings and gitignored `.spur/context/` memory do not own the lens.
 
-**Build vs extend.** The mapping is a real seam: two callers (dogfood §6, history-anatomy
+**Build vs extend.** The mapping is a real seam: two report projections (dogfood §6, history-anatomy
 section 9) must not drift. A new `sp:retro` skill would be a third overlapping analysis owner and
 fails the deletion test relative to section 9 (Approach 2). Folding the scan into wrap-up
 (Approach 3) mixes task-lifecycle gitignored learnings with harness-file proposals. Extending the
 two existing reference files plus one plugin-level mapping is the smallest change that keeps a
-single category table.
+single category table. `sp:session-review` does not own another category table: it reviews the live
+conversation and applies the mapping's placement rule to at most three supported proposals.
 
 **Placement rule** (mapping content; both projections apply it):
 
@@ -1284,5 +1292,7 @@ Invariants (enforceable):
 4. An environment-tagged dogfood finding is never applied as a tree mutation in fix-mode.
 5. `plugins/sp/skills/issue-finding/` gains no category, flag, or lens projection.
 6. No public CLI noun/verb/flag and no `/sp:dev-retro` command (ADR-016 / ADR-051).
+7. `/sp:dev-review-session` stays inline and report-only; no workflow, delegation, import, baseline,
+   cache, task creation, or indexed-context append (ADR-089).
 
-Shapes: `docs/design/environment-improvement-lens.md`.
+Shapes: `docs/design/environment-improvement-lens.md`; `docs/design/session-review.md`.

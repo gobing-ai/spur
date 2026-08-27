@@ -1,5 +1,5 @@
 ---
-description: "Generate the daily or ad-hoc history-anatomy diagnostic report over already-imported history: the twelve-section report contract, closed finding taxonomy, cache branch, bounded correction, and atomic publication. Triggers: find issues, post-mortem, performance analysis, session review, history-anatomy, run the daily report, ad-hoc diagnosis"
+description: "Generate the daily or ad-hoc history-anatomy diagnostic report over already-imported history: the twelve-section report contract, closed finding taxonomy, cache branch, bounded correction, and atomic publication. Triggers: find historical issues, post-mortem, performance analysis, history-anatomy, run the daily report, ad-hoc diagnosis"
 role: reviewer
 argument-hint: "[<focus>] [--mode <daily|ad-hoc>] [--date <YYYY-MM-DD>] [--since <RFC3339>] [--until <RFC3339>] [--recompute] [--agent <auto|name>] [--output <path>]"
 allowed-tools: ["Bash", "Read", "Skill"]
@@ -14,6 +14,9 @@ contract (twelve sections, closed finding taxonomy, evidence rules, recurrence l
 exposes the `enrich` and `validate` operations the `history-anatomy.yaml` workflow invokes.
 Publication is atomic and gated behind both the deterministic structure gate and independent
 evidence validation. This command never triggers an import.
+
+For an immediate review of the active conversation, route to `/sp:dev-review-session`; this command
+owns imported-history windows, recurrence, trends, and quantitative forensics only.
 
 ## Argument Flags
 

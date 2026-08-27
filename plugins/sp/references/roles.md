@@ -58,7 +58,7 @@ roles:
     stages: [implement, test, wrap]
   - id: reviewer
     tier: capable-1
-    commands: [dev-verify, dev-verifyall, dev-review, dev-pr-review, dev-dogfood, rule-scan, dev-find-conflict, dev-find-issue]
+    commands: [dev-verify, dev-verifyall, dev-review, dev-review-session, dev-pr-review, dev-dogfood, rule-scan, dev-find-conflict, dev-find-issue]
     stages: [verify, review, dogfood]
   - id: planner
     tier: capable-2
@@ -81,9 +81,11 @@ must not sit below the highest `min_tier` among its folded stages.
   simplification, fix-everything sweeps, reverse engineering, wrap-up, and the end-to-end
   delivery flow (`dev-gtd`). Folds `implement`, `test`, `wrap`.
 - **`reviewer` (capable-1).** Verification and analysis: per-task verify/review, batch verify,
-  dogfooding, anti-pattern scanning (`rule-scan`), and the two audit commands (`dev-find-conflict`,
-  `dev-find-issue`) — those analyse rather than transcribe, which is why they sit here and not
-  under `scribe`. `dev-find-issue` now routes through the `sp:history-anatomy` skill (mode contract + report contract). Folds `verify`, `review`, `dogfood`.
+  dogfooding, anti-pattern scanning (`rule-scan`), immediate session review, and the two audit
+  commands (`dev-find-conflict`, `dev-find-issue`) — those analyse rather than transcribe, which is
+  why they sit here and not under `scribe`. `dev-find-issue` routes through `sp:history-anatomy`;
+  `dev-review-session` routes through `sp:session-review` in the active host context. Folds
+  `verify`, `review`, `dogfood`.
 - **`planner` (capable-2).** The planning half: feature planning, requirement refinement (single
   and batch), brainstorm, idea intake, batch run/parallel orchestration, next-step routing,
   architecture survey, feature-frontier prioritization, and feature-tree restructure. Folds `plan`,
@@ -96,7 +98,8 @@ same stage logic: `dev-refineall` folds `refine` → planner; `dev-find-next` is
 frontier work → planner; `dev-feature-change` is planning-half corpus surgery on the feature tree →
 planner; `dev-gtd` is the execution/delivery flow → coder; `dev-find-conflict` and `dev-find-issue`
 are audits/analysis → reviewer (same reasoning as `rule-scan`). Later additions: `dev-pr-review` is review orchestration —
-driving the external PR review and triaging its findings folds the `review` stage → reviewer.
+driving the external PR review and triaging its findings folds the `review` stage → reviewer;
+`dev-review-session` performs evidence-backed review over the active conversation → reviewer.
 
 **Consistency is a test, not a convention.** `plugins/sp/tests/roles.test.ts` parses this YAML and
 asserts the tier-distinctness, command closure, stage-floor, and boundary invariants against the

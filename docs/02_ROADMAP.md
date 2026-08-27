@@ -2,10 +2,10 @@
 doc: 02_ROADMAP
 owns: WHEN — phases, current vs deferred, sequencing
 authority: derived
-version: 1.4.0
+version: 1.5.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-13
+updated_at: 2026-08-27
 read_before: placing work in a phase
 edit_rules: 99 §6.3
 sync: [T5, T6]
@@ -64,7 +64,8 @@ status only. Per ADR-023(3), Stage D designs everything collectively before the 
       retired and the live `docs/tasks2/` corpus was normalized via `spur task migrate`. The
       server/web implementation lives in the **Server-Side Adjustment** programme below (groups S + W).
 - [x] **Wave 4 — Pipeline + execution** (planning skill, task-pipeline workflow, HITL continue)
-- [x] **Wave 5 — sp wrappers** (ADR-016-filtered)
+- [x] **Wave 5 — sp wrappers** (ADR-016-filtered), including the inline active-session review
+  surface `/sp:dev-review-session` (ADR-089).
 - [ ] **Wave 6 — cc-agents cleanup** (each item gated on its verified replacement)
 
 **Exit:** operator daily-drives the spur board; agents drive `spur task` across the 7 corpora;

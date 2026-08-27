@@ -345,11 +345,11 @@ describe('(b) frontmatter schema — description, argument-hint, allowed-tools',
         }
     });
 
-    test('38 command files exist with unique basenames', () => {
+    test('39 command files exist with unique basenames', () => {
         const files = listCommandFiles();
-        expect(files.length).toBe(38);
+        expect(files.length).toBe(39);
         const names = new Set(files.map((f) => f.replace(/\.md$/, '')));
-        expect(names.size).toBe(38);
+        expect(names.size).toBe(39);
     });
 });
 
@@ -432,9 +432,9 @@ describe('(d) allowed-tools coherence — Skill <-> Skill() call', () => {
 // ─── (e) validator integration — no violations on the real corpus ───────────
 
 describe('(e) validator integration — corpus is clean after the 28-file migration (task 0412)', () => {
-    test('validate() reports zero violations across all 38 commands', () => {
+    test('validate() reports zero violations across all 39 commands', () => {
         const result = validate(ROOT);
-        expect(result.fileCount).toBe(38);
+        expect(result.fileCount).toBe(39);
         expect(result.violations).toEqual([]);
     });
 });
@@ -1158,6 +1158,22 @@ describe('(i) task 0316 — dev-debug and dev-daily entry points', () => {
         expect(existsSync(join(SKILLS_DIR, 'history-anatomy', 'SKILL.md'))).toBe(true);
         // Legacy skill remains packaged and directly invocable (coexistence, not removal).
         expect(existsSync(join(SKILLS_DIR, 'issue-finding', 'SKILL.md'))).toBe(true);
+    });
+
+    test('dev-review-session stays an inline, read-only wrapper over sp:session-review (ADR-089)', () => {
+        const raw = readFileSync(join(COMMANDS_DIR, 'dev-review-session.md'), 'utf8');
+        expect(raw).toContain('description:');
+        expect(raw).toMatch(/^argument-hint:\s*"\[<focus>\]"/m);
+        expect(raw).toContain('role: reviewer');
+        expect(raw).toContain('allowed-tools: ["Bash", "Read", "Grep", "Glob", "Skill"]');
+        expect(raw).toContain('# Dev Review Session');
+        expect(raw).toContain('## Argument Flags');
+        expect(raw).toContain('## Usage');
+        expect(raw).toContain('## Implementation');
+        expect(implSection(raw)).toContain('Skill(skill="sp:session-review", args="$ARGUMENTS")');
+        expect(implSection(raw)).toContain('do not delegate to a subagent or subprocess');
+        expect(raw).not.toContain('--agent');
+        expect(existsSync(join(SKILLS_DIR, 'session-review', 'SKILL.md'))).toBe(true);
     });
 });
 

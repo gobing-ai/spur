@@ -51,7 +51,7 @@ artifacts (with optional feature transition and irreversible branch cleanup).
 
 ## The command map
 
-The `sp` plugin provides **34 commands** across planning, execution, operations/hygiene, wrap-up, and authoring:
+The `sp` plugin provides **39 commands** across planning, execution, operations/hygiene, wrap-up, and authoring:
 
 | Command                 | Phase / Category | What it does                                                                                                                                                                           | Backed by                                        |
 | ----------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
@@ -76,7 +76,8 @@ The `sp` plugin provides **34 commands** across planning, execution, operations/
 | `/sp:dev-daily`         | Operations       | Generate a daily summary report from agent usage data, git history, and notes (honors `SP_DAILY_SUMMARY_NO_PROMPT`)                                                                    | `sp:daily-summary`                               |
 | `/sp:dev-handover`      | Operations       | Write an honest handover doc when blocked (`docs/handover/<date>-<slug>.md` SSOT + non-destructive task pointer append)                                                                | `sp:spur-dev` (`dev-operations.md`)              |
 | `/sp:dev-dogfood`       | Operations       | Drive a command/skill/CLI end-to-end, fix-within-budget, emit a structured report                                                                                                      | `sp:dogfood-testing`                             |
-| `/sp:dev-find-issue`    | Operations       | Render the session forensics report, rank performance bottlenecks, create a fix task only with `--create-task` (`sp:issue-finding`; optional `[topic]`)                                 | `sp:issue-finding`                               |
+| `/sp:dev-find-issue`    | Operations       | Generate the daily/ad-hoc history-anatomy report over already-imported history; no import or task creation                                                                            | `sp:history-anatomy`                             |
+| `/sp:dev-review-session` | Operations      | Review the active conversation inline: outcomes, resolved/open issues with evidence, bounded improvement proposals, and next actions                                                  | `sp:session-review`                              |
 | `/sp:dev-arch`          | Operations       | Survey codebase for shallow modules and deepening opportunities                                                                                                                        | `sp:code-improvement`                            |
 | `/sp:dev-reverse`       | Operations       | Depth-driven codebase reverse engineering / HLD generation / audit                                                                                                                     | `sp:reverse-engineering`                         |
 | `/sp:dev-gitmsg`        | Operations       | Draft Conventional-Commits message from staged changes                                                                                                                                 | inline                                           |

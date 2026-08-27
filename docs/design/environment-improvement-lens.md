@@ -3,7 +3,7 @@ doc: design/environment-improvement-lens
 feature_id: I9
 owns: SURFACE — plugin-level environment-improvement mapping and its two report projections
 authority: derived (ADR wins on conflict)
-updated_at: 2026-08-26
+updated_at: 2026-08-27
 ---
 
 # Environment-improvement lens
@@ -16,7 +16,8 @@ Baseline: `docs/plans/2026-08-26-retro-skills-brainstorm.md` (Approach 1).
 
 ## Operator surface
 
-No new command, flag, or CLI noun.
+No command, flag, or CLI noun is created by this mapping. ADR-089's `/sp:dev-review-session` is a
+separate active-context review surface and consumes only the placement rule.
 
 ```text
 /sp:dev-dogfood <testee> [...]     # §6 findings may carry an optional class tag
@@ -33,6 +34,7 @@ No new command, flag, or CLI noun.
 | `plugins/sp/skills/dogfood-testing/references/report-template.md` §6 | Optional `environment` / `testee` / `waste` class tag; skill/command checklist; fix-mode exclusion for environment tags | Category table (points at the mapping) |
 | `plugins/sp/skills/history-anatomy/references/report-contract.md` §9 | Signal grammar under closed categories; structure-gate reject of retro-as-category | Category table (points at the mapping) |
 | `plugins/sp/skills/issue-finding/` | Unchanged | Lens, new categories, new flags |
+| `plugins/sp/skills/session-review/` | Applies the placement rule to supported live-session proposals | Category table or history-anatomy projection |
 | `vendors/misc/retro/SKILL.md` | Inspiration only | Runtime invocation |
 
 ## Mapping SSOT
@@ -159,7 +161,8 @@ Structural tests (plugin suite) must prove:
 ## Out of this satellite
 
 - `writing-for-agents` dependency; `CODING_STANDARDS.md`; installing `vendors/misc/retro`.
-- `/sp:dev-retro`; any `spur` CLI noun/verb/flag (ADR-016 / ADR-051 consent required separately).
+- `/sp:dev-retro`; any `spur` CLI noun/verb/flag. ADR-089's active-session reviewer is specified in
+  `docs/design/session-review.md`, not by this mapping.
 - Unfreezing history-anatomy categories; restoring raw JSONL as a primary evidence plane.
 - Auto-creating tasks from environment findings (`--task` / `--create-task` stay existing opt-in sinks).
 - Folding the lens into wrap-up learnings or `.spur/context/` memory.

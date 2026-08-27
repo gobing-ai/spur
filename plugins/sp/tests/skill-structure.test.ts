@@ -1034,6 +1034,33 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         }
     });
 
+    test('session-review owns the compact active-context report and excludes historical workflow machinery (ADR-089)', () => {
+        const skill = readFileSync(join(SKILLS_DIR, 'session-review', 'SKILL.md'), 'utf8');
+        const command = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-review-session.md'), 'utf8');
+
+        for (const heading of [
+            '### Outcome',
+            '### Resolved issues',
+            '### Open issues and risks',
+            '### Process and environment improvements',
+            '### Next actions',
+        ]) {
+            expect(skill).toContain(heading);
+        }
+        for (const boundary of [
+            'Do not delegate',
+            'Do not launch a workflow',
+            'import history',
+            'create or update corpus items',
+            'append indexed-context memory',
+        ]) {
+            expect(skill).toContain(boundary);
+        }
+        expect(skill).toContain('../../references/environment-lens.md');
+        expect(command).toContain('Skill(skill="sp:session-review", args="$ARGUMENTS")');
+        expect(command).not.toContain('spur workflow run');
+    });
+
     test('R43 — README index tables list every shipped command/skill/agent exactly once (task 0187 AC6, task 0514 R1)', () => {
         const readmePath = join(PLUGIN_ROOT, 'README.md');
         statSync(readmePath);

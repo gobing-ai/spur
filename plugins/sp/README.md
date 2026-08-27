@@ -129,6 +129,7 @@ list this README is checked against.
 | `dev-daily`         | Generate a daily summary report from agent usage data, git history, and notes                                                                                                                     |
 | `dev-dogfood`       | Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report                                                                     |
 | `dev-find-issue`    | Generate the daily/ad-hoc history-anatomy diagnostic report over already-imported history — mode contract, closed finding taxonomy, twelve-section report contract, cache branch, atomic publication; forwards to sp:history-anatomy                               |
+| `dev-review-session` | Review the active coding-agent session inline — compact outcome, resolved/open issues with evidence, proposal-only improvements, and next actions; forwards to sp:session-review                                                                                  |
 | `dev-find-conflict` | Authority-aware semantic audit across source, task, feature, and project authority files — detect conflicts, resolve claim-specific authority, and route confirmed repairs through owner surfaces |
 | `dev-find-next`     | Prompt-first feature frontier prioritizer — ranks the open feature frontier by derived importance/urgency with per-candidate evidence; gates unactionable features; emits tree defects as proposals only     |
 | `dev-fixall`        | Fix all lint, type, and test errors systematically across the working tree                                                                                                                        |
@@ -173,7 +174,8 @@ and verification (`sp:code-verification`) — plus a CLI facade (`sp:spur-cli`, 
 `spur` noun) and standalone technique skills (`sp:next-router`, `sp:test-driven-development`, `sp:brainstorm`,
 `sp:wayfinder`, `sp:sys-debugging`, `sp:code-review`, `sp:code-simplification`, `sp:code-improvement`,
 `sp:parallel-execution`, `sp:branch-workflow`, `sp:doc-evolve`, `sp:dogfood-testing`,
-`sp:daily-summary`, `sp:reverse-engineering`, `sp:issue-finding`, `sp:conflict-finding`, `sp:indexed-context`, `sp:redesign-web-ui`). See
+`sp:daily-summary`, `sp:reverse-engineering`, `sp:issue-finding`, `sp:conflict-finding`,
+`sp:indexed-context`, `sp:session-review`, `sp:redesign-web-ui`). See
 [skills/spur-dev/SKILL.md](skills/spur-dev/SKILL.md)'s Step routing table for which skill owns which
 pipeline step.
 
@@ -181,7 +183,7 @@ pipeline step.
 
 ```
 plugins/sp/
-├── skills/                          # Domain knowledge + workflow docs (31 skills)
+├── skills/                          # Domain knowledge + workflow docs (32 skills)
 │   ├── brainstorm/                  # Structured ideation workflow
 │   │   ├── agents/openai.yaml
 │   │   ├── examples/ideation-example.md
@@ -243,12 +245,13 @@ plugins/sp/
 │   │   └── references/{audit-checklist, upgrade-techniques}.md
 │   ├── history-anatomy/             # Diagnostic interpretation owner over already-imported history (backs /sp:dev-find-issue)
 │   │   └── references/{modes.md, report-contract.md, operations.md}
+│   ├── session-review/              # Inline, report-only review of the active coding-agent session
 │   ├── sys-architecture/            # Architecture / ADR judgment competency
 │   │   └── references/decision-method.md
 │   ├── sys-debugging/               # Structured debugging protocol
 │   │   └── references/debugging-protocol.md
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
-├── commands/                        # 37 slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
+├── commands/                        # 39 slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
 ├── agents/                          # 4 specialist subagents (expert-spur, super-coder, super-planner, super-reviewer)
 ├── hooks/                           # hooks.json + task-write-guard.{ts,test.ts} + context-{session-start,post-tool,session-stop}.ts
 │                                    # + careful-guard.{ts,test.ts} + context-hooks.test.ts + token-estimate.test.ts
@@ -286,8 +289,8 @@ Tier 3 — Execution Layer (spur CLI + Guard Scripts)
 The single source of truth for domain knowledge and workflow documentation. Each skill is a
 self-contained knowledge module that teaches the agent how to operate one slice of the Spur CLI
 surface or run one workflow. All skills target the same five core platforms: `claude-code`, `codex`,
-`antigravity`, `opencode`, `openclaw`; `conflict-finding`, `issue-finding`, `next-feature`, and
-`reverse-engineering` additionally declare `pi`.
+`antigravity`, `opencode`, `openclaw`; selected read-only and review skills additionally declare
+`pi`.
 
 | Skill                       | Ver   | Domain                                                                                                                                                                                                                                     |
 | --------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -321,6 +324,7 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `pr-reviewing`              | 1.0   | GitHub Codex PR review — PR prepare/reuse, `@codex review` request with per-HEAD dedupe, bounded polling, findings normalization, validated fix + re-review; spine SSOT `pr-review.yaml` + `scripts/pr-reviewing.ts`; backs `/sp:dev-pr-review`     |
 | `indexed-context`           | 1.0   | Cross-agent project context — anatomy/learnings/pitfalls/buglog/memory in `.spur/context/`; hook-tracked token-ledger; graceful degradation on agents without hooks                                                                        |
 | `history-anatomy`           | 1.0   | Diagnostic interpretation owner over already-imported history — daily/ad-hoc mode contract, closed finding taxonomy, twelve-section report contract, `enrich`/`validate` rubrics; no workflow launch, no JSONL fallback, no corpus mutation                                                                   |
+| `session-review`            | 1.0   | Inline review of the active coding-agent session — compact outcomes, evidence-backed resolved/open issue classification, proposal-only improvements, and next actions; no workflow, import, delegation, or mutation                                                                                           |
 | `redesign-web-ui`           | 1.0   | Existing-UI visual upgrade — audit generic AI fingerprints, apply in-stack polish against `DESIGN.md` / live tokens, verify behavior and viewports; does not migrate frameworks                                                                                                                            |
 
 #### Bounded coexistence and retirement gate — `sp:issue-finding` (HA-S1 0661)
@@ -354,11 +358,11 @@ Skills contain zero validation logic — the CLI is the gate.
 
 Thin slash-command wrappers that parse user arguments and delegate to the corresponding skill. Each
 command is a user-facing entry point that bridges natural language to skill invocation. There are
-**38 commands** (see the Command index above for the full list), organized by the surface they wrap:
+**39 commands** (see the Command index above for the full list), organized by the surface they wrap:
 
 | Prefix       | Count | Delegates to                                                                                                                                                                                                                                                                                                        | Purpose                                                                                |
 | ------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `dev-*`      | 32    | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:next-router`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, `sp:sys-debugging`, `sp:daily-summary`, `sp:history-anatomy`, `sp:conflict-finding`, `sp:reverse-engineering`, `sp:pr-reviewing`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
+| `dev-*`      | 33    | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:next-router`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, `sp:sys-debugging`, `sp:daily-summary`, `sp:history-anatomy`, `sp:session-review`, `sp:conflict-finding`, `sp:reverse-engineering`, `sp:pr-reviewing`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
 | `rule-*`     | 3     | `sp:spur-cli`                                                                                                                                                                                                                                                                                                       | The rule surface — `rule-add`, `rule-refine`, `rule-scan`                              |
 | `workflow-*` | 2     | `sp:spur-cli`                                                                                                                                                                                                                                                                                                       | The workflow surface — `workflow-add`, `workflow-refine`                               |
 | `spur-init`  | 1     | `sp:doc-evolve`                                                                                                                                                                                                                                                                                                     | Project bootstrap (`spur init`) with doc-evolve integration                            |
@@ -368,7 +372,7 @@ Each command file contains:
 - YAML frontmatter (`description`, `argument-hint`, `allowed-tools`).
 - A delegation block: `Skill(skill="sp:<skill-name>", args="<operation> $ARGUMENTS")`.
 
-**Commands as SSOT (ADR-032).** The 38 `.md` files in `commands/` are the authoritative,
+**Commands as SSOT (ADR-032).** The 39 `.md` files in `commands/` are the authoritative,
 hand-editable source for the operator command surface. Per-platform adapters are **install-time
 output** owned by `superskill` (`superskill install sp`) and never committed here. Plugin `sp` ships
 no per-platform artifacts — only the platform-independent thin wrappers.
@@ -497,7 +501,7 @@ the hard gate that the soft skill cannot enforce on its own.
 ```mermaid
 graph TB
     subgraph "User entry points"
-        CMD["Commands<br/>37 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:dev-refineall, /sp:rule-add, ..."]
+        CMD["Commands<br/>39 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:dev-review-session, /sp:rule-add, ..."]
         AGENT["Agents<br/>4 subagents<br/>expert-spur, super-coder, super-planner, super-reviewer"]
         HOOK["PreToolUse hook<br/>Write|Edit matcher"]
     end

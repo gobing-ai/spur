@@ -32,14 +32,17 @@ each would be scope creep for one-liner procedures.
 > backbone skill (which owns the 4-phase dogfood protocol, the live ledger, and the report template);
 > it does not map to a numbered dev-\* operation. See its command file and the backing skill for details.
 
-> **`dev-find-issue`** is not in this table. It is a thin `Skill()` wrapper over **`sp:issue-finding`**
->(session-log forensics report → optional CLI-gated fix task via `--create-task`). Hygiene /
->post-batch analysis — not a spine pipeline stage. Report-first (task 0556): the default run
->renders the `spur history report --mode forensics` data plane plus model-authored analysis and
->creates nothing; task creation is opt-in behind `--create-task` (`--use-history`/`--no-task` are
->removed). See `plugins/sp/commands/dev-find-issue.md` and
->`plugins/sp/skills/issue-finding/SKILL.md`. After a slow `/sp:dev-runall`, prefer
->`/sp:dev-find-issue [<topic>]` before re-running the batch.
+> **`dev-find-issue`** is not in this table. It is a thin `Skill()` wrapper over
+> **`sp:history-anatomy`** for daily/ad-hoc imported-history forensics: fixed twelve-section report,
+> baseline comparison, cache branch, independent validation, and atomic publication. It never
+> imports history or creates a task. See `plugins/sp/commands/dev-find-issue.md` and
+> `plugins/sp/skills/history-anatomy/SKILL.md`.
+
+> **`dev-review-session`** is not in this table. It is a thin `Skill()` wrapper over
+> **`sp:session-review`** for an immediate, inline, report-only review of the active conversation.
+> It launches no workflow or agent and performs no import, persistence, or mutation. Use it before
+> the active session ends; use history-anatomy for ended sessions, cross-agent windows, trends, or
+> quantitative forensics.
 
 > **`dev-find-conflict`** is not in this table. It is a thin `Skill()` wrapper over
 > **`sp:conflict-finding`** (authority-aware four-pillar semantic audit → optional confirmed,

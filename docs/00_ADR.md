@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.30.0
+version: 1.31.0
 owner: Robin Min
-updated_at: 2026-08-26
+updated_at: 2026-08-27
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -1380,6 +1380,11 @@ bun run apps/cli/src/index.ts task check --corpus --json > /tmp/corpus.json
 
 **Detail:** `docs/03_ARCHITECTURE.md` §22; `docs/design/environment-improvement-lens.md`.
 
+**Amendment (2026-08-27 · ADR-089):** The prohibition remains on a standalone retro/lens command
+that duplicates the two report owners. `/sp:dev-review-session` is a distinct current-context
+review surface: it reviews the active conversation, uses this lens only to place supported
+improvement proposals, and performs no imported-history analysis.
+
 ## ADR-085: Environment Remediations Remain Operator Proposals
 
 **Status:** Accepted (design) · **Date:** 2026-08-26 · **Feature:** I9
@@ -1389,6 +1394,10 @@ bun run apps/cli/src/index.ts task check --corpus --json > /tmp/corpus.json
 **Why.** Retro suggests environment changes; mixing those into dogfood fix-mode would mutate harness files on the same path that repairs the testee.
 
 **Detail:** `docs/03_ARCHITECTURE.md` §22; `docs/design/environment-improvement-lens.md`.
+
+**Amendment (2026-08-27 · ADR-089):** `sp:session-review` inherits present-don't-apply for process
+and environment improvements. Its complete report is read-only: no source/doc edit, corpus write,
+workflow launch, or indexed-context append.
 
 ## ADR-086: Materialized Agent Instances Are Runtime State, Not Committed Spec Files
 
@@ -1498,3 +1507,18 @@ class) is baselined as a dated set. (4) 04_DESIGN §2.1 and
 `docs/design/lifecycle-projection-integrity.md` §2 carry the widened-window tokenization contract.
 
 **Detail:** task 0688; feature F91; `config/corpus-baseline.json` note § 2026-08-27.
+
+## ADR-089: Active Session Review Is Inline and Separate from Imported-History Forensics
+
+**Status:** Accepted · **Date:** 2026-08-27
+
+**Decision.** Ship `/sp:dev-review-session` as a thin wrapper over `sp:session-review`. The skill
+reviews the active host conversation, emits a compact read-only report, and never launches a
+workflow, delegates to another agent, imports history, compares a baseline, publishes a cache, or
+mutates source, docs, memory, or corpus state. `/sp:dev-find-issue` remains the daily/ad-hoc
+imported-history surface.
+
+**Why.** Immediate wrap-up and historical forensics have different evidence, latency, and output
+contracts; combining them would unfreeze history-anatomy's two-mode and twelve-section contracts.
+
+**Detail:** `docs/design/session-review.md`; `docs/04_DESIGN.md` §6.

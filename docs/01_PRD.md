@@ -2,9 +2,9 @@
 doc: 01_PRD
 owns: WHAT — product vision, users, scope (in / out / deferred)
 authority: authoritative-on-scope
-version: 1.5.2
+version: 1.6.0
 owner: Robin Min
-updated_at: 2026-08-26
+updated_at: 2026-08-27
 read_before: adding a command or feature
 edit_rules: 99 §6.2
 sync: [T1, T4, T6]
@@ -102,6 +102,7 @@ Scope tables own **membership** only; delivery status per capability lives in `0
 | Spec-driven planning pipeline (fat skill)                  | `plugins/sp` skill → `spur agent run` + CLI verbs  | `ts-ai-runner` + task/feature domain       |
 | Semantic conflict audit (authority-aware, four-pillar)     | `/sp:dev-find-conflict`                            | `sp:conflict-finding` skill (`plugins/sp`) |
 | Environment-improvement lens on dogfood and history-anatomy reports | existing `/sp:dev-dogfood` / `/sp:dev-find-issue` (no new command) | ADR-084/085; feature I9 |
+| Immediate active-session review                            | `/sp:dev-review-session [<focus>]`                 | `sp:session-review` skill; ADR-089         |
 
 ### 5.2 Supporting utilities
 

@@ -279,7 +279,8 @@ Promoted in task 0502 per ADR-051 noun discipline: corpus validation is `spur ta
 (NOT a new `corpus` noun); the misplaced spur-dev command is removed. All public CLI nouns are
 legitimately public; all other spur-dev commands are correctly internal.
 
-**Long-tail:** Additional `/sp:dev-*` commands (handover, gitmsg, fixall, findconflict, dogfood, reverse, arch,
+**Long-tail:** Additional `/sp:dev-*` commands (handover, gitmsg, fixall, findconflict, find-issue,
+review-session, dogfood, reverse, arch,
 …) are indexed in `plugins/sp/README.md`.
 
 **Outside spur-cli:** Nouns without a `sp:spur-cli` reference file (`history`, `projects`,

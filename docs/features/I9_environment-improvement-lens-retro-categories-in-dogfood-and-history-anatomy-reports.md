@@ -6,15 +6,13 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-08-27T00:15:00.420Z"
-updated_at: "2026-08-27T03:04:14.060Z"
+updated_at: "2026-08-27T22:30:24.655Z"
 ---
 
 # I9: Environment-improvement lens: retro categories in dogfood and history-anatomy reports
 
 ## Goal
-
-Give dogfood-testing and history-anatomy a shared, proposal-only environment-improvement lens — retro's seven categories plus the implementer-versus-reviewer placement rule — so steering, navigation, and standards remediations are classified as environment changes rather than implementer bugs, without a third skill or SKILL.md growth.
-
+Give dogfood-testing and history-anatomy a shared, proposal-only environment-improvement lens — retro's seven categories plus the implementer-versus-reviewer placement rule — so steering, navigation, and standards remediations are classified as environment changes rather than implementer bugs, without a third environment-analysis owner or growth of either existing skill body. ADR-089's separate active-session reviewer may consume the placement rule but owns no category projection or imported-history analysis.
 ## Scope
 
 **In scope:**

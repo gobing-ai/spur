@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.54.0
+version: 1.55.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-27
@@ -72,6 +72,7 @@ When collaborating with the design team:
 | [`tasks-module-shell-parity.md`](design/tasks-module-shell-parity.md)                                   | Tasks Board — History-parity shell: one-row header, inline filters, append-only tabs, full-bleed density, enriched cards, board-owned folder store (ADR-081, feature F72)                                                                                                                                                 | verified (0663/0664; 2026-08-25)                                                                                                                                |                                                                                                                               |             |
 | [`history-anatomy.md`](design/history-anatomy.md)                                                       | History-anatomy diagnostic — daily/ad-hoc report mode, closed finding taxonomy, twelve-section report contract, cache branch + semantic digest (ADR-079/080), atomic publication, HA-S1 issue-finding migration gate (feature I8 / 0657–0661)                                                                             | built (0657–0661)                                                                                                                                               |                                                                                                                               |             |
 | [`environment-improvement-lens.md`](design/environment-improvement-lens.md)                             | Environment-improvement lens — plugin-level mapping SSOT, dogfood §6 optional class tags, history-anatomy closed-category keys + section 9 projection, present-don't-apply (ADR-084/085, feature I9)                                                                                                                      | accepted design                                                                                                                                                 |                                                                                                                               |             |
+| [`session-review.md`](design/session-review.md)                                                         | `/sp:dev-review-session` + `sp:session-review` — inline current-context evidence, compact five-section report, proposal-only improvements (ADR-089)                                                                                                                               | built                                                                                                                                                           |                                                                                                                               |             |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -887,6 +888,14 @@ determinism is `plugins/sp/scripts/history-anatomy-cache.ts` (+ committed `.mjs`
 standard contract, ADR-079 digest-truth). Publication is reachable only from a passing validation
 state; a hit reuses model enrichment only and refreshes `validated_at` + the imported-snapshot banner
 without claiming a later import.
+
+**Active-session review (ADR-089):** `/sp:dev-review-session [<focus>]` invokes
+`sp:session-review` directly in the active host session. Focus changes ordering, not evidence
+collection. The current conversation is the primary evidence plane; read-only repository checks
+may confirm material claims. The compact report contains Outcome, Resolved issues, Open issues and
+risks, Process and environment improvements, and Next actions. It launches no workflow or agent,
+imports no history, performs no baseline/cache/publication step, and mutates nothing. Historical,
+cross-agent, recurrence, trend, and quantitative questions stay on `/sp:dev-find-issue`.
 
 **Artifact-digest ownership boundary (task 0669).** The semantic artifact digest and its ranked-
 versus-set canonicalization rules live in **`packages/domain/src/analytics/artifact-digest.ts`**,
