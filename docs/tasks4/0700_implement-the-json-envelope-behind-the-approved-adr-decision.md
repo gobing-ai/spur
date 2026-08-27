@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Implement the JSON envelope behind the approved ADR decision"
-status: blocked
+status: cancelled
 template: feature-impl
 created_at: 2026-08-27T19:45:35.625Z
-updated_at: "2026-08-27T19:48:39.332Z"
+updated_at: "2026-08-27T20:11:58.345Z"
 feature_id: F95
 priority: P2
 dependencies: ["0698"]
@@ -63,3 +63,4 @@ amendment. Blocked by design until that decision lands.
 ### History
 
 - 2026-08-27T19:48:39.332Z todo → blocked (system)
+- 2026-08-27T20:11:58.345Z blocked → cancelled (system)

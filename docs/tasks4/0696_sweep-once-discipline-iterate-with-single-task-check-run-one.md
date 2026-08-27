@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Sweep-once discipline: iterate with single-task check, run one --corpus sweep before commit"
-status: todo
+status: cancelled
 template: feature-impl
 created_at: 2026-08-27T19:45:19.961Z
-updated_at: "2026-08-27T19:48:07.545Z"
+updated_at: "2026-08-27T20:11:34.369Z"
 feature_id: F94
 priority: P3
 ---
@@ -59,3 +59,5 @@ task; the discipline is real money in agent time.
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-08-27T20:11:34.369Z todo → cancelled (system)

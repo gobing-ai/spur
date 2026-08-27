@@ -6,53 +6,65 @@ status: backlog
 priority: P1
 tags: []
 created_at: "2026-08-27T19:43:44.288Z"
-updated_at: "2026-08-27T19:44:43.661Z"
+updated_at: "2026-08-27T20:14:04.296Z"
 ---
 
 # F94: Pipeline close-out and gate friction: baseline reconcile verb, anchor-drift detection, verified-box auto-flip, and FSM denial guidance
 
 ## Goal
 
-Close the four confirmed core frictions from the task-0688 post-run friction review (session
-2026-08-27, commits f7402c21 / f60e5aec1), plus three confirmed riders. All four core frictions
-are close-out and gate mechanics that forced hand-work or carried silent risk during the 0688 run:
+Close the confirmed frictions from the task-0688 post-run friction review (session 2026-08-27,
+commits f7402c21 / f60e5aec1), consolidated per operator review (2026-08-27) from twelve
+over-decomposed tasks into three work streams:
 
-| # | Friction | Evidence from the 0688 run |
+| Stream | Absorbs | Evidence from the 0688 run |
 | --- | --- | --- |
-| G-1 | Reconciling `config/corpus-baseline.json` is hand-rolled jq | An agent's inverted filter silently dropped the baseline **1907 → 18** entries; caught only by a 408-new-error gate blowup — the two-sided ratchet (ADR-088) did its job the hard way |
-| G-2 | Source edits silently rot line-number citations in done tasks | 0606's `eval-pipeline.ts:528` drifted to `:562` after 0688's +34 lines; caught only post-commit |
-| G-3 | Pipeline completion leaves Requirements/AC boxes unchecked | **21** unchecked boxes left in done task 0688; `L3.unchecked-checklist` then forces post-close flips (a history rewrite) |
-| G-4 | FSM denials do not say what is legal | `feature update F91 done` denied ("No transition from active to done") with no hint that `feature sync` derives the legal hop path; task transitions share the same silent-denial shape |
+| Close-out integrity | G-2, G-3, G-4 + `resolveRepoRoot` rider | 0606's `eval-pipeline.ts:528` drifted to `:562` after 0688's +34 lines (caught only post-commit); **21** unchecked boxes in done task 0688 forced post-close flips (history rewrite); `feature update F91 done` denied with no legal-path hint; `resolveRepoRoot` cwd bug verified via stash |
+| Gate & baseline simplification | G-1 + all of F96 | Reconciling `config/corpus-baseline.json` is hand-rolled jq — an inverted filter silently dropped it **1907 → 18**, caught only by a 408-new-error blowup; baseline now ~1928 dated entries; the operator ruled the dated-baseline machinery itself the wrong direction (2026-08-27): simplify massively. F96's claim-matcher subject association folds in — simplification may delete the clause-window machinery rather than refine it (dated residue 0607/0677/0670) |
+| Docs consolidation | symbol-anchor + sweep-once riders | `path:line` citations rot (G-2's root cause); 17 `--corpus` sweeps × ~60s ≈ 17 min burned in one session |
 
-Riders from the same run (lower priority, S-size each): a symbol-anchor citation convention
-(`path:line` is the rot source G-2 exploits), a sweep-once discipline doc (17 `--corpus` sweeps ×
-~60s were burned in one session), and the pre-existing `resolveRepoRoot` cwd-dependence bug
-(verified via stash during 0688).
+Operator direction (2026-08-27): the ADR-088 two-sided dated-baseline direction is wrong —
+simplify the corpus gate and `config/corpus-baseline.json` for reliability and efficiency. The
+simplification task is design-first: an ADR in `docs/00_ADR.md` evaluates simplification options,
+and operator approval gates implementation (that approval message is the ADR-051 consent evidence
+for any `task check` surface change).
 
 ## Scope
 
-**In:** a baseline reconcile verb hosted under the `task` noun (exact verb naming per existing CLI
-conventions; no new noun without operator consent — ADR-051; hosting under `task` is the operator's
-stated preference); anchor-drift re-resolution inside `task check`; Requirements/AC checkbox
-auto-flip in the `task record`/verify path; `GuardDeniedError` message enrichment naming legal
-paths; symbol-anchor authoring guidance plus a corpus note; the sweep-once discipline in the
-verification-gate docs; the `resolveRepoRoot` cwd fix.
+**In (one task per stream):**
 
-**Out:** any change to the two-sided ratchet semantics (ADR-088 preserved exactly — reconcile only
-automates what the operator already does by hand); new CLI nouns; the CLI JSON envelope (F95);
-claim-matcher association (F96).
+- **Close-out integrity** — anchor-drift re-resolution inside `task check`, reported at
+  commit-prep; Requirements/AC checkbox auto-flip in the `task record`/verify path when the
+  verdict marks them MET/PASS; `GuardDeniedError` message enrichment naming legal paths and the
+  commands that reach them (both FSMs); the `resolveRepoRoot` cwd-dependence fix. One
+  implementation surface (packages/app task/feature services), one test pass.
+- **Gate & baseline simplification** — design-first: an ADR entry in `docs/00_ADR.md` evaluating
+  simplification options (e.g. drop dated-residue baselining and gate only
+  new-findings-vs-committed-snapshot; collapse superseded finding classes; single-sided vs
+  two-sided tradeoffs), then implementation of the approved option. Absorbs F96: claim-matcher
+  subject association is evaluated inside this ADR — simplification may delete the clause-window
+  machinery rather than refine it.
+- **Docs consolidation** — the symbol-anchor citation convention (`path:symbol` over `path:line`)
+  and the sweep-once discipline (iterate with single-task check; run `--corpus` once before
+  commit), landed in `docs/04_DESIGN.md` + verification-gate docs in one pass. Depends on the
+  simplification ADR outcome for the gate docs.
+
+**Out:** a reconcile verb or any entrenchment of the dated-baseline machinery (operator ruled the
+complexity the wrong direction, 2026-08-27); the CLI JSON envelope (F95); any simplification
+implementation before the ADR decision is approved; re-decomposition into subtasks (operator
+merged the twelve tasks into these streams on purpose).
 
 ## Acceptance Criteria
 
 ```gherkin
 Feature: Pipeline close-out and gate friction
 
-  Scenario: R1 — Baseline reconciliation is a verb, not hand-rolled jq
-    Given a `task check --corpus --json` output whose new findings and stale entries differ from `config/corpus-baseline.json`
-    When the reconcile verb runs
-    Then new dated entries are applied and stale entries are removed in one deterministic pass
-    And dry-run is the default and prints a summary diff before any write
-    And two-sided semantics are preserved and unit tests cover both directions
+  Scenario: R1 — Gate & baseline simplification is design-first with an operator approval gate
+    Given the dated-baseline machinery (config/corpus-baseline.json, ~1928 entries) and its reconcile churn
+    When the simplification ADR is authored in docs/00_ADR.md
+    Then it evaluates simplification options — e.g. drop dated-residue baselining and gate only new-findings-vs-committed-snapshot, collapse superseded finding classes, single-sided vs two-sided tradeoffs
+    And implementation waits for operator approval of the chosen option (ADR-051 consent evidence, 2026-08-27)
+    And the approved option is then implemented, including the disposition of the F96 claim-matcher clause-window machinery
 
   Scenario: R2 — Line-number anchor drift is caught at commit-prep, not post-commit
     Given a done task citing `path:line` anchors and a source edit that moved those lines
@@ -91,13 +103,16 @@ Feature: Pipeline close-out and gate friction
 <!-- AUTO-GENERATED by spur feature refresh -->
 | WBS | Task | Status |
 | --- | ---- | ------ |
-| 0691 | Baseline reconcile verb: apply and prune corpus-baseline.json from task check --corpus output | todo |
-| 0692 | Anchor-drift detection: task check re-resolves line-number anchors against the current tree | todo |
-| 0693 | Auto-flip verified checklist boxes when the verdict marks them MET/PASS | todo |
-| 0694 | FSM denial guidance: GuardDeniedError names the legal path or the command that reaches it | todo |
-| 0695 | Symbol-anchor convention: prefer path:symbol over path:line in new task citations and test evidence | todo |
-| 0696 | Sweep-once discipline: iterate with single-task check, run one --corpus sweep before commit | todo |
-| 0697 | Fix resolveRepoRoot cwd-dependence: repo-root resolution must not depend on the invoking directory | todo |
+| 0691 | Baseline reconcile verb: apply and prune corpus-baseline.json from task check --corpus output | cancelled |
+| 0692 | Anchor-drift detection: task check re-resolves line-number anchors against the current tree | cancelled |
+| 0693 | Auto-flip verified checklist boxes when the verdict marks them MET/PASS | cancelled |
+| 0694 | FSM denial guidance: GuardDeniedError names the legal path or the command that reaches it | cancelled |
+| 0695 | Symbol-anchor convention: prefer path:symbol over path:line in new task citations and test evidence | cancelled |
+| 0696 | Sweep-once discipline: iterate with single-task check, run one --corpus sweep before commit | cancelled |
+| 0697 | Fix resolveRepoRoot cwd-dependence: repo-root resolution must not depend on the invoking directory | cancelled |
+| 0703 | Corpus gate & baseline simplification: design-first ADR and operator-gated implementation | todo |
+| 0704 | Close-out integrity: anchor-drift detection, verified-box auto-flip, FSM denial guidance, resolveRepoRoot fix | todo |
+| 0706 | Docs consolidation — 0688 friction review: symbol anchors and sweep-once discipline | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

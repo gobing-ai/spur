@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Design note: claim-syntax convention vs smarter subject association for claim-matcher residue"
-status: todo
+status: cancelled
 template: feature-impl
 created_at: 2026-08-27T19:45:35.829Z
-updated_at: "2026-08-27T19:48:07.892Z"
+updated_at: "2026-08-27T20:11:58.648Z"
 feature_id: F96
 priority: P3
 ---
@@ -61,3 +61,5 @@ Explicitly deferred-depth: diminishing returns, so the deliverable is a decision
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-08-27T20:11:58.648Z todo → cancelled (system)

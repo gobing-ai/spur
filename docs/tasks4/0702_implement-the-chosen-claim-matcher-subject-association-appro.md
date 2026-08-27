@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Implement the chosen claim-matcher subject association approach"
-status: blocked
+status: cancelled
 template: feature-impl
 created_at: 2026-08-27T19:45:36.028Z
-updated_at: "2026-08-27T19:48:39.501Z"
+updated_at: "2026-08-27T20:11:58.913Z"
 feature_id: F96
 priority: P3
 dependencies: ["0701"]
@@ -61,3 +61,4 @@ friction batch lands).
 ### History
 
 - 2026-08-27T19:48:39.501Z todo → blocked (system)
+- 2026-08-27T20:11:58.913Z blocked → cancelled (system)

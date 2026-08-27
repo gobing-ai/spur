@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "FSM denial guidance: GuardDeniedError names the legal path or the command that reaches it"
-status: todo
+status: cancelled
 template: feature-impl
 created_at: 2026-08-27T19:45:00.042Z
-updated_at: "2026-08-27T19:48:06.708Z"
+updated_at: "2026-08-27T20:11:33.850Z"
 feature_id: F94
 priority: P2
 ---
@@ -69,3 +69,5 @@ useless. This task files friction G-4 of F94.
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-08-27T20:11:33.850Z todo → cancelled (system)

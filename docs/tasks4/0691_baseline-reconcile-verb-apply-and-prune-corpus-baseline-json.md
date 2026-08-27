@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Baseline reconcile verb: apply and prune corpus-baseline.json from task check --corpus output"
-status: todo
+status: cancelled
 template: feature-impl
 created_at: 2026-08-27T19:44:59.389Z
-updated_at: "2026-08-27T19:48:06.175Z"
+updated_at: "2026-08-27T20:11:33.067Z"
 feature_id: F94
 priority: P1
 ---
@@ -77,3 +77,5 @@ task files friction G-1 of F94.
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-08-27T20:11:33.067Z todo → cancelled (system)

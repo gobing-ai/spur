@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Symbol-anchor convention: prefer path:symbol over path:line in new task citations and test evidence"
-status: todo
+status: cancelled
 template: feature-impl
 created_at: 2026-08-27T19:45:19.751Z
-updated_at: "2026-08-27T19:48:07.380Z"
+updated_at: "2026-08-27T20:11:34.109Z"
 feature_id: F94
 priority: P3
 ---
@@ -65,3 +65,5 @@ plus a corpus note, no checker change.
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-08-27T20:11:34.109Z todo → cancelled (system)

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Auto-flip verified checklist boxes when the verdict marks them MET/PASS"
-status: todo
+status: cancelled
 template: feature-impl
 created_at: 2026-08-27T19:44:59.828Z
-updated_at: "2026-08-27T19:48:06.526Z"
+updated_at: "2026-08-27T20:11:33.589Z"
 feature_id: F94
 priority: P2
 ---
@@ -68,3 +68,5 @@ happens mechanically. This task files friction G-3 of F94.
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-08-27T20:11:33.589Z todo → cancelled (system)

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Anchor-drift detection: task check re-resolves line-number anchors against the current tree"
-status: todo
+status: cancelled
 template: feature-impl
 created_at: 2026-08-27T19:44:59.611Z
-updated_at: "2026-08-27T19:48:06.352Z"
+updated_at: "2026-08-27T20:11:33.327Z"
 feature_id: F94
 priority: P2
 ---
@@ -70,3 +70,5 @@ of F94 (and is why the F94 rider R5 prefers symbol anchors).
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-08-27T20:11:33.327Z todo → cancelled (system)

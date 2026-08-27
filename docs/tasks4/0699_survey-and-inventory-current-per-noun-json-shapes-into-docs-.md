@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Survey and inventory current per-noun --json shapes into docs/04_DESIGN.md"
-status: todo
+status: cancelled
 template: feature-impl
 created_at: 2026-08-27T19:45:35.427Z
-updated_at: "2026-08-27T19:48:07.040Z"
+updated_at: "2026-08-27T20:11:35.182Z"
 feature_id: F95
 priority: P2
 ---
@@ -60,3 +60,5 @@ the rest. Survey-first task for F95.
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-08-27T20:11:35.182Z todo → cancelled (system)

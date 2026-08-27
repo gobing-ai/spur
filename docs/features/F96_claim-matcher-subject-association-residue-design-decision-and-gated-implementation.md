@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F96"
 name: "Claim-matcher subject association: residue design decision and gated implementation"
-status: backlog
+status: cancelled
 priority: P3
 tags: []
 created_at: "2026-08-27T19:43:56.520Z"
-updated_at: "2026-08-27T19:44:44.022Z"
+updated_at: "2026-08-27T20:13:40.934Z"
 ---
 
 # F96: Claim-matcher subject association: residue design decision and gated implementation
@@ -61,3 +61,4 @@ Feature: Claim-matcher subject association
 ## Notes
 
 ## History
+- 2026-08-27T20:13:40.934Z backlog → cancelled (system)

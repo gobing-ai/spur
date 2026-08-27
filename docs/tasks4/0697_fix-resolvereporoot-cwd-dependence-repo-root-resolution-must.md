@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Fix resolveRepoRoot cwd-dependence: repo-root resolution must not depend on the invoking directory"
-status: todo
+status: cancelled
 template: feature-impl
 created_at: 2026-08-27T19:45:20.158Z
-updated_at: "2026-08-27T19:48:07.713Z"
+updated_at: "2026-08-27T20:11:34.634Z"
 feature_id: F94
 priority: P3
 ---
@@ -60,3 +60,5 @@ nested directory. S-size fix.
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-08-27T20:11:34.634Z todo → cancelled (system)

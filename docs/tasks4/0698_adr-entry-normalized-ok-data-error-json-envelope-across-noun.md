@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "ADR entry: normalized ok-data-error JSON envelope across nouns with compat and deprecation story"
-status: todo
+status: cancelled
 template: feature-impl
 created_at: 2026-08-27T19:45:35.221Z
-updated_at: "2026-08-27T19:48:06.879Z"
+updated_at: "2026-08-27T20:11:34.920Z"
 feature_id: F95
 priority: P2
 ---
@@ -66,3 +66,5 @@ downstream.
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-08-27T20:11:34.920Z todo → cancelled (system)
