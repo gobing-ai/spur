@@ -4,13 +4,26 @@
     "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": false,
     "failIfUnavailable": true,
+    "network": {
+      "allowLocalBinding": true,
+      "allowAllUnixSockets": true
+    },
     "filesystem": {
       "allowWrite": [
         ".git/hooks",
         "~/xprojects/ts-libs",
         "~/.omp",
         "~/tools/dot_files/config/omp",
-        ".spur/workflows/"
+        "~/tools/dot_files/config/pi",
+        "~/tools/dot_files/config/grok",
+        "~/tools/dot_files/config/codex",
+        ".spur/workflows/",
+        "~/.pi",
+        "~/.grok",
+        "~/.gemini",
+        "~/.codex",
+        "~/.cache",
+        "~/.config/spur/"
       ]
     }
   }
