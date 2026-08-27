@@ -4,7 +4,7 @@ name: "Simplify --agent to one honest selector: inline default, subagent-first, 
 status: todo
 template: issue
 created_at: 2026-08-27T04:45:22.880Z
-updated_at: "2026-08-27T04:49:02.685Z"
+updated_at: "2026-08-27T05:09:51.401Z"
 feature_id: B
 ---
 
@@ -197,7 +197,7 @@ risk is mitigated by a mandatory substitution warning. State plainly that ADR-04
 workflow-specific rejection and the G5 amendment are both retired, so a future reader does
 not resurrect them.
 
-**R8 — Provider-scope the failure classifier.** `classifyDispatch`
+**R8 — Provider-scope the failure classifier.** ⚠ **SUPERSEDED during implementation — do not implement as written.** Provider scoping discards real cross-vendor evidence; the defect was pattern precision. See `### Solution` for what shipped instead and why. Left here verbatim as the decision record. `classifyDispatch`
 (`packages/app/src/services/failure-classification.ts:78-92`) must only apply a rule whose
 `provider` matches the dispatching executor's agent/provider. Thread the executor identity
 (agent name and/or model provider prefix) from the call site
@@ -208,13 +208,13 @@ dump containing `contextWindow` and a `codex` stderr containing `quota` are NOT 
 as `resource-exhaustion` under a non-matching provider.
 
 **R9 — Classify OS permission failures as their own signal, never as resource
-exhaustion.** Add an `EPERM`/`operation not permitted`/`FS_PERMISSION_DENIED`/`bind:
+exhaustion.** ✅ **DONE** — see `### Solution` / `### Testing`. Add an `EPERM`/`operation not permitted`/`FS_PERMISSION_DENIED`/`bind:
 operation not permitted` pattern that resolves to a non-escalating outcome (either a new
 `environment` signal in `ObjectiveEscalationSignal`, or `undefined` with an explicit
 comment). Escalating to a costlier tier cannot fix a sandbox denial — it burns budget and
 buries the cause. The failure message must name the permission error verbatim.
 
-**R10 — Restore agent-dispatch telemetry for workflow-driven runs.** Close the gap between
+**R10 — Restore agent-dispatch telemetry for workflow-driven runs.** ✅ **DONE** (option (a), dual-emit disproved) — see `### Solution` / `### Testing`. Close the gap between
 the emitted series and the queried series. Either:
 - (a) thread the ledger bus into the workflow path —
   `apps/cli/src/commands/workflow.ts:231` becomes `context.agentService({ events: bus })`,
@@ -229,7 +229,7 @@ the emitted series and the queried series. Either:
 speak `agent.invoke.*`, and (b) requires a read-side migration for every consumer. State
 the choice and the dual-emit evidence in `### Design`.
 
-**R11 — Prove the telemetry fix on real data.** After R10, a workflow run that dispatches
+**R11 — Prove the telemetry fix on real data.** ◑ **PARTIAL** — rows and no-dual-emit proven (`### Testing`); the non-empty `pairings` half needs a *successful* dispatch, blocked by the sandbox patch in `### References`. After R10, a workflow run that dispatches
 at least one `agent.run` stage must produce `agent.invoke.start` + `agent.invoke.exit` rows
 carrying the routing block (executor, role, tier, source), and a bounded
 `spur history analyze --since <today> --until <today>` must return a non-empty `pairings`
@@ -534,13 +534,116 @@ every agent analytic silently returns empty for any window after 2026-08-20. Mea
 a bounded analyze for 2026-08-26 yields `pairings: 0` (30,849 records, 57 sessions);
 the same analyze unbounded yields `pairings: 5`, all pre-08-20.
 ### Solution
+**Partial — R9 and R10 are implemented and verified; R8 was investigated and deliberately
+NOT implemented as specified (see below). R1-R7, R11-R12 remain open.**
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R10 — agent telemetry restored.** `apps/cli/src/commands/workflow.ts:227-239` now threads
+the ledger bus into `AgentService` (`context.agentService({ events: bus })`), matching the
+`spur agent run` path at `apps/cli/src/commands/agent.ts:425`. The removed comment claimed
+the workflow-dispatched lifecycle lived in a single `workflow.agent` series; that series has
+zero rows, so the effect was a total blackout rather than deduplication.
 
+**R9 — permission failures never escalate and are named verbatim.**
+- `packages/app/src/services/failure-classification.ts` — new `PERMISSION_PATTERNS`
+  (`EPERM`, `EACCES`, `operation not permitted`, `permission denied`,
+  `FS_PERMISSION_DENIED`) and exported `permissionFailureEvidence(text)`. `classifyDispatch`
+  short-circuits to `undefined` on permission evidence **before** any rule matching, so a
+  crash dump carried alongside the denial cannot be pattern-matched into a quota signal.
+- `packages/app/src/workflow/actions/agent-run.ts:403,409-411` — a non-zero exit carrying
+  permission evidence now reports it verbatim and names it an environment constraint
+  instead of pointing at the timed-out-implement runbook.
+
+**R8 — provider scoping: investigated, rejected, replaced with pattern precision.**
+Implementing R8 as written (filter `FAILURE_RULES` by `rule.provider` against the
+dispatch's agent/model/executor) broke 20 existing tests, and the breakage was correct
+signal rather than fixture rot: the exhaustion vocabulary is genuinely cross-vendor. `pi`
+alone fronts a dozen providers (`volc/`, `zai/`, `kimi/`, `deepseek/`, `minimax/`,
+`nvidia/`), so an HTTP 429 or "usage limit reached" from a `pi` dispatch is real evidence
+that scoping would discard — a worse failure (no failover on genuine exhaustion) than the
+one being fixed. Two intermediate designs were tried and also rejected: neutral status
+codes + scoped prose (still suppressed "usage limit reached" on a `claude` executor, which
+is legitimate Anthropic output), and scope-only-when-the-vendor-is-identifiable (a
+maintenance table of vendor tokens buying protection for one hypothetical case).
+
+What actually made the loose patterns dangerous was precision, not provenance, so that is
+what was fixed:
+- `ollama` rule: `context[_ -]?(?:length|window)` → `context[_ -](?:length|window)`. The
+  optional separator matched the camelCase identifier `contextWindow`, which appears in any
+  bundled-JS crash dump; a separator is now required so only the prose form matches.
+- `gemini` rule: bare `quota` → `quota (?:exceeded|exhausted|reached)` /
+  `exceeded[^.\n]{0,40}quota`. A bare `quota` matched any incidental mention (a path, a
+  field name, a log line).
+- `FailureRule.provider` is now documented as registry metadata rather than left looking
+  like dead code — the field records whose vocabulary a rule transcribes; precision comes
+  from narrow patterns, not from guessing the dispatch's provider.
+
+**R8 follow-up left open:** whether any classifier should ever fire on a dispatch that
+crashed before reaching its provider (an exit path with no HTTP exchange at all) is a
+better-framed question than provider scoping, and is not answered here.
 ### Testing
+**Unit — `packages/app/tests/services/failure-classification.test.ts` (24 pass, 0 fail).**
+Nine new assertions across two describes:
+- *pattern precision*: `contextWindow` / `getContextWindow` / `maxContextWindow` in a crash
+  dump → `undefined`; the prose forms (`maximum context length`, `context window exhausted`,
+  `context_length limit hit`) still → `resource-exhaustion`; incidental `quota` mentions
+  (`the quota directory was not found`, `/etc/quota.conf`) → `undefined`; `quota exceeded`
+  and `exceeded your current quota` still → `resource-exhaustion`.
+- *R9 permission failures*: the three real 2026-08-26 stderr strings (pi `EPERM ... .lock`,
+  grok `FS_PERMISSION_DENIED`, antigravity `bind: operation not permitted`) → `undefined`;
+  a permission denial co-occurring with `HTTP 429` → `undefined` (denial wins);
+  `permissionFailureEvidence` returns the offending line and `undefined` for ordinary stderr.
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Regression — no pre-existing intent was weakened.**
+`bun test packages/app/tests/services/failure-classification.test.ts packages/app/tests/services/agent-service.test.ts`
+→ **198 pass, 0 fail, 615 expect() calls**. All 20 `0485 R1 classifier signature` /
+escalation-ladder tests pass unmodified; not one fixture or assertion was edited to
+accommodate the change. (The rejected provider-scoping design failed exactly these 20 —
+that failure is what drove the redesign recorded in `### Solution`.)
 
+`bun test packages/app/tests/workflow/actions/agent-run.test.ts` → **113 pass, 0 fail**
+(covers the reworded failure message and the R2 partial-work contract).
+
+**Real-data verification (R11 evidence).** Two runs of
+`bun run apps/cli/src/index.ts workflow run history-anatomy.yaml --vars '{"mode":"daily","date":"2026-08-26","agent":"pi-k3"}'`
+against the live ledger — source-local binary per the CLAUDE.md contract, never the global
+`spur`:
+
+| Measure | Before | After run 1 | After run 2 |
+| --- | --- | --- | --- |
+| `agent.invoke.start` rows | 156 (frozen since 2026-08-20T04:04) | 158 | 160 |
+| `agent.invoke.exit` rows | 152 (frozen since 2026-08-20T04:04) | 154 | 156 |
+| max `occurred_at` | `2026-08-20T04:04:45Z` | `2026-08-27T05:03:39Z` | `2026-08-27T05:09:05Z` |
+| `Stage escalation` lines | 1 (`signal=resource-exhaustion from=pi-k3 to tier=capable-2`) | 0 | 0 |
+
+**No dual-emit (AC7).** The four rows from run 1, by `executionId`:
+
+```
+05:03:37.538Z agent.invoke.start  op=version  agent=pi  executor=(none)
+05:03:37.693Z agent.invoke.exit   op=version  agent=pi  executor=(none)
+05:03:37.708Z agent.invoke.start  op=prompt   agent=pi  executor=pi-k3  exec_id=a60213b9…
+05:03:39.971Z agent.invoke.exit   op=prompt   agent=pi  executor=pi-k3  exec_id=a60213b9…
+```
+
+Exactly one `prompt` start/exit pair per dispatch, sharing one `executionId` and carrying
+the routing block; the extra pair is the detector's CLI `version` probe (no routing block),
+not a duplicate. The 0365 R9 / 0370 R4 dual-emit concern does not materialize.
+
+**R9 message, observed verbatim in run output:**
+```
+agent.run 'resolve-scope' (pi-k3) exited with code 3: the executor was denied an OS
+permission — Warning: Invalid settings file /Users/robin/.pi/agent/settings.json: EPERM:
+operation not permitted, mkdir '/Users/robin/.pi/agent/settings.json.lock'. This is an
+environment constraint, not a model or quota failure; grant the executor its state
+directory and any local socket bind it needs, then retry
+```
+
+**Gates.** `bunx biome check packages/app/src apps/cli/src packages/app/tests` → 217 files,
+clean. `tsc --noEmit` → 0 for both `packages/app` and `apps/cli`.
+
+**Not verified here (open):** AC8/AC9 — a non-empty `pairings` array and a live run-cost
+section still need a workflow run whose dispatch *succeeds*, which is blocked by the
+sandbox constraint in `### References` until that patch is applied. The rows now exist; the
+fold has not yet been exercised against a successful dispatch.
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
