@@ -14890,6 +14890,174 @@
             "severity": "error",
             "reason": "Clause-window ambiguity (task 0688 R7 ceiling): \"Pending\" is part of the quoted ADR-083 title, not an open claim on R1. Dated residue, same class as the eb93dfdaa set. See note § L3.status-claim-contradiction.",
             "since": "2026-08-27"
+        },
+        {
+            "kind": "feature",
+            "id": "F94",
+            "code": "L4.uncovered-feature-scenario",
+            "severity": "warning",
+            "reason": "Backlog feature (0688 friction filing): scenario coverage ratchets in as child tasks execute — same class F91 documented for 0688. See note § L4.uncovered-feature-scenario.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "feature",
+            "id": "F95",
+            "code": "L4.uncovered-feature-scenario",
+            "severity": "warning",
+            "reason": "Backlog feature (0688 friction filing): scenario coverage ratchets in as child tasks execute — same class F91 documented for 0688. See note § L4.uncovered-feature-scenario.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "feature",
+            "id": "F96",
+            "code": "L4.uncovered-feature-scenario",
+            "severity": "warning",
+            "reason": "Backlog feature (0688 friction filing): scenario coverage ratchets in as child tasks execute — same class F91 documented for 0688. See note § L4.uncovered-feature-scenario.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0691",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0692",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0693",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0694",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0695",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0696",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0697",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0698",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0699",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0700",
+            "code": "L4.gate-language",
+            "severity": "warning",
+            "reason": "Intentional GATE wording required by the ADR-051 public-surface consent gate. See note § L4.gate-language.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0700",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning",
+            "reason": "Deliberately blocked pending its prerequisite task — readiness warnings are the designed state. See note § L4.prerequisite-not-done.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0700",
+            "code": "L4.readiness-blocked",
+            "severity": "warning",
+            "reason": "Deliberately blocked pending its consent gate — readiness warnings are the designed state. See note § L4.readiness-blocked.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0700",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0701",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0702",
+            "code": "L4.gate-language",
+            "severity": "warning",
+            "reason": "Intentional GATE wording required by the ADR-051 public-surface consent gate. See note § L4.gate-language.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0702",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning",
+            "reason": "Deliberately blocked pending its prerequisite task — readiness warnings are the designed state. See note § L4.prerequisite-not-done.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0702",
+            "code": "L4.readiness-blocked",
+            "severity": "warning",
+            "reason": "Deliberately blocked pending its consent gate — readiness warnings are the designed state. See note § L4.readiness-blocked.",
+            "since": "2026-08-27"
+        },
+        {
+            "kind": "task",
+            "id": "0702",
+            "code": "L4.uncovered-task-scenario",
+            "severity": "warning",
+            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
+            "since": "2026-08-27"
         }
     ],
     "note": "Accepted `spur task check` / `spur feature check` errors. This is a POLICY file, not a status dump: it is an INPUT to `bun run corpus-check`, so it must be committed — an untracked baseline means the gate behaves differently on every clone and CI, and the first person to meet 8 unexplained failures disables it. Do not move it under `.spur/` (gitignored, ephemeral run artifacts). The gate fails on any error NOT listed here, and ALSO on any entry that no longer reproduces, so this cannot rot into a silent suppression list. Every entry needs a real diagnosis, a reason, and a date — 'pre-existing, not investigated' is not a reason. SCOPE (2026-08-17, ADR-062 / task 0582): the sweep now covers EVERY configured task folder, not just the active one. The entries dated 2026-08-17 are that widening's honest backlog — all in docs/tasks{,2,3}, none in the active folder — and every one is a gate that postdates the task it fires on. They stay two-sided: if a legacy corpus is migrated and an error stops reproducing, the gate fails as stale and the entry must be removed. PER-CODE DIAGNOSIS FOR THE 2026-08-17 ENTRIES. § L1.schema-validation — These tasks predate DD-03, when `schema_version: 1` became a required frontmatter field; 79 of 128 files in docs/tasks lack it entirely, so the strictness gate reports `expected 1` against an absent field. The work is closed and correct; only the envelope is pre-schema. Backfilling across three archived corpora is a corpus migration, not a task repair. § L3.review-priority-table — The P1–P4 priority findings table became the required Review shape after these tasks closed; they carry the older prose form (`#### Verification (dev-verify) … **Verdict: PASS**` plus narrative findings). The review happened and its verdict is recorded — only the layout is pre-gate. Re-formatting closed reviews rewrites historical evidence to satisfy a later convention. § L3.solution-file-line — The `file:line` citation requirement postdates these tasks; their Solution sections describe changes in prose, naming modules rather than lines. Retrofitting citations means re-deriving line numbers for long-merged diffs — a guess dressed as evidence, which is precisely what feature L exists to prevent. § L3.required-section-placeholder — These reached `done` before the section matrix required a populated Testing/Solution at terminal status, so the section sits at its template placeholder. `spur task record` cannot fill them: these runs predate `.spur/run/<wbs>-verdict.json`, so no verdict artifact exists to transcribe. § L3.ac-empty — Acceptance Criteria was not a populated-at-close requirement when these ran, and several are spike, meta, and brainstorm tasks whose output is a decision or a document rather than a testable behavior. Authoring AC for closed exploratory work would be fiction written to satisfy a checker. § L2.missing-required-section — The section matrix gained these required sections (chiefly Review) after the tasks closed. Adding an empty required heading converts a legible historical record into a hollow one that then trips the placeholder gate instead. § L3.requirements-empty — Nine spike/meta/brainstorm tasks whose Requirements were never populated because their contract was a question to answer, not a behavior to build. The `unverifiable` diagnosis is accurate and accepted: they were never verified against requirements, and back-filling now would invent a contract the work was never held to. DEDUPE (2026-08-17, task 0582 R5 verify): the warning half was generated per-observed-finding rather than per key, so 2541 entries covered only 903 distinct keys. Reconciliation is key-addressed, so the extras were unreachable and the ratchet could see only a key's total disappearance, never a partial reduction. Collapsed to one entry per key; `duplicateBaselineKeys` now fails the gate so this cannot recur. ANCHOR-SUBJECT WAVE (2026-08-18, task 0583 R6): `L4.anchor-subject-mismatch` entries are the first sweep of the content-matching rule over historical citations, accepted at WARNING severity only. 0583 R6 promotes the code to error after the qualification migration is APPLIED and this residue is worked down; promotion is a reconcile-the-entry event because severity is part of the acceptance contract. RECONCILED 2026-08-25 (task 0670, feature F61; decision ADR-083). § L4.anchor-subject-mismatch (2026-08-25) — Measured residue of the point-window matcher (ADR-083 probe 2): the cited line resolves and is in bounds but does not lexically name the requirement row's subject, because the matcher reads only the cited lines and a single-line anchor inside a symbol cannot contain that symbol's name. The citation is correct; the window is too narrow. Decision: dated legacy set, frozen pending feature F91's matcher decision; not a repair campaign and not a matcher change here. § L4.stale-line-anchor (2026-08-25) — Measured residue of anchors whose path cannot resolve from project root (bare or plugin-relative paths such as plugins/sp/scripts/history-load.ts, dev-find-issue.md:47, eval-pipeline.ts:204) or whose line range exceeds the file. The F91 anchor-qualification migration (task 0583) repaired the 2026-08-17 ambiguous set; these postdate that pass. Decision: dated legacy set, frozen pending F91 (ADR-083). § L3.unchecked-checklist (2026-08-25) — Recent closed tasks (0662, 0663, 0664, 0668) reached done/cancelled with planning checklist items never flipped; flipping post-close rewrites history (same family as the 2026-08-17 block). § L3.ac-empty (2026-08-25) — Task 0662 closed with placeholder-only Acceptance Criteria; authoring AC post-close for exploratory work invents a contract (same family as the 2026-08-17 block).\nRECONCILED 2026-08-27 (task 0688, feature F91; decision ADR-088). § L4.anchor-subject-mismatch (2026-08-27) — This paragraph SUPERSEDES the 2026-08-25 diagnosis above. The frozen point-window matcher question is resolved: the matcher now reads the cited lines plus an ±20-line window around each anchor (ANCHOR_WINDOW_LINES=20, task 0688), and row subject tokens exclude every anchor in the row, so multi-anchor rows no longer self-report. Corpus effect measured (before/after, .spur/run/0688-{before,after}.json): observed mismatch findings 2015 → 982 (−51%); sections pinned at the 5-finding cap 304 → 124 (the stale-line-anchor rise 391 → 482 is cap relief, not regression). ADR-083 probe 2 measured new-code mismatches 42 → 10 under the wider window. The error promotion condition (\"after the qualification migration is APPLIED and this residue is worked down\") is therefore judged NOT met: the migration is applied and the residue halved, but the remainder is frozen legacy drift with no repair campaign — promoting now would mint ~840 dated error entries for drift the corpus has declined to repair, converting a live drift signal into permanent ratchet debt. Decision: the severity override is REMOVED (default warning); the two-sided warning ratchet keeps full force (new or vanished warning keys still fail this gate). All 435 error-severity entries above staled under the new matcher and were re-keyed at warning severity; the prior narrow-matcher keys are gone. § L3.testing-coverage (2026-08-27) — Retired (task 0688, R6): bunfig.toml machine-enforces the 90/90 line/function coverage threshold on every bun run test, making the human-obligation check redundant double-keeping; all 54 entries removed. Its replacement, L3.status-claim-contradiction (error), fires when a Requirements checkbox contradicts a done/open status claim in the same sentence-ish clause of Solution/Testing prose — ambiguity is silent by construction (bare claim word required within 80 chars, no sentence separator between id and claim; negation only via not/never lookbehind). Measured residue (32 findings) is the eb93dfdaa class on legacy tasks: verdict tables say MET while Requirements boxes were never flipped — flipping post-close rewrites history, same family as the 2026-08-17 block. § L4.stale-line-anchor (2026-08-27) — The 38 new keys are cap relief from the matcher fix plus live drift from this task's own design-doc edit (0673); frozen legacy set unchanged in policy.\n"
