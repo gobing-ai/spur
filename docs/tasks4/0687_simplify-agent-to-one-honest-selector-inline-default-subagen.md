@@ -242,7 +242,7 @@ carrying the routing block (executor, role, tier, source), and a bounded
 `spur history analyze --since <today> --until <today>` must return a non-empty `pairings`
 array. Record the before/after row counts in `### Testing`.
 
-**R12 — Document the sandbox requirement for engine-driven work.** The environment fix is
+**R12 — Document the sandbox requirement for engine-driven work.** ✅ **DONE** 2026-08-27 — affordances + doctor caveat added to sp:dogfood-testing SKILL; operator applied the sandbox patch (probe passes). Original: The environment fix is
 the operator's to apply (`.claude/settings.json` is outside agent write scope), but the
 requirement must be discoverable. Add a short "running engine-driven commands under a
 sandboxed session" note to `plugins/sp/skills/dogfood-testing/SKILL.md` (or
