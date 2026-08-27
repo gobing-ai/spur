@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F91"
 name: "Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet"
-status: done
+status: active
 priority: P2
 tags: []
 created_at: "2026-08-17T22:15:08.187Z"
-updated_at: "2026-08-21T23:26:42.870Z"
+updated_at: "2026-08-27T15:34:14.595Z"
 ---
 
 # F91: Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet
@@ -93,10 +93,46 @@ Feature: Corpus gate integrity
 | 0583 | Anchor integrity: qualification migration, then subject matching | done |
 | 0584 | Task authoring contract: external-evidence citation form and AC-altitude declaration | done |
 | 0625 | Close the 2026-08-21 dogfood residue: lifecycle projections and gates that report a state the tree contradicts | done |
+| 0688 | Right-size the post-implementation task gate: drop no-signal citation checks, keep real drift detection | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+**Reopened 2026-08-27 — slice 2: the matcher decision ADR-083 routed here.**
 
+RC-1 through RC-4 shipped and remain shipped; this reopen does not reverse them. The feature is
+active again because it owns the anchor subject-matcher, and ADR-083 (2026-08-25, task 0670,
+feature F61) measured that matcher and **routed a proposal to F91 without applying it** — F61 put
+matcher changes out of scope. F91 closed on 2026-08-21, four days before that routing, so the
+proposal arrived at a terminal feature and no task carried it.
+
+What the routed proposal says, in ADR-083's own measurements:
+
+- **Probe 2 (the driver):** the matcher reads only the cited lines, so a single-line anchor pointing
+  inside a symbol can never contain that symbol's name — *"The citation is correct and the window is
+  too narrow."* Widening the cited window to ±20 lines moves new mismatches **42 → 10** and turns
+  ~101 baselined entries stale.
+- **Probe 1:** `extractSubjectTokens` excludes only the anchor under test, so a sibling anchor's path
+  becomes an unmatchable subject token (~0.5% of the class).
+- **Probe 3:** the 5-findings-per-section cap couples per-code counts, so deltas are only comparable
+  when cap engagement is stated.
+
+Consequence that forced the reopen: `.spur/config.yaml`'s `tasks.severity` block still carries
+`L4.anchor-subject-mismatch: error` from task 0583 R6 (2026-08-18) — a promotion whose premise
+ADR-083 reversed a week later. On 2026-08-27 it blocked task 0687's `wip → testing` transition on a
+citation that was correct (`apps/cli/src/commands/agent.ts:425`), which is the encounter that
+surfaced the orphaned proposal.
+
+**Slice-2 scope:** task **0688** only — apply probes 1 and 2, re-decide the severity override,
+retire the `L3.testing-coverage` human obligation that duplicates `bunfig.toml`'s enforced 90/90
+threshold, and add `L3.status-claim-contradiction`. Explicitly **not** in scope: a citation-repair
+campaign (ADR-083 chose against it), collapsing `L4.stale-line-anchor` or `L3.solution-file-line`
+(different, true facts), and a broad audit of the other 48 finding codes.
+
+**Known warning class while slice 2 is open:** task 0688's twelve AC scenarios report
+`L4.uncovered-task-scenario` because they sit below this feature's ship-contract altitude. That is
+RC-3 — this feature's own diagnosis — and the AC-altitude carve-out covers it. Warnings only; the
+feature and task gates both pass. Add a slice-2 scenario to `## Acceptance Criteria` if the
+carve-out is later judged insufficient.
 ## History
 
 - 2026-08-17T22:49:05.671Z moved L → F91 (system)
@@ -105,3 +141,4 @@ Feature: Corpus gate integrity
 - 2026-08-18T06:24:28.631Z verifying → active (system)
 - 2026-08-21T23:23:08.778Z active → verifying (system)
 - 2026-08-21T23:26:42.870Z verifying → done (system)
+- 2026-08-27T15:33:31.671Z done → active (system)

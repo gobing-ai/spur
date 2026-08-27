@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Simplify --agent to one honest selector: inline default, subagent-first, remove the headless rejection, restore agent telemetry"
-status: wip
+status: testing
 template: issue
 created_at: 2026-08-27T04:45:22.880Z
-updated_at: "2026-08-27T06:03:36.087Z"
+updated_at: "2026-08-27T07:03:05.601Z"
 feature_id: B
 ---
 
@@ -553,12 +553,15 @@ the same analyze unbounded yields `pairings: 5`, all pre-08-20.
 
 ### Solution
 
-**Partial — R9 and R10 are implemented and verified; R8 was investigated and deliberately
-NOT implemented as specified (see below). R1-R7, R11-R12 remain open.**
+**Status at handoff (2026-08-27): R1-R4, R6, R7, R9, R10, R12 implemented; R8 investigated and
+deliberately NOT implemented as specified — replaced with pattern precision (see below); R5 open
+and R11 partial. Per-requirement evidence is in the two slices below; the verify step owns the
+verdict.**
 
 **R10 — agent telemetry restored.** `apps/cli/src/commands/workflow.ts:227-239` now threads
 the ledger bus into `AgentService` (`context.agentService({ events: bus })`), matching the
-`spur agent run` path at `apps/cli/src/commands/agent.ts:425`. The removed comment claimed
+`spur agent run` path at `apps/cli/src/commands/agent.ts:409-425` (the `runAgentRun` body,
+whose docstring names the `spur agent run` subject the anchor gate resolves). The removed comment claimed
 the workflow-dispatched lifecycle lived in a single `workflow.agent` series; that series has
 zero rows, so the effect was a total blackout rather than deduplication.
 
@@ -610,7 +613,7 @@ better-framed question than provider scoping, and is not answered here.
 - **R3** rejection deleted: `AGENT_INLINE_HEADLESS_MESSAGE` removed along with the CLI branch (`apps/cli/src/commands/agent.ts`), workflow G5 early-return (`packages/app/src/workflow/actions/agent-run.ts`), and the `packages/app/src/index.ts` re-export. Substitution lives only in `resolveAgent`: raw `inline` on a headless surface → `resolveAgentAuto()` + single warning through `ctx.output.error` naming the resolved executor (`via role/<tier>` when role-routed); no per-call-site branching, exit code unchanged.
 - **R4** untouched by design (`auto`/name paths identical) — proven by unchanged classifier/escalation-ladder tests below.
 - **R2 (doc half)** `inline-pipeline-driver.md` eligibility generalized omit-only → "resolved selector is inline"; **R6** stale prose purged in `flag-glossary.md` + `cross-cutting.md` (rejection quote, value-table row semantics, carve-out paragraphs) and this commit supersedes `docs/design/agent-inline-host-session.md` with a banner. The find-issue command body (an R6 target) still carries old wording — design-surface remnant intentionally left to the follow-up slice.
-- Honest scope: **R5/R11(partial)/R12 open.**
+- Honest scope: **R5 open, R11 partial.** (R12 closed 2026-08-27 — see Requirements.)
 
 ### Testing
 
@@ -791,3 +794,4 @@ sqlite3 .spur/spur.db "select count(*) from system_events where event_name like 
 ### History
 
 - 2026-08-27T05:34:32.761Z todo → wip (system)
+- 2026-08-27T07:03:05.601Z wip → testing (system)
