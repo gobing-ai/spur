@@ -45,10 +45,24 @@ guide and conventions before acting.
 - **Traceability audits** — verify every task links to a feature, every scenario maps to a task.
 - **Section-editing campaigns** — update the same section across multiple tasks.
 - **Rule-catalog work** — author, fine-tune, validate, or harden constraint rules across the catalog.
-- **Workflow work** — author, validate, dry-run, or refactor one or more workflows.
-  When authoring or refactoring, read the composition-measures section in
-  `sp:spur-cli` `references/workflows.md` and apply the advisory's fix-path map — findings are
-  advisory only; never block a run or edit an executing pipeline over them.
+- **Workflow work** — decide fit, author, validate, dry-run, tune, or refactor one or more workflows.
+  Read `sp:spur-cli` `references/workflows/workflow-fit-and-tuning.md` before authoring or
+  refactoring, and apply it in this order:
+  - **Fit first.** A process earns a `spur workflow` only when it replays, branches on a
+    machine-checkable predicate, **and** needs a durable per-run record. Fewer than three → recommend
+    a descriptive procedure or checklist and stop. Author the mode gate only after fit clears.
+  - **Simplicity is the budget, and it is measured.** `shell` commands at or under 5 non-comment
+    units, `agent.run` inputs referencing a slash command rather than carrying a raw prompt, guards
+    a single predicate. Over budget → pick a recorded owner from
+    `docs/design/workflow-shell-ownership.md`; never reformat to dodge the measure.
+  - **Latency and observability are authoring decisions.** Minimize `agent.run` node count first;
+    soft status-file probe over repeated probing; guards ordered cheapest-discriminating-first;
+    `iterationBound` from a latency budget; states named for outcomes; `failureStates` declared.
+  - **Refactor in a named direction** — promote (prose → workflow), demote (workflow → prose),
+    or optimize in place. Back an optimization with a before/after `spur workflow trace` pair,
+    never with a feel.
+  - Composition-advisory findings (`workflow validate --json` → `composition`) are advisory only;
+    never block a run or edit an executing pipeline over them.
 - **Corpus health checks** — run `check`/`validate` across a batch and report findings.
 
 For a single operation, use the `spur` CLI directly. For the planning/execution lifecycle, use
@@ -72,12 +86,14 @@ Invoke `sp:spur-cli` for verb guidance and per-noun conventions:
 - [ ] Run the corpus-wide sweep after batch edits: `spur task check --corpus --json` (fails on structural errors outside `config/corpus-baseline.json`).
 - [ ] Use `spur task update --section --from-file` for all task section edits.
 - [ ] Run the noun's scoped `refresh` after batch operations where one exists (`spur task refresh`, `spur feature refresh --feature <id>` or `--all`).
+- [ ] Run the workflow fit gate before authoring any new workflow, and recommend a descriptive procedure when it does not clear all three parts.
 
 ### Never
 
 - [ ] Never edit corpus files directly — always through CLI verbs.
 - [ ] Never reimplement verb logic or validation — the CLI owns it.
 - [ ] Never drive the planning/execution lifecycle through this agent — use `sp:spur-dev`.
+- [ ] Never author a workflow whose every node is a raw-prompt `agent.run` — that is a descriptive procedure paying a process spawn per step.
 
 ## Output Format
 

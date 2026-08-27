@@ -161,22 +161,31 @@ Turn a described process into a validated, dry-run-verified workflow in the righ
 1. **Clarify intent** — restate the process as one or two sentences: the steps, the success terminal,
    the loop/branch points. If ambiguous (which step retries? what ends it?), state the interpretation
    taken.
-2. **Mode-selection gate** — run [mode-selection gate](#sub-procedure-mode-selection-gate). This is
+2. **Fit gate** — run the three-part test in
+   [workflow-fit-and-tuning.md](workflow-fit-and-tuning.md#the-three-part-test) *before* the mode
+   gate: the process earns a workflow only if it replays, branches on a machine-checkable predicate,
+   and needs a durable per-run record. Fewer than three → recommend a descriptive procedure /
+   checklist instead and stop; do not author YAML the process will not use.
+3. **Mode-selection gate** — run [mode-selection gate](#sub-procedure-mode-selection-gate). This is
    mandatory and gating: surface the recommended mode with its reason and the rejected alternative,
    and **confirm before authoring**. Honor an explicit `--kind`.
-3. **Reconcile against existing workflows** — run [find-existing-workflow](#sub-procedure-find-existing-workflow).
+4. **Reconcile against existing workflows** — run [find-existing-workflow](#sub-procedure-find-existing-workflow).
    If the process is already covered, **stop and hand to refine (or extend the existing flow) on
    confirmation** — do not author a redundant workflow. Only the "no real match" / "add-new" branch
    proceeds to author below.
-4. **Author the YAML** — use the **real schema shape** for the chosen mode
+5. **Author the YAML** — use the **real schema shape** for the chosen mode
    ([authoring-workflows.md → Per-mode shapes](authoring-workflows.md#per-mode-shapes)). Set `name`,
    `description` (the WHY), the initial + terminal states/nodes, the steps with their actions, the
    transitions/edges with guards/conditions in the right declaration order, `iterationBound` for any
    loop, `env.allow` for any `${env.X}`, and a quoted `$schema`. For transition-flow, set
    `kind: transition-flow`.
-5. **Place the file** — default `.spur/workflows/<name>.yaml` (a `--file` arg overrides), named for
+   Keep each node inside the simplicity budget
+   ([workflow-fit-and-tuning.md](workflow-fit-and-tuning.md#3-node-simplicity-budget)): `shell`
+   commands at or under 5 non-comment units, `agent.run` inputs referencing a slash command rather
+   than carrying a raw prompt, guards a single predicate.
+6. **Place the file** — default `.spur/workflows/<name>.yaml` (a `--file` arg overrides), named for
    what the workflow does.
-6. **Verify** — run the [validate-and-dry-run core](#sub-procedure-validate-and-dry-run) with the
+7. **Verify** — run the [validate-and-dry-run core](#sub-procedure-validate-and-dry-run) with the
    expected terminal state. Not done until the definition validates AND the dry-run reaches it.
 
 Output contract: YAML workflow content + chosen mode + reason + destination path + validate result +
@@ -197,6 +206,12 @@ Adjust an existing workflow with the smallest change that meets the intent. Proc
    - missing step → add a state/node + its transition/edge in the correct declaration order
    - runaway loop → set or raise `iterationBound`
    - missing variable/env → add to `vars` or `env.allow`
+   - too slow / unreadable trace (not a correctness bug) → the
+     [optimize procedure](workflow-fit-and-tuning.md#optimize--refine-an-accepted-workflow-in-place),
+     backed by a before/after `spur workflow trace <run-id> --json` pair
+   - the whole file is the wrong surface (all nodes raw `agent.run`, no branching, edited more than
+     run) → not a refine: the
+     [demote procedure](workflow-fit-and-tuning.md#demote--workflow--descriptive-procedure)
    See [authoring-workflows.md](authoring-workflows.md) for each mechanism's real shape. **Do not
    switch mode** in a refine — a mode change is a rewrite; hand it back to `add`.
 3. **Apply the smallest change.** Preserve declaration order semantics (the first passing

@@ -9,12 +9,24 @@ see_also:
 
 `spur workflow` runs declarative YAML workflows (powered by `@gobing-ai/ts-dual-workflow-engine`) that
 orchestrate a multi-step process — an implement→check→fix loop, an import→validate→transform→write
-pipeline, an approval gate. The engine executes **two distinct workflow kinds**, and the first act of
-any new workflow is choosing between them. Get the mode right and the rest of authoring follows the
+pipeline, an approval gate. The engine executes **two distinct workflow kinds**, and choosing between
+them is the first act of *authoring*. Get the mode right and the rest of authoring follows the
 schema; get it wrong and you fight the engine.
 
-Operating a workflow well is a full lifecycle — choose the mode, author the YAML, validate it, run it,
-read the trace, and refine. This skill covers all of it.
+Operating a workflow well is a full lifecycle — decide it should be a workflow at all, choose the mode,
+author the YAML, validate it, run it, read the trace, tune it, and refine. This skill covers all of it.
+
+## Decide it is a workflow at all — before the mode
+
+The mode gate presumes the process belongs in YAML. That presumption is the more expensive one to get
+wrong: a workflow whose nodes are all raw `agent.run` prompts is a descriptive procedure paying a
+process spawn per step, and a bounded retry loop written as a paragraph in a skill reference is a
+workflow nobody authored. Run the **fit gate** first — a process earns a workflow only when it
+replays, branches on a machine-checkable predicate, **and** needs a durable per-run record.
+
+Fit gate, cost model, latency/observability tuning, the node simplicity budget, and the
+promote / demote / optimize refactor procedures:
+[workflows/workflow-fit-and-tuning.md](workflows/workflow-fit-and-tuning.md).
 
 ## Choose the execution mode first
 
@@ -62,6 +74,9 @@ before authoring. Full procedure: [workflows/authoring-workflows.md](workflows/a
 
 Use this skill to:
 
+- **Decide fit** — judge whether a process should be a workflow at all or stay a descriptive
+  procedure / checklist, and tune an accepted one for latency and legible traces.
+  → workflows/workflow-fit-and-tuning.md
 - **Author a workflow** — turn a described process into a validated, dry-run-verified YAML definition
   in the right mode. → authoring-workflows.md
 - **Validate before trusting** — schema + semantic-check a workflow file (references, terminal
@@ -70,6 +85,9 @@ Use this skill to:
   taken, terminal status).
 - **Refine an existing workflow** — fix a stuck guard, add a state/node, retune `iterationBound`,
   re-scope variables / `env.allow`, with the smallest change. → workflows/operations.md
+- **Refactor across the prose/YAML boundary** — promote a descriptive procedure into a workflow,
+  demote a workflow back to prose, or optimize an accepted one for latency.
+  → workflows/workflow-fit-and-tuning.md
 - **Extend the engine** — register a custom action/guard runner or a trust-gated extension module when
   the built-ins (`note`, `shell`, `always`, `action-ok`) fall short. → workflows/validation-and-extension.md
 
@@ -362,6 +380,10 @@ the workflow's actions (`shell`, custom runners) do that; this skill builds and 
 
 ## Additional Resources
 
+- [workflows/workflow-fit-and-tuning.md](workflows/workflow-fit-and-tuning.md) — the fit gate
+  (workflow vs. descriptive procedure), the per-node cost model, latency and observability tuning,
+  the node simplicity budget tied to the frozen ADR-069 measures, and the promote / demote /
+  optimize refactor procedures. Read before `add` and before any performance-motivated `refine`.
 - [workflows/operations.md](workflows/operations.md) — the operation procedures (validate/run/list/add/refine),
   the shared find-existing-workflow and validate-and-dry-run cores, and the mode-selection gate. The
   entry point for slash-command delegation.

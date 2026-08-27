@@ -218,9 +218,14 @@ verifying shape, or stand in a `note` action until the path is proven, then swap
 
 ## Authoring checklist
 
+- [ ] Fit gate cleared before the mode gate — replay + machine-checkable branch + durable record
+      ([workflow-fit-and-tuning.md](workflow-fit-and-tuning.md#1-fit-gate--workflow-or-prose)).
 - [ ] Mode chosen deliberately (loop → state-machine; pipeline → transition-flow); recorded the reason.
 - [ ] `kind: transition-flow` set for flows; `$schema` quoted.
 - [ ] Initial + terminal states/nodes declared; every transition/edge target exists.
 - [ ] Guards/conditions ordered so the specific case precedes the fallback.
 - [ ] `iterationBound` set for any loop; `env.allow` lists every `${env.X}` used.
+- [ ] Every node inside the simplicity budget — `shell` at or under 5 non-comment units,
+      `agent.run` input referencing a command rather than a raw prompt, guards a single predicate
+      ([workflow-fit-and-tuning.md](workflow-fit-and-tuning.md#3-node-simplicity-budget)).
 - [ ] Validates clean AND dry-run reaches the expected terminal state.
