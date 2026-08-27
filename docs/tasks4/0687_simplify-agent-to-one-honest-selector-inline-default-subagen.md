@@ -4,7 +4,7 @@ name: "Simplify --agent to one honest selector: inline default, subagent-first, 
 status: testing
 template: issue
 created_at: 2026-08-27T04:45:22.880Z
-updated_at: "2026-08-27T07:03:05.601Z"
+updated_at: "2026-08-27T16:00:03.027Z"
 feature_id: B
 ---
 
@@ -615,86 +615,59 @@ better-framed question than provider scoping, and is not answered here.
 - **R2 (doc half)** `inline-pipeline-driver.md` eligibility generalized omit-only → "resolved selector is inline"; **R6** stale prose purged in `flag-glossary.md` + `cross-cutting.md` (rejection quote, value-table row semantics, carve-out paragraphs) and this commit supersedes `docs/design/agent-inline-host-session.md` with a banner. The find-issue command body (an R6 target) still carries old wording — design-surface remnant intentionally left to the follow-up slice.
 - Honest scope: **R5 open, R11 partial.** (R12 closed 2026-08-27 — see Requirements.)
 
-### Testing
-
-**Unit — `packages/app/tests/services/failure-classification.test.ts` (24 pass, 0 fail).**
-Nine new assertions across two describes:
-
-- *pattern precision*: `contextWindow` / `getContextWindow` / `maxContextWindow` in a crash
-  dump → `undefined`; the prose forms (`maximum context length`, `context window exhausted`,
-  `context_length limit hit`) still → `resource-exhaustion`; incidental `quota` mentions
-  (`the quota directory was not found`, `/etc/quota.conf`) → `undefined`; `quota exceeded`
-  and `exceeded your current quota` still → `resource-exhaustion`.
-- *R9 permission failures*: the three real 2026-08-26 stderr strings (pi `EPERM ... .lock`,
-  grok `FS_PERMISSION_DENIED`, antigravity `bind: operation not permitted`) → `undefined`;
-  a permission denial co-occurring with `HTTP 429` → `undefined` (denial wins);
-  `permissionFailureEvidence` returns the offending line and `undefined` for ordinary stderr.
-
-**Regression — no pre-existing intent was weakened.**
-`bun test packages/app/tests/services/failure-classification.test.ts packages/app/tests/services/agent-service.test.ts`
-→ **198 pass, 0 fail, 615 expect() calls**. All 20 `0485 R1 classifier signature` /
-escalation-ladder tests pass unmodified; not one fixture or assertion was edited to
-accommodate the change. (The rejected provider-scoping design failed exactly these 20 —
-that failure is what drove the redesign recorded in `### Solution`.)
-
-`bun test packages/app/tests/workflow/actions/agent-run.test.ts` → **113 pass, 0 fail**
-(covers the reworded failure message and the R2 partial-work contract).
-
-**Real-data verification (R11 evidence).** Two runs of
-`bun run apps/cli/src/index.ts workflow run history-anatomy.yaml --vars '{"mode":"daily","date":"2026-08-26","agent":"pi-k3"}'`
-against the live ledger — source-local binary per the CLAUDE.md contract, never the global
-`spur`:
-
-| Measure | Before | After run 1 | After run 2 |
-| --- | --- | --- | --- |
-| `agent.invoke.start` rows | 156 (frozen since 2026-08-20T04:04) | 158 | 160 |
-| `agent.invoke.exit` rows | 152 (frozen since 2026-08-20T04:04) | 154 | 156 |
-| max `occurred_at` | `2026-08-20T04:04:45Z` | `2026-08-27T05:03:39Z` | `2026-08-27T05:09:05Z` |
-| `Stage escalation` lines | 1 (`signal=resource-exhaustion from=pi-k3 to tier=capable-2`) | 0 | 0 |
-
-**No dual-emit (AC7).** The four rows from run 1, by `executionId`:
-
-```
-05:03:37.538Z agent.invoke.start  op=version  agent=pi  executor=(none)
-05:03:37.693Z agent.invoke.exit   op=version  agent=pi  executor=(none)
-05:03:37.708Z agent.invoke.start  op=prompt   agent=pi  executor=pi-k3  exec_id=a60213b9…
-05:03:39.971Z agent.invoke.exit   op=prompt   agent=pi  executor=pi-k3  exec_id=a60213b9…
-```
-
-Exactly one `prompt` start/exit pair per dispatch, sharing one `executionId` and carrying
-the routing block; the extra pair is the detector's CLI `version` probe (no routing block),
-not a duplicate. The 0365 R9 / 0370 R4 dual-emit concern does not materialize.
-
-**R9 message, observed verbatim in run output:**
-
-```
-agent.run 'resolve-scope' (pi-k3) exited with code 3: the executor was denied an OS
-permission — Warning: Invalid settings file /Users/robin/.pi/agent/settings.json: EPERM:
-operation not permitted, mkdir '/Users/robin/.pi/agent/settings.json.lock'. This is an
-environment constraint, not a model or quota failure; grant the executor its state
-directory and any local socket bind it needs, then retry
-```
-
-**Gates.** `bunx biome check packages/app/src apps/cli/src packages/app/tests` → 217 files,
-clean. `tsc --noEmit` → 0 for both `packages/app` and `apps/cli`.
-
-**Not verified here (open):** AC8/AC9 — a non-empty `pairings` array and a live run-cost
-section still need a workflow run whose dispatch *succeeds*, which is blocked by the
-sandbox constraint in `### References` until that patch is applied. The rows now exist; the
-fold has not yet been exercised against a successful dispatch.
-
 ---
 
-**Slice 2 (2026-08-26):**
+**Verify-run addendum (2026-08-27, `/sp:dev-verify 0687 --fix all`):** the status line above is
+superseded. R5 closed via mechanism (b) — `plugins/sp/commands/dev-find-issue.md:28` documents the deliberate absence
+of a host-session inline driver. R11 closed: run e1060200 produced one routed start/exit pair per
+dispatch (no dual-emit) and a bounded analyze returned `pairings: 2` with non-null executor/role.
+R6 sweep closed two residual live references (`plugins/sp/skills/spur-cli/references/agent.md:51`,
+`plugins/sp/skills/spur-dev/references/execution-workflow.md:150`) plus next-router wording and a stale contract-test name. ADR-087
+gained the explicit ADR-046 retirement clause. Verdict PARTIAL: AC3/AC4/AC9 blocked by the
+antigravity-cli print-mode `write_file` auto-denial (executor shim gap, not this diff) — filed as
+task 0689. Operator-approved machine-config fix applied: agy-opus model pin
+`claude-opus-4.6-thinking` → `claude-opus-4-6-thinking` (operator machine config `~/.config/spur/config.yaml` line 163, backup `~/.config/spur/config.yaml.bak-0687`).
+### Testing
+**Pipeline verify results**
 
-- Targeted: `apps/cli/tests/commands/agent.test.ts`, `packages/app/tests/services/agent-service.test.ts`, `packages/app/tests/workflow/actions/agent-run.test.ts` — pinned rejection tests flipped to substitution/warning contract; **336 pass / 0 fail**.
-- Full suite gate: `bun run test` → **6556 pass / 0 fail** across 351 files (96.6s), after fixing two mechanical-parity pins my doc purge broke: `flag-contract-parity.test.ts` (40 pass) and `inline-execution-contract.test.ts` (13 pass). Root cause was mine: reworded value-table cell dropped its surface token from C3a extraction, and a stale rejection paragraph survived under the new blockquote — both fixed at source.
-- `bun run lint` green (biome + tsc app/web/server).
+- Verdict: PARTIAL (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/agent-service.ts:1319` — `stringFlag(flags, 'agent', 'inline')`; omission and explicit inline produce the same `raw` and the same code path (`:1325-1337`). Re-read this run. |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md:40-47` — explicit inline resolves identically, 0508 eligibility generalized to all inline resolution; `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:72-77` — "Native-subagent dispatch (R2 eligibility)": the resolved selector is inline, omitted or explicit, 0687 R2 generalized from omit-only. Re-read this run. |
+| R3 | MET | `packages/app/src/services/agent-service.ts:1325-1337` — inline on dispatch surface resolves via `resolveAgentAuto()` + one warning; `apps/cli/src/commands/agent.ts:221` — validator returns null; `AGENT_INLINE_HEADLESS_MESSAGE` and all four call sites deleted (git diff `658dfa0db`). Real-run warning verbatim: `--agent inline requested on a headless surface (no host session); resolved agy-opus via role/capable-1 — substituted tier resolution` (runs e1060200, 4f55c237, 2026-08-27). |
+| R4 | MET | `resolveAgentAuto`/`resolvePinned` untouched by the diff; escalation ladder and classifier tests pass unmodified — 357 targeted tests (failure-classification, agent-service, agent-run, cli agent) this run, 0 fail. |
+| R5 | MET | Mechanism (b) chosen and stated plainly: `plugins/sp/commands/dev-find-issue.md:28` — "omit and explicit `--agent inline` resolve identically — tier resolution with one warning naming the substituted executor; there is deliberately **no** host-session inline driver for `history-anatomy.yaml` (mechanism (b))". R5's own conditional permits (b) with plain documentation. |
+| R6 | MET | Sweeps this run: `rg -n "requires a host session\|zero-dispatch\|hard host-session guarantee" docs plugins` — live hits only `docs/design/agent-inline-host-session.md:21` (behind a SUPERSEDED banner added in `658dfa0db`), historical task records (0565/0566/0676/0687), and ADR-087 retrospective text. Two additional stale live references found and fixed this run: `plugins/sp/skills/spur-cli/references/agent.md:51`, `plugins/sp/skills/spur-dev/references/execution-workflow.md:150`, plus `plugins/sp/skills/next-router/SKILL.md:50` wording and stale test name/comment in `plugins/sp/tests/inline-execution-contract.test.ts:58,68-70`. `apps/cli/spur.js` and `apps/cli/plugins/` hits are gitignored build artifacts (`.gitignore:84,127`), refreshed by `build:bundle`. |
+| R7 | MET | `docs/00_ADR.md:1430` ADR-087 (dated 2026-08-26, task 0687) collapses the G5 contract; "Retired by this ADR" clause (`:1459-1463`, added this run) names ADR-046's workflow-specific rejection and the G5 amendment explicitly as dead ends. Delivered as a new ADR instead of an ADR-047 amendment — documented deviation (Solution slice 2). |
+| R9 | MET | `packages/app/src/services/failure-classification.ts:89-119` — `PERMISSION_PATTERNS` + `permissionFailureEvidence`; `:133` — short-circuit before rule matching; `packages/app/src/workflow/actions/agent-run.ts:403,409-411` — verbatim environment-constraint message. Tests: three real 2026-08-26 stderr strings → `undefined`; denial co-occurring with HTTP 429 → `undefined` (24 classifier tests pass this run). |
+| R10 | MET | `apps/cli/src/commands/workflow.ts:227-239` — `context.agentService({ events: bus })` threaded, mirroring `apps/cli/src/commands/agent.ts:409-425`; false single-series comment replaced with the accurate one. Ledger this run: `agent.invoke.start` 172 / `agent.invoke.exit` 168 (frozen at 156/152 since 2026-08-20 before the fix). |
+| R11 | MET | Run e1060200 (this verify): exactly one `agent.invoke.start` + one `agent.invoke.exit` for the dispatch, both carrying the routing block (executor=agy-opus, role=reviewer, tier=capable-1, source=role) — no dual-emit. Bounded `history analyze --since 2026-08-27T00:00:00-07:00 --until ...-07:00 --json` this run: `pairings: 2`, entries carry non-null `executor` and `role` (pre-fix bounded windows returned `pairings: 0`). |
+| R12 | MET | `plugins/sp/skills/dogfood-testing/SKILL.md:612-622` — engine-driven sandbox note naming both affordances (`sandbox.filesystem.allowWrite` for executor home dirs; `sandbox.network.allowLocalBinding`) and the `agent doctor` usable≠runnable caveat. Operator applied the sandbox patch; probes pass this run (`touch ~/.grok/.probe` ok; `socket.bind(('127.0.0.1',0))` ok). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — omission and inline indistinguishable | MET | test | `packages/app/src/services/agent-service.ts:1319` — both produce `raw === 'inline'`, same branch; agent-service suite (part of 357 targeted tests, 0 fail, this run). |
+| AC2 — rejection string gone from repo | MET | command | `rg -n "requires a host session\|AGENT_INLINE_HEADLESS_MESSAGE" apps packages plugins docs` this run: no live code path, command doc, or skill reference; residuals are gitignored build artifacts (`apps/cli/spur.js`, `apps/cli/plugins/`), historical task records, the bannered superseded design doc, and ADR retrospective text. |
+| AC3 — headless inline resolves with warning | PARTIAL | command | Run e1060200 and run 4f55c237 (this verify): warning verbatim present, no selector refusal, dispatch attempted through normal states. Literal "does not fail at resolve-scope" unmet: run 1 failed on the stale agy-opus model pin (fixed this run, operator-approved); run 2's dispatch exited 0 but agy auto-denied `write_file` in print mode so `expectFile` was absent — executor-capability gap, filed as task 0689 with repro. |
+| AC4 — operator's invocation produces a report | PARTIAL | command | Blocked by 0689: inline tier-resolves to agy-opus (cheapest capable-1), which cannot satisfy `expectFile` stages until the shim gains a permission affordance. Publish-path retry pinned to pi-k3 died mid-dispatch (pi-k3 Kimi 5-hour quota; codex-sol ChatGPT usage limit until Sep 1 — escalation ladder classified both correctly as resource-exhaustion). No `docs/report/2026-08-27-history-anatomy.md` yet. |
+| AC5 — cross-provider quota patterns no longer fire | MET | test | `packages/app/tests/services/failure-classification.test.ts` (this run): `contextWindow`/`getContextWindow`/`maxContextWindow` in a crash dump → `undefined`; incidental `quota` mentions → `undefined`; prose forms still → `resource-exhaustion`. Observable outcome of the AC satisfied via pattern precision (R8 supersession documented in-task). |
+| AC6 — permission failures named, not escalated | MET | test | Same file: pi `EPERM ... .lock`, grok `FS_PERMISSION_DENIED`, antigravity `bind: operation not permitted` → `undefined`, no escalation; `permissionFailureEvidence` returns the offending line verbatim. Real-run message quoted in task Testing (run 2, 2026-08-27). |
+| AC7 — workflow dispatches land in ledger | MET | command | sqlite3 query this run on run e1060200: one `agent.invoke.start` + one `agent.invoke.exit`, routing block with `executor`/`role`/`tier`/`source`; no dual-emit (version probes carry no correlation block). |
+| AC8 — pairing analytics alive | MET | command | `bun run apps/cli/src/index.ts history analyze --since 2026-08-27T00:00:00-07:00 --until 2026-08-27T23:59:59-07:00 --json` this run → `pairings: 2` (agy-opus reviewer, pi-k3 reviewer), non-null executor+role. |
+| AC9 — run-cost dimension not structurally dead | PARTIAL | command | Pairing fold now populated (AC8), but no 2026-08-27 report published yet (AC4 blocker), so the Performance section render against live pairings is unexercised. |
+| AC10 — docs and ADR in same commit; spur-check green | MET | command | `658dfa0db` contains ADR-087 + code + command/skill/reference surfaces. This run: `bun run lint` clean (biome + tsc all workspaces); `bun run test` 6556 pass / 0 fail / 351 files; `validate-flag-contracts.ts --check` — all 71 contract surfaces agree. |
+| AC11 [docs-only] — sandbox requirement discoverable | MET | static-ref | `plugins/sp/skills/dogfood-testing/SKILL.md:612-622` names both affordances and the settings block; doctor caveat present. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PARTIAL)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | R5 (a)→(b): CHANGED, permitted by R5's own conditional and documented in `dev-find-issue.md:28`. R7 as new ADR-087 instead of ADR-047 amendment: CHANGED, documented in Solution slice 2. R8 superseded: documented in-task. R1 value-table row count (4 kept, semantics identical): CHANGED, cosmetic. No silent deviations; no scope-creep hunks. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 
 **The run that produced this task**

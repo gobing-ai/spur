@@ -55,7 +55,7 @@ const HEADLESS_ONLY_WORKFLOW_COMMANDS = ['dev-plan'] as const;
 const HEADLESS_NO_INLINE_ADVERTISED = ['dev-find-issue', 'dev-idea'] as const;
 
 describe('task 0406 / H82 — unified --agent execution-surface contract', () => {
-    test('the unified --agent selector governs the surface; omit is the default, explicit inline is the zero-dispatch carve-out', () => {
+    test('the unified --agent selector governs the surface; inline is the default and resolves identically to omit', () => {
         // Extracted claims (R2/R3) — not prose pins. The value→behavior table and the
         // one-rule blockquote are compared mechanically by the cross-surface gate
         // (flag-contract-parity.test.ts); here we assert the extracted claim directly.
@@ -65,9 +65,10 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
             throw new Error('cross-cutting.md inline-default value table must parse');
         }
         expect(table.get('inline')?.surfaces.has('inline')).toBe(true);
-        // G5 carve-out: explicit inline is NOT the default and never dispatches — omit is its own
-        // row with 0508 eligibility; inline is the zero-dispatch host-session guarantee.
-        expect(table.get('inline')?.defaultWhenOmitted).toBe(false);
+        // 0687 R1: inline IS the default and resolves identically to omit; the table keeps
+        // both rows, with the (omitted) row carrying the default marker and 0508 eligibility
+        // now generalized to all inline resolution (0687 R2).
+        expect(table.get('inline')?.defaultWhenOmitted).toBe(false); // (omitted) is the carrier row; inline is documented identical (0687 R1)
         expect(table.get('inline')?.surfaces.has('subprocess')).toBe(false);
         expect(table.get('auto')?.surfaces.has('subprocess')).toBe(true);
         expect(table.get('<name>')?.surfaces.has('subprocess')).toBe(true);

@@ -147,7 +147,7 @@ On the subprocess path, when `--agent <value>` is set (passed through from the t
 `--vars '{"wbs":"<wbs>","agent":"<value>","implementAgent":"<value>"}'`. The pipeline YAML reads
 `${vars.agent}` for review/verify/test-fix and `${vars.implementAgent}` for implement — setting
 both keys ensures the pinned executor reaches every hop. The full value-semantics contract (one
-rule, value table, objective triggers, and headless `inline` rejection (stable special error) per the ADR-047 G5 amendment)
+rule, value table, objective triggers, and headless `inline` substitution (tier resolution + one warning) per ADR-087)
 lives in [cross-cutting.md](cross-cutting.md#inline-default-execution-surface) — the SSOT.
 This file documents only the **workflow-pipeline mechanics**: how the selector reaches `agent.run`
 steps. Precedence chain: `--agent` / explicit `--vars` → `agent.default` → YAML literal (see SSOT

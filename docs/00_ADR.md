@@ -1456,5 +1456,11 @@ from the selector so `inline` has exactly one behavior everywhere: in-session wh
 exists, tier-substituted when it does not. Pinned verbatim tests were updated in the same change;
 the exit-2 envelope shape remains untouched for genuine resolution failures.
 
+**Retired by this ADR.** Both rejection contracts are dead ends a future reader must not
+resurrect: ADR-046's workflow-specific rejection of `--agent inline` (already superseded by
+ADR-047, restated here so no surviving reference implies it still binds) and the ADR-047 G5
+amendment's frozen `AGENT_INLINE_HEADLESS_MESSAGE` hard error (task 0565). The debugging-trap
+motive behind both is satisfied by the mandatory substitution warning, not by refusal.
+
 **Detail:** `docs/04_DESIGN.md` §2.1/§3.2 (selector table, agent.run flow);
 `docs/design/agent-inline-host-session.md` (G5 history, superseded); task 0687.

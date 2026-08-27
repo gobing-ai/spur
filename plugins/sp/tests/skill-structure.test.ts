@@ -774,7 +774,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // references; it is not a permanent exemption.
         const BODY_BUDGET = 20_000;
         const BASELINE: Record<string, number> = {
-            'dogfood-testing': 37_452,
+            // 0687 R12: +696B engine-driven-sandbox note (allowWrite + allowLocalBinding
+            // affordances, doctor caveat). Not permanent — split into references.
+            'dogfood-testing': 38_148,
             'code-verification': 30_488,
             wayfinder: 26_264,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
