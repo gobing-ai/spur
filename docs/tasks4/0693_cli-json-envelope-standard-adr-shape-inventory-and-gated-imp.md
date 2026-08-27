@@ -9,7 +9,7 @@ feature_id: F95
 priority: P2
 ---
 
-## 0705. CLI JSON envelope standard: ADR, shape inventory, and gated implementation in one task
+## 0693. CLI JSON envelope standard: ADR, shape inventory, and gated implementation in one task
 
 ### Background
 

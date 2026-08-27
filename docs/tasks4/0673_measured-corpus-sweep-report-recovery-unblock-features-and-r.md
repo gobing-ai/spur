@@ -25,6 +25,7 @@ Constitution T10 applies: baselined `scenario-unverified` entries that stop repr
 Rubric: E2 D1 L1 C1 R1 = 6 → decompose (force: parent R=high).
 
 ### Requirements
+
 - [x] R1. The fallback is run across all done tasks lacking a verdict artifact, and the change records how many became verified and how many remain in the unrecoverable-evidence state.
 - [x] R2. Both counts are reproducible: re-running the sweep on an unchanged tree yields the same numbers.
 - [x] R3. Features previously blocked only by `L4.scenario-unverified` whose covering tasks carry parseable tracked evidence no longer report those findings, and their remaining findings are unrelated to evidence durability.
@@ -32,6 +33,7 @@ Rubric: E2 D1 L1 C1 R1 = 6 → decompose (force: parent R=high).
 - [x] R5. The sweep's two-sidedness is preserved — introducing a new unlisted finding still fails, and repairing a defect a baseline entry names still fails until that entry is removed.
 - [x] R6. The recovery count is reported as a measured outcome. Parser tolerance is not adjusted to improve it; if tolerance changes, the reason is a correctness defect and it is stated as such.
 - [x] R7. The final diff introduces no database migration, no new artifact directory, and no new spur CLI noun, verb or flag, and leaves what `spur task record` writes unchanged.
+
 ### Acceptance Criteria
 
 ```gherkin
@@ -135,6 +137,7 @@ tune upward is real, and yielding to it would invert the feature.
   unfalsifiable; "recovered 128 of 313, measured 2026-08-25" can be re-run.
 
 ### Plan
+
 - [x] 1. Re-measure the pre-change baseline on the current tree and record it with the command that
      produced it: done-task count, artifact-present/absent split, `verifying` feature count,
      baselined `L4.scenario-unverified` count. Do not reuse the Design's 2026-08-25 figures if the
@@ -158,39 +161,46 @@ tune upward is real, and yielding to it would invert the feature.
 - [x] 9. Final boundary sweep over the whole feature diff: no migration, no new artifact directory,
      no new CLI noun/verb/flag, `renderTesting` output unchanged. (R7)
 - [x] 10. Gate: `bun run lint`, `bun run spur-check`, then `bun run corpus-check` for the delta.
+
 ### Solution
+
 Change-map (task 0673 — measured corpus sweep + baseline reconciliation):
 
 - `runCorpusSweep` — `packages/app/src/services/corpus-sweep.ts:85-127` — sweeps every configured task folder, selects each `done` task without a verdict artifact, and classifies its tracked Testing evidence through the canonical fallback. Unreadable configured folders now fail loudly instead of yielding incomplete counts (R1/R2/R6).
 - `classifyFallback` — `packages/app/src/services/corpus-sweep.ts:68-82` — mirrors completion-gate consistency: stored PASS, recomputed PASS, and at least one MET row are all required for the verified bucket (R1/R6).
 - Sweep tests — `packages/app/tests/services/corpus-sweep.test.ts:141-169` — prove all three buckets, artifact exclusion, stable ordering, repeated-run equality, and fail-loud behavior for an unreadable configured corpus (R1/R2/R6).
-- `config/corpus-baseline.json:14959-15070` — adds the 14 `L4.evidence-not-recoverable` entries surfaced by F93 (R4).
+- `config/corpus-baseline.json` — adds the 14 `L4.evidence-not-recoverable` entries surfaced by F93 (R4).
 - `git diff -- config/corpus-baseline.json` — confirms the same delta removes only the 3 stale `L4.scenario-unverified` entries for E6, E9, and M3; the separate task-0670 baseline backlog remains out of scope (R3/R4/R5).
 
 No parser tolerance changed. The measurement remains an app-local executable module because that is the smallest surface that directly reuses `parseTesting`; no database migration, schema change, artifact directory, public CLI noun/verb/flag, or `spur task record` output changed (R6/R7).
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | `packages/app/src/services/corpus-sweep.ts:85-127` sweeps every configured folder and every done task without an artifact; fresh command: `bun run packages/app/src/services/corpus-sweep.ts --json` → 78 verified, 2 recovered-not-pass, 235 evidence-not-recoverable of 315 without artifacts. @spur-run `.spur/run/0673-verify-answer.txt` lines 1-38 records the post-fix verification. |
 | R2 | MET | `packages/app/tests/services/corpus-sweep.test.ts:156-159` asserts repeat equality; two fresh live runs returned byte-identical JSON with 632/317/315/78/2/235 counts. |
 | R3 | MET | Fresh source-local `feature check --json`: E6 and E9 have zero findings; M3 has only `L4.uncovered-feature-scenario`, unrelated to evidence durability. |
-| R4 | MET | `config/corpus-baseline.json:14959-15070` contains the 14 F93 unrecoverable-evidence entries; `git diff -- config/corpus-baseline.json` removes only stale E6/E9/M3 scenario entries. Fresh corpus sweep has no new/stale F93, E6, E9, M3, 0673, or `L4.evidence-not-recoverable` item; its residual 44 errors, 90 warnings, and 2 stale entries are the explicitly excluded task-0670/current-corpus backlog. |
+| R4 | MET | `config/corpus-baseline.json` contains the 14 F93 unrecoverable-evidence entries; `git diff -- config/corpus-baseline.json` removes only stale E6/E9/M3 scenario entries. Fresh corpus sweep has no new/stale F93, E6, E9, M3, 0673, or `L4.evidence-not-recoverable` item; its residual 44 errors, 90 warnings, and 2 stale entries are the explicitly excluded task-0670/current-corpus backlog. |
 | R5 | MET | `bun test packages/app/tests/services/corpus-check.test.ts --test-name-pattern 'returns new findings and stale baseline entries as failures'` → 1 pass, 0 fail; both unlisted and stale-baseline directions remain enforced. |
 | R6 | MET | Measured 2026-08-25: 78 verified, 2 recovered-not-pass, 235 unrecoverable of 315; two live runs byte-identical. `git diff -- packages/app/src/services/task-record.ts packages/app/src/services/verify-verdict.ts` is empty, so parser tolerance did not change. |
 | R7 | MET | Task-scope boundary diff contains only the app-local sweep, its test, baseline/task/feature records, and derived index status; no migration, schema, artifact directory, public CLI noun/verb/flag, or `task-record.ts` change. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
+| --------------------- | -------- | --------------- | ---------- |
 | Scenario: R7 — The retroactive sweep reports a measured result, not a promised one | MET | command | Two fresh `bun run packages/app/src/services/corpus-sweep.ts --json` runs were byte-identical: 78 verified / 2 recovered-not-pass / 235 unrecoverable of 315 without artifacts, measured 2026-08-25. |
 | Scenario: R8 — Features unblocked by the fallback stop reporting scenario-unverified | MET | command | Source-local feature checks: E6 PASS with zero findings; E9 PASS with zero findings; M3 PASS with only unrelated uncovered-scenario warning. |
 | Scenario: R9 — The corpus baseline delta is reconciled in the same change | MET | command | Scoped corpus result has zero F93/evidence-durability NEW or STALE entries; focused two-sidedness test passes both unexpected-finding and stale-entry assertions. |
 | Scenario: R10 — No new storage, schema, or public CLI surface | MET | command | Task-scope `git diff --name-only` plus empty diffs for `drizzle`, CLI commands, `.gitignore`, and `task-record.ts` confirm the boundary. |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
+
 **Coordinated review** (`/sp:dev-review 0673 --focus all`)
 
 | Priority | Dimension | Location | Finding |
@@ -201,11 +211,11 @@ No parser tolerance changed. The measurement remains an app-local executable mod
 **Functional traceability**
 
 | Req | Status | Evidence |
-|-----|--------|----------|
+| ----- | -------- | ---------- |
 | R1 | MET | `packages/app/src/services/corpus-sweep.ts:85-129` classifies every done task without an artifact; fresh live sweep measured 78 verified, 2 recovered-not-pass, and 235 evidence-not-recoverable of 315. |
 | R2 | MET | `packages/app/src/services/corpus-sweep.ts:98-127` uses deterministic traversal and sorted outcomes; `packages/app/tests/services/corpus-sweep.test.ts:156-159` asserts repeat equality, and two fresh live runs were byte-identical. |
 | R3 | MET | Fresh source-local feature checks returned E6 PASS with no findings, E9 PASS with no findings, and M3 PASS with only `L4.uncovered-feature-scenario`, unrelated to evidence durability. |
-| R4 | MET | `config/corpus-baseline.json:14959-15070` records the F93 delta; the remaining corpus backlog is explicitly owned by 0670 and contains no F93 evidence-durability residue. |
+| R4 | MET | `config/corpus-baseline.json` records the F93 delta; the remaining corpus backlog is explicitly owned by 0670 and contains no F93 evidence-durability residue. |
 | R5 | MET | `packages/app/tests/services/corpus-check.test.ts:22` exercises both unlisted-finding and stale-baseline failure directions. |
 | R6 | MET | Fresh reproducible outcome: 78 verified / 2 recovered-not-pass / 235 unrecoverable of 315, measured 2026-08-25; `packages/app/src/services/task-record.ts:185-188` remains the unchanged parser boundary. |
 | R7 | MET | `packages/app/src/services/corpus-sweep.ts:20-23,150-154` keeps the measurement app-local; the task diff adds no migration, artifact directory, public CLI surface, or `renderTesting` change. |
@@ -217,6 +227,7 @@ No parser tolerance changed. The measurement remains an app-local executable mod
 **Residual risk:** reproducibility is intentionally scoped to an unchanged tracked corpus and unchanged `.spur/run` state. Any mutation between runs legitimately changes the measurement.
 
 **Disposition:** approve. No blockers; Review is current after the fail-loud repair.
+
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->

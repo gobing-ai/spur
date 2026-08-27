@@ -14900,208 +14900,8 @@
             "since": "2026-08-27"
         },
         {
-            "kind": "feature",
-            "id": "F96",
-            "code": "L4.uncovered-feature-scenario",
-            "severity": "warning",
-            "reason": "Backlog feature (0688 friction filing): scenario coverage ratchets in as child tasks execute — same class F91 documented for 0688. See note § L4.uncovered-feature-scenario.",
-            "since": "2026-08-27"
-        },
-        {
             "kind": "task",
             "id": "0691",
-            "code": "L4.uncovered-task-scenario",
-            "severity": "warning",
-            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0692",
-            "code": "L4.uncovered-task-scenario",
-            "severity": "warning",
-            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0693",
-            "code": "L4.uncovered-task-scenario",
-            "severity": "warning",
-            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0694",
-            "code": "L4.uncovered-task-scenario",
-            "severity": "warning",
-            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0695",
-            "code": "L4.uncovered-task-scenario",
-            "severity": "warning",
-            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0696",
-            "code": "L4.uncovered-task-scenario",
-            "severity": "warning",
-            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0697",
-            "code": "L4.uncovered-task-scenario",
-            "severity": "warning",
-            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0698",
-            "code": "L4.uncovered-task-scenario",
-            "severity": "warning",
-            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0699",
-            "code": "L4.uncovered-task-scenario",
-            "severity": "warning",
-            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0700",
-            "code": "L4.uncovered-task-scenario",
-            "severity": "warning",
-            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0701",
-            "code": "L4.uncovered-task-scenario",
-            "severity": "warning",
-            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0702",
-            "code": "L4.uncovered-task-scenario",
-            "severity": "warning",
-            "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed backlog task. See note § L4.uncovered-task-scenario.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0691",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning",
-            "reason": "Cancelled tombstone (0688-friction consolidation, operator review 2026-08-27) carries its original unchecked boxes; boxes are left as filed rather than history-rewritten after cancellation. See note § L3.unchecked-checklist.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0692",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning",
-            "reason": "Cancelled tombstone (0688-friction consolidation, operator review 2026-08-27) carries its original unchecked boxes; boxes are left as filed rather than history-rewritten after cancellation. See note § L3.unchecked-checklist.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0693",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning",
-            "reason": "Cancelled tombstone (0688-friction consolidation, operator review 2026-08-27) carries its original unchecked boxes; boxes are left as filed rather than history-rewritten after cancellation. See note § L3.unchecked-checklist.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0694",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning",
-            "reason": "Cancelled tombstone (0688-friction consolidation, operator review 2026-08-27) carries its original unchecked boxes; boxes are left as filed rather than history-rewritten after cancellation. See note § L3.unchecked-checklist.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0695",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning",
-            "reason": "Cancelled tombstone (0688-friction consolidation, operator review 2026-08-27) carries its original unchecked boxes; boxes are left as filed rather than history-rewritten after cancellation. See note § L3.unchecked-checklist.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0696",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning",
-            "reason": "Cancelled tombstone (0688-friction consolidation, operator review 2026-08-27) carries its original unchecked boxes; boxes are left as filed rather than history-rewritten after cancellation. See note § L3.unchecked-checklist.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0697",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning",
-            "reason": "Cancelled tombstone (0688-friction consolidation, operator review 2026-08-27) carries its original unchecked boxes; boxes are left as filed rather than history-rewritten after cancellation. See note § L3.unchecked-checklist.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0698",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning",
-            "reason": "Cancelled tombstone (0688-friction consolidation, operator review 2026-08-27) carries its original unchecked boxes; boxes are left as filed rather than history-rewritten after cancellation. See note § L3.unchecked-checklist.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0699",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning",
-            "reason": "Cancelled tombstone (0688-friction consolidation, operator review 2026-08-27) carries its original unchecked boxes; boxes are left as filed rather than history-rewritten after cancellation. See note § L3.unchecked-checklist.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0700",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning",
-            "reason": "Cancelled tombstone (0688-friction consolidation, operator review 2026-08-27) carries its original unchecked boxes; boxes are left as filed rather than history-rewritten after cancellation. See note § L3.unchecked-checklist.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0701",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning",
-            "reason": "Cancelled tombstone (0688-friction consolidation, operator review 2026-08-27) carries its original unchecked boxes; boxes are left as filed rather than history-rewritten after cancellation. See note § L3.unchecked-checklist.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0702",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning",
-            "reason": "Cancelled tombstone (0688-friction consolidation, operator review 2026-08-27) carries its original unchecked boxes; boxes are left as filed rather than history-rewritten after cancellation. See note § L3.unchecked-checklist.",
-            "since": "2026-08-27"
-        },
-        {
-            "kind": "task",
-            "id": "0703",
             "code": "L4.gate-language",
             "severity": "warning",
             "reason": "Intentional GATE wording (design-first ADR, operator approval gate) mandated by the 2026-08-27 operator simplification direction. See note § L4.gate-language.",
@@ -15109,7 +14909,7 @@
         },
         {
             "kind": "task",
-            "id": "0704",
+            "id": "0692",
             "code": "L4.gate-language",
             "severity": "warning",
             "reason": "Intentional gate wording describing the close-out frictions being fixed, not a task gate. See note § L4.gate-language.",
@@ -15117,7 +14917,7 @@
         },
         {
             "kind": "task",
-            "id": "0705",
+            "id": "0693",
             "code": "L4.gate-language",
             "severity": "warning",
             "reason": "Intentional GATE wording required by the ADR-051 public-surface consent gate (mid-task HITL). See note § L4.gate-language.",
@@ -15125,7 +14925,7 @@
         },
         {
             "kind": "task",
-            "id": "0703",
+            "id": "0691",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed task. See note § L4.uncovered-task-scenario.",
@@ -15133,7 +14933,7 @@
         },
         {
             "kind": "task",
-            "id": "0704",
+            "id": "0692",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed task. See note § L4.uncovered-task-scenario.",
@@ -15141,7 +14941,7 @@
         },
         {
             "kind": "task",
-            "id": "0705",
+            "id": "0693",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed task. See note § L4.uncovered-task-scenario.",
@@ -15149,7 +14949,7 @@
         },
         {
             "kind": "task",
-            "id": "0706",
+            "id": "0694",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning",
             "reason": "Checkbox-form task AC vs feature Gherkin mapping (the F91-documented class) on a freshly filed task. See note § L4.uncovered-task-scenario.",
@@ -15157,18 +14957,18 @@
         },
         {
             "kind": "task",
-            "id": "0706",
+            "id": "0694",
             "code": "L4.prerequisite-not-done",
             "severity": "warning",
-            "reason": "Designed readiness state: 0706 deliberately waits on prerequisite 0703 (gate docs depend on the simplification ADR outcome). See note § L4.prerequisite-not-done.",
+            "reason": "Designed readiness state: 0694 deliberately waits on prerequisite 0691 (gate docs depend on the simplification ADR outcome). See note § L4.prerequisite-not-done.",
             "since": "2026-08-27"
         },
         {
-            "kind": "task",
-            "id": "0673",
-            "code": "L4.anchor-subject-mismatch",
+            "kind": "feature",
+            "id": "F96",
+            "code": "L4.orphan-scenarios",
             "severity": "warning",
-            "reason": "Self-referential anchor to config/corpus-baseline.json:14959-15070 (the F94-F96 residue block) drifted when the 2026-08-27 consolidation reconcile rewrote that region; citation rewrite belongs to the gate-simplification/anchor work (0703). See note § L4.anchor-subject-mismatch.",
+            "reason": "Cancelled 2026-08-27; AC kept as a withdrawal record (scenario names supersession by 0691) — no linked task is intentional.",
             "since": "2026-08-27"
         }
     ],

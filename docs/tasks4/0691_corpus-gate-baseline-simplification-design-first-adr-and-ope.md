@@ -9,7 +9,7 @@ feature_id: F94
 priority: P1
 ---
 
-## 0703. Corpus gate & baseline simplification: design-first ADR and operator-gated implementation
+## 0691. Corpus gate & baseline simplification: design-first ADR and operator-gated implementation
 
 ### Background
 

@@ -9,7 +9,7 @@ feature_id: F94
 priority: P2
 ---
 
-## 0704. Close-out integrity: anchor-drift detection, verified-box auto-flip, FSM denial guidance, resolveRepoRoot fix
+## 0692. Close-out integrity: anchor-drift detection, verified-box auto-flip, FSM denial guidance, resolveRepoRoot fix
 
 ### Background
 

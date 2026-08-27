@@ -7,10 +7,10 @@ created_at: 2026-08-27T20:16:10.953Z
 updated_at: "2026-08-27T20:19:54.774Z"
 feature_id: F94
 priority: P3
-dependencies: ["0703"]
+dependencies: ["0691"]
 ---
 
-## 0706. Docs consolidation — 0688 friction review: symbol anchors and sweep-once discipline
+## 0694. Docs consolidation — 0688 friction review: symbol anchors and sweep-once discipline
 
 ### Background
 
