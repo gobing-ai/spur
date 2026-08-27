@@ -233,13 +233,10 @@ touching callers.
 
 Model-bearing `/sp:dev-*` commands invoked from a live coding-agent session use the host-native
 skill/subagent surface by default; omitting `--agent` keeps the host-session default (eligible
-model stages may use a native subagent, task 0508) and explicit `--agent inline` is the
-zero-dispatch host-session carve-out. `--agent auto` /
+model stages may use a native subagent, task 0508) and omitting `--agent` and explicit `--agent inline` resolve identically (task 0687 — eligible
+model stages may use a native subagent with host-session fallback). `--agent auto` /
 `--agent <name>` force this verb. The four dispatch-surface triggers select the subprocess path
-when the selector is omitted/`auto`/a name; explicit `--agent inline` is the hard carve-out — a
-trigger requirement it cannot satisfy in-session rejects with the stable special error rather than
-dispatching: a different model/coding agent,
-headless or unattended execution, a durable auditable run record, or workspace/credential isolation.
+when the selector is omitted/`auto`/a name; explicit `--agent inline` rides the same unified inline resolution (subagent-first, host fallback)
 The applied trigger is named. Inline has no isolated workspace, per-stage subprocess action record,
 independent timeout/abort boundary, or tier-selected executor. Interactive `dev-run --mode full`
 and sequential `dev-runall` are the ADR-047 control-inversion case: the wrapper reads

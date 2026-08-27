@@ -25,7 +25,7 @@ evidence validation. This command never triggers an import.
 | `--since` `<RFC3339>`                  | Inclusive lower bound (ad-hoc; required).                                                          | omitted  |
 | `--until` `<RFC3339>`                  | Inclusive upper bound (ad-hoc; required).                                                          | omitted  |
 | `--recompute`                          | Force the full analyze/render/enrich/validate path; records disposition forced-recompute.          | off      |
-| `--agent` `<auto\|name>`               | Execution surface selector. This target is engine-driven (headless): omit resolves through the executor precedence chain to `agent.default`, then the workflow literal. Explicit `--agent inline` is rejected with the stable special error (exit 2). | omitted  |
+| `--agent` `<auto\|name>`               | Execution surface selector. This target is engine-driven (headless). Per task 0687, omit and explicit `--agent inline` resolve identically — tier resolution with one warning naming the substituted executor; there is deliberately **no** host-session inline driver for `history-anatomy.yaml` (mechanism (b)). A name pins the executor. | omitted  |
 | `--output` `<path>`                    | Explicit report output path (ad-hoc; default writes to the run directory).                         | run dir  |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).

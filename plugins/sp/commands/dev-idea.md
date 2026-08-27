@@ -20,7 +20,7 @@ contract below maps to that workflow's transitions.
 | `--approve-taste` | With `--auto`: set idea_approved + design_approved so idea-eval / design-approval do not pause. | off |
 | `--idea-approved` | Compatibility alias for idea_approved=true (subset of --approve-taste). | off |
 | `--design-approved` | Compatibility alias for design_approved=true (subset of --approve-taste). | off |
-| `--agent` `<auto\|name>` | Who runs the model-bearing ideation. The pipeline's `agent.run` stages are headless — they always dispatch a subprocess, so `--agent inline` is rejected there with the stable special error (exit 2). Use `omit` (resolves to `agent.default`), `auto` (tier-resolves an executor), or a name (pins that executor). | agent.default |
+| `--agent` `<auto\|name>` | Who runs the model-bearing ideation. The pipeline's `agent.run` stages are headless — they always dispatch a subprocess. Omission and explicit `--agent inline` resolve identically per task 0687: tier substitution plus one warning naming the substituted executor; `auto` (tier-resolves an executor); a name (pins that executor). | inline |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 

@@ -86,11 +86,10 @@ Parse the first positional argument as the mode; default `full`.
 - `--agent <inline|auto|name>` — names **who performs model-bearing work**, per the
   [inline-default execution-surface contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface).
   Omit: the current agent is the default owner (eligible model stages may use one native subagent
-  under the shared contract). `inline` keeps all model work in the host session as the hard
-  zero-dispatch guarantee. `auto` resolves the command's declared role; a named executor pins that executor.
+  under the shared contract). `inline` (also what omission resolves to, task 0687) keeps model work in the host session — native-subagent-first with host fallback where eligible `auto` resolves the command's declared role; a named executor pins that executor.
   An alternate executor gets one `spur agent run --agent <value>` dispatch with the selector removed
   from child args; that child owns model work. Current-agent selection stays inline.
-  Headless surfaces reject explicit `inline` with the shared stable error.
+  Headless surfaces substitute tier resolution for `inline` with a warning (task 0687), never refusing.
 - `--agent` describes the model owner only; it is independent of the deterministic git/GitHub spine
   and the workflow/direct route. Run the selected route in that resolved skill context. A separate
   workflow subprocess belongs to the caller's execution surface or an objective trigger (for example,

@@ -48,7 +48,7 @@ testee (a /sp:... command, Skill(...), or shell CLI invocation)
 The command forwards these via `$ARGUMENTS`:
 
 | Argument | Description | Default |
-|----------|-------------|---------|
+| ---------- | ------------- | --------- |
 | `testee` | What to exercise — a slash command, agent skill, or CLI invocation (positional, required). Quote it if it contains flags. | (required) |
 | `--agent <name\|auto>` | **Testee-scoped** agent: the agent the **testee** runs under, forwarded into the testee invocation. The driver (this skill) always runs in the current session. **Omit it** to forward nothing — the testee runs under its own default. See [§Testee-scoped agent](#testee-scoped-agent). | (omitted → forward nothing) |
 | `--max-retry <n>` | Fix attempts per failed step. The **default is `2`** (fix mode): apply `Edit`/`Write` fixes to the working tree, up to 2 attempts per step. This flag is **mandatory** for two independent mutation sources: (a) pipeline-driving testees and (b) testees carrying a mutating `--fix` mode (`--fix all` / `--fix blockers-first`). Pass `--max-retry 0` for **observe-only**, or `--max-retry N` to acknowledge fix-mode mutation risk. For a mutating-`--fix` testee, `--max-retry 0` bounds the **driver only** — the testee still mutates the tree. | `2` unless the testee is pipeline-driving or carries a mutating `--fix` mode |
@@ -239,6 +239,7 @@ Full section contract, frontmatter, Cost shape, and footer:
 **[report-template.md](references/report-template.md)**.
 
 **Sinks** (composable):
+
 - **Always-on report files** → live + `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md` (see Phase 1).
 - `--save` → no-op for delivery; still print/document the report path (back-compat).
 - `--task` → file findings as a review task (`spur task create --template review`), writing the
@@ -276,6 +277,7 @@ which always launches a fresh agent subprocess.
 - Producing a structured findings report (and optionally a fix task) from a real run.
 
 Do **not** use this skill for:
+
 - Requirements-traceability verdicts — use `sp:code-verification` (`/sp:dev-verify`).
 - SECU code review of a diff — use `sp:code-verification` (`/sp:dev-review`).
 - Running a task through the fix pipeline — use `sp:spur-dev` (`/sp:dev-run`).
@@ -606,3 +608,14 @@ Findings (P1+P2):
 A report missing any of the six headings, the on-disk live ledger, dual paths, terminal `status`,
 the Cost block, or this footer does not satisfy the dogfood contract on this platform, regardless
 of `Skill()` availability.
+
+## Engine-driven testees under a sandboxed session
+
+A subprocess executor dies at startup, not at model time, when `.claude/settings.json` denies
+it its state directory (`~/.pi`, `~/.grok`, `~/.gemini`, `~/.codex`, `~/.cache`) or local
+socket binding. Signals: `EPERM: operation not permitted`, `FS_PERMISSION_DENIED`,
+`bind: operation not permitted`. Two affordances must be granted and the session restarted:
+`sandbox.filesystem.allowWrite` covering the executor home dirs, and
+`sandbox.network.allowLocalBinding`. Caveat: `spur agent doctor` reports `usable: true` from
+configuration alone — it never probes a real dispatch, so `usable` means *configured*, not
+*proven runnable under this sandbox*.

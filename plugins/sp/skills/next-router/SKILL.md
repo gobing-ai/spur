@@ -42,12 +42,12 @@ silently (that is a HITL stop).
 ## Inputs
 
 | Input | Semantics |
-|-------|-----------|
+| ------- | ----------- |
 | `target` | Task WBS (digits), task `.md` path, or feature id (`^[A-Z][1-9]*$`). Required for dispatch; omit → stop **U1** (usage). |
 | `--dry-run` | Print the resolved plan (**P1**) and do not dispatch. |
 | `--once` | Strip `--next` from the shaped child argv so only the current step runs; no router re-entry. |
 | `--auto` | Forward into dispatched children that support it. **Never** breaks multi-candidate HITL ties. |
-| `--agent <inline\|auto\|name>` | Execution-surface selector forwarded into the dispatched child when that child documents `--agent`. Router defaults to omit semantics: Omit forwards nothing, and the dispatched child applies its own default (host session, 0508 eligibility). Explicit `--agent inline` is the zero-dispatch carve-out, forwarded as-is; escalation triggers reject `inline` (no override). |
+| `--agent <inline\|auto\|name>` | Execution-surface selector forwarded into the dispatched child when that child documents `--agent`. Router defaults to omit semantics: Omit forwards nothing, and the dispatched child applies its own default (`inline`, task 0687 — native-subagent-first with host fallback). Explicit `--agent inline` is forwarded as-is and resolves identically; escalation triggers reject `inline`. |
 | `--full` | When the primary route is `dev-run … --next`, substitute `dev-run <wbs> --mode full` (no `--next`). No effect on non-run routes → warning **W-FULL**. |
 
 ## Protocol (deterministic)
@@ -126,7 +126,7 @@ but redundant. See the glossary entry for the disambiguation in full.
 **[references/messages.md](references/messages.md)** (exact templates, prefixed `dev-next:`). The router fires them by id:
 
 | Id | Fires when | Kind |
-|----|-----------|------|
+| ---- | ----------- | ------ |
 | U1 | no target | stop — usage |
 | U2 | target unresolvable | stop |
 | U3 | no route (table miss / cancelled) | stop |
@@ -147,7 +147,7 @@ bypass lifecycle guards (`--no-lifecycle`) to force progress.
 ## Common Rationalizations
 
 | Rationalization | Reality |
-|---|---|
+| --- | --- |
 | "Two candidates are both fine — pick the higher-priority one." | Multi-candidate is a HITL stop (routing-table §4). A silent pick hides a real fork from the operator; print the decision-brief. |
 | "The task is todo, so run the full pipeline to be safe." | Full mode is not the v1 default (non-route). A3 dispatches the `--next` chain link; `--full` exists for the explicit override. |
 | "I can loop dev-next until the task is done." | Step budget is one dispatch per invocation. Self-looping makes token cost unbounded; the operator re-invokes after non-chain dispatches. |

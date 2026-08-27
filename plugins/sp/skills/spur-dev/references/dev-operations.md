@@ -74,7 +74,7 @@ each would be scope creep for one-liner procedures.
 | 6   | plan       | `dev-plan`          | `Skill()`         | `sp:spur-dev` (`plan`)                                                             | `"<description>" [--feature <id>] [--parent <feature-id>] [--agent <inline\|auto\|name>] [--skip-design] [--auto] [--approve-taste]`                                                                   |
 | 7   | docs       | _(no thin wrapper)_ | `Skill()`         | `sp:doc-evolve`                                                                    | `"<change description>"`                                                                                                                                                                               |
 | 8   | changelog  | `dev-changelog`     | `inline`          | git log + conventional-commit grouping                                             | `[--since <ref>] [--until <ref>] [--version <ver>]`                                                                                                                                                    |
-| 9   | gitmsg     | `dev-gitmsg`        | `inline`          | per-file diff summary → group → conventional commit                                | `[--commit] [--squash] [--scope <path>]`                                                                                                                                                               |
+| 9   | gitmsg     | `dev-gitmsg`        | `inline`          | bounded diff capture → concern grouping → conventional commit                      | `[--commit] [--squash] [--all] [--scope <path>]`                                                                                                                            |
 | 10  | fixall     | `dev-fixall`        | `inline`          | lint + test fix loop                                                               | `[<validation-command>] [--max-retry <n>] [--scope <path>] [--gate-log <path>] [--findings <anchors>]`                                                                                                 |
 | 11  | handover   | `dev-handover`      | `inline`          | structured doc generation                                                          | `"<blocker description>"`                                                                                                                                                                              |
 | 12  | brainstorm | `dev-brainstorm`    | `Skill()`         | `sp:brainstorm` (`dev-brainstorm`)                                                 | `<topic> [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--agent <inline\|auto\|name>] [--skip-discovery] [--wayfind] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]`          |
@@ -140,12 +140,12 @@ must not be changed without updating the backing skill.
 ### 4. run
 
 - **Purpose:** Run a task through the execution pipeline (full) or execute a single pipeline step (implement).
-- **Inputs:** `<wbs>` (required). `--mode <full|implement>` selects the execution mode. `implement` invokes `sp:code-implementation` inline by default. Interactive `full` with omitted `--agent` or explicit `--agent inline` reads `task-pipeline.yaml` and drives its actions/guards in the host session — host-controlled and non-subprocess; **omitted** `--agent` keeps 0508 eligibility (eligible `agent.run` stages dispatch once to a native subagent, host fallback), while explicit `--agent inline` is the zero-dispatch carve-out (every stage executes in the invoking session). `--agent auto`, a name, or headless invocation launches the workflow subprocess. `--agent <inline|auto|name>` selects the execution surface (see [SSOT](cross-cutting.md#inline-default-execution-surface)). `--auto` skips the HITL approve gate / confirmations and propagates down the `--next` chain. `--next` controls chaining only and never changes the mode; a pipeline implement stage must invoke `/sp:dev-run <wbs> --mode implement`. On implement success with `--next`, transition `todo → wip → testing` through the FSM (guards honored — no `--no-lifecycle`) + chain to `/sp:dev-verify <wbs> --auto --next`. On a guard failure, stop as review-pending. **Partial-deliverable rule:** if the task ships only part of its requirements (e.g. an R1/R2 split with the rest in a follow-up task), the `## Solution` section must state that explicitly and the verify verdict will record the scope. `--worktree [<name>]` runs the full pipeline inside an isolated git worktree (create or reuse; FF-merge on success, retain on failure) — the batch lifecycle in [execution-batch.md § Worktree isolation](execution-batch.md#worktree-isolation---worktree-name) applied to a batch of one; rejected with `--mode implement`. `--wrap` hands off to `/sp:dev-wrap <wbs>` after the main step; the `--agent` selector is preserved into that handoff when supplied (omission remains omission), and the wrap hop reports its own trigger-3 subprocess override per the wrap contract.
+- **Inputs:** `<wbs>` (required). `--mode <full|implement>` selects the execution mode. `implement` invokes `sp:code-implementation` inline by default. Interactive `full` resolves the selector uniformly (task 0687): omit ≡ explicit `--agent inline`; full mode reads `task-pipeline.yaml` and drives its actions/guards in the host session — host-controlled and non-subprocess, with 0508 eligibility applying to the resolved-inline selector (eligible `agent.run` stages dispatch once to a native subagent, host fallback)). `--agent auto`, a name, or headless invocation launches the workflow subprocess. `--agent <inline|auto|name>` selects the execution surface (see [SSOT](cross-cutting.md#inline-default-execution-surface)). `--auto` skips the HITL approve gate / confirmations and propagates down the `--next` chain. `--next` controls chaining only and never changes the mode; a pipeline implement stage must invoke `/sp:dev-run <wbs> --mode implement`. On implement success with `--next`, transition `todo → wip → testing` through the FSM (guards honored — no `--no-lifecycle`) + chain to `/sp:dev-verify <wbs> --auto --next`. On a guard failure, stop as review-pending. **Partial-deliverable rule:** if the task ships only part of its requirements (e.g. an R1/R2 split with the rest in a follow-up task), the `## Solution` section must state that explicitly and the verify verdict will record the scope. `--worktree [<name>]` runs the full pipeline inside an isolated git worktree (create or reuse; FF-merge on success, retain on failure) — the batch lifecycle in [execution-batch.md § Worktree isolation](execution-batch.md#worktree-isolation---worktree-name) applied to a batch of one; rejected with `--mode implement`. `--wrap` hands off to `/sp:dev-wrap <wbs>` after the main step; the `--agent` selector is preserved into that handoff when supplied (omission remains omission), and the wrap hop reports its own trigger-3 subprocess override per the wrap contract.
 - **Backing:** `sp:spur-dev` skill — `run` operation for the full pipeline (the spine drives it); `sp:code-implementation` competency skill for the implement step (the spine dispatches to it).
 - **Modes:**
   - **`full`** (default): Drive the full pipeline — precheck → implement → test → review → approve(HITL) → verify → record → done. Interactive omit/inline uses [inline-pipeline-driver.md](inline-pipeline-driver.md) (host-controlled; eligible stages may use a native subagent); explicit/headless executor selection invokes `spur workflow run task-pipeline.yaml --vars '{"wbs":"<wbs>"}'` (with `profile: auto` when `--auto`). Both monitor/surface HITL and preserve the YAML gates. `--next` never changes this mode.
   - **`implement`** (explicit `--mode implement` only): Execute only the implement step. Read the task's `## Requirements` / `## Design` / `## Plan`, write the code that satisfies them, author the `## Solution` change-map section (file:line + what/why per changed file) via `spur task update <wbs> --section Solution --from-file`. This is the implement step the pipeline calls — it is NOT the pipeline driver. With `--next`: on success, transition `todo → wip → testing` through the FSM (guards honored — no `--no-lifecycle`) + chain to `/sp:dev-verify <wbs> --auto --next`; on a guard failure, stop as review-pending. **Partial-deliverable rule:** if the task ships only part of its requirements (e.g. an R1/R2 split with the rest in a follow-up task), the `## Solution` and `## Review` sections MUST carry a `⚠️ PARTIAL` marker naming the deferred part and the follow-up WBS — see `plugins/sp/commands/dev-run.md` → "Section ownership".
-- **Delegation:** `Skill(skill="sp:spur-dev", args="run-inline $ARGUMENTS")` for interactive full omit/inline (explicit `inline` = zero-dispatch carve-out); `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")` for explicit/headless full mode; `Skill(skill="sp:code-implementation", args="$ARGUMENTS")` for implement mode.
+- **Delegation:** `Skill(skill="sp:spur-dev", args="run-inline $ARGUMENTS")` for interactive full omit/inline (resolved-inline semantics, task 0687); `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")` for explicit/headless full mode; `Skill(skill="sp:code-implementation", args="$ARGUMENTS")` for implement mode.
 
 ### 5. refine
 
@@ -252,7 +252,7 @@ must not be changed without updating the backing skill.
 ### 6. plan
 
 - **Purpose:** Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create (with **Design by default**).
-- **Inputs:** `"<description>"` (required). `--feature <id>` links to an existing feature. `--parent <feature-id>` nests under a parent. The planning pipeline's `agent.run` stages always dispatch a subprocess; `--agent <inline|auto|name>` selector accepted — explicit `inline` is rejected on this headless surface with the stable special error (see [SSOT](cross-cutting.md#inline-default-execution-surface)). **Design package flags (unified with `/sp:dev-idea`):**
+- **Inputs:** `"<description>"` (required). `--feature <id>` links to an existing feature. `--parent <feature-id>` nests under a parent. The planning pipeline's `agent.run` stages always dispatch a subprocess; `--agent <inline|auto|name>` selector accepted — `inline` substitutes tier resolution with a warning on this headless surface (task 0687) (see [SSOT](cross-cutting.md#inline-default-execution-surface)). **Design package flags (unified with `/sp:dev-idea`):**
   - **Default:** author task `design` on every batch item + feature satellite when the seam heuristic fires (**ties lean design**). There is **no** `--design` force flag.
   - `--skip-design` — skip feature satellite **and** omit task `design` fields (scaffold only; refine fills later). Sole design opt-out.
   - `--approve-taste` — with `--auto`, pre-clear design-approval taste pause when that gate is used (`design_approved=true`). Alias: `--design-approved`.
@@ -300,7 +300,7 @@ must not be changed without updating the backing skill.
 ### 14. wrap
 
 - **Purpose:** Wrap up a single completed task — capture learnings, record metrics, sync docs, and optionally advance the feature / clean up the branch.
-- **Inputs:** `<wbs>` (required, positional). `--agent <inline|auto|name>` names the wrap's model-bearing executor (default: `agent.default`); wrap is workflow-backed, so omitted `--agent` resolves to `agent.default` under objective trigger 3 (durable auditable run record required) while explicit `--agent inline` is rejected with the stable special error (headless workflow surface), `auto` tier-resolves an executor, and a name pins that executor into `vars.agent` (see [SSOT](cross-cutting.md#inline-default-execution-surface)). `--auto` skips objective confirmations (the branch-cleanup HITL gate still pauses — irreversible). `--merge` triggers branch cleanup (irreversible HITL gate).
+- **Inputs:** `<wbs>` (required, positional). `--agent <inline|auto|name>` names the wrap's model-bearing executor (default: `inline`, resolving identically when omitted; task 0687); wrap is workflow-backed (headless), so omit ≡ explicit `inline` (task 0687): tier substitution under objective trigger 3 (durable auditable run record required) plus one warning naming the substituted executor. `auto` tier-resolves an executor, and a name pins that executor into `vars.agent` (see [SSOT](cross-cutting.md#inline-default-execution-surface)). `--auto` skips objective confirmations (the branch-cleanup HITL gate still pauses — irreversible). `--merge` triggers branch cleanup (irreversible HITL gate).
 - **Backing:** `spur workflow run wrapup-pipeline.yaml` — direct workflow invocation (no backing skill; the pipeline IS the procedure).
 - **Behavior:** Resolves the executor (`agent.default` for omit/`inline`, tier-resolved for `auto`, unchanged for a name), emits a pre-dispatch notice naming the subprocess override — `execution surface: subprocess`, `reason: trigger 3 — durable auditable run record required`, `requested agent: <selector>`, `executor: <resolved>` — then builds `--vars '{"tasks":"[\"<wbs>\"]","agent":"<resolved>","profile":"interactive|auto","merge":"true|false"}'` and invokes the wrapup pipeline. The pipeline runs: task-resolve → doc-sync → learning-capture → metrics-record → (feature-transition) → (branch-cleanup) → done. Task statuses are NOT mutated. Branch cleanup is an irreversible HITL gate that always pauses, even under `--auto`.
 - **Vars string typing:** `tasks` is a JSON-encoded **string**, not a JSON array — `spur workflow run --vars` accepts only string values (`--vars values must be strings`); the pipeline's guards parse the string with `jq length`. `jq -nc` guarantees the shape:
@@ -316,9 +316,9 @@ must not be changed without updating the backing skill.
 ### 15. wrapall
 
 - **Purpose:** Wrap up a batch of completed tasks — capture learnings, record metrics, sync docs, advance a feature through legal lifecycle edges, and optionally clean up branches.
-- **Inputs:** `--since <iso-date>` filters done tasks by frontmatter `updated_at >= date` (v1 approximation). `--feature <id>` selects all tasks under a feature AND advances the feature through legal lifecycle edges (`backlog → active → verifying → done`, guards honored). `--status <s>` (default: `done`) filters by task status. `--agent <inline|auto|name>` names the wrap's model-bearing executor (default: `agent.default`); wrap is workflow-backed, so omitted `--agent` resolves to `agent.default` under objective trigger 3 (durable auditable run record required) while explicit `--agent inline` is rejected with the stable special error (headless workflow surface), `auto` tier-resolves an executor, and a name pins that executor into `vars.agent` (see [SSOT](cross-cutting.md#inline-default-execution-surface)). `--auto` skips objective confirmations. `--merge` triggers branch cleanup (irreversible HITL gate).
+- **Inputs:** `--since <iso-date>` filters done tasks by frontmatter `updated_at >= date` (v1 approximation). `--feature <id>` selects all tasks under a feature AND advances the feature through legal lifecycle edges (`backlog → active → verifying → done`, guards honored). `--status <s>` (default: `done`) filters by task status. `--agent <inline|auto|name>` names the wrap's model-bearing executor (default: `inline`, resolving identically when omitted; task 0687); wrap is workflow-backed (headless), so omit ≡ explicit `inline` (task 0687): tier substitution under objective trigger 3 (durable auditable run record required) plus one warning naming the substituted executor. `auto` tier-resolves an executor, and a name pins that executor into `vars.agent` (see [SSOT](cross-cutting.md#inline-default-execution-surface)). `--auto` skips objective confirmations. `--merge` triggers branch cleanup (irreversible HITL gate).
 - **Backing:** `spur workflow run wrapup-pipeline.yaml` — direct workflow invocation.
-- **Behavior:** Resolves the task list via `spur task list --json` (filtered by `--feature`, `--since`, `--status`), resolves the executor (`agent.default` for omitted `--agent`, tier-resolved for `auto`, unchanged for a name; explicit `--agent inline` is rejected with the stable special error), emits a pre-dispatch notice naming the subprocess override — `execution surface: subprocess`, `reason: trigger 3 — durable auditable run record required`, `requested agent: <selector>`, `executor: <resolved>` — then builds `--vars '{"tasks":"[...]","feature":"<id>","agent":"<resolved>","profile":"interactive|auto","merge":"true|false"}'` and invokes the wrapup pipeline. The pipeline runs the same states as `wrap` but with the full task list and optional feature transition. Task statuses are NOT mutated. Feature transitions go through `spur feature update` so lifecycle guards apply. Branch cleanup is an irreversible HITL gate.
+- **Behavior:** Resolves the task list via `spur task list --json` (filtered by `--feature`, `--since`, `--status`), resolves the executor (omission and explicit `--agent inline` tier-substitute identically with a warning per task 0687, `auto` tier-resolves, a name pins), emits a pre-dispatch notice naming the subprocess override — `execution surface: subprocess`, `reason: trigger 3 — durable auditable run record required`, `requested agent: <selector>`, `executor: <resolved>` — then builds `--vars '{"tasks":"[...]","feature":"<id>","agent":"<resolved>","profile":"interactive|auto","merge":"true|false"}'` and invokes the wrapup pipeline. The pipeline runs the same states as `wrap` but with the full task list and optional feature transition. Task statuses are NOT mutated. Feature transitions go through `spur feature update` so lifecycle guards apply. Branch cleanup is an irreversible HITL gate.
 - **Vars string typing:** `tasks` is a JSON-encoded **string**, not a JSON array — `--vars` values must be strings (the CLI rejects raw arrays); `jq -nc` passes the array text through as a string value:
 
   ```bash
@@ -378,14 +378,43 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
 
 ### 9. gitmsg
 
-- **Purpose:** Generate conventional commit message(s) from staged changes via per-file summarization → concern grouping → one message per group.
-- **Inputs:** `--scope <path>` (default: all staged changes) — limits diff analysis to a path. `--commit` — execute the commit (off by default; refuses on a multi-group staging unless `--squash`). `--squash` — collapse all concerns into one combined message and let `--commit` proceed on a mixed staging.
-- **Backing:** `inline` — per-file diff summary + concern grouping + conventional commit formatting.
+- **Purpose:** Generate conventional commit message(s) for the current change set — one bounded diff capture → concern grouping → one message per concern; optionally commit.
+- **Inputs:** `--scope <path>` (default: the whole change set) — path filter; an explicit `--scope` always wins over change-set auto-discovery. `--all` (default: off) — widen the change set past the index to every change in the tree: unstaged **and untracked** files. Omitted, the change set is the index only, which keeps pre-commit semantics stable. `--commit` (default: off) — commit the change set, one commit per concern. `--squash` (default: off) — collapse every concern into one message and one commit; implies `--commit`.
+- **Backing:** `inline` — bounded diff capture + concern grouping + conventional commit formatting.
 - **Behavior:**
-  1. Run `git diff --cached --stat` (add `-- <path>` when `--scope` is given) for the outline. If the diff is empty, report "no staged changes" and stop.
-  2. Capture the full diff to a temp file (`TEMP_FILE="/tmp/gitdiff_$(date +%s)"; git diff --cached > "$TEMP_FILE" 2>&1`) so analysis reads from disk, not a giant inline blob.
-  3. Read `$TEMP_FILE` and write **one sentence per changed file** — what changed and why, not a line count.
-  4. **Group the per-file sentences by concern.** For each group derive its commit type, scope, and message:
+
+  1. **Gather once — a single shell round trip.** No temp file, no second read, no follow-up `git` call for context:
+
+     ```bash
+     # default:  RANGE=--cached        (the index)
+     # --all:    RANGE=HEAD            (plus untracked, listed below)
+     git rev-parse --abbrev-ref HEAD --git-dir --git-common-dir
+     git diff $RANGE --stat $PATHSPEC
+     git diff $RANGE --name-status $PATHSPEC
+     git diff $RANGE -U0 $PATHSPEC ':(exclude)*.lock' ':(exclude)*lock.json' ':(exclude)*.lockb' | head -c 60000
+     # --all only:
+     git ls-files --others --exclude-standard $PATHSPEC
+     ```
+
+     `$PATHSPEC` is `-- <path>` when `--scope` is given, empty otherwise.
+
+     **Empty index, no `--all`** — the dead-end this command used to hand back. Reading is
+     not a mutation, so the two cases split there:
+     - **No committing flag** → re-gather once with `--all` semantics and say so
+       (`index empty — read the whole tree instead`). A message-only run has nothing to lose by
+       looking wider, and the operator gets an answer instead of an errand.
+     - **`--commit` / `--squash`** → stop. Print the worktree counts (`N tracked, M untracked`) and
+       the exact re-run line (`/sp:dev-gitmsg <the same flags> --all`). Committing
+       untracked files is never inferred from an empty index — that is the operator's call, and it
+       is now one paste away rather than a guess.
+
+     Empty under `--all`, or still empty after the widen → report `no changes in <scope>` and stop.
+
+  2. **Stay inside the budget.** `-U0` (no context lines) plus the lockfile exclusions plus the 60 KB cap is the token contract — never re-run the diff with context to "see more", never paste diff hunks into the output. If the cap truncated the diff, say so and derive the message from `--stat` + `--name-status` alone; a large mechanical change rarely needs hunk detail to be typed and scoped correctly.
+
+  3. **Summarize only what shapes the message.** One sentence — what changed and _why_, not a line count — for each file whose change is not obvious from its path and status. Skip the obvious ones (generated files, lockfiles, pure renames, `docs/**` under a `docs` group). Past ~12 interesting files, summarize per directory instead of per file.
+
+  4. **Group by concern**, and for each group derive type, scope, message:
      - Type from the dominant change — `feat` (new functionality) · `fix` (bug fix) · `refactor` (restructuring, no behavior change) · `docs` (documentation only) · `chore` (build/config/tooling) · `perf` · `test` · `style`.
      - Scope from the affected module/package (`cli`, `domain`, `server`, `web`, `app`, …); `--scope` overrides.
      - Message:
@@ -393,16 +422,29 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
        ```
        <type>(<scope>): <summary>
 
-       <body — optional bullets from the group's per-file sentences>
+       <body — why, only when the why is not obvious>
        ```
 
-       Summary: imperative mood, ≤72 chars, lowercase first word, no period. Body: only when the change is non-obvious.
+       Summary: imperative mood, ≤72 chars, lowercase first word, no period. Body explains intent and consequence; it never restates the diff. Behavior changes and pure formatting/refactor churn are **different concerns** — never one group.
 
-  5. **Resolve groups:** one group → emit its message; multiple groups (default) → emit one message per group **plus a split recommendation** (stage per concern, re-run); `--squash` → collapse to one combined message (dominant type/scope, per-file bullets).
-  6. Print the resolved message + a copy-paste `git commit -m` line. With `--commit`: execute it for a single group or under `--squash`; on a multi-group staging without `--squash`, **do not commit** — print the split guidance instead (one `git commit` can't honor per-group messages).
-  7. `rm "$TEMP_FILE"` once done — no `/tmp` diff residue (the F5 cleanup discipline).
+  5. **Resolve the message shape without a round trip to the operator.** `--squash` → one combined
+     message (dominant type/scope, one body bullet per group). Otherwise one message per group, in
+     dependency order (refactor before the feature that uses it); a single group is that same rule
+     with one group.
 
-- **Invariants:** Without `--commit`, never runs `git commit` — message only, the operator commits. With `--commit`, only commits when the staging is a single concern OR `--squash` was given — a mixed staging without `--squash` is reported, never silently squashed. Never leave the temp diff file behind.
+  6. **Report, then commit if asked.** Print the resolved message(s), a copy-paste `git commit` line per message, and a one-line context header: current branch, and `linked worktree` when `--git-dir` differs from `--git-common-dir` and `git rev-parse --show-superproject-working-tree` is empty (a non-empty result means submodule, not worktree). With neither `--commit` nor `--squash`, stop here — the operator commits.
+
+  7. **Committing (`--commit` / `--squash`).** The two flags name outcomes, not dimensions: `--commit`
+     commits **by concern**, `--squash` commits **everything as one**. `--squash` implies `--commit`,
+     so `--commit --squash` is just `--squash`, never an error.
+
+     First scan the captured diff's added lines for credentials (`password`, `secret`, `api[_-]?key`, `token`, `BEGIN [A-Z ]*PRIVATE KEY`, long base64-looking literals). On a hit: print the offending `file:line`, commit nothing, stop. Otherwise:
+     - `--all` → `git add -A $PATHSPEC` first (this is what stages the untracked files).
+     - `--squash`, or `--commit` on a single group → `git commit -m "$MESSAGE"`.
+     - `--commit` on multiple groups → **commit each group in sequence**: record the full staged file list once, then per group `git reset -q -- <all staged paths>` → `git add -- <that group's paths>` → `git commit -m "<that group's message>"`. This is the split; it needs no re-run and no re-staging by the operator.
+     - **Partial-staging guard:** if any path appears in _both_ `git diff --cached --name-only` and `git diff --name-only` (a `git add -p` staging), the sequence above would silently widen those commits to the whole file. Do not split — report the affected paths and commit nothing unless `--squash` was given.
+
+- **Invariants:** With neither `--commit` nor `--squash`, never runs `git commit` — message only. Neither flag commits across a credential hit, and `--commit` never splits across a partial staging. Without `--all` the change set is the index, so plain `/sp:dev-gitmsg` keeps pre-commit semantics; only `--all` reaches unstaged and untracked files, and only a committing run (`--commit` / `--squash`) stages them. The empty-index widen is read-only and always announced — a committing run never widens its own scope. An explicit `--scope <path>` always bounds the change set, with or without `--all`. One diff capture per run, bounded and context-free — never a second, wider read.
 
 ### 10. fixall
 

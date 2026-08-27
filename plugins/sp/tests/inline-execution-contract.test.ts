@@ -136,14 +136,17 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         }
     });
 
-    test('G5 — headless workflow commands (dev-plan) reject explicit inline and name agent.default as the omit redirect', () => {
+    test('0687 — headless workflow commands (dev-plan) resolve omission and explicit inline identically via tier substitution', () => {
         for (const command of HEADLESS_ONLY_WORKFLOW_COMMANDS) {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
             expect(raw, `${command}: must be mode-aware to carry --agent`).toContain(
                 'cross-cutting.md#inline-default-execution-surface',
             );
             expect(raw, `${command}: must document the <inline|auto|name> selector`).toContain('<inline|auto|name>');
-            expect(raw, `${command}: must name agent.default as the redirect`).toContain('agent.default');
+            expect(raw, `${command}: must state the task 0687 unified resolution`).toContain('task 0687');
+            expect(raw, `${command}: must not advertise the retired headless rejection`).not.toContain(
+                'rejected with the stable special error',
+            );
         }
     });
 
@@ -179,13 +182,13 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
             expect(raw, `${command}: must apply the inline-default contract`).toContain(
                 'cross-cutting.md#inline-default-execution-surface',
             );
-            expect(raw, `${command}: must name agent.default as the headless resolution`).toContain('agent.default');
+            expect(raw, `${command}: must state unified inline resolution (task 0687)`).toContain('task 0687');
 
             // Wrap remains workflow-backed — no inline driver, no Skill() substitution.
             expect(raw, `${command}: must stay workflow-backed`).toContain('spur workflow run wrapup-pipeline.yaml');
             expect(raw, `${command}: must not promise an inline wrap driver`).not.toContain('inline-wrapup-driver.md');
 
-            // Pre-dispatch notice fields (R1): subprocess surface, trigger 3, agent.default resolution.
+            // Pre-dispatch notice fields (R1): subprocess surface, trigger 3, executor resolution.
             expect(raw, `${command}: must name the subprocess surface in the notice`).toContain(
                 'execution surface: subprocess',
             );

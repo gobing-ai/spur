@@ -285,11 +285,7 @@ invokes `spur agent run` or `spur workflow run` — but eligible model-bearing `
 execute on a native platform subagent. Eligibility is decided by observable facts only: the action
 is a pure-slash `agent.run`, the state is not interactive (no operator-confirmation action,
 `pause: true`, or approve/taste/ask decision), and the host platform exposes a native subagent with
-shared-worktree read/write/shell capability. **Explicit `--agent inline` is the zero-dispatch
-carve-out (G5):** 0508 eligibility applies to omitted `--agent` only — explicit inline never
-dispatches a native subagent, subprocess, or workflow hop, and headless surfaces (`spur agent run`,
-workflow `agent.run`, serve-side dispatch) reject it with the stable
-`AGENT_INLINE_HEADLESS_MESSAGE` special error (exit 2 at the CLI) instead of resolving it. Dispatch
+shared-worktree read/write/shell capability. **Omitted and explicit `--agent inline` resolve identically (task 0687 / ADR-087):** 0508 eligibility (native subagent first, host-session fallback) applies to all inline resolutions, and headless surfaces (`spur agent run`, workflow `agent.run`, serve-side dispatch) substitute tier resolution with a single warning instead of rejecting. Dispatch
 happens **once**, sequentially (one writer at a time), and joins before the driver evaluates the
 next action or guard; a pre-dispatch eligibility failure falls back to one host execution, while a
 failure after dispatch follows the stage's error policy and is never replayed in the host. Operator
