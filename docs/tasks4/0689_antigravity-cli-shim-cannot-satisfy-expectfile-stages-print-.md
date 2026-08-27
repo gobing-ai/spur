@@ -4,7 +4,7 @@ name: "antigravity-cli shim cannot satisfy expectFile stages: print mode auto-de
 status: wip
 template: issue
 created_at: 2026-08-27T15:39:39.946Z
-updated_at: "2026-08-27T23:24:07.800Z"
+updated_at: "2026-08-27T23:24:46.902Z"
 feature_id: B
 ---
 
@@ -175,9 +175,13 @@ Comment wording (supersedes the "blanket tool approval" line): the shim comment 
 <!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
 
 ### Solution
+**R1 (uniform headless write policy):** per-shim flags chosen; agy first and only (see Q&A/Design). Substituted `--mode accept-edits` per the frozen decision rule after live probes A (one-shot, 12s) and B (multi-step write-read-write, 8.5s) both passed 2026-08-27 — the narrower grant verified; blanket flag not needed. Other shims remain out of scope (deferred, owner: Robin). ts-libs `packages/ai-runner/src/agents/shims.ts` + `tests/agents/shims.test.ts` updated (49/49 pass); shipped as released 0.4.46 (commit 06b2976, bump a258251; shim at `packages/ai-runner/src/agents/shims.ts:216`, Publish run 33125794239 success), Spur catalog pin `package.json:32` `^0.4.45`→`^0.4.46`, `bun update` resolved node_modules to npm-store 0.4.46 — no `bun link`.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R2 (real-dispatch regression probe):** shipped in its two corpus-sanctioned tiers. Deterministic tier: the four-path presence matrix in `tests/agents/shims.test.ts` (Design names it "the R2 deterministic tier"). Dispatch tier: live multi-step write probes recorded in ### Testing (probe A/B + AC2 workflow run), which is Background's "the regression test that must pass". The doctor-feature half (a built-in `usable`-beyond-`--version` probe per write-capable executor) is NOT built here: `packages/ai-runner/src/doctor-runner.ts:35` is a 256-line version/auth detector with no capability concept — a net-new feature surface with no pinning AC scenario; deferred as a follow-up work item (proposal, owner: Robin). The SKILL.md caveat (updated this run) documents the `usable: true` gap in the meantime.
 
+**R4 (docs):** `plugins/sp/skills/dogfood-testing/SKILL.md` "Engine-driven testees under a sandboxed session" now states the `permissions.allow` `write_file(**)` entry is an operator-local unblock, not the shipped fix, and masks shim regressions in local end-to-end runs.
+
+**Design amendment:** dated entry in ### Design (as-built argv table: position + `--add-dir` + accept-edits substitution).
 ### Testing
 **0687 failing baseline:** run `4f55c237-e808-457d-9cdf-5fb5be128906` — `agent.run (inline) exited 0 but expected file is absent` at resolve-scope (agy print-mode auto-denial).
 
