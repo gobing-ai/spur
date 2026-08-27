@@ -2,7 +2,7 @@
 
 **Area:** sp plugin > `sp:history-anatomy` skill, `/sp:dev-find-issue` command, `history-anatomy.yaml` workflow, `docs/report` daily cache, and the HA-S1 correction to the history analyze artifact + forensics renderer.
 **Status:** built (I8 HA-S1; 0657–0661 — ADR-079 cache, ADR-080 bounded rankings).
-**Authority:** decisions in `00` (ADR-079 cache, ADR-080 bounded rankings); command/flag shapes in `04`; this satellite owns the report contract, cache contract, workflow shape, and migration gate. The history data plane itself remains [`history-data-processing.md`](history-data-processing.md) and [`sqlite-forensics-token-time-per-step.md`](sqlite-forensics-token-time-per-step.md); shared flag semantics remain `plugins/sp/skills/spur-dev/references/flag-glossary.md`.
+**Authority:** decisions in `00` (ADR-079 cache, ADR-080 bounded rankings); command/flag shapes in `04`; this satellite owns the report contract, cache contract, workflow shape, and migration gate. The history data plane itself remains [`history-data-processing.md`](history-data-processing.md) and [`sqlite-forensics-token-time-per-step.md`](sqlite-forensics-token-time-per-step.md); shared flag semantics remain `plugins/sp/skills/spur-dev/references/flag-glossary.md`. I9 environment-improvement projection (accepted design — ADR-084/085; not yet built) is [`environment-improvement-lens.md`](environment-improvement-lens.md) — retro names as section-9 signals, closed categories unchanged.
 
 Baseline artifacts: `.spur/run/7fa52fa5-…-idea-eval-report.md` (idea evaluation) and
 `docs/plans/2026-08-24-history-anatomy-brainstorm.md` (approach + trade-offs).

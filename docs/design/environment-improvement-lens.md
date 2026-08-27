@@ -83,17 +83,29 @@ Optional class tag, closed set: `environment` | `testee` | `waste`. Finding line
 | Testee contract bug | `testee` (or untagged) | the testee |
 | Token/tool waste that is not a missing environment affordance | `waste` or untagged cache-health P3 | existing cost/cache findings |
 
-**Fix-mode (ADR-085).** Environment-tagged findings are recommended actions in §6 only. Bounded retries do not `Edit` or `Write` `AGENTS.md`, skills, rules, or other environment sources for those findings. Step-failure fixes against the testee are unchanged. `--task` remains an opt-in sink and may copy an environment finding into a review task; it does not apply the change.
+When the testee is a skill or command, a defect in **that testee's contract** (the protocol the run is grading) is `testee` and may be repaired in fix-mode. The same file tagged `environment` (always-loaded steering, placement, a check that should exist, a review-path standard) is a proposal only. Class, not path, decides mutation.
+
+`validate-report` (`plugins/sp/scripts/dogfood-testing/validate-report.ts`) checks headings, protocol string, footer, Issues subheads, and ledger cardinality. It does not parse §6 bullets. A class tag cannot fail `@1.2`; the validator gains no required fields.
+
+**Fix-mode (ADR-085).** Environment-tagged findings are recommended actions in §6 only. Bounded retries do not `Edit` or `Write` `AGENTS.md`, `CLAUDE.md`, skills, rules, numbered docs, or plugin references for those findings. Step-failure fixes against a `testee`-class finding are unchanged. `--task` remains an opt-in sink and may copy an environment finding into a review task; it does not apply the change.
 
 Dogfood `SKILL.md` is BODY_BUDGET-baselined at 37,452 bytes (live 37,435). Lens rules go in `report-template.md`, already linked from that skill. Do not grow the SKILL.md body.
 
-## History-anatomy projection (`report-contract.md` section 9)
+## History-anatomy projection (`report-contract.md`)
 
 Closed vocabulary unchanged: `reliability | repetition | workflow | performance | coverage | telemetry | positive`.
 
 Stable key remains `<category>:<owner-surface>:<signal>`. Retro names occupy `<signal>` (table above) or a stable owner-surface slug. They never occupy `<category>`.
 
-Examples:
+**Three homes** (do not collapse):
+
+| Home | I9 shape |
+| --- | --- |
+| Section 4 Findings | Keyed findings use a closed `category`. Retro name is `<signal>` (preferred) or owner-surface. Full existing field set unchanged. |
+| Section 9 Workflow and process improvements | I9 projection. Each **projected** candidate names owner surface, expected impact, verification method, and reversibility (same four names as section 7), and may cite a section-4 `key`. Unprojected numbered prose stays valid and gains no required fields. |
+| Section 7 Remediation options | Existing proposal table. I9 does not add a second mutation source; auto-written corpus tasks stay forbidden (0680 R4). |
+
+Examples (section 4 `key`):
 
 ```text
 workflow:agents-md:navigation
@@ -105,9 +117,21 @@ workflow:skill-md:no-ops
 telemetry:logs:information-access
 ```
 
-Section 9 remediations keep the existing proposal fields: owner surface, expected impact, verification method, reversibility. The report contains no applied change, no diff, and no command it claims to have run.
+Section 9 projected-candidate line (additive; existing numbered prose without these fields remains valid):
 
-**Structure gate.** `history-anatomy-cache.ts` `checkReportStructure` already matches pipe-row keys against the closed vocabulary. Extend it so a finding whose `category` / key first segment is a retro name (`navigation`, `automated-checks`, `coding-standards`, `agents-md-placement`, `tool-economy`, `no-ops`, `information-access`, plus the spaced display names) fails. Fixtures that use only the closed vocabulary still pass; a retro signal is not required.
+```text
+- `workflow:agents-md:navigation` — **owner surface:** `AGENTS.md` see_also. **expected impact:** shorter file hunt. **verification method:** subsequent daily report key `resolved` or absent. **reversibility:** revert the pointer.
+```
+
+The report contains no applied change, no diff, and no command it claims to have run.
+
+**Structure gate.** `checkReportStructure` (`plugins/sp/scripts/history-anatomy-cache.ts`) matches pipe-rows whose first segment is already in the closed vocabulary, then scans Findings bullet blocks for `key` + triage fields. A retro-as-category key currently misses the pipe-row regex and does not fail. Extend the gate so a finding whose `category` or key first segment is a retro name fails:
+
+```text
+navigation | automated-checks | coding-standards | agents-md-placement | tool-economy | no-ops | information-access
+```
+
+plus the spaced display names (`automated checks`, `coding standards`, `AGENTS.md placement`, `tool economy`, `information access`). Retro names in `<signal>` or owner-surface must pass. Fixtures that use only the closed vocabulary still pass; a retro signal is not required.
 
 History-anatomy `SKILL.md` stays a dispatcher under 20,000 bytes and does not copy the seven category names.
 
@@ -128,8 +152,8 @@ Structural tests (plugin suite) must prove:
 2. `report-template.md` and `report-contract.md` name that file and do not redefine the seven names.
 3. A dogfood report with an `environment` / `testee` / `waste` tagged §6 finding is accepted by `validate-report` at protocol `sp:dogfood-testing@1.2`.
 4. An untagged @1.2 report, including cache-health P3, remains accepted.
-5. A history-anatomy fixture using only closed categories passes the structure gate.
-6. A history-anatomy finding whose category is a retro name fails the structure gate.
+5. A history-anatomy fixture using only closed categories passes the structure gate, including a section 9 that is numbered prose without I9 proposal fields.
+6. A history-anatomy finding whose `category` or key first segment is a retro name fails the structure gate; the same retro name in `<signal>` passes.
 7. `dogfood-testing` and `issue-finding` SKILL.md byte sizes do not exceed their BODY_BUDGET baselines.
 
 ## Out of this satellite

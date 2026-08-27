@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.32.0
+version: 1.33.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-24
+updated_at: 2026-08-26
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -372,7 +372,9 @@ interpretation lives in the plugin space, not the CLI: `sp:history-anatomy` owns
 contracts, `history-anatomy.yaml` owns the cache branch / bounded correction / atomic publication,
 and `history-anatomy-cache.ts` (+ committed `.mjs` twin, ADR-065 standard contract) computes the
 semantic artifact digest — the deterministic half always reruns, only model judgment is cacheable
-(ADR-079). Shapes: `docs/design/history-anatomy.md`.
+(ADR-079). Shapes: `docs/design/history-anatomy.md`. I9 environment-improvement projection
+(accepted design — ADR-084/085; not yet built): §22;
+`docs/design/environment-improvement-lens.md`.
 
 **History Board read plane (E8).** The six `history.*` oRPC procedures delegate through
 `HistoryBoardService`; `LiveHistoryBoardService` composes the existing forensic queries and keeps
@@ -571,7 +573,9 @@ task ## Acceptance Criteria (subset coverage)
   (ADR-021 consequence b).
 - `plugins/sp` centralizes agent-facing behavior in **skills** (Fat Skills — ADR-023); slash
   commands and subagents are thin wrappers of skills. Skills delegate deterministic execution to
-  CLI verbs where they exist, but are not limited to CLI wrapping.
+  CLI verbs where they exist, but are not limited to CLI wrapping. The environment-improvement
+  lens (accepted design — ADR-084/085; not yet built) is a plugin-level mapping projected into
+  those skills' report contracts, not a third analysis skill: §22.
 - Cross-cutting needs reuse the owning ts-libs package (`ts-utils` output/errors, `ts-runtime`
   FileSystem, `.spur/config.yaml` via ADR-017) — no parallel local re-implementations.
 
@@ -1207,3 +1211,78 @@ Enforceable invariants:
 
 Detailed DTO, source mapping, follower sequence, and fixture matrix:
 `docs/design/workflow-observability.md` §D5 detailed progress projection.
+
+## 22. Environment-Improvement Lens (accepted design — ADR-084/085; not yet built)
+
+One plugin-level mapping projects vendor retro's seven-category environment-improvement taxonomy
+into two **live** report contracts. There is no third analysis skill and no new command. Vendor
+`vendors/misc/retro/SKILL.md` stays inspiration; it is not installed or invoked.
+
+```text
+plugins/sp/references/environment-lens.md     mapping SSOT (seven categories + placement rule)
+        │
+        ├─► sp:dogfood-testing  references/report-template.md §6
+        │     optional finding class: environment | testee | waste
+        │     protocol stays sp:dogfood-testing@1.2
+        │
+        └─► sp:history-anatomy  references/report-contract.md
+              section 4: finding keys (closed category + retro <signal>)
+              section 9: operator-facing environment/process candidates
+              section 7: remediations stay proposals
+              closed categories unchanged
+```
+
+`sp:issue-finding` is a coexistence-window non-target (`/sp:dev-find-issue` already wraps
+history-anatomy). Wrap-up learnings and gitignored `.spur/context/` memory do not own the lens.
+
+**Build vs extend.** The mapping is a real seam: two callers (dogfood §6, history-anatomy
+section 9) must not drift. A new `sp:retro` skill would be a third overlapping analysis owner and
+fails the deletion test relative to section 9 (Approach 2). Folding the scan into wrap-up
+(Approach 3) mixes task-lifecycle gitignored learnings with harness-file proposals. Extending the
+two existing reference files plus one plugin-level mapping is the smallest change that keeps a
+single category table.
+
+**Placement rule** (mapping content; both projections apply it):
+
+1. If an automated check can catch it, propose the check — not a new always-loaded sentence.
+2. If it is a coding standard, the owner surface is the review path (`sp:code-verification` /
+   `sp:code-review` / pipeline review), never the implementer skill.
+3. `AGENTS.md` / `CLAUDE.md` stay navigation pointers; depth lives in skills and numbered docs.
+
+**Present-don't-apply** (ADR-085): environment remediations are proposals. Dogfood fix-mode
+repairs testee-contract step failures only; it must not `Edit`/`Write` environment sources for
+an environment-tagged finding. History-anatomy already forbids applied changes.
+
+**BODY_BUDGET.** `dogfood-testing` and `issue-finding` `SKILL.md` bodies are two-sided baselines
+and must not grow. Dogfood driver-facing lens rules live in `report-template.md` (already linked
+from that skill). History-anatomy `SKILL.md` stays a dispatcher; it does not copy the seven names.
+
+**History-anatomy homes.** Environment-lens items that qualify as findings keep the closed
+`category` and put the retro name in `<signal>` or owner-surface (section 4). Section 9 is the
+I9 projection: each projected candidate names owner surface, expected impact, verification
+method, and reversibility, and may cite a section-4 `key`. Section 7 remediations remain
+proposals (existing contract). Existing section 9 prose that is not an I9 projection stays valid
+and does not gain required fields.
+
+**Structure gate.** `checkReportStructure` today matches pipe-rows whose first segment is already
+in the closed vocabulary, so a retro-as-category key is currently invisible to that regex. The
+I9 extension is an **additive reject**: a finding whose `category` or key first segment is a
+retro name fails. Retro names in `<signal>` or owner-surface must not fail. Closed-vocabulary
+fixtures that carry no retro signal must still pass.
+
+Invariants (enforceable):
+
+1. Exactly one file under `plugins/sp/references/` enumerates the seven retro category names.
+   Dogfood `report-template.md` and history-anatomy `report-contract.md` name that file and do
+   not redefine the seven names with different wording.
+2. History-anatomy finding `category` is one of `reliability | repetition | workflow |
+   performance | coverage | telemetry | positive`. A retro name (`navigation`, `automated checks`,
+   `coding standards`, `AGENTS.md placement`, `tool economy`, `no-ops`, `information access`,
+   and their kebab-case signal slugs) as `category` fails the structure gate.
+3. Dogfood protocol remains `sp:dogfood-testing@1.2`. Class tags are optional; `validate-report`
+   does not parse them; untagged reports and the cache-health P3 remain valid.
+4. An environment-tagged dogfood finding is never applied as a tree mutation in fix-mode.
+5. `plugins/sp/skills/issue-finding/` gains no category, flag, or lens projection.
+6. No public CLI noun/verb/flag and no `/sp:dev-retro` command (ADR-016 / ADR-051).
+
+Shapes: `docs/design/environment-improvement-lens.md`.

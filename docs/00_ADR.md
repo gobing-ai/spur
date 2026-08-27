@@ -1414,4 +1414,3 @@ pointer file cannot provide.
 
 Untracked generated specs also imply the demo-story fix: an example roster ships as the commented-in
 `agent.team.demo` block in `.spur/config.yaml`, not as tracked spec files.
-
