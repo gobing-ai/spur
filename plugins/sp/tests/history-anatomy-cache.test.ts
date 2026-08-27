@@ -491,6 +491,38 @@ describe('checkReportStructure (R5)', () => {
         expect(r.ok).toBe(false);
         expect(r.problems).toContain('evidence-claim-without-anchor');
     });
+
+    // 0690 R3: the anchor gate keeps pinning the backticked format from the 0687 fix pass —
+    // the `current #/pointer` artifact vocabulary enrich models actually emit never matches.
+    test('a `current #/pointer` claim row fails evidence-claim-without-anchor', () => {
+        const r = checkReportStructure(ledger('| repeated session spike | current #/sessions/pi-deepseek |\n'));
+        expect(r.ok).toBe(false);
+        expect(r.problems).toContain('evidence-claim-without-anchor');
+    });
+
+    test('backticked path and path:line anchors satisfy the gate directly (0690 R3)', () => {
+        const r = checkReportStructure(
+            ledger(
+                '| artifact digest changed | `.spur/run/x-history-anatomy-current.json` |\n| gate regex drifted | `plugins/sp/scripts/history-anatomy-cache.mjs:330` |\n',
+            ),
+        );
+        expect(r.problems).toEqual([]);
+        expect(r.ok).toBe(true);
+    });
+
+    // 0690: a replica of run 99333080's candidate reproduces all three observed gate classes by name.
+    test('the 99333080 failure classes reproduce together and by name', () => {
+        const bad = sections
+            .filter((s) => s !== 'Report-only advisories')
+            .map((s) => `## ${s}\n\nbody`)
+            .join('\n\n');
+        const replica = `${bad.replace('body', 'TODO: fill')}\n\n## Evidence ledger\n\n| Claim | Anchor |\n| --- | --- |\n| repeated session spike | current #/sessions/pi-deepseek |\n`;
+        const r = checkReportStructure(replica);
+        expect(r.ok).toBe(false);
+        expect(r.problems).toContain('placeholder-or-todo-present');
+        expect(r.problems).toContain('evidence-claim-without-anchor');
+        expect(r.problems).toContain('section-missing-or-out-of-order:Report-only advisories');
+    });
 });
 
 describe('diffPorcelain (0676 R3)', () => {
