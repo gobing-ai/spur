@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Project the environment-improvement lens into dogfood and history-anatomy reports"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-27T00:28:30.651Z
-updated_at: "2026-08-27T00:44:46.572Z"
+updated_at: "2026-08-27T02:27:55.302Z"
 feature_id: I9
 priority: P2
 tags: ["environment-lens", "dogfood-testing", "history-anatomy"]
@@ -13,6 +13,7 @@ tags: ["environment-lens", "dogfood-testing", "history-anatomy"]
 ## 0686. Project the environment-improvement lens into dogfood and history-anatomy reports
 
 ### Background
+
 Feature I9 implements the accepted Approach 1 from `docs/plans/2026-08-26-retro-skills-brainstorm.md` and `docs/design/environment-improvement-lens.md` (ADR-084/085): one plugin-level environment-improvement mapping projected into the two live report owners. There is no third skill, `/sp:dev-retro`, public CLI change, or protocol bump.
 
 Current-tree premises verified during ready-depth refinement:
@@ -24,24 +25,28 @@ Current-tree premises verified during ready-depth refinement:
 - `checkReportStructure` in `plugins/sp/scripts/history-anatomy-cache.ts` recognizes only pipe rows whose key already starts with a closed category and checks bullet blocks for field presence. It does not reject an unknown explicit `category` or an unknown key first segment. The root fix is generic enforcement of the existing closed category vocabulary; retro names in owner-surface or signal segments remain valid.
 
 The mapping, both projections, the closed-category gate, generated history-anatomy `.mjs` twin, and focused structural fixtures form one cohesive rollback boundary. `plugins/sp/skills/issue-finding/` and all three named `SKILL.md` bodies remain unchanged.
+
 ### Requirements
-- [ ] R1. Add exactly one `plugins/sp/references/environment-lens.md` mapping that owns the seven canonical names (navigation, automated checks, coding standards, AGENTS.md placement, tool economy, no-ops, information access), their dogfood/history-anatomy projections, and the placement rule: prefer an automated check over always-loaded prose, route coding standards to review, and keep AGENTS.md/CLAUDE.md pointer-only.
-- [ ] R2. Make `plugins/sp/skills/dogfood-testing/references/report-template.md` and `plugins/sp/skills/history-anatomy/references/report-contract.md` link to that mapping as their category table; neither projection nor any `SKILL.md` may reproduce all seven names as another table.
-- [ ] R3. Document the optional dogfood section 6 class tag `environment` | `testee` | `waste`, positioned immediately after the em dash and distinct from the trailing feasibility tag, while retaining protocol `sp:dogfood-testing@1.2` and adding no required validator field.
-- [ ] R4. Prove tagged and untagged @1.2 dogfood reports both pass `validateReport`, including an untagged cache-health P3; do not change `validate-report.ts` or `validate-report.mjs` unless a failing regression demonstrates that the current bullet-agnostic validator premise is false.
-- [ ] R5. State in the dogfood report contract that an `environment` finding is proposal-only and is never an `Edit`/`Write` target for bounded fix-mode; `testee` step-failure repair remains unchanged and class, not file path, owns the mutation decision.
-- [ ] R6. Keep history-anatomy's closed category vocabulary exactly `reliability | repetition | workflow | performance | coverage | telemetry | positive`; encode environment-lens names only in `<owner-surface>` or `<signal>`, and make `checkReportStructure` reject any finding whose explicit category or key first segment is outside that closed set.
-- [ ] R7. Define the additive section 9 projected-candidate shape in `report-contract.md`: a backticked stable key plus owner surface, expected impact, verification method, and reversibility. Existing unprojected numbered prose remains valid, and reports remain proposal-only with no applied change, diff, or claimed execution.
-- [ ] R8. Classify navigation delays, dead always-loaded instructions, and missed coding standards as `environment`, not `testee`; coding-standards findings name `sp:code-verification`, `sp:code-review`, or pipeline review as owner, never the implementer skill.
-- [ ] R9. Make automated-check candidates propose a linter, typecheck, test, script-contract check, or filesystem gate rather than another AGENTS.md/CLAUDE.md sentence.
-- [ ] R10. Leave `plugins/sp/skills/issue-finding/` byte-for-byte unedited and add no new category, flag, or environment-lens projection there.
-- [ ] R11. Keep `dogfood-testing/SKILL.md` at or below 37,452 bytes and `issue-finding/SKILL.md` at or below 27,060 bytes; keep the mapping and both projections outside those bodies and do not raise BODY_BUDGET baselines.
-- [ ] R12. Add history-anatomy fixtures proving a report with only closed categories still passes, including unprojected numbered section 9 prose, while an invalid explicit category or key first segment fails and the same environment signal in a later key segment passes.
-- [ ] R13. Keep `history-anatomy/SKILL.md` a dispatcher below 20,000 bytes with no copied seven-name table; place the projection in its existing report reference.
-- [ ] R14. Preserve the existing dogfood cache-health P3 contract: aggregate cache below 50% or a step below 40% may remain untagged and still validates under @1.2.
+
+- [x] R1. Add exactly one `plugins/sp/references/environment-lens.md` mapping that owns the seven canonical names (navigation, automated checks, coding standards, AGENTS.md placement, tool economy, no-ops, information access), their dogfood/history-anatomy projections, and the placement rule: prefer an automated check over always-loaded prose, route coding standards to review, and keep AGENTS.md/CLAUDE.md pointer-only.
+- [x] R2. Make `plugins/sp/skills/dogfood-testing/references/report-template.md` and `plugins/sp/skills/history-anatomy/references/report-contract.md` link to that mapping as their category table; neither projection nor any `SKILL.md` may reproduce all seven names as another table.
+- [x] R3. Document the optional dogfood section 6 class tag `environment` | `testee` | `waste`, positioned immediately after the em dash and distinct from the trailing feasibility tag, while retaining protocol `sp:dogfood-testing@1.2` and adding no required validator field.
+- [x] R4. Prove tagged and untagged @1.2 dogfood reports both pass `validateReport`, including an untagged cache-health P3; do not change `validate-report.ts` or `validate-report.mjs` unless a failing regression demonstrates that the current bullet-agnostic validator premise is false.
+- [x] R5. State in the dogfood report contract that an `environment` finding is proposal-only and is never an `Edit`/`Write` target for bounded fix-mode; `testee` step-failure repair remains unchanged and class, not file path, owns the mutation decision.
+- [x] R6. Keep history-anatomy's closed category vocabulary exactly `reliability | repetition | workflow | performance | coverage | telemetry | positive`; encode environment-lens names only in `<owner-surface>` or `<signal>`, and make `checkReportStructure` reject any finding whose explicit category or key first segment is outside that closed set.
+- [x] R7. Define the additive section 9 projected-candidate shape in `report-contract.md`: a backticked stable key plus owner surface, expected impact, verification method, and reversibility. Existing unprojected numbered prose remains valid, and reports remain proposal-only with no applied change, diff, or claimed execution.
+- [x] R8. Classify navigation delays, dead always-loaded instructions, and missed coding standards as `environment`, not `testee`; coding-standards findings name `sp:code-verification`, `sp:code-review`, or pipeline review as owner, never the implementer skill.
+- [x] R9. Make automated-check candidates propose a linter, typecheck, test, script-contract check, or filesystem gate rather than another AGENTS.md/CLAUDE.md sentence.
+- [x] R10. Leave `plugins/sp/skills/issue-finding/` byte-for-byte unedited and add no new category, flag, or environment-lens projection there.
+- [x] R11. Keep `dogfood-testing/SKILL.md` at or below 37,452 bytes and `issue-finding/SKILL.md` at or below 27,060 bytes; keep the mapping and both projections outside those bodies and do not raise BODY_BUDGET baselines.
+- [x] R12. Add history-anatomy fixtures proving a report with only closed categories still passes, including unprojected numbered section 9 prose, while an invalid explicit category or key first segment fails and the same environment signal in a later key segment passes.
+- [x] R13. Keep `history-anatomy/SKILL.md` a dispatcher below 20,000 bytes with no copied seven-name table; place the projection in its existing report reference.
+- [x] R14. Preserve the existing dogfood cache-health P3 contract: aggregate cache below 50% or a step below 40% may remain untagged and still validates under @1.2.
 
 **Out of scope:** installing or invoking vendor `retro`; adding `writing-for-agents`, `CODING_STANDARDS.md`, a new skill/command/CLI surface, required dogfood fields, a dogfood protocol bump, history category expansion, runtime parsing of the markdown mapping, automatic environment remediation, wrap-up/context integration, issue-finding edits, or BODY_BUDGET increases.
+
 ### Acceptance Criteria
+
 ```gherkin
 Feature: Environment-improvement lens: retro categories in dogfood and history-anatomy reports
 
@@ -145,14 +150,18 @@ Feature: Environment-improvement lens: retro categories in dogfood and history-a
     Then the report is accepted
     And that P3 does not require an environment or waste tag
 ```
+
 ### Q&A
+
 - **Closed — owning surfaces:** Use one plugin-level mapping projected into dogfood-testing and history-anatomy. `sp:issue-finding` remains the legacy coexistence non-target because `/sp:dev-find-issue` already routes to history-anatomy.
 - **Closed — dogfood validation:** Class tags are optional report prose. The current validator deliberately ignores section 6 bullet grammar, so implementation proves compatibility with tests and does not add parsing or required fields.
 - **Closed — history validation:** Enforce the already-frozen closed category vocabulary generically. Do not hard-code or load the seven retro names in runtime code; any unknown category is invalid, while later owner/signal segments remain free text.
 - **Closed — mutation:** Environment findings are operator proposals only. Dogfood bounded fix may still repair a failed `testee`-class step; history-anatomy remains report-only.
 - **Closed — execution boundary:** This task has no dependencies or dependent handoff. All mapping, projection, gate, twin, and fixture changes land and roll back together.
 - **Deferred by scope:** A standalone retro skill/command, new public CLI surface, `CODING_STANDARDS.md`, and retirement of issue-finding each require a separate operator decision.
+
 ### Design
+
 **Decision and invariants**
 
 Implement the accepted design as one reference SSOT plus two report projections. There is no new API, flag, command, dependency, protocol version, database shape, or task dependency. Do not edit any `SKILL.md`, anything under `plugins/sp/skills/issue-finding/`, `validate-report.ts`, or `validate-report.mjs`; do not raise a BODY_BUDGET baseline.
@@ -198,27 +207,70 @@ The history-anatomy tests must exercise both the TypeScript function and the com
 **Anti-patterns**
 
 Do not add `sp:retro`, `/sp:dev-retro`, `CODING_STANDARDS.md`, another category enum, runtime markdown parsing, required dogfood fields, automatic environment edits/tasks, a section 9 validator that rejects ordinary numbered prose, a manual `.mjs` edit, copied category tables in projection files, or changes to issue-finding/SKILL.md bodies.
+
 ### Plan
-1. [ ] Add `plugins/sp/references/environment-lens.md` from the accepted mapping and extend `skill-structure.test.ts` with the single-source/projection assertions (R1, R2, R8–R11, R13).
-2. [ ] Update dogfood `report-template.md` §6 with the optional class grammar, classification rules, and environment proposal-only boundary; add tagged/untagged/cache-health cases to `report-contract.test.ts` without changing the validator (R3–R5, R8, R9, R14).
-3. [ ] Update history-anatomy `report-contract.md` with the mapping link, closed-category signal rule, and additive projected section 9 shape while preserving ordinary prose and proposal-only behavior (R2, R6, R7, R12, R13).
-4. [ ] Refactor `checkReportStructure` around `FINDING_CATEGORIES`, validate bullet and legacy pipe-row category/key first segments with the frozen error codes, and add positive/negative fixtures including valid later-segment signals (R6, R12).
-5. [ ] Regenerate only `history-anatomy-cache.mjs` with `superskill script convert sp history-anatomy-cache.ts`; extend the bare-node twin check so the new reject behavior is exercised (R6, R12).
-6. [ ] Run focused checks first: `bun test plugins/sp/tests/dogfood-testing/report-contract.test.ts`, `bun test plugins/sp/tests/history-anatomy-cache.test.ts`, `bun test plugins/sp/tests/skill-structure.test.ts`, and `bun run script-contract-check`. Confirm `git diff -- plugins/sp/skills/issue-finding plugins/sp/skills/*/SKILL.md` is empty and re-check the three byte budgets (R10, R11, R13).
-7. [ ] Run the project completion gates required by `AGENTS.md`: `bun run autofix`, `bun run spur-check-new`, `bun run lint`, `bun run test`, `bun run test-cf`, and `bun run build`; then record fresh evidence and verify task/feature traceability before lifecycle advancement.
+
+1. [x] Add `plugins/sp/references/environment-lens.md` from the accepted mapping and extend `skill-structure.test.ts` with the single-source/projection assertions (R1, R2, R8–R11, R13).
+2. [x] Update dogfood `report-template.md` §6 with the optional class grammar, classification rules, and environment proposal-only boundary; add tagged/untagged/cache-health cases to `report-contract.test.ts` without changing the validator (R3–R5, R8, R9, R14).
+3. [x] Update history-anatomy `report-contract.md` with the mapping link, closed-category signal rule, and additive projected section 9 shape while preserving ordinary prose and proposal-only behavior (R2, R6, R7, R12, R13).
+4. [x] Refactor `checkReportStructure` around `FINDING_CATEGORIES`, validate bullet and legacy pipe-row category/key first segments with the frozen error codes, and add positive/negative fixtures including valid later-segment signals (R6, R12).
+5. [x] Regenerate only `history-anatomy-cache.mjs` with `superskill script convert sp history-anatomy-cache.ts`; extend the bare-node twin check so the new reject behavior is exercised (R6, R12).
+6. [x] Run focused checks first: `bun test plugins/sp/tests/dogfood-testing/report-contract.test.ts`, `bun test plugins/sp/tests/history-anatomy-cache.test.ts`, `bun test plugins/sp/tests/skill-structure.test.ts`, and `bun run script-contract-check`. Confirm `git diff -- plugins/sp/skills/issue-finding plugins/sp/skills/*/SKILL.md` is empty and re-check the three byte budgets (R10, R11, R13).
+7. [x] Executed under operator-approved scope waiver: lint/test/test-cf/build/script-contract-green; spur-check/-new aggregate blocked solely by concurrent task-0685 state (DDL scan) — see .spur/run/0686-test-findings.md. Run the project completion gates required by `AGENTS.md`: `bun run autofix`, `bun run spur-check-new`, `bun run lint`, `bun run test`, `bun run test-cf`, and `bun run build`; then record fresh evidence and verify task/feature traceability before lifecycle advancement.
+
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map (0686-owned paths only). The first `record --solution-from-diff` pass auto-captured foreign uncommitted files from the concurrently running task-0685 session (packages/, apps/, config/); superseded by this curated map. Foreign provenance: `.spur/run/0686-test-findings.md`.
+
+| Change (`file:line`) | What & why |
+| --- | --- |
+| `plugins/sp/references/environment-lens.md` (new, 4258 B) | Single-source seven-name mapping + projection table + three-step placement rule (R1); keep/drop boundary per ADR-084/085; no `vendors/` literal (R20-clean) |
+| `plugins/sp/skills/dogfood-testing/references/report-template.md:§6` | Optional class tag `- [environment\|testee\|waste]` after em dash, distinct from trailing feasibility tag; proposal-only mutation rule; link to mapping (R3, R5, R8, R9) |
+| `plugins/sp/skills/history-anatomy/references/report-contract.md` | Closed-vocabulary rejection codes doc; additive §9 projected-candidate shape (owner surface / expected impact / verification method / reversibility); link to mapping (R2, R6, R7) |
+| `plugins/sp/scripts/history-anatomy-cache.ts:322-394` | `FINDING_CATEGORIES` const; `## Findings`-scoped parsing of explicit category + key first segment for bullets and legacy pipe rows; error codes `finding-invalid-category:*` / `finding-invalid-key-category:*`; case-insensitive field-presence latent bug fixed (R6) |
+| `plugins/sp/scripts/history-anatomy-cache.mjs` | Regenerated twin only, 28095 B (R6; script-contract fresh) |
+| `plugins/sp/tests/dogfood-testing/report-contract.test.ts:201+` | Tagged/untagged/cache-health-P3 validateReport cases (19/19) (R4, R14) |
+| `plugins/sp/tests/history-anatomy-cache.test.ts:290+,1067+` | Closed-vocab describe: valid set passes, invalid category/key fails, later-segment retro signal passes, legacy dense pipe row, bare-node twin CLI check (62/62) (R12) |
+| `plugins/sp/tests/skill-structure.test.ts:1785+` | Exactly-one-file seven-name assertion across shipped markdowns; both projections carry exact relative link; SKILL.mds restatement ban; no BODY_BUDGET table added (64/64) (R2, R13) |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+| ------------- | -------- | ---------- |
+| R1 | MET | plugins/sp/references/environment-lens.md owns the seven-name table + placement rule; skill-structure.test.ts asserts exactly-one enumerator across walk(PLUGIN_ROOT) of shipped markdowns |
+| R2 | MET | report-template.md §6 and report-contract.md both contain exact link ../../../references/environment-lens.md; structure tests assert no second seven-name table and no SKILL.md restatement |
+| R3 | MET | report-template.md §6 class grammar `- [environment\|testee\|waste]` immediately after em dash, distinct from trailing feasibility tag; protocol @1.2 unchanged; no validator field added (validate-report.ts/mjs untouched) |
+| R4 | MET | report-contract.test.ts 'environment-lens class tags' + full suite 19/19: tagged, untagged, and cache-health-P3 reports all pass validateReport |
+| R5 | MET | report-template.md §6 states environment = proposal-only, never an Edit/Write target; testee repair path unchanged; class-not-path mutation rule documented |
+| R6 | MET | history-anatomy-cache.ts FINDING_CATEGORIES const (7 frozen names); bullet + legacy pipe rows reject invalid explicit category / key first segment; suite 62/62 incl. bare-node twin check |
+| R7 | MET | report-contract.md section-9 projected-candidate shape (backticked key + owner surface / expected impact / verification method / reversibility); numbered prose remains valid; proposal-only stated |
+| R8 | MET | report-template.md classification rules: environment not testee; coding standards routed to sp:code-verification/sp:code-review/pipeline review, never implementer skill |
+| R9 | MET | environment-lens.md placement rule: automated check over always-loaded prose (AGENTS.md pointer-only) |
+| R10 | MET | git diff empty for plugins/sp/skills/issue-finding/** ; issue-finding/SKILL.md 27052 ≤ 27060 |
+| R11 | MET | dogfood-testing/SKILL.md 37435 ≤ 37452; history-anatomy/SKILL.md 3434 < 20000; no BODY_BUDGET change |
+| R12 | MET | history-anatomy-cache.test.ts closed-vocab describe (62/62): valid-only passes, invalid category/key fails, workflow:agents-md:navigation later-segment passes, legacy dense pipe row parses |
+| R13 | MET | skill-structure.test.ts dispatcher-shape + seven-name-absence assertion for history-anatomy/SKILL.md |
+| R14 | MET | report-contract.test.ts untagged cache-health P3 accepted under @1.2 |
+
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Inline review** (host session mtat5zb9-zg2cj4gy, auto profile): no blocking findings.
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P3 | process/SECUA | packages/domain/src/agent-instance.ts:85 (foreign) | Concurrent task-0685 session wrote shared tree during this run (one-writer violation, 0487-R5 precedent); not touched by 0686 — documented in `.spur/run/0686-test-findings.md` |
+| P4 | self-caught | plugins/sp/references/environment-lens.md | Implement briefly tripped skill-structure R20 (`vendors/` literal); reworded pre-commit; nothing outstanding |
+
+Residual risk: low. Aggregate `spur-check`/`spur-check-new` blocked solely by the foreign 0685 DDL scan hit; operator approved scope waiver 2026-08-26 ~19:10 PST. Task-owned evidence green: focused suites 64+62+19, script-contract fresh twin (28095 B), lint/test/test-cf/build/corpus-check(all PASS), `spur task check --corpus` NEW findings attributable to other tasks only. Verify verdict PASS 14/14 MET; proof digest sha256:b7f6a4db060b3318a3d8651c49efaea53f8095a9620d3343a3c58b2051a0492e.
 
 ### References
+
 - [Feature I9](../features/I9_environment-improvement-lens-retro-categories-in-dogfood-and-history-anatomy-reports.md)
 - [Accepted environment-lens design](../design/environment-improvement-lens.md)
 - [Retro-skill brainstorm and keep/drop analysis](../plans/2026-08-26-retro-skills-brainstorm.md)
@@ -227,4 +279,9 @@ Do not add `sp:retro`, `/sp:dev-retro`, `CODING_STANDARDS.md`, another category 
 - [Dogfood report contract](../../plugins/sp/skills/dogfood-testing/references/report-template.md)
 - [History-anatomy report contract](../../plugins/sp/skills/history-anatomy/references/report-contract.md)
 - [History-anatomy surface design](../design/history-anatomy.md)
+
 ### History
+
+- 2026-08-27T01:34:40.116Z todo → wip (system)
+- 2026-08-27T02:20:06.194Z wip → testing (system)
+- 2026-08-27T02:27:55.302Z testing → done (system)

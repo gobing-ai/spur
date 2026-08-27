@@ -15046,14 +15046,6 @@
         },
         {
             "kind": "task",
-            "id": "0102",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "error",
-            "reason": "Point-window matcher residue (probe 2): cited line resolves and is in bounds but does not name the row subject because the matcher reads only the cited lines — see note § L4.anchor-subject-mismatch (2026-08-25), ADR-083.",
-            "since": "2026-08-25"
-        },
-        {
-            "kind": "task",
             "id": "0384",
             "code": "L4.anchor-subject-mismatch",
             "severity": "error",
@@ -15339,6 +15331,222 @@
             "severity": "warning",
             "reason": "Anchor path cannot resolve from project root (bare or plugin-relative) or line range exceeds file — see note § L4.stale-line-anchor (2026-08-25), ADR-083.",
             "since": "2026-08-25"
+        },
+        {
+            "kind": "feature",
+            "id": "E1",
+            "code": "L4.scenario-unverified",
+            "severity": "warning",
+            "reason": "Linked historical task 0474 has no canonical PASS verdict with MET requirements; accepted until evidence is recovered or rerun, with two-sided removal when it lands.",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "feature",
+            "id": "F4",
+            "code": "L4.scenario-unverified",
+            "severity": "warning",
+            "reason": "Linked historical task 0418 has no canonical PASS verdict with MET requirements; accepted until evidence is recovered or rerun, with two-sided removal when it lands.",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "feature",
+            "id": "F91",
+            "code": "L4.scenario-unverified",
+            "severity": "warning",
+            "reason": "Linked historical task 0582 has no canonical PASS verdict with MET requirements; accepted until evidence is recovered or rerun, with two-sided removal when it lands.",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "feature",
+            "id": "G4",
+            "code": "L4.scenario-unverified",
+            "severity": "warning",
+            "reason": "Linked historical task 0529 has no canonical PASS verdict with MET requirements; accepted until evidence is recovered or rerun, with two-sided removal when it lands.",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "feature",
+            "id": "I3",
+            "code": "L4.scenario-unverified",
+            "severity": "warning",
+            "reason": "Linked historical tasks 0539/0540 have no canonical PASS verdict with MET requirements; accepted until evidence is recovered or rerun, with two-sided removal when it lands.",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "feature",
+            "id": "I81",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "Self-referential history-anatomy work has no tracked dogfood artifact yet; accepted pending feature verification, with two-sided removal when the artifact lands.",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "feature",
+            "id": "I81",
+            "code": "L4.scenario-unverified",
+            "severity": "warning",
+            "reason": "Linked tasks 0674/0680 predate canonical PASS recording for these scenarios; accepted until evidence is recovered or rerun, with two-sided removal when it lands.",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "feature",
+            "id": "I9",
+            "code": "L4.dogfood-missing",
+            "severity": "warning",
+            "reason": "Feature I9 is active and task 0686 is still in progress; its dogfood artifact is a completion gate and does not exist yet.",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "feature",
+            "id": "I9",
+            "code": "L4.scenario-unverified",
+            "severity": "warning",
+            "reason": "Feature I9 is active and linked task 0686 is not yet verified; the two-sided entry must be removed when its canonical PASS verdict lands.",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "feature",
+            "id": "J4",
+            "code": "L4.scenario-unverified",
+            "severity": "warning",
+            "reason": "Linked historical tasks 0374-0378 have no canonical PASS verdicts with MET requirements; accepted until evidence is recovered or rerun, with two-sided removal when it lands.",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "feature",
+            "id": "K",
+            "code": "L4.scenario-unverified",
+            "severity": "warning",
+            "reason": "Linked historical task 0525 has no canonical PASS verdict with MET requirements; accepted until evidence is recovered or rerun, with two-sided removal when it lands.",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0342",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Current source line shifts exposed another closed-task point-window mismatch; preserve the historical citation pending the accepted F91 matcher/corpus migration (ADR-083).",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0588",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Task 0685 intentionally removed generated demo specs from the tracked tree, invalidating a historical 0588 point anchor; preserve that evidence pending F91 corpus migration (ADR-083).",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0609",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Task 0685 intentionally evolved the agent-wait surface and shifted 0609's historical point anchor; preserve that evidence pending F91 corpus migration (ADR-083).",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0631",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "The reserved 0685 DDL shifted migration-source line windows and exposed closed-task matcher residue; preserve historical citations pending F91 (ADR-083).",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0639",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Current config-source line shifts exposed another closed-task point-window mismatch; preserve the historical citation pending F91 (ADR-083).",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0645",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Current web-source line shifts exposed another closed-task point-window mismatch; preserve the historical citation pending F91 (ADR-083).",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0655",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Current web-source line shifts exposed another closed-task point-window mismatch; preserve the historical citation pending F91 (ADR-083).",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0665",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Current workflow-source line shifts exposed another closed-task point-window mismatch; preserve the historical citation pending F91 (ADR-083).",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0666",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Current agent-source line shifts exposed another closed-task point-window mismatch; preserve the historical citation pending F91 (ADR-083).",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0667",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Current workflow-source line shifts exposed another closed-task point-window mismatch; preserve the historical citation pending F91 (ADR-083).",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0669",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Current history-anatomy source/test line shifts exposed closed-task point-window residue; preserve historical citations pending F91 (ADR-083).",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0670",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Current ADR line shifts exposed another closed-task point-window mismatch; preserve the historical citation pending F91 (ADR-083).",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0674",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Current history-anatomy source line shifts exposed another closed-task point-window mismatch; preserve the historical citation pending F91 (ADR-083).",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0676",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Current history-anatomy source/test line shifts exposed closed-task point-window residue; preserve historical citations pending F91 (ADR-083).",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0680",
+            "code": "L4.anchor-subject-mismatch",
+            "severity": "error",
+            "reason": "Current history-anatomy source/test line shifts exposed closed-task point-window residue; preserve historical citations pending F91 (ADR-083).",
+            "since": "2026-08-26"
+        },
+        {
+            "kind": "task",
+            "id": "0685",
+            "code": "L4.missing-feature-id",
+            "severity": "warning",
+            "reason": "Standalone operator-design task completed with a canonical PASS but no parent feature existed; do not invent a post-hoc feature edge solely to silence the advisory.",
+            "since": "2026-08-26"
         }
     ]
 }

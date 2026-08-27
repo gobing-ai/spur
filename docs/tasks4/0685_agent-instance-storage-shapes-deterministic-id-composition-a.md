@@ -4,7 +4,7 @@ name: "Agent instance storage shapes, deterministic id composition, and role-add
 status: done
 template: feature-impl
 created_at: 2026-08-26T20:00:46.323Z
-updated_at: "2026-08-27T00:35:48.873Z"
+updated_at: "2026-08-27T02:24:07.180Z"
 ---
 
 ## 0685. Agent instance storage shapes, deterministic id composition, and role-addressed messaging
@@ -526,58 +526,78 @@ and the T3 doc ships with the surface — with no DB migration, no `AgentSpec` c
 performed.
 
 ### Solution
+Task 0685 landed in commit `66e43cee83e9cf0c97c4c3b4529b9d08c33139d1`; the standalone verification correction is the current working-tree diff.
 
-Change-map (R-items ↔ first changed anchor per file).
+| Req | Implementation | Anchor |
+| --- | --- | --- |
+| R1 | `ADR-086` records the three-layer storage taxonomy and projects-registry rejection; its append-only correction preserves the global capability catalog. | `docs/00_ADR.md:1393-1428` |
+| R2 | `AgentInstance` mirrors the reserved database shape. | `packages/domain/src/agent-instance.ts:15-44` |
+| R2 | `AgentInstanceStore` exposes only `bySpecId`, `byRole`, and `byExecutor`. | `packages/domain/src/agent-instance.ts:51-62` |
+| R2 | `AGENT_INSTANCES_DDL_DRAFT` freezes the complete unregistered `0026_spur_cli_agent_instances` DDL and indexes beside the registered migration catalog. | `packages/domain/src/migrations.ts:641-667` |
+| R2 | `createFileAgentInstanceStore` projects current specs onto the frozen read shape. | `packages/app/src/services/agent-instance-store.ts:23-57` |
+| R3 | `.spur/agents` generated materializations are ignored while `.gitkeep` remains tracked; hand-authored specs are force-trackable because gitignore cannot inspect YAML tags. | `.gitignore:134-140` |
+| R3 | `agent:` owns the active project-local `team.demo` roster used by the materialization proof. | `.spur/config.yaml:192-211` |
+| R4 | `memberLocalId` allocates deterministic, append-stable executor suffixes without colliding with an existing derived base. | `packages/config/src/index.ts:332-380` |
+| R5 | `--role` reopens ADR-075 only as exact-one resolution above the existing identity pin. | `docs/00_ADR.md:1072-1085` |
+| R6 | `resolveRoleTarget` validates the shared vocabulary and rejects zero/multiple matches with explicit counts and candidates. | `packages/app/src/services/agent-instance-store.ts:83-124` |
+| R6 | `message send` resolves exactly one selector before `runMessageSend`, which snapshots the occupant before a wait-bearing send. | `apps/cli/src/commands/message.ts:28-77` |
+| R6 | `agent wait` resolves exactly one selector before snapshotting `{specId, runId, generation}` once. | `apps/cli/src/commands/agent.ts:105-150` |
+| R7 | `--role` signatures, exact-one semantics, exit codes, and pin behavior are documented with the public surface. | `docs/04_DESIGN.md:463-480` |
 
-| Change (`file:line`) |
-| ---------------------- |
-| `apps/cli/src/commands/agent.ts:8` |
-| `apps/cli/src/commands/agent.ts:124` |
-| `apps/cli/src/commands/agent.ts:147` |
-| `apps/cli/src/commands/message.ts:47` |
-| `apps/cli/src/commands/message.ts:136` |
-| `apps/cli/src/commands/message.ts:164` |
-| `apps/cli/tests/commands/message.test.ts:591` |
-| `packages/app/src/services/agent-instance-store.ts:1` |
-| `packages/app/tests/services/agent-instance-store.test.ts:1` |
-| `packages/config/src/index.ts:342` |
-| `packages/config/tests/team-config.test.ts:210` |
-| `packages/config/tests/team-config.test.ts:215` |
-| `packages/config/tests/team-config.test.ts:228` |
-| `packages/domain/src/agent-instance.ts:16` |
-| `packages/domain/tests/agent-instance.test.ts:1` |
-
-Un-anchorable-but-real changes (import/barrel lines whose cited subject tokens cannot appear on
-the line): `.gitignore` generated-spec rule; `.spur/config.yaml` demo roster activation;
-`packages/domain/src/agent-instance.ts` DDL draft const (:88); barrel exports at
-`packages/app/src/index.ts` and `packages/domain/src/index.ts`; message.test.ts fixture
-(`seedSpecs`, import block); docs updates under `docs/04_DESIGN.md` +
-`plugins/sp/skills/spur-cli/references/{message,agent}.md`.
-
+No database migration, instance cutover, UI, `AgentSpec` change, fan-out path, new noun, or new verb was added.
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1/R2 — Storage taxonomy decided and instance shapes frozen | MET | docs/00_ADR.md ADR-086 (next free slot; task text said ADR-084 but 084+085 landed post-authoring) + Amendment inside ADR-075 entry; shapes packages/domain/src/agent-instance.ts (AgentInstance, AgentInstanceStore, specRole, reserved draft id const); read-side store packages/app/src/services/agent-instance-store.ts with resolveAgentSelector; tests packages/domain/tests/agent-instance.test.ts + packages/app/tests/services/agent-instance-store.test.ts |
-| R3 — Generated instance specs leave the tracked tree | MET | .gitignore /.spur/agents/* keep .gitkeep; three demo specs git rm --cached (staged D); demo roster activated in .spur/config.yaml agent.team.demo; real `team up demo` materialized demo-claude/demo-omp-zai/demo-codex-sol and pruned orphaned demo-codex.yaml; git status --porcelain .spur/agents shows only intentional staged deletions |
-| R4 — Duplicate-executor members disambiguate deterministically | MET | packages/config/src/index.ts memberLocalId suffixes dups omp/omp-2 (explicit ids untouched); explicit-dup guard retained; tests packages/config/tests/team-config.test.ts incl rewritten AC2 gate 'duplicate shorthand members no longer collide' |
-| R5/R6 — Role-addressed send/wait resolve exact-one and collapse to the pin | MET | apps/cli/src/commands/message.ts --to\|--role mutually exclusive, resolution collapses to toId before send flow; apps/cli/src/commands/agent.ts wait [<specId>] [--role] same guards via shared resolveAgentSelector; exit conventions: neither/both/unknown_selector=exit2 usage, selector_unmatched/ambiguous=exit1 typed envelope; covered by apps/cli/tests/commands/message.test.ts --role describe (both flags, unknown vocab, zero match, ambiguous naming count+candidates) |
-| R7 — T3 surface doc ships with the surface | MET | docs/04_DESIGN.md §inter-agent wait/send signatures updated with --role + error semantics; plugins/sp/skills/spur-cli/references/message.md & agent.md flag tables/examples/disambiguation notes — same commit as surface per T3 |
+|-------------|--------|----------|
+| R1 | MET | Storage taxonomy and projects.json rejection are recorded at docs/00_ADR.md:1393-1428; the append-only correction preserves the global catalog. Fix-pass artifacts: .spur/run/0685-solution.md:1-19 (CLI-submitted Solution), .spur/run/0685-review.md:1-29 (combined review), and .spur/run/0685-verdict.json:1-138 (final standalone verdict). |
+| R2 | MET | packages/domain/src/agent-instance.ts:15-62 freezes AgentInstance and the exact three-method AgentInstanceStore; packages/domain/src/migrations.ts:641-667 carries the complete reserved DDL outside CLI_MIGRATIONS; packages/app/src/services/agent-instance-store.ts:23-57 is the file reader. |
+| R3 | MET | Source-local team up demo exited 0; git status --porcelain .spur/agents produced no output; git ls-files .spur/agents lists only .gitkeep; git add -f --dry-run proves a hand-authored spec remains explicitly trackable. |
+| R4 | MET | packages/config/src/index.ts:332-380 allocates deterministic collision-free suffixes; packages/config/tests/team-config.test.ts:121-249 covers -2/-3, suffix/base collision, append stability, explicit duplicate rejection, compatibility, and schema bounds. |
+| R5 | MET | docs/00_ADR.md:1072-1085 amends ADR-075 in place: exact-one resolution, explicit count/candidates failures, no fan-out, and the unchanged identity pin. |
+| R6 | MET | packages/app/src/services/agent-instance-store.ts:59-124 centralizes selector resolution; message/agent CLI tests cover neither, both, unknown, zero, multi, and exact-one pin paths. Real golden path exited 0: message send --role planner --from verifier --json returned toId demo-claude and status queued. |
+| R7 | MET | git show 66e43cee... confirms both command modules, docs/04_DESIGN.md, and both spur-cli references landed in the same implementation commit; doc-evolve sync-check confirms docs/00, docs/03, docs/04, and AGENTS.md are present in the correction diff. |
 
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1/R2 — Storage taxonomy decided and instance shapes frozen | MET | command | bun run spur-check exited 0: all seven workspaces typechecked and the coverage-enforced repository suite passed with 6,540 tests, 0 failures, 99.19% functions, and 99.04% lines. |
+| Scenario: R3 — Generated instance specs leave the tracked tree | MET | command | team up demo exited 0; git status --porcelain .spur/agents was empty; git ls-files .spur/agents returned only .spur/agents/.gitkeep; git add -f --dry-run identified a spec as addable. |
+| Scenario: R4 — Duplicate-executor members disambiguate deterministically | MET | test | The clean 6,540-test repository run includes team-config.test.ts cases for duplicate executors, suffix/base collision, append stability, explicit duplicates, regex, and length bounds. |
+| Scenario: R5/R6 — Role-addressed send/wait resolve exact-one and collapse to the pin | MET | test | The clean repository run includes message.test.ts and agent-wait.test.ts exact-one pin, zero/multi, unknown, neither/both, and no-fan-out assertions; the real --json message golden path also exited 0. |
+| Scenario: R7 — T3 surface doc ships with the surface | MET | command | git show --name-only 66e43cee... exited 0 and listed agent.ts, message.ts, docs/04_DESIGN.md, references/agent.md, and references/message.md in one commit. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
-
-**SECU findings** (pipeline verify step — verdict: UNKNOWN)
-
 | Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
+| --- | --- | --- | --- |
+| P4 | Functional / SECUA / Architecture | Task 0685 | No P1-P3 findings. R1-R7 are traced and met; no architecture-deepening candidate remains. |
 
+#### Functional traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `docs/00_ADR.md:1393-1428` records the global catalog, project-local roster, DB-owned instances, and rejection of `projects.json`. |
+| R2 | MET | `packages/domain/src/agent-instance.ts:15-62` freezes the type and exact three-method read seam; `packages/domain/src/migrations.ts:641-667` freezes complete DDL outside `CLI_MIGRATIONS`; `packages/app/src/services/agent-instance-store.ts:23-57` supplies the file-backed reader. |
+| R3 | MET | `.gitignore:134-140` excludes generated specs while preserving `.gitkeep`; the recorded source-local `team up demo` proof produced no `.spur/agents` churn. |
+| R4 | MET | `packages/config/src/index.ts:338-380` allocates deterministic append-stable executor suffixes; `packages/config/tests/team-config.test.ts:121-149` covers duplicates, base/suffix collisions, and append stability. |
+| R5 | MET | `docs/00_ADR.md:1072-1085` amends ADR-075 in place with exact-one resolution, count/candidate errors, no fan-out, and the unchanged pin. |
+| R6 | MET | `packages/app/src/services/agent-instance-store.ts:64-124` validates and resolves the shared vocabulary; `apps/cli/src/commands/message.ts:28-77` and `apps/cli/src/commands/agent.ts:105-150` enforce mutually exclusive identity/role inputs before the existing pinned paths. Exact-one send/wait tests pass. |
+| R7 | MET | `docs/04_DESIGN.md:463-483` and both `plugins/sp/skills/spur-cli/references/{message,agent}.md` references document signatures, exact-one semantics, exit codes, and pin behavior. |
+
+#### SECUA
+
+- Security/correctness: selectors are allow-listed, zero/multiple matches fail with explicit counts, and resolution yields one spec id before entering the existing identity-pinned path; there is no broadcast branch.
+- Usability/maintainability: usage errors distinguish missing, conflicting, unknown, unmatched, and ambiguous inputs; the shared resolver keeps both CLI call sites consistent.
+- Efficiency: the file reader scans the project-local materialized specs once per selector lookup; this is bounded by roster size and adds no polling or network path.
+
+#### Architecture
+
+The three-method `AgentInstanceStore` is the explicit file-to-DB cutover seam required by R2, not speculative layering. The reserved DDL is colocated with migration ownership but absent from `CLI_MIGRATIONS`, so this task introduces no schema/runtime blast radius. No deepening candidate is justified.
+
+#### Verification
+
+`bun run spur-check` passes: 6,540 tests, 0 failures, 99.19% functions, and 99.04% lines.
 ### References
 
 - Decisions: `docs/00_ADR.md` — ADR-051:456 (public-surface consent, noun-first; amendment
