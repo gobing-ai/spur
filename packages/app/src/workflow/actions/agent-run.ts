@@ -231,6 +231,18 @@ export class AgentRunActionRunner implements ActionRunner {
         const requireDiff = asOptionalBoolean(options.requireDiff);
         const capture = asOptionalBoolean(options.capture) || answerFile !== undefined;
 
+        // 0689: an expectFile/answerFile prompt that names a RELATIVE path lets a
+        // headless executor with a scratch-rooted file tool (antigravity-cli)
+        // satisfy the write somewhere the post-exit check never looks. Append the
+        // resolved absolute path so every agent writes where the guard checks.
+        const absoluteArtifactHint = (() => {
+            const rel = expectFile ?? answerFile;
+            if (rel === undefined || isAbsolute(rel)) return undefined;
+            return `\n\nWrite the required artifact to this absolute path: ${join(cwd, rel)}`;
+        })();
+        const dispatchInput =
+            input === undefined || absoluteArtifactHint === undefined ? input : `${input}${absoluteArtifactHint}`;
+
         // Always dispatch via runTraced: forces non-interactive pipe-no-TTY
         // output (H83 R5 / task 0295+0448) so onOutput streams live without a
         // child TTY, and returns the resolved invocation for the run trace
@@ -264,7 +276,7 @@ export class AgentRunActionRunner implements ActionRunner {
                 steeringNote = undefined;
                 let steeringSignal = this.steeringController?.begin(context.runId, actionId, steeringPolicy);
                 while (true) {
-                    traced = await this.agentService.runTraced(input, flags, undefined, {
+                    traced = await this.agentService.runTraced(dispatchInput, flags, undefined, {
                         correlation: {
                             runId: context.runId,
                             executionId: crypto.randomUUID(),

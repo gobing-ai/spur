@@ -617,6 +617,46 @@ describe('AgentRunActionRunner expectFile', () => {
         expect(result.error).toContain('artifact.txt');
     });
 
+    // 0689: a RELATIVE expectFile/answerFile must reach the executor as its resolved
+    // absolute path — headless executors with a scratch-rooted file tool
+    // (antigravity-cli) otherwise write where the post-exit check never looks.
+    test('relative expectFile appends the absolute path to the dispatched input', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const seen: Array<string | undefined> = [];
+        const svc = {
+            runTraced: async (input: string | undefined) => {
+                seen.push(input);
+                return { exitCode: 0, stdout: '', invocation: invocation() };
+            },
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        // expectFile still verifies the file post-exit; satisfy it so the run is ok.
+        writeFileSync(join(dir, 'artifact.json'), '{}');
+        const result = await runner.execute(
+            { role: 'coder', input: 'write it', expectFile: 'artifact.json', cwd: dir },
+            makeCtx(),
+        );
+        expect(result.ok).toBe(true);
+        expect(seen[0]).toContain('write it');
+        expect(seen[0]).toContain(`absolute path: ${join(dir, 'artifact.json')}`);
+    });
+
+    test('absolute expectFile leaves the dispatched input unchanged', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const seen: Array<string | undefined> = [];
+        const svc = {
+            runTraced: async (input: string | undefined) => {
+                seen.push(input);
+                return { exitCode: 0, stdout: '', invocation: invocation() };
+            },
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const abs = join(dir, 'artifact.json');
+        writeFileSync(abs, 'x');
+        await runner.execute({ role: 'coder', input: 'write it', expectFile: abs, cwd: dir }, makeCtx());
+        expect(seen[0]).toBe('write it');
+    });
+
     test('non-capture: non-zero exit skips expectFile check', async () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
         const svc = svcWithRunTraced({ exitCode: 2, stdout: '', invocation: invocation() });
