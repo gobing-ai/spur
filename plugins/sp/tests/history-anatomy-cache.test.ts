@@ -1118,6 +1118,18 @@ describe('checkReportStructure closed category vocabulary (0686/I9)', () => {
         ).toEqual([]);
     });
 
+    // R12/R7: section 9 stays additive report grammar — ordinary unprojected numbered prose is
+    // still valid alongside closed-vocabulary findings; the gate adds no section-9 parser branch.
+    test('unprojected numbered section 9 prose still passes alongside closed categories', () => {
+        const numbered = '1. Shorten the always-loaded preamble.\n2. Pin the agent spec in the run header.';
+        const report = findingBlock(fullFinding('workflow:agents-md:navigation', 'workflow')).replace(
+            '## Workflow and process improvements\n\nbody',
+            `## Workflow and process improvements\n\n${numbered}`,
+        );
+        expect(report).toContain('1. Shorten the always-loaded preamble.');
+        expect(checkReportStructure(report).problems.filter((p) => p.startsWith('finding-'))).toEqual([]);
+    });
+
     test('an environment-signal key (workflow:agents-md:navigation) passes — retro names live in <signal>', () => {
         expect(
             checkReportStructure(

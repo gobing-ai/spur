@@ -1826,4 +1826,32 @@ describe('environment-lens single source of truth (task 0686 / R44-adjacent)', (
             expect(SEVEN.every((name) => body.includes(name))).toBe(false);
         }
     });
+
+    // R5/R8/R9: the classification and mutation boundaries are contract prose with no runtime
+    // parser behind them, so they regress silently unless pinned here. Each assertion names the
+    // clause an AC depends on, not the whole paragraph.
+    test('dogfood report-template pins the proposal-only, classification, and check-first clauses', () => {
+        const text = readFileSync(join(SKILLS_DIR, 'dogfood-testing', 'references', 'report-template.md'), 'utf8');
+        // R5 — environment findings are never a bounded-fix mutation target; class, not path, decides.
+        expect(text).toContain('never `Edit` or `Write`');
+        expect(text).toContain('Class, not the cited file path, decides whether bounded fix may mutate.');
+        // R8 — navigation / dead instructions are environment, and coding standards route to review.
+        expect(text).toMatch(/navigation friction and dead always-loaded instructions are likewise `environment`/);
+        expect(text).toMatch(
+            /`sp:code-verification`, `sp:code-review`, or pipeline review\) — never the implementer skill/,
+        );
+        // R9 — the recommended action is a gate, not another always-loaded sentence.
+        expect(text).toMatch(
+            /proposes a new-or-tighter automated check — never another sentence in an\s+always-loaded steering file/,
+        );
+    });
+
+    // R7: history-anatomy section 9 stays proposal-only and names the four projected fields.
+    test('history-anatomy report-contract pins the section 9 projected-candidate fields', () => {
+        const text = readFileSync(join(SKILLS_DIR, 'history-anatomy', 'references', 'report-contract.md'), 'utf8');
+        for (const field of ['owner surface:', 'expected impact:', 'verification method:', 'reversibility:']) {
+            expect(text).toContain(field);
+        }
+        expect(text).toContain('no applied change, no diff, and no command the report claims to have run');
+    });
 });

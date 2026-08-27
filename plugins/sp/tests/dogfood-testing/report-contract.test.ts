@@ -228,4 +228,16 @@ describe('environment-lens class tags (task 0686, R3-R5/R14)', () => {
     test('a report with no findings still validates — no new required field exists', () => {
         expect(validateReport(passFixture).ok).toBe(true);
     });
+
+    // R14: the pre-existing cache-health P3 (aggregate cache% < 50 or a step < 40) predates the
+    // class tags and must keep validating without one — the tags add no required field.
+    test('the untagged cache-health P3 still validates under @1.2 (R14)', () => {
+        const cacheHealth =
+            '- **P3** — Low cache hit rate — candidate for context-window or prompt trimming ' +
+            '(aggregate 38%, step `implement` 22%). → **Action:** trim the always-loaded preamble. ' +
+            '(`plugins/sp/skills/dogfood-testing/SKILL.md:1`, ~15m) `[unverifiable]`';
+        expect(cacheHealth).not.toContain('[environment]');
+        expect(cacheHealth).not.toContain('[waste]');
+        expect(validateReport(inject(cacheHealth)).ok).toBe(true);
+    });
 });
