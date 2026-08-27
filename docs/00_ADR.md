@@ -1426,3 +1426,35 @@ Untracked generated specs also imply the demo-story fix: an example roster ships
 overrides through the merged loader. The blanket scratch rule cannot inspect YAML tags, so
 hand-authored specs remain opt-in trackable with `git add -f`; only `spur:generated` specs are
 runtime state by contract. Detail: `docs/03_ARCHITECTURE.md` §17 and `docs/04_DESIGN.md` §2.1/§3.1.
+
+## ADR-087: `--agent inline` Is One Honest Selector — Default Inline, Substitution Over Rejection
+
+**Status:** Accepted · **Date:** 2026-08-26 · **Task:** 0687
+
+**Decision.** Three changes collapse the G5 (0565) frozen-rejection contract and the 0508
+omit-only carve-out into plain selector semantics:
+
+1. **Inline is the default.** `resolveAgent` resolves omitted `--agent` as `'inline'`
+   (`agent-service.ts`); omitted and explicit `inline` are indistinguishable downstream.
+2. **Native-subagent eligibility is resolution-shaped, not flag-shaped.** Task-0508 eligibility
+   condition 1 now reads "resolved selector is inline" on the two interactive full-pipeline
+   surfaces instead of "`--agent` omitted with an explicit-inline zero-dispatch carve-out"
+   (`inline-pipeline-driver.md`).
+3. **Headless surfaces substitute instead of rejecting.** `AGENT_INLINE_HEADLESS_MESSAGE` is
+   deleted together with its validation gate in `validateAgentSelector`, its workflow wrapper in
+   `AgentRunActionRunner.execute`, and the re-export. An `inline` request reaching
+   `AgentService.resolveAgent` resolves through the tier chain exactly like `auto` and emits one
+   stderr warning naming the substitute (`--agent inline requested on a headless surface (no host
+   session); resolved <executor> — substituted tier resolution`). No exit-code change, no
+   `agent.default` normalization at call sites — substitution lives only where resolution happens.
+
+**Why.** The frozen rejection was honest about the surface mismatch but violated one-flag-one-
+meaning: scripts propagating the new default got exit 2 from `spur agent run` for requesting the
+same selection an interactive session honors. A warn-and-resolve fallback keeps dispatches alive,
+stays auditable (the warning names role/tier provenance), and removes the last conditional branch
+from the selector so `inline` has exactly one behavior everywhere: in-session when a session
+exists, tier-substituted when it does not. Pinned verbatim tests were updated in the same change;
+the exit-2 envelope shape remains untouched for genuine resolution failures.
+
+**Detail:** `docs/04_DESIGN.md` §2.1/§3.2 (selector table, agent.run flow);
+`docs/design/agent-inline-host-session.md` (G5 history, superseded); task 0687.

@@ -11,7 +11,6 @@ import type {
     AgentExecutionOptions,
 } from '../../../src/observability/agent-execution';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../../src/services/agent-service';
-import { AGENT_INLINE_HEADLESS_MESSAGE } from '../../../src/services/agent-service';
 import {
     AGENT_RUN_PROGRESS_INTERVAL_MS,
     AgentRunActionRunner,
@@ -1984,7 +1983,7 @@ describe('R1 — config injection (task 0451)', () => {
         expect(result.setVars?.__agentSessionId).toBeUndefined();
     });
 
-    test('G5: agent: inline fails the action with the frozen message and never dispatches', async () => {
+    test('R3 (0687): agent: inline forwards to the service for substitution instead of rejecting', async () => {
         let capturedFlags: Record<string, string | boolean> = {};
         const svc = svcCapturingFlags((f) => {
             capturedFlags = f;
@@ -1996,13 +1995,11 @@ describe('R1 — config injection (task 0451)', () => {
         const ctx = makeCtx({ runId: 'run-456', workdir: '/tmp/w2' });
         const result = await runner.execute({ role: 'coder', input: 'hello', agent: 'inline' }, ctx);
 
-        // ADR-047 amendment (G5): a workflow agent.run action is a headless
-        // dispatch surface — inline is rejected loudly, never normalized to
-        // agentConfig.default (no fallback, no dispatch).
-        expect(result.ok).toBe(false);
-        expect(result.error).toContain(AGENT_INLINE_HEADLESS_MESSAGE);
-        expect(result.error).toContain('inline');
-        expect(capturedFlags.agent).toBeUndefined();
+        // 0687 R3: a workflow agent.run action is a headless dispatch surface; the
+        // explicit inline selector flows through unchanged (flags.agent set) and
+        // AgentService substitutes tier resolution with a warning there.
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.agent).toBe('inline');
     });
 
     test('G5 regression: a step with no agent: still dispatches to agentConfig.default', async () => {

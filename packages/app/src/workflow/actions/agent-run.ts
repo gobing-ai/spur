@@ -4,12 +4,7 @@ import { AGENT_ROLE_NAMES } from '@gobing-ai/spur-config';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { type AgentExecutionObserver, redactAndBound } from '../../observability/agent-execution';
-import {
-    AGENT_INLINE_HEADLESS_MESSAGE,
-    type AgentRunInvocation,
-    type AgentRunTracedResult,
-    type AgentService,
-} from '../../services/agent-service';
+import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../services/agent-service';
 import { permissionFailureEvidence } from '../../services/failure-classification';
 import { TaskLocator } from '../../services/task-locator';
 import type { WorkflowObservabilityBus } from '../observability';
@@ -128,18 +123,9 @@ export class AgentRunActionRunner implements ActionRunner {
     async execute(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
         const input = asOptionalString(options.input);
         const agent = asOptionalString(options.agent);
-        // ADR-047 amendment (G5): explicit `inline` is a host-session guarantee;
-        // this workflow action is a headless dispatch surface and cannot host a
-        // session. Fail loudly instead of normalizing to agentConfig.default —
-        // no fallback, no dispatch (a default-executor subprocess would run in
-        // another session with zero signal). `omit` still resolves
-        // agentConfig.default through the service.
-        if (agent === 'inline') {
-            return {
-                ok: false,
-                error: `agent.run: ${AGENT_INLINE_HEADLESS_MESSAGE}`,
-            };
-        }
+        // 0687 R3: explicit `inline` is no longer rejected on dispatch surfaces;
+        // it flows to AgentService.resolveAgent which substitutes tier resolution
+        // with a substitution warning (host-session inline never reaches here).
         // Declared step role (0538 R2): threaded onto the underlying `spur agent run`
         // so the resolution records the reason even when the `agent:` pin beats it.
         const role = asOptionalString(options.role);

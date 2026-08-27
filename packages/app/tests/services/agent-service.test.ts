@@ -9,7 +9,6 @@ import { createDbAdapter } from '@gobing-ai/ts-db';
 import { EventBus } from '@gobing-ai/ts-infra';
 import {
     _resetAgentServiceShimsForTest,
-    AGENT_INLINE_HEADLESS_MESSAGE,
     type AgentConfig,
     type AgentExecutionEvent,
     type AgentExecutionStartedEvent,
@@ -2175,18 +2174,17 @@ describe('AgentService executor-aware explicit --agent (0346)', () => {
         expect(diag).toContain('claude');
     });
 
-    test('ADR-047 (G5): --agent inline fails resolution with the frozen message — no agent.default fallback, no dispatch', async () => {
-        const { lines, output } = captureOutput();
+    test('R3 (0687): --agent inline substitutes tier resolution with a warning and spawns', async () => {
+        const { errors, output } = captureOutput();
         const svc = new AgentService({ cwd: process.cwd(), env: {}, output, agentConfig: cfg });
         const { deps, runner } = mockResolutionDeps();
         const code = await svc.run('plain prompt', { agent: 'inline', json: true }, deps);
-        // Explicit inline is host-session-only; a headless surface cannot host a
-        // session, so resolution fails loudly through the resolve-failure channel
-        // — never normalized to agent.default (no default-executor subprocess).
-        expect(code).toBe(2);
-        expect(runner.runPromptCommand).not.toHaveBeenCalled();
-        const envelope = JSON.parse(lines[0] ?? '{}');
-        expect(envelope.error?.message).toContain(AGENT_INLINE_HEADLESS_MESSAGE);
+        // 0687 R3: an `inline` request reaching AgentService is by definition on a
+        // headless dispatch surface; resolution substitutes tier resolution and
+        // warns once instead of failing with the retired frozen message.
+        expect(code).toBe(0);
+        expect(runner.runPromptCommand).toHaveBeenCalledTimes(1);
+        expect(errors.join('\n')).toContain('--agent inline requested on a headless surface');
     });
 });
 

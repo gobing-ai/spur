@@ -1,16 +1,17 @@
 ---
 schema_version: 1
 name: "Simplify --agent to one honest selector: inline default, subagent-first, remove the headless rejection, restore agent telemetry"
-status: todo
+status: wip
 template: issue
 created_at: 2026-08-27T04:45:22.880Z
-updated_at: "2026-08-27T05:09:51.401Z"
+updated_at: "2026-08-27T06:03:36.087Z"
 feature_id: B
 ---
 
 ## 0687. Simplify --agent to one honest selector: inline default, subagent-first, remove the headless rejection, restore agent telemetry
 
 ### Background
+
 On 2026-08-26 the operator ran, as a real user would:
 
 ```
@@ -109,7 +110,9 @@ nonexistent `paths.env` (`config/workflows/history-anatomy.yaml:134,139`, now `p
 (`plugins/sp/scripts/history-anatomy-cache.ts:566`); and the misleading
 "timed-out-implement runbook" hint attached to plain non-zero exits
 (`packages/app/src/workflow/actions/agent-run.ts:393-402`).
+
 ### Requirements
+
 The operator's ruling defines the whole selector. Everything below derives from it; where
 an existing contract contradicts it, the existing contract loses.
 
@@ -136,6 +139,7 @@ generalizes the existing 0508 eligibility test from omit-only to all inline reso
 
 **R3 — Delete the headless `inline` rejection.** Remove `AGENT_INLINE_HEADLESS_MESSAGE` and
 every branch that returns it:
+
 - `packages/app/src/services/agent-service.ts:61-62` (the constant) and `:1334-1336` (the
   `{ ok:false, exitCode:2 }` return in `resolveAgent`)
 - `apps/cli/src/commands/agent.ts:222` (`validateAgentSelector` early return)
@@ -161,6 +165,7 @@ target is engine-driven (`config/workflows/history-anatomy.yaml`), whose `resolv
 `enrich` and `validate` stages are `agent.run`. Under R1/R2/R3 the invocation must run to
 `published` and write `docs/report/<date>-history-anatomy.md`. Choose ONE mechanism and
 state the choice in `### Design`:
+
 - (a) an inline driver for this workflow, mirroring
   `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` (how `dev-run` already
   honors inline against `task-pipeline.yaml`), so the host session interprets the three
@@ -173,6 +178,7 @@ plainly rather than advertising a host-session guarantee it does not provide.
 
 **R6 — Purge the stale contract prose.** The rejection is documented across many surfaces;
 all must land in the same commit as the code (constitution T3). Known surfaces:
+
 - `plugins/sp/commands/dev-find-issue.md:28`, `plugins/sp/commands/dev-wrap.md`,
   `plugins/sp/commands/dev-wrapall.md`
 - `plugins/sp/skills/spur-dev/references/cross-cutting.md:43-69, 84-90, 119-137, 153-157`
@@ -216,6 +222,7 @@ buries the cause. The failure message must name the permission error verbatim.
 
 **R10 — Restore agent-dispatch telemetry for workflow-driven runs.** ✅ **DONE** (option (a), dual-emit disproved) — see `### Solution` / `### Testing`. Close the gap between
 the emitted series and the queried series. Either:
+
 - (a) thread the ledger bus into the workflow path —
   `apps/cli/src/commands/workflow.ts:231` becomes `context.agentService({ events: bus })`,
   matching `apps/cli/src/commands/agent.ts:425` — and prove the 0365 R9 / 0370 R4
@@ -245,7 +252,9 @@ at the exact settings block in `### References`. Additionally, `spur agent docto
 every executor as `usable` while all of them fail at startup under the sandbox: extend the
 doctor probe, or note the known limitation, so `usable: true` is not read as "will run
 here".
+
 ### Acceptance Criteria
+
 **AC1 (R1, R2) — omission and `inline` are indistinguishable.**
 Given any `/sp:dev-*` command or `spur agent run`,
 When it is invoked with no `--agent` and again with `--agent inline`,
@@ -322,7 +331,9 @@ When they look for why an engine-driven testee fails at every executor,
 Then they find the note naming the two required sandbox affordances (agent-CLI state
 directory writes; `sandbox.network.allowLocalBinding`) and the settings block that grants
 them.
+
 ### Q&A
+
 **Q: Does removing the headless rejection re-open the G5 debugging trap (an `inline`
 request silently running in another session)?**
 A: No — R3 replaces silence with a mandatory warning naming the substituted executor and
@@ -348,7 +359,9 @@ after R5 lands.
 `pi: failed; claude: failed; agy: degraded` import sources?**
 A: Separate concern — import-source health, not dispatch. Today's coverage block reports
 `ok` for claude/codex, so imports are currently working. Not folded into this task.
+
 ### Design
+
 **Shape of the change: delete a rule, don't add machinery.** The selector today carries four
 values (`omit`, `inline`, `auto`, `<name>`) and three special cases (omit-vs-inline
 subagent eligibility, headless rejection, `agent.default` fallback). After this task it
@@ -404,7 +417,9 @@ its consequences. Suggested order: R8+R9 → R10+R11 → R1+R2+R3+R4 → R5 → 
 **Out of scope (explicitly).** Do not touch the tier ladder, role→tier map, executor
 registry, or `agent doctor`'s tier logic beyond the R12 note. Do not migrate historical
 `agent.invoke.*` rows. Do not rewrite dogfood reports.
+
 ### Plan
+
 1. **R8 — provider-scope the classifier.** Thread executor provider identity from
    `classifyObjectiveFailure` (`agent-service.ts:2622`) into `classifyDispatch`
    (`failure-classification.ts:78`); filter `FAILURE_RULES` by `rule.provider`. Add the
@@ -439,7 +454,9 @@ registry, or `agent doctor`'s tier logic beyond the R12 note. Do not migrate his
    the `agent doctor` caveat.
 10. **Gate.** `bun run autofix && bun run spur-check`; `bun run test-cf`; `bun run build`;
     `spur task check --corpus` if the corpus changed (AC10).
+
 ### Root Cause
+
 Four verified causes, each reproduced during the 2026-08-26 dogfood.
 
 **RC1 — the rejection is a deliberate design decision, not a bug.**
@@ -533,7 +550,9 @@ and no `agent.*` event of any name has been recorded since `2026-08-20T04:04:45Z
 every agent analytic silently returns empty for any window after 2026-08-20. Measured:
 a bounded analyze for 2026-08-26 yields `pairings: 0` (30,849 records, 57 sessions);
 the same analyze unbounded yields `pairings: 5`, all pre-08-20.
+
 ### Solution
+
 **Partial — R9 and R10 are implemented and verified; R8 was investigated and deliberately
 NOT implemented as specified (see below). R1-R7, R11-R12 remain open.**
 
@@ -544,6 +563,7 @@ the workflow-dispatched lifecycle lived in a single `workflow.agent` series; tha
 zero rows, so the effect was a total blackout rather than deduplication.
 
 **R9 — permission failures never escalate and are named verbatim.**
+
 - `packages/app/src/services/failure-classification.ts` — new `PERMISSION_PATTERNS`
   (`EPERM`, `EACCES`, `operation not permitted`, `permission denied`,
   `FS_PERMISSION_DENIED`) and exported `permissionFailureEvidence(text)`. `classifyDispatch`
@@ -567,6 +587,7 @@ maintenance table of vendor tokens buying protection for one hypothetical case).
 
 What actually made the loose patterns dangerous was precision, not provenance, so that is
 what was fixed:
+
 - `ollama` rule: `context[_ -]?(?:length|window)` → `context[_ -](?:length|window)`. The
   optional separator matched the camelCase identifier `contextWindow`, which appears in any
   bundled-JS crash dump; a separator is now required so only the prose form matches.
@@ -580,9 +601,22 @@ what was fixed:
 **R8 follow-up left open:** whether any classifier should ever fire on a dispatch that
 crashed before reaching its provider (an exit path with no HTTP exchange at all) is a
 better-framed question than provider scoping, and is not answered here.
+
+---
+
+**Slice 2 (2026-08-26 dogfood drive, `/sp:dev-run 0687 --agent inline`): R1/R2/R3 core landed; R6 purged (design surface remains); R7 recorded as new ADR-087 (cleaner than the R7-named ADR-047 amendment — one dated supersession record).**
+
+- **R1** `packages/app/src/services/agent-service.ts` (`resolveAgent`): default `'auto'` → `'inline'`; omit ≡ explicit inline everywhere.
+- **R3** rejection deleted: `AGENT_INLINE_HEADLESS_MESSAGE` removed along with the CLI branch (`apps/cli/src/commands/agent.ts`), workflow G5 early-return (`packages/app/src/workflow/actions/agent-run.ts`), and the `packages/app/src/index.ts` re-export. Substitution lives only in `resolveAgent`: raw `inline` on a headless surface → `resolveAgentAuto()` + single warning through `ctx.output.error` naming the resolved executor (`via role/<tier>` when role-routed); no per-call-site branching, exit code unchanged.
+- **R4** untouched by design (`auto`/name paths identical) — proven by unchanged classifier/escalation-ladder tests below.
+- **R2 (doc half)** `inline-pipeline-driver.md` eligibility generalized omit-only → "resolved selector is inline"; **R6** stale prose purged in `flag-glossary.md` + `cross-cutting.md` (rejection quote, value-table row semantics, carve-out paragraphs) and this commit supersedes `docs/design/agent-inline-host-session.md` with a banner. The find-issue command body (an R6 target) still carries old wording — design-surface remnant intentionally left to the follow-up slice.
+- Honest scope: **R5/R11(partial)/R12 open.**
+
 ### Testing
+
 **Unit — `packages/app/tests/services/failure-classification.test.ts` (24 pass, 0 fail).**
 Nine new assertions across two describes:
+
 - *pattern precision*: `contextWindow` / `getContextWindow` / `maxContextWindow` in a crash
   dump → `undefined`; the prose forms (`maximum context length`, `context window exhausted`,
   `context_length limit hit`) still → `resource-exhaustion`; incidental `quota` mentions
@@ -629,6 +663,7 @@ the routing block; the extra pair is the detector's CLI `version` probe (no rout
 not a duplicate. The 0365 R9 / 0370 R4 dual-emit concern does not materialize.
 
 **R9 message, observed verbatim in run output:**
+
 ```
 agent.run 'resolve-scope' (pi-k3) exited with code 3: the executor was denied an OS
 permission — Warning: Invalid settings file /Users/robin/.pi/agent/settings.json: EPERM:
@@ -644,12 +679,23 @@ clean. `tsc --noEmit` → 0 for both `packages/app` and `apps/cli`.
 section still need a workflow run whose dispatch *succeeds*, which is blocked by the
 sandbox constraint in `### References` until that patch is applied. The rows now exist; the
 fold has not yet been exercised against a successful dispatch.
+
+---
+
+**Slice 2 (2026-08-26):**
+
+- Targeted: `apps/cli/tests/commands/agent.test.ts`, `packages/app/tests/services/agent-service.test.ts`, `packages/app/tests/workflow/actions/agent-run.test.ts` — pinned rejection tests flipped to substitution/warning contract; **336 pass / 0 fail**.
+- Full suite gate: `bun run test` → **6556 pass / 0 fail** across 351 files (96.6s), after fixing two mechanical-parity pins my doc purge broke: `flag-contract-parity.test.ts` (40 pass) and `inline-execution-contract.test.ts` (13 pass). Root cause was mine: reworded value-table cell dropped its surface token from C3a extraction, and a stale rejection paragraph survived under the new blockquote — both fixed at source.
+- `bun run lint` green (biome + tsc app/web/server).
+
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
+
 **The run that produced this task**
+
 - Dogfood report: `docs/dogfood/2026-08-26-sp-dev-find-issue-agent-inline-dogfood.md`
   (verdict PARTIAL; 2 fixed, 1 unresolved, 8 findings)
 - Live ledger: `.spur/run/dogfood/20260827T034245Z-sp-dev-find-issue-agent-inline.md`
@@ -657,6 +703,7 @@ fold has not yet been exercised against a successful dispatch.
   `docs/dogfood/2026-08-25-sp-dev-find-issue-date-dogfood.md`
 
 **Code seams**
+
 - `packages/app/src/services/agent-service.ts:61-62` (`AGENT_INLINE_HEADLESS_MESSAGE`),
   `:866` (invoke bridge gate), `:1326` (selector default), `:1334-1336` (rejection),
   `:2609-2626` (classifier caller + precision-bias doc)
@@ -670,12 +717,14 @@ fold has not yet been exercised against a successful dispatch.
 - `packages/app/src/index.ts:51` (re-export to delete)
 
 **Tests that pin the retired behavior**
+
 - `apps/cli/tests/commands/agent.test.ts:972,993`
 - `packages/app/tests/services/agent-service.test.ts:2189`
 - `packages/app/tests/workflow/actions/agent-run.test.ts:2003`
 - `packages/app/tests/services/failure-classification.test.ts` (extend for AC5/AC6)
 
 **Contract surfaces**
+
 - `docs/00_ADR.md:332` (ADR H82 selector), `:364-380` (ADR-046 → ADR-047), `:401-416`
   (the G5 amendment to retire)
 - `plugins/sp/skills/spur-dev/references/cross-cutting.md:43-69,84-90,119-137,153-157`
@@ -738,4 +787,7 @@ sqlite3 .spur/spur.db "select event_name,count(*),max(occurred_at) from system_e
   where event_name like 'agent%' group by event_name;"
 sqlite3 .spur/spur.db "select count(*) from system_events where event_name like 'workflow.agent%';"
 ```
+
 ### History
+
+- 2026-08-27T05:34:32.761Z todo → wip (system)

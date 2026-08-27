@@ -10,9 +10,9 @@ see_also:
 # Inline Pipeline Driver
 
 This driver is the interactive control-inversion path granted by ADR-047. It applies only when an
-interactive `/sp:dev-run --mode full` or sequential `/sp:dev-runall` invocation omits `--agent` or
-passes `--agent inline`. A named executor, `--agent auto`, parallel batch mode, `spur workflow run`,
-and `spur agent run` keep the existing subprocess path.
+interactive `/sp:dev-run --mode full` or sequential `/sp:dev-runall` invocation omits `--agent` (now
+the inline default, 0687 R1) or passes `--agent inline`. A named executor, `--agent auto`, parallel
+batch mode, `spur workflow run`, and `spur agent run` keep the existing subprocess path.
 
 The project runtime definition — `task-pipeline.yaml`, resolved through the two-tier
 project→bundled model (task 0648/0650, never an unbundled runtime path) — remains the sole
@@ -72,9 +72,10 @@ Action semantics come from the YAML and the workflow action contract:
 **Native-subagent dispatch (R2 eligibility, evaluated before each action):**
 
 1. The invocation is one of the two interactive inline full-pipeline surfaces (`dev-run --mode full`
-   or sequential `dev-runall`) with the `--agent` flag **omitted**. Explicit `--agent inline` is the
-   zero-dispatch carve-out: every model stage executes in the invoking host session — the
-   native-subagent leg below never applies to it.
+   or sequential `dev-runall`) and the resolved selector is inline — i.e. `--agent` **omitted**
+   (0687 R1 default) or `--agent inline` passed explicitly (0687 R2 generalized from omit-only).
+   Explicit inline and omitted resolve identically; a named executor, `auto`, parallel mode,
+   `spur workflow run`, and `spur agent run` keep the subprocess path.
 2. The YAML action kind is `agent.run` and its input is a pure slash command. Shell, note, file,
    guard, and operator-interaction actions remain host-executed.
 3. The current state/action has no operator-confirmation action, `pause: true`, approve/taste/ask

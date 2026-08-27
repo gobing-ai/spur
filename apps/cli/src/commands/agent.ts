@@ -1,6 +1,5 @@
 import type { Command } from '@commander-js/extra-typings';
 import {
-    AGENT_INLINE_HEADLESS_MESSAGE,
     type AgentRunDeps,
     AgentService,
     type AgentSpecInput,
@@ -219,7 +218,7 @@ function commanderOptionsToFlags(options: Record<string, unknown>): Record<strin
 export function validateAgentSelector(flags: Record<string, string | boolean>, context: CliContext): string | null {
     const raw = typeof flags.agent === 'string' ? flags.agent : undefined;
     if (raw === undefined || raw === 'auto') return null;
-    if (raw === 'inline') return AGENT_INLINE_HEADLESS_MESSAGE;
+    if (raw === 'inline') return null; // 0687 R3: valid selector on every surface
     if (context.agentRoles.has(raw)) return null;
     if ((context.agentConfig?.executors ?? []).some((e) => e.name === raw)) return null;
     if (isAgentName(raw)) return null;

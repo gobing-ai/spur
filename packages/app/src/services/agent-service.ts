@@ -52,15 +52,6 @@ import { bridgeEventBus, withInvokeRouting } from './event-bridge';
 import { classifyDispatch } from './failure-classification';
 import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
 
-/**
- * Stable, greppable error for explicit `--agent inline` on a headless surface
- * (ADR-047 amendment / feature G5). A headless surface cannot host a session,
- * so `inline` is rejected loudly — never normalized to `agent.default`. Tests
- * assert this text verbatim; keep it stable (task 0566 consumes it verbatim).
- */
-export const AGENT_INLINE_HEADLESS_MESSAGE =
-    "--agent inline requires a host session: this surface is headless and never dispatches inline runs (no fallback to agent.default). Use 'auto', a role, or an executor name.";
-
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -1323,16 +1314,26 @@ export class AgentService {
         doctorRunner: DoctorRunner,
         exclude?: ReadonlySet<string>,
     ): Promise<AgentResolveResult> {
-        const raw = stringFlag(flags, 'agent', 'auto');
+        // 0687 R1: `inline` is the default selector; omission and explicit
+        // `inline` resolve identically.
+        const raw = stringFlag(flags, 'agent', 'inline');
         if (raw === 'auto') return this.resolveAgentAuto(flags, doctorRunner, exclude);
-        // ADR-047 amendment (G5): explicit `inline` is a host-session guarantee.
-        // A headless dispatch surface (`spur agent run` / workflow agent.run)
-        // cannot host a session, so `inline` fails resolution loudly — no
-        // `agent.default` fallback (a subprocess of the default executor would
-        // run in another session with zero signal). `omit`/`auto`/named
-        // selectors are untouched; 0508 native-subagent eligibility is omit-only.
+        // 0687 R3: the retired G5 headless rejection — an `inline` request that
+        // reaches AgentService IS on a dispatch surface (a host-session inline
+        // never gets here), so resolve through the tier chain and warn once
+        // naming the substitution; never fail the dispatch over the selector.
         if (raw === 'inline') {
-            return { ok: false, exitCode: 2, message: AGENT_INLINE_HEADLESS_MESSAGE };
+            const res = await this.resolveAgentAuto(flags, doctorRunner, exclude);
+            if (res.ok) {
+                const target =
+                    res.role !== undefined
+                        ? `${res.executor ?? res.agent} via role/${res.tier ?? res.role}`
+                        : (res.executor ?? res.agent);
+                this.ctx.output.error(
+                    `--agent inline requested on a headless surface (no host session); resolved ${target} — substituted tier resolution`,
+                );
+            }
+            return res;
         }
         // Executor-aware (0346): explicit `--agent <name>` reuses the same
         // executor-first lookup as `agent.default`; a role (0536 R1) is matched
@@ -2240,6 +2241,8 @@ function cachedDoctorRunner(results: DoctorResult[]): DoctorRunner {
                 } as DoctorResult),
         );
     };
+    // SAFETY: runAll/runOne satisfy DoctorRunner structurally; row shape is
+    // validated by the doctor cache builder, not expressible as a nominal type.
     return { runAll, runOne } as unknown as DoctorRunner;
 }
 

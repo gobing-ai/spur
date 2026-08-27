@@ -36,21 +36,20 @@ answer. Everything below is a consequence of that sentence, not an additional ru
 **Default: execute the backing skill directly in the current coding-agent session.** Do not invoke
 `spur agent run` when no escalation trigger applies and the operator did not select subprocess via
 the `--agent` selector. Omitting `--agent` keeps the default — the backing skill runs in the
-current session, and eligible model stages may dispatch once to a native subagent (task 0508). The
-explicit value is useful in scripts and audit output but is not the default: explicit `inline`
-selects the zero-dispatch carve-out below.
+current session, and eligible model stages may dispatch once to a native subagent (task 0508).
+Explicit `inline` resolves identically (0687 R1: inline is the default selector; R2 generalized
+native-subagent eligibility from omit-only to all inline resolutions).
 
-> **Explicit `--agent inline` is a hard host-session guarantee: all model-bearing work executes in
-> the invoking host session — never a native subagent, never a subprocess, never a workflow hop.
-> The 0508 native-subagent eligibility applies to **omitted** `--agent` only. Headless surfaces
-> (`spur agent run`, workflow `agent.run`, serve-side dispatch) reject `inline` with the stable
-> special error (exit 2 at the CLI) and take no further action — no dispatch, no `agent.default`
-> fallback.**
+> **`--agent inline` (explicit or omitted) is an honest selector, not a dispatch guarantee. On a
+> host session the work runs in-session and eligible model stages may use a native subagent (0508,
+> as generalized by 0687 R2). A headless dispatch surface (`spur agent run`, workflow `agent.run`,
+> serve-side dispatch) cannot host a session; there AgentService substitutes tier resolution and
+> warns once naming the resolved executor (0687 R3) — no rejection, no `exit 2`.**
 
 | Value | Who does the work | Derived surface |
 | --- | --- | --- |
 | `(omitted)` | The agent running this session | Host session — host-controlled; eligible model stages may use a native subagent (0508) |
-| `inline` | The agent running this session | Host session — hard guarantee: zero dispatch, never a subprocess, never a workflow hop; headless surfaces reject `inline` (exit 2, stable special error) |
+| `inline` | The agent running this session | Inline host session — identical to omitted (0687 R1); on headless surfaces tier resolution substitutes with a warning (0687 R3) |
 | `auto` | The role the caller declared — this command's `role:` frontmatter or the workflow step's `role:` (Layer 1, `plugins/sp/references/roles.md`); with nothing declared, `agent.default`'s role (0542) | Subprocess — a tier-resolved executor pins a specific agent/model, which the host session cannot supply |
 | `<name>` (coding agent or configured executor) | That executor | Inline when it resolves to the current session's agent; subprocess otherwise |
 
@@ -58,15 +57,9 @@ The previous `--inline` and `--subprocess` flags (feature H82, task 0413) are co
 single selector: `--inline` → `--agent inline`, `--subprocess` → `--agent auto`. The old two-flag
 form is no longer part of the command surface.
 
-This is a prompt-runtime rule owned by the command wrapper and its backing skill, not a branch in
-`AgentService`: the current coding agent is already executing the command, so inline means continuing
-in that session. Threading an `inline` option through `AiRunner` would still start a subprocess and
-would therefore be a false implementation. On a headless surface (`spur agent run` / workflow
-`agent.run`) explicit `inline` is **rejected** (ADR-047 G5 amendment) with the stable special error —
-headless surfaces cannot host a session: `--agent inline requires a host session: this surface is
-headless and never dispatches inline runs (no fallback to agent.default). Use 'auto', a role, or an
-executor name.` (exit 2 at the CLI; the exported `AGENT_INLINE_HEADLESS_MESSAGE` in
-`agent-service`). No further action is taken — no dispatch, no `agent.default` fallback.
+The explicit-rejection carve-out above was superseded by ADR-087 (task 0687): a headless surface
+substitutes tier resolution with a warning instead of rejecting — see the substitution blockquote
+above and `resolveAgent` in `packages/app/src/services/agent-service.ts`.
 
 ### Objective triggers override the answer
 
@@ -81,9 +74,8 @@ cannot satisfy, so it wins regardless:
 | **Workspace or credential isolation required** | The work must not share the host workspace or credentials. | `trigger 4: workspace or credential isolation required` |
 
 A trigger selects subprocess when the selector is omitted, `auto`, or a name, and the applied trigger
-must be named in the dispatch or result. Explicit `--agent inline` is the hard host-session carve-out:
-a trigger requirement that cannot be satisfied in-session rejects with the stable special error rather
-than dispatching a subprocess. When the operator selected a non-current executor and no objective trigger
+must be named in the dispatch or result. Inline selections (omitted or explicit — they are now the
+same value, 0687 R1/R2) satisfy trigger requirements in-session where possible. When the operator selected a non-current executor and no objective trigger
 applies, report `operator override` rather than inventing one of the four. The trigger vocabulary and
 evidence standard are owned by
 [dispatch-surface.md](../../parallel-execution/references/dispatch-surface.md). If none can be named
@@ -125,15 +117,15 @@ model stage (task 0508): an eligible `agent.run` stage — pure-slash input, non
 native subagent with shared-worktree read/write/shell capability — dispatches **once** to that
 native subagent and joins before the driver continues; any pre-dispatch eligibility failure falls
 back to one host execution, and a failure after dispatch follows the stage's error policy with no
-automatic host replay. Explicit `--agent inline` is the zero-dispatch carve-out: every model stage
-executes in the invoking host session — no native-subagent leg. Operator
+automatic host replay. Inline resolution (omitted or explicit, 0687 R1/R2) keeps the native-subagent
+leg for eligible stages. Operator
 confirmation actions, `pause: true`, and approve/taste/ask decisions stay host-owned. Each inline
 model stage appends `stage <id> executed inline in session <session-id>` to its run log; a
 subagent-dispatched stage appends `stage <id> executed via subagent <agent-id> (host session
 <session-id>)` instead. `dev-plan` remains a workflow subprocess, as do `dev-run`/`dev-runall` with
 `--agent auto` or a name, parallel batches, and every headless `spur workflow run` / `spur agent
 run`. `dev-run --mode implement` continues to run its single competency in-session under omitted
-`--agent` or explicit `--agent inline` (zero-dispatch).
+`--agent` or explicit `--agent inline` (identical values, 0687 R1).
 
 ### Executor precedence chain (R7)
 
@@ -150,11 +142,11 @@ resolved in this order; first match wins:
 
 `--agent auto` tier-resolves an executor (stage `model_policy` → `agent.default` → tier priority)
 **before** merging, so it enters the chain at step 1 already resolved to a concrete name.
-On a headless workflow surface, explicit `--agent inline` is rejected with the stable special error
-— the surface cannot host a session. Interactive task wrappers consume omitted `--agent` (0508
-eligibility) and explicit `inline` (zero-dispatch carve-out) before this chain and use the host
-driver. Omitting the flag on a headless surface forwards nothing, so the spawned step resolves to
-`agent.default` (step 2) or the YAML literal (step 3).
+On a headless workflow surface, explicit `--agent inline` substitutes tier resolution with a warning
+(0687 R3) instead of rejecting — it resolves exactly like an omitted flag. Interactive task wrappers
+consume both inline resolutions identically (0508 eligibility as generalized by 0687 R2) before this
+chain and use the host driver. Omitting the flag on a headless surface forwards nothing, so the
+spawned step resolves to `agent.default` (step 2) or the YAML literal (step 3).
 
 ### Implement-only executor override (R6)
 

@@ -5,13 +5,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-    _resetAgentServiceShimsForTest,
-    AGENT_INLINE_HEADLESS_MESSAGE,
-    type AgentConfig,
-    type AgentRunDeps,
-    TeamService,
-} from '@gobing-ai/spur-app';
+import { _resetAgentServiceShimsForTest, type AgentConfig, type AgentRunDeps, TeamService } from '@gobing-ai/spur-app';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import { saveAgentSpec } from '@gobing-ai/ts-ai-runner';
 import { runAgentLoop, runAgentRun, splitEditorCommand, validateAgentSelector } from '../../src/commands/agent';
@@ -869,6 +863,22 @@ describe('runAgentRun role boundary (0536)', () => {
                     error: null,
                 }),
             ),
+            // 0687 R3: omitted/explicit inline walk tier priority, so a runAll
+            // leg is required for resolution to reach a concrete executor.
+            runAll: mock(() =>
+                Promise.resolve([
+                    {
+                        agent: 'pi',
+                        installed: true,
+                        version: '1.0.0',
+                        authenticated: 'authenticated',
+                        usable: true,
+                        tier: 1,
+                        channels: [],
+                        error: null,
+                    },
+                ]),
+            ),
         } as unknown as AgentRunDeps['doctorRunner'];
         return { runner, detector, doctorRunner };
     }
@@ -969,7 +979,7 @@ describe('runAgentRun role boundary (0536)', () => {
         try {
             const output = captureOutput();
             const ctx = createCliContext({ cwd: tempDir, output, db, agentConfig: {} as AgentConfig });
-            expect(validateAgentSelector({ agent: 'inline' }, ctx)).toBe(AGENT_INLINE_HEADLESS_MESSAGE);
+            expect(validateAgentSelector({ agent: 'inline' }, ctx)).toBeNull(); // 0687 R3: valid everywhere
             expect(validateAgentSelector({}, ctx)).toBeNull();
             expect(validateAgentSelector({ agent: 'auto' }, ctx)).toBeNull();
         } finally {
@@ -977,7 +987,7 @@ describe('runAgentRun role boundary (0536)', () => {
         }
     });
 
-    test('R1 (G5): --agent inline exits 2 with the frozen message and never spawns', async () => {
+    test('R3 (0687): --agent inline substitutes tier resolution with a warning and spawns', async () => {
         const tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-inline-reject-'));
         const db = await createMigratedDb({ url: ':memory:' });
         try {
@@ -987,10 +997,10 @@ describe('runAgentRun role boundary (0536)', () => {
                 Promise.resolve({ exitCode: 0, stdout: '', stderr: '', durationMs: 1 }),
             );
             const code = await runAgentRun('plain prompt', ctx, { agent: 'inline' }, depsWith(runPromptCommand));
-            expect(code).toBe(2);
-            expect(runPromptCommand).not.toHaveBeenCalled();
+            expect(code).toBe(0);
+            expect(runPromptCommand).toHaveBeenCalledTimes(1);
             const diag = output.stderr.join('\n');
-            expect(diag).toContain(AGENT_INLINE_HEADLESS_MESSAGE);
+            expect(diag).toContain('--agent inline requested on a headless surface');
             expect(diag).toContain('inline');
         } finally {
             rmSync(tempDir, { recursive: true, force: true });

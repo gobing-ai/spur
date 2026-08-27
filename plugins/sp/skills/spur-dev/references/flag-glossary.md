@@ -47,8 +47,8 @@ The value table below is the C3a cross-file parity surface (kept in lockstep wit
 
 | Value                           | Who does the work                                                           | Derived surface                                                             |
 | ------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `(omitted)`                     | The agent running this session                                              | Host session — host-controlled; eligible model stages may use a native subagent (0508) |
-| `inline`                        | The agent running this session                                              | Host session — hard guarantee: zero dispatch, never a subprocess, never a workflow hop; headless surfaces reject `inline` (exit 2, stable special error) |
+| `(omitted)`                     | The agent running this session                                              | Host session — host-controlled; eligible model stages may use a native subagent (0508). Identical to explicit `inline` (0687 R1: inline is the default selector) |
+| `inline`                        | The agent running this session                                              | Host session — eligible model stages may use a native subagent (0508, generalized to explicit inline by 0687 R2); on a headless dispatch surface AgentService substitutes tier resolution with a warning (0687 R3), never a rejection |
 | `auto`                          | The role the caller declared — this command's `role:` frontmatter or the workflow step's `role:` (Layer 1, `plugins/sp/references/roles.md`); with nothing declared, `agent.default`'s role (0542) | Subprocess                                                                  |
 | `<name>`                        | That coding agent or configured executor                                    | Inline when it is the current session's agent; subprocess otherwise         |
 
@@ -62,10 +62,10 @@ threaded by `AgentRunActionRunner`; a pin still beats role routing permanently (
 The previous `--inline` and `--subprocess` flags (feature H82, task 0413) are collapsed into this
 selector: `--inline` → `--agent inline`, `--subprocess` → `--agent auto`. Those two flags are no
 longer part of the command surface; their anchors (`#flag-inline`, `#flag-subprocess`) are retained
-as stubs below so external links do not dangle. **Superseded (feature G5):** the `--inline` →
-`--agent inline` leg of the collapse no longer means "equivalent to omitting the flag" — explicit
-`inline` is the zero-dispatch host-session carve-out (see
-[cross-cutting.md](cross-cutting.md#inline-default-execution-surface)). Operator-layer vocabulary (task 0405): `agent` names
+as stubs below so external links do not dangle. **Restored equivalence (0687 R1/R2):** the
+`--inline` → `--agent inline` leg of the collapse means "equivalent to omitting the flag" again —
+inline is the default selector and omitted/explicit `inline` resolve identically on every surface
+(see [cross-cutting.md](cross-cutting.md#inline-default-execution-surface)). Operator-layer vocabulary (task 0405): `agent` names
 the concrete coding-agent tool; `executor` remains the domain-layer role and is not a command flag.
 `inline` and `auto` are reserved values — config validation rejects an executor claiming either.
 
@@ -176,6 +176,16 @@ all dimensions.
 
 Limit the operation to a file or directory path (`dev-arch`, `dev-debug`, `dev-fixall`,
 `dev-gitmsg`, `dev-gtd`, `dev-simplify`) to bound the working set.
+
+### `--all` — widen the operation to everything in its domain
+
+**Anchor:** `#flag-all`.
+
+Drop the default narrowing and operate on the full set (`dev-gitmsg`, `dev-refresh`). On
+`dev-gitmsg` the default set is the git index, and `--all` widens it to every change in the tree —
+unstaged **and untracked**; on `dev-refresh` the default is one feature or task, and `--all` sweeps
+every feature. An explicit `--scope <path>` still bounds the result, and always wins over
+auto-discovery.
 
 ### `--dry-run` — print the plan without executing
 
@@ -395,9 +405,9 @@ merges but never removes. This keeps the continue-the-work loop stable — after
 **Value binding.** The following token is consumed as `<name>` **only when it does not begin with
 `-`**, so `--worktree --auto` is the bare create form and `--agent`/`--feature`/etc. are never
 swallowed as the name. `--worktree=<name>` is the unambiguous spelling. `/sp:dev-next` does not get
-the flag (single *step*; not worth the worktree cost — unlike `dev-run`, which isolates a whole
+the flag (single _step_; not worth the worktree cost — unlike `dev-run`, which isolates a whole
 task pipeline), `--worktree --mode parallel` is rejected (per-task parallel isolation stays task
-0142), and `--worktree --mode implement` is rejected on `dev-run` (that mode *is* the pipeline's
+0142), and `--worktree --mode implement` is rejected on `dev-run` (that mode _is_ the pipeline's
 implement stage and runs in the driver's tree). The full lifecycle — name resolution, dirty-tree
 precheck, creation or adoption, crash-safe marker, merge-or-retain, and `--continue` re-entry — is
 specified in [execution-batch.md § Worktree isolation](execution-batch.md#worktree-isolation---worktree-name).

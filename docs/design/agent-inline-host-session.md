@@ -1,5 +1,11 @@
 # Design: `--agent inline` — host-session-only execution guarantee
 
+> **SUPERSEDED (2026-08-26, task 0687 / ADR-087):** the headless rejection this doc specifies was
+> replaced by tier-resolution substitution with a warning — inline is now the default selector and
+> one honest value across every surface. See [ADR-087](../00_ADR.md) and
+> [cross-cutting.md § Inline-default execution surface](../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
+> Retained below for historical context.
+
 Feature G5 · ADR-047 amendment · supersedes the 0508 relaxation for the explicit-`inline` value only.
 
 ## Problem

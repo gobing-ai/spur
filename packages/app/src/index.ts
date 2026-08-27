@@ -48,7 +48,7 @@ export type {
     AgentServiceContext,
     AgentServiceOutput,
 } from './services/agent-service';
-export { _resetAgentServiceShimsForTest, AGENT_INLINE_HEADLESS_MESSAGE, AgentService } from './services/agent-service';
+export { _resetAgentServiceShimsForTest, AgentService } from './services/agent-service';
 export type {
     AnchorFileReport,
     AnchorQualifyReport,
