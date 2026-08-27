@@ -997,6 +997,12 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(text, 'the correction retry edge must be bounded to a single pass').toMatch(
             /correction-count[^\n]*-lt 1/,
         );
+        // 0690: a structure-gate FAIL detours into the same bounded correction pass
+        // instead of terminating, and still can never reach publish directly.
+        expect(edges).toContain('structure-gate->correct');
+        expect(edges).toContain('structure-gate->failed');
+        expect(edges).not.toContain('structure-gate->publish');
+        expect(edges).not.toContain('structure-gate->stamp');
     });
 
     // HA-S1 (0658 R4): the report contract freezes the section names and the per-finding

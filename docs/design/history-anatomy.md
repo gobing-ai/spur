@@ -117,9 +117,10 @@ resolve scope
           → render both artifacts        (report --mode forensics <explicit-path>)
           → model enrichment             (sp:history-anatomy enrich)
           → deterministic structure gate (helper)
+              → FAIL: one correction pass → gate re-runs | terminal failure
           → independent evidence validation (sp:history-anatomy validate)
               → PASS: atomic publish
-              → FAIL: one correction pass → PASS publish | terminal failure
+              → FAIL: the same one correction pass → gate re-runs | terminal failure
 ```
 
 The workflow calls the same skill in explicit `enrich` and `validate` operations; those operations
@@ -127,7 +128,10 @@ never launch another workflow, which keeps the rubric single-sourced and prevent
 reads the mutable `latest.json` pointer — every analyze writes, and every render names, an explicit
 run-scoped path.
 
-Correction is capped at exactly one pass. A second validation failure terminates the run.
+Correction is capped at exactly one pass (0690): the counter is shared by the structure-gate and
+validation FAIL edges, and the `correct` pass re-authors the candidate in place from the gate
+findings and validation notes (backticked evidence anchors, no placeholders, canonical twelve-section
+order) before the deterministic gate re-runs. A second failure at either gate terminates the run.
 
 ## Report contract
 
