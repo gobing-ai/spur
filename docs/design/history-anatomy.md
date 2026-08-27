@@ -130,8 +130,9 @@ run-scoped path.
 
 Correction is capped at exactly one pass (0690): the counter is shared by the structure-gate and
 validation FAIL edges, and the `correct` pass re-authors the candidate in place from the gate
-findings and validation notes (backticked evidence anchors, no placeholders, canonical twelve-section
-order) before the deterministic gate re-runs. A second failure at either gate terminates the run.
+findings and validation notes (backticked `.md`/`.ts`/`.json` path or `path:line` anchors, no
+placeholders, canonical twelve-section order) before the deterministic gate re-runs. A second
+failure at either gate terminates the run.
 
 ## Report contract
 

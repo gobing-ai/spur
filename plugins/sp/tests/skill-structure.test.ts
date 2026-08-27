@@ -1003,6 +1003,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(edges).toContain('structure-gate->failed');
         expect(edges).not.toContain('structure-gate->publish');
         expect(edges).not.toContain('structure-gate->stamp');
+        // 0690 P3: the repair prompt must name the gate's extension set, not a generic
+        // backticked `path` the evidence-claim-without-anchor regex would reject.
+        expect(text).toMatch(/backticked `\.md`\/`\.ts`\/`\.json` path or a `path:line`/);
     });
 
     // HA-S1 (0658 R4): the report contract freezes the section names and the per-finding

@@ -231,11 +231,13 @@ states:
   - id: correct
     description: >
       One bounded correction pass (0690). onEnter increments the counter; the retry edges guard on
-      correctionCount < 1, the second failure takes the -> failed edge. The counter is shared by the
-      structure-gate and validate FAIL edges, so the whole run gets exactly one repair. The model
-      half re-authors the candidate in place from the gate findings and validation notes —
-      re-anchoring evidence rows to the backticked path[:line] form, stripping placeholders, and
-      restoring the canonical twelve-section order — before the deterministic gate re-runs.
+      the run-scoped correction-count file < 1 (`vars.correctionCount` is the declared home; the
+      file is the live bound), the second failure takes the -> failed edge. The counter is shared
+      by the structure-gate and validate FAIL edges, so the whole run gets exactly one repair. The
+      model half re-authors the candidate in place from the gate findings and validation notes —
+      re-anchoring evidence rows to a backticked .md/.ts/.json path or path:line, stripping
+      placeholders, and restoring the canonical twelve-section order — before the deterministic
+      gate re-runs.
     onEnter:
       - kind: shell
         options:
@@ -249,7 +251,7 @@ states:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Repair the candidate report .spur/run/${vars.__runId}-candidate.md in place: read the structure-gate findings in .spur/run/${vars.__runId}-structure-gate.txt and, when present, the validation notes in .spur/run/${vars.__runId}-validation.txt, then fix every listed problem per references/report-contract.md — rewrite evidence-ledger claim rows to carry a backticked `path` or `path:line` anchor (never `current #/...`), remove placeholders/TODO/FIXME markers and empty table rows, and restore the canonical twelve sections in their contract order. Overwrite the candidate file only. This operation never launches a workflow."
+          input: "Repair the candidate report .spur/run/${vars.__runId}-candidate.md in place: read the structure-gate findings in .spur/run/${vars.__runId}-structure-gate.txt and, when present, the validation notes in .spur/run/${vars.__runId}-validation.txt, then fix every listed problem per references/report-contract.md — rewrite evidence-ledger claim rows to carry a backticked `.md`/`.ts`/`.json` path or a `path:line` anchor (never `current #/...`), remove placeholders/TODO/FIXME markers and empty table rows, and restore the canonical twelve sections in their contract order. Overwrite the candidate file only. This operation never launches a workflow."
           # Declared Layer-1 role (0538 R2): repair reuses enrich-class judgment.
           role: reviewer
           expectFile: .spur/run/${vars.__runId}-candidate.md
