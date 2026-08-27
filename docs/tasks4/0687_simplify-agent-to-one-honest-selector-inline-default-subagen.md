@@ -1,11 +1,13 @@
 ---
 schema_version: 1
 name: "Simplify --agent to one honest selector: inline default, subagent-first, remove the headless rejection, restore agent telemetry"
-status: testing
+status: done
 template: issue
 created_at: 2026-08-27T04:45:22.880Z
-updated_at: "2026-08-27T17:55:01.861Z"
+updated_at: "2026-08-27T19:40:24.287Z"
 feature_id: B
+done_forced: "true"
+done_reason: "Selector/telemetry/classifier contract is MET (R1-R7, R9-R12). Residual AC3 write-path / AC4 published-report / AC9 Performance-section publication are covering tasks 0689 (agy expectFile shim) and 0690 (history-anatomy structure-gate reliability), not this diff. PARTIAL verdict retained as the honest record."
 ---
 
 ## 0687. Simplify --agent to one honest selector: inline default, subagent-first, remove the headless rejection, restore agent telemetry
@@ -768,3 +770,4 @@ sqlite3 .spur/spur.db "select count(*) from system_events where event_name like 
 
 - 2026-08-27T05:34:32.761Z todo → wip (system)
 - 2026-08-27T07:03:05.601Z wip → testing (system)
+- 2026-08-27T19:40:24.233Z testing → done (system)

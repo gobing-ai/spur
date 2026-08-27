@@ -4,7 +4,7 @@ name: "Right-size the post-implementation task gate: drop no-signal citation che
 status: done
 template: feature-impl
 created_at: 2026-08-27T07:03:56.288Z
-updated_at: "2026-08-27T19:06:25.018Z"
+updated_at: "2026-08-27T19:40:22.394Z"
 feature_id: F91
 ---
 
@@ -366,70 +366,81 @@ noted inline); plus three pre-existing unguarded-JSON.parse / possibly-undefined
 file fixed while in it. Full suite 6566 pass / 0 fail; corpus gate green.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | `packages/app/src/services/task-check.ts` — `export const ANCHOR_WINDOW_LINES = 20`; window slice `Math.max(1, cite.startLine - ANCHOR_WINDOW_LINES)` … `Math.min(lineCount, end + ANCHOR_WINDOW_LINES)`. Basename-append hack removed. `extractPathSubjectTokens` fallback re-decided and KEPT with disposition recorded in the doc comment: prose-free change-map rows carry zero tokens for the wider window to rescue (drifted-bare-row test still exercises it). Design sync: `docs/design/lifecycle-projection-integrity.md` §2. Test: ±20-window rescue test in task-check.test.ts. |
-| R2 | MET | `extractSubjectTokens(row)` is now 1-arg and excludes every `extractBacktickLineAnchors(row)` anchor from the row's own tokens. Tests: multi-anchor exclusion test + exclusion-doesn't-blunt-detection test (a row naming an absent subject still reports). |
-| R3 | MET | Decided from measured residue (ADR-088): override `L4.anchor-subject-mismatch: error` REMOVED from `.spur/config.yaml`. Residue after the matcher fix is 982 observed warnings (frozen legacy, no repair campaign); new-code mismatches 42→10 (ADR-083 probe 2). Demotion costs transition loudness, not gate force — warnings reconcile two-sided in the corpus ratchet. All 435 error-severity baseline entries re-keyed at warning. |
-| R4 | MET | `L4.stale-line-anchor` and `L3.solution-file-line` check blocks untouched by the diff (only the mismatch window, subject-token derivation, and the L3 testing-coverage→status-claim swap changed); their tests pass unmodified — full suite 6566 pass / 0 fail. |
-| R5 | MET | Before/after sweeps with cap-engagement accounting: `.spur/run/0688-before.json` (2406 findings: mismatch 2015 = 800 Testing + 1215 Solution; stale-line 391; 304 sections at the 5-finding cap) → `.spur/run/0688-after.json` (1464 findings: mismatch 982 = 406 + 576; stale-line 482; 124 capped). Mismatch −51%; the stale-line rise is cap relief, not regression — documented in the corpus-baseline note § 2026-08-27 and ADR-088. |
-| R6 | MET | `L3.testing-coverage` removed from `packages/config/src/finding-codes.ts` (registry count 51) and its check block deleted from task-check.ts; both its tests deleted. Rationale (bunfig.toml machine-enforces 90/90) recorded in ADR-088 consequences; 54 baseline entries removed. |
-| R7 | MET | New `L3.status-claim-contradiction` (error severity) fires when a Requirements checkbox contradicts a done/open status claim in the same sentence-ish clause of Solution/Testing prose (≤80 chars, no `.`/`;` between id and claim; negation only via not/never lookbehind). Ambiguity is silent by construction: bare `open` demoted to `remains open\|still open` after corpus sampling caught the "Browser open (R7)" false positive (38→32 findings). Six tests: checked+open error ×2 sections, unchecked+done error, consistent silent, bare-mention silent, negated-open silent. |
-| R8 | MET | `config/corpus-baseline.json` reconciled two-sided and green (ok=true, 4155 observed, 0 new / 0 stale / 0 dup, 1907 entries): 494 stale removed (54 testing-coverage, 435 error-keyed mismatch, 5 scenario-unverified), 414 dated entries added (32 status-claim, 380 warning keys incl. cap-relief stale-line, 1 ac-empty, 1 live-drift 0673). Dated note paragraph supersedes ADR-083's 2026-08-25 diagnosis. ADR-088 appended to `docs/00_ADR.md`; `docs/04_DESIGN.md` §2.1 + `docs/design/lifecycle-projection-integrity.md` §2 synced same-commit. |
-| R9 | MET | Diff scope: task-check.ts (window constant, subject-token derivation, L3 swap), finding-codes.ts (code swap), task-check.test.ts, eval-pipeline.ts (injection anchor unblocked by the severity removal — schema-stable `features:` anchor — plus 3 pre-existing guard fixes flagged on edit), config/baseline/docs. L2 section matrix, FSM, and all other finding codes untouched. |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/task-check.ts:333` exports `ANCHOR_WINDOW_LINES = 20`; window slice `packages/app/src/services/task-check.ts:1450-1451` is `Math.max(1, cite.startLine - ANCHOR_WINDOW_LINES)` … `Math.min(lineCount, end + ANCHOR_WINDOW_LINES)`. Basename-append hack absent from the matching window. `extractPathSubjectTokens` fallback KEPT (`packages/app/src/services/task-check.ts:457-460`). Test: `packages/app/tests/services/task-check.test.ts:3462`. |
+| R2 | MET | `packages/app/src/services/task-check.ts:341-359` `extractSubjectTokens(row)` is 1-arg and excludes every `extractBacktickLineAnchors(row)` path/raw. Tests: `packages/app/tests/services/task-check.test.ts:3479` and `:3491`. |
+| R3 | MET | `.spur/config.yaml` has no `tasks.severity` override (`rg` this run: no match). Decision recorded in `docs/00_ADR.md:1468-1488` (ADR-088): residue 2015 → 982 frozen-legacy warnings, new-code floor 42 → 10; promotion condition not met. |
+| R4 | MET | `L3.solution-file-line` and `L4.stale-line-anchor` remain registered at `packages/config/src/finding-codes.ts:27-62` (untouched codes; no collapse). |
+| R5 | MET | Cap-accounted sweeps `.spur/run` `0688-before.json` line 2 total 2406 (mismatch 2015, stale-line 391, 304 capped) → `.spur/run` `0688-after.json` line 2 total 1464 (mismatch 982, stale-line 482, 124 capped). |
+| R6 | MET | `L3.testing-coverage` absent from `packages/config/src/finding-codes.ts` (registry still 51; `L3.status-claim-contradiction` at `:29`). `rg testing-coverage packages/config/src/finding-codes.ts` this run: no match. |
+| R7 | MET | New `L3.status-claim-contradiction` (error) is registered at `packages/config/src/finding-codes.ts:29`. |
+| R8 | MET | This-run `bun run corpus-check --json` exit 0: ok=true observed=4159 baselined=1907 newErrors=0 newWarnings=0 staleEntries=0 duplicateKeys=0. ADR-088 at `docs/00_ADR.md:1468`. T3: `docs/04_DESIGN.md:1217` and `:1585` plus projection-content `:1597-1605` synced on this verify fix pass (implementation commit had missed 04_DESIGN.md). Satellite `docs/design/lifecycle-projection-integrity.md:39-42`. |
+| R9 | MET | Lifecycle done-gating still denies a PARTIAL verdict at `packages/app/tests/services/done-transition-guard.test.ts:84`. L2 matrix and other finding codes were not edited in the 0688 diffs. |
 
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/services/task-check.test.ts:3462` — subject 12 lines above cited line reports no mismatch (window ±20). `bun test packages/app/tests/services/task-check.test.ts --test-name-pattern 'subject sits 12'` this run pass. |
+| AC2 | MET | test | `packages/app/tests/services/task-check.test.ts:3479` two-anchor row silent when subject present; `:3491` still reports when subject absent. |
+| AC3 | MET | test | `packages/app/tests/services/task-check.test.ts:3507` a cited line past EOF still reports `L4.stale-line-anchor`. |
+| AC4 | MET | command | python3 read of `.spur/run` `0688-before.json` / `0688-after.json` this run: mismatch 2015→982 (−51%), cap-hit sections 304→124. New-code floor remains ADR-083 probe 2 (42→10), not the full-corpus 982. |
+| AC5 | MET | command | `rg -n 'anchor-subject-mismatch\|tasks.severity' .spur/config.yaml` this run: no override. Residue class recorded in `docs/00_ADR.md:1479-1488`: 982 frozen-legacy warnings, not a named ~10 true-positive set, so error not retained. |
+| AC6 | MET | test | `packages/app/tests/services/task-check.test.ts:2902` checked-R claimed open in Solution reports error naming the section. |
+| AC7 | MET | test | `packages/app/tests/services/task-check.test.ts:2933` consistent states produce no finding. |
+| AC8 | MET | test | `packages/app/tests/services/task-check.test.ts:2943` bare R-id mention without a claim word is silent. |
+| AC9 | MET | command | `rg -n 'testing-coverage' packages/config/src/finding-codes.ts` this run: absent. Check block gone; `bun test packages/app/tests/services/task-check.test.ts` 151 pass / 0 fail (no leftover coverage-claim tests). |
+| AC10 | MET | command | `bun run corpus-check --json` this run exit 0: ok=true, observed=4159, newErrors=[], newWarnings=[], staleEntries=[], duplicateKeys=[]. |
+| AC11 | MET | test | `bun test packages/app/tests/services/task-check.test.ts` this run: 151 pass / 0 fail / 234 expect(); `rg '\.skip' packages/app/tests/services/task-check.test.ts` no match. Coverage remains bunfig.toml 90/90 on `bun run test`. |
+| AC12 | MET | test | `bun test packages/app/tests/services/done-transition-guard.test.ts --test-name-pattern 'R4b\|R4c'` this run: PARTIAL deny + FAIL deny, 2 pass. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
-
-**SECU findings** (pipeline verify step — verdict: PASS)
+**SECU findings** (re-verify 2026-08-27 — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
 | ---------- | ----------- | ---------- | ---------- |
-| P4 | spur task check --corpus | — | ok=true; observed=4155, newErrors=0, newWarnings=0, staleEntries=0, duplicateBaselineKeys=0 |
-| P4 | bun run test (full suite) | — | 6566 pass / 0 fail across 351 files (was 3 fail: eval-pipeline injection anchor broken by the severity-block removal — root-cause fixed in scripts/commands/eval-pipeline.ts, 19/19 pass) |
-| P4 | targeted tests | — | task-check.test.ts 148 pass / 0 fail (6 new status-claim tests, 3 new change-map window/exclusion tests, 2 deleted testing-coverage tests, 3 retargeted to 1-arg extractSubjectTokens) |
-| P4 | design-conformance | — | R3 decision is a measured reversal of the 0583-R6 promotion intent — documented as superseding ADR-083's condition in ADR-088 + baseline note, not silently. R1 fallback disposition documented. No silent deviations; design docs synced same-commit. |
-
+| P4 | spur task check --corpus | — | ok=true; observed=4159, newErrors=0, newWarnings=0, staleEntries=0, duplicateBaselineKeys=0 |
+| P4 | targeted tests | — | task-check.test.ts 151 pass / 0 fail (2 AC3 bounds tests added on re-verify) |
+| P4 | design-conformance | — | R3 reversal documented in ADR-088. T3 `docs/04_DESIGN.md` synced on re-verify. Path-token fallback KEPT (documented). |
+| P4 | — | — | No P1–P3 findings; verify verdict PASS |
 ### References
-
 **Authority for this task's premise:**
 
 - `docs/00_ADR.md` § **ADR-083** — "The Anchor-Citation Class Is a Dated Legacy Set — Frozen Pending
   F91's Matcher Decision" (2026-08-25, feature F61, task 0670). Probes 1-3, the routed proposal to
   F91, and the standing prohibition this task honors.
+- `docs/00_ADR.md` § **ADR-088** — "The Anchor-Subject Gate Is a Warning Signal, Not an Error
+  Verdict" (2026-08-27, feature F91, task 0688). Applied the routed proposal.
 - Feature **F91** (`done`) — owns the matcher; `docs/features/F91_*.md`. Tasks 0582, 0583, 0584,
-  0625 all closed. 0583 R6 landed the severity promotion.
+  0625, 0688 all closed. 0583 R6 landed the severity promotion this task reversed.
 - Feature **F61** (`done`) — the reconciliation that produced ADR-083.
 
 **Code under change:**
 
-- `packages/app/src/services/task-check.ts:1300-1400` — `checkLineAnchors`: external-evidence form,
-  path resolution + bounds (`L4.stale-line-anchor`, warning), then the subject match
-  (`L4.anchor-subject-mismatch`, source severity `warning`).
-- `packages/app/src/services/task-check.ts:1367-1373` — the point-window slice + basename append.
-- `packages/app/src/services/task-check.ts:1378`, `:400-406` — `extractSubjectTokens` and the
-  every-token-is-a-row-id escape in `citedLinesNameSubject`.
-- `packages/app/src/services/task-check.ts:1384-1387` — 0625 R4 path-token fallback for bare
-  Solution rows (added after 0620 shipped a drifted anchor).
-- `packages/app/src/services/task-check.ts:748-757` — `L3.solution-file-line` (presence of any
-  citation; a different fact — R4 keeps it).
-- `packages/config/src/finding-codes.ts` — the 51-code registry (L1×2, L2×5, L3×18, L4×26).
-- `packages/app/tests/services/task-check.test.ts` — the check suite.
+- `packages/app/src/services/task-check.ts:333` — `ANCHOR_WINDOW_LINES = 20`.
+- `packages/app/src/services/task-check.ts:341-398` — `extractSubjectTokens` excludes every
+  backticked anchor in the row (probe 1).
+- `packages/app/src/services/task-check.ts:1434-1451` — bounds still use the cited range;
+  subject matching uses the cited range ±20, clamped.
+- `packages/app/src/services/task-check.ts:457-460` — 0625 R4 path-token fallback KEPT
+  (prose-free change-map rows).
+- `packages/app/src/services/task-check.ts:797-804` — `L3.solution-file-line` (untouched; R4).
+- `packages/app/src/services/task-check.ts:865-914` — `L3.status-claim-contradiction`.
+- `packages/config/src/finding-codes.ts` — 51-code registry (L3.testing-coverage retired;
+  L3.status-claim-contradiction added).
+- `packages/app/tests/services/task-check.test.ts` — the check suite (151 tests).
 
 **Configuration:**
 
-- `.spur/config.yaml:230-232` — `tasks.severity` block; sole entry
-  `L4.anchor-subject-mismatch: error`.
+- `.spur/config.yaml` — the `tasks.severity` override `L4.anchor-subject-mismatch: error` was
+  **removed** (ADR-088); the check runs at default warning severity.
 - `config/corpus-baseline.json` — two-sided accepted-error policy file; its `note` carries the
-  2026-08-25 per-code diagnoses this task supersedes.
+  2026-08-27 applied-matcher diagnosis that supersedes the 2026-08-25 frozen-set note.
 - `bunfig.toml` — `[test] coverage = true`, `coverageThreshold = { lines = 0.9, functions = 0.9 }`
-  (the machine authority `L3.testing-coverage` duplicates).
+  (the machine authority that made `L3.testing-coverage` redundant).
 
 **The encounter:**
 
@@ -438,7 +449,6 @@ file fixed while in it. Full suite 6566 pass / 0 fail; corpus gate green.
   for AC6.
 - `AGENTS.md` § Verification gate — `spur task check --corpus`, the two-sided baseline rationale,
   constitution T10.
-
 ### History
 
 - 2026-08-27T18:57:14.550Z todo → wip (system)

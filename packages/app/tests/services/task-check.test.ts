@@ -3499,4 +3499,34 @@ describe('0625 R4 — Solution change-map anchor drift detection', () => {
         const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
         expect(mismatch).toHaveLength(1);
     });
+
+    // 0688 AC3: widening is a matching concession only. Bounds still use the cited
+    // range — a missing path or a line past EOF must still report stale-line, and a
+    // valid line-1 cite in a short file must not become stale just because ±20
+    // would theoretically walk off the top of the file.
+    test('a cited line past EOF still reports L4.stale-line-anchor (window is matching-only)', async () => {
+        const { fs, path, cleanup } = seedChangeMap(
+            '`workflow.ts:99` — closes `registerCancel`',
+            'export function registerCancel() {}\n',
+        );
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const stale = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
+        expect(stale.length).toBeGreaterThanOrEqual(1);
+        expect(stale[0]?.message).toMatch(/outside file|line 99/);
+    });
+
+    test('a missing path still reports L4.stale-line-anchor after the window widens', async () => {
+        const { fs, path, cleanup } = seedChangeMap(
+            '`does-not-exist.ts:1` — closes `registerCancel`',
+            'export function registerCancel() {}\n',
+        );
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const stale = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
+        expect(stale.length).toBeGreaterThanOrEqual(1);
+        expect(stale[0]?.message).toMatch(/file not found/i);
+    });
 });
