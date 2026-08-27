@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CoordinationRunDao, createMigratedDb, SystemEventDao } from '@gobing-ai/spur-domain';
@@ -48,7 +48,58 @@ async function seedOccupant(opts: {
     db.close();
 }
 
+/** Seed one file-backed materialized instance for role resolution. */
+async function seedRoleSpec(cwd: string, id: string, role: string): Promise<void> {
+    const dir = join(cwd, '.spur', 'agents');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+        join(dir, `${id}.yaml`),
+        [
+            `id: ${id}`,
+            `name: ${id}`,
+            'type: claude',
+            'executor: claude',
+            `workspace: ${cwd}`,
+            'purpose: wait role fixture',
+            'tags:',
+            '  - spur:test-fixture',
+            'config:',
+            `  role: ${role}`,
+            '',
+        ].join('\n'),
+        'utf8',
+    );
+}
+
 describe('spur agent wait (G4 wave 2, R4)', () => {
+    test('requires exactly one of specId or --role', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        try {
+            expect(await main(['agent', 'wait', '--json'], { cwd, output: out, dbUrl: ':memory:' })).toBe(2);
+            const parsed = JSON.parse(out.messages.join(''));
+            expect(parsed.error.code).toBe('usage');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('rejects specId and --role together', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        try {
+            expect(
+                await main(['agent', 'wait', 'reviewer', '--role', 'reviewer', '--json'], {
+                    cwd,
+                    output: out,
+                    dbUrl: ':memory:',
+                }),
+            ).toBe(2);
+            const parsed = JSON.parse(out.messages.join(''));
+            expect(parsed.error.code).toBe('usage');
+        } finally {
+            await cleanup();
+        }
+    });
+
     test('no occupant → exit 1 with occupant_gone (--json envelope)', async () => {
         const { cwd, out, cleanup } = await makeCtx();
         try {
@@ -127,6 +178,30 @@ describe('spur agent wait (G4 wave 2, R4)', () => {
 });
 
 describe('spur agent wait — seeded occupant resolves', () => {
+    test('--role exact-one snapshots the resolved instance pin', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        const dbUrl = join(cwd, 'test.db');
+        await seedRoleSpec(cwd, 'demo-reviewer', 'reviewer');
+        await seedOccupant({
+            dbUrl,
+            specId: 'demo-reviewer',
+            runId: 'R-role',
+            events: [{ eventName: 'agent.invoke.exit', sequence: 2 }],
+        });
+        try {
+            const code = await main(['agent', 'wait', '--role', 'reviewer', '--json'], {
+                cwd,
+                output: out,
+                dbUrl,
+            });
+            expect(code).toBe(0);
+            const parsed = JSON.parse(out.messages.join(''));
+            expect(parsed.pin).toMatchObject({ specId: 'demo-reviewer', runId: 'R-role', generation: 1 });
+        } finally {
+            await cleanup();
+        }
+    });
+
     test('default --until idle resolves when the latest event is invoke-exit', async () => {
         const { cwd, out, cleanup } = await makeCtx();
         const dbUrl = join(cwd, 'test.db');

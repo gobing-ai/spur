@@ -117,7 +117,8 @@ is the spec's latest run. Replacement, generation bump, or disappearance fails f
 occupant that makes no progress inside the stall budget fails `wait_stalled`.
 Addressing takes `<specId>` **or** `--role` — never both. `--role` resolves against materialized
 instances (vocabulary = `AGENT_ROLE_NAMES` ∪ executor names); zero/multi matches are hard errors
-naming count + candidates (`selector_unmatched` / `selector_ambiguous`, exit 1), an unknown name
+naming `count=0` + candidates `none` or `count=N` + candidate ids
+(`selector_unmatched` / `selector_ambiguous`, exit 1), an unknown name
 exits 2 naming the accepted vocabulary. Resolution collapses onto the same identity pin.
 
 ### Flags

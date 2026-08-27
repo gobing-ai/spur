@@ -14,30 +14,42 @@ function teamTagOf(spec: Pick<AgentSpec, 'tags'>): string | null {
     return null;
 }
 
+/** Recover the roster-local member key from its exact `team:<id>` prefix. */
+function memberKeyOf(specId: string, teamId: string | null): string {
+    const prefix = teamId === null ? null : `${teamId}-`;
+    return prefix !== null && specId.startsWith(prefix) ? specId.slice(prefix.length) : specId;
+}
+
 /**
  * File-backed instance reader (0685 R2): projects spec files (via
  * `TeamService.listAgentSpecs()`) onto the frozen {@link AgentInstance} shape.
- * Runtime fields are null here — occupancy lives with the agent service until
- * the DB cutover (`0026_spur_cli_agent_instances`, ADR-085).
+ * Runtime fields use stopped/epoch sentinels here — occupancy lives with the
+ * agent service until the DB cutover (`0026_spur_cli_agent_instances`, ADR-086).
  */
 export function createFileAgentInstanceStore(listAgentSpecs: AgentSpecLister): AgentInstanceStore {
     async function all(): Promise<AgentInstance[]> {
         const specs = await listAgentSpecs();
-        return specs.map((spec) => ({
-            specId: spec.id,
-            teamId: teamTagOf(spec),
-            role: specRole(spec),
-            executor: spec.executor ?? null,
-            workspace: spec.workspace ?? null,
-            tags: spec.tags ?? [],
-            config: spec.config ?? {},
-            status: null,
-            runId: null,
-            generation: null,
-        }));
+        return specs.map((spec) => {
+            const teamId = teamTagOf(spec);
+            return {
+                specId: spec.id,
+                teamId,
+                memberKey: memberKeyOf(spec.id, teamId),
+                role: specRole(spec),
+                executor: spec.executor ?? null,
+                workspace: spec.workspace,
+                tags: spec.tags,
+                config: spec.config,
+                status: 'stopped',
+                pid: null,
+                runId: null,
+                generation: null,
+                createdAt: 0,
+                updatedAt: 0,
+            };
+        });
     }
     return {
-        all,
         bySpecId: async (specId) => (await all()).find((i) => i.specId === specId) ?? null,
         byRole: async (role) => (await all()).filter((i) => i.role === role),
         byExecutor: async (executor) => (await all()).filter((i) => i.executor === executor),
@@ -99,14 +111,14 @@ export async function resolveRoleTarget(
         return {
             ok: false,
             code: 'selector_unmatched',
-            message: `no materialized instance for "${selector}" (looked up as ${roles.includes(selector) ? 'role' : 'executor'}; visible instances: ${candidates.length === 0 ? 'none' : candidates.join(', ')})`,
+            message: `"${selector}" resolves to count=0 instances (looked up as ${roles.includes(selector) ? 'role' : 'executor'}; candidates: none)`,
         };
     }
     if (matches.length > 1) {
         return {
             ok: false,
             code: 'selector_ambiguous',
-            message: `"${selector}" resolves to ${matches.length} instances (candidates: ${candidates.join(', ')}) — address one by its full spec id`,
+            message: `"${selector}" resolves to count=${matches.length} instances (candidates: ${candidates.join(', ')}) — address one by its full spec id`,
         };
     }
     return { ok: true, specId: candidates[0] ?? '', count: 1, candidates };

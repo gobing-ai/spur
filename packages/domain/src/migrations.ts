@@ -638,6 +638,32 @@ CREATE INDEX IF NOT EXISTS idx_history_message_provenance_run ON history_message
  * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
  * safe regardless of the database's age.
  */
+/** Reserved agent-instance migration draft (0685 R2); intentionally absent from `CLI_MIGRATIONS`. */
+export const AGENT_INSTANCES_MIGRATION_ID_DRAFT = '0026_spur_cli_agent_instances';
+
+export const AGENT_INSTANCES_DDL_DRAFT = `
+CREATE TABLE IF NOT EXISTS agent_instances (
+    spec_id TEXT PRIMARY KEY,
+    team_id TEXT,
+    member_key TEXT NOT NULL,
+    executor TEXT,
+    role TEXT,
+    workspace TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('stopped', 'running', 'exited', 'errored')),
+    pid INTEGER,
+    run_id TEXT,
+    generation INTEGER,
+    tags TEXT NOT NULL DEFAULT '[]',
+    config TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_instances_role ON agent_instances (role);
+CREATE INDEX IF NOT EXISTS idx_agent_instances_executor ON agent_instances (executor);
+CREATE INDEX IF NOT EXISTS idx_agent_instances_team ON agent_instances (team_id);
+`;
+
 export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
     // Renamed from `0001_spur_team_inbox` so the filename carries the

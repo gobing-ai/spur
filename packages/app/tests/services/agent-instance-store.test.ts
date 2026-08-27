@@ -36,23 +36,27 @@ function store() {
 
 describe('createFileAgentInstanceStore (0685 R2)', () => {
     test('projects specs onto the frozen AgentInstance shape', async () => {
-        const all = await store().all();
-        expect(all).toHaveLength(5);
-        const coder = all.find((i) => i.specId === 'demo-coder');
+        const coder = await store().bySpecId('demo-coder');
         expect(coder).toMatchObject({
             specId: 'demo-coder',
             teamId: 'demo',
+            memberKey: 'coder',
             role: 'coder',
             executor: 'omp',
-            status: null,
+            workspace: '/tmp',
+            status: 'stopped',
+            pid: null,
             runId: null,
             generation: null,
+            createdAt: 0,
+            updatedAt: 0,
         });
     });
 
     test('untethered spec has teamId null; unassigned role is null', async () => {
-        const solo = (await store().bySpecId('solo')) ?? (await store().all())[0];
+        const solo = await store().bySpecId('solo');
         expect(solo?.teamId).toBeNull();
+        expect(solo?.memberKey).toBe('solo');
         expect(solo?.role).toBeNull();
         expect(await store().bySpecId('missing')).toBeNull();
     });
@@ -86,6 +90,8 @@ describe('resolveRoleTarget (0685 R6)', () => {
         if (!res.ok) {
             expect(res.code).toBe('selector_unmatched');
             expect(res.message).toContain('role');
+            expect(res.message).toContain('count=0');
+            expect(res.message).toContain('candidates: none');
         }
         const resExec = await resolveRoleTarget(store(), 'gemini', [], [...EXECUTORS, 'gemini']);
         expect(resExec.ok).toBe(false);
@@ -100,7 +106,7 @@ describe('resolveRoleTarget (0685 R6)', () => {
         expect(res.ok).toBe(false);
         if (!res.ok) {
             expect(res.code).toBe('selector_ambiguous');
-            expect(res.message).toContain('2 instances');
+            expect(res.message).toContain('count=2');
             expect(res.message).toContain('demo-scribe-a');
             expect(res.message).toContain('demo-scribe-b');
         }

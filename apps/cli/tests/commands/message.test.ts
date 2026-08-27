@@ -656,6 +656,8 @@ describe('spur message send --role (0685 R6)', () => {
             expect(code).toBe(1);
             const payload = JSON.parse(out.messages[0] ?? '{}');
             expect(payload.error.code).toBe('selector_unmatched');
+            expect(payload.error.message).toContain('count=0');
+            expect(payload.error.message).toContain('candidates: none');
         } finally {
             await cleanup();
         }
@@ -676,7 +678,31 @@ describe('spur message send --role (0685 R6)', () => {
             expect(code).toBe(1);
             const payload = JSON.parse(out.messages[0] ?? '{}');
             expect(payload.error.code).toBe('selector_ambiguous');
-            expect(payload.error.message).toMatch(/2 instances|rev-a.*rev-b/s);
+            expect(payload.error.message).toContain('count=2');
+            expect(payload.error.message).toMatch(/rev-a.*rev-b/s);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('--role exact-one resolves to the same pinned send-wait path as --to', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
+        await seedSpecs(cwd, [{ id: 'rev-one', type: 'claude', executor: 'claude', role: 'reviewer' }]);
+        await seedSendOccupant({
+            dbUrl,
+            specId: 'rev-one',
+            runId: 'R-role',
+            events: [{ eventName: 'agent.invoke.exit', sequence: 2 }],
+        });
+        try {
+            const code = await main(
+                ['message', 'send', '--role', 'reviewer', '--wait', '--until', 'invoke-exit', '--json', 'hi'],
+                { cwd, output: out, dbUrl },
+            );
+            expect(code).toBe(0);
+            const payload = JSON.parse(out.messages[0] ?? '{}');
+            expect(payload.toId).toBe('rev-one');
+            expect(payload.wait.satisfied).toBe('invoke-exit');
         } finally {
             await cleanup();
         }

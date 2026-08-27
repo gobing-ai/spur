@@ -134,6 +134,18 @@ describe('memberLocalId (0543 R3)', () => {
         ];
         expect(memberLocalId(mixed[3] as NormalizedTeamMember, mixed, 3)).toBe('omp-2');
     });
+
+    test('0685 R4: a suffix never collides with another executor base', () => {
+        const mixed: NormalizedTeamMember[] = [{ executor: 'omp' }, { executor: 'omp' }, { executor: 'omp-2' }];
+        expect(mixed.map((member, index) => memberLocalId(member, mixed, index))).toEqual(['omp', 'omp-2', 'omp-2-2']);
+    });
+
+    test('0685 R4: appending a colliding executor leaves existing ids unchanged', () => {
+        const original: NormalizedTeamMember[] = [{ executor: 'omp' }, { executor: 'omp' }];
+        const before = original.map((member, index) => memberLocalId(member, original, index));
+        const appended = [...original, { executor: 'omp-2' }];
+        expect(appended.slice(0, 2).map((member, index) => memberLocalId(member, appended, index))).toEqual(before);
+    });
 });
 
 // ---- TeamConfigSchema shape (R2) ----
@@ -217,6 +229,19 @@ describe('AgentConfigSchema team validation', () => {
                     name: 'Dev Ops 01',
                     work_dir: '~/x',
                     members: ['claude', 'claude'],
+                },
+            },
+        });
+        expect(result.success).toBe(true);
+    });
+
+    test('0685 R4: a duplicate suffix colliding with another executor name still composes unique ids', () => {
+        const result = AgentConfigSchema.safeParse({
+            team: {
+                demo: {
+                    name: 'Demo',
+                    work_dir: '~/x',
+                    members: ['omp', 'omp', 'omp-2'],
                 },
             },
         });

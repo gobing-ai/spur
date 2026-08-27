@@ -49,7 +49,7 @@ wait; enqueue is **not** rolled back if the wait later fails.
 | Flag | Purpose |
 | ------ | --------- |
 | `--to <id>` | Recipient agent id. Mutually exclusive with `--role`; exactly one of the two is required. |
-| `--role <name>` | Address by Layer-1 role or executor name. Must resolve to exactly one materialized instance; zero/multi matches are hard errors naming count + candidates (exit 1); unknown name exits 2 naming the accepted vocabulary (`AGENT_ROLE_NAMES` ∪ executor names). Resolution collapses onto the same identity pin as `--to`. (0685 R6 / ADR-075 amendment) |
+| `--role <name>` | Address by Layer-1 role or executor name. Must resolve to exactly one materialized instance; zero (`count=0`, candidates `none`) or multi (`count=N` + candidates) matches are hard errors (exit 1); unknown name exits 2 naming the accepted vocabulary (`AGENT_ROLE_NAMES` ∪ executor names). Resolution yields the same spec-id path as `--to`; `--wait` snapshots that occupant pin. (0685 R6 / ADR-075 amendment) |
 | `--from <id>` | Sender id (default: `operator`). |
 | `--wait` | Block until the recipient reaches `--until` (snapshots occupant before send). |
 | `--until <state>` | Wait target: `injected` \| `invoke-exit` (repeatable OR). Default `invoke-exit`. |

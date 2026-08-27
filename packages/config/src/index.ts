@@ -330,9 +330,8 @@ export function normalizeMember(member: TeamMemberConfig): NormalizedTeamMember 
 /**
  * Local member id (0251 + 0543 R3). `id` wins, then `executor`; a role-only
  * member (neither) derives from its role plus a 1-based declaration-order index
- * among role-only members sharing that role: `<role>-<n>`. The index is frozen
- * so the id does not shift when the roster is reordered or gains another member
- * of the same role — a shifting id would break inbox addressing (0543 Design).
+ * among role-only members sharing that role: `<role>-<n>`. Derived ids are
+ * append-stable; arbitrary roster reordering is intentionally not stable.
  * The neither-role-nor-executor case yields `''` — R4 validation rejects that
  * member before it reaches materialization; callers treat `''` as invalid.
  */
@@ -342,28 +341,43 @@ export function memberLocalId(
     index: number,
 ): string {
     if (member.id !== undefined) return member.id;
-    if (member.executor !== undefined) {
-        // 0685 R4: duplicate-executor members disambiguate deterministically —
-        // first occurrence keeps the bare executor name, later ones append
-        // `-<position>` (2, 3, …). Rosters without duplicates are byte-identical
-        // to the pre-0685 derivation; the rosters that previously hard-failed in
-        // the composed-id guard now compose stable unique ids.
-        const base = member.executor;
-        let n = 0;
-        for (let i = 0; i < index; i++) {
-            const m = roster[i];
-            if (m !== undefined && m.id === undefined && m.executor === base) n += 1;
-        }
-        return n === 0 ? base : `${base}-${n + 1}`;
-    }
-    const role = member.role;
-    if (role === undefined) return '';
-    let n = 0;
+    // 0685 R4: one allocator covers every shape. Duplicate-executor members
+    // disambiguate deterministically — first occurrence keeps the bare executor
+    // name, later ones append `-<position>` (2, 3, …); a derived id never
+    // collides with an explicit id or another executor base. Role-only members
+    // derive `<role>-<n>` over their role-only peers exactly as in 0543 R3.
+    // Rosters without duplicates are byte-identical to the pre-0685 derivation.
+    // ponytail: prefix scan keeps append stability without persisted ids;
+    // index allocations only if team rosters ever become large.
+    const used = new Set<string>();
+    const executorSeen = new Map<string, number>();
+    const roleSeen = new Map<string, number>();
     for (let i = 0; i <= index; i++) {
-        const m = roster[i];
-        if (m !== undefined && m.id === undefined && m.executor === undefined && m.role === role) n += 1;
+        const current = i === index ? member : roster[i];
+        if (current === undefined) continue;
+        let localId: string;
+        if (current.id !== undefined) {
+            localId = current.id;
+        } else if (current.executor !== undefined) {
+            const base = current.executor;
+            let suffix = (executorSeen.get(base) ?? 0) + 1;
+            executorSeen.set(base, suffix);
+            localId = suffix === 1 ? base : `${base}-${suffix}`;
+            while (used.has(localId)) {
+                suffix += 1;
+                localId = `${base}-${suffix}`;
+            }
+        } else if (current.role !== undefined) {
+            const n = (roleSeen.get(current.role) ?? 0) + 1;
+            roleSeen.set(current.role, n);
+            localId = `${current.role}-${n}`;
+        } else {
+            localId = '';
+        }
+        if (i === index) return localId;
+        used.add(localId);
     }
-    return `${role}-${n}`;
+    return '';
 }
 
 /** A resolved executor: a canonical agent plus an optional model override. */

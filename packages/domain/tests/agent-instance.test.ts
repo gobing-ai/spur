@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { AGENT_INSTANCES_DDL_DRAFT, specRole } from '../src/index';
+import { AGENT_INSTANCES_DDL_DRAFT, AGENT_INSTANCES_MIGRATION_ID_DRAFT, CLI_MIGRATIONS, specRole } from '../src/index';
 
 /**
  * 0685 R2: specRole is the structural Layer-1 role accessor the domain can
@@ -20,7 +20,22 @@ describe('specRole', () => {
         expect(specRole(undefined)).toBeNull();
     });
 
-    test('exposes the reserved (unregistered) migration id', () => {
-        expect(AGENT_INSTANCES_DDL_DRAFT).toBe('0026_spur_cli_agent_instances');
+    test('freezes the complete reserved DDL without registering the migration', () => {
+        expect(AGENT_INSTANCES_MIGRATION_ID_DRAFT).toBe('0026_spur_cli_agent_instances');
+        expect(AGENT_INSTANCES_DDL_DRAFT).toContain('CREATE TABLE IF NOT EXISTS agent_instances');
+        for (const column of [
+            'member_key TEXT NOT NULL',
+            'workspace TEXT NOT NULL',
+            'status TEXT NOT NULL',
+            'pid INTEGER',
+            'tags TEXT NOT NULL',
+            'config TEXT NOT NULL',
+            'created_at INTEGER NOT NULL',
+            'updated_at INTEGER NOT NULL',
+        ]) {
+            expect(AGENT_INSTANCES_DDL_DRAFT).toContain(column);
+        }
+        expect(AGENT_INSTANCES_DDL_DRAFT.match(/CREATE INDEX IF NOT EXISTS/g)).toHaveLength(3);
+        expect(CLI_MIGRATIONS.some((migration) => migration.id === AGENT_INSTANCES_MIGRATION_ID_DRAFT)).toBe(false);
     });
 });
