@@ -4,7 +4,7 @@ name: "Right-size the post-implementation task gate: drop no-signal citation che
 status: done
 template: feature-impl
 created_at: 2026-08-27T07:03:56.288Z
-updated_at: "2026-08-27T18:57:58.564Z"
+updated_at: "2026-08-27T19:06:25.018Z"
 feature_id: F91
 ---
 
@@ -82,7 +82,7 @@ Disposition rule for anything this task touches: **a check earns `error` severit
 means the record is wrong.** If firing means the record is merely unlike a preferred shape, it is a
 `warning`. No check blocks a transition on a proxy for correctness.
 
-- [ ] R1. **Apply ADR-083 probe 2 — widen the cited window.** Change the cited-window slice in
+- [x] R1. **Apply ADR-083 probe 2 — widen the cited window.** Change the cited-window slice in
       `checkLineAnchors` (`packages/app/src/services/task-check.ts:1367-1373`) from the cited lines
       only to the cited range **±20 lines**, clamped to file bounds. ADR-083 measured this as
       new mismatches 42 → 10. Remove the basename-append hack in the same edit — it exists only to
@@ -91,42 +91,42 @@ means the record is wrong.** If firing means the record is merely unlike a prefe
       (F61 Scope; F61 AC R2 required it unchanged, and this task is the sanctioned successor that
       changes it — the ban was on changing it *under F61*, not forever).
 
-- [ ] R2. **Apply ADR-083 probe 1 — exclude every anchor in the evidence row.**
+- [x] R2. **Apply ADR-083 probe 1 — exclude every anchor in the evidence row.**
       `extractSubjectTokens` (`task-check.ts:1378`, escape at `:400-406`) currently excludes only the
       anchor under test, so a sibling anchor's path becomes a subject token that can never appear in
       the cited source. Exclude all anchors in the row. ADR-083 measured 2 baseline entries going
       stale (`task:0110`, `task:0368`).
 
-- [ ] R3. **Re-decide the severity promotion.** `.spur/config.yaml:230-232` holds one override,
+- [x] R3. **Re-decide the severity promotion.** `.spur/config.yaml:230-232` holds one override,
       `L4.anchor-subject-mismatch: error`, landed by 0583 R6 before ADR-083 reversed its premise.
       After R1+R2, measure the residual mismatch count and decide: keep `error` (justified only if
       the residue is genuinely-wrong citations), demote to `warning`, or remove the override block.
       Record the measured residue and the decision. Blocking a lifecycle transition on the ~10
       remaining findings requires showing they are true positives.
 
-- [ ] R4. **Do not collapse the citation codes.** `L4.stale-line-anchor` and `L3.solution-file-line`
+- [x] R4. **Do not collapse the citation codes.** `L4.stale-line-anchor` and `L3.solution-file-line`
       check different, true facts (resolution/bounds vs. presence-of-any-citation) and stay as they
       are. This requirement exists to close the plausible-but-false "three overlapping checks"
       reading; verify it holds and record that it does.
 
-- [ ] R5. **Account for probe-3 cap coupling in the measurement.** `checkLineAnchors` caps at 5
+- [x] R5. **Account for probe-3 cap coupling in the measurement.** `checkLineAnchors` caps at 5
       findings per section, so suppressing mismatches frees slots and inflates
       `L4.stale-line-anchor`. Every before/after count reported under R1-R3 must state whether the
       cap was hit, or the numbers are not comparable.
 
-- [ ] R6. **Stop asking a human for the coverage number.** Either drop `L3.testing-coverage`, or
+- [x] R6. **Stop asking a human for the coverage number.** Either drop `L3.testing-coverage`, or
       keep the code and have `spur task record` populate the claim from the verdict artifact so no
       author transcribes it. Choose one and state the reason; do not ship both a human obligation
       and a machine writer for the same fact. Authority: `bunfig.toml` already enforces 90/90.
 
-- [ ] R7. **Add the check that would have caught the real defect: `Solution`/`Testing` status claims
+- [x] R7. **Add the check that would have caught the real defect: `Solution`/`Testing` status claims
       that contradict the `Requirements` checkboxes.** A requirement checked in `Requirements` and
       named open in `Solution` (or the reverse) is a contradiction inside one file — cheap to
       detect and always a true positive. New code under `L3`. Severity `error` is justified because
       firing means the record *is* wrong; demote to `warning` only if the checkbox↔prose mapping
       proves ambiguous in practice, and say which and why.
 
-- [ ] R8. **Reconcile the fallout in the same change (constitution T10).** ADR-083 predicts ~101
+- [x] R8. **Reconcile the fallout in the same change (constitution T10).** ADR-083 predicts ~101
       baselined `L4.anchor-subject-mismatch` entries stop reproducing under probe 2, plus
       `task:0110` / `task:0368` under probe 1. The baseline is two-sided, so a stale entry fails the
       gate: reconcile `config/corpus-baseline.json` and its `note` (add a dated
@@ -135,53 +135,53 @@ means the record is wrong.** If firing means the record is merely unlike a prefe
       for the changed code set (T3) and append a dated ADR entry recording that ADR-083's routed
       proposal was applied here.
 
-- [ ] R9. **Out of scope — do not touch.** L2 section-matrix presence, the transition FSM, and
+- [x] R9. **Out of scope — do not touch.** L2 section-matrix presence, the transition FSM, and
       `done` gating on a real verify verdict. A broad audit of the other 48 finding codes is
       explicitly **not** in this task; if R1-R3 show the disposition rule generalizes, that sweep is
       a follow-up task, not scope creep here.
 
 ### Acceptance Criteria
 
-- [ ] AC1. Given a task whose Solution cites a single line *inside* a symbol whose name is the
+- [x] AC1. Given a task whose Solution cites a single line *inside* a symbol whose name is the
       requirement's subject (the ADR-083 probe-2 worked example: `apps/cli/src/context.ts:170` for
       subjects `createCliContext` / `AgentConfig`, where the symbol is declared at `:151`), when
       `spur task check` runs after R1, then no `L4.anchor-subject-mismatch` finding is emitted.
-- [ ] AC2. Given an evidence row carrying two anchors, when `spur task check` runs after R2, then
+- [x] AC2. Given an evidence row carrying two anchors, when `spur task check` runs after R2, then
       the sibling anchor's path contributes no subject token and the row does not report — and the
       same row with one anchor still does not report.
-- [ ] AC3. Given a citation whose path does not resolve from project root, or whose line range
+- [x] AC3. Given a citation whose path does not resolve from project root, or whose line range
       exceeds the file, when `spur task check` runs after R1, then `L4.stale-line-anchor` still
       fires on the **cited** range — proving the widened window is a matching concession only and
       did not loosen bounds checking.
-- [ ] AC4. Given a full-corpus `spur task check --corpus` run before and after R1+R2, when the
+- [x] AC4. Given a full-corpus `spur task check --corpus` run before and after R1+R2, when the
       counts are compared, then new `L4.anchor-subject-mismatch` findings have dropped from the
       recorded baseline to approximately ADR-083's predicted 10, and each reported count states
       whether the 5-per-section cap was engaged (R5).
-- [ ] AC5. Given the ~10 residual mismatches after R1+R2, when R3's decision is recorded, then the
+- [x] AC5. Given the ~10 residual mismatches after R1+R2, when R3's decision is recorded, then the
       Solution names each residual citation and states whether it is a genuinely wrong citation, and
       `.spur/config.yaml`'s `tasks.severity` block matches that finding — `error` retained only if
       the residue is wrong citations.
-- [ ] AC6. Given task 0687's record as of commit `eb93dfdaa` (Requirements marks R12 checked while
+- [x] AC6. Given task 0687's record as of commit `eb93dfdaa` (Requirements marks R12 checked while
       Solution lists "R5/R11(partial)/R12 open"), when `spur task check` runs after R7, then
       `L3.status-claim-contradiction` is emitted naming R12, the section claiming done, and the
       section claiming open.
-- [ ] AC7. Given task 0687's record at its 2026-08-27 repaired state, when the same check runs, then
+- [x] AC7. Given task 0687's record at its 2026-08-27 repaired state, when the same check runs, then
       no contradiction finding is emitted — the check does not fire on a consistent record.
-- [ ] AC8. Given a Solution that mentions `R3` in prose with no open/closed claim word adjacent,
+- [x] AC8. Given a Solution that mentions `R3` in prose with no open/closed claim word adjacent,
       when the check runs, then no finding is emitted — ambiguity resolves to no finding.
-- [ ] AC9. Given a task whose Testing section carries no numeric coverage claim, when
+- [x] AC9. Given a task whose Testing section carries no numeric coverage claim, when
       `spur task check` runs after R6, then either no `L3.testing-coverage` finding is emitted, or
       the claim was written by `spur task record` from the verdict artifact and the finding cannot
       fire on a record-written Testing section.
-- [ ] AC10. Given the full corpus after the R8 reconciliation, when `bun run corpus-check` runs,
+- [x] AC10. Given the full corpus after the R8 reconciliation, when `bun run corpus-check` runs,
       then it passes with no unlisted errors **and** no baseline entry that no longer reproduces —
       including the ~101 mismatch entries and the two probe-1 entries (`task:0110`, `task:0368`)
       that R1/R2 make stale.
-- [ ] AC11. Given `packages/app/tests/services/task-check.test.ts` after the change, when the suite
+- [x] AC11. Given `packages/app/tests/services/task-check.test.ts` after the change, when the suite
       runs, then every behavior change has a test, no test was `.skip`ped to go green, deleted codes
       have had their tests removed outright, and coverage still meets the repo's 90% line/function
       threshold.
-- [ ] AC12. Given a task at `testing` with a PARTIAL or FAIL verify verdict, when `→ done` is
+- [x] AC12. Given a task at `testing` with a PARTIAL or FAIL verify verdict, when `→ done` is
       attempted without `--force-done`, then it is still refused — proving R9 held and the lifecycle
       was not loosened.
 

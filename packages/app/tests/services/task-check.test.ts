@@ -2957,6 +2957,15 @@ describe('L3.status-claim-contradiction (0688 R7)', () => {
         });
         expect(findings).toHaveLength(0);
     });
+
+    test('a claim word quoted inside a code span is not a claim (0688 self-catch)', async () => {
+        const findings = await check({
+            solution: 'The lexicon `remains open|still open` sits near the fixture "Browser open (R1)".',
+            testing: 'R1 covered.',
+            checked: 'x',
+        });
+        expect(findings).toHaveLength(0);
+    });
 });
 
 describe('classifyExternalEvidence — frozen external form (0584 R1/R2)', () => {

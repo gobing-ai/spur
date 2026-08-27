@@ -881,8 +881,11 @@ export class TaskCheckService extends PlanningCheckService {
                 for (const claimSection of ['Solution', 'Testing'] as const) {
                     const claimBody = doc.getSection(claimSection);
                     if (claimBody === null || isPlaceholderBody(claimBody)) continue;
-                    for (const claimLine of claimBody.split('\n')) {
-                        const excerpt = claimLine.trim().slice(0, 100);
+                    for (const rawClaimLine of claimBody.split('\n')) {
+                        // 0688 R7: markdown code spans are quotations (a row documenting this
+                        // check's own lexicon matched itself), not status claims — strip them.
+                        const claimLine = rawClaimLine.replace(/`[^`]*`/g, ' ');
+                        const excerpt = rawClaimLine.trim().slice(0, 100);
                         for (const id of checked) {
                             if (claimsOpen(claimLine, id)) {
                                 findings.push({
