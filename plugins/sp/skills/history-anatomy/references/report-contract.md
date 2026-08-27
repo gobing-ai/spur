@@ -175,6 +175,14 @@ proposal-only: no applied change, no diff, and no command the report claims to h
 The final section lists, for every finding, the artifact anchor(s) and any cited `file:line`,
 so a reader can verify the report's claims against the evidence plane.
 
+Every row MUST name the artifact path in backticks — the deterministic structure gate's
+`evidence-claim-without-anchor` check matches `` `[^`]+\.(md|ts|json)` `` or a
+`path:line` — never a bare `current`/`baseline` label. Write each anchor as:
+
+```text
+`telemetry:history-analyze:duration-coverage-gap` | `.spur/run/<runId>-history-anatomy-current.json` — `#/warnings/0`, `#/derived/timeDecomposition`, `#/stepSupport`
+```
+
 ## Truthfulness invariants
 
 - `not available` is the true rendering for an unsupported dimension, never a masked gap.
