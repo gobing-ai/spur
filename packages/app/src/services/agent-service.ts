@@ -672,8 +672,8 @@ export class AgentService {
             silent: false,
             execution: this.defaultExecutionOptions(flags),
         });
-        // `commanderOptionsToFlags` kebab-cases commander's camelCase keys, so the
-        // `--json-envelope` flag arrives as `json-envelope` (agent.ts:223). Absent →
+        // agent.ts restores Commander's tri-state value under `jsonEnvelope` after the
+        // generic camelCase-to-kebab conversion; absence still defers to the env.
         if (!outcome.ok) {
             if (booleanFlag(flags, 'json')) {
                 this.ctx.output.write(
@@ -2602,7 +2602,7 @@ function booleanFlag(flags: Record<string, string | boolean>, name: string): boo
 
 /** ADR-091 tri-state `--json-envelope` read: explicit true/false wins, undefined defers to SPUR_JSON_ENVELOPE. */
 function jsonEnvelopeFlag(flags: Record<string, string | boolean>): boolean | undefined {
-    const value = flags['jsonEnvelope'];
+    const value = flags.jsonEnvelope;
     return typeof value === 'boolean' ? value : undefined;
 }
 
