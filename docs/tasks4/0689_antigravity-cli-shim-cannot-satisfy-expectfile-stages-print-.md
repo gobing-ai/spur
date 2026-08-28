@@ -4,7 +4,7 @@ name: "antigravity-cli shim cannot satisfy expectFile stages: print mode auto-de
 status: done
 template: issue
 created_at: 2026-08-27T15:39:39.946Z
-updated_at: "2026-08-27T23:37:55.402Z"
+updated_at: "2026-08-28T16:58:08.079Z"
 feature_id: B
 ---
 
@@ -59,7 +59,6 @@ a real multi-step write dispatch, not just `--version`, for any executor that de
 capability. See `spur agent doctor` caveat already noted in sp:dogfood-testing (0687 R12).
 
 ### Acceptance Criteria
-
 **Scenario 1 — every agy print-mode argv carries the permission affordance.**
 
 - **Given** the `antigravity-cli` shim from `@gobing-ai/ts-ai-runner`
@@ -102,124 +101,138 @@ capability. See `spur agent doctor` caveat already noted in sp:dogfood-testing (
 
 **Checklist — gates.**
 
-- [ ] ts-libs `bun run check` green
-- [ ] Spur `bun run autofix && bun run spur-check` green
-- [ ] `git status` intentional only in both repos
-
+- [x] ts-libs `bun run check` green
+- [x] Spur `bun run autofix && bun run spur-check` green
+- [x] `git status` intentional only in both repos
 ### Q&A
+**Q: What does “every executor” cover?** The active executor registry, not every dormant shim in
+`AGENT_SHIMS`. `spur agent doctor --json` reports eleven configured executors: seven Pi-backed, two
+Antigravity-backed, one Claude-backed, and one Grok-backed. Those four executable families are the
+R1 matrix. A future executor using another shim must gain and pass the same live write probe before
+being considered usable for `expectFile` work.
 
-**Q: Does (a) really "match how other CLI shims trust the dispatch sandbox", as R1 originally said?**
-No — checked 2026-08-27. `rg 'dangerously|yolo|skip-permissions|autoApprove|approval'` over
-`packages/ai-runner/src` returns zero hits; no shim passes a permission flag today. agy becomes the
-first. The premise is corrected in `### Background` / `### Design`; (a) still wins, on portability
-rather than precedent.
+**Q: Why not rely on operator-local permission files?** They are machine-local and can mask a broken
+published shim. The configured executor matrix therefore carries its required noninteractive policy
+in argv; local allow rules remain optional operator conveniences.
 
-**Q: Why not remedy (b), the `permissions.allow` rule?** It is per-machine and untracked. It is
-already applied on this machine (`write_file(**)`, added 2026-08-27T09:03, `settings.json.bak-0687`
-sibling), which is exactly why a broken shim can look green here and fail on every other machine and
-in CI. Kept as an operator convenience and documented as such (R4); not the fix.
+**Q: Why does Grok not use `acceptEdits` like Claude and Antigravity?** Grok 1.0.5 accepted that mode
+but twice exited 0 after narrating the write without invoking a tool. A broader `--always-approve`
+probe proved the permission diagnosis; the narrower repeated `--allow Write --allow Edit` rules then
+wrote and verified the artifact. Shell and other tools remain outside the grant.
 
-**Q: Why is `--mode accept-edits` a probe rather than the decision?** It is narrower and would be
-preferred if it works, but nothing verified that it suppresses the print-mode `write_file` denial —
-agy could not be reached from the refine session (TLS verification failure against
-`daily-cloudcode-pa.googleapis.com` behind the session proxy). Freezing a design on an unverified
-premise is worse than freezing the broader flag with one cheap probe in front of it. Decision rule
-is in `### Design`; the default when the probe cannot run is `--dangerously-skip-permissions`.
+**Q: Why not pair Antigravity with `--sandbox`?** That flag restricts terminal execution and would
+break workflows that legitimately shell out. `--mode accept-edits` is the narrower verified write
+grant; `--add-dir` and the authoritative workspace keep its file tools rooted in the project.
 
-**Q: Why not pair the flag with agy's `--sandbox`?** `--sandbox` enables terminal restrictions and
-would break dispatches that legitimately shell out (the pipeline's whole point). Rejected. Note that
-agy's own `enableTerminalSandbox` setting already applies terminal restrictions independently of the
-permission flag.
-
-**Q: Do the other shims have the same gap?** Almost certainly — `claude -p`, `codex exec`, `pi`,
-`omp`, `grok`, `hermes`, `opencode` all dispatch headless with no permission affordance, and any of
-them backing an `expectFile` stage would fail the same way. Deliberately **not** fixed here (see
-Out of scope). Worth a follow-up task once (a) is proven on agy; deferred, owner: Robin.
-
-**Q: Should the flag be opt-in via config?** No. It would vary for no one — a knob for a constant.
-Always on for this shim, off (untouched) for every other.
-
+**Q: Should this be configurable?** No. Each configured executor family has one verified headless
+policy. A knob would let production drift back into an unverified state.
 ### Design
+**Final amendment 2026-08-28 — configured-executor write policy.** Spur’s eleven configured
+executors resolve to four shim families. The shared contract is: a headless executor used by
+`agent.run` must be able to write the absolute `expectFile` path without an interactive prompt.
 
-**Amendment 2026-08-27 (implement, pipeline run — as-built correction, three deltas, each traceable):**
+| Configured family | Executors | Headless write policy | Trust boundary |
+| --- | ---: | --- | --- |
+| Pi | 7 | Native write behavior; no approval flag | Built-in write tool already runs noninteractively |
+| Antigravity | 2 | `--mode accept-edits`; `--add-dir <workspace>`; caller timeout mirrored as `--print-timeout` | Edit-only approval; project-rooted and process-supervised |
+| Claude | 1 | `--permission-mode acceptEdits` | Edit-only approval; shell and broader tools remain gated |
+| Grok | 1 | `--allow Write --allow Edit` | Tool-scoped approval; shell and other tools remain gated |
 
-1. **Flag narrowed to `--mode accept-edits`** per this Design's own decision rule: Plan step 1's probe RAN this time (agy reachable from this session) and the narrower flag wrote the file — probe A one-shot write 12s exit 0 + probe B multi-step write-read-write 8.5s exit 0 (2026-08-27). `--dangerously-skip-permissions` remains the documented fallback branch; not shipped.
-2. **Flag position: immediately after the `-p` input, not appended last.** As-built 0.4.45 (commit 4ce405b, landed during 0687 verification before this pipeline started) nests the flag in the initial argv array; agy parses these flags order-agnostically and exact `toEqual` still asserts position — the amended table below is the contract. Re-churning a published lockstep release for position cosmetics violates surgical-change discipline.
-3. **`--add-dir <workspace>` threads defect-2's verified scratch-dir re-root fix** (same 0687-verification pass, tested); the frozen table predated it.
+Dormant bundled shims are not Spur executors. They do not receive speculative flags; adding an
+executor backed by one of them requires the same deterministic argv assertion plus a real write
+probe before it can claim `expectFile` capability.
 
-Amended frozen argv (all four paths carry `--mode accept-edits`; `--add-dir <workspace>` follows when `options.workspace` is set):
+**Antigravity frozen argv.** All four paths carry `--mode accept-edits`; `--print-timeout` appears
+when the caller supplies a timeout, and `--add-dir <workspace>` appears when a workspace is present.
 
-| path | argv |
+| Path | Base argv |
 | --- | --- |
 | fresh | `['-p', '', '--mode', 'accept-edits']` |
 | sessionDir only | `['-p', '', '--mode', 'accept-edits']` |
 | sessionId + sessionDir | `['-p', '', '--mode', 'accept-edits', '--conversation', 'abc123']` |
 | continue only | `['-p', '', '--mode', 'accept-edits', '--continue']` |
 
-Comment wording (supersedes the "blanket tool approval" line): the shim comment states the trust assumption and that this is the only shim carrying a print-mode permission affordance — `accept-edits` auto-approves edit permission requests only, strictly narrower than the blanket flag.
-
+`buildAgentCommand` applies caller context after prompt options, so a stale caller-supplied
+`PromptOptions.workspace` cannot override the authoritative execution cwd.
 ### Plan
-
-1. **(R1, optional-narrowing) Probe whether `--mode accept-edits` suffices.** On a machine with
-   working agy auth, with the local `write_file(**)` allow entry temporarily removed:
-   `agy -p "Write exactly 'probe-ok' to /tmp/agy-probe-mode.txt, then stop." --model claude-opus-4-6-thinking --mode accept-edits`
-   File present ⇒ use `--mode accept-edits`. File absent, or the probe cannot run ⇒ use
-   `--dangerously-skip-permissions`. Record which branch was taken and why in `### Solution`.
-2. **(R1) Edit the shim.** `packages/ai-runner/src/agents/shims.ts` — append the chosen affordance
-   last in `antigravityCliShim.getPromptCommand`, with the trust-assumption comment verbatim from
-   `### Design`. No other shim touched.
-3. **(R2 deterministic) Update the argv assertions.** `packages/ai-runner/tests/agents/shims.test.ts`
-   at 164-175 and the session-matrix case at 302-308, plus the new all-paths presence test. Iterate
-   narrow first: `bun test packages/ai-runner/tests/agents/shims.test.ts`. Then ts-libs
-   `bun run lint && bun run test`.
-4. **(R3) Release.** CHANGELOG bullet under `## [Unreleased]` → `### Fixed` naming the symptom
-   (expectFile stages fail with the agent exiting 0) and the flag. `bun run bump-ver`, publish.
-5. **(R2 end-to-end) Prove it, honestly.** In Spur: update both root `package.json` pin blocks to
-   the published version, `bun update`, confirm
-   `rg '"version"' node_modules/@gobing-ai/ts-ai-runner/package.json` shows it. Then **remove
-   `"write_file(**)"` from `~/.gemini/antigravity-cli/settings.json` `permissions.allow`** (keep a
-   backup) and run an agy-executor `agent.run` stage carrying `expectFile` — either
-   `spur workflow run history-anatomy.yaml` reaching `resolve-scope` → `resolve-paths`, or a
-   one-shot `spur agent run` with a write instruction plus a file assertion. Capture the
-   `action_runs` row (or exit + file listing) as after-evidence next to the 4f55c237 before-row.
-   Restore the allow entry afterwards if the operator wants it back for interactive dogfooding.
-6. **(R4) Document.** One paragraph in `plugins/sp/skills/dogfood-testing/SKILL.md`, "Engine-driven
-   testees under a sandboxed session": the allow entry is an operator-local unblock, not the fix, and
-   it masks shim regressions in local end-to-end runs.
-7. **Gate.** `bun run autofix && bun run spur-check` in Spur; ts-libs `bun run check`. Record
-   commands and outcomes in `### Testing`.
-
+1. Probe the active executor registry and group configured executors by shim family.
+2. Use the narrowest live-verified noninteractive write policy for each family; retain native Pi
+   behavior, use edit-only modes for Antigravity and Claude, and use Grok's tool-scoped allow rules
+   when its edit-only mode fails the real probe.
+3. Pin exact argv for fresh, session, and continue paths; test authoritative workspace precedence
+   and Antigravity timeout propagation.
+4. Run one real source-runner write probe per configured family to a distinct ignored artifact.
+5. Run the ts-libs and Spur full gates, record the verdict, and leave release/commit to the operator’s
+   next step.
 ### Root Cause
+Headless agent CLIs cannot answer interactive approval prompts. Antigravity and Claude therefore
+exited 0 without producing an artifact when their file tools requested edit permission. Grok 1.0.5
+had a subtler variant: `acceptEdits` was accepted syntactically, but one-shot runs narrated the write
+and exited 0 without invoking a tool. Its tool-scoped `--allow Write --allow Edit` path passed the
+real probe. Pi’s built-in write tool already works noninteractively.
 
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
+Antigravity had two additional independent defects. It resolves relative file-tool paths against a
+scratch workspace unless given `--add-dir <workspace>`, and its internal print timeout can be shorter
+than Spur’s process timeout. The shared command builder also let a stale `PromptOptions.workspace`
+override the authoritative execution cwd because of spread order.
 
+The fix is one verified policy per configured executor family, an absolute artifact hint from Spur,
+authoritative workspace precedence, and timeout propagation into Antigravity.
 ### Solution
+**R1 — complete configured-executor policy.** The active registry contains seven Pi, two
+Antigravity, one Claude, and one Grok executor. Pi keeps its native noninteractive write behavior;
+Antigravity uses `--mode accept-edits`; Claude uses `--permission-mode acceptEdits`; Grok uses
+tool-scoped `--allow Write --allow Edit` rules after two `acceptEdits` probes reproduced
+exit-0/narrate-only behavior. Fresh source-runner probes wrote and byte-checked distinct artifacts
+for all four families.
 
-**R1 (uniform headless write policy):** per-shim flags chosen; agy first and only (see Q&A/Design). Substituted `--mode accept-edits` per the frozen decision rule after live probes A (one-shot, 12s) and B (multi-step write-read-write, 8.5s) both passed 2026-08-27 — the narrower grant verified; blanket flag not needed. Other shims remain out of scope (deferred, owner: Robin). ts-libs `packages/ai-runner/src/agents/shims.ts` + `tests/agents/shims.test.ts` updated (49/49 pass); shipped as released 0.4.46 (commit 06b2976, bump a258251; shim at `packages/ai-runner/src/agents/shims.ts:216`, Publish run 33125794239 success), Spur catalog pin `package.json:32` `^0.4.45`→`^0.4.46`, `bun update` resolved node_modules to npm-store 0.4.46 — no `bun link`.
+Implementation anchors: @gobing-ai/ts-ai-runner `packages/ai-runner/src/agents/shims.ts` lines
+106-120, 214-240, and 312-330; argv coverage in
+`packages/ai-runner/tests/agents/shims.test.ts` lines 194-225 and 310-358. Spur's absolute artifact
+hint remains at `packages/app/src/workflow/actions/agent-run.ts:238`.
 
-**R2 (real-dispatch regression probe):** shipped in its two corpus-sanctioned tiers. Deterministic tier: the four-path presence matrix in `tests/agents/shims.test.ts` (Design names it "the R2 deterministic tier"). Dispatch tier: live multi-step write probes recorded in ### Testing (probe A/B + AC2 workflow run), which is Background's "the regression test that must pass". The doctor-feature half (a built-in `usable`-beyond-`--version` probe per write-capable executor) is NOT built here: `packages/ai-runner/src/doctor-runner.ts:35` is a 256-line version/auth detector with no capability concept — a net-new feature surface with no pinning AC scenario; deferred as a follow-up work item (proposal, owner: Robin). The SKILL.md caveat (updated this run) documents the `usable: true` gap in the meantime.
+**R2 — deterministic plus real-dispatch probe.** `packages/ai-runner/tests/agents/shims.test.ts`
+pins the affected argv matrices. `packages/ai-runner/tests/ai-runner.test.ts` pins timeout forwarding
+and authoritative workspace precedence. Real source-runner probes exercised the actual Claude,
+Grok, Pi, and Antigravity binaries rather than their version commands.
 
-**R4 (docs):** `plugins/sp/skills/dogfood-testing/SKILL.md` "Engine-driven testees under a sandboxed session" now states the `permissions.allow` `write_file(**)` entry is an operator-local unblock, not the shipped fix, and masks shim regressions in local end-to-end runs.
+Runner anchors: @gobing-ai/ts-ai-runner `packages/ai-runner/src/ai-runner.ts` lines 188-199 and
+279-287; regression coverage in `packages/ai-runner/tests/ai-runner.test.ts` lines 109-127.
 
-**Design amendment:** dated entry in ### Design (as-built argv table: position + `--add-dir` + accept-edits substitution).
+**Reliability corrections.** `AiRunner.buildPromptCommand` mirrors the process timeout into
+Antigravity’s `--print-timeout`. `buildAgentCommand` applies the authoritative execution workspace
+after prompt options, preventing stale caller data from re-rooting artifacts. Antigravity retains
+`--add-dir <workspace>` for its scratch-workspace behavior.
 
+**Release state.** The previously published 0.4.46 Antigravity fix remains installed in Spur. The
+cross-executor completion and timeout/workspace corrections are intentionally uncommitted and
+unreleased for the operator’s next commit/release step; no development link was introduced.
+
+**Documentation.** `CHANGELOG.md` records the four-family policy and Grok's tool-scoped fallback.
+The operator-local `write_file(**)` rule remains documented as an unblock that can mask shim
+regressions, not the product fix.
+
+Release-note anchor: @gobing-ai/ts-libs `CHANGELOG.md` lines 11-17.
 ### Testing
+**Pipeline verify results**
 
-**0687 failing baseline:** run `4f55c237-e808-457d-9cdf-5fb5be128906` — `agent.run (inline) exited 0 but expected file is absent` at resolve-scope (agy print-mode auto-denial).
+- Verdict: PASS (from verdict artifact)
 
-**After-evidence (2026-08-27, this run):**
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `docs/tasks4/0689_antigravity-cli-shim-cannot-satisfy-expectfile-stages-print-.md:46-54` requires every configured executor to satisfy expectFile; the final Design/Solution records the active seven-Pi/two-Antigravity/one-Claude/one-Grok matrix. @gobing-ai/ts-ai-runner `packages/ai-runner/src/agents/shims.ts` lines 106-120, 214-240, and 312-330 implement the three approval-bearing families; fresh source-runner probes byte-checked all four families. |
+| R2 | MET | The argv matrix and runner precedence tests passed 75/75. Fresh real source-runner dispatches wrote and byte-checked Claude, Grok, Pi, and Antigravity artifacts; the published 0.4.46 expectFile workflow run a554ecf6-b3af-4b0e-abc3-5548d57960f7 also completed with agent.run ok=1 and exact B-OK-0689 output. |
 
-| Probe | Command/mechanism | Result |
-| --- | --- | --- |
-| A — accept-edits one-shot | `agy -p "…write_file…" --mode accept-edits --add-dir <dir>` | exit 0, 12s, `probe-ae.txt`=OK-0689 |
-| B — multi-step regression | same flags; write→read→write | exit 0, 8.5s, both files correct |
-| AC2 workflow expectFile | `spur workflow run /tmp/ac2-0689-expectfile.yaml --vars '{"agent":"agy-gemini"}'` (worktree, pins 0.4.46) | run `16d91908-a36b-4157-9fe4-e9aeb18297ac` status done, expectFile ok, `probe-ac2-0689-b.txt`=B-OK-0689, no `expected file is absent` |
-| ts-libs suite | `bun test packages/ai-runner/tests/agents/shims.test.ts` | 49 pass / 0 fail |
-| ts-libs gate | `bun run check` | 2054 pass / 0 fail |
-| Spur gate | `bun run autofix && bun run spur-check` | (test hop — see below) |
-
-`write_file(**)` confirmed absent from `~/.gemini/antigravity-cli/settings.json` during all probes.
-
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario 1 — every agy print-mode argv carries the permission affordance | MET | test | The source argv matrix produced the exact frozen arrays for fresh, sessionDir, sessionId+sessionDir, and continue paths; ts-libs full gate passed 2056 tests including the matrix. |
+| Scenario 2 — an expectFile stage driven by an agy executor now passes | MET | command | With write_file(**) absent from operator permissions, source-local workflow run a554ecf6-b3af-4b0e-abc3-5548d57960f7 reached done; action_runs records agy-opus, --mode accept-edits, --add-dir, exitCode 0, ok=1, and .spur/run/0689-verify-probe.txt contains exactly B-OK-0689 newline. |
+| Scenario 3 — the fix ships as a released dependency | MET | command | `package.json:31-39` and `:96-108` pin the lockstep 0.4.46 family; installed package version is 0.4.46 and realpath resolves under node_modules/.bun rather than ~/xprojects/ts-libs. @gobing-ai/ts-libs `CHANGELOG.md` lines 11-18 names the symptom and --mode accept-edits fix. |
+| Scenario 4 [docs-only] — the operator-local remedy is documented as not-the-fix | MET | static-ref | `plugins/sp/skills/dogfood-testing/SKILL.md:623-629` calls write_file(**) an operator-local unblock, says it masks regressions, and assigns the fix to the executor shim. |
+| Checklist — ts-libs bun run check | MET | command | Fresh bun run spur-check: 2056 pass, 0 fail, all 50 rules, 99.37% functions and 99.26% lines; fresh full build passed all packages. |
+| Checklist — Spur full gate | MET | command | Fresh bun run autofix && bun run spur-check: 6658 pass, 0 fail, all 44 pre-check and 2 post-check rules passed; test-cf and build also exited 0. |
+| Checklist — intentional git status | MET | command | Both repositories contain only disclosed 0687/0689 work: Spur selector diagnostics and task records; ts-libs headless write policy, timeout/workspace corrections, tests, and changelog. Probe files are ignored under .spur/run. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 
 | Priority | Finding | Disposition |
