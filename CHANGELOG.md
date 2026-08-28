@@ -1,5 +1,68 @@
 # Changelog
 
+## [0.3.65] - 2026-08-28
+
+### Added
+
+- feat(cli): land task 0697 ADR-091 envelope seam from dogfood branch (merge) (3a3e791b4)
+- feat(agent): accept inline selector on headless surfaces (bb712c8d1)
+- feat(cli): route service-layer JSON emission through the ADR-091 envelope seam (9043d390c)
+- feat(app): schedule-triggered history refresh on the server (0696) (a459922eb)
+- feat(cli): workflow show --format todo projection (task 0695) (d05c0ac12)
+- feat(app): anchor-drift detection and verified-box auto-flip (cee844c45)
+- feat(cli): adopt opt-in JSON envelope across all nouns (791dc9c94)
+- feat(corpus): single-sided baseline gate on new findings (ADR-090) (71f588678)
+- feat(sp): add inline session review command (ffe35dd0d)
+
+### Fixed
+
+- fix(workflow): raise history-anatomy correction budget to two passes (46281cd1f)
+- fix(cli): envelop feature not-found errors; close 0693 (6b89162e1)
+- fix(app): match feature-id references case-insensitively (1a2cfd75e)
+- fix(dogfood-testing): merge run-0689 worktree branch (7378bf7d7)
+- fix(deps): align ts-* family pins to 0.4.46 lockstep; R44 baseline for 0689 R4 note (e445631c4)
+- fix(dogfood-testing): operator-local write_file allow is unblock, not the fix (0689) (6fd4cfca0)
+- fix(history-anatomy): align correct-pass prompt with gate regex (0690) (dcbc0d0ef)
+- fix(history-anatomy): merge bounded correct pass for structure-gate FAIL (0690) (b0049416f)
+- fix(history-anatomy): bounded correct pass on structure-gate FAIL (0690) (ad116d12c)
+
+### Changed
+
+- docs(task): record 0697 service-layer envelope verification (945d0ea2a)
+- refactor(app): sync jsonEnvelope access with envelope seam (0697) (33e642f42)
+- docs(task): record 0689 verify PASS and four-family write policy (847af68b8)
+- chore(claude): allow npm registry webfetch and bun run permissions (61382ba33)
+- docs(task): record 0542/0585/0682 implementation evidence (e9cf8db72)
+- refactor(app): move the JSON envelope seam into spur-app (0697) (7dcddadbb)
+- docs(task): record 0693 re-verify evidence with fix-pass disclosure (917f164be)
+- docs(task): update task status after verification (926d454df)
+- docs(task): update task status after verification (9b01f7705)
+- docs(frature): update feature status (8448b6de4)
+- docs(frature): update feature status (e00264cf6)
+- chore(memory): D7 wrap-hop learnings + wrapup metrics rows (92f5680ca)
+- docs: wrap-up sync for D7 (ADR-051 amendment, governance index, dogfood report) (eb58712a2)
+- docs(sp): route inline driver step-4 to the todo projection (task 0696) (de4a4a12c)
+- chore: normalize blank line in learnings.md (fc33a4a8b)
+- docs(corpus): re-point shifted 04_DESIGN.md anchors in 0672/0694 (07c3b52c4)
+- docs(corpus): refine 0697 to implement-ready depth (8cd865265)
+- docs(corpus): add 0697 ADR-091 service-layer envelope task (236fbbcf2)
+- docs(tasks): record close-out evidence for 0692 and 0694 (570ee072d)
+- docs(features): mark F94 pipeline close-out feature done (09cda7fbd)
+- chore(claude): allow WebFetch from registry.npmjs.org (b1c841ce4)
+- docs(corpus): F94 task-status projection from completed close-out tasks (c230a2db6)
+- docs: sync ADR-091/090, friction-review consolidation, corpus status (a93ebd05c)
+- chore(corpus): atomic baseline regen and .spur rule exclusion (42c4aabbc)
+- test(cli): cover output envelope adoption and raw byte-identity (2d07eb73d)
+- chore(corpus): task 0691 todo->wip lifecycle write (a55ffe381)
+- docs(adr-090): sync gate contract across harness docs (5b6403df9)
+- docs(corpus): refine F94 task sections 0692 and 0694 (145bc8943)
+- docs(corpus): refine D7 todo projection scope and task plans (10343e848)
+- chore(scripts): add regen-corpus-baseline for ADR-090 snapshots (0c2c0eaea)
+- docs(corpus): plan feature D7 todo projection for workflow show (42cf803f2)
+- docs(task-0689): Solution/Testing/Review/History evidence; status done (abff75df2)
+- docs(corpus): refine 0693 to implement-ready depth (5172005ed)
+- docs(corpus): refine F94 tasks 0691/0692/0694 to implement-ready depth (4e0e826af)
+
 ## [0.3.64] - 2026-08-27
 
 ### Added
