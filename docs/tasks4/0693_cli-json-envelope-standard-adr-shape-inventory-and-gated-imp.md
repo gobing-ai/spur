@@ -4,7 +4,7 @@ name: "CLI JSON envelope standard: ADR, shape inventory, and gated implementatio
 status: done
 template: feature-impl
 created_at: 2026-08-27T20:16:10.932Z
-updated_at: "2026-08-28T04:34:18.526Z"
+updated_at: "2026-08-28T05:27:21.739Z"
 feature_id: F95
 priority: P2
 ---
@@ -74,28 +74,34 @@ rejected alternative only); any `apps/cli/src/` implementation before the R3 gat
 re-splitting this work into separate ADR / inventory / implementation tasks (operator
 consolidation, 2026-08-27).
 ### Acceptance Criteria
+```gherkin
+Feature: CLI JSON envelope standard
 
-- [x] AC1. Given the four `--json` deviations recorded in Background, when the ADR entry is authored
-      in `docs/00_ADR.md`, then it is dated, it **adopts** the
-      `packages/contracts/src/shared.ts` envelope by name (`apiSuccessSchema` / `apiErrorSchema` /
-      `paginatedResponseSchema`) rather than defining a new shape, it records the two rejected
-      alternatives, it resolves the `API_ERROR_CODES` extend-vs-collapse question, and it carries a
-      compat/deprecation story naming the `--json-envelope` opt-in.
+  Scenario: R1 — The envelope decision is recorded as an ADR
+    Given the four "--json" deviations recorded in Background
+    When the ADR entry is authored in docs/00_ADR.md
+    Then it is dated and adopts the packages/contracts/src/shared.ts envelope by name — apiSuccessSchema, apiErrorSchema, paginatedResponseSchema — rather than defining a new shape
+    And it records the two rejected alternatives and resolves the API_ERROR_CODES extend-vs-collapse question
+    And it carries a compat and deprecation story naming the "--json-envelope" opt-in
 
-- [x] AC2. Given every `--json`-bearing verb across the 14 noun modules under
-      `apps/cli/src/commands/`, when the inventory lands in `docs/04_DESIGN.md`, then each verb has
-      a row naming its current top-level shape and its deviation from the R1 envelope, and re-running
-      the `toJson(` / `JSON.stringify(` emit-site sweep surfaces no verb absent from the table.
+  Scenario: R2 — The current shapes are inventoried per noun
+    Given every "--json"-bearing verb across the 14 noun modules under apps/cli/src/commands/
+    When the inventory lands in docs/04_DESIGN.md
+    Then each verb has a row naming its current top-level shape and its deviation from the R1 envelope
+    And re-running the toJson and JSON.stringify emit-site sweep surfaces no verb absent from the table
 
-- [x] AC3. Given the operator has not recorded approval in `### Q&A`, when the task reaches step 5
-      of the Plan, then execution stops at the HITL consent gate and no file under `apps/cli/src/`
-      is modified.
+  Scenario: R3 — Implementation follows the approved ADR
+    Given the operator has not recorded approval in the task's Q&A section
+    When the task reaches step 5 of the Plan
+    Then execution stops at the HITL consent gate and no file under apps/cli/src/ is modified
+    And once approval is recorded "spur <noun> <verb> --json --json-envelope" emits an ok-true data envelope, or an ok-false error envelope carrying code and message on failure, validating against the contracts zod schemas
+    And the same command without the opt-in emits byte-identical output to the pre-change baseline for "task update --section", "feature check", and "task check --corpus"
+```
 
-- [x] AC4. Given operator approval is recorded, when the envelope ships, then
-      `spur <noun> <verb> --json --json-envelope` emits `{ok: true, data}` (or
-      `{ok: false, error: {code, message}}` on failure) validating against the contracts zod
-      schemas, **and** the same command without the opt-in emits byte-identical output to the
-      pre-change baseline for `task update --section`, `feature check`, and `task check --corpus`.
+**AC-to-row map (identity keys are the feature scenario titles, F95 R1–R3).** The former task-local
+rows AC1–AC4 map onto these scenarios: AC1 → R1, AC2 → R2, AC3 and AC4 → R3 (the consent gate and
+the shipped envelope are the two clauses of F95's R3). The `### Testing` evidence table keeps its
+AC1–AC4 row ids; they are the finer-grained evidence rows behind the three ship-contract scenarios.
 ### Q&A
 
 **2026-08-27 — R3 consent gate (ADR-051 amendment): APPROVED.**
@@ -236,9 +242,9 @@ CLI JSON envelope per ADR-091: seam at `apps/cli/src/output.ts:63` (`envelopeEna
 
 **Close-out addenda (2026-08-27, dogfood re-audit of `/sp:dev-verify 0693 --fix all`):**
 
-- **`feature show` / `feature transition` not-found paths enveloped** — `apps/cli/src/commands/feature.ts:60` and `:175` called `context.output.error(...)` directly, bypassing the seam, so `spur feature show F999 --json --json-envelope` emitted plain text and no JSON. Both now route through `writeJsonError(context.output, options, …)` (already imported at `feature.ts:11`). Enveloped: `{ok:false,error:{code:'INTERNAL_ERROR',message:'Feature F999 not found'}}`; raw default byte-identical (`writeJsonError`'s raw branch is `output.error(message)`). `feature.ts:388` deliberately **not** converted: it sits inside a `continue` loop that later emits an aggregate array, so an envelope there would write two JSON documents to one stdout.
+- **`feature show` / `feature transition` not-found paths enveloped** — `apps/cli/src/commands/feature.ts:60` and `:175` called `context.output.error(...)` directly, bypassing the seam, so `spur feature show F999 --json --json-envelope` emitted plain text and no JSON. Both now route through `writeJsonError(context.output, options, …)` (already imported at `apps/cli/src/commands/feature.ts:11`). Enveloped: `{ok:false,error:{code:'INTERNAL_ERROR',message:'Feature F999 not found'}}`; raw default byte-identical (`writeJsonError`'s raw branch is `output.error(message)`). `apps/cli/src/commands/feature.ts:388` deliberately **not** converted: it sits inside a `continue` loop that later emits an aggregate array, so an envelope there would write two JSON documents to one stdout.
 
-- **`writeJsonError` is a fourth exported helper** beyond the `### Design` "frozen new names" table (`output.ts:100`). It is module-internal — no new CLI noun, verb, or flag — so the ADR-051 consent recorded in `### Q&A` is unaffected. The Design table is the operator-approved artifact of record and is left as approved; this entry is the deviation record.
+- **`writeJsonError` is a fourth exported helper** beyond the `### Design` "frozen new names" table (`apps/cli/src/output.ts:100`). It is module-internal — no new CLI noun, verb, or flag — so the ADR-051 consent recorded in `### Q&A` is unaffected. The Design table is the operator-approved artifact of record and is left as approved; this entry is the deviation record.
 
 - **Service-layer emitters are outside this task's seam and do not honor the flag.** `agent list`, `agent doctor`, `rule run`, and `rule validate` register `SHARED_OPTIONS.jsonEnvelope` but emit from `packages/app` (`agent-service.ts:423,553,621` via a private `toJson` at `:2132`; `rule-service.ts:332,368,397` via raw `JSON.stringify`), which never receives `options.jsonEnvelope`. Confirmed live at HEAD `1a2cfd75`. `packages/app` may not import `apps/cli` (ADR-021), so closing this needs a seam-location decision rather than a patch — routed to task **0697** and recorded in `docs/04_DESIGN.md` §4.1.
 ### Testing
