@@ -1522,7 +1522,9 @@ Row-level deltas from the default rule:
   `details.cliCode`): task create/batch-create collision + duplicate-follow-up,
   projects add/remove/list/start/stop error branches, builder bump-ver/drop-tags error
   branches, message send/wait usage + typed failures, agent wait resolution/usage/fail
-  branches, history daily `{error: detail}`.
+  branches, history daily `{error: detail}`, and (close-out 2026-08-27) the `feature show` /
+  `feature transition` not-found returns at `apps/cli/src/commands/feature.ts:60,175`, which had
+  bypassed the seam via a direct `context.output.error(...)`.
 - **Class-3 top-level-`ok` payloads** move under `data` unchanged; the envelope `ok` is
   recomputed as command success (task migrate, migrate-anchors, check --corpus, noop,
   agent create, init fresh run, projects/builder success payloads).
@@ -1531,9 +1533,16 @@ Row-level deltas from the default rule:
   fingerprints (dedup keys, not CLI output). `rule list` and `task verifyall-aggregate`
   raw `JSON.stringify(x, null, 2)` sites were adopted — their formatting is identical to
   the `toJson` raw path, so byte-identity holds.
-- **Not adopted (service-side, outside the 14-module sweep):** `agent doctor` and the
-  plain path of `agent list` emit inside `packages/app/src/services/agent-service.ts`;
-  they adopt when their own seam adopts (row note above stands).
+- **Not adopted (service-side, outside the 14-module sweep) — flag advertised, flag ignored:**
+  four verbs register `SHARED_OPTIONS.jsonEnvelope` but emit their JSON from `packages/app`,
+  which never receives `options.jsonEnvelope`, so `--json-envelope` is silently a no-op on them.
+  Confirmed live 2026-08-27 at HEAD `1a2cfd75`: `agent list` and `agent doctor`
+  (`agent-service.ts:423,553,621`, private `toJson` at `:2132`); `rule run` and `rule validate`
+  (`rule-service.ts:332,368,397`, raw `JSON.stringify`). `packages/app` may not import
+  `apps/cli` (ADR-021), so closing this needs a seam-location decision, not a patch — **task
+  0697**. Until then these four are the only verbs whose advertised `--json-envelope` does
+  nothing; every other flag-registering verb honors it (`message inbox` and the `team` verbs
+  route through in-module helpers and are enveloped).
 
 | Noun | Verb | Emit sites (`apps/cli/src/commands/<noun>.ts`) | Current shape | Deviation from ADR-091 envelope |
 | --- | --- | --- | --- | --- |

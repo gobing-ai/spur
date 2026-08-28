@@ -4,7 +4,7 @@ name: "CLI JSON envelope standard: ADR, shape inventory, and gated implementatio
 status: done
 template: feature-impl
 created_at: 2026-08-27T20:16:10.932Z
-updated_at: "2026-08-28T03:01:02.019Z"
+updated_at: "2026-08-28T04:34:18.526Z"
 feature_id: F95
 priority: P2
 ---
@@ -44,7 +44,7 @@ message 10, history 9, team 6, agent 6, builder 4, rule 3, init 2, status/serve/
 
 ### Requirements
 
-- [ ] R1. **ADR entry** in `docs/00_ADR.md` — a dated entry that *adopts* the existing
+- [x] R1. **ADR entry** in `docs/00_ADR.md` — a dated entry that *adopts* the existing
       `packages/contracts/src/shared.ts` envelope (`{ok: true, data}` / `{ok: false, error:
       {code, message, details?}}`) as the `spur` CLI `--json` standard, rather than inventing a
       third shape. It must state: the decision, the rejected alternatives (ts-utils `ApiEnvelope`;
@@ -52,18 +52,18 @@ message 10, history 9, team 6, agent 6, builder 4, rule 3, init 2, status/serve/
       story keyed to the `--json-envelope` opt-in flag named in Design. Cites the four 0688
       deviations in Background as motivating evidence.
 
-- [ ] R2. **Per-noun shape inventory** in `docs/04_DESIGN.md` — one table row per `--json`-bearing
+- [x] R2. **Per-noun shape inventory** in `docs/04_DESIGN.md` — one table row per `--json`-bearing
       verb across all 14 noun modules under `apps/cli/src/commands/`, recording the current
       top-level shape (`bare-array` | `flat-object` | `envelope` | `scalar`) and naming each
       deviation from the R1 envelope. Completeness is checkable: every `toJson(` / `JSON.stringify(`
       emit site in those modules is represented by a row.
 
-- [ ] R3. **HITL consent gate** — implementation (R4) does not begin until the operator explicitly
+- [x] R3. **HITL consent gate** — implementation (R4) does not begin until the operator explicitly
       approves the R1 decision mid-task, per the ADR-051 amendment for public CLI surface changes.
       The gate is observable: the task records the approval (or the stop) in `### Q&A` before any
       code under `apps/cli/src/` changes.
 
-- [ ] R4. **Implement the envelope** behind the gate, per the approved decision: a single
+- [x] R4. **Implement the envelope** behind the gate, per the approved decision: a single
       opt-in wrapping seam at `apps/cli/src/output.ts` plus per-noun adoption, with existing
       unwrapped output preserved as the default until the deprecation window closes.
 
@@ -73,31 +73,29 @@ adopted, not a target); retiring the unused `@gobing-ai/ts-utils` `ApiEnvelope` 
 rejected alternative only); any `apps/cli/src/` implementation before the R3 gate passes; and
 re-splitting this work into separate ADR / inventory / implementation tasks (operator
 consolidation, 2026-08-27).
-
 ### Acceptance Criteria
 
-- [ ] AC1. Given the four `--json` deviations recorded in Background, when the ADR entry is authored
+- [x] AC1. Given the four `--json` deviations recorded in Background, when the ADR entry is authored
       in `docs/00_ADR.md`, then it is dated, it **adopts** the
       `packages/contracts/src/shared.ts` envelope by name (`apiSuccessSchema` / `apiErrorSchema` /
       `paginatedResponseSchema`) rather than defining a new shape, it records the two rejected
       alternatives, it resolves the `API_ERROR_CODES` extend-vs-collapse question, and it carries a
       compat/deprecation story naming the `--json-envelope` opt-in.
 
-- [ ] AC2. Given every `--json`-bearing verb across the 14 noun modules under
+- [x] AC2. Given every `--json`-bearing verb across the 14 noun modules under
       `apps/cli/src/commands/`, when the inventory lands in `docs/04_DESIGN.md`, then each verb has
       a row naming its current top-level shape and its deviation from the R1 envelope, and re-running
       the `toJson(` / `JSON.stringify(` emit-site sweep surfaces no verb absent from the table.
 
-- [ ] AC3. Given the operator has not recorded approval in `### Q&A`, when the task reaches step 5
+- [x] AC3. Given the operator has not recorded approval in `### Q&A`, when the task reaches step 5
       of the Plan, then execution stops at the HITL consent gate and no file under `apps/cli/src/`
       is modified.
 
-- [ ] AC4. Given operator approval is recorded, when the envelope ships, then
+- [x] AC4. Given operator approval is recorded, when the envelope ships, then
       `spur <noun> <verb> --json --json-envelope` emits `{ok: true, data}` (or
       `{ok: false, error: {code, message}}` on failure) validating against the contracts zod
       schemas, **and** the same command without the opt-in emits byte-identical output to the
       pre-change baseline for `task update --section`, `feature check`, and `task check --corpus`.
-
 ### Q&A
 
 **2026-08-27 — R3 consent gate (ADR-051 amendment): APPROVED.**
@@ -234,9 +232,15 @@ is out of scope here and must be filed against F95 as a new task carrying the AD
   verb set against the table rows.
 
 ### Solution
+CLI JSON envelope per ADR-091: seam at `apps/cli/src/output.ts:63` (`envelopeEnabled`, precedence flag > `SPUR_JSON_ENVELOPE=1` > raw), `apps/cli/src/output.ts:75` (`toEnvelopeJson`), `apps/cli/src/output.ts:87` (`toEnvelopeError`), `apps/cli/src/output.ts:100` (`writeJsonError`); flag `apps/cli/src/commands/shared-options.ts:31`; contracts schemas re-exported `packages/contracts/src/index.ts:41`. Adopted at 99/102 emit sites across all 14 noun modules (3 kept raw, recorded `docs/04_DESIGN.md:1529`). Failure surface normalized: generic catches route through `writeJsonError` (e.g. `apps/cli/src/commands/task.ts:990`); `{status:'error'}` payloads carry `opts.error` (`apps/cli/src/commands/history.ts:80,101,129,250`) so enveloped mode emits `{ok:false,error:{code:'INTERNAL_ERROR',...}}` while raw stays byte-identical. Check verbs pin `ok:true` on failure (§4.1 judgment call, exit codes unchanged). Corpus rule `cli-json-output` updated: `config/rules/surface/check-cli-surface.yaml:35`.
 
-CLI JSON envelope per ADR-091: seam at `apps/cli/src/output.ts:63` (`envelopeEnabled`, precedence flag > `SPUR_JSON_ENVELOPE=1` > raw), `apps/cli/src/output.ts:75` (`toEnvelopeJson`), `apps/cli/src/output.ts:87` (`toEnvelopeError`), `apps/cli/src/output.ts:96` (`writeJsonError`); flag `apps/cli/src/commands/shared-options.ts:31`; contracts schemas re-exported `packages/contracts/src/index.ts:41`. Adopted at 99/102 emit sites across all 14 noun modules (3 kept raw, recorded `docs/04_DESIGN.md:1529`). Failure surface normalized: generic catches route through `writeJsonError` (e.g. `apps/cli/src/commands/task.ts:990`); `{status:'error'}` payloads carry `opts.error` (`apps/cli/src/commands/history.ts:80,101,129,250`) so enveloped mode emits `{ok:false,error:{code:'INTERNAL_ERROR',...}}` while raw stays byte-identical. Check verbs pin `ok:true` on failure (§4.1 judgment call, exit codes unchanged). Corpus rule `cli-json-output` updated: `config/rules/surface/check-cli-surface.yaml:35`.
+**Close-out addenda (2026-08-27, dogfood re-audit of `/sp:dev-verify 0693 --fix all`):**
 
+- **`feature show` / `feature transition` not-found paths enveloped** — `apps/cli/src/commands/feature.ts:60` and `:175` called `context.output.error(...)` directly, bypassing the seam, so `spur feature show F999 --json --json-envelope` emitted plain text and no JSON. Both now route through `writeJsonError(context.output, options, …)` (already imported at `feature.ts:11`). Enveloped: `{ok:false,error:{code:'INTERNAL_ERROR',message:'Feature F999 not found'}}`; raw default byte-identical (`writeJsonError`'s raw branch is `output.error(message)`). `feature.ts:388` deliberately **not** converted: it sits inside a `continue` loop that later emits an aggregate array, so an envelope there would write two JSON documents to one stdout.
+
+- **`writeJsonError` is a fourth exported helper** beyond the `### Design` "frozen new names" table (`output.ts:100`). It is module-internal — no new CLI noun, verb, or flag — so the ADR-051 consent recorded in `### Q&A` is unaffected. The Design table is the operator-approved artifact of record and is left as approved; this entry is the deviation record.
+
+- **Service-layer emitters are outside this task's seam and do not honor the flag.** `agent list`, `agent doctor`, `rule run`, and `rule validate` register `SHARED_OPTIONS.jsonEnvelope` but emit from `packages/app` (`agent-service.ts:423,553,621` via a private `toJson` at `:2132`; `rule-service.ts:332,368,397` via raw `JSON.stringify`), which never receives `options.jsonEnvelope`. Confirmed live at HEAD `1a2cfd75`. `packages/app` may not import `apps/cli` (ADR-021), so closing this needs a seam-location decision rather than a patch — routed to task **0697** and recorded in `docs/04_DESIGN.md` §4.1.
 ### Testing
 
 **Pipeline verify results**
@@ -259,11 +263,29 @@ CLI JSON envelope per ADR-091: seam at `apps/cli/src/output.ts:63` (`envelopeEna
 
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
+**Close-out addendum — 2026-08-27 (dogfood re-audit).** The R4/AC4 rows above were re-verified
+against HEAD `1a2cfd75` and one gap was found and fixed: `spur feature show F999 --json
+--json-envelope` emitted plain text with no JSON, because `apps/cli/src/commands/feature.ts:60`
+and `:175` called `context.output.error(...)` directly instead of the seam. Both now route through
+`writeJsonError`; enveloped output is `{ok:false,error:{code:'INTERNAL_ERROR',message:'Feature F999
+not found'}}` and the raw default is byte-identical. AC4's failure clause is therefore MET on both
+probed nouns (`task show 9999`, `feature show F999`) rather than on one.
+
+Scope statement for AC2, recorded so the number is not read as more than it is: the 102-site sweep
+is bounded to `apps/cli/src/commands/**` by AC2's own wording. Four verbs (`agent list`, `agent
+doctor`, `rule run`, `rule validate`) emit from `packages/app` and are outside it; they advertise
+`--json-envelope` and ignore it. Routed to task **0697**, recorded in `docs/04_DESIGN.md` §4.1.
+
+Re-run at close-out: `spur task check 0693` → 0 findings; `bunx tsc --noEmit` (apps/cli) → exit 0;
+`bunx biome check apps/cli/src/commands/feature.ts` → clean; `bun test` (apps/cli) → 857 pass /
+6 fail, all 6 pre-existing and machine-dependent (verified by stashing this session's diff).
 ### Review
 
 **Reviewer:** sp-super-reviewer (pipeline stage 7, run 51a81fbd, `--auto`) · **Date:** 2026-08-28 · **Scope:** diff `a55ffe38`→working tree, 0693-owned files only (foreign 0691/0692 files excluded per operator) · **Method:** three-dimension review (functional traceability + SECUA + architecture), evidence re-run this session.
 
 **Verdict: PARTIAL — request-changes** (blocks gate; R1–R3 MET, R4/AC4 PARTIAL on the failure-envelope surface)
+
+> **Superseded 2026-08-27 — see “Re-review” at the end of this section.** The blocking P2 is closed for `task.ts`/`history.ts` (before close-out) and for `feature.ts` (at close-out); the residual is scoped to service-layer emitters and routed to task **0697**.
 
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
@@ -300,6 +322,45 @@ CLI JSON envelope per ADR-091: seam at `apps/cli/src/output.ts:63` (`envelopeEna
 
 **Next:** route remediation of the P2 finding (and optionally the P3 doc/record fixes) through `/sp-dev-verify --fix` or a follow-up F95 task carrying ADR-091; then re-review.
 
+---
+
+#### Re-review — 2026-08-27 (dogfood re-audit of `/sp:dev-verify 0693 --auto --next --force --focus all --fix all`)
+
+**Verdict: PASS** (R1–R4 MET, AC1–AC4 MET). Supersedes the `PARTIAL — request-changes` above.
+Method: every finding below re-executed against HEAD `1a2cfd75` this session; dispositions are
+observed behavior, not re-reading the prior text.
+
+| # | Original finding | Disposition | Evidence |
+| --- | --- | --- | --- |
+| P2 | Enveloped failure surface inconsistent — (a) proper envelope only on pre-existing-JSON branches, (b) generic catches emit plain stderr (17 `task.ts`, 9 `feature.ts`), (c) status-discriminated payloads wrap as `{ok:true,data:{status:'error'}}` | **Closed for the CLI seam; residual re-scoped** | (a) unchanged and correct. (b) `task show 9999 --json --json-envelope` → `{ok:false,error:{code:'INTERNAL_ERROR',…}}` (closed before close-out, `task.ts:990,1061,1074`); `feature show F999 --json --json-envelope` still emitted plain text at re-audit and was fixed this session at `feature.ts:60,175`. (c) `history import --mode nope --json --json-envelope` → `{ok:false,error:{code:'INTERNAL_ERROR',details:{cliCode:'usage'}}}` — closed. Residual: 4 service-layer verbs (`agent list`, `agent doctor`, `rule run`, `rule validate`) advertise the flag and ignore it → task **0697**, recorded `docs/04_DESIGN.md` §4.1. |
+| P3 | Check verbs pin `ok:true` when findings fail, contradicting Design Precedence rule 3; deviation has no Solution-level record | **Closed** | The deviation is now recorded in `### Solution` ("Check verbs pin `ok:true` on failure (§4.1 judgment call, exit codes unchanged)") and in `docs/04_DESIGN.md` §4.1. Behavior intentionally unchanged; exit codes still carry the failure. |
+| P3 | ADR-091 Decision ¶ says helper bypasses route through the seam, but §4.1 says `task verdict` is kept raw — ADR overclaims | **Closed** | `docs/00_ADR.md:1644-1650` was corrected to state the console emit stays raw, matching §4.1 and `task.ts:1027-1032`. |
+| P3 | The R3 gate Q&A entry **replaced** the prior refinement Q&A instead of appending; decision trail destroyed | **Accepted, not repaired** | The six refinement decisions survive in `### Design` (WHAT/WHY/WHERE/Precedence) and ADR-091's rejected-alternatives table. Reconstructing the deleted Q&A prose from memory would fabricate a record; the loss is acknowledged here instead. Append-only Q&A discipline stands for future tasks. |
+| P3 | `### Solution` / `### Testing` left as unfilled placeholders | **Closed** | Both are populated: `### Solution` carries the file:line change map plus close-out addenda; `### Testing` carries the transcribed R/AC tables. |
+| P4 | `--json-envelope` without `--json` silently ignored; envelope `meta` is vestigial (`limit = data.length`, `hasMore` always false) | **Accepted as documented** | Unchanged and intentional for this slice; revisit when cursor support lands. |
+| P4 | Error branches triple-duplicate the message literal in `message.ts`; a `writeJsonError` helper would shrink per-noun diffs | **Closed** | `writeJsonError` exists (`output.ts:100`) and is used at 26 sites across 8 modules. The `message.ts` branches are not retro-fitted — cosmetic, no behavior change. |
+| P4 | Shared-file drift from the concurrent 0691 session in `docs/00_ADR.md` / `04_DESIGN.md` / `packages/app/**` | **Closed** | Those hunks landed under their own commits (`cee844c4`, `42c4aabb`, `a93ebd05`); this close-out's diff is scoped to `feature.ts`, this task file, `docs/00_ADR.md:1622`, and `docs/04_DESIGN.md` §4.1. |
+
+**New findings from the re-audit** (none blocking; all routed):
+
+- `writeJsonError` collapses every failure to `INTERNAL_ERROR` with no `details.cliCode`, including
+  plain not-found conditions that map onto the frozen `NOT_FOUND` code (`output.ts:100`). Uniform
+  today; a partial per-site reclassification would be worse than the uniform collapse, so this is a
+  whole-surface follow-up, noted in **0697**'s non-goals as a separate item.
+- 26 call sites pass `String(err)`, so the enveloped `message` carries the JS `Error: ` class prefix
+  (`"Error: Task 9999 not found…"`). Stripping it inside `writeJsonError` must apply to the envelope
+  branch only — the raw branch is covered by AC3-style byte-identity. Same follow-up.
+- ADR-091 was left `Status: Proposed — consent-gated (R3)` while carrying its own operator-approval
+  block; flipped to `Accepted` at close-out (`docs/00_ADR.md:1622`).
+- All three F95 scenarios report `L4.uncovered-feature-scenario`: DD-09 matches feature scenario
+  titles against the linked task's `### Acceptance Criteria`
+  (`packages/app/src/services/feature-check.ts:446`), and F95's `R1 —`/`R2 —`/`R3 —` titles do not
+  match 0693's `AC1`–`AC4`. Feature-level alignment, not a 0693 defect; it will block F95's done gate.
+
+**Gates at close-out:** `spur task check 0693` → 0 findings. `bunx tsc --noEmit` (apps/cli) → exit 0.
+`bunx biome check apps/cli/src/commands/feature.ts` → clean. `bun test` (apps/cli) → 857 pass / 6 fail;
+all 6 failures are pre-existing and machine-dependent (`agent-team.test.ts` reads the operator's live
+`.spur/agents/` instead of a fixture), verified by stashing this session's diff and re-running.
 ### References
 
 - **Feature:** `F95` — CLI JSON envelope standard: normalized ok-data-error shape across spur nouns

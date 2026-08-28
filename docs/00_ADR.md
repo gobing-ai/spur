@@ -1619,7 +1619,7 @@ ADR-083 → ADR-088 chain; `99 §5 T10`; `config/corpus-baseline.json` (1,916 en
 
 ## ADR-091: The CLI `--json` Surface Adopts the Contracts Envelope Behind an Opt-In `--json-envelope` Flag
 
-**Status:** Proposed — consent-gated (R3) · **Date:** 2026-08-27 · **Task:** 0693 · **Feature:** F95
+**Status:** Accepted · **Date:** 2026-08-27 · **Task:** 0693 · **Feature:** F95
 
 **Decision.** Every `spur <noun> <verb> --json` emit migrates to the envelope already defined in
 `packages/contracts/src/shared.ts:24-39` — success `{ok: true, data}` (paginated lists

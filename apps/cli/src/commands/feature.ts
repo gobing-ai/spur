@@ -57,7 +57,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
             try {
                 const result = await svc.show(id);
                 if (result === null) {
-                    context.output.error(`Feature ${id} not found`);
+                    writeJsonError(context.output, options, `Feature ${id} not found`);
                     context.setExitCode(1);
                     return;
                 }
@@ -172,7 +172,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
             try {
                 const initial = await svc.show(id);
                 if (initial === null) {
-                    context.output.error(`Feature ${id} not found`);
+                    writeJsonError(context.output, options, `Feature ${id} not found`);
                     context.setExitCode(1);
                     return;
                 }
