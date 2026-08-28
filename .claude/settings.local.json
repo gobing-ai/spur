@@ -54,7 +54,8 @@
       "Read(//private/tmp/**)",
       "Edit(//tmp/**)",
       "Edit(//private/tmp/**)",
-      "WebFetch(domain:registry.npmjs.org)"
+      "WebFetch(domain:registry.npmjs.org)",
+      "Bash(bun run *)"
     ]
   },
   "skillOverrides": {
