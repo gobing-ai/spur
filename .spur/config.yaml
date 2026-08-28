@@ -213,6 +213,14 @@ rules:
 redaction:
   enabled: false
 
+# ── History refresh (task 0696) ──
+# While `spur serve` runs, the server scheduler enqueues the coalesced
+# `history.refresh` job every N minutes: import-all (checkpoint-resumed,
+# per-source isolation) → analyze → artifact. Opt-in; unset = off.
+history:
+  refresh:
+    schedule_minutes: 10
+
 # ── Planning (design §2.1 / §9) ──
 tasks:
   active: docs/tasks4

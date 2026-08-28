@@ -21,7 +21,7 @@ import type { SystemEventBus } from './system-event-tap';
 export const HISTORY_REFRESH_JOB = 'history.refresh';
 
 /** Named completion points that may fire the trigger — never "every CLI invocation". */
-export type HistoryRefreshTriggerPoint = 'task-done' | 'pipeline-run' | 'manual';
+export type HistoryRefreshTriggerPoint = 'task-done' | 'pipeline-run' | 'manual' | 'schedule';
 
 /** Payload of a `history.refresh` queue job. */
 export interface HistoryRefreshPayload {
@@ -58,7 +58,10 @@ export interface HistoryRefreshEnqueueOptions {
 function parsePayload(raw: unknown): HistoryRefreshPayload {
     const candidate = (typeof raw === 'string' ? safeJsonParse(raw) : raw) as Partial<HistoryRefreshPayload> | null;
     const trigger: HistoryRefreshTriggerPoint =
-        candidate?.trigger === 'task-done' || candidate?.trigger === 'pipeline-run' || candidate?.trigger === 'manual'
+        candidate?.trigger === 'task-done' ||
+        candidate?.trigger === 'pipeline-run' ||
+        candidate?.trigger === 'manual' ||
+        candidate?.trigger === 'schedule'
             ? candidate.trigger
             : 'task-done';
     return {
@@ -72,9 +75,9 @@ function parsePayload(raw: unknown): HistoryRefreshPayload {
     };
 }
 
-function safeJsonParse(raw: string): unknown {
+function safeJsonParse(raw: string): Partial<HistoryRefreshPayload> | null {
     try {
-        return JSON.parse(raw) as unknown;
+        return JSON.parse(raw) as Partial<HistoryRefreshPayload>;
     } catch {
         return null;
     }

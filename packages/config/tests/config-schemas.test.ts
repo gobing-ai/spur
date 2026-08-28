@@ -80,7 +80,21 @@ describe('historyConfigSchema / resolveHistoryRefreshTrigger (task 0549)', () =>
     });
 
     test('resolveHistoryRefreshTrigger tolerates null config (trigger disabled by default)', () => {
-        expect(resolveHistoryRefreshTrigger(null)).toEqual({ onCompletion: false, debounceMs: 600_000 });
+        expect(resolveHistoryRefreshTrigger(null)).toEqual({
+            onCompletion: false,
+            debounceMs: 600_000,
+            scheduleMinutes: null,
+        });
+    });
+
+    test('schedule_minutes resolves to a scheduler interval; unset stays null (task 0696)', () => {
+        expect(
+            resolveHistoryRefreshTrigger({
+                history: { refresh: { on_completion: false, debounce_ms: 600_000, schedule_minutes: 10 } },
+            }).scheduleMinutes,
+        ).toBe(10);
+        expect(resolveHistoryRefreshTrigger({ history: {} }).scheduleMinutes).toBeNull();
+        expect(HistoryRefreshConfigSchema.safeParse({ schedule_minutes: 0 }).success).toBe(false);
     });
 });
 

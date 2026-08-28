@@ -5,6 +5,7 @@ import {
     configuredSecretValues,
     type FeatureActionJob,
     HISTORY_REFRESH_JOB,
+    type HistoryRefreshPayload,
     handleHistoryRefreshJob,
     JobHandlerRegistry,
     JobWorkerService,
@@ -14,7 +15,8 @@ import {
     resolveRetentionQuotas,
     type TaskActionJob,
 } from '@gobing-ai/spur-app';
-import { IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
+import type { SpurConfig } from '@gobing-ai/spur-config';
+import { IN_MEMORY_DATABASE_URL, resolveHistoryRefreshTrigger } from '@gobing-ai/spur-config';
 import {
     bundledConfigRoot,
     loadSpurConfig,
@@ -43,12 +45,14 @@ async function loadServerSectionMatrix(): Promise<SectionMatrix> {
     const nodeFs = createNodeFileSystem(cwd);
     const localPath = nodeFs.resolve('.spur', 'tasks', 'section-matrix.yaml');
     if (await nodeFs.exists(localPath)) {
+        // SAFETY: the path pins the document shape — `.spur/tasks/section-matrix.yaml` is by contract a SectionMatrix; loader returns the generic structured-config envelope.
         return (await loadStructuredSpurConfig(localPath, { validateJsonSchema: false })) as unknown as SectionMatrix;
     }
     const root = bundledConfigRoot();
     if (root !== null) {
         const matrixPath = join(root, 'tasks', 'section-matrix.yaml');
         if (await nodeFs.exists(matrixPath)) {
+            // SAFETY: same contract as the local path above — the canonical bundled `tasks/section-matrix.yaml` is a SectionMatrix by build-time generation.
             return (await loadStructuredSpurConfig(matrixPath, {
                 validateJsonSchema: false,
             })) as unknown as SectionMatrix;
@@ -125,8 +129,17 @@ export const defaultDeps: StartServerDeps = {
 
 /** Register built-in scheduled queue entries for the Bun serve runtime.
  * Each scheduled action emits `scheduler.job.executed` to the server EventBus
- * so the System Events tab surfaces scheduler activity alongside queue events. */
-export function registerSchedulerEntries(scheduler: ServerScheduler, ctx: ServerContext): void {
+ * so the System Events tab surfaces scheduler activity alongside queue events.
+ *
+ * `spurConfig` gates the opt-in interval history refresh (task 0696): when
+ * `history.refresh.schedule_minutes` is set, one entry enqueues the same
+ * coalesced `history.refresh` job the completion trigger uses — the job body
+ * (incremental checkpoint-resumed import-all → analyze) is unchanged. */
+export function registerSchedulerEntries(
+    scheduler: ServerScheduler,
+    ctx: ServerContext,
+    spurConfig?: SpurConfig | null,
+): void {
     const register = (cron: string, name: string, action: () => Promise<void>): void => {
         scheduler.register(cron, async () => {
             const startedAt = Date.now();
@@ -154,6 +167,20 @@ export function registerSchedulerEntries(scheduler: ServerScheduler, ctx: Server
         const queue = await ctx.jobQueue();
         await queue.enqueue(SMOKE_JOB, { source: 'scheduler' }, { maxRetries: 1 });
     });
+    const scheduleMinutes = resolveHistoryRefreshTrigger(spurConfig ?? null).scheduleMinutes;
+    if (scheduleMinutes !== null) {
+        register(String(scheduleMinutes * 60_000), HISTORY_REFRESH_JOB, async () => {
+            const queue = await ctx.jobQueue();
+            const now = Date.now();
+            const payload: HistoryRefreshPayload = {
+                trigger: 'schedule',
+                triggerId: null,
+                windowStart: now,
+                windowEnd: now,
+            };
+            await queue.enqueue(HISTORY_REFRESH_JOB, payload, { maxRetries: 1 });
+        });
+    }
 }
 
 /** Parse and validate the queue payload for a board-triggered task workflow action. */
@@ -468,6 +495,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                             getDb: () => ctx.getDb(),
                             cwd: ctx.cwd,
                             ...(spurConfig?.agent !== undefined ? { agentConfig: spurConfig.agent } : {}),
+                            // SAFETY: the server EventBus is a superset of SystemEventBus (same emit(name, payload) contract); the narrow type only restricts which names the refresh job may emit.
                             bus: ctx.eventBus() as unknown as SystemEventBus,
                         },
                         payload,
@@ -482,7 +510,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             }
 
             if (scheduler) {
-                registerSchedulerEntries(scheduler, ctx);
+                registerSchedulerEntries(scheduler, ctx, spurConfig);
                 await scheduler.start();
                 appRt.logger.info('Scheduler started');
             }

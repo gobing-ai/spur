@@ -639,6 +639,53 @@ describe('startServer', () => {
         expect(smokePayload).toMatchObject({ name: 'smoke' });
     });
 
+    test('registerSchedulerEntries enqueues history.refresh on schedule_minutes (opt-in, task 0696)', async () => {
+        const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+        const enqueued: Array<{ type: string; payload: unknown }> = [];
+        const scheduler = {
+            register: (cron: string, action: () => Promise<void>) => {
+                registered.push({ cron, action });
+            },
+            start: async () => {},
+            stop: async () => {},
+        };
+        const ctx = {
+            jobQueue: async () => ({
+                enqueue: async (type: string, payload: unknown) => {
+                    enqueued.push({ type, payload });
+                    return `${type}-id`;
+                },
+            }),
+            eventBus: () => ({ emit: async () => {} }),
+        } as unknown as ServerContext;
+        const spurConfig = { history: { refresh: { schedule_minutes: 10 } } } as never;
+
+        registerSchedulerEntries(scheduler, ctx, spurConfig);
+        expect(registered.map((r) => r.cron)).toEqual(['300000', '600000', '600000']);
+        await registered[2]?.action();
+        expect(enqueued).toHaveLength(1);
+        expect(enqueued[0]?.type).toBe(HISTORY_REFRESH_JOB);
+        expect(enqueued[0]?.payload).toMatchObject({ trigger: 'schedule', triggerId: null });
+    });
+
+    test('registerSchedulerEntries skips the history refresh entry when schedule_minutes is unset', () => {
+        const registered: Array<{ cron: string }> = [];
+        const scheduler = {
+            register: (cron: string) => {
+                registered.push({ cron });
+            },
+            start: async () => {},
+            stop: async () => {},
+        };
+        const ctx = {
+            jobQueue: async () => ({ enqueue: async () => 'id' }),
+            eventBus: () => ({ emit: async () => {} }),
+        } as unknown as ServerContext;
+
+        registerSchedulerEntries(scheduler, ctx, null);
+        expect(registered.map((r) => r.cron)).toEqual(['300000', '600000']);
+    });
+
     test('registerSchedulerEntries captures error on failure and re-throws after emitting', async () => {
         const emitted: Array<{ name: string; payload: unknown }> = [];
         const handlers: Array<() => Promise<void>> = [];
