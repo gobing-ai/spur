@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "antigravity-cli shim cannot satisfy expectFile stages: print mode auto-denies write_file without --dangerously-skip-permissions or a permissions.allow rule"
-status: wip
+status: done
 template: issue
 created_at: 2026-08-27T15:39:39.946Z
-updated_at: "2026-08-27T23:24:46.902Z"
+updated_at: "2026-08-27T23:37:55.402Z"
 feature_id: B
 ---
 
@@ -198,9 +198,15 @@ Comment wording (supersedes the "blanket tool approval" line): the shim comment 
 
 `write_file(**)` confirmed absent from `~/.gemini/antigravity-cli/settings.json` during all probes.
 ### Review
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P1 | None. | — |
+| P2 | Lockstep skew: moving only ts-ai-runner to 0.4.46 left family members at 0.4.45; mixed ts-infra copies broke spur-server typecheck (duplicate EventBus private-property nominal types). | Fixed in-task, commit e445631c4 — family pins aligned (exact block package.json:98-101 + catalog carets), bun.lock regenerated. Root-cause fix, not symptom. |
+| P3 | R44 SKILL.md body-budget invariant tripped by the +609B R4 caveat (baseline 38148). | Resolved per 0687 R12 precedent: dated baseline bump 38148→38800 (`plugins/sp/tests/skill-structure.test.ts:797-801`); retirement path remains "split into references". |
+| P4 | Doctor capability-probe feature (R2 extension) not built; `usable: true` gap documented in SKILL.md. | Deferred as non-blocking finding — no AC scenario pins it; deterministic + dispatch tiers cover R2 per corpus definition. |
+| P4 | pi-lens STOP-hook flagged 109 issues in `config/workflows/history-anatomy.yaml` (schema-path + line-length). | Out of scope: 0690-shipped main-tree file, not in this run's diff. Schema-path is a lens resolver false-positive (virtual `@gobing-ai/spur` path, marked); line-length is pre-existing style. Recorded as environment finding. |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+**Residual risk:** baseline growth is debt by design (dogfood-testing SKILL.md 38800 vs 20k general budget); gate deviation — spur-check ran 3× (2 failed iterations + final) vs twice-per-task guidance, noted in Testing. No silent deviations; no scope-creep hunks.
 ### References
 - Failing run (before-evidence): `4f55c237-e808-457d-9cdf-5fb5be128906` — `runs.workflow_name =
   history-anatomy`, `status = failed`; `action_runs` `node = resolve-scope`, `ok = 0`, error
@@ -222,4 +228,6 @@ Comment wording (supersedes the "blanket tool approval" line): the shim comment 
 - Upstream: task 0687 (verdict PARTIAL; AC3/AC4/AC9 blocked by this shim) and its R12 sandbox
   affordances in `plugins/sp/skills/dogfood-testing/SKILL.md`.
 ### History
-- 2026-08-27T23:24:07.800Z todo → wip (system)
+- 2026-08-27 pipeline (dogfood run 2026-08-27T2249): implement→test→review PASS. ts-libs 0.4.46 published (Publish run 33125794239) with `--mode accept-edits` narrow grant (probe A/B evidence); Spur pins moved, family aligned; AC2 expectFile workflow probe run 16d91908 done. Commits 6fd4cfca0, e445631c4. Gate spur-check green (3rd run, deviation noted in Testing).
+- 2026-08-27T23:37:54.658Z wip → testing (system)
+- 2026-08-27T23:37:55.402Z testing → done (system)
