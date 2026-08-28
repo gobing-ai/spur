@@ -53,7 +53,8 @@
       "Read(//tmp/**)",
       "Read(//private/tmp/**)",
       "Edit(//tmp/**)",
-      "Edit(//private/tmp/**)"
+      "Edit(//private/tmp/**)",
+      "WebFetch(domain:registry.npmjs.org)"
     ]
   },
   "skillOverrides": {
