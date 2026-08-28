@@ -56,6 +56,16 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
         db.close();
     });
 
+    test('R3 (0692): active→done denial names the legal path and the feature sync command', async () => {
+        const { adapter, db } = await makeAdapter();
+        const result = await adapter.requestTransition(makeRef('F9'), 'active', 'done');
+        expect(result.allowed).toBe(false);
+        if (result.allowed) throw new Error('expected denial');
+        expect(result.report ?? '').toContain('Legal path(s) from active');
+        expect(result.report ?? '').toContain('spur feature sync');
+        db.close();
+    });
+
     test('R2: verifying→done shell guard (feature check --strict) denies with its report', async () => {
         // verifying→done is guarded by `spur feature check <id> --strict`. With no
         // real feature file the guard fails → the transition is denied and the

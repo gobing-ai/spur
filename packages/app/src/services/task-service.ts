@@ -33,6 +33,7 @@ import { hasSolutionFileLineCitation } from './task-check';
 import { TaskLocator } from './task-locator';
 import {
     escapeTablePipe,
+    flipVerifiedCheckboxes,
     gitDiffU0,
     type RecordOptions,
     type RecordResult,
@@ -1155,6 +1156,19 @@ export class TaskService {
             const solutionBody = renderSolutionFromDiff(diffText);
             await this.writeService.updateSection(ref, 'Solution', solutionBody);
             result.solutionBackfilled = true;
+        }
+
+        // ── Requirements/AC checkbox auto-flip (R2, 0692) ──
+        // A verdict that marks a requirement MET proves its box; flip exactly the
+        // proven boxes in Requirements and Acceptance Criteria, never on
+        // PARTIAL/FAIL/UNKNOWN beyond the proven ids and never unmentioned boxes.
+        for (const section of ['Requirements', 'Acceptance Criteria']) {
+            const body = doc.getSection(section);
+            if (body === null || body.trim().length === 0) continue;
+            const flipped = flipVerifiedCheckboxes(body, verdict);
+            if (flipped !== body) {
+                await this.writeService.updateSection(ref, section, flipped);
+            }
         }
 
         // ── Optional transition (R4) ──

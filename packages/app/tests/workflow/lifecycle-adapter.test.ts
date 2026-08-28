@@ -52,6 +52,16 @@ describe('LifecycleAdapter (engine integration)', () => {
         db.close();
     });
 
+    test('R3 (0692): task denial names the legal path and the reaching command', async () => {
+        const { adapter, db } = await makeAdapter();
+        const result = await adapter.requestTransition(makeRef('0003'), 'todo', 'testing');
+        expect(result.allowed).toBe(false);
+        if (result.allowed) throw new Error('expected denial');
+        expect(result.report ?? '').toContain('Legal path(s) from todo');
+        expect(result.report ?? '').toContain('spur task update');
+        db.close();
+    });
+
     test('R2: a shell guard denies the transition with its report (wip → testing, no task file)', async () => {
         // wip→testing is guarded by `spur task check ${vars.wbs}`. With no real
         // task file on disk the guard command fails, so the transition is denied

@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import {
     anchorQualify,
@@ -84,6 +87,22 @@ describe('resolveRepoRoot', () => {
     test('resolves git repo root when projectRoot is omitted', async () => {
         const root = await resolveRepoRoot(undefined);
         expect(root).toBe(process.cwd());
+    });
+
+    test('R4: hint resolves the target project root when cwd is outside the project', async () => {
+        const outer = mkdtempSync(join(tmpdir(), 'spur-r4-'));
+        Bun.spawnSync(['git', 'init', '-q', '.'], { cwd: outer });
+        const nested = join(outer, 'docs', 'tasks');
+        mkdirSync(nested, { recursive: true });
+        const prevCwd = process.cwd();
+        try {
+            process.chdir(tmpdir());
+            const root = await resolveRepoRoot(undefined, nested);
+            expect(root).toBe(realpathSync(outer));
+        } finally {
+            process.chdir(prevCwd);
+            rmSync(outer, { recursive: true, force: true });
+        }
     });
 });
 

@@ -1383,6 +1383,33 @@ export class TaskCheckService extends PlanningCheckService {
                                 ? extractPathSubjectTokens(cite.path)
                                 : tokens;
                         if (!citedLinesNameSubject(effectiveTokens, citedWindow)) {
+                            // 0692 R1: before reporting a generic subject mismatch,
+                            // look for the subject elsewhere in the file. Found on a
+                            // different line ⇒ the anchor drifted (an edit moved the
+                            // symbol; precedent 0606 `:528` → `:562`) — report the
+                            // cited vs current position. Not found anywhere ⇒ keep
+                            // the plain mismatch. Report only; `anchorQualify` owns
+                            // rewrites. The scan cannot hit a window line — reaching
+                            // here means no subject token appears in the window.
+                            let driftLine = -1;
+                            const fileLines = raw.split('\n');
+                            for (let i = 0; i < fileLines.length; i++) {
+                                if (citedLinesNameSubject(effectiveTokens, fileLines[i] ?? '')) {
+                                    driftLine = i + 1;
+                                    break;
+                                }
+                            }
+                            if (driftLine > 0) {
+                                findings.push({
+                                    layer: 'L4',
+                                    code: FINDING_CODES.L4_STALE_LINE_ANCHOR,
+                                    severity: 'warning',
+                                    section,
+                                    message: `Anchor drift \`${cite.raw}\` — subject (${effectiveTokens.join(', ')}) cited at ${cite.startLine}${cite.endLine ? `-${cite.endLine}` : ''} now sits at line ${driftLine}; re-point the citation`,
+                                });
+                                reported++;
+                                continue;
+                            }
                             findings.push({
                                 layer: 'L4',
                                 code: FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH,

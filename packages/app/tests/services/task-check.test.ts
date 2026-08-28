@@ -3403,4 +3403,52 @@ describe('0625 R4 — Solution change-map anchor drift detection', () => {
         expect(stale.length).toBeGreaterThanOrEqual(1);
         expect(stale[0]?.message).toMatch(/file not found/i);
     });
+
+    // 0692 R1: a moved cited symbol reports drift; a stable anchor stays silent.
+    describe('0692 R1 — anchor-drift detection', () => {
+        test('a moved anchor reports drift naming cited and current positions', async () => {
+            const { fs, path, cleanup } = seedChangeMap(
+                '`workflow.ts:1` — closes `registerCancel`',
+                'export function other() {}\nconst pad = 1;\nexport function registerCancel() {}\n',
+            );
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            const drift = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
+            expect(drift).toHaveLength(1);
+            expect(drift[0]?.message).toContain('cited at 1');
+            expect(drift[0]?.message).toContain('now sits at line 3');
+            expect(drift[0]?.message).toContain('registercancel');
+        });
+
+        test('a stable anchor stays silent — no drift, no mismatch', async () => {
+            const { fs, path, cleanup } = seedChangeMap(
+                '`workflow.ts:3` — closes `registerCancel`',
+                'export function other() {}\nconst pad = 1;\nexport function registerCancel() {}\n',
+            );
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            const relevant = result.findings.filter(
+                (f) =>
+                    f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR ||
+                    f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH,
+            );
+            expect(relevant).toHaveLength(0);
+        });
+
+        test('a subject absent from the file entirely keeps the plain mismatch (no drift)', async () => {
+            const { fs, path, cleanup } = seedChangeMap(
+                '`workflow.ts:1` — closes `registerCancel`',
+                'export function other() {}\nconst pad = 1;\nexport function somethingElse() {}\n',
+            );
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            const drift = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
+            expect(drift).toHaveLength(0);
+            const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
+            expect(mismatch).toHaveLength(1);
+        });
+    });
 });

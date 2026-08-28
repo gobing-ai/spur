@@ -11,6 +11,7 @@
  * Design: docs/tasks/0108_*.md; ADR-022 (orchestration is configuration).
  */
 
+import { parseChecklist } from '@gobing-ai/spur-domain';
 import { BunSyncProcessExecutor, type FileSystem } from '@gobing-ai/ts-runtime';
 import {
     aggregateVerifyVerdict,
@@ -160,6 +161,63 @@ export function renderTesting(v: CanonicalVerifyVerdict): string {
 
     lines.push('- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)');
     return lines.join('\n');
+}
+
+// ─── R2 (0692): Verdict-driven checkbox auto-flip ───────────────────────
+
+/**
+ * Normalize a verdict requirement id to its `R\d+` prefix (e.g.
+ * `R1 (anchor-drift detection)` → `R1`) so it matches the checkbox id
+ * parseChecklist extracts. Non-`R` ids pass through unchanged.
+ */
+function prefixId(id: string): string {
+    const m = /^R\d+/.exec(id);
+    return m ? m[0] : id;
+}
+
+/**
+ * Flip `- [ ]` → `- [x]` on exactly the Requirements/AC boxes a verdict proves.
+ *
+ * Conservative by construction (0692 Design): a box flips only when the verdict
+ * names that requirement id AND marks it MET. PARTIAL flips exactly the proven
+ * ids and leaves the rest; FAIL/UNKNOWN flip nothing; boxes the verdict does not
+ * mention are never touched — silence is not proof. Reuses the task-check
+ * checkbox parser rather than a second regex.
+ *
+ * @param body      Section body (Requirements or Acceptance Criteria).
+ * @param verdict   Canonical verdict whose proven ids drive the flip.
+ * @returns the body with proven boxes checked; unchanged when nothing proves.
+ */
+export function flipVerifiedCheckboxes(body: string, verdict: CanonicalVerifyVerdict): string {
+    if (verdict.verdict === 'FAIL' || verdict.verdict === 'UNKNOWN') return body;
+    // Verdict ids may carry trailing context (`R1 (anchor-drift detection)`)
+    // while parseChecklist extracts the bare `R1` prefix — normalize both sides
+    // to the `R\d+` prefix so a MET row proves its box.
+    const proven = new Set<string>();
+    for (const req of verdict.requirements) {
+        if (req.status === 'MET') proven.add(prefixId(req.id));
+    }
+    for (const ac of verdict.acceptanceCriteria ?? []) {
+        if (ac.status === 'MET') proven.add(prefixId(ac.id));
+    }
+    if (proven.size === 0) return body;
+
+    const items = parseChecklist(body);
+    if (items.length === 0) return body;
+
+    const lines = body.split('\n');
+    let changed = false;
+    for (const item of items) {
+        if (item.checked) continue;
+        const rid = item.requirementId;
+        if (rid === undefined || !proven.has(rid)) continue;
+        const idx = item.line - 1;
+        const line = lines[idx];
+        if (line === undefined) continue;
+        lines[idx] = line.replace(/^\s*[-*]\s+\[ \]\s*/, (m) => m.replace('[ ]', '[x]'));
+        changed = true;
+    }
+    return changed ? lines.join('\n') : body;
 }
 
 // ─── R4: Testing-section inverse parser (task 0671, feature F93) ────────

@@ -15,9 +15,10 @@ import { createDbAdapter } from '@gobing-ai/ts-db';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { GuardDeniedError } from '../../src/errors';
 import type { SectionMatrix } from '../../src/services/planning-check-base';
-import { PlanningWriteService } from '../../src/services/planning-write-service';
+import { type EntityRef, PlanningWriteService } from '../../src/services/planning-write-service';
 import {
     escapeTablePipe,
+    flipVerifiedCheckboxes,
     gitDiffU0,
     parseTesting,
     parseVerdict,
@@ -708,6 +709,45 @@ describe('TaskService.record', () => {
         expect(raw).toContain('| Priority | Dimension | Location | Finding |');
     });
 
+    test('R2 (0692): record flips the Requirements box a PASS verdict proves', async () => {
+        const wbs = await createTask(svc);
+
+        // Seed unchecked Requirements boxes on the task via a local write service.
+        const root = tasksDir.replace('/tasks', '');
+        const fs = createNodeFileSystem(root);
+        const ws = new PlanningWriteService({ fs });
+        const ref: EntityRef = {
+            kind: 'task',
+            id: wbs,
+            filePath: `${tasksDir}/${wbs}_record-test-task.md`,
+            folder: tasksDir,
+        };
+        await ws.updateSection(
+            ref,
+            'Requirements',
+            '- [ ] R1. first requirement\n- [ ] R2. second requirement\n- [ ] R3. third requirement\n',
+        );
+
+        // PASS verdict proves R1 only.
+        const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+        await fs.writeFile(
+            verdictPath,
+            JSON.stringify({
+                wbs,
+                verdict: 'PASS',
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'covered' }],
+                checks: [],
+            }),
+        );
+
+        await svc.record(wbs, { verdictFile: verdictPath });
+
+        const raw = await fs.readFile(`${tasksDir}/${wbs}_record-test-task.md`);
+        expect(raw).toContain('- [x] R1. first requirement');
+        expect(raw).toContain('- [ ] R2. second requirement');
+        expect(raw).toContain('- [ ] R3. third requirement');
+    });
+
     test('handles missing verdict file gracefully', async () => {
         const wbs = await createTask(svc);
 
@@ -1045,5 +1085,75 @@ describe('gitDiffU0', () => {
     test('returns empty string when git diff fails (no repo)', () => {
         const result = gitDiffU0('/tmp/nonexistent-git-repo-xyz');
         expect(result).toBe('');
+    });
+});
+
+describe('flipVerifiedCheckboxes', () => {
+    const mkVerdict = (verdict: string, rows: Array<[string, string]>): VerifyVerdict =>
+        ({
+            wbs: '0001',
+            verdict,
+            requirements: rows.map(([id, status]) => ({ id, status, evidenceType: '', evidence: 'e' })),
+            acceptanceCriteria: [],
+            checks: [],
+        }) as VerifyVerdict;
+
+    const boxed = (body: string): string =>
+        body
+            .split('\n')
+            .filter((l) => l.trim().startsWith('- [x]'))
+            .join('\n');
+
+    test('full PASS flips exactly the boxes the verdict names MET', () => {
+        const body = '- [ ] R1. one\n- [ ] R2. two\n- [ ] R3. three\n';
+        const out = flipVerifiedCheckboxes(
+            body,
+            mkVerdict('PASS', [
+                ['R1', 'MET'],
+                ['R3', 'MET'],
+            ]),
+        );
+        expect(boxed(out)).toBe('- [x] R1. one\n- [x] R3. three');
+        expect(out).not.toContain('- [x] R2.');
+    });
+
+    test('PARTIAL flips only the proven ids and leaves the rest', () => {
+        const body = '- [ ] R1. one\n- [ ] R2. two\n- [ ] R3. three\n';
+        const out = flipVerifiedCheckboxes(
+            body,
+            mkVerdict('PARTIAL', [
+                ['R1', 'MET'],
+                ['R2', 'UNMET'],
+            ]),
+        );
+        expect(boxed(out)).toBe('- [x] R1. one');
+        expect(out).not.toContain('- [x] R2.');
+        expect(out).not.toContain('- [x] R3.');
+    });
+
+    test('FAIL and UNKNOWN verdicts flip nothing', () => {
+        const body = '- [ ] R1. one\n- [ ] R2. two\n';
+        expect(flipVerifiedCheckboxes(body, mkVerdict('FAIL', [['R1', 'MET']]))).toBe(body);
+        expect(flipVerifiedCheckboxes(body, mkVerdict('UNKNOWN', []))).toBe(body);
+    });
+
+    test('unmentioned boxes stay untouched even on PASS', () => {
+        const body = '- [ ] R1. one\n- [ ] R2. two\n';
+        const out = flipVerifiedCheckboxes(body, mkVerdict('PASS', [['R1', 'MET']]));
+        expect(boxed(out)).toBe('- [x] R1. one');
+        expect(out).toContain('- [ ] R2. two');
+    });
+
+    test('already-checked boxes are not rewritten', () => {
+        const body = '- [x] R1. one\n- [ ] R2. two\n';
+        const out = flipVerifiedCheckboxes(body, mkVerdict('PASS', [['R1', 'MET']]));
+        expect(out).toBe(body);
+    });
+
+    test('verdict ids with trailing context still flip the R-prefix box', () => {
+        const body = '- [ ] R1. one\n- [ ] R2. two\n';
+        const out = flipVerifiedCheckboxes(body, mkVerdict('PASS', [['R1 (anchor-drift detection)', 'MET']]));
+        expect(boxed(out)).toBe('- [x] R1. one');
+        expect(out).toContain('- [ ] R2. two');
     });
 });

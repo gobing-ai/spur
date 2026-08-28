@@ -19,6 +19,7 @@ import {
     WorkflowService as EngineWorkflowService,
     loadWorkflowDef,
     type StateMachineWorkflowDef,
+    type TransitionDenied,
 } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { EntityRef, LifecyclePort, TransitionResult } from '../services/planning-write-service';
@@ -218,8 +219,32 @@ export class LifecycleAdapter implements LifecyclePort {
             allowed: false,
             from: currentStatus,
             to,
-            report: this.formatDenial(result.detail, result.guardReport),
+            report: this.formatDenialWithLegalPaths(result, workflow, currentStatus, ref.id),
         };
+    }
+
+    /**
+     * R3 (0692): enrich an engine transition denial with the legal path(s) from
+     * the current state and the command that reaches them. A bare
+     * "No transition from X to Y" names no remedy; the lifecycle graph in the
+     * workflow def does. `no-such-transition` means the target edge is absent,
+     * so the legal next states are exactly the workflow's declared `from` edges.
+     */
+    private formatDenialWithLegalPaths(
+        result: TransitionDenied,
+        workflow: StateMachineWorkflowDef,
+        currentStatus: string,
+        id: string,
+    ): string {
+        const base = this.formatDenial(result.detail, result.guardReport);
+        if (result.reason !== 'no-such-transition') return base;
+        const legal = workflow.transitions.filter((t) => t.from === currentStatus).map((t) => t.to);
+        if (legal.length === 0) return base;
+        const command =
+            this.opts.profile.entityPrefix === 'feature'
+                ? `spur feature sync ${id} (derives the legal hop path)`
+                : `spur task update ${id} <legal-status> or \`spur task record ${id} --transition <legal-status>\``;
+        return `${base}. Legal path(s) from ${currentStatus}: ${legal.join(' → ')}. Reach them via \`${command}\`.`;
     }
 
     /** Load + cache the profile's workflow definition (must be a state-machine). */

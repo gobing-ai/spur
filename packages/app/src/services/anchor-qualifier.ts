@@ -95,21 +95,30 @@ const ANCHOR_RE = /`([^`\n]+?):(\d+)(?:-(\d+))?`/g;
  * not `dirname(taskDirs[0])` — task dirs live under `docs/`, so deriving the
  * root from them runs `git ls-files` inside a subdirectory and returns paths
  * relative to it, which then qualify already-correct `docs/…` anchors backwards.
+ *
+ * `hintDir` scopes the git probe to a directory inside the target project so the
+ * resolution no longer depends on the process cwd: without it a process sitting
+ * outside the target project resolves (or falls back) to the wrong tree and the
+ * pass reports `Files scanned: 0` (0692 R4). The hint only locates the repo —
+ * the returned root is still the git toplevel, never the hint itself.
  */
-export async function resolveRepoRoot(projectRoot: string | undefined): Promise<string> {
+export async function resolveRepoRoot(projectRoot: string | undefined, hintDir?: string): Promise<string> {
     if (projectRoot) return projectRoot;
-    try {
-        const result = await new NodeProcessExecutor().run({
-            command: 'git',
-            args: ['rev-parse', '--show-toplevel'],
-            cwd: process.cwd(),
-            maxOutput: 64 * 1024,
-            forceBuffered: true,
-            rejectOnError: false,
-        });
-        if (result.exitCode === 0 && result.stdout.trim()) return result.stdout.trim();
-    } catch {
-        // fall through to cwd
+    const probeDirs = [hintDir, process.cwd()].filter((d): d is string => Boolean(d));
+    for (const probeDir of probeDirs) {
+        try {
+            const result = await new NodeProcessExecutor().run({
+                command: 'git',
+                args: ['rev-parse', '--show-toplevel'],
+                cwd: probeDir,
+                maxOutput: 64 * 1024,
+                forceBuffered: true,
+                rejectOnError: false,
+            });
+            if (result.exitCode === 0 && result.stdout.trim()) return result.stdout.trim();
+        } catch {
+            // try next probe dir
+        }
     }
     return process.cwd();
 }
@@ -267,7 +276,7 @@ export async function qualifyAnchors(
 ): Promise<AnchorQualifyReport> {
     const taskDirs = opts.taskDirs ?? (await resolveConfiguredTaskDirs(fs));
     const dryRun = opts.dryRun ?? false;
-    const projectRoot = await resolveRepoRoot(opts.projectRoot);
+    const projectRoot = await resolveRepoRoot(opts.projectRoot, taskDirs[0]);
     const index = await buildTrackedBasenameIndex(projectRoot);
 
     const fileReports: AnchorFileReport[] = [];
