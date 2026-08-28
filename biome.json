@@ -59,6 +59,12 @@
                     }
                 }
             }
+        },
+        {
+            "includes": ["apps/cli/tests/fixtures/raw-json-baseline/**"],
+            "formatter": {
+                "enabled": false
+            }
         }
     ],
     "javascript": {

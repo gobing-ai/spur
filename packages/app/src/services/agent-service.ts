@@ -48,6 +48,7 @@ import {
     type AgentRoutingAttribution,
     configuredSecretValues,
 } from '../observability/agent-execution';
+import { toEnvelopeJson } from '../output/envelope';
 import { bridgeEventBus, withInvokeRouting } from './event-bridge';
 import { classifyDispatch } from './failure-classification';
 import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
@@ -416,11 +417,11 @@ export class AgentService {
     // Public: list
     // -------------------------------------------------------------------------
 
-    async list(opts: { json: boolean }, deps?: AgentRunDeps): Promise<number> {
+    async list(opts: { json: boolean; enveloped?: boolean }, deps?: AgentRunDeps): Promise<number> {
         const detector = deps?.detector ?? new AgentDetector();
         const agents = await detector.detectAll();
         if (opts.json) {
-            this.ctx.output.write(toJson({ agents }));
+            this.ctx.output.write(toEnvelopeJson({ agents }, { enveloped: opts.enveloped }));
         } else {
             this.ctx.output.write(
                 agents
@@ -441,6 +442,8 @@ export class AgentService {
     async doctor(
         args: {
             json: boolean;
+            /** ADR-091 opt-in envelope decision threaded from `--json-envelope` (undefined → env). */
+            enveloped?: boolean;
             agent?: string;
             /** B4/0683 R1: opt into model health probing; without it no probe fires. */
             probeHealth?: boolean;
@@ -486,7 +489,14 @@ export class AgentService {
         if (args.agent === undefined) {
             if (serveCached !== null) {
                 cacheInfo = { hit: true, ageMs: serveCached.ageMs, path: DOCTOR_CACHE_REL };
-                return this.renderDoctor(serveCached.results, executors, args.json, undefined, cacheInfo);
+                return this.renderDoctor(
+                    serveCached.results,
+                    executors,
+                    args.json,
+                    undefined,
+                    cacheInfo,
+                    args.enveloped,
+                );
             }
             const results = await doctorRunner.runAll();
             if (cacheOn && !args.probeHealth) {
@@ -496,7 +506,7 @@ export class AgentService {
                     this.ctx.output.error(`Warning: could not update ${DOCTOR_CACHE_REL}: ${writeErr}`);
                 }
             }
-            return this.renderDoctor(results, executors, args.json, undefined, cacheInfo);
+            return this.renderDoctor(results, executors, args.json, undefined, cacheInfo, args.enveloped);
         }
         const roleDef = this.ctx.roles?.get(args.agent);
         if (roleDef !== undefined) {
@@ -525,7 +535,19 @@ export class AgentService {
                 // line. Text surface only: --json stays stderr-clean (machine
                 // consumers parse the single error envelope, R5 0609).
                 if (args.json) {
-                    this.ctx.output.write(toJson({ error: { code: 'agent-resolution', message: resolved.message } }));
+                    this.ctx.output.write(
+                        toEnvelopeJson(
+                            { error: { code: 'agent-resolution', message: resolved.message } },
+                            {
+                                enveloped: args.enveloped,
+                                error: {
+                                    code: 'INTERNAL_ERROR',
+                                    message: resolved.message,
+                                    details: { cliCode: 'agent-resolution' },
+                                },
+                            },
+                        ),
+                    );
                 } else {
                     this.ctx.output.error(renderRoleLadder(args.agent, roleDef.tier, ladderRows, undefined));
                 }
@@ -550,7 +572,10 @@ export class AgentService {
                     };
                 });
                 this.ctx.output.write(
-                    toJson({ agents: entries, rolesSource: this.ctx.rolesSource ?? 'config', cache: cacheInfo }),
+                    toEnvelopeJson(
+                        { agents: entries, rolesSource: this.ctx.rolesSource ?? 'config', cache: cacheInfo },
+                        { enveloped: args.enveloped },
+                    ),
                 );
                 return 0;
             }
@@ -563,10 +588,10 @@ export class AgentService {
         const cachedSelectorRow = serveCached?.results.find((r) => r.agent === args.agent);
         if (cachedSelectorRow !== undefined) {
             cacheInfo = { hit: true, ageMs: serveCached?.ageMs ?? null, path: DOCTOR_CACHE_REL };
-            return this.renderDoctor([cachedSelectorRow], executors, args.json, args.agent, cacheInfo);
+            return this.renderDoctor([cachedSelectorRow], executors, args.json, args.agent, cacheInfo, args.enveloped);
         }
         const results = [await doctorRunner.runOne(args.agent)];
-        return this.renderDoctor(results, executors, args.json, args.agent, cacheInfo);
+        return this.renderDoctor(results, executors, args.json, args.agent, cacheInfo, args.enveloped);
     }
 
     /** R4: a cache hit prints its age — text surfaces get a trailing line, JSON carries it structurally. */
@@ -583,6 +608,8 @@ export class AgentService {
         json: boolean,
         agent?: string,
         cache?: DoctorCacheInfo,
+        /** ADR-091 opt-in envelope decision threaded from `--json-envelope` (undefined → env). */
+        enveloped?: boolean,
     ): number {
         // R6/AC5: warn (not block) when an executor's model is quota_exhausted or unavailable.
         const modelByExecutor = new Map(
@@ -618,7 +645,10 @@ export class AgentService {
             });
             const cacheField: DoctorCacheInfo = cache ?? { hit: false, ageMs: null, path: DOCTOR_CACHE_REL };
             this.ctx.output.write(
-                toJson({ agents: entries, rolesSource: this.ctx.rolesSource ?? 'config', cache: cacheField }),
+                toEnvelopeJson(
+                    { agents: entries, rolesSource: this.ctx.rolesSource ?? 'config', cache: cacheField },
+                    { enveloped },
+                ),
             );
         } else {
             const rows = buildDoctorRows(results, executors, this.ctx.roles);
@@ -644,7 +674,19 @@ export class AgentService {
         });
         if (!outcome.ok) {
             if (booleanFlag(flags, 'json')) {
-                this.ctx.output.write(toJson({ error: { code: 'agent-resolution', message: outcome.message } }));
+                this.ctx.output.write(
+                    toEnvelopeJson(
+                        { error: { code: 'agent-resolution', message: outcome.message } },
+                        {
+                            enveloped: jsonEnvelopeFlag(flags),
+                            error: {
+                                code: 'INTERNAL_ERROR',
+                                message: outcome.message,
+                                details: { cliCode: 'agent-resolution' },
+                            },
+                        },
+                    ),
+                );
             } else {
                 this.ctx.output.error(outcome.message);
             }
@@ -658,7 +700,7 @@ export class AgentService {
             outcome.coordination !== undefined
                 ? ((await this.getCoordinationRun(outcome.coordination.occupant.runId)) ?? undefined)
                 : undefined;
-        this.handleRunOutput(result, jsonOutput, coordination, outcome.invocation);
+        this.handleRunOutput(result, jsonOutput, jsonEnvelopeFlag(flags), coordination, outcome.invocation);
         if (result.exitCode === 0) return 0;
         if (result.signal !== undefined) {
             this.ctx.output.error(`Agent terminated by signal: ${result.signal}`);
@@ -2075,44 +2117,51 @@ export class AgentService {
     private handleRunOutput(
         result: AgentRunResult,
         jsonOutput: boolean,
+        /** ADR-091 opt-in envelope decision threaded from `--json-envelope` (undefined → env). */
+        enveloped: boolean | undefined,
         coordination?: CoordinationRun,
         invocation?: AgentRunInvocation,
     ): void {
         if (jsonOutput) {
             this.ctx.output.write(
-                toJson({
-                    exitCode: result.exitCode,
-                    stdout: result.stdout,
-                    stderr: result.stderr,
-                    ...(result.signal !== undefined ? { signal: result.signal } : {}),
-                    durationMs: result.durationMs,
-                    // Resolution attribution (0536 R1/R2): the resolved agent,
-                    // source, and — when role-resolved or executor-pinned — the
-                    // role, its tier, and the executor entry that won.
-                    ...(invocation !== undefined
-                        ? {
-                              resolved: {
-                                  ...(invocation.role !== undefined ? { role: invocation.role } : {}),
-                                  ...(invocation.roleOrigin !== undefined ? { roleOrigin: invocation.roleOrigin } : {}),
-                                  ...(invocation.tier !== undefined ? { tier: invocation.tier } : {}),
-                                  ...(invocation.executor !== undefined ? { executor: invocation.executor } : {}),
-                                  agent: invocation.agent,
-                                  source: invocation.source,
-                              },
-                          }
-                        : {}),
-                    ...(coordination?.occupant !== undefined ? { occupant: coordination.occupant } : {}),
-                    ...(coordination !== undefined
-                        ? {
-                              run: {
-                                  status: coordination.status,
-                                  startedAt: coordination.startedAt,
-                                  completedAt: coordination.completedAt,
-                                  artifactRefs: coordination.artifactRefs,
-                              },
-                          }
-                        : {}),
-                }),
+                toEnvelopeJson(
+                    {
+                        exitCode: result.exitCode,
+                        stdout: result.stdout,
+                        stderr: result.stderr,
+                        ...(result.signal !== undefined ? { signal: result.signal } : {}),
+                        durationMs: result.durationMs,
+                        // Resolution attribution (0536 R1/R2): the resolved agent,
+                        // source, and — when role-resolved or executor-pinned — the
+                        // role, its tier, and the executor entry that won.
+                        ...(invocation !== undefined
+                            ? {
+                                  resolved: {
+                                      ...(invocation.role !== undefined ? { role: invocation.role } : {}),
+                                      ...(invocation.roleOrigin !== undefined
+                                          ? { roleOrigin: invocation.roleOrigin }
+                                          : {}),
+                                      ...(invocation.tier !== undefined ? { tier: invocation.tier } : {}),
+                                      ...(invocation.executor !== undefined ? { executor: invocation.executor } : {}),
+                                      agent: invocation.agent,
+                                      source: invocation.source,
+                                  },
+                              }
+                            : {}),
+                        ...(coordination?.occupant !== undefined ? { occupant: coordination.occupant } : {}),
+                        ...(coordination !== undefined
+                            ? {
+                                  run: {
+                                      status: coordination.status,
+                                      startedAt: coordination.startedAt,
+                                      completedAt: coordination.completedAt,
+                                      artifactRefs: coordination.artifactRefs,
+                                  },
+                              }
+                            : {}),
+                    },
+                    { enveloped },
+                ),
             );
             return;
         }
@@ -2128,10 +2177,6 @@ export class AgentService {
 // ---------------------------------------------------------------------------
 // Internal helpers (not exported)
 // ---------------------------------------------------------------------------
-
-function toJson(value: unknown): string {
-    return JSON.stringify(value, null, 2);
-}
 
 // --- Detection cache (B4/0683) ----------------------------------------------
 
@@ -2551,6 +2596,12 @@ function stringFlag(flags: Record<string, string | boolean>, name: string, fallb
 
 function booleanFlag(flags: Record<string, string | boolean>, name: string): boolean {
     return flags[name] === true;
+}
+
+/** ADR-091 tri-state `--json-envelope` read: explicit true/false wins, undefined defers to SPUR_JSON_ENVELOPE. */
+function jsonEnvelopeFlag(flags: Record<string, string | boolean>): boolean | undefined {
+    const value = flags['jsonEnvelope'];
+    return typeof value === 'boolean' ? value : undefined;
 }
 
 function numberFlag(flags: Record<string, string | boolean>, name: string): number | undefined {

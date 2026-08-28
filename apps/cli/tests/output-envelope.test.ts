@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { apiErrorSchema, apiSuccessSchema, paginatedResponseSchema } from '@gobing-ai/spur-contracts';
 import { z } from 'zod';
+import { main } from '../src/index';
+import type { CommandOutput } from '../src/output';
 import { envelopeEnabled, toEnvelopeError, toEnvelopeJson, toJson } from '../src/output';
 
 // ── raw byte-identity (ADR-091 regression guard: the 0688 break class) ──
@@ -120,5 +125,252 @@ describe('envelope outputs validate against contracts schemas', () => {
             'CONFLICT',
             'INTERNAL_ERROR',
         ]).toContain(out.error.code);
+    });
+});
+
+// ── service-emitting verbs end-to-end (task 0697 AC2) ──
+// These four verbs emit from packages/app services; the enveloped decision is threaded
+// through the moved seam (packages/app/src/output/envelope.ts), not re-implemented.
+
+function captureSink(): CommandOutput & { text: string } {
+    let text = '';
+    return {
+        write(message: string): void {
+            text += message;
+        },
+        error(_message: string): void {},
+        get text() {
+            return text;
+        },
+    };
+}
+
+const ENVELOPE_ENV = 'SPUR_JSON_ENVELOPE';
+
+/** The four confirmed service-emitting verbs (task 0697 Background table). */
+const SERVICE_VERBS: Array<{ label: string; argv: string[]; assertExit: boolean }> = [
+    { label: 'agent list', argv: ['agent', 'list'], assertExit: true },
+    // doctor exits 1 when a tier-1 agent is unusable on the host — the enveloped
+    // document is still a success-shaped payload about agents, so exit is not asserted.
+    { label: 'agent doctor', argv: ['agent', 'doctor'], assertExit: false },
+    { label: 'rule run', argv: ['rule', 'run'], assertExit: true },
+    {
+        label: 'rule validate',
+        argv: ['rule', 'validate', '--kind', 'preset', 'recommended-pre-check'],
+        assertExit: true,
+    },
+];
+
+describe('service-emitting verbs honor --json-envelope end-to-end (0697 AC2)', () => {
+    for (const { label, argv, assertExit } of SERVICE_VERBS) {
+        test(`${label}: flag and SPUR_JSON_ENVELOPE=1 produce the identical {ok:true,data} document`, async () => {
+            delete process.env[ENVELOPE_ENV];
+            // Fresh cwd per invocation: doctor's cache read would flip hit/ageMs between runs.
+            const byFlag = captureSink();
+            const flagCode = await main([...argv, '--json', '--json-envelope'], {
+                cwd: mkdtempSync(join(tmpdir(), 'spur-envflag-')),
+                output: byFlag,
+            });
+            if (assertExit) expect(flagCode).toBe(0);
+            const flagDoc = JSON.parse(byFlag.text) as unknown;
+            expect(apiSuccessSchema(z.unknown()).safeParse(flagDoc).success).toBe(true);
+
+            process.env[ENVELOPE_ENV] = '1';
+            try {
+                const byEnv = captureSink();
+                const envCode = await main([...argv, '--json'], {
+                    cwd: mkdtempSync(join(tmpdir(), 'spur-envvar-')),
+                    output: byEnv,
+                });
+                if (assertExit) expect(envCode).toBe(0);
+                expect(byEnv.text).toBe(byFlag.text);
+            } finally {
+                delete process.env[ENVELOPE_ENV];
+            }
+        }, 30000);
+    }
+});
+
+// ── agent run env opt-in (0697 review-fix F-R1) ──
+// `agent run` threads --json-envelope tri-state into AgentService.run. A failing --cwd
+// exercises the service error branch (run()'s !outcome.ok envelope emit) deterministically
+// without spawning a real agent.
+
+const RUN_ENV_FAIL_ARGV = ['agent', 'run', '--json', '--cwd', '/nonexistent-0697-cwd', 'hi'] as const;
+
+describe('agent run honors SPUR_JSON_ENVELOPE end-to-end (0697 F-R1)', () => {
+    test('env opt-in envelops, explicit flag wins with env off, default stays raw', async () => {
+        delete process.env[ENVELOPE_ENV];
+        const raw = captureSink();
+        const rawCode = await main([...RUN_ENV_FAIL_ARGV], {
+            cwd: mkdtempSync(join(tmpdir(), 'spur-run-raw-')),
+            output: raw,
+        });
+        expect(rawCode).toBe(2);
+        const rawDoc = JSON.parse(raw.text) as { ok?: unknown };
+        expect(rawDoc.ok).toBeUndefined(); // failure pseudo-envelope, not the {ok:false} envelope
+
+        process.env[ENVELOPE_ENV] = '1';
+        try {
+            const byEnv = captureSink();
+            const envCode = await main([...RUN_ENV_FAIL_ARGV], {
+                cwd: mkdtempSync(join(tmpdir(), 'spur-run-env-')),
+                output: byEnv,
+            });
+            expect(envCode).toBe(2);
+            expect(apiErrorSchema.safeParse(JSON.parse(byEnv.text)).success).toBe(true);
+        } finally {
+            delete process.env[ENVELOPE_ENV];
+        }
+
+        const byFlag = captureSink();
+        const flagCode = await main([...RUN_ENV_FAIL_ARGV, '--json-envelope'], {
+            cwd: mkdtempSync(join(tmpdir(), 'spur-run-flag-')),
+            output: byFlag,
+        });
+        expect(flagCode).toBe(2);
+        expect(apiErrorSchema.safeParse(JSON.parse(byFlag.text)).success).toBe(true);
+    }, 30000);
+});
+
+// ── raw-default byte-identity (task 0697 AC3/R3) ──
+// The fixture was captured BEFORE any source edit (plan step 1) via the same in-process
+// harness: `rule run --json` / `rule validate --json --kind preset recommended-pre-check`
+// in a fresh temp project. The agent verbs emit host-detected payloads, so a committed
+// byte fixture would be machine-specific; their identity is pinned structurally instead:
+// raw bytes === toJson(enveloped document data), which fails if the conversion changes the
+// payload, its key order, or the serialization settings.
+
+describe('raw default byte-identity vs pre-change baseline (0697 AC3)', () => {
+    const fixtureDir = join(import.meta.dir, 'fixtures', 'raw-json-baseline');
+
+    test('rule run --json emits the captured pre-change fixture bytes', async () => {
+        delete process.env[ENVELOPE_ENV];
+        const out = captureSink();
+        const code = await main(['rule', 'run', '--json'], {
+            cwd: mkdtempSync(join(tmpdir(), 'spur-baseline-')),
+            output: out,
+        });
+        expect(code).toBe(0);
+        const fixture = readFileSync(join(fixtureDir, 'rule-run.json'), 'utf8');
+        expect(out.text).toBe(fixture);
+    }, 20000);
+
+    test('rule validate --json --kind preset emits the captured pre-change fixture bytes', async () => {
+        delete process.env[ENVELOPE_ENV];
+        const out = captureSink();
+        const code = await main(['rule', 'validate', '--json', '--kind', 'preset', 'recommended-pre-check'], {
+            cwd: mkdtempSync(join(tmpdir(), 'spur-baseline-')),
+            output: out,
+        });
+        expect(code).toBe(0);
+        const fixture = readFileSync(join(fixtureDir, 'rule-validate-preset.json'), 'utf8');
+        expect(out.text).toBe(fixture);
+    }, 20000);
+
+    test('agent list --json raw bytes equal toJson of the enveloped document data', async () => {
+        delete process.env[ENVELOPE_ENV];
+        const enveloped = captureSink();
+        await main(['agent', 'list', '--json', '--json-envelope'], {
+            cwd: mkdtempSync(join(tmpdir(), 'spur-raw-')),
+            output: enveloped,
+        });
+        const raw = captureSink();
+        await main(['agent', 'list', '--json'], {
+            cwd: mkdtempSync(join(tmpdir(), 'spur-raw-')),
+            output: raw,
+        });
+        expect(raw.text).toBe(toJson(JSON.parse(enveloped.text).data));
+    }, 30000);
+
+    test('agent doctor --json raw bytes equal toJson of the enveloped document data', async () => {
+        delete process.env[ENVELOPE_ENV];
+        const enveloped = captureSink();
+        await main(['agent', 'doctor', '--json', '--json-envelope'], {
+            cwd: mkdtempSync(join(tmpdir(), 'spur-raw-')),
+            output: enveloped,
+        });
+        const raw = captureSink();
+        await main(['agent', 'doctor', '--json'], {
+            cwd: mkdtempSync(join(tmpdir(), 'spur-raw-')),
+            output: raw,
+        });
+        expect(raw.text).toBe(toJson(JSON.parse(enveloped.text).data));
+    }, 30000);
+});
+
+// ── jsonEnvelope registration sweep (task 0697 AC4/R4) ──
+// Every `.command()` block registering SHARED_OPTIONS.jsonEnvelope must either reference an
+// envelope emitter, pass options.jsonEnvelope onward to a service, or be a documented
+// delegated emitter whose verb has a row in docs/04_DESIGN.md §4.1. Default-deny: a new
+// flag-registering verb that ignores the flag fails here instead of shipping silently.
+
+describe('jsonEnvelope registration sweep (0697 AC4)', () => {
+    const commandsDir = join(import.meta.dir, '..', 'src', 'commands');
+    const modules = readdirSync(commandsDir)
+        .filter((f) => f.endsWith('.ts') && f !== 'shared-options.ts')
+        .map((f) => ({ file: f, src: readFileSync(join(commandsDir, f), 'utf8') }));
+
+    /** Verbs whose action delegates to a helper/service that emits through the seam. */
+    const DELEGATED_EMITTERS: Record<string, { helper: string; file: string }> = {
+        'agent.ts:run': { helper: 'handleRunOutput', file: 'packages/app/src/services/agent-service.ts' },
+        'agent.ts:create': { helper: 'runAgentCreate', file: 'apps/cli/src/commands/agent.ts' },
+        'message.ts:inbox': { helper: 'runMessageInbox', file: 'apps/cli/src/commands/message.ts' },
+        'message.ts:reply': { helper: 'runMessageReply', file: 'apps/cli/src/commands/message.ts' },
+        'team.ts:status': { helper: 'runTeamStatus', file: 'apps/cli/src/commands/team.ts' },
+        'team.ts:start': { helper: 'runTeamStart', file: 'apps/cli/src/commands/team.ts' },
+        'team.ts:up': { helper: 'runTeamUp', file: 'apps/cli/src/commands/team.ts' },
+        'team.ts:down': { helper: 'runTeamDown', file: 'apps/cli/src/commands/team.ts' },
+    };
+
+    const EMITTER_RE = /toEnvelopeJson|toEnvelopeError|writeJsonError/;
+
+    function sweepTargets(): Array<{ key: string; chunk: string }> {
+        const targets: Array<{ key: string; chunk: string }> = [];
+        for (const { file, src } of modules) {
+            const starts = [...src.matchAll(/\.command\(/g)].map((m) => m.index ?? 0);
+            for (let i = 0; i < starts.length; i++) {
+                const chunk = src.slice(starts[i], i + 1 < starts.length ? starts[i + 1] : src.length);
+                if (!chunk.includes('SHARED_OPTIONS.jsonEnvelope')) continue;
+                const verb = /\.command\(\s*['"`]([^'"`]+)['"`]/.exec(chunk)?.[1] ?? '?';
+                targets.push({ key: `${file}:${verb}`, chunk });
+            }
+        }
+        return targets;
+    }
+
+    test('every flag-registering verb emits through the seam, threads the flag, or is documented delegated', () => {
+        const targets = sweepTargets();
+        expect(targets.length).toBeGreaterThan(50); // scan sanity: the sweep actually sees the surface
+        const offenders: string[] = [];
+        for (const { key, chunk } of targets) {
+            const actionRegion = chunk.split('.action(', 2)[1] ?? '';
+            const emits = EMITTER_RE.test(chunk);
+            const threads = actionRegion.includes('jsonEnvelope');
+            if (emits || threads) continue;
+            const delegated = DELEGATED_EMITTERS[key];
+            if (!delegated) {
+                offenders.push(`${key} registers --json-envelope but neither emits, threads, nor is documented`);
+                continue;
+            }
+            const delegateSrc = readFileSync(join(import.meta.dir, '..', '..', '..', delegated.file), 'utf8');
+            if (!delegateSrc.includes(delegated.helper) || !EMITTER_RE.test(delegateSrc)) {
+                offenders.push(`${key}: delegated emitter ${delegated.helper} not found emitting in ${delegated.file}`);
+            }
+        }
+        expect(offenders).toEqual([]);
+    });
+
+    test('delegated emitters carry a §4.1 inventory row', () => {
+        const design = readFileSync(join(import.meta.dir, '..', '..', '..', 'docs', '04_DESIGN.md'), 'utf8');
+        const missing = Object.keys(DELEGATED_EMITTERS).filter((key) => {
+            const sep = key.indexOf(':');
+            const noun = key.slice(0, sep).replace('.ts', '');
+            const verb = key.slice(sep + 1);
+            // First row of a noun block carries the emit-count suffix: `| team (6) | status |`.
+            const row = new RegExp(`\\| ${noun}( \\(\\d+\\))? \\| ${verb} \\|`);
+            return !row.test(design);
+        });
+        expect(missing).toEqual([]);
     });
 });

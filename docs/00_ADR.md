@@ -1711,3 +1711,25 @@ Mirrored in task 0693 `### Q&A`. R4 unblocked.
 **Detail:** task 0693; feature F95; `docs/04_DESIGN.md` §4.1 (102-site shape inventory);
 `packages/contracts/src/shared.ts:24-39`; `apps/cli/src/output.ts:22`; incident evidence: task
 0688 (2026-08-27, four observed `--json` deviations).
+
+**Amendment (2026-08-28, task 0697 — envelope helpers relocate to `packages/app`).** The four
+service-emitting verbs (`agent list`, `agent doctor`, `rule run`, `rule validate`) registered
+`--json-envelope` but emitted from `packages/app` services that never received the flag — the
+flag was advertised and silently ignored. Closing this is a seam-location change, not a patch:
+the helpers (`envelopeEnabled`, `toEnvelopeJson`, `toEnvelopeError`, `writeJsonError`, and the
+`CliEnvelope` / `EnvelopeErrorPayload` / `EnvelopeOptions` types) move verbatim from
+`apps/cli/src/output.ts` to **`packages/app/src/output/envelope.ts`** (plus the new structural
+`EnvelopeCapableOutput` sink type); `apps/cli/src/output.ts` becomes a re-export so the 99
+adopted CLI call sites resolve unchanged. The move direction is forced by the workspace graph,
+not chosen: `apps/cli` depends on `@gobing-ai/spur-app` (`apps/cli/package.json`; five command
+modules import it at runtime), so `packages/app → apps/cli` would be circular — the helpers
+must live at or below `packages/app`. (ADR-021 governs where logic belongs and agrees; the
+binding constraint is the dependency direction.) Services receive the opt-in decision through
+an `enveloped?: boolean` field threaded from `options.jsonEnvelope`, and precedence stays
+single-sourced in the moved `envelopeEnabled()` — no service reads the env var itself.
+Rejected alternatives: **`packages/contracts`** (transport DTOs only; `envelopeEnabled` reads
+`process.env`, which is runtime behavior, not a DTO) and **duplicating the helpers into
+`packages/app`** (a second envelope implementation inside the task meant to finish the first —
+ADR-091 exists to prevent exactly that). **No ADR-051 consent gate applies**: no CLI noun,
+verb, or flag changes — `--json-envelope` already exists and is already approved; this
+amendment records where the code lives, never a new envelope shape.

@@ -57,6 +57,7 @@ export function registerRuleCommand(program: Command, context: CliContext): void
                 file,
                 rule,
                 json,
+                enveloped: options.jsonEnvelope,
                 verbose,
                 color,
             });
@@ -83,7 +84,7 @@ export function registerRuleCommand(program: Command, context: CliContext): void
             }
             const json = options.json === true;
             const validateSchema = options.schema === false ? false : undefined;
-            const result = await service.validate({ source, json, validateSchema });
+            const result = await service.validate({ source, json, enveloped: options.jsonEnvelope, validateSchema });
             context.setExitCode(result.exitCode);
         });
 
