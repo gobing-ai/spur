@@ -93,16 +93,22 @@ export function toEnvelopeError(code: ApiErrorCode, message: string, details?: u
 
 /**
  * Failure emit for a `--json` command (ADR-091): enveloped mode writes the canonical error
- * envelope (collapsed `INTERNAL_ERROR`) to stdout; raw mode keeps the pre-existing plain
- * stderr message byte-identical. Exit codes stay the caller's responsibility.
+ * envelope to stdout — `code` defaults to the collapsed `INTERNAL_ERROR`, and a known
+ * `API_ERROR_CODES` member (e.g. `NOT_FOUND`) may be passed explicitly; a leading JS-class
+ * `Error: ` prefix is stripped so the machine-readable message never carries it. Raw mode
+ * keeps the pre-existing plain stderr message byte-identical (AC4). Exit codes stay the
+ * caller's responsibility.
  */
 export function writeJsonError(
     output: EnvelopeCapableOutput,
     options: { json?: boolean; jsonEnvelope?: boolean },
     message: string,
+    code: ApiErrorCode = 'INTERNAL_ERROR',
+    details?: unknown,
 ): void {
     if (options.json && envelopeEnabled(options.jsonEnvelope)) {
-        output.write(toEnvelopeError('INTERNAL_ERROR', message));
+        const bare = message.startsWith('Error: ') ? message.slice('Error: '.length) : message;
+        output.write(toEnvelopeError(code, bare, details));
         return;
     }
     output.error(message);

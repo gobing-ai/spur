@@ -1,0 +1,6 @@
+# Workspace-local test config (task 0699 R3): the preload that sets
+# SPUR_SKIP_GLOBAL_CONFIG was reachable only from the root bunfig, so
+# `cd apps/cli && bun test` resolved the operator's real global config and
+# failed on a clean tree. Coverage stays gated by the root bunfig (bun run test).
+[test]
+preload = ["../../tests/setup.ts"]

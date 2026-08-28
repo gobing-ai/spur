@@ -296,7 +296,14 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     );
                 }
             } catch (err) {
-                writeJsonError(context.output, options, String(err));
+                const cliCode = (err as { cliCode?: string } | null)?.cliCode;
+                writeJsonError(
+                    context.output,
+                    options,
+                    String(err),
+                    'INTERNAL_ERROR',
+                    cliCode !== undefined ? { cliCode } : undefined,
+                );
                 context.setExitCode(1);
             }
         });
@@ -1135,26 +1142,44 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             // canonical task statuses; reject contradictory combinations explicitly.
             const asStatus = options.as === undefined ? undefined : canonicalStatusOrRaw(options.as);
             if (options.as !== undefined && !(TASK_STATUSES as readonly string[]).includes(asStatus ?? '')) {
-                context.output.error(`invalid --as status "${options.as}" (canonical: ${TASK_STATUSES.join(', ')})`);
+                writeJsonError(
+                    context.output,
+                    options,
+                    `invalid --as status "${options.as}" (canonical: ${TASK_STATUSES.join(', ')})`,
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(2);
                 return;
             }
             if (asStatus !== undefined && options.corpus === true) {
-                context.output.error(
+                writeJsonError(
+                    context.output,
+                    options,
                     '--as <status> is a single-task target projection and cannot be combined with --corpus',
+                    'VALIDATION_FAILED',
                 );
                 context.setExitCode(2);
                 return;
             }
             if (options.fix === true && options.corpus === true) {
-                context.output.error('--fix repairs files in place and cannot be combined with --corpus');
+                writeJsonError(
+                    context.output,
+                    options,
+                    '--fix repairs files in place and cannot be combined with --corpus',
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(2);
                 return;
             }
             try {
                 if (options.corpus === true) {
                     if (wbs !== undefined) {
-                        context.output.error('--corpus validates the whole corpus and cannot be combined with a WBS');
+                        writeJsonError(
+                            context.output,
+                            options,
+                            '--corpus validates the whole corpus and cannot be combined with a WBS',
+                            'VALIDATION_FAILED',
+                        );
                         context.setExitCode(2);
                         return;
                     }
@@ -1165,7 +1190,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         // the deleted spur-dev throw at scripts/spur-dev.ts:102). A
                         // truly absent value already throws "option '--since <ref>'
                         // argument missing" via exitOverride.
-                        context.output.error('--since requires a git ref value (e.g. --since HEAD~1)');
+                        writeJsonError(
+                            context.output,
+                            options,
+                            '--since requires a git ref value (e.g. --since HEAD~1)',
+                            'VALIDATION_FAILED',
+                        );
                         context.setExitCode(2);
                         return;
                     }
@@ -1223,7 +1253,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     return;
                 }
                 if (options.since !== undefined) {
-                    context.output.error('--since requires --corpus');
+                    writeJsonError(context.output, options, '--since requires --corpus', 'VALIDATION_FAILED');
                     context.setExitCode(2);
                     return;
                 }
@@ -1264,8 +1294,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                             : await makeTaskLocator(context);
                     const hit = await locator.findByWbs(wbs);
                     if (hit === null) {
-                        context.output.error(`Task ${wbs} not found`);
+                        writeJsonError(context.output, options, `Task ${wbs} not found`, 'NOT_FOUND');
                         context.setExitCode(1);
+                        return;
                     } else {
                         const result = await svc.check(hit.filePath, wbs, {
                             strict,
@@ -1353,7 +1384,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         context.output.write(`${result.wbs}  ${result.filePath}`);
                     }
                 } else {
-                    context.output.error(`No owning task found for ${filePath}`);
+                    writeJsonError(context.output, options, `No owning task found for ${filePath}`, 'NOT_FOUND');
                     context.setExitCode(1);
                 }
             } catch (err) {
@@ -1380,7 +1411,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         context.output.write(filePath);
                     }
                 } else {
-                    context.output.error(`Task ${wbs} not found`);
+                    writeJsonError(context.output, options, `Task ${wbs} not found`, 'NOT_FOUND');
                     context.setExitCode(1);
                 }
             } catch (err) {

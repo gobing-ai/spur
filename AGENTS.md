@@ -164,7 +164,16 @@ git status --short
 `spur task check <wbs>`; run the corpus sweep once, not per edit. Never use `--no-verify` or silent
 suppressions to force green.
 
-Coverage is always measured and enforced by `bunfig.toml`. Tests live under
+Targeted-test loop — run from **inside the workspace**, never the repo root (task 0699 R4):
+
+```bash
+cd apps/cli && bun test tests/output-envelope.test.ts --test-name-pattern "wraps a payload"  # exit 0 on pass
+```
+
+The workspace's `bunfig.toml` supplies the test preload and carries no repo-wide coverage
+denominator; a single-file run from the repo root is scored against the whole-repo coverage
+threshold and exits 1 even when the test passes. Coverage is measured and enforced by the root
+`bunfig.toml` at the `bun run test` gate. Tests live under
 `<workspace>/tests/**/*.test.ts`; use in-memory SQLite for DAO tests. Test requirements, not getters
 or implementation details.
 

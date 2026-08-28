@@ -6,7 +6,7 @@ import { apiErrorSchema, apiSuccessSchema, paginatedResponseSchema } from '@gobi
 import { z } from 'zod';
 import { main } from '../src/index';
 import type { CommandOutput } from '../src/output';
-import { envelopeEnabled, toEnvelopeError, toEnvelopeJson, toJson } from '../src/output';
+import { envelopeEnabled, toEnvelopeError, toEnvelopeJson, toJson, writeJsonError } from '../src/output';
 
 // ── raw byte-identity (ADR-091 regression guard: the 0688 break class) ──
 
@@ -380,4 +380,173 @@ describe('jsonEnvelope registration sweep (0697 AC4)', () => {
         });
         expect(missing).toEqual([]);
     });
+});
+
+// ── writeJsonError capability (task 0699 R2): code + details + prefix strip ──
+
+function captureBoth(): CommandOutput & { out: string; err: string } {
+    let out = '';
+    let err = '';
+    return {
+        write(message: string): void {
+            out += message;
+        },
+        error(message: string): void {
+            err += message;
+        },
+        get out() {
+            return out;
+        },
+        get err() {
+            return err;
+        },
+    };
+}
+
+describe('writeJsonError code/details capability (0699 R2)', () => {
+    test('default code stays INTERNAL_ERROR with no details', () => {
+        const sink = captureBoth();
+        process.env[ENVELOPE_ENV] = '1';
+        try {
+            writeJsonError(sink, { json: true }, 'boom');
+            expect(JSON.parse(sink.out)).toEqual({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'boom' } });
+        } finally {
+            delete process.env[ENVELOPE_ENV];
+        }
+    });
+
+    test('explicit code and details pass through to the envelope', () => {
+        const sink = captureBoth();
+        process.env[ENVELOPE_ENV] = '1';
+        try {
+            writeJsonError(sink, { json: true }, 'Task 9999 not found', 'INTERNAL_ERROR', { cliCode: 'NOT_FOUND' });
+            expect(JSON.parse(sink.out)).toEqual({
+                ok: false,
+                error: { code: 'INTERNAL_ERROR', message: 'Task 9999 not found', details: { cliCode: 'NOT_FOUND' } },
+            });
+        } finally {
+            delete process.env[ENVELOPE_ENV];
+        }
+    });
+
+    test('a leading "Error: " is stripped in the enveloped branch only', () => {
+        const sink = captureBoth();
+        process.env[ENVELOPE_ENV] = '1';
+        try {
+            writeJsonError(sink, { json: true }, 'Error: Task 9999 not found in any registered task folder');
+            expect((JSON.parse(sink.out) as { error: { message: string } }).error.message).toBe(
+                'Task 9999 not found in any registered task folder',
+            );
+        } finally {
+            delete process.env[ENVELOPE_ENV];
+        }
+    });
+
+    test('raw branch keeps the message byte-identical on stderr (AC4)', () => {
+        const sink = captureBoth();
+        writeJsonError(sink, { json: true }, 'Error: keep me as-is');
+        expect(sink.out).toBe('');
+        expect(sink.err).toBe('Error: keep me as-is');
+    });
+});
+
+const API_ERROR_CODES = [
+    'NOT_FOUND',
+    'VALIDATION_FAILED',
+    'GUARD_DENIED',
+    'LOCK_TIMEOUT',
+    'CONFLICT',
+    'INTERNAL_ERROR',
+] as const;
+
+// ── honest failure surface end-to-end (task 0699 R1): a --json-envelope verb never
+// prints {ok:true} on a non-zero exit and never exits non-zero with no JSON at all ──
+
+const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
+
+const FAILURE_CASES: Array<{
+    label: string;
+    argv: string[];
+    exit: number;
+    code: string;
+    cliCode?: string;
+    viaEnv?: boolean;
+}> = [
+    { label: 'task check 9999 (not-found fall-through)', argv: ['task', 'check', '9999'], exit: 1, code: 'NOT_FOUND' },
+    {
+        label: 'feature check F999 (not-found fall-through)',
+        argv: ['feature', 'check', 'F999'],
+        exit: 1,
+        code: 'NOT_FOUND',
+    },
+    { label: 'task path 9999', argv: ['task', 'path', '9999'], exit: 1, code: 'NOT_FOUND' },
+    { label: 'task resolve /nope/nope.ts', argv: ['task', 'resolve', '/nope/nope.ts'], exit: 1, code: 'NOT_FOUND' },
+    { label: 'feature show F999', argv: ['feature', 'show', 'F999'], exit: 1, code: 'NOT_FOUND' },
+    {
+        label: 'task show 9999 (cliCode collapse per ADR-091)',
+        argv: ['task', 'show', '9999'],
+        exit: 1,
+        code: 'INTERNAL_ERROR',
+        cliCode: 'NOT_FOUND',
+    },
+    { label: 'rule trace --last 0', argv: ['rule', 'trace', '--last', '0'], exit: 1, code: 'VALIDATION_FAILED' },
+    { label: 'task check --as bogus', argv: ['task', 'check', '--as', 'bogus'], exit: 2, code: 'VALIDATION_FAILED' },
+    {
+        label: 'task check --fix --corpus',
+        argv: ['task', 'check', '--fix', '--corpus'],
+        exit: 2,
+        code: 'VALIDATION_FAILED',
+    },
+    {
+        label: 'workflow show missing file (env opt-in: verb declares --json only)',
+        argv: ['workflow', 'show', 'nope-0699.yaml', '--json'],
+        exit: 1,
+        code: 'NOT_FOUND',
+        viaEnv: true,
+    },
+];
+
+describe('enveloped failure surface is honest end-to-end (0699 R1/R2)', () => {
+    for (const { label, argv, exit, code, cliCode, viaEnv } of FAILURE_CASES) {
+        test(`${label}: {ok:false,error:{code,message}} on stdout, exit ${exit}`, async () => {
+            delete process.env[ENVELOPE_ENV];
+            if (viaEnv) process.env[ENVELOPE_ENV] = '1';
+            try {
+                const sink = captureBoth();
+                const exitCode = await main([...argv, ...(viaEnv ? [] : ['--json', '--json-envelope'])], {
+                    cwd: REPO_ROOT,
+                    output: sink,
+                });
+                expect(exitCode).toBe(exit);
+                const doc = JSON.parse(sink.out) as {
+                    ok?: unknown;
+                    error?: { code?: string; message?: string; details?: { cliCode?: string } };
+                };
+                expect(doc.ok).toBe(false); // never a success envelope on a failure path
+                const emittedCode = doc.error?.code;
+                expect(emittedCode).toBeDefined();
+                expect(API_ERROR_CODES as readonly string[]).toContain(emittedCode as string);
+                expect(emittedCode).toBe(code);
+                expect(doc.error?.message).toBeTruthy();
+                expect(doc.error?.message?.startsWith('Error: ') ?? false).toBe(false); // R2 prefix strip
+                if (cliCode === undefined) {
+                    expect(doc.error?.details).toBeUndefined();
+                } else {
+                    expect(doc.error?.details?.cliCode).toBe(cliCode);
+                }
+                expect(sink.err).toBe(''); // no bare stderr line standing in for the envelope
+            } finally {
+                delete process.env[ENVELOPE_ENV];
+            }
+        }, 30000);
+    }
+
+    test('raw --json failure path stays byte-identical: bare stderr, no envelope (AC4)', async () => {
+        delete process.env[ENVELOPE_ENV];
+        const sink = captureBoth();
+        const exitCode = await main(['task', 'path', '9999', '--json'], { cwd: REPO_ROOT, output: sink });
+        expect(exitCode).toBe(1);
+        expect(sink.out).toBe('');
+        expect(sink.err).toContain('Task 9999 not found');
+    }, 30000);
 });

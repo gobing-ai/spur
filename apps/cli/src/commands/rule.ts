@@ -118,17 +118,17 @@ export function registerRuleCommand(program: Command, context: CliContext): void
         .action(async (runId, options) => {
             const last = parseInt(options.last, 10);
             if (!Number.isInteger(last) || last < 1) {
-                context.output.error('--last must be a positive integer');
+                writeJsonError(context.output, options, '--last must be a positive integer', 'VALIDATION_FAILED');
                 context.setExitCode(1);
                 return;
             }
             if (options.status !== undefined && !['done', 'failed'].includes(options.status)) {
-                context.output.error('--status must be one of: done, failed');
+                writeJsonError(context.output, options, '--status must be one of: done, failed', 'VALIDATION_FAILED');
                 context.setExitCode(1);
                 return;
             }
             if (options.since !== undefined && Number.isNaN(Date.parse(options.since))) {
-                context.output.error('--since must be a valid ISO date');
+                writeJsonError(context.output, options, '--since must be a valid ISO date', 'VALIDATION_FAILED');
                 context.setExitCode(1);
                 return;
             }

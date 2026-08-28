@@ -57,7 +57,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
             try {
                 const result = await svc.show(id);
                 if (result === null) {
-                    writeJsonError(context.output, options, `Feature ${id} not found`);
+                    writeJsonError(context.output, options, `Feature ${id} not found`, 'NOT_FOUND');
                     context.setExitCode(1);
                     return;
                 }
@@ -172,7 +172,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
             try {
                 const initial = await svc.show(id);
                 if (initial === null) {
-                    writeJsonError(context.output, options, `Feature ${id} not found`);
+                    writeJsonError(context.output, options, `Feature ${id} not found`, 'NOT_FOUND');
                     context.setExitCode(1);
                     return;
                 }
@@ -385,9 +385,9 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                 for (const fid of ids) {
                     const fileName = entries.find((n) => n.match(new RegExp(`^${fid}_.+\\.md$`)));
                     if (!fileName) {
-                        context.output.error(`Feature ${fid} not found`);
+                        writeJsonError(context.output, options, `Feature ${fid} not found`, 'NOT_FOUND');
                         context.setExitCode(1);
-                        continue;
+                        return;
                     }
                     const result = await svc.check(`${featuresDir}/${fileName}`, fid, {
                         strict,

@@ -825,15 +825,23 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .action(async (file, options) => {
             // Validate the format before resolving the file so an unknown value fails fast (0695 R7).
             if (options.format !== 'mermaid' && options.format !== 'todo') {
-                context.output.error(`workflow show: unknown --format '${options.format}' — expected mermaid or todo`);
+                writeJsonError(
+                    context.output,
+                    options,
+                    `workflow show: unknown --format '${options.format}' — expected mermaid or todo`,
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(1);
                 return;
             }
             const resolved = resolveWorkflowFile(context.cwd, file);
             if (resolved.path === null) {
                 const [probedProject, probedBundled] = resolved.probed;
-                context.output.error(
+                writeJsonError(
+                    context.output,
+                    options,
                     `workflow show: file not found: ${probedProject}${probedBundled !== null ? ` (bundled: ${probedBundled})` : ''}`,
+                    'NOT_FOUND',
                 );
                 context.setExitCode(1);
                 return;
@@ -843,8 +851,11 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             try {
                 def = await loadWorkflowDef(filePath, { validateSchema: true });
             } catch (err) {
-                context.output.error(
+                writeJsonError(
+                    context.output,
+                    options,
                     `workflow show: cannot read or parse ${file} — ${err instanceof Error ? err.message : String(err)}`,
+                    'VALIDATION_FAILED',
                 );
                 context.setExitCode(1);
                 return;

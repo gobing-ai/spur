@@ -1667,7 +1667,11 @@ export class TaskService {
 
     private async resolveTaskFile(wbs: string): Promise<string> {
         const result = await this.findTaskFileName(wbs);
-        if (!result) throw new Error(`Task ${wbs} not found in any registered task folder`);
+        if (!result) {
+            const err: Error & { cliCode?: string } = new Error(`Task ${wbs} not found in any registered task folder`);
+            err.cliCode = 'NOT_FOUND';
+            throw err;
+        }
         return result.filePath;
     }
 
