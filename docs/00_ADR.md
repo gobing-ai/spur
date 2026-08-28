@@ -1590,11 +1590,13 @@ three dated residue entries **0607/0677/0670** (`L3.status-claim-contradiction: 
 deferred residuals, 0677 a "todo" token in a MET table row, 0670 "Pending" inside the quoted
 ADR-083 title. A matcher whose own filing residue on fresh work is 100% false positives at error
 severity has a precision floor no window tuning fixes — the clause-proximity heuristic cannot
-see quotation or scope boundaries. Under the chosen option its 18 entries (7 archived / 11
-active) go into the regenerated snapshot as accepted findings, the check itself is removed from
-`task-check.ts`, and the `L3.status-claim-contradiction` code retires. If status-claim
-verification is wanted again, it returns as a structurally different check (e.g. resolving
-checkbox state against recorded verdicts, not prose token proximity), as its own decision.
+see quotation or scope boundaries. The check itself is removed from
+`task-check.ts`, the `L3.status-claim-contradiction` code retires, and its 18 residue
+entries (7 archived / 11 active) go nowhere — under the single-sided snapshot they would
+be keys whose emitting check no longer exists, so the regenerated baseline carries zero
+status-claim entries. If status-claim verification is wanted again, it returns as a
+structurally different check (e.g. resolving checkbox state against recorded verdicts, not
+prose token proximity), as its own decision.
 
 **Consequences.** (1) `config/corpus-baseline.json` becomes a generated snapshot (entries keyed
 by observed finding; wave note preserved) — hand edits to it are prohibited; regeneration is a
@@ -1614,3 +1616,89 @@ efficiency"). Plan steps 5–7 (implementation, verification, anti-pattern confi
 **Detail:** task 0691; feature F94; feature F96 (cancelled into 0691); ADR-050 → ADR-062 →
 ADR-083 → ADR-088 chain; `99 §5 T10`; `config/corpus-baseline.json` (1,916 entries, measured
 2026-08-27).
+
+## ADR-091: The CLI `--json` Surface Adopts the Contracts Envelope Behind an Opt-In `--json-envelope` Flag
+
+**Status:** Proposed — consent-gated (R3) · **Date:** 2026-08-27 · **Task:** 0693 · **Feature:** F95
+
+**Decision.** Every `spur <noun> <verb> --json` emit migrates to the envelope already defined in
+`packages/contracts/src/shared.ts:24-39` — success `{ok: true, data}` (paginated lists
+`{ok: true, data[], meta}`), failure `{ok: false, error: {code, message, details?}}` with the
+frozen `API_ERROR_CODES` union — routed through **a single opt-in seam**: a `--json-envelope`
+flag on shared options (explicit flag > `SPUR_JSON_ENVELOPE=1` env, read in
+`apps/cli/src/output.ts`, the non-interactive opt-in for scripts that cannot add a flag per call),
+applied at the `toJson()` choke point in `apps/cli/src/output.ts` and
+adopted per noun in descending emit-count order (task 26, workflow 12, feature 11, projects 10,
+message 10, history 9, team 6, agent 6, builder 4, rule 3, init 2, status/serve/migrate 1 each —
+102 sites swept, `docs/04_DESIGN.md` §4.1). **The default stays the current unwrapped shape for
+the deprecation window**; `--json` and `--json-envelope` coexist until a follow-up F95 task flips
+the default after a documented window.
+
+Migration of the deviation classes found in the §4.1 sweep:
+
+- **Bare-array lists** (`task list`, `task check`, `feature check`) become paginated envelope
+  responses: `{ok: true, data: [...], meta}`.
+- **Top-level `ok`-as-command-success** (~18 sites: projects verbs, task 431/715/754, agent
+  create, builder, init fresh) move their payload under `data`; the top-level `ok` becomes the
+  envelope discriminant. Command-level failure semantics move to the `ok: false` + `error`
+  branch; exit codes are unchanged (out of scope).
+- **Pseudo-envelope errors** (`{error: {code, message}}` without `ok`; `{ok: false, error:
+  "<string>"}` with CLI-local codes) normalize to `apiErrorSchema` with frozen codes.
+- **Helper bypasses** (raw `JSON.stringify` at rule list, task verdict, task verifyall-aggregate)
+  route through the same seam; the task-verdict file artifact's *content* is unchanged (out of
+  scope). Its console emit also stays raw (see `docs/04_DESIGN.md` §4.1 "Kept raw"), where the
+  artifact bytes double as the stdout payload — adopting the seam there would fork two renderings
+  of one artifact and is deferred to the consumers of that surface.
+
+**`API_ERROR_CODES` extension (closes the DEFERRED Q&A item).** **No seventh code now.** The two
+CLI-local error vocabularies (message/agent/task-collision; projects/builder) map to
+`INTERNAL_ERROR` with the CLI-local code carried in `error.details.cliCode`, so no consumer that
+strings-matches today loses information and no new vocabulary is minted without proven need. A
+new code is added only when a consumer can be shown to branch programmatically on it — and that
+extension amends this ADR rather than reopening it.
+
+- **Operates under ADR-051:** the `spur` CLI is the public surface; this change is consent-gated
+  (see conditioning) and the flag name, migration table, and deprecation window are the consent
+  artifacts.
+
+**Why.** Task 0688 (2026-08-27) surfaced four live `--json` deviations in one session: a task
+update response with no `ok` field, two bare-array responses, and a flat-with-`ok` shape — each a
+different contract for the same flag. The 102-site sweep (`docs/04_DESIGN.md` §4.1) showed the
+divergence is structural: **zero sites emit the canonical envelope today**, with five recurring
+deviation classes across 14 noun modules. `packages/contracts` already defines and
+server-validates the exact shape; the CLI re-invented five approximations of it. Adopting rather
+than authoring gives one wire shape across oRPC server and CLI with one source of truth. The 0688
+incident is the cost of the status quo: an unannounced shape change broke consumers — which is
+also why adoption is opt-in with the raw default preserved, not a flag flip in this task.
+
+**Options evaluated:**
+
+| Option | Verdict | Reasoning |
+| --- | --- | --- |
+| **Adopt contracts envelope, opt-in `--json-envelope`, raw default during window** | **Adopted** | One source of truth, zero breaking change at merge, per-noun adoption reviewable incrementally. |
+| Flip `--json` to enveloped immediately | Rejected | Repeats the 0688 failure class: an unannounced shape change breaking consumers. |
+| Author a new CLI-local envelope | Rejected | Second convention beside an existing canonical one; server and CLI shapes drift again. |
+| Adopt `@gobing-ai/ts-utils` `ApiEnvelope` | Rejected | Different shape (`{code, message, result, data}`), zero call sites under `apps/`/`packages/`. Recorded as rejected alternative; retiring it is out of scope. |
+| Per-call-site wrapping (no seam) | Rejected | 102 sites × two shapes to keep in sync; the seam makes the flag a one-line concern per noun. |
+
+**Consequences.** (1) `apps/cli/src/output.ts` gains `CliEnvelope<T>` types re-exported from
+`packages/contracts`; `--json-envelope` registers in
+`apps/cli/src/commands/shared-options.ts`. (2) Migration is per-noun and mechanical: each site's
+existing payload moves under `data` verbatim — **no payload field, exit code, or human-output
+change** (out of scope). (3) The oRPC/server surface is not migrated; `packages/contracts` is the
+source being adopted, not a target. (4) The default-shape flip and the `--json-envelope`-default
+deprecation window are follow-up F95 work carrying this ADR id. (5) **Not in effect until
+operator consent is recorded — task 0693 R3, per the ADR-051 amendment for public CLI surface
+changes. No `apps/cli/src/` or `packages/app/src` edit lands before that consent.**
+
+**Operator approval.** **Approved** — recorded 2026-08-27 (operator Robin Min) via the task 0693
+R3 gate. The operator approves ADR-091 as presented: contracts envelope adopted as the standard
+`--json` shape, opt-in only via `--json-envelope` / `SPUR_JSON_ENVELOPE=1` (flag > env) at the
+single `toJson()` seam, raw default preserved during the deprecation window (default flip =
+follow-up F95 work), bare-array list verbs paginate to `{ok, data[], meta}`, and **no seventh
+`API_ERROR_CODES` code** (CLI-local codes collapse to `INTERNAL_ERROR` with `details.cliCode`).
+Mirrored in task 0693 `### Q&A`. R4 unblocked.
+
+**Detail:** task 0693; feature F95; `docs/04_DESIGN.md` §4.1 (102-site shape inventory);
+`packages/contracts/src/shared.ts:24-39`; `apps/cli/src/output.ts:22`; incident evidence: task
+0688 (2026-08-27, four observed `--json` deviations).

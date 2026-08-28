@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Docs consolidation — 0688 friction review: symbol anchors and sweep-once discipline"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-27T20:16:10.953Z
-updated_at: "2026-08-27T23:34:44.133Z"
+updated_at: "2026-08-28T03:14:26.259Z"
 feature_id: F94
 priority: P3
 dependencies: ["0691"]
@@ -23,13 +23,13 @@ Sequencing: the gate docs depend on the corpus gate & baseline simplification AD
 
 ### Requirements
 
-- [ ] R1. **Symbol-anchor citation convention** — document in the authoring guidance that owns
+- [x] R1. **Symbol-anchor citation convention** — document in the authoring guidance that owns
       citation forms: prefer `path:symbol` over `path:line` for new task citations and test
       evidence; state when a line anchor is still acceptable; include a dated corpus note
       recording the 0688-review decision.
-- [ ] R2. **Sweep-once discipline** — codify in the verification-gate docs: single-task check
+- [x] R2. **Sweep-once discipline** — codify in the verification-gate docs: single-task check
       drives the iterate loop; one `--corpus` sweep before commit.
-- [ ] R3. **One pass** — land both in `docs/04_DESIGN.md` + the verification-gate docs in a
+- [x] R3. **One pass** — land both in `docs/04_DESIGN.md` + the verification-gate docs in a
       single pass.
 
 ### Acceptance Criteria
@@ -117,36 +117,330 @@ entirely. If the approved option retires the baseline, relocate the dated note i
 `docs/04_DESIGN.md` §4 instead; do not author a note into a file 0691 is removing.
 
 ### Plan
-
-- [ ] 1. Confirm 0691's approved option before touching gate wording; if still unapproved, land the
+- [x] 1. Confirm 0691's approved option before touching gate wording; if still unapproved, land the
       R1 half only and hold R2. → R2 sequencing.
-- [ ] 2. Add a citation-convention subsection under `docs/04_DESIGN.md` §4 Output Conventions:
+- [x] 2. Add a citation-convention subsection under `docs/04_DESIGN.md` §4 Output Conventions:
       preferred `path:symbol` form, the rot rationale (0606 `:528` → `:562`), and the explicit
       line-anchor exception list. → R1, AC1.
-- [ ] 3. Add the dated decision note recording the 0688-review decision — into
+- [x] 3. Add the dated decision note recording the 0688-review decision — into
       `config/corpus-baseline.json`'s `note` field, or into the 0691 ADR entry if that option
       retires the baseline (see Design hazard). → R1, AC1.
-- [ ] 4. Author the sweep-once rule in `docs/99_PROJECT_CONSTITUTION.md` (process authority):
+- [x] 4. Author the sweep-once rule in `docs/99_PROJECT_CONSTITUTION.md` (process authority):
       single-task check iterates; `--corpus` runs once at commit-prep. → R2, AC2.
-- [ ] 5. Update `AGENTS.md` §Verification gate (:315–360) with the derived operational line, mirroring
+- [x] 5. Update `AGENTS.md` §Verification gate (:315–360) with the derived operational line, mirroring
       the "Targeted-test-first while iterating" shape (:357); do not restate the full rule. → R2, AC2.
-- [ ] 6. Land steps 2–5 in one commit. → R3, AC3.
-- [ ] 7. Verify: a reader starting from `docs/04_DESIGN.md` §4 reaches the form, the reason, the
+- [x] 6. Land steps 2–5 in one commit. → R3, AC3.
+- [x] 7. Verify: a reader starting from `docs/04_DESIGN.md` §4 reaches the form, the reason, the
       exception, and the dated note; `AGENTS.md` reaches the constitution rule. Run
       `spur task check --corpus` once before the commit. → AC1, AC2, AC3.
-
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/agent.ts:121` |
+| `apps/cli/src/commands/agent.ts:141` |
+| `apps/cli/src/commands/agent.ts:183` |
+| `apps/cli/src/commands/agent.ts:20` |
+| `apps/cli/src/commands/agent.ts:252` |
+| `apps/cli/src/commands/agent.ts:260` |
+| `apps/cli/src/commands/agent.ts:328` |
+| `apps/cli/src/commands/agent.ts:334` |
+| `apps/cli/src/commands/agent.ts:34` |
+| `apps/cli/src/commands/agent.ts:424` |
+| `apps/cli/src/commands/agent.ts:46` |
+| `apps/cli/src/commands/agent.ts:714` |
+| `apps/cli/src/commands/agent.ts:77` |
+| `apps/cli/src/commands/agent.ts:795` |
+| `apps/cli/src/commands/agent.ts:810` |
+| `apps/cli/src/commands/agent.ts:816` |
+| `apps/cli/src/commands/agent.ts:832` |
+| `apps/cli/src/commands/agent.ts:839` |
+| `apps/cli/src/commands/builder.ts:100` |
+| `apps/cli/src/commands/builder.ts:28` |
+| `apps/cli/src/commands/builder.ts:3` |
+| `apps/cli/src/commands/builder.ts:39` |
+| `apps/cli/src/commands/builder.ts:48` |
+| `apps/cli/src/commands/builder.ts:80` |
+| `apps/cli/src/commands/builder.ts:91` |
+| `apps/cli/src/commands/feature.ts:11` |
+| `apps/cli/src/commands/feature.ts:146` |
+| `apps/cli/src/commands/feature.ts:149` |
+| `apps/cli/src/commands/feature.ts:162` |
+| `apps/cli/src/commands/feature.ts:182` |
+| `apps/cli/src/commands/feature.ts:216` |
+| `apps/cli/src/commands/feature.ts:224` |
+| `apps/cli/src/commands/feature.ts:237` |
+| `apps/cli/src/commands/feature.ts:250` |
+| `apps/cli/src/commands/feature.ts:259` |
+| `apps/cli/src/commands/feature.ts:273` |
+| `apps/cli/src/commands/feature.ts:279` |
+| `apps/cli/src/commands/feature.ts:28` |
+| `apps/cli/src/commands/feature.ts:292` |
+| `apps/cli/src/commands/feature.ts:321` |
+| `apps/cli/src/commands/feature.ts:339` |
+| `apps/cli/src/commands/feature.ts:34` |
+| `apps/cli/src/commands/feature.ts:350` |
+| `apps/cli/src/commands/feature.ts:365` |
+| `apps/cli/src/commands/feature.ts:39` |
+| `apps/cli/src/commands/feature.ts:418` |
+| `apps/cli/src/commands/feature.ts:422` |
+| `apps/cli/src/commands/feature.ts:450` |
+| `apps/cli/src/commands/feature.ts:466` |
+| `apps/cli/src/commands/feature.ts:490` |
+| `apps/cli/src/commands/feature.ts:505` |
+| `apps/cli/src/commands/feature.ts:54` |
+| `apps/cli/src/commands/feature.ts:66` |
+| `apps/cli/src/commands/feature.ts:71` |
+| `apps/cli/src/commands/feature.ts:96` |
+| `apps/cli/src/commands/history.ts:123` |
+| `apps/cli/src/commands/history.ts:154` |
+| `apps/cli/src/commands/history.ts:16` |
+| `apps/cli/src/commands/history.ts:172` |
+| `apps/cli/src/commands/history.ts:192` |
+| `apps/cli/src/commands/history.ts:209` |
+| `apps/cli/src/commands/history.ts:229` |
+| `apps/cli/src/commands/history.ts:248` |
+| `apps/cli/src/commands/history.ts:274` |
+| `apps/cli/src/commands/history.ts:281` |
+| `apps/cli/src/commands/history.ts:387` |
+| `apps/cli/src/commands/history.ts:404` |
+| `apps/cli/src/commands/history.ts:65` |
+| `apps/cli/src/commands/history.ts:73` |
+| `apps/cli/src/commands/history.ts:96` |
+| `apps/cli/src/commands/init.ts:17` |
+| `apps/cli/src/commands/init.ts:195` |
+| `apps/cli/src/commands/init.ts:283` |
+| `apps/cli/src/commands/init.ts:427` |
+| `apps/cli/src/commands/message.ts:105` |
+| `apps/cli/src/commands/message.ts:117` |
+| `apps/cli/src/commands/message.ts:129` |
+| `apps/cli/src/commands/message.ts:15` |
+| `apps/cli/src/commands/message.ts:172` |
+| `apps/cli/src/commands/message.ts:179` |
+| `apps/cli/src/commands/message.ts:199` |
+| `apps/cli/src/commands/message.ts:235` |
+| `apps/cli/src/commands/message.ts:319` |
+| `apps/cli/src/commands/message.ts:337` |
+| `apps/cli/src/commands/message.ts:341` |
+| `apps/cli/src/commands/message.ts:358` |
+| `apps/cli/src/commands/message.ts:368` |
+| `apps/cli/src/commands/message.ts:384` |
+| `apps/cli/src/commands/message.ts:41` |
+| `apps/cli/src/commands/message.ts:434` |
+| `apps/cli/src/commands/message.ts:50` |
+| `apps/cli/src/commands/message.ts:514` |
+| `apps/cli/src/commands/message.ts:521` |
+| `apps/cli/src/commands/message.ts:73` |
+| `apps/cli/src/commands/migrate.ts:18` |
+| `apps/cli/src/commands/migrate.ts:24` |
+| `apps/cli/src/commands/migrate.ts:5` |
+| `apps/cli/src/commands/projects.ts:108` |
+| `apps/cli/src/commands/projects.ts:123` |
+| `apps/cli/src/commands/projects.ts:141` |
+| `apps/cli/src/commands/projects.ts:151` |
+| `apps/cli/src/commands/projects.ts:163` |
+| `apps/cli/src/commands/projects.ts:174` |
+| `apps/cli/src/commands/projects.ts:191` |
+| `apps/cli/src/commands/projects.ts:20` |
+| `apps/cli/src/commands/projects.ts:236` |
+| `apps/cli/src/commands/projects.ts:245` |
+| `apps/cli/src/commands/projects.ts:33` |
+| `apps/cli/src/commands/projects.ts:42` |
+| `apps/cli/src/commands/projects.ts:59` |
+| `apps/cli/src/commands/projects.ts:6` |
+| `apps/cli/src/commands/projects.ts:69` |
+| `apps/cli/src/commands/projects.ts:78` |
+| `apps/cli/src/commands/projects.ts:94` |
+| `apps/cli/src/commands/rule.ts:101` |
+| `apps/cli/src/commands/rule.ts:116` |
+| `apps/cli/src/commands/rule.ts:139` |
+| `apps/cli/src/commands/rule.ts:14` |
+| `apps/cli/src/commands/rule.ts:151` |
+| `apps/cli/src/commands/rule.ts:159` |
+| `apps/cli/src/commands/rule.ts:32` |
+| `apps/cli/src/commands/rule.ts:74` |
+| `apps/cli/src/commands/rule.ts:94` |
+| `apps/cli/src/commands/serve.ts:24` |
+| `apps/cli/src/commands/serve.ts:38` |
+| `apps/cli/src/commands/serve.ts:6` |
+| `apps/cli/src/commands/serve.ts:61` |
+| `apps/cli/src/commands/shared-options.ts:31` |
+| `apps/cli/src/commands/status.ts:15` |
+| `apps/cli/src/commands/status.ts:22` |
+| `apps/cli/src/commands/status.ts:31` |
+| `apps/cli/src/commands/status.ts:52` |
+| `apps/cli/src/commands/status.ts:6` |
+| `apps/cli/src/commands/task.ts:1054` |
+| `apps/cli/src/commands/task.ts:1061` |
+| `apps/cli/src/commands/task.ts:1074` |
+| `apps/cli/src/commands/task.ts:1094` |
+| `apps/cli/src/commands/task.ts:1125` |
+| `apps/cli/src/commands/task.ts:1186` |
+| `apps/cli/src/commands/task.ts:1327` |
+| `apps/cli/src/commands/task.ts:1333` |
+| `apps/cli/src/commands/task.ts:1344` |
+| `apps/cli/src/commands/task.ts:1351` |
+| `apps/cli/src/commands/task.ts:1360` |
+| `apps/cli/src/commands/task.ts:1371` |
+| `apps/cli/src/commands/task.ts:1378` |
+| `apps/cli/src/commands/task.ts:1387` |
+| `apps/cli/src/commands/task.ts:1401` |
+| `apps/cli/src/commands/task.ts:1417` |
+| `apps/cli/src/commands/task.ts:1426` |
+| `apps/cli/src/commands/task.ts:1438` |
+| `apps/cli/src/commands/task.ts:1454` |
+| `apps/cli/src/commands/task.ts:1464` |
+| `apps/cli/src/commands/task.ts:157` |
+| `apps/cli/src/commands/task.ts:192` |
+| `apps/cli/src/commands/task.ts:205` |
+| `apps/cli/src/commands/task.ts:229` |
+| `apps/cli/src/commands/task.ts:238` |
+| `apps/cli/src/commands/task.ts:249` |
+| `apps/cli/src/commands/task.ts:269` |
+| `apps/cli/src/commands/task.ts:285` |
+| `apps/cli/src/commands/task.ts:292` |
+| `apps/cli/src/commands/task.ts:299` |
+| `apps/cli/src/commands/task.ts:350` |
+| `apps/cli/src/commands/task.ts:362` |
+| `apps/cli/src/commands/task.ts:387` |
+| `apps/cli/src/commands/task.ts:45` |
+| `apps/cli/src/commands/task.ts:469` |
+| `apps/cli/src/commands/task.ts:518` |
+| `apps/cli/src/commands/task.ts:553` |
+| `apps/cli/src/commands/task.ts:577` |
+| `apps/cli/src/commands/task.ts:590` |
+| `apps/cli/src/commands/task.ts:601` |
+| `apps/cli/src/commands/task.ts:632` |
+| `apps/cli/src/commands/task.ts:655` |
+| `apps/cli/src/commands/task.ts:677` |
+| `apps/cli/src/commands/task.ts:692` |
+| `apps/cli/src/commands/task.ts:703` |
+| `apps/cli/src/commands/task.ts:722` |
+| `apps/cli/src/commands/task.ts:731` |
+| `apps/cli/src/commands/task.ts:737` |
+| `apps/cli/src/commands/task.ts:742` |
+| `apps/cli/src/commands/task.ts:753` |
+| `apps/cli/src/commands/task.ts:763` |
+| `apps/cli/src/commands/task.ts:770` |
+| `apps/cli/src/commands/task.ts:780` |
+| `apps/cli/src/commands/task.ts:805` |
+| `apps/cli/src/commands/task.ts:837` |
+| `apps/cli/src/commands/task.ts:848` |
+| `apps/cli/src/commands/task.ts:854` |
+| `apps/cli/src/commands/task.ts:861` |
+| `apps/cli/src/commands/task.ts:872` |
+| `apps/cli/src/commands/task.ts:879` |
+| `apps/cli/src/commands/task.ts:903` |
+| `apps/cli/src/commands/task.ts:927` |
+| `apps/cli/src/commands/task.ts:934` |
+| `apps/cli/src/commands/task.ts:949` |
+| `apps/cli/src/commands/task.ts:959` |
+| `apps/cli/src/commands/task.ts:969` |
+| `apps/cli/src/commands/task.ts:981` |
+| `apps/cli/src/commands/task.ts:990` |
+| `apps/cli/src/commands/team.ts:104` |
+| `apps/cli/src/commands/team.ts:126` |
+| `apps/cli/src/commands/team.ts:13` |
+| `apps/cli/src/commands/team.ts:158` |
+| `apps/cli/src/commands/team.ts:233` |
+| `apps/cli/src/commands/team.ts:253` |
+| `apps/cli/src/commands/team.ts:269` |
+| `apps/cli/src/commands/team.ts:279` |
+| `apps/cli/src/commands/team.ts:299` |
+| `apps/cli/src/commands/team.ts:315` |
+| `apps/cli/src/commands/team.ts:332` |
+| `apps/cli/src/commands/team.ts:337` |
+| `apps/cli/src/commands/team.ts:371` |
+| `apps/cli/src/commands/team.ts:383` |
+| `apps/cli/src/commands/team.ts:392` |
+| `apps/cli/src/commands/team.ts:408` |
+| `apps/cli/src/commands/team.ts:426` |
+| `apps/cli/src/commands/team.ts:435` |
+| `apps/cli/src/commands/team.ts:447` |
+| `apps/cli/src/commands/team.ts:54` |
+| `apps/cli/src/commands/team.ts:70` |
+| `apps/cli/src/commands/team.ts:82` |
+| `apps/cli/src/commands/team.ts:93` |
+| `apps/cli/src/commands/workflow.ts:263` |
+| `apps/cli/src/commands/workflow.ts:267` |
+| `apps/cli/src/commands/workflow.ts:313` |
+| `apps/cli/src/commands/workflow.ts:40` |
+| `apps/cli/src/commands/workflow.ts:400` |
+| `apps/cli/src/commands/workflow.ts:424` |
+| `apps/cli/src/commands/workflow.ts:434` |
+| `apps/cli/src/commands/workflow.ts:615` |
+| `apps/cli/src/commands/workflow.ts:639` |
+| `apps/cli/src/commands/workflow.ts:691` |
+| `apps/cli/src/commands/workflow.ts:700` |
+| `apps/cli/src/commands/workflow.ts:721` |
+| `apps/cli/src/commands/workflow.ts:737` |
+| `apps/cli/src/commands/workflow.ts:778` |
+| `apps/cli/src/commands/workflow.ts:782` |
+| `apps/cli/src/commands/workflow.ts:802` |
+| `apps/cli/src/commands/workflow.ts:807` |
+| `apps/cli/src/commands/workflow.ts:853` |
+| `apps/cli/src/commands/workflow.ts:910` |
+| `apps/cli/src/output.ts:1` |
+| `apps/cli/src/output.ts:31` |
+| `apps/cli/src/output.ts:9` |
+| `apps/cli/tests/commands/message.test.ts:775` |
+| `apps/cli/tests/commands/task.test.ts:15` |
+| `apps/cli/tests/commands/task.test.ts:2545` |
+| `apps/cli/tests/commands/task.test.ts:388` |
+| `apps/cli/tests/output-envelope.test.ts:1` |
+| `apps/cli/tests/shared-option-parity.test.ts:30` |
+| `packages/app/src/services/anchor-qualifier.ts:105` |
+| `packages/app/src/services/anchor-qualifier.ts:107` |
+| `packages/app/src/services/anchor-qualifier.ts:279` |
+| `packages/app/src/services/anchor-qualifier.ts:98` |
+| `packages/app/src/services/corpus-check.ts:172` |
+| `packages/app/src/services/corpus-check.ts:184` |
+| `packages/app/src/services/corpus-check.ts:566` |
+| `packages/app/src/services/task-check.ts:1386` |
+| `packages/app/src/services/task-record.ts:14` |
+| `packages/app/src/services/task-record.ts:166` |
+| `packages/app/src/services/task-service.ts:1161` |
+| `packages/app/src/services/task-service.ts:36` |
+| `packages/app/src/workflow/lifecycle-adapter.ts:22` |
+| `packages/app/src/workflow/lifecycle-adapter.ts:222` |
+| `packages/app/src/workflow/lifecycle-adapter.ts:226` |
+| `packages/app/tests/services/anchor-qualifier.test.ts:2` |
+| `packages/app/tests/services/anchor-qualifier.test.ts:91` |
+| `packages/app/tests/services/task-check.test.ts:3406` |
+| `packages/app/tests/services/task-record.test.ts:1090` |
+| `packages/app/tests/services/task-record.test.ts:18` |
+| `packages/app/tests/services/task-record.test.ts:21` |
+| `packages/app/tests/services/task-record.test.ts:712` |
+| `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:59` |
+| `packages/app/tests/workflow/lifecycle-adapter.test.ts:55` |
+| `packages/contracts/src/index.ts:39` |
+| `scripts/commands/regen-corpus-baseline.ts:46` |
+| `scripts/commands/regen-corpus-baseline.ts:51` |
+| `scripts/commands/regen-corpus-baseline.ts:54` |
+| `scripts/commands/regen-corpus-baseline.ts:60` |
+| `scripts/commands/regen-corpus-baseline.ts:63` |
+| `scripts/commands/regen-corpus-baseline.ts:65` |
+| `scripts/commands/regen-corpus-baseline.ts:70` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — Symbol-anchor citation convention in `docs/04_DESIGN.md` §4.2 + dated corpus note | MET | static-ref + command |
+| R2 — Sweep-once discipline in verification-gate docs (constitution T11 + derived AGENTS.md line) | MET | static-ref + command |
+| R3 — One pass: both conventions land together; AGENTS.md reaches the constitution rule | MET | static-ref + command |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | proof-input-digest | — | sha256:781c7a3a5a7ea3744809112ec62ef3c5c9689dc9c6f7032e97e2fa2c0789b674 |
 ### References
 
 - Parent feature: `docs/features/F94_pipeline-close-out-and-gate-friction-*.md` (R5, R6 rows)
@@ -159,3 +453,6 @@ entirely. If the approved option retires the baseline, relocate the dated note i
 - Source session: task 0688 (2026-08-27); 0606 anchor-drift precedent (`eval-pipeline.ts:528` → `:562`)
 
 ### History
+- 2026-08-28T02:18:48.457Z todo → wip (system)
+- 2026-08-28T03:12:06.028Z wip → testing (system)
+- 2026-08-28T03:12:34.919Z testing → done (system)

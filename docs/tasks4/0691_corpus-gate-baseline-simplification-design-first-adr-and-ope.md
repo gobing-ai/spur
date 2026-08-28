@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Corpus gate & baseline simplification: design-first ADR and operator-gated implementation"
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-08-27T20:16:10.884Z
-updated_at: "2026-08-28T00:37:30.665Z"
+updated_at: "2026-08-28T01:02:25.069Z"
 feature_id: F94
 priority: P1
 ---
@@ -36,20 +36,18 @@ than refine it — the three dated residue entries 0607/0677/0670 are the eviden
 `config/corpus-baseline.json`, verified 2026-08-27).
 
 ### Requirements
-
-- [ ] R1. **ADR entry in `docs/00_ADR.md`** evaluating simplification options: e.g. drop
+- [x] R1. **ADR entry in `docs/00_ADR.md`** evaluating simplification options: e.g. drop
       dated-residue baselining entirely and gate only new findings against a committed snapshot;
       collapse superseded finding classes (testing-coverage successors, gate-language, readiness
       classes); single-sided vs two-sided tradeoffs; disposition of the claim-matcher
       clause-window machinery (F96 absorption).
-- [ ] R2. **Design-first, operator-gated:** implementation waits for explicit operator approval
+- [x] R2. **Design-first, operator-gated:** implementation waits for explicit operator approval
       of the ADR decision. Do NOT implement in this task's filing — the ADR decision gate comes
       first.
-- [ ] R3. **Implement the approved option** once approved, removing the machinery it retires
+- [x] R3. **Implement the approved option** once approved, removing the machinery it retires
       while the gate stays able to catch genuine regressions.
-- [ ] R4. **Do not entrench:** any interim baseline reconcile stays minimal — this task's
+- [x] R4. **Do not entrench:** any interim baseline reconcile stays minimal — this task's
       direction is simplification, not more dated-baseline machinery.
-
 ### Acceptance Criteria
 
 ```gherkin
@@ -132,35 +130,61 @@ half cannot start until the ADR is approved. 0694's symbol-anchor half is indepe
 proceed. State the approved option and its ADR number in this task's Solution so 0694 can cite it.
 
 ### Plan
-
-- [ ] 1. Measure the current cost curve: `entries[]` count, distinct finding codes, and how many
+- [x] 1. Measure the current cost curve: `entries[]` count, distinct finding codes, and how many
       entries are dated residue vs live diagnoses (`config/corpus-baseline.json`). → R1 evidence.
-- [ ] 2. Read the four-ADR chain (ADR-050, ADR-062, ADR-083, ADR-088) and constitution T10; record
+- [x] 2. Read the four-ADR chain (ADR-050, ADR-062, ADR-083, ADR-088) and constitution T10; record
       what each one would have to give up under each option. → R1.
-- [ ] 3. Draft the ADR entry in `docs/00_ADR.md` evaluating options A–D with a recommendation,
+- [x] 3. Draft the ADR entry in `docs/00_ADR.md` evaluating options A–D with a recommendation,
       including the F96 clause-window disposition. → R1, AC1, AC4.
-- [ ] 4. Present the ADR to the operator and record the approval verbatim in the ADR (ADR-051
+- [x] 4. Present the ADR to the operator and record the approval verbatim in the ADR (ADR-051
       consent evidence, dated). **Stop here until approved.** → R2, AC2.
-- [ ] 5. Implement the approved option: remove the retired machinery, keep the gate failing on
+- [x] 5. Implement the approved option: remove the retired machinery, keep the gate failing on
       genuine new findings. → R3, AC3.
-- [ ] 6. Verify: run `bun run corpus-check` on a tree with a deliberately introduced new finding
+- [x] 6. Verify: run `bun run corpus-check` on a tree with a deliberately introduced new finding
       (must fail) and on a clean tree (must pass); confirm the retired machinery's code paths and
       config entries are gone, not merely unreferenced. → AC3.
-- [ ] 7. Confirm no reconcile verb, no new CLI noun, and no new baseline-maintenance surface was
+- [x] 7. Confirm no reconcile verb, no new CLI noun, and no new baseline-maintenance surface was
       added. → R4.
-
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/services/corpus-check.ts:172` |
+| `packages/app/src/services/corpus-check.ts:184` |
+| `packages/app/src/services/corpus-check.ts:566` |
+| `scripts/commands/regen-corpus-baseline.ts:51` |
+| `scripts/commands/regen-corpus-baseline.ts:54` |
+| `scripts/commands/regen-corpus-baseline.ts:60` |
+| `scripts/commands/regen-corpus-baseline.ts:63` |
+| `scripts/commands/regen-corpus-baseline.ts:65` |
+| `scripts/commands/regen-corpus-baseline.ts:70` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `docs/00_ADR.md:1526-1618` — ADR-090 evaluates the full frozen option set A–D (A adopted as new-findings half :1578, B rejected :1579, C adopted as vanished half :1580, D rejected :1581), single-sided vs two-sided tradeoff explicit (ADR-050 amendment :1537, ADR-062 amendment :1538-1540), F96 clause-window disposition DELETE recorded :1583-1599 with 0607/0677/0670 residue as the evidence set |
+| R2 | MET | `docs/00_ADR.md:1610-1614` — operator approval "A+C compose" recorded 2026-08-27 via the task 0691 R2 gate with ADR-051 consent evidence (verbatim selection + direction message); consequence (4) :1606-1608 gates implementation on that approval; commit order confirms the gate held (regen script 0c2c0eaea 17:16 pre-dates but adds no gate code; gate implementation 71f588678 17:34 lands only with the approval recorded in the same commit's ADR entry) |
+| R3 | MET | `packages/app/src/services/corpus-check.ts:591-621` — reconcileBaseline is single-sided (unexpected = observed ∧ not-baselined-with-same-severity :593; ok = no unexpected + no dupes :619; no staleEntries anywhere in the tree); `packages/app/src/services/task-check.ts` — ANCHOR_WINDOW_LINES / status-claim clause-window machinery fully deleted (grep across packages/app returns zero hits; removal hunks in commit 71f588678); `packages/config/src/finding-codes.ts:22-38` — L3.status-claim-contradiction absent from ALL_FINDING_CODES; `scripts/commands/regen-corpus-baseline.ts:1-74` — regeneration tooling with round-trip assertion; gate still fails on genuine new findings: negative probe (broken task 9999 planted, `bun run apps/cli/src/index.ts task check --corpus` → "corpus-check FAILED", NEW findings listed; probe removed, tree clean) and `packages/app/tests/services/corpus-check.test.ts:184-206` ('fails on new findings; a vanished baseline entry no longer fails'), :225-247 (severity acceptance contract) — 36/36 tests pass |
+| R4 | MET | No `spur corpus` noun, no reconcile verb, no new baseline-maintenance surface: grep of apps/cli/src/commands/, packages/app/src/, scripts/commands/ returns zero hits; corpus validation stays `task check --corpus` (`package.json:89`); T10 narrowed to fix-or-regenerate (`docs/99_PROJECT_CONSTITUTION.md:196`); the only new baseline surface is the regeneration script replacing hand-rolled jq (its purpose is retiring the machinery, not entrenching it) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Gate & baseline simplification is design-first with an operator approval gate | MET | test | Options+recommendation: `docs/00_ADR.md:1573-1581`; approval before implementation: `docs/00_ADR.md:1606-1614` + commit ordering (0c2c0eaea 17:16 adds script only; 71f588678 17:34 carries ADR+approval+impl together, approval text inside the same landed ADR); retired machinery removed while gate still fails genuine new findings: `packages/app/src/services/corpus-check.ts:591-621`, deleted clause-window code (commit 71f588678 task-check.ts hunks), negative probe run this session (FAILED on planted finding, OK after removal), `packages/app/tests/services/corpus-check.test.ts:184-206` (36/36 pass); F96 disposition with 0607/0677/0670 evidence set: `docs/00_ADR.md:1583-1599` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | 4/4 anti-pattern constraints honored (no reconcile verb, no new noun, no hand-rolled jq — script with round-trip assertion instead, no pre-approval implementation); option set floor respected (A–D all evaluated, none silently dropped, A+C compose is within the set); precedence rule applied (:1573-1574); Handoff claim "state the approved option in Solution" → CHANGED-equivalent: `### Solution` is record-stage territory (`spur task record --solution-from-diff` backfills it, task-pipeline.yaml:520; verify must not write sections — code-verification SKILL.md Step 10), and the ADR number is stated in R1/R2 evidence and the commit messages; documented pipeline deviation, not a silent one |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | proof-input-digest | — | sha256:b1830e6de1d2704b0413f7f492191e92d3b3b6fadd2cac52b36422944172df2e |
 ### References
 
 - Parent feature: `docs/features/F94_pipeline-close-out-and-gate-friction-*.md` (R1)
@@ -173,3 +197,5 @@ proceed. State the approved option and its ADR number in this task's Solution so
 
 ### History
 - 2026-08-28T00:37:30.665Z todo → wip (system)
+- 2026-08-28T01:01:00.746Z wip → testing (system)
+- 2026-08-28T01:01:17.807Z testing → done (system)

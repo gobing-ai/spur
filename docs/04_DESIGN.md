@@ -1409,10 +1409,13 @@ Every field is required (R1): `id`, `wbs` (owning task), `file` (where the marke
 `keepsWorking` (what the shim keeps working), `removalCondition` (when it can be deleted).
 
 **Gate.** `bun run transition-shim-check` (wired inside `spur-check` and `spur-check-new`) is
-two-sided, mirroring `config/corpus-baseline.json` semantics (`packages/app/src/services/corpus-check.ts`):
-a marker with no manifest entry fails as a **new unregistered shim** naming the id and the file; a
-manifest entry whose marker no longer appears in source fails as a **stale entry** — the two are
-reported distinctly. Markers are scanned in the source roots `apps, packages, plugins, config,
+two-sided by design: a marker with no manifest entry fails as a **new unregistered shim**
+naming the id and the file; a manifest entry whose marker no longer appears in source fails
+as a **stale entry** — the two are reported distinctly. (The corpus-baseline gate that
+inspired this shape, `packages/app/src/services/corpus-check.ts`, is single-sided since
+ADR-090 — vanished baseline entries retire via regeneration, not gate failure — but the
+shim check keeps its own two-sided contract.)
+Markers are scanned in the source roots `apps, packages, plugins, config,
 scripts, tooling` (excluding build output and `tests`/`test` directories — a fixture mentioning a
 marker id is test data, not a shim); `docs/` is not scanned, so prose examples do not trip the gate.
 
@@ -1491,6 +1494,155 @@ type, absent on pre-0581 artifacts (schemaVersion stays 1).
 - Human mode: terse, line-oriented, tab-separated where tabular.
 - JSON mode (`--json`): a single JSON document to stdout, stable keys for automation.
 - Errors go to the error sink with context (what failed, path/identifier); exit codes are meaningful.
+
+### 4.1 CLI `--json` shape inventory (F95 / task 0693, swept 2026-08-27 @ emit set below)
+
+Per-noun inventory of every `--json`-bearing verb across the 14 noun modules under
+`apps/cli/src/commands/`, from a full `toJson(` / `JSON.stringify(` sweep (102 emit sites,
+counts per module in parentheses). Target shape = the ADR-091 envelope
+(`{ok: true, data}` / `{ok: false, error: {code, message, details?}}`; paginated list verbs
+`{ok, data, meta}`). This table doubles as the migration ledger: rows gain a **Post-adoption**
+note as nouns adopt behind `--json-envelope` (plan step 8).
+
+**Post-adoption (task 0693 R4, 2026-08-27):** all 102 sites are accounted for — 99 adopted
+behind the opt-in (`toJson(payload)` → `toEnvelopeJson(payload, { enveloped: options.jsonEnvelope })`;
+raw output stays byte-identical), 3 intentionally kept raw. Default rule per row: the "Current
+shape" column describes the **raw default that remains unchanged**; enveloped output wraps it
+as `{ok, data}` (single), `{ok, data, meta}` (list), or normalizes it (error envelopes).
+Row-level deltas from the default rule:
+
+- **List-kind sites** (bare arrays → paginated `{ok, data, meta}`): `task list`, `task check`
+  (default path), `feature list`, `feature check`. The check verbs' envelope `ok` is command
+  success (`ok: true` with the verdict carried per row in `data`) — the frozen
+  `apiSuccessSchema` pins `ok: true`, so an aggregate-failure cannot be expressed as
+  `ok: false, data` without re-spelling the envelope (recorded as the one classification
+  judgment call of R4).
+- **Error normalization** (class 4 sites → enveloped `{ok: false, error: {code,
+  message, details}}` with `code: 'INTERNAL_ERROR'` and the CLI-local code carried in
+  `details.cliCode`): task create/batch-create collision + duplicate-follow-up,
+  projects add/remove/list/start/stop error branches, builder bump-ver/drop-tags error
+  branches, message send/wait usage + typed failures, agent wait resolution/usage/fail
+  branches, history daily `{error: detail}`.
+- **Class-3 top-level-`ok` payloads** move under `data` unchanged; the envelope `ok` is
+  recomputed as command success (task migrate, migrate-anchors, check --corpus, noop,
+  agent create, init fresh run, projects/builder success payloads).
+- **Kept raw (3 sites, not adopted):** `task verdict` (writes the `.spur/run` verdict
+  artifact consumed by pipeline code, not CLI stdout) and the two workflow internal event
+  fingerprints (dedup keys, not CLI output). `rule list` and `task verifyall-aggregate`
+  raw `JSON.stringify(x, null, 2)` sites were adopted — their formatting is identical to
+  the `toJson` raw path, so byte-identity holds.
+- **Not adopted (service-side, outside the 14-module sweep):** `agent doctor` and the
+  plain path of `agent list` emit inside `packages/app/src/services/agent-service.ts`;
+  they adopt when their own seam adopts (row note above stands).
+
+| Noun | Verb | Emit sites (`apps/cli/src/commands/<noun>.ts`) | Current shape | Deviation from ADR-091 envelope |
+| --- | --- | --- | --- | --- |
+| task (26) | create | 191, 199, 217 | mixed: success flat-object `{…result, wbs, filePath}`; collision errors pseudo-envelope `{ok:false, error:{code:'wbs-collision'\|'duplicate-follow-up', …}}` | success unwrapped; error codes not in `API_ERROR_CODES` (ADR-091: collapse to `INTERNAL_ERROR` with `details`) |
+| task | show | 255 | flat-object `{…rest, frontmatter}` | unwrapped |
+| task | update | 324, 349, 431, 475 | flat-object; `--section` result `{ref, warnings, …}` has **no `ok`** (0688 case 1); `noop` path `{ok:true, noop, …}` | unwrapped; top-level `ok` on a subset of branches = two meanings of `ok` across calls |
+| task | deps | 546 | flat-object | unwrapped |
+| task | sections | 610 | flat-object | unwrapped |
+| task | list | 657 | **bare-array** | no envelope; becomes `{ok:true, data, meta}` paginated form |
+| task | refresh | 690 | flat-object | unwrapped |
+| task | migrate | 715 | flat-object-with-ok `{ok:true, dryRun, corpusDir, …report}` | `ok` at top level means command success, not envelope discriminant |
+| task | migrate-anchors | 754 | flat-object-with-ok | same top-level-`ok` conflict |
+| task | refresh-roster | 797 | flat-object | unwrapped |
+| task | batch-create | 821, 840 | success flat-object `{created, wbs, parentsWired}`; collision error pseudo-envelope | unwrapped success; non-vocabulary error code |
+| task | record | 880 | flat-object | unwrapped |
+| task | verdict | 947 | flat-object artifact written to `.spur/run/<wbs>-verdict.json` (raw `JSON.stringify`) | file artifact, not stdout; unwrapped; bypasses `toJson` |
+| task | verifyall-aggregate | 1013 | flat-object (raw `JSON.stringify`) | unwrapped; bypasses `toJson` |
+| task | check | 1104 (`--corpus`), 1245 (default) | `--corpus`: flat-object-with-ok (0688 case 4); default: **bare-array** `[{wbs, status, findings, pass, …}]` (0688 case 3) | bare-array path wraps array as `data` with `ok` from aggregate pass/fail; corpus `ok` moves under `data` |
+| task | resolve | 1268 | flat-object | unwrapped |
+| task | path | 1294 | flat-object `{wbs, filePath}` | unwrapped |
+| task | run-link | 1332 | flat-object | unwrapped |
+| task | scaffold-tests | 1368 | flat-object | unwrapped |
+| workflow (12) | validate | 266 | flat-object | unwrapped |
+| workflow | run | 398, 422, 430, 611 | flat-object (sync/async-fallback result, `{status:'failed', reason, hint}` failure, `{runId, status:'started', …}` handle, sync result) | unwrapped; failure is status-discriminated, not `{ok:false, error}` |
+| workflow | continue | 686 | flat-object | unwrapped |
+| workflow | clean | 729 | flat-object (`logsOnly ? logResult : {…result, logs}`) | unwrapped |
+| workflow | cancel | 769 | flat-object (status union incl. `not_found`) | not-found is a status value, not an error envelope |
+| workflow | list | 793 | flat-object (`WorkflowListResult`) | list verb without paginated `{ok, data, meta}` form |
+| workflow | trace | 895 | flat-object (timeline/summary union) | unwrapped |
+| workflow | (internal) | 1070, 1077 | `JSON.stringify` event fingerprints — **not CLI output** (dedup/dedupe keys) | none — counted in the 102 for sweep parity, no migration |
+| feature (11) | create | 33 | flat-object | unwrapped |
+| feature | show | 64 | flat-object `{…rest, content}` | unwrapped |
+| feature | update | 143 | flat-object | unwrapped |
+| feature | advance | 178, 210 | flat-object `{id, status, hops}` | unwrapped |
+| feature | list | 241 | **bare-array** | wraps as paginated `{ok, data, meta}` |
+| feature | move | 269 | flat-object | unwrapped |
+| feature | refresh | 328 | flat-object `{index_path, tasksUpdated}` | unwrapped |
+| feature | check | 403 | **bare-array** (0688 case 2) | wraps array as `data`, `ok` from aggregate pass/fail |
+| feature | sync | 450, 474 | flat-object | unwrapped |
+| projects (10) | add | 32, 39 | `{ok:true, project, …}` / `{ok:false, error:"<string>"}` | top-level `ok` is command success, not envelope discriminant; `error` is a bare string, not `{code, message}` |
+| projects | remove | 60, 67 | same `{ok, …}` / `{ok:false, error:"…"}` pattern | same |
+| projects | list | 91, 106 | `{projects}` (no `ok`) / `{ok:false, error:"…"}` | unwrapped success; string error |
+| projects | start | 128, 148 | `{ok:true, project, running}` / `{ok:false, error:"…"}` | top-level-`ok` conflict; string error |
+| projects | stop | 204, 211 | `{ok:true, stopped}` / `{ok:false, error:"…"}` | same |
+| message (10) | send | 49, 64, 154, 190, 274, 470 | errors: pseudo-envelope `{error:{code:'usage'\|…, message}}` (**no `ok`**); success: flat-object queued ack / wait payload `{msgId, toId, status, wait}` | error shape is near-miss (no discriminant, CLI-local codes); success unwrapped |
+| message | inbox | 296 | flat-object `{count, messages}` | unwrapped |
+| message | reply | 323 | flat-object | unwrapped |
+| message | watch | 388 | stream of flat-object message rows (one JSON doc per poll) | streamed rows stay per-row flat; envelope applies per emitted row under `--json-envelope` |
+| history (9) | import | 72, 85, 104, 125 | errors `{status:'error', message}`; success `{…fanOut, provenance}` | failure discriminated by `status` field, not envelope; success unwrapped |
+| history | analyze | 162 | flat-object (HistoryArtifact) | unwrapped |
+| history | report | 198 | flat-object (HistoryArtifact) | unwrapped |
+| history | daily | 217, 347, 356 | errors `{status:'error', message}` / `{error: detail}`; success flat-object | mixed failure conventions, none the envelope |
+| team (6) | status | 150, 329 | flat-object status doc; `--by-team` `{teams}` | unwrapped |
+| team | start | 261 | flat-object (`result.body`) | unwrapped |
+| team | stop | 307 | flat-object (`result.body`) | unwrapped |
+| team | up | 399 | flat-object `{…result, started}` | unwrapped |
+| team | down | 438 | flat-object `{…result, stopped}` | unwrapped |
+| agent (6) | list | 243 (`--specs`); plain path emits service-side (`packages/app/src/services/agent-service.ts:423`) | flat-object `{specs:[…]}` / `{agents}` | unwrapped |
+| agent | doctor | (no site in module; emits service-side `packages/app/src/services/agent-service.ts:553,621,528,647`) | flat-object `{agents, rolesSource, cache…}`; errors pseudo-envelope `{error:{code:'agent-resolution', message}}` | outside the 14-module sweep (service emit); same deviation classes; no migration until its seam adopts |
+| agent | wait | 137, 775, 792, 802 | errors pseudo-envelope `{error:{code:'usage'\|'wait_stalled'\|…, message}}`; success flat-object `{satisfied, pin}` | near-miss error shape (no `ok`), CLI-local codes |
+| agent | create | 308 | flat-object-with-ok `{ok:true, spec}` | top-level-`ok` conflict |
+| builder (4) | bump-ver | 38, 44 | `{ok:true, verb, target, version}` / `{ok:false, verb, error:"…"}` | top-level-`ok` conflict; string error |
+| builder | drop-tags | 74, 80 | same pattern | same |
+| rule (3) | list | 98 | flat-object (`RuleListServiceResult`) via **raw `JSON.stringify`** | unwrapped; bypasses `toJson` helper |
+| rule | trace | 135, 147 | flat-object detail / `{runs}` | unwrapped |
+| init (2) | init | 282, 426 | converged re-run flat-object `{…result, globalRulesSeeded, …}` (no `ok`); fresh run `{ok:true, project, config, …result}` | inconsistent between branches; top-level-`ok` on fresh path only |
+| status (1) | status | 51 | flat-object | unwrapped |
+| serve (1) | serve | 37 | flat-object `{port, url, pid:null, running:false}` (dry probe) | unwrapped |
+| migrate (1) | migrate | 23 | flat-object | unwrapped |
+
+Sweep parity: 102 raw sites = 100 verb emit sites + 2 workflow internal fingerprints
+(1070/1077, footnoted above); per-module counts in the Noun column match the Plan step-1
+counts (task 26, workflow 12, feature 11, projects 10, message 10, history 9, team 6,
+agent 6, builder 4, rule 3, init 2, status/serve/migrate 1 each).
+
+Cross-cutting deviation classes (every row is an instance of one of these):
+
+1. **Unwrapped flat-object** — no `{ok, data}` envelope (majority).
+2. **Bare-array** — `task list`, `task check`, `feature check`.
+3. **Top-level `ok` with non-envelope meaning** — projects/builder/init-fresh/agent-create/
+   task migrate/migrate-anchors/corpus-check: `ok` states command success and siblings sit
+   beside it, so `.ok` is not an envelope discriminant (the two-`ok`s hazard ADR-091 rule 4
+   resolves by moving these under `data`).
+4. **Pseudo-envelope errors** — `{error:{code, message}}` with no `ok` (message/agent/task
+   collision paths) or `{ok:false, error:"<string>"}` (projects/builder): neither validates
+   against `apiErrorSchema`; codes are CLI-local strings, not `API_ERROR_CODES`.
+5. **Helper bypass** — `rule list`, `task verdict`, `task verifyall-aggregate` stringify
+   without `toJson`.
+
+### 4.2 Citation convention — prefer `path:symbol` over `path:line` (task 0694, F94)
+
+Line anchors rot: 0606's `eval-pipeline.ts:528` drifted to `:562` after an unrelated +34-line
+edit, caught post-commit by a human. New task citations and test evidence therefore prefer
+the `path:symbol` form — the symbol names a named code entity, so an edit that shifts lines
+does not invalidate it.
+
+- **Preferred form:** `` `anchor-qualifier.ts:resolveRepoRoot` `` — repo-relative path plus a
+  named symbol (function, class, exported const). Applies to new citations in task files
+  (Solution/Testing/References evidence) and test descriptions.
+- **Line anchors stay acceptable** when there is no enclosing named symbol or the reference is
+  not to code position: a specific line in a non-code file, a diff hunk under review, a quoted
+  log line, or code with no enclosing named symbol. State the exception explicitly in the
+  citation (a convention with no stated exception gets ignored wholesale).
+- **No rewrite of existing `path:line` citations.** This governs new citations only; a mass
+  rewrite would mint the churn F94 exists to remove.
+- **Dated decision note:** the 0688 friction review (2026-08-27) recorded this preference; the
+  corpus note carries the per-code diagnosis (see `config/corpus-baseline.json` `note`). The
+  drift *detection* side is task 0692's report; enforcement is deliberately deferred — this is a
+  documentation convention, not a gate.
 
 ## 5. Server/Web Surface (current slice)
 

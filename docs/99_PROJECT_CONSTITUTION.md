@@ -206,11 +206,11 @@ why the rule changed, and the blast radius is smallest before anyone rebases ont
 reconciliation means the next unrelated contributor inherits a red gate they did not cause and
 cannot judge.
 
-The baseline is a machine-regenerated snapshot, not a hand-maintained list (ADR-090): a finding
-outside it fails the gate; an entry that stops reproducing simply retires at the next
-regeneration. Never hand-edit `config/corpus-baseline.json` — accepting a finding means
-regenerating the snapshot and committing the diff, where a suppressed finding stays visible as a
-count drop.
+**T11 — sweep-once discipline (0688 review, 2026-08-27).** Iterating on a task uses the
+single-task gate — `spur task check <wbs>` — not the corpus sweep. `spur task check --corpus`
+(`bun run corpus-check`) runs **once**, at commit-prep, before a commit that touches the
+task/feature corpus. The 0688 session burned ~17 min across 17 sweeps because nothing named the
+single-task check as the iterate loop; the sweep is a commit gate, not a per-edit diagnostic.
 
 ## 6. Edit principles per file
 

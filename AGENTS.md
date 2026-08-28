@@ -360,6 +360,11 @@ creation (the pipeline is already a run; a nested one would orphan). The structu
 `spur-check` at most twice per task (task 0436 R2). Do not re-run the whole suite on every
 iteration — it is the dominant verification-loop cost.
 
+**Sweep-once while iterating on a task:** drive the iterate loop with the single-task gate
+`spur task check <wbs>`; run `spur task check --corpus` (`bun run corpus-check`) **once**, at
+commit-prep, not per edit (constitution **T11**, task 0694). The corpus sweep is a commit gate,
+not a per-edit diagnostic.
+
 Never `--no-verify` / silent `biome-ignore` to force green. Harness task done ⇒ real verify **PASS**
 when the task used the pipeline.
 
