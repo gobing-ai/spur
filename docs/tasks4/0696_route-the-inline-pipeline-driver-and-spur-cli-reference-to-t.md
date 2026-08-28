@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Route the inline pipeline driver and spur-cli reference to the todo projection"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-27T23:57:38.341Z
-updated_at: "2026-08-28T00:20:59.181Z"
+updated_at: "2026-08-28T04:48:05.053Z"
 feature_id: D7
 priority: P2
 tags: ["workflow", "docs", "plugin-surface"]
@@ -162,16 +162,32 @@ eliminate YAML reading, and the reference should not claim otherwise.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:34` — Run setup step 4 rewritten to the frozen shape from Design: **Layer 1** now names `spur workflow show <pipeline-yaml> --format todo --json` → its `steps[]` (declaration order, `initial`/`terminal`/`failure`/`pause`/`loopBack`/`conditional` markers, "Never re-derive this list from the YAML"); **Source of truth** now splits — CLI projection for layer 1, step-1 YAML parse for layer 2 — and its prohibition covers hand-**deriving**, not only hand-copying. Layer 2 keeps the active state's `onEnter` actions from the YAML parsed in step 1; refresh cadence and steps 1–3/5 untouched (verified by diff: only the Layer 1 and Source-of-truth bullets plus the layer-2 attribution phrase changed).
+- Sibling sweep (R3, plan step 4): `rg` over `plugins/sp/**` for hand-copy/hand-derive/dry-run-walk/"states in declaration order" instructions found **no other run-time state-list derivation to fix**. Remaining hits are out of scope (all paths under `plugins/sp/skills/`): `spur-cli/references/workflows.md:352` and `workflows/operations.md:179,206,217` are authoring guidance about writing states/guards in declaration order; `execution-workflow.md:113` walks actions/guards (layer-2 interpreter, and 0695's todo projection carries no action bodies); `team.md:78` is team-spec naming order; `code-verification/references/secu-review.md:66` mentions the dry-run in a return-type argument, unrelated.
+- Evidence the documented command and fields are real (plan step 1, run before editing): `spur workflow show config/workflows/task-pipeline.yaml --format todo --json` returned the 0695 envelope `{ "name": "task-pipeline", "kind": "state-machine", "format": "todo", "steps": [...] }`, steps in declaration order (`precheck, implement, test, test-fix, test-recheck, review, approve, verify, record, done, failed, cancelled`), each carrying exactly `id`, `initial`, `terminal`, `failure`, `pause`, `loopBack`, `conditional` — e.g. `{ "id": "precheck", "initial": true, "terminal": false, "failure": false, "pause": false, "loopBack": false, "conditional": false }`, `approve` with `"pause": true`, `failed`/`cancelled` with `"terminal": true, "failure": true`. Matches 0695's Design field-for-field; no reconciliation needed.
+- Anti-patterns respected: layer 2 not replaced, no cache/fetch-once instruction, no restated marker semantics or ordering rule, `task-pipeline.yaml` and the YAML-interpreter section untouched, no `sp:spur-cli` workflows row or `docs/04_DESIGN.md` entry (0695 owns both).
 
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:35-38` — Run setup step 4 Layer 1 sources from `spur workflow show <pipeline-yaml> --format todo --json` → `steps[]` with the six markers and "Never re-derive"; `:43-44` source-of-truth split (CLI projection vs YAML parse) with hand-copy **or hand-derive** prohibition; live command re-run returned the documented 0695 envelope. |
+| R2 | MET | Diff touches only the Layer 1 / Layer-2-attribution / Source-of-truth bullets (attribution phrase belongs to the frozen shape); steps 1–3, 5 and refresh cadence (`:41-42`) byte-identical; no restated marker semantics or ordering rule. |
+| R3 | MET | Fresh `rg` sweep over plugins/sp/** reproduces the Solution result: only surviving hits are the rewritten prohibition itself (`inline-pipeline-driver.md:20,44`) and five out-of-scope citations verified in place (authoring-order guidance, layer-2 interpreter, team naming, return-type argument). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R6 — the inline pipeline driver calls the CLI instead of hand-parsing the YAML | MET | test | `inline-pipeline-driver.md:35` Layer 1 = CLI command; old dry-run-walk source-of-truth removed (`:44` prohibits copy and derive); other two R6 lines are 0695 scope per task AC. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: UNKNOWN)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 ### References
 
 - Feature: `docs/features/D7_workflow-todo-projection-show-format-for-deterministic-plan-rendering.md` (scenario R6).
@@ -181,3 +197,7 @@ eliminate YAML reading, and the reference should not claim otherwise.
 - Parity gate that forced the scope split: `plugins/sp/tests/cli-surface-parity.test.ts`, helper `plugins/sp/tests/helpers/cli-surface.ts`.
 
 ### History
+
+- 2026-08-28T04:35:37.536Z todo → wip (system)
+- 2026-08-28T04:48:04.350Z wip → testing (system)
+- 2026-08-28T04:48:05.053Z testing → done (system)

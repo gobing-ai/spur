@@ -32,14 +32,16 @@ command, skill, script, or second workflow.
    `host-session-<run-id>` and record that fallback in the log; provenance must never be blank or
    guessed from an executor subprocess.
 4. Render the two-layer plan into the host todo list (task 0596):
-   - **Layer 1** = the pipeline's `states` in declaration order, with the active state marked — the
-     same order `renderRunPlan` / `spur workflow run --dry-run` previews.
-   - **Layer 2** = the active state's `onEnter` actions (`kind` + resolved `input`/`command`), shown
-     only for the active state.
+   - **Layer 1** = `spur workflow show <pipeline-yaml> --format todo --json` → its `steps[]`: the
+     declared state inventory in declaration order with `initial` / `terminal` / `failure` /
+     `pause` / `loopBack` / `conditional` markers. Mark the active state. Never re-derive this
+     list from the YAML.
+   - **Layer 2** = the active state's `onEnter` actions (`kind` + resolved `input`/`command`), from
+     the YAML parsed in step 1, shown only for the active state.
    - **Refresh cadence** = stage boundaries only (when the current state changes after a transition),
      never per action.
-   - **Source of truth** = the YAML parsed in step 1 plus the dry-run walk — never hand-copy the
-     state list into the driver, a command, a skill, or a script.
+   - **Source of truth** = the CLI projection for layer 1; the YAML parsed in step 1 for layer 2.
+     Never hand-copy or hand-derive the state list into the driver, a command, a skill, or a script.
 5. Record lifecycle provenance before entering the FSM:
 
    ```bash
