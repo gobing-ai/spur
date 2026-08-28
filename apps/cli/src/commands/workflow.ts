@@ -4,12 +4,14 @@ import { createInterface } from 'node:readline';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Command } from '@commander-js/extra-typings';
 import {
+    buildWorkflowSteps,
     configuredSecretValues,
     createWorkflowEventIdentity,
     decorateWorkflowEvent,
     renderActionHeartbeat,
     renderRunPlan,
     renderStepLine,
+    renderWorkflowTodo,
     resolveOutputLogConfig,
     resolveWorkflowFile,
     resolveWorkflowLogRetentionDays,
@@ -37,7 +39,7 @@ import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
 import type { CliContext } from '../context';
 import { maybeTriggerHistoryRefresh } from '../history-refresh';
-import { toEnvelopeJson, writeJsonError } from '../output';
+import { toEnvelopeJson, toJson, writeJsonError } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
 import { renderWorkflowMermaid } from '../workflow/mermaid-render';
 import { resolveSpurBin } from '../workflow/resolve-spur-bin';
@@ -218,8 +220,12 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
     //   - `events` → engine-native workflow.* names (run-lifecycle / HITL / custom)
     // Task 0370 attaches a SystemEventDao tap to that bus so CLI-driven runs land in
     // the shared ledger the Board reads (same direct-DAO pattern as task 0249).
-    const makeSvc = (json?: boolean, bus?: WorkflowObservabilityBus) =>
-        new WorkflowAppService({
+    const makeSvc = (json?: boolean, bus?: WorkflowObservabilityBus) => {
+        // SAFETY: the workflow observability bus is the same EventBus instance the system-event
+        // ledger consumes; the branded nominal types only differ by name (ADR-044 event bridge),
+        // so workflow-dispatch agent events can ride it without double-emission.
+        const dispatchBus = bus as unknown as SystemEventBus | undefined;
+        return new WorkflowAppService({
             cwd: context.cwd,
             secretValues: configuredSecretValues(context.env),
             warn: (message) => context.output.error(`Warning: ${message}`),
@@ -235,8 +241,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             // report's run-cost dimension — silently read empty. One dispatch still emits
             // exactly one start/exit pair; the workflow's own `workflow.action.*` series is
             // a different grain (action, not dispatch) and does not double-count.
-            agentService: () =>
-                bus ? context.agentService({ events: bus as unknown as SystemEventBus }) : context.agentService(),
+            agentService: () => (bus ? context.agentService({ events: dispatchBus }) : context.agentService()),
             ruleService: () => context.ruleService(),
             hitlResponder: () => context.hitlResponder(json),
             // Resolve bundled-workflow `$schema` refs from the embedded map rather than
@@ -251,6 +256,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                   }
                 : {}),
         });
+    };
 
     const workflow = program.command('workflow').summary('validate and execute workflow YAML files');
 
@@ -812,9 +818,17 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
 
     workflow
         .command('show')
-        .description('Render a workflow definition as a mermaid FSM diagram.')
+        .description('Render a workflow definition: mermaid FSM diagram (default) or declared-step todo checklist.')
         .argument('<file>', 'Workflow YAML file')
-        .action(async (file) => {
+        .option('--format <name>', 'Projection to render: mermaid (default) or todo', 'mermaid')
+        .option(...SHARED_OPTIONS.jsonSupported)
+        .action(async (file, options) => {
+            // Validate the format before resolving the file so an unknown value fails fast (0695 R7).
+            if (options.format !== 'mermaid' && options.format !== 'todo') {
+                context.output.error(`workflow show: unknown --format '${options.format}' — expected mermaid or todo`);
+                context.setExitCode(1);
+                return;
+            }
             const resolved = resolveWorkflowFile(context.cwd, file);
             if (resolved.path === null) {
                 const [probedProject, probedBundled] = resolved.probed;
@@ -835,7 +849,29 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 context.setExitCode(1);
                 return;
             }
-            context.output.write(renderWorkflowMermaid(def));
+            if (options.json) {
+                if (options.format === 'todo') {
+                    context.output.write(
+                        toJson({
+                            name: def.name,
+                            kind: def.kind ?? 'state-machine',
+                            format: 'todo',
+                            steps: buildWorkflowSteps(def),
+                        }),
+                    );
+                } else {
+                    context.output.write(
+                        toJson({
+                            name: def.name,
+                            kind: def.kind ?? 'state-machine',
+                            format: 'mermaid',
+                            diagram: renderWorkflowMermaid(def),
+                        }),
+                    );
+                }
+                return;
+            }
+            context.output.write(options.format === 'todo' ? renderWorkflowTodo(def) : renderWorkflowMermaid(def));
         });
 
     workflow

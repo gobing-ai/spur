@@ -162,15 +162,106 @@ export function renderActionHeartbeat(
     return `${runPrefix(event.runId, options)}… ${event.node}/${event.kind} · elapsed=${elapsed} · budget=${budget}${full}`;
 }
 
+/** One declared workflow step with its structural markers (task 0695). */
+export interface WorkflowStep {
+    id: string;
+    initial: boolean;
+    terminal: boolean;
+    failure: boolean;
+    pause: boolean;
+    loopBack: boolean;
+    conditional: boolean;
+    /** transition-flow only; absent for state-machine steps. */
+    nodeType?: 'action' | 'gate' | 'parallel' | 'decision';
+}
+
+/**
+ * The single step-sequence builder behind both the run-start plan preview and
+ * the todo projection (0695 R5): one entry per declared state/node, in
+ * DECLARATION order — no topological reordering for either kind. Markers are
+ * structural, not predictive: `conditional` means every incoming edge is
+ * guarded, not that the step will be entered; `loopBack` means some declared
+ * source at-or-after this position transitions back here (self-loops included).
+ */
+export function buildWorkflowSteps(def: WorkflowDef): WorkflowStep[] {
+    if (def.kind === 'transition-flow') {
+        const order = new Map(def.nodes.map((n, i) => [n.id, i] as const));
+        const terminal = new Set<string>(def.terminalNodes ?? []);
+        return def.nodes.map((node) => {
+            const incoming = def.edges.filter((e) => e.to === node.id);
+            return {
+                id: node.id,
+                initial: node.id === def.initialNode,
+                terminal: terminal.has(node.id),
+                failure: false, // transition-flow has no failure-state concept.
+                pause: node.pause === true,
+                loopBack: incoming.some((e) => (order.get(e.from) ?? -1) >= (order.get(node.id) ?? 0)),
+                conditional:
+                    node.id !== def.initialNode &&
+                    incoming.length > 0 &&
+                    incoming.every((e) => e.condition !== undefined),
+                nodeType: node.type ?? 'action',
+            };
+        });
+    }
+    const order = new Map(def.states.map((s, i) => [s.id, i] as const));
+    const terminal = new Set<string>(def.terminalStates ?? []);
+    const failure = new Set<string>(def.failureStates ?? []);
+    return def.states.map((state) => {
+        const incoming = def.transitions.filter((t) => t.to === state.id);
+        return {
+            id: state.id,
+            initial: state.id === def.initialState,
+            terminal: terminal.has(state.id),
+            failure: failure.has(state.id),
+            pause: state.pause === true,
+            loopBack: incoming.some((t) => (order.get(t.from) ?? -1) >= (order.get(state.id) ?? 0)),
+            conditional:
+                state.id !== def.initialState && incoming.length > 0 && incoming.every((t) => t.guard !== undefined),
+        };
+    });
+}
+
+/**
+ * Render the todo projection of a workflow definition: a markdown checklist of
+ * the declared steps (the same sequence as {@link renderRunPlan} — one shared
+ * builder), markers appended after ` — ` joined by ` · `. For state-machine
+ * definitions the header states that the list is a declared inventory, not a
+ * predicted execution path. Built from the DEFINITION, not a run result.
+ */
+export function renderWorkflowTodo(def: WorkflowDef): string {
+    const kind = def.kind ?? 'state-machine';
+    const lines = [`# ${def.name} (${kind}) — declared steps`, ''];
+    if (kind === 'state-machine') {
+        lines.push('Declared step inventory in declaration order, not a predicted execution path.', '');
+    }
+    for (const step of buildWorkflowSteps(def)) {
+        const markers = [
+            step.initial ? 'initial' : undefined,
+            step.terminal ? 'terminal' : undefined,
+            step.failure ? 'failure' : undefined,
+            step.pause ? 'pause' : undefined,
+            step.loopBack ? 'loop-back' : undefined,
+            step.conditional ? 'conditional' : undefined,
+            step.nodeType !== undefined && step.nodeType !== 'action' ? step.nodeType : undefined,
+        ].filter((m): m is string => m !== undefined);
+        lines.push(markers.length > 0 ? `- [ ] ${step.id} — ${markers.join(' · ')}` : `- [ ] ${step.id}`);
+    }
+    return lines.join('\n');
+}
+
 /**
  * Render a one-line run plan from a parsed workflow definition: the states (or
- * nodes, for transition-flow) the run will attempt, in declared order. Built
- * from the DEFINITION, not a run result — the preview answers "what does this
- * workflow define", before any execution.
+ * nodes, for transition-flow) the run will attempt, in declared order. Derived
+ * from the shared {@link buildWorkflowSteps} builder (0695 R1/R5) so the plan
+ * preview and the todo projection can never disagree about what the steps are;
+ * built from the DEFINITION, not a run result — the preview answers "what does
+ * this workflow define", before any execution.
  */
 export function renderRunPlan(def: WorkflowDef): string {
-    const steps = def.kind === 'transition-flow' ? def.nodes.map((n) => n.id) : def.states.map((s) => s.id);
-    return `plan: ${steps.join(' → ')}`;
+    return `plan: ${buildWorkflowSteps(def)
+        .map((s) => s.id)
+        .join(' → ')}`;
 }
 
 /** Format a millisecond duration as a compact `Ns` / `Nm Ns` string. */

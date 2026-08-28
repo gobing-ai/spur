@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Kind-aware workflow todo renderer and spur workflow show --format/--json"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-27T23:57:38.268Z
-updated_at: "2026-08-28T00:19:43.939Z"
+updated_at: "2026-08-28T04:28:15.108Z"
 feature_id: D7
 priority: P2
 tags: ["workflow", "cli-surface"]
@@ -45,6 +45,7 @@ idea-evaluation gate, which also rejected a boolean `--todo` flag and a separate
 `spur workflow todo` verb, and rejected caching the rendered output as speculative.
 
 ### Requirements
+
 R1. **Shared step builder.** Add `buildWorkflowSteps(def: WorkflowDef): WorkflowStep[]` to
 `packages/app/src/workflow/step-reporter.ts`, returning one entry per declared state (state-machine)
 or node (transition-flow) in **declaration order**, each carrying its id and its `initial`,
@@ -73,6 +74,7 @@ for `mermaid`, where `diagram` is the fenced block the human path prints. `--jso
 R5. **Predictable failure.** An unrecognised `--format` value exits non-zero with stderr naming both
 accepted values. A path that does not resolve, or a file that fails schema validation, exits 1 with
 the message the mermaid path emits today — identically for every format.
+
 ### Acceptance Criteria
 
 Covers feature D7 scenarios R1, R2, R3, R4, R5, R7, R8. Scenario R6 belongs to task 0696.
@@ -157,6 +159,7 @@ with different output models for no benefit. R1's single-builder rule scopes to 
 sequence only.
 
 ### Design
+
 **WHAT.** One shared step builder plus a second renderer in the module that already owns the
 run-start plan preview, exposed through two new options on the existing `show` verb. No new verb,
 no new module home, no cache.
@@ -270,7 +273,9 @@ reference row and the `docs/04_DESIGN.md` sync); 0696 covers the two inline-pipe
 **Existing doc anchors to edit.** `docs/04_DESIGN.md:556` carries the one-line `spur workflow …`
 signature run for the whole noun — extend the `show` entry there. `docs/04_DESIGN.md:258` carries
 the `spur workflow show      <file>` synopsis line — extend it too.
+
 ### Plan
+
 1. Add `WorkflowStep` and `buildWorkflowSteps` to `packages/app/src/workflow/step-reporter.ts`, and
    rewrite `renderRunPlan` on top of the builder (R1).
 2. Add `renderWorkflowTodo` in the same module, rendering the frozen checklist shape (R2).
@@ -292,18 +297,48 @@ the `spur workflow show      <file>` synopsis line — extend it too.
 8. `bun run lint && bun run test` (root test chains `plugins/sp`, so `cli-surface-parity` runs);
    confirm `spur workflow show config/workflows/task-pipeline.yaml` is unchanged against a
    pre-change capture.
+
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `packages/app/src/workflow/step-reporter.ts:166` — `WorkflowStep` interface (id + initial/terminal/failure/pause/loopBack/conditional markers + transition-flow `nodeType`), exactly the frozen field names 0696 consumes.
+- `packages/app/src/workflow/step-reporter.ts:186` — `buildWorkflowSteps(def)`: one entry per declared state/node in declaration order, no topological reordering. Markers per the frozen algorithm: `initial` = initialState/initialNode; `terminal` = terminalStates/terminalNodes; `failure` = failureStates (always false for transition-flow); `pause` = declared pause; `loopBack` = some incoming edge whose source declares at-or-after the target (self-loops included); `conditional` = at least one incoming edge and every one guarded (state-machine `guard` / transition-flow `condition`), never on the initial step.
+- `packages/app/src/workflow/step-reporter.ts:232` — `renderWorkflowTodo(def)`: markdown checklist `- [ ] <id>` with markers appended after ` — ` joined by ` · ` in the frozen order; `# <name> (<kind>) — declared steps` header; the declared-inventory disclaimer line emitted for state-machine only.
+- `packages/app/src/workflow/step-reporter.ts:261` — `renderRunPlan` rebuilt on the shared builder; emitted string unchanged (`plan: a → b`, byte-identical, verified against a pre-change capture of `config/workflows/task-pipeline.yaml`).
+- `packages/app/src/index.ts:592-601` — `buildWorkflowSteps`, `renderWorkflowTodo`, `type WorkflowStep` added to the step-reporter export block.
+- `apps/cli/src/commands/workflow.ts:816` — `show` gains `--format <name>` (default `mermaid`) and `--json` (`SHARED_OPTIONS.jsonSupported`); unknown format fails fast before file resolution with `workflow show: unknown --format '<v>' — expected mermaid or todo` + exit 1; not-found and parse-failure branches untouched (identical for every format); `--json` envelopes via `toJson`: `{ name, kind, format: 'todo', steps }` and `{ name, kind, format: 'mermaid', diagram }` (`diagram` = the exact fenced block the human path prints).
+- Docs/parity (same change-set): `docs/04_DESIGN.md` workflow signature run (`show` entry gains `[--format <mermaid|todo>] [--json]`); `plugins/sp/skills/spur-cli/references/workflows.md` `show` fence row gains both flags (cli-surface-parity is bidirectional); `docs/design/harness-surface-governance.md` §4 records the ADR-051 consent granted at the D7 idea gate (rejected shapes noted: boolean `--todo`, separate `todo` verb, caching).
+- Anti-patterns respected: no topo sort, no cache, no `todo` verb, `renderWorkflowMermaid` untouched in `apps/cli/src/workflow/mermaid-render.ts`, no `--vars` prediction.
 
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/workflow/step-reporter.ts:186` — `buildWorkflowSteps(def)`: one entry per declared state/node in declaration order, id + initial/terminal/failure/pause/loopBack/conditional + transition-flow `nodeType`; `renderRunPlan` rebuilt on the builder at `packages/app/src/workflow/step-reporter.ts:261`; byte-identity re-proven this run (`spur workflow show config/workflows/task-pipeline.yaml` current vs stashed-HEAD pre-change output: diff empty, 2936 bytes); builder-parity pin `packages/app/tests/workflow/step-reporter.test.ts:433`; byte-identical CLI test `apps/cli/tests/commands/workflow.test.ts:2260`; exports at `packages/app/src/index.ts:592-601`. |
+| R2 | MET | `packages/app/src/workflow/step-reporter.ts:232` — `renderWorkflowTodo(def)`: `- [ ] <id>` checklist, markers after ` — ` joined by ` · ` in frozen order, state-machine-only declared-inventory disclaimer, no topological reordering; frozen-shape tests for both kinds `packages/app/tests/workflow/step-reporter.test.ts:346,385`; live render of the real consumer config matches a hand-computation of the marker algorithm (loop-back on test-fix only, pause on approve, failure on failed/cancelled). |
+| R3 | MET | `apps/cli/src/commands/workflow.ts:823` — `--format <name>` default `mermaid`; default-path byte-identity (2936 bytes, diff empty this run); docs synced same change-set: `docs/04_DESIGN.md:556` (show synopsis gains `[--format <mermaid |
+| R4 | MET | `apps/cli/src/commands/workflow.ts:846-871` — `--json` envelopes via `toJson`: `{name, kind, format:'todo', steps: buildWorkflowSteps(def)}` and `{name, kind, format:'mermaid', diagram}` (exact fenced block); bare `--json` returns the mermaid envelope; tests `apps/cli/tests/commands/workflow.test.ts:2304,2358`; live smoke this run: todo JSON parses, 12 steps, step[3] `test-fix` loopBack=true; bare JSON parses, 2733-byte diagram. |
+| R5 | MET | Unknown format fails fast BEFORE file resolution: `apps/cli/src/commands/workflow.ts:825-831` — exit 1, stderr names both values (live smoke: `workflow show: unknown --format 'outline' — expected mermaid or todo`, exit=1); not-found and schema-invalid branches untouched and shared by both formats (tests `apps/cli/tests/commands/workflow.test.ts:2385,2403` — identical errors, exit 1). Single-builder rule: `renderRunPlan` derives from `buildWorkflowSteps` at `step-reporter.ts:261`, todo renderer iterates the builder at `step-reporter.ts:240`, no independent derivation (`packages/app/tests/workflow/step-reporter.test.ts:433`; CLI equivalence test `workflow.test.ts:2418`). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — spur workflow show without --format renders the mermaid diagram unchanged | MET | test | `apps/cli/tests/commands/workflow.test.ts:2260` (bare == `--format mermaid` == renderer, exit 0); git-stash diff this run: 2936 bytes identical |
+| Scenario: R2 — --format todo renders a transition-flow definition in declared node order with node-type markers | MET | test | `packages/app/tests/workflow/step-reporter.test.ts:313` (nodeType gate/decision/parallel, declaration order, no reordering) + todo shape `:385` |
+| Scenario: R3 — --format todo renders a state-machine definition as a declared step inventory | MET | test | `packages/app/tests/workflow/step-reporter.test.ts:346` (disclaimer, initial/terminal/failure/pause/loop-back/conditional); CLI `apps/cli/tests/commands/workflow.test.ts:2280`; live render of `config/workflows/task-pipeline.yaml` hand-verified against the frozen marker algorithm |
+| Scenario: R4 — --json emits the machine shape of the selected format | MET | test | `apps/cli/tests/commands/workflow.test.ts:2304,2358`; live `--format todo --json` parses with 12 steps and correct markers; bare `--json` returns mermaid envelope |
+| Scenario: R5 — the todo projection and the run-start plan preview share one step builder | MET | test | `packages/app/tests/workflow/step-reporter.test.ts:433` (plan sequence == builder sequence, both kinds); `apps/cli/tests/commands/workflow.test.ts:2418` (CLI steps == `buildWorkflowSteps(def)`) |
+| Scenario: R7 — an unrecognised --format value fails with a non-zero exit naming the accepted values | MET | test | `apps/cli/tests/commands/workflow.test.ts:2373` (exit 1, message names mermaid and todo); live smoke exit=1 with identical stderr |
+| Scenario: R8 — an unresolvable or invalid definition fails identically for every format | MET | test | `apps/cli/tests/commands/workflow.test.ts:2385` (unresolvable path, identical errors both formats) and `:2403` (schema-invalid, exit 1, same mermaid-path message) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 
 - Feature: `docs/features/D7_workflow-todo-projection-show-format-for-deterministic-plan-rendering.md`
@@ -315,3 +350,6 @@ the `spur workflow show      <file>` synopsis line — extend it too.
 - Engine types: `@gobing-ai/ts-dual-workflow-engine` `StateDef` / `TransitionDef` / `FlowNodeDef` / `FlowEdgeDef` (`dist/types.d.ts:36-113`).
 
 ### History
+- 2026-08-28T04:02:22.601Z todo → wip (system)
+- 2026-08-28T04:28:14.501Z wip → testing (system)
+- 2026-08-28T04:28:15.108Z testing → done (system)

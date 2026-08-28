@@ -589,12 +589,15 @@ export {
 } from './workflow/steering';
 // Workflow step reporter — pure event→line / def→plan formatters for CLI progress (0114)
 export {
+    buildWorkflowSteps,
     renderActionHeartbeat,
     renderRunPlan,
     renderStepLine,
+    renderWorkflowTodo,
     type StepEvent,
     type StepLineRenderer,
     type StepRenderOptions,
     type WorkflowOutputDetail,
+    type WorkflowStep,
 } from './workflow/step-reporter';
 export { WorkflowTraceWriter } from './workflow/trace-writer';

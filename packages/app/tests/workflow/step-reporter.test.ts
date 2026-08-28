@@ -4,7 +4,14 @@
  */
 import { describe, expect, test } from 'bun:test';
 import type { StateMachineWorkflowDef, TransitionFlowWorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
-import { renderActionHeartbeat, renderRunPlan, renderStepLine, type StepEvent } from '../../src/workflow/step-reporter';
+import {
+    buildWorkflowSteps,
+    renderActionHeartbeat,
+    renderRunPlan,
+    renderStepLine,
+    renderWorkflowTodo,
+    type StepEvent,
+} from '../../src/workflow/step-reporter';
 
 const at = '2026-06-25T00:00:00.000Z';
 const envelope = { schemaVersion: 1 as const, eventId: 'e1', sequence: 1, runId: 'r1', at };
@@ -294,5 +301,161 @@ describe('renderRunPlan', () => {
             edges: [],
         } as unknown as TransitionFlowWorkflowDef;
         expect(renderRunPlan(def)).toBe('plan: start → work → end');
+    });
+});
+describe('buildWorkflowSteps', () => {
+    test('state-machine: declaration order + initial/terminal/failure/pause/loop-back/conditional markers', () => {
+        const def: StateMachineWorkflowDef = {
+            kind: 'state-machine',
+            name: 'sm',
+            initialState: 'a',
+            terminalStates: ['e', 'f'],
+            failureStates: ['f'],
+            states: [{ id: 'a' }, { id: 'b', pause: true }, { id: 'c' }, { id: 'd' }, { id: 'e' }, { id: 'f' }],
+            transitions: [
+                { from: 'a', to: 'b' },
+                { from: 'b', to: 'c', guard: { kind: 'always' } },
+                { from: 'b', to: 'd' },
+                { from: 'd', to: 'c', guard: { kind: 'always' } },
+                { from: 'c', to: 'b' }, // source declared after b → b is loop-back
+                { from: 'd', to: 'e' },
+                { from: 'e', to: 'e' }, // self-loop → e is loop-back
+                { from: 'd', to: 'f' },
+            ],
+        };
+        const steps = buildWorkflowSteps(def);
+        expect(steps.map((s) => s.id)).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
+        expect(steps[0]).toMatchObject({ initial: true, terminal: false, failure: false, conditional: false });
+        expect(steps[1]).toMatchObject({ pause: true, loopBack: true, conditional: false });
+        // c is entered only through guarded transitions → conditional; d has an unguarded incoming edge → not.
+        expect(steps[2]).toMatchObject({ conditional: true });
+        expect(steps[3]).toMatchObject({ conditional: false, loopBack: false });
+        expect(steps[4]).toMatchObject({ terminal: true, failure: false, loopBack: true });
+        expect(steps[5]).toMatchObject({ terminal: true, failure: true });
+    });
+
+    test('transition-flow: nodeType labels, terminalNodes, condition-only edges, no failure concept', () => {
+        const def: TransitionFlowWorkflowDef = {
+            kind: 'transition-flow',
+            name: 'tf',
+            initialNode: 'first',
+            terminalNodes: ['last'],
+            nodes: [
+                { id: 'first' },
+                { id: 'gate1', type: 'gate' },
+                { id: 'branch', type: 'decision' },
+                { id: 'fan', type: 'parallel' },
+                { id: 'last', pause: true },
+            ],
+            edges: [
+                { from: 'first', to: 'gate1' },
+                { from: 'gate1', to: 'branch', condition: { kind: 'flag' } },
+                { from: 'branch', to: 'fan' },
+                { from: 'fan', to: 'last' },
+            ],
+        };
+        const steps = buildWorkflowSteps(def);
+        expect(steps.map((s) => s.id)).toEqual(['first', 'gate1', 'branch', 'fan', 'last']);
+        expect(steps[0]).toMatchObject({ initial: true, nodeType: 'action', conditional: false });
+        expect(steps[1]).toMatchObject({ nodeType: 'gate', failure: false });
+        expect(steps[2]).toMatchObject({ nodeType: 'decision', conditional: true });
+        expect(steps[3]).toMatchObject({ nodeType: 'parallel', conditional: false });
+        expect(steps[4]).toMatchObject({ terminal: true, pause: true });
+    });
+});
+
+describe('renderWorkflowTodo', () => {
+    test('state-machine: frozen checklist shape with the declared-inventory disclaimer', () => {
+        const def: StateMachineWorkflowDef = {
+            kind: 'state-machine',
+            name: 'task-pipeline',
+            initialState: 'precheck',
+            terminalStates: ['done', 'failed'],
+            failureStates: ['failed'],
+            states: [
+                { id: 'precheck' },
+                { id: 'implement' },
+                { id: 'approve', pause: true },
+                { id: 'verify' },
+                { id: 'done' },
+                { id: 'failed' },
+            ],
+            transitions: [
+                { from: 'precheck', to: 'implement' },
+                { from: 'implement', to: 'approve' },
+                { from: 'approve', to: 'verify' },
+                { from: 'verify', to: 'done', guard: { kind: 'approved' } },
+                { from: 'verify', to: 'implement' }, // loop-back
+                { from: 'done', to: 'done' },
+                { from: 'verify', to: 'failed' },
+            ],
+        };
+        expect(renderWorkflowTodo(def)).toBe(
+            [
+                '# task-pipeline (state-machine) — declared steps',
+                '',
+                'Declared step inventory in declaration order, not a predicted execution path.',
+                '',
+                '- [ ] precheck — initial',
+                '- [ ] implement — loop-back',
+                '- [ ] approve — pause',
+                '- [ ] verify',
+                '- [ ] done — terminal · loop-back',
+                '- [ ] failed — terminal · failure',
+            ].join('\n'),
+        );
+    });
+
+    test('transition-flow: node-type markers appended, no disclaimer line', () => {
+        const def: TransitionFlowWorkflowDef = {
+            kind: 'transition-flow',
+            name: 'flow',
+            initialNode: 'start',
+            terminalNodes: ['end'],
+            nodes: [{ id: 'start' }, { id: 'gate', type: 'gate' }, { id: 'end' }],
+            edges: [
+                { from: 'start', to: 'gate' },
+                { from: 'gate', to: 'end' },
+            ],
+        };
+        expect(renderWorkflowTodo(def)).toBe(
+            [
+                '# flow (transition-flow) — declared steps',
+                '',
+                '- [ ] start — initial',
+                '- [ ] gate — gate',
+                '- [ ] end — terminal',
+            ].join('\n'),
+        );
+    });
+});
+
+describe('renderRunPlan (builder parity, 0695 R5)', () => {
+    test('plan sequence is exactly the shared builder sequence for both kinds', () => {
+        const sm: StateMachineWorkflowDef = {
+            kind: 'state-machine',
+            name: 'sm',
+            initialState: 'a',
+            states: [{ id: 'a' }, { id: 'b' }],
+            transitions: [{ from: 'a', to: 'b', guard: { kind: 'always' } }],
+        };
+        expect(renderRunPlan(sm)).toBe(
+            `plan: ${buildWorkflowSteps(sm)
+                .map((s) => s.id)
+                .join(' → ')}`,
+        );
+        expect(renderRunPlan(sm)).toBe('plan: a → b');
+        const tf: TransitionFlowWorkflowDef = {
+            kind: 'transition-flow',
+            name: 'tf',
+            initialNode: 'x',
+            nodes: [{ id: 'x' }, { id: 'y' }],
+            edges: [{ from: 'x', to: 'y' }],
+        };
+        expect(renderRunPlan(tf)).toBe(
+            `plan: ${buildWorkflowSteps(tf)
+                .map((s) => s.id)
+                .join(' → ')}`,
+        );
     });
 });
