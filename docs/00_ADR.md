@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.31.0
+version: 1.32.0
 owner: Robin Min
 updated_at: 2026-08-27
 read_before: any structural change; before diverging from a decision
@@ -535,6 +535,15 @@ is already crowded.
   planning session of 2026-08-26 and is recorded here so landing tasks cite the record rather than
   re-litigating the gate. **Detail:** `docs/design/agent-doctor-inspection-surface.md` §5.1–§5.2;
   surface shape in `docs/04_DESIGN.md` § `spur agent doctor`.
+
+  **Amendment (2026-08-27, feature D7 / task 0695):** Consent granted for two options on the
+  existing `spur workflow show` verb — `--format <mermaid|todo>` (mermaid stays default; `todo`
+  renders a declared-step checklist projection) and `--json` (machine envelope for both formats).
+  Both are option expansions of an existing read-only verb, not a new noun or verb. Consent was
+  given at the D7 idea-evaluation gate, which also rejected the alternative shapes: a boolean
+  `--todo` flag and a separate `spur workflow todo` verb (flag-not-action), and output caching.
+  **Detail:** `docs/design/harness-surface-governance.md` §4; surface shape in `docs/04_DESIGN.md`
+  § `spur workflow show`.
 
 ## ADR-052: Team-Scoped Board Composition with Separate Control and Message Planes
 

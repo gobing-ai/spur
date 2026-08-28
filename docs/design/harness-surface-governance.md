@@ -3,7 +3,7 @@
 **Area:** the two detectable composition measures (shell / agent.run), the advisory-only posture, and
 the four-surface script placement table with dated operator-consent applications.
 **Status:** authority landed (ADR-069 amendment + promotion, ADR-051 amendment); advisory tooling is
-sibling tasks 0614/0615; consent record updated by task 0625 on 2026-08-21.
+sibling tasks 0614/0615; consent record updated by task 0695 on 2026-08-27.
 **Authority:** derived; ADR-069 (composition measures, advisory posture), ADR-051 (surface boundary,
 consent gate), ADR-065 (plugin-script entrypoint contract, cross-referenced), ADR-043 (slash-command
 preference). On conflict, `00_ADR.md` wins (lower number wins on content, constitution §4.1).
@@ -97,8 +97,9 @@ without one, the command stays internal under `scripts/commands/`.
 | Date | Task | Public change | Granted scope and reason |
 | --- | --- | --- | --- |
 | 2026-08-21 | 0625 | `spur feature refresh` adds `--all`; a bare invocation now exits 2 unless `--feature <id>` is supplied | Require an explicit one-feature or all-feature breadth token. The A3 wrap-up's bare refresh rewrote unrelated D3/D5/D6/E5 rosters, so implicit global mutation is no longer an acceptable default. |
+| 2026-08-27 | 0695 | `spur workflow show` adds `--format <mermaid\|todo>` (mermaid stays default; `todo` is a declared-step checklist projection) and `--json` (machine envelope for both formats) | Extend the existing read-only `show` verb for feature D7 per the idea-evaluation gate. Rejected shapes recorded at the gate: a boolean `--todo` flag and a separate `spur workflow todo` verb (flag-not-action); no output caching. |
 
-The grant changes only refresh breadth selection. It does not change the `## Tasks` marker format,
+The 2026-08-21 grant changes only refresh breadth selection. It does not change the `## Tasks` marker format,
 the deterministic global `INDEX.md` regeneration, or lifecycle status; those shapes are in
 `lifecycle-projection-integrity.md`.
 
