@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Corpus gate & baseline simplification: design-first ADR and operator-gated implementation"
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-08-27T20:16:10.884Z
-updated_at: "2026-08-27T23:34:43.010Z"
+updated_at: "2026-08-28T00:37:30.665Z"
 feature_id: F94
 priority: P1
 ---
@@ -172,3 +172,4 @@ proceed. State the approved option and its ADR number in this task's Solution so
 - Sibling task: 0692 (close-out integrity — independent surface, same feature)
 
 ### History
+- 2026-08-28T00:37:30.665Z todo → wip (system)
