@@ -878,15 +878,17 @@ describe('spur task CLI', () => {
         }
     });
 
-    test('check --corpus human reporter prints STALE for a baseline entry that no longer reproduces', async () => {
+    test('check --corpus treats a baseline entry that no longer reproduces as retired (ADR-090)', async () => {
         const isoCwd = await corpusFixture([
-            { kind: 'task', id: '9999', code: 'L1.schema-validation', reason: 'fixture', since: '2026-08-10' },
+            { kind: 'task', id: '9999', code: 'L1.schema-validation', severity: 'error' },
         ]);
         try {
             const out = createCapturedOutput();
-            expect(await main(['task', 'check', '--corpus'], { cwd: isoCwd, output: out })).toBe(1);
-            expect(out.errors.join('\n')).toContain('STALE  task 9999');
-            expect(out.messages.join('\n')).toContain('corpus-check FAILED');
+            // Single-sided gate (ADR-090): a vanished finding retires via snapshot
+            // regeneration, never as a gate failure — the two-sided STALE ratchet is gone.
+            expect(await main(['task', 'check', '--corpus'], { cwd: isoCwd, output: out })).toBe(0);
+            expect(out.errors.join('\n')).not.toContain('STALE');
+            expect(out.messages.join('\n')).toContain('corpus-check OK');
         } finally {
             rmSync(isoCwd, { recursive: true, force: true });
         }
@@ -918,26 +920,16 @@ describe('spur task CLI', () => {
             expect(await main(['task', 'check', '--corpus', '--json'], { cwd: isoCwd, output: clean })).toBe(0);
             const result = JSON.parse(lastMessage(clean));
             expect(Object.keys(result).sort()).toEqual(
-                [
-                    'observed',
-                    'baselined',
-                    'newErrors',
-                    'newWarnings',
-                    'staleEntries',
-                    'bySeverity',
-                    'duplicateKeys',
-                    'ok',
-                ].sort(),
+                ['observed', 'baselined', 'newErrors', 'newWarnings', 'bySeverity', 'duplicateKeys', 'ok'].sort(),
             );
             expect(result).toMatchObject({
                 observed: 0,
                 baselined: 0,
                 newErrors: [],
                 newWarnings: [],
-                staleEntries: [],
                 bySeverity: {
-                    error: { observed: 0, baselined: 0, newCount: 0, staleCount: 0 },
-                    warning: { observed: 0, baselined: 0, newCount: 0, staleCount: 0 },
+                    error: { observed: 0, baselined: 0, newCount: 0 },
+                    warning: { observed: 0, baselined: 0, newCount: 0 },
                 },
                 ok: true,
             });

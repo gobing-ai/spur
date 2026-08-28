@@ -1107,9 +1107,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         const w = result.bySeverity.warning;
                         context.output.write(
                             `corpus-check: swept tasks + features — errors ${e.observed} observed, ` +
-                                `${e.baselined} baselined, ${e.newCount} new, ${e.staleCount} stale; ` +
+                                `${e.baselined} baselined, ${e.newCount} new; ` +
                                 `warnings ${w.observed} observed, ${w.baselined} baselined, ` +
-                                `${w.newCount} new, ${w.staleCount} stale.`,
+                                `${w.newCount} new.`,
                         );
                         for (const error of result.newErrors) {
                             context.output.error(
@@ -1121,11 +1121,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                                 `  NEW    [warning] ${warning.kind} ${warning.id}: ${warning.code} — ${warning.message}`,
                             );
                         }
-                        for (const entry of result.staleEntries) {
-                            context.output.error(
-                                `  STALE  ${entry.kind} ${entry.id}: ${entry.code} — fixed; remove this baseline entry`,
-                            );
-                        }
+
                         for (const dup of result.duplicateKeys) {
                             context.output.error(
                                 `  DUP    ${dup.key} — ${dup.count} entries for one key; reconciliation is key-addressed, ` +
@@ -1135,10 +1131,13 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         context.output.write(
                             result.ok
                                 ? 'corpus-check OK — no corpus errors or warnings outside the accepted baseline.'
-                                : 'corpus-check FAILED — reconcile new, stale, and duplicate entries in config/corpus-baseline.json.',
+                                : 'corpus-check FAILED — fix the new findings above, or accept them by regenerating the snapshot: bun run scripts/commands/regen-corpus-baseline.ts.',
                         );
                     }
                     if (!result.ok) context.setExitCode(1);
+                    // The corpus sweep is terminal — fall through and the unscoped
+                    // per-task scan appends its own results JSON after the corpus
+                    // payload, corrupting the --json contract (task 0691 R2 fix).
                     return;
                 }
                 if (options.since !== undefined) {
@@ -1528,6 +1527,8 @@ async function loadSectionMatrixUncached(projectRoot: string): Promise<SectionMa
             validateJsonSchema: true,
             embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
         });
+        // SAFETY: loadStructuredSpurConfig validated the document against the embedded
+        // section-matrix JSON schema, so the parsed shape satisfies SectionMatrix.
         return data as unknown as SectionMatrix;
     }
     // 2. Bundled / packaged fallback: tasks/section-matrix.yaml
@@ -1539,6 +1540,8 @@ async function loadSectionMatrixUncached(projectRoot: string): Promise<SectionMa
                 validateJsonSchema: true,
                 embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
             });
+            // SAFETY: same embedded-schema validation as the project-local path —
+            // the bundled matrix document is schema-checked before this cast.
             return data as unknown as SectionMatrix;
         }
     }

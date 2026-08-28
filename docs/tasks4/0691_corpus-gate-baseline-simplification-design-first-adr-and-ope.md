@@ -4,7 +4,7 @@ name: "Corpus gate & baseline simplification: design-first ADR and operator-gate
 status: todo
 template: feature-impl
 created_at: 2026-08-27T20:16:10.884Z
-updated_at: "2026-08-27T21:38:18.697Z"
+updated_at: "2026-08-27T23:34:43.010Z"
 feature_id: F94
 priority: P1
 ---
@@ -12,6 +12,7 @@ priority: P1
 ## 0691. Corpus gate & baseline simplification: design-first ADR and operator-gated implementation
 
 ### Background
+
 The corpus gate and `config/corpus-baseline.json` machinery is failing operationally. The dated
 baseline stands at **1917 entries** (`config/corpus-baseline.json` `entries[]`, verified
 2026-08-27). Three reconcile incidents occurred in the 0688 session alone (2026-08-27): an inverted
@@ -33,6 +34,7 @@ evidence for any `task check` surface change. Absorbs F96 (claim-matcher subject
 `status: cancelled` 2026-08-27): the simplification may delete the clause-window machinery rather
 than refine it — the three dated residue entries 0607/0677/0670 are the evidence set (present in
 `config/corpus-baseline.json`, verified 2026-08-27).
+
 ### Requirements
 
 - [ ] R1. **ADR entry in `docs/00_ADR.md`** evaluating simplification options: e.g. drop
@@ -50,12 +52,18 @@ than refine it — the three dated residue entries 0607/0677/0670 are the eviden
 
 ### Acceptance Criteria
 
-- [ ] AC1. Given the simplification ADR entry in docs/00_ADR.md, when it is reviewed, then it evaluates the named options (drop dated-residue baselining / gate new-findings-vs-committed-snapshot, superseded-class collapse, single-sided vs two-sided) and records a recommendation.
-- [ ] AC2. Given the operator approval gate, when implementation starts, then the ADR records the approval (ADR-051 consent evidence dated 2026-08-27).
-- [ ] AC3. Given the approved option, when implementation lands, then the retired machinery is removed and the corpus gate still fails on genuine new findings.
-- [ ] AC4. Given the F96 absorption, when the ADR decides the claim-matcher clause-window machinery's fate, then the decision is recorded with the 0607/0677/0670 residue as the evidence set.
+```gherkin
+Scenario: R1 — Gate & baseline simplification is design-first with an operator approval gate
+  Given the simplification ADR entry in docs/00_ADR.md
+  When it is reviewed
+  Then it evaluates the named options (drop dated-residue baselining / gate new-findings-vs-committed-snapshot, superseded-class collapse, single-sided vs two-sided)
+  And it records a recommendation and the ADR-051 operator approval evidence (dated 2026-08-27) before implementation starts
+  And once the approved option is implemented, the retired machinery is removed while the corpus gate still fails on genuine new findings
+  And the F96 claim-matcher clause-window disposition is recorded with the 0607/0677/0670 residue as the evidence set
+```
 
 ### Q&A
+
 - **Which ADR founds the direction being reversed?** Not ADR-088 alone. The chain is ADR-050
   (two-sided gate) → ADR-062 (every severity ratcheted) → ADR-083 (dated legacy set) → ADR-088
   (latest instance). Background corrected 2026-08-27; the new ADR supersedes as much of that chain
@@ -68,7 +76,9 @@ than refine it — the three dated residue entries 0607/0677/0670 are the eviden
   not silently drop one: an option evaluated and rejected must say why.
 - **Deferred:** the exact removal diff for the clause-window machinery. It depends on which option
   is approved, so it is deferred to step 5 with owner = this task's implementer.
+
 ### Design
+
 **WHAT.** Author one ADR entry in `docs/00_ADR.md` that decides how the corpus gate and
 `config/corpus-baseline.json` are simplified, then — only after explicit operator approval of the
 chosen option — implement it. This task's deliverable up to the approval gate is the ADR entry
@@ -81,6 +91,7 @@ any one matcher — it is the cost curve of the dated ratchet itself, which the 
 wrong direction on 2026-08-27.
 
 **WHERE.**
+
 - ADR entry: `docs/00_ADR.md` (next free `ADR-0NN`, appended in date order).
 - Gate implementation surface (post-approval only): `packages/app` corpus-check services plus
   `scripts/commands/` corpus-check entry; `config/corpus-baseline.json` is data, not code.
@@ -106,6 +117,7 @@ chosen option, citing the 0607/0677/0670 dated residue as the evidence set. "Def
 answer: F96 was cancelled into this task precisely so the decision lands here.
 
 **Anti-patterns (do NOT implement).**
+
 - Do **not** add a `spur corpus reconcile` verb or any other new baseline-maintenance surface —
   F94's Scope names that explicitly out of scope, and it would entrench the machinery being retired.
 - Do **not** add a new CLI noun; corpus validation stays `spur task check --corpus` (ADR-051 noun
@@ -118,7 +130,9 @@ answer: F96 was cancelled into this task precisely so the decision lands here.
 verification-gate documentation must describe the gate as this ADR decides it, so 0694's gate-doc
 half cannot start until the ADR is approved. 0694's symbol-anchor half is independent and may
 proceed. State the approved option and its ADR number in this task's Solution so 0694 can cite it.
+
 ### Plan
+
 - [ ] 1. Measure the current cost curve: `entries[]` count, distinct finding codes, and how many
       entries are dated residue vs live diagnoses (`config/corpus-baseline.json`). → R1 evidence.
 - [ ] 2. Read the four-ADR chain (ADR-050, ADR-062, ADR-083, ADR-088) and constitution T10; record
@@ -134,6 +148,7 @@ proceed. State the approved option and its ADR number in this task's Solution so
       config entries are gone, not merely unreferenced. → AC3.
 - [ ] 7. Confirm no reconcile verb, no new CLI noun, and no new baseline-maintenance surface was
       added. → R4.
+
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
@@ -147,6 +162,7 @@ proceed. State the approved option and its ADR number in this task's Solution so
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
+
 - Parent feature: `docs/features/F94_pipeline-close-out-and-gate-friction-*.md` (R1)
 - Absorbed feature: F96 `docs/features/F96_claim-matcher-subject-association-*.md` (`status: cancelled`, 2026-08-27)
 - `docs/00_ADR.md` — ADR-050 (continuous unbypassable corpus gates), ADR-062 (every severity ratcheted), ADR-083 (dated legacy set), ADR-088 (anchor-subject gate demoted to warning), ADR-051 (surface consent gate)
@@ -154,4 +170,5 @@ proceed. State the approved option and its ADR number in this task's Solution so
 - `config/corpus-baseline.json` — the policy file under review (1917 entries; its `note` field carries the per-code diagnoses)
 - Dependent task: 0694 (docs consolidation — gate-doc half blocked on this ADR's approval)
 - Sibling task: 0692 (close-out integrity — independent surface, same feature)
+
 ### History

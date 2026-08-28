@@ -324,13 +324,6 @@ export function classifyExternalEvidence(
  * requirement's subject → mismatch (R4). Never re-reads the whole file: the caller
  * already holds the in-range window.
  */
-/**
- * ADR-083 probe 2 (task 0688): subject matching reads the cited range widened by
- * ±20 lines, clamped to file bounds. A point anchor inside a long symbol can
- * never contain the symbol's own name; the enclosing window can. One measured
- * constant (corpus new mismatches 42 → 10), not a config knob.
- */
-export const ANCHOR_WINDOW_LINES = 20;
 
 /**
  * Subject tokens from a citing row — the identifier-like words a citation's
@@ -413,32 +406,6 @@ export function citedLinesNameSubject(subjectTokens: string[], cited: string): b
     // correctly-cited minimal row. Absence of a real identifier ⇒ nothing to assert.
     const isRowId = (t: string) => /^(r|ac)-?\d+$/.test(t);
     return subjectTokens.every(isRowId);
-}
-
-/**
- * Status-claim lexicons for `L3.status-claim-contradiction` (task 0688 / ADR-083,
- * the eb93dfdaa defect class). A claim attaches to an `R<n>` id only when both sit
- * in the same sentence-ish clause — no `.`/`;` between, ≤80 chars in either direction.
- * Prose that merely mentions an id with no claim word is deliberately silent
- * (ambiguity → no finding). `ponytail:` negations beyond `not |never ` unhandled;
- * extend the lookbehind if a corpus false positive appears.
- */
-const OPEN_CLAIM_WORDS = 'remains open|still open|pending|unfinished|unimplemented|not implemented|outstanding|todo';
-const DONE_CLAIM_WORDS = 'done|landed|implemented|completed|shipped|closed|resolved|fixed';
-
-function claimsOpen(line: string, id: string): boolean {
-    return (
-        new RegExp(`\\bR${id}\\b[^.;]{0,80}?\\b(?:${OPEN_CLAIM_WORDS})\\b`, 'i').test(line) ||
-        new RegExp(`\\b(?:${OPEN_CLAIM_WORDS})\\b[^.;]{0,80}?\\bR${id}\\b`, 'i').test(line)
-    );
-}
-
-function claimsDone(line: string, id: string): boolean {
-    const word = `(?<!not |never )(?:${DONE_CLAIM_WORDS})`;
-    return (
-        new RegExp(`\\bR${id}\\b[^.;]{0,80}?\\b${word}\\b`, 'i').test(line) ||
-        new RegExp(`\\b${word}\\b[^.;]{0,80}?\\bR${id}\\b`, 'i').test(line)
-    );
 }
 
 /**
@@ -860,57 +827,6 @@ export class TaskCheckService extends PlanningCheckService {
                 section: sectionName,
                 message: `${sectionName} is required at status '${status}' but is still placeholder-only — run \`spur task record <wbs>\` to fill it from the verdict artifact, or author it directly`,
             });
-        }
-
-        // Status-claim contradiction (task 0688 R7 / ADR-083): Requirements
-        // checkboxes vs Solution/Testing prose. eb93dfdaa shipped with its
-        // checkboxes claiming done while the Solution prose still named the work
-        // open — no check looked across that seam. Fires only on a positive claim
-        // word about the id in the same clause; ambiguity is silent by
-        // construction, so error severity (a fire is a verified true positive).
-        const checkboxBody = doc.getSection('Requirements');
-        if (checkboxBody !== null && !isPlaceholderBody(checkboxBody)) {
-            const checked = new Set<string>();
-            const unchecked = new Set<string>();
-            for (const cbLine of checkboxBody.split('\n')) {
-                const m = /^\s*[-*]\s*\[([ xX])\]\s*[`*_]{0,2}R(\d+)\b/.exec(cbLine);
-                if (m === null) continue;
-                (m[1]?.toLowerCase() === 'x' ? checked : unchecked).add(m[2] ?? '');
-            }
-            if (checked.size > 0 || unchecked.size > 0) {
-                for (const claimSection of ['Solution', 'Testing'] as const) {
-                    const claimBody = doc.getSection(claimSection);
-                    if (claimBody === null || isPlaceholderBody(claimBody)) continue;
-                    for (const rawClaimLine of claimBody.split('\n')) {
-                        // 0688 R7: markdown code spans are quotations (a row documenting this
-                        // check's own lexicon matched itself), not status claims — strip them.
-                        const claimLine = rawClaimLine.replace(/`[^`]*`/g, ' ');
-                        const excerpt = rawClaimLine.trim().slice(0, 100);
-                        for (const id of checked) {
-                            if (claimsOpen(claimLine, id)) {
-                                findings.push({
-                                    layer: 'L3',
-                                    code: FINDING_CODES.L3_STATUS_CLAIM_CONTRADICTION,
-                                    severity: 'error',
-                                    section: claimSection,
-                                    message: `R${id} is checked in Requirements but ${claimSection} claims it is still open — reconcile: "${excerpt}"`,
-                                });
-                            }
-                        }
-                        for (const id of unchecked) {
-                            if (claimsDone(claimLine, id)) {
-                                findings.push({
-                                    layer: 'L3',
-                                    code: FINDING_CODES.L3_STATUS_CLAIM_CONTRADICTION,
-                                    severity: 'error',
-                                    section: claimSection,
-                                    message: `R${id} is unchecked in Requirements but ${claimSection} claims it is done — reconcile: "${excerpt}"`,
-                                });
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         // Note: L4.stale-line-anchor for Testing/Solution file:line citations runs in runL4
@@ -1447,12 +1363,10 @@ export class TaskCheckService extends PlanningCheckService {
                         // from the citing row (the line that carries this citation) and
                         // require one to appear in the cited window. Warning until the
                         // R1 qualification pass has landed (severity-override promotes).
-                        const start = Math.max(1, cite.startLine - ANCHOR_WINDOW_LINES);
-                        const end = Math.min(lineCount, (cite.endLine ?? cite.startLine) + ANCHOR_WINDOW_LINES);
                         const citedWindow =
                             raw
                                 .split('\n')
-                                .slice(start - 1, end)
+                                .slice(cite.startLine - 1, cite.endLine ?? cite.startLine)
                                 .join('\n') || '';
                         const citingRow =
                             body.split('\n').find((l) => l.includes(`\`${cite.raw}\``)) ??

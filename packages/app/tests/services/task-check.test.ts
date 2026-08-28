@@ -2861,113 +2861,6 @@ describe('subject-token exclusion (0583 R5 verify)', () => {
     });
 });
 
-describe('L3.status-claim-contradiction (0688 R7)', () => {
-    function claimTask(sections: { solution: string; testing: string; checked: string }): string {
-        return [
-            '---',
-            'schema_version: 1',
-            'name: "Claim task"',
-            'status: done',
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Claim task',
-            '',
-            '### Background',
-            'text',
-            '',
-            '### Requirements',
-            `- [${sections.checked}] R1. **Do the thing.**`,
-            '- [ ] R2. **Other thing.**',
-            '',
-            '### Solution',
-            sections.solution,
-            '',
-            '### Testing',
-            sections.testing,
-            '',
-            '### Review',
-            '| P1 | path | finding | fix |',
-        ].join('\n');
-    }
-
-    async function check(sections: { solution: string; testing: string; checked: string }) {
-        const env = seedEnv({ taskContent: claimTask(sections) });
-        const result = await new TaskCheckService(env.fs, matrix).check(env.path, '0001');
-        env.cleanup();
-        return result.findings.filter((f) => f.code === FINDING_CODES.L3_STATUS_CLAIM_CONTRADICTION);
-    }
-
-    test('a checked requirement claimed open in Solution reports an error', async () => {
-        const findings = await check({
-            solution: 'R1 remains open — deferred to a follow-up task.',
-            testing: 'All paths exercised.',
-            checked: 'x',
-        });
-        expect(findings).toHaveLength(1);
-        expect(findings[0]?.severity).toBe('error');
-        expect(findings[0]?.section).toBe('Solution');
-    });
-
-    test('a checked requirement claimed open in Testing reports an error', async () => {
-        const findings = await check({
-            solution: ' Implemented in task-check.ts. ',
-            testing: 'R1 still pending — coverage suite not wired.',
-            checked: 'x',
-        });
-        expect(findings).toHaveLength(1);
-        expect(findings[0]?.section).toBe('Testing');
-    });
-
-    test('an unchecked requirement claimed done reports an error', async () => {
-        const findings = await check({
-            solution: 'R2 was implemented alongside the parser rework.',
-            testing: 'Both paths covered.',
-            checked: ' ',
-        });
-        expect(findings).toHaveLength(1);
-        expect(findings[0]?.section).toBe('Solution');
-    });
-
-    test('consistent states produce no finding', async () => {
-        const findings = await check({
-            solution: 'R1 was implemented; R2 remains open for a follow-up.',
-            testing: 'R1 done — suite green.',
-            checked: 'x',
-        });
-        expect(findings).toHaveLength(0);
-    });
-
-    // AC8: an R-id with no claim word in the same clause is not a claim.
-    test('prose that merely mentions the id without a claim word is silent', async () => {
-        const findings = await check({
-            solution: 'R1 touches the parser; the registry stays untouched.',
-            testing: 'Exercised via unit tests.',
-            checked: 'x',
-        });
-        expect(findings).toHaveLength(0);
-    });
-
-    test('"not implemented" is an open claim, not a done claim', async () => {
-        const findings = await check({
-            solution: 'R2 is not implemented in this change.',
-            testing: 'R1 covered.',
-            checked: ' ',
-        });
-        expect(findings).toHaveLength(0);
-    });
-
-    test('a claim word quoted inside a code span is not a claim (0688 self-catch)', async () => {
-        const findings = await check({
-            solution: 'The lexicon `remains open|still open` sits near the fixture "Browser open (R1)".',
-            testing: 'R1 covered.',
-            checked: 'x',
-        });
-        expect(findings).toHaveLength(0);
-    });
-});
-
 describe('classifyExternalEvidence — frozen external form (0584 R1/R2)', () => {
     test('R1: recognizes a named origin + backticked path + line number outside the backticks', () => {
         const body = 'Evidence: @gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 481 — omp call_id write';
@@ -3456,23 +3349,6 @@ describe('0625 R4 — Solution change-map anchor drift detection', () => {
         expect(mismatch).toHaveLength(0);
     });
 
-    // 0688 R1 / AC1: the subject window is the cited range ± ANCHOR_WINDOW_LINES.
-    // A point anchor inside a long symbol can never contain the symbol's name; a
-    // citation >5 lines from the symbol used to report, the window now covers it.
-    test('a citation whose subject sits 12 lines above the cited line reports no mismatch', async () => {
-        const fileContent = [
-            'export function registerCancel() {}',
-            ...Array.from({ length: 19 }, (_, i) => `const filler${i} = ${i};`),
-            '',
-        ].join('\n');
-        const { fs, path, cleanup } = seedChangeMap('`workflow.ts:12` — closes `registerCancel`', fileContent);
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-
-        const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
-        expect(mismatch).toHaveLength(0);
-    });
-
     // 0688 R2 / AC2: every anchor in the row is excluded from subject tokens, not
     // just the one under test — a sibling anchor's path can never appear in this
     // citation's source, so a correct multi-anchor row used to report.
@@ -3500,10 +3376,8 @@ describe('0625 R4 — Solution change-map anchor drift detection', () => {
         expect(mismatch).toHaveLength(1);
     });
 
-    // 0688 AC3: widening is a matching concession only. Bounds still use the cited
-    // range — a missing path or a line past EOF must still report stale-line, and a
-    // valid line-1 cite in a short file must not become stale just because ±20
-    // would theoretically walk off the top of the file.
+    // 0688 AC3: subject matching is matching-only — bounds still use the cited
+    // range. A line past EOF or a missing path must still report stale-line.
     test('a cited line past EOF still reports L4.stale-line-anchor (window is matching-only)', async () => {
         const { fs, path, cleanup } = seedChangeMap(
             '`workflow.ts:99` — closes `registerCancel`',
@@ -3517,7 +3391,7 @@ describe('0625 R4 — Solution change-map anchor drift detection', () => {
         expect(stale[0]?.message).toMatch(/outside file|line 99/);
     });
 
-    test('a missing path still reports L4.stale-line-anchor after the window widens', async () => {
+    test('a missing path still reports L4.stale-line-anchor', async () => {
         const { fs, path, cleanup } = seedChangeMap(
             '`does-not-exist.ts:1` — closes `registerCancel`',
             'export function registerCancel() {}\n',

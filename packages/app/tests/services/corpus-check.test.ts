@@ -14,7 +14,7 @@
  *      is branch-scoped, and the narrow-range control below shows what happens without it.
  */
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
@@ -93,7 +93,7 @@ describe('runCorpusCheck', () => {
                 seen.add(k);
                 return true;
             })
-            .map((f) => ({ ...f, message: undefined, reason: 'fixture', since: '2026-08-10' }));
+            .map((f) => ({ ...f, message: undefined }));
     }
 
     test('reconciles a baselined finding and preserves the result contract', async () => {
@@ -113,19 +113,16 @@ describe('runCorpusCheck', () => {
             baselined: uniqueBaseline(first).length,
             newErrors: [],
             newWarnings: [],
-            staleEntries: [],
             bySeverity: {
                 error: {
                     observed: first.bySeverity.error.observed,
                     baselined: errorEntries.length,
                     newCount: 0,
-                    staleCount: 0,
                 },
                 warning: {
                     observed: first.bySeverity.warning.observed,
                     baselined: warningEntries.length,
                     newCount: 0,
-                    staleCount: 0,
                 },
             },
             duplicateKeys: [],
@@ -151,10 +148,9 @@ describe('runCorpusCheck', () => {
         const result = await runCorpusCheck(root);
         expect(result.duplicateKeys).toHaveLength(1);
         expect(result.duplicateKeys[0]?.count).toBe(2);
-        // No new findings and nothing stale — the gate must still fail, on the duplicate alone.
+        // No new findings — the gate must still fail, on the duplicate alone.
         expect(result.newErrors).toEqual([]);
         expect(result.newWarnings).toEqual([]);
-        expect(result.staleEntries).toEqual([]);
         expect(result.ok).toBe(false);
     });
 
@@ -185,30 +181,27 @@ describe('runCorpusCheck', () => {
         expect(result.ok).toBe(false);
     });
 
-    test('returns new findings and stale baseline entries as failures', async () => {
+    test('fails on new findings; a vanished baseline entry no longer fails', async () => {
         const newRoot = corpusFixture();
         write(newRoot, 'docs/tasks/0001_broken.md', 'not task markdown\n');
         const newResult = await runCorpusCheck(newRoot);
         expect(newResult.ok).toBe(false);
         expect(newResult.newErrors.length).toBeGreaterThan(0);
 
-        const staleRoot = corpusFixture();
-        const stale = {
+        const vanishedRoot = corpusFixture();
+        const vanished = {
             kind: 'task',
             id: '0999',
             code: 'L1.fixture',
             severity: 'error',
-            reason: 'fixture',
-            since: '2026-08-10',
         };
-        writeBaseline(staleRoot, [stale]);
-        expect(await runCorpusCheck(staleRoot)).toMatchObject({
+        writeBaseline(vanishedRoot, [vanished]);
+        expect(await runCorpusCheck(vanishedRoot)).toMatchObject({
             observed: 0,
             baselined: 1,
             newErrors: [],
             newWarnings: [],
-            staleEntries: [stale],
-            ok: false,
+            ok: true,
         });
     });
 
@@ -229,38 +222,6 @@ describe('runCorpusCheck', () => {
         expect(result.bySeverity.warning.newCount).toBe(result.newWarnings.length);
     });
 
-    test('a baselined warning that stops reproducing fails as stale', async () => {
-        const root = corpusFixture();
-        write(root, 'docs/tasks/0001_warn.md', validTaskMd());
-        const observed = await runCorpusCheck(root);
-        const [warning] = observed.newWarnings;
-        expect(warning).toBeDefined();
-        if (warning === undefined) throw new Error('expected a warning finding');
-        writeBaseline(root, [
-            {
-                kind: warning.kind,
-                id: warning.id,
-                code: warning.code,
-                severity: 'warning',
-                reason: 'fixture',
-                since: '2026-08-10',
-            },
-        ]);
-        expect(await runCorpusCheck(root)).toMatchObject({
-            newErrors: [],
-            newWarnings: [],
-            staleEntries: [],
-            ok: true,
-        });
-
-        // Entry no longer reproduces → stale, even though it is a warning
-        write(root, 'docs/tasks/0002_clean.md', validTaskMd('0002'));
-        rmSync(join(root, 'docs/tasks/0001_warn.md'));
-        const staleResult = await runCorpusCheck(root);
-        expect(staleResult.staleEntries.map((e) => e.code)).toContain(warning.code);
-        expect(staleResult.ok).toBe(false);
-    });
-
     test('severity is part of the acceptance contract: a baselined warning does not cover an error', async () => {
         const root = corpusFixture();
         write(root, 'docs/tasks/0001_warn.md', validTaskMd());
@@ -275,15 +236,13 @@ describe('runCorpusCheck', () => {
                 id: warning.id,
                 code: warning.code,
                 severity: 'error',
-                reason: 'fixture',
-                since: '2026-08-10',
             },
         ]);
         const mismatched = await runCorpusCheck(root);
         // Warning still reads as new (error entry does not cover it)
         expect(mismatched.newWarnings.map((w) => w.code)).toContain(warning.code);
-        // And the error entry itself is stale (no error at that key reproduces)
-        expect(mismatched.staleEntries.map((e) => e.code)).toContain(warning.code);
+        // The error entry does not reproduce as an error — under the snapshot gate
+        // that direction is silent by design (ADR-090); only the new-warning half fires.
         expect(mismatched.ok).toBe(false);
     });
 
@@ -713,22 +672,18 @@ describe('loadAcceptedFindings', () => {
     test('loads baseline entries and maps key to baselineSeverity', async () => {
         const root = corpusFixture();
         writeBaseline(root, [
-            { kind: 'task', id: '0001', code: 'L1.schema-validation', reason: 'legacy', since: '2026-08-10' },
+            { kind: 'task', id: '0001', code: 'L1.schema-validation' },
             {
                 kind: 'task',
                 id: '0002',
                 code: 'L4.anchor-subject-mismatch',
                 severity: 'warning',
-                reason: 'warning debt',
-                since: '2026-08-18',
             },
             {
                 kind: 'feature',
                 id: 'F1',
                 code: 'L3.scope-delineation',
                 severity: 'error',
-                reason: 'error debt',
-                since: '2026-08-18',
             },
         ]);
         const accepted = await loadAcceptedFindings(root);
