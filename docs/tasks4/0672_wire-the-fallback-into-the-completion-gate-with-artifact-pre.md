@@ -4,7 +4,7 @@ name: "Wire the fallback into the completion gate with artifact precedence and a
 status: done
 template: feature-impl
 created_at: 2026-08-25T18:05:19.652Z
-updated_at: "2026-08-25T20:51:01.671Z"
+updated_at: "2026-08-28T04:37:27.703Z"
 feature_id: F93
 priority: P1
 dependencies: ["0671"]
@@ -182,7 +182,7 @@ Change-map:
 - fallback and unrecoverable state — `packages/app/src/services/feature-check.ts:672-705` — maps valid parser rows into the existing cache or emits the named task-specific evidence-not-recoverable finding (R1/R3/R4).
 - aggregate consistency — `packages/app/src/services/feature-check.ts:765-819` — requires both stored and canonically recomputed PASS before any matching MET row verifies a scenario, for artifact and tracked-Testing sources alike (R1/R2).
 - finding registry — `packages/config/src/finding-codes.ts:67,137` — retains the canonical `L4.evidence-not-recoverable` code (R3/R4).
-- design contract — `docs/04_DESIGN.md:1578-1581`; `docs/design/feature-check-strict-ac-satisfaction.md:16-73` — records artifact → tracked Testing → unrecoverable precedence outside the command table and updates the detailed AC-satisfaction contract (R7).
+- design contract — `docs/04_DESIGN.md:1798-1801`; `docs/design/feature-check-strict-ac-satisfaction.md:16-73` — records artifact → tracked Testing → unrecoverable precedence outside the command table and updates the detailed AC-satisfaction contract (R7).
 - feature-check tests — `packages/app/tests/services/feature-check.test.ts:2642-2746` — cover fallback, unconditional artifact precedence, aggregate inconsistency for both sources, unrecoverable evidence, PARTIAL, and simple absence (R1–R5).
 
 Why: an authoritative source is useful only if its aggregate agrees with all canonical rows. The existing cache remains the single resolution seam; no database/schema change, second artifact directory, extra I/O pass, dependency, or CLI surface was added (R6).
@@ -199,7 +199,7 @@ Why: an authoritative source is useful only if its aggregate agrees with all can
 | R4 | MET | `packages/app/src/services/feature-check.ts:698` — L4_EVIDENCE_NOT_RECOVERABLE identifies the task and says evidence predates durable recording. |
 | R5 | MET | `packages/app/tests/services/feature-check.test.ts:2739` — simple absence never emits malformed-verdict-artifact. |
 | R6 | MET | `.gitignore:132` — /.spur/run remains ignored; no migration, second artifact directory, dependency, or CLI surface changed. |
-| R7 | MET | `docs/04_DESIGN.md:1578` — artifact → tracked Testing → unrecoverable order is recorded in the same repair; the satellite carries the detailed semantics. |
+| R7 | MET | `docs/04_DESIGN.md:1798` — artifact → tracked Testing → unrecoverable order is recorded in the same repair; the satellite carries the detailed semantics. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
@@ -213,7 +213,7 @@ Why: an authoritative source is useful only if its aggregate agrees with all can
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|---------|
 | P4 | Correctness | `packages/app/src/services/feature-check.ts:672-819` | Review found and closed an inconsistent-PASS path: a matching MET row could verify while a sibling row was UNMET. Artifact and fallback evidence now require stored plus recomputed PASS; no remaining P1–P3 finding. |
-| P4 | Documentation | `docs/04_DESIGN.md:1578`; `docs/design/feature-check-strict-ac-satisfaction.md:16` | The resolution-order sentence no longer splits the command table, and the satellite now documents fallback, unrecoverable evidence, and aggregate consistency. |
+| P4 | Documentation | `docs/04_DESIGN.md:1798`; `docs/design/feature-check-strict-ac-satisfaction.md:16` | The resolution-order sentence no longer splits the command table, and the satellite now documents fallback, unrecoverable evidence, and aggregate consistency. |
 
 **Functional traceability (R1–R7):** all MET — absent artifacts use tracked Testing (R1); present artifacts remain unconditional authority and are never merged (R2); missing/unparseable durable evidence has a distinct non-PASS state (R3/R4); simple absence is non-throwing and never malformed (R5); storage, gitignore, dependency, and CLI boundaries stay intact (R6); both design surfaces now record the fixed order (R7).
 
