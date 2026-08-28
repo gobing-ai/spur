@@ -577,7 +577,7 @@ export class FeatureCheckService extends PlanningCheckService {
                     // The id must be delimited by `-`/`.`/`_`/boundary, so a filename
                     // segment must equal the feature id (feature ids are `[A-Z][0-9]*`,
                     // so the delimiters cannot be alphanumeric).
-                    const segmentRe = new RegExp(`(^|[^A-Za-z0-9])${featureId}([^A-Za-z0-9]|$)`);
+                    const segmentRe = new RegExp(`(^|[^A-Za-z0-9])${featureId}([^A-Za-z0-9]|$)`, 'i');
                     hasDogfood = entries.some((f) => segmentRe.test(f));
                 } catch {
                     // Directory doesn't exist — no dogfood artifact.
