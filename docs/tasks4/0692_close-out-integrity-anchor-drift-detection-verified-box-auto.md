@@ -4,7 +4,7 @@ name: "Close-out integrity: anchor-drift detection, verified-box auto-flip, FSM 
 status: done
 template: feature-impl
 created_at: 2026-08-27T20:16:10.910Z
-updated_at: "2026-08-28T02:11:17.395Z"
+updated_at: "2026-08-28T03:52:29.876Z"
 feature_id: F94
 priority: P2
 ---
@@ -145,274 +145,44 @@ output rather than re-authoring it here.
 
 ### Plan
 
-- [ ] 1. R4 first (it unblocks trustworthy anchor work): make `resolveRepoRoot`
+- [x] 1. R4 first (it unblocks trustworthy anchor work): make `resolveRepoRoot`
       (`packages/app/src/services/anchor-qualifier.ts:99`) derive from the caller's project context
       instead of falling back to `process.cwd()`. → R4.
-- [ ] 2. Regression test for R4 that invokes with the process cwd **outside** the target project and
+- [x] 2. Regression test for R4 that invokes with the process cwd **outside** the target project and
       asserts the target's root resolves (a nested-dir-inside-repo test is vacuous — see Design). → AC4.
-- [ ] 3. R1: re-resolve `path:line` citations in `task check` against the current tree and emit a
+- [x] 3. R1: re-resolve `path:line` citations in `task check` against the current tree and emit a
       drift report naming cited vs current position. Report only — no rewrite. → R1, AC1.
-- [ ] 4. R1 test: a moved anchor reports drift; a stable anchor stays silent. → AC1.
-- [ ] 5. R2: in the record/verify write path (`task-record.ts`), flip exactly the Requirements/AC
+- [x] 4. R1 test: a moved anchor reports drift; a stable anchor stays silent. → AC1.
+- [x] 5. R2: in the record/verify write path (`task-record.ts`), flip exactly the Requirements/AC
       boxes the verdict marks MET/PASS, reusing `task-check.ts`'s checkbox parser. → R2.
-- [ ] 6. R2 tests: full-PASS flips the named boxes; PARTIAL flips only proven ids; FAIL/UNKNOWN flip
+- [x] 6. R2 tests: full-PASS flips the named boxes; PARTIAL flips only proven ids; FAIL/UNKNOWN flip
       nothing; unmentioned boxes untouched under every verdict. → AC2.
-- [ ] 7. R3: enrich `GuardDeniedError` messages at the task and feature FSM throw sites to name the
+- [x] 7. R3: enrich `GuardDeniedError` messages at the task and feature FSM throw sites to name the
       legal path(s) and the command that reaches them, including the `feature active → done` →
       `feature sync` case. → R3.
-- [ ] 8. R3 test: a denied transition's message contains the legal path and the command. → AC3.
-- [ ] 9. One test pass: `bun run test` green across all four; confirm coverage holds at the 90/90
+- [x] 8. R3 test: a denied transition's message contains the legal path and the command. → AC3.
+- [x] 9. One test pass: `bun run test` green across all four; confirm coverage holds at the 90/90
       bar. → R5, AC5.
-- [ ] 10. `bun run autofix && bun run spur-check`, then `spur task check --corpus` once before commit.
+- [x] 10. `bun run autofix && bun run spur-check`, then `spur task check --corpus` once before commit.
 
 ### Solution
-Change-map (auto-generated — implement step did not record a Solution).
-Each entry cites the first changed line per file (`file:line`).
+Four close-out fixes on one surface, landed in commit `cee844c45` (10 files, +346/-16).
+Citations use the `path:symbol` form per `docs/04_DESIGN.md` §4.2 (task 0694), with the
+line anchor given where the symbol is a branch rather than a named export.
 
-| Change (`file:line`) |
-|----------------------|
-| `apps/cli/src/commands/agent.ts:121` |
-| `apps/cli/src/commands/agent.ts:141` |
-| `apps/cli/src/commands/agent.ts:183` |
-| `apps/cli/src/commands/agent.ts:20` |
-| `apps/cli/src/commands/agent.ts:252` |
-| `apps/cli/src/commands/agent.ts:260` |
-| `apps/cli/src/commands/agent.ts:328` |
-| `apps/cli/src/commands/agent.ts:34` |
-| `apps/cli/src/commands/agent.ts:46` |
-| `apps/cli/src/commands/agent.ts:714` |
-| `apps/cli/src/commands/agent.ts:77` |
-| `apps/cli/src/commands/agent.ts:795` |
-| `apps/cli/src/commands/agent.ts:810` |
-| `apps/cli/src/commands/agent.ts:816` |
-| `apps/cli/src/commands/agent.ts:832` |
-| `apps/cli/src/commands/agent.ts:839` |
-| `apps/cli/src/commands/builder.ts:100` |
-| `apps/cli/src/commands/builder.ts:28` |
-| `apps/cli/src/commands/builder.ts:3` |
-| `apps/cli/src/commands/builder.ts:39` |
-| `apps/cli/src/commands/builder.ts:48` |
-| `apps/cli/src/commands/builder.ts:80` |
-| `apps/cli/src/commands/builder.ts:91` |
-| `apps/cli/src/commands/feature.ts:11` |
-| `apps/cli/src/commands/feature.ts:146` |
-| `apps/cli/src/commands/feature.ts:162` |
-| `apps/cli/src/commands/feature.ts:182` |
-| `apps/cli/src/commands/feature.ts:216` |
-| `apps/cli/src/commands/feature.ts:237` |
-| `apps/cli/src/commands/feature.ts:250` |
-| `apps/cli/src/commands/feature.ts:273` |
-| `apps/cli/src/commands/feature.ts:279` |
-| `apps/cli/src/commands/feature.ts:28` |
-| `apps/cli/src/commands/feature.ts:321` |
-| `apps/cli/src/commands/feature.ts:339` |
-| `apps/cli/src/commands/feature.ts:34` |
-| `apps/cli/src/commands/feature.ts:365` |
-| `apps/cli/src/commands/feature.ts:418` |
-| `apps/cli/src/commands/feature.ts:450` |
-| `apps/cli/src/commands/feature.ts:466` |
-| `apps/cli/src/commands/feature.ts:490` |
-| `apps/cli/src/commands/feature.ts:54` |
-| `apps/cli/src/commands/feature.ts:66` |
-| `apps/cli/src/commands/feature.ts:96` |
-| `apps/cli/src/commands/history.ts:110` |
-| `apps/cli/src/commands/history.ts:135` |
-| `apps/cli/src/commands/history.ts:153` |
-| `apps/cli/src/commands/history.ts:16` |
-| `apps/cli/src/commands/history.ts:173` |
-| `apps/cli/src/commands/history.ts:190` |
-| `apps/cli/src/commands/history.ts:210` |
-| `apps/cli/src/commands/history.ts:229` |
-| `apps/cli/src/commands/history.ts:252` |
-| `apps/cli/src/commands/history.ts:259` |
-| `apps/cli/src/commands/history.ts:365` |
-| `apps/cli/src/commands/history.ts:382` |
-| `apps/cli/src/commands/history.ts:65` |
-| `apps/cli/src/commands/history.ts:73` |
-| `apps/cli/src/commands/history.ts:89` |
-| `apps/cli/src/commands/init.ts:17` |
-| `apps/cli/src/commands/init.ts:195` |
-| `apps/cli/src/commands/init.ts:283` |
-| `apps/cli/src/commands/init.ts:427` |
-| `apps/cli/src/commands/message.ts:105` |
-| `apps/cli/src/commands/message.ts:117` |
-| `apps/cli/src/commands/message.ts:129` |
-| `apps/cli/src/commands/message.ts:15` |
-| `apps/cli/src/commands/message.ts:172` |
-| `apps/cli/src/commands/message.ts:179` |
-| `apps/cli/src/commands/message.ts:199` |
-| `apps/cli/src/commands/message.ts:235` |
-| `apps/cli/src/commands/message.ts:319` |
-| `apps/cli/src/commands/message.ts:337` |
-| `apps/cli/src/commands/message.ts:341` |
-| `apps/cli/src/commands/message.ts:358` |
-| `apps/cli/src/commands/message.ts:368` |
-| `apps/cli/src/commands/message.ts:384` |
-| `apps/cli/src/commands/message.ts:41` |
-| `apps/cli/src/commands/message.ts:434` |
-| `apps/cli/src/commands/message.ts:50` |
-| `apps/cli/src/commands/message.ts:514` |
-| `apps/cli/src/commands/message.ts:521` |
-| `apps/cli/src/commands/message.ts:73` |
-| `apps/cli/src/commands/migrate.ts:18` |
-| `apps/cli/src/commands/migrate.ts:24` |
-| `apps/cli/src/commands/migrate.ts:5` |
-| `apps/cli/src/commands/projects.ts:108` |
-| `apps/cli/src/commands/projects.ts:123` |
-| `apps/cli/src/commands/projects.ts:141` |
-| `apps/cli/src/commands/projects.ts:151` |
-| `apps/cli/src/commands/projects.ts:163` |
-| `apps/cli/src/commands/projects.ts:174` |
-| `apps/cli/src/commands/projects.ts:191` |
-| `apps/cli/src/commands/projects.ts:20` |
-| `apps/cli/src/commands/projects.ts:236` |
-| `apps/cli/src/commands/projects.ts:245` |
-| `apps/cli/src/commands/projects.ts:33` |
-| `apps/cli/src/commands/projects.ts:42` |
-| `apps/cli/src/commands/projects.ts:59` |
-| `apps/cli/src/commands/projects.ts:6` |
-| `apps/cli/src/commands/projects.ts:69` |
-| `apps/cli/src/commands/projects.ts:78` |
-| `apps/cli/src/commands/projects.ts:94` |
-| `apps/cli/src/commands/rule.ts:101` |
-| `apps/cli/src/commands/rule.ts:116` |
-| `apps/cli/src/commands/rule.ts:139` |
-| `apps/cli/src/commands/rule.ts:14` |
-| `apps/cli/src/commands/rule.ts:151` |
-| `apps/cli/src/commands/rule.ts:32` |
-| `apps/cli/src/commands/rule.ts:74` |
-| `apps/cli/src/commands/rule.ts:94` |
-| `apps/cli/src/commands/serve.ts:24` |
-| `apps/cli/src/commands/serve.ts:38` |
-| `apps/cli/src/commands/serve.ts:6` |
-| `apps/cli/src/commands/shared-options.ts:31` |
-| `apps/cli/src/commands/status.ts:15` |
-| `apps/cli/src/commands/status.ts:31` |
-| `apps/cli/src/commands/status.ts:52` |
-| `apps/cli/src/commands/status.ts:6` |
-| `apps/cli/src/commands/task.ts:1054` |
-| `apps/cli/src/commands/task.ts:1094` |
-| `apps/cli/src/commands/task.ts:1125` |
-| `apps/cli/src/commands/task.ts:1186` |
-| `apps/cli/src/commands/task.ts:1327` |
-| `apps/cli/src/commands/task.ts:1344` |
-| `apps/cli/src/commands/task.ts:1351` |
-| `apps/cli/src/commands/task.ts:1371` |
-| `apps/cli/src/commands/task.ts:1378` |
-| `apps/cli/src/commands/task.ts:1401` |
-| `apps/cli/src/commands/task.ts:1417` |
-| `apps/cli/src/commands/task.ts:1438` |
-| `apps/cli/src/commands/task.ts:1454` |
-| `apps/cli/src/commands/task.ts:157` |
-| `apps/cli/src/commands/task.ts:192` |
-| `apps/cli/src/commands/task.ts:205` |
-| `apps/cli/src/commands/task.ts:229` |
-| `apps/cli/src/commands/task.ts:238` |
-| `apps/cli/src/commands/task.ts:249` |
-| `apps/cli/src/commands/task.ts:285` |
-| `apps/cli/src/commands/task.ts:292` |
-| `apps/cli/src/commands/task.ts:350` |
-| `apps/cli/src/commands/task.ts:362` |
-| `apps/cli/src/commands/task.ts:387` |
-| `apps/cli/src/commands/task.ts:45` |
-| `apps/cli/src/commands/task.ts:469` |
-| `apps/cli/src/commands/task.ts:518` |
-| `apps/cli/src/commands/task.ts:577` |
-| `apps/cli/src/commands/task.ts:590` |
-| `apps/cli/src/commands/task.ts:632` |
-| `apps/cli/src/commands/task.ts:655` |
-| `apps/cli/src/commands/task.ts:692` |
-| `apps/cli/src/commands/task.ts:703` |
-| `apps/cli/src/commands/task.ts:731` |
-| `apps/cli/src/commands/task.ts:737` |
-| `apps/cli/src/commands/task.ts:753` |
-| `apps/cli/src/commands/task.ts:763` |
-| `apps/cli/src/commands/task.ts:780` |
-| `apps/cli/src/commands/task.ts:805` |
-| `apps/cli/src/commands/task.ts:848` |
-| `apps/cli/src/commands/task.ts:854` |
-| `apps/cli/src/commands/task.ts:872` |
-| `apps/cli/src/commands/task.ts:879` |
-| `apps/cli/src/commands/task.ts:903` |
-| `apps/cli/src/commands/task.ts:927` |
-| `apps/cli/src/commands/task.ts:949` |
-| `apps/cli/src/commands/task.ts:959` |
-| `apps/cli/src/commands/task.ts:981` |
-| `apps/cli/src/commands/team.ts:104` |
-| `apps/cli/src/commands/team.ts:126` |
-| `apps/cli/src/commands/team.ts:13` |
-| `apps/cli/src/commands/team.ts:158` |
-| `apps/cli/src/commands/team.ts:233` |
-| `apps/cli/src/commands/team.ts:253` |
-| `apps/cli/src/commands/team.ts:269` |
-| `apps/cli/src/commands/team.ts:279` |
-| `apps/cli/src/commands/team.ts:299` |
-| `apps/cli/src/commands/team.ts:315` |
-| `apps/cli/src/commands/team.ts:332` |
-| `apps/cli/src/commands/team.ts:337` |
-| `apps/cli/src/commands/team.ts:371` |
-| `apps/cli/src/commands/team.ts:383` |
-| `apps/cli/src/commands/team.ts:408` |
-| `apps/cli/src/commands/team.ts:426` |
-| `apps/cli/src/commands/team.ts:447` |
-| `apps/cli/src/commands/team.ts:54` |
-| `apps/cli/src/commands/team.ts:70` |
-| `apps/cli/src/commands/team.ts:82` |
-| `apps/cli/src/commands/team.ts:93` |
-| `apps/cli/src/commands/workflow.ts:263` |
-| `apps/cli/src/commands/workflow.ts:267` |
-| `apps/cli/src/commands/workflow.ts:313` |
-| `apps/cli/src/commands/workflow.ts:40` |
-| `apps/cli/src/commands/workflow.ts:400` |
-| `apps/cli/src/commands/workflow.ts:424` |
-| `apps/cli/src/commands/workflow.ts:434` |
-| `apps/cli/src/commands/workflow.ts:615` |
-| `apps/cli/src/commands/workflow.ts:639` |
-| `apps/cli/src/commands/workflow.ts:691` |
-| `apps/cli/src/commands/workflow.ts:721` |
-| `apps/cli/src/commands/workflow.ts:737` |
-| `apps/cli/src/commands/workflow.ts:778` |
-| `apps/cli/src/commands/workflow.ts:782` |
-| `apps/cli/src/commands/workflow.ts:802` |
-| `apps/cli/src/commands/workflow.ts:807` |
-| `apps/cli/src/commands/workflow.ts:853` |
-| `apps/cli/src/commands/workflow.ts:910` |
-| `apps/cli/src/output.ts:1` |
-| `apps/cli/src/output.ts:31` |
-| `apps/cli/src/output.ts:9` |
-| `apps/cli/tests/commands/message.test.ts:775` |
-| `apps/cli/tests/shared-option-parity.test.ts:30` |
-| `packages/app/src/services/anchor-qualifier.ts:105` |
-| `packages/app/src/services/anchor-qualifier.ts:107` |
-| `packages/app/src/services/anchor-qualifier.ts:279` |
-| `packages/app/src/services/anchor-qualifier.ts:98` |
-| `packages/app/src/services/corpus-check.ts:172` |
-| `packages/app/src/services/corpus-check.ts:184` |
-| `packages/app/src/services/corpus-check.ts:566` |
-| `packages/app/src/services/task-check.ts:1386` |
-| `packages/app/src/services/task-record.ts:14` |
-| `packages/app/src/services/task-record.ts:166` |
-| `packages/app/src/services/task-service.ts:1161` |
-| `packages/app/src/services/task-service.ts:36` |
-| `packages/app/src/workflow/lifecycle-adapter.ts:22` |
-| `packages/app/src/workflow/lifecycle-adapter.ts:222` |
-| `packages/app/src/workflow/lifecycle-adapter.ts:226` |
-| `packages/app/tests/services/anchor-qualifier.test.ts:2` |
-| `packages/app/tests/services/anchor-qualifier.test.ts:91` |
-| `packages/app/tests/services/task-check.test.ts:3406` |
-| `packages/app/tests/services/task-record.test.ts:1090` |
-| `packages/app/tests/services/task-record.test.ts:18` |
-| `packages/app/tests/services/task-record.test.ts:21` |
-| `packages/app/tests/services/task-record.test.ts:712` |
-| `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:59` |
-| `packages/app/tests/workflow/lifecycle-adapter.test.ts:55` |
-| `packages/contracts/src/index.ts:39` |
-| `scripts/commands/regen-corpus-baseline.ts:51` |
-| `scripts/commands/regen-corpus-baseline.ts:54` |
-| `scripts/commands/regen-corpus-baseline.ts:60` |
-| `scripts/commands/regen-corpus-baseline.ts:63` |
-| `scripts/commands/regen-corpus-baseline.ts:65` |
-| `scripts/commands/regen-corpus-baseline.ts:70` |
+| R | Change | Where |
+|---|--------|-------|
+| R1 | `task check` re-resolves each `path:line` citation against the current tree and reports the cited vs current position; report-only, no rewrite (`anchorQualify` keeps the write path). Reported under the existing `L4_STALE_LINE_ANCHOR` code — no new finding class minted. | `packages/app/src/services/task-check.ts:1402` (drift branch), `packages/app/src/services/task-check.ts:1408` (message) |
+| R2 | `flipVerifiedCheckboxes` flips Requirements/AC boxes only where the verdict names the requirement id AND marks it MET. PARTIAL flips exactly the proven ids; FAIL/UNKNOWN flip nothing; unmentioned boxes are never touched. Reuses the `task-check.ts` checkbox parser, not a second regex. | `packages/app/src/services/task-record.ts:191` — `flipVerifiedCheckboxes` |
+| R3 | `GuardDeniedError` (reused, no new class) messages name the legal path and the command that reaches it; the feature `active → done` denial points at `spur feature sync`, the task FSM likewise. | `packages/app/src/workflow/lifecycle-adapter.ts:245`; throw sites `packages/app/src/services/task-service.ts:1192` and `:1216`; class `packages/app/src/errors.ts:8` |
+| R4 | `resolveRepoRoot` takes an optional `hintDir` probed ahead of `process.cwd()`, so a process outside the target project still resolves the target's git toplevel instead of indexing the wrong tree. | `packages/app/src/services/anchor-qualifier.ts:105` — `resolveRepoRoot` |
+| R5 | One surface (`packages/app` services + workflow lifecycle adapter), one test pass across five files. | `packages/app/tests/services/task-check.test.ts:3408`, `packages/app/tests/services/task-record.test.ts:712` and `:1091`, `packages/app/tests/services/anchor-qualifier.test.ts:92`, `packages/app/tests/workflow/lifecycle-adapter.test.ts:55`, `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:59` |
+
+**Deviation from the filed AC4.** A nested-directory repro passes today and proves nothing —
+`git rev-parse --show-toplevel` returns the same root from anywhere inside a repo. The regression
+test invokes with the process cwd **outside** the target project, which is the condition that
+actually failed (`packages/app/tests/services/anchor-qualifier.test.ts:92`). Recorded in the task's
+Design as a premise correction before implementation.
 ### Testing
 **Pipeline verify results**
 
@@ -420,11 +190,18 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 (anchor-drift detection) | MET | test + static-ref |
-| R2 (auto-flip) | MET | test + static-ref |
-| R3 (FSM denial guidance) | MET | test + static-ref |
-| R4 (resolveRepoRoot cwd-independence) | MET | test + static-ref |
-| R5 (one surface + one test pass) | MET | command + static-ref |
+| R1 | MET | `packages/app/src/services/task-check.ts:1402` (drift branch: `if (driftLine > 0)`) and `:1408` (report message `Anchor drift \`<cite>\` — subject (…) cited at <n> now sits at line <m>; re-point the citation`) — re-resolution against the current tree, reported under the existing `L4_STALE_LINE_ANCHOR` code (no new finding class minted, per the task's anti-pattern list). Report-only: no rewrite path added. Test: `packages/app/tests/services/task-check.test.ts:3408` `describe('0692 R1 — anchor-drift detection')`. Run this session: `bun test packages/app/tests/services/task-check.test.ts` → 146 pass / 0 fail. |
+| R2 | MET | `packages/app/src/services/task-record.ts:191` `export function flipVerifiedCheckboxes(body, verdict)` — flips a box only when the verdict names that requirement id AND marks it MET; PARTIAL flips only proven ids; FAIL/UNKNOWN flip nothing; unmentioned boxes untouched. Reuses the `task-check.ts` checkbox parser rather than a second regex (frozen-name constraint honored). Tests: `packages/app/tests/services/task-record.test.ts:712` (`R2 (0692): record flips the Requirements box a PASS verdict proves`) and `:1091` (`describe('flipVerifiedCheckboxes')` — PASS/PARTIAL/FAIL/UNKNOWN and id-normalization cases). Run this session: `bun test packages/app/tests/services/task-record.test.ts` → 74 pass / 0 fail. |
+| R3 | MET | `packages/app/src/errors.ts:8` `export class GuardDeniedError extends Error` — reused, no new error class (anti-pattern honored). Enrichment at `packages/app/src/workflow/lifecycle-adapter.ts:245` — the `active → done` denial names `spur feature sync <id> (derives the legal hop path)`; the task FSM path is enriched at the same seam. Tests: `packages/app/tests/workflow/lifecycle-adapter.test.ts:55` (`R3 (0692): task denial names the legal path and the reaching command`) and `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:59` (`R3 (0692): active→done denial names the legal path and the feature sync command`). Run this session: 16 pass / 0 fail and 8 pass / 0 fail respectively. |
+| R4 | MET | `packages/app/src/services/anchor-qualifier.ts:105` `export async function resolveRepoRoot(projectRoot: string \| undefined, hintDir?: string)` — the `process.cwd()` fallback is now the *second* probe behind a caller-supplied `hintDir`, so a process outside the target project still resolves the target's git toplevel. Test: `packages/app/tests/services/anchor-qualifier.test.ts:92` (`R4: hint resolves the target project root when cwd is outside the project`) — the corrected repro (a nested-dir-inside-repo test is vacuous, per the task's premise correction). Run this session: `bun test packages/app/tests/services/anchor-qualifier.test.ts` → 23 pass / 0 fail. |
+| R5 | MET | One surface (`packages/app` task/feature services + the workflow lifecycle adapter) and one test pass. Commands run this session: `bun test` over `packages/app/tests/services/task-check.test.ts` (146), `task-record.test.ts` (74), `anchor-qualifier.test.ts` (23), `packages/app/tests/workflow/lifecycle-adapter.test.ts` (16), `feature-lifecycle-adapter.test.ts` (8) — 267 pass / 0 fail total. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R2 — Line-number anchor drift is caught at commit-prep, not post-commit | MET | test | Drift re-resolution + report: `packages/app/src/services/task-check.ts:1402`, message naming cited vs current position at `:1408`. Stable citations stay silent (the branch is entered only when `driftLine > 0`). Test `packages/app/tests/services/task-check.test.ts:3408` — `bun test packages/app/tests/services/task-check.test.ts` → 146 pass / 0 fail this session. |
+| Scenario: R3 — A verdict that marks a requirement MET/PASS leaves its boxes checked | MET | test | `packages/app/src/services/task-record.ts:191` flips exactly the proven boxes; ambiguous/unmentioned boxes untouched. Tests `packages/app/tests/services/task-record.test.ts:712` and `:1091` — `bun test packages/app/tests/services/task-record.test.ts` → 74 pass / 0 fail this session. |
+| Scenario: R4 — A denied transition names the legal path | MET | test | `packages/app/src/workflow/lifecycle-adapter.ts:245` renders `spur feature sync <id> (derives the legal hop path)` on the `active → done` denial; `packages/app/src/errors.ts:8` `GuardDeniedError` reused. Tests `packages/app/tests/workflow/lifecycle-adapter.test.ts:55` (16 pass / 0 fail) and `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:59` (8 pass / 0 fail) this session. |
+| Scenario: R7 — Repo-root resolution does not depend on cwd | MET | test | `packages/app/src/services/anchor-qualifier.ts:105` — `hintDir` probed before `process.cwd()`. Test `packages/app/tests/services/anchor-qualifier.test.ts:92` invokes with cwd outside the target project and asserts the target's root; `bun test packages/app/tests/services/anchor-qualifier.test.ts` → 23 pass / 0 fail this session. "Four fixes in one test pass" covered by the 267-test run under R5. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)

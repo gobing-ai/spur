@@ -4,7 +4,7 @@ name: "Docs consolidation — 0688 friction review: symbol anchors and sweep-onc
 status: done
 template: feature-impl
 created_at: 2026-08-27T20:16:10.953Z
-updated_at: "2026-08-28T03:14:26.259Z"
+updated_at: "2026-08-28T03:33:18.729Z"
 feature_id: F94
 priority: P3
 dependencies: ["0691"]
@@ -13,14 +13,12 @@ dependencies: ["0691"]
 ## 0694. Docs consolidation — 0688 friction review: symbol anchors and sweep-once discipline
 
 ### Background
-
 Two documentation riders from the 0688 friction review (2026-08-27), consolidated into one docs pass landing in `docs/04_DESIGN.md` + the verification-gate docs:
 
-- **Symbol-anchor convention:** prefer `path:symbol` over `path:line` — line anchors rot (0606 precedent: `eval-pipeline.ts:528` drifted to `:562`; PROMOTION_BAR_PROPOSAL move).
+- **Symbol-anchor convention:** prefer `path:symbol` over `path:line` — line anchors rot (0606 precedent: an `eval-pipeline.ts` citation drifted 34 lines after an unrelated edit and was caught only post-commit; PROMOTION_BAR_PROPOSAL move). The precedent is quoted without its line numbers on purpose: it is narrative, not evidence, and re-anchoring it every time the file moves is the churn this task removes.
 - **Sweep-once discipline:** iterate with single-task `spur task check <wbs>`; run the `task check --corpus` sweep once, at commit-prep — 17 sweeps × ~60s ≈ 17 min burned in the 0688 session.
 
 Sequencing: the gate docs depend on the corpus gate & baseline simplification ADR outcome (dependency wired to that task), so this task starts after it.
-
 ### Requirements
 
 - [x] R1. **Symbol-anchor citation convention** — document in the authoring guidance that owns
@@ -134,295 +132,30 @@ entirely. If the approved option retires the baseline, relocate the dated note i
       exception, and the dated note; `AGENTS.md` reaches the constitution rule. Run
       `spur task check --corpus` once before the commit. → AC1, AC2, AC3.
 ### Solution
-Change-map (auto-generated — implement step did not record a Solution).
-Each entry cites the first changed line per file (`file:line`).
+Documentation-only pass. Both conventions landed together in commit `a93ebd05c`
+(`AGENTS.md` +5, `docs/04_DESIGN.md` +160, `docs/99_PROJECT_CONSTITUTION.md` +10/-9). The dated
+corpus note rode the baseline regeneration in `42c4aabbc`, because `config/corpus-baseline.json`
+is machine-generated and cannot be hand-edited.
 
-| Change (`file:line`) |
-|----------------------|
-| `apps/cli/src/commands/agent.ts:121` |
-| `apps/cli/src/commands/agent.ts:141` |
-| `apps/cli/src/commands/agent.ts:183` |
-| `apps/cli/src/commands/agent.ts:20` |
-| `apps/cli/src/commands/agent.ts:252` |
-| `apps/cli/src/commands/agent.ts:260` |
-| `apps/cli/src/commands/agent.ts:328` |
-| `apps/cli/src/commands/agent.ts:334` |
-| `apps/cli/src/commands/agent.ts:34` |
-| `apps/cli/src/commands/agent.ts:424` |
-| `apps/cli/src/commands/agent.ts:46` |
-| `apps/cli/src/commands/agent.ts:714` |
-| `apps/cli/src/commands/agent.ts:77` |
-| `apps/cli/src/commands/agent.ts:795` |
-| `apps/cli/src/commands/agent.ts:810` |
-| `apps/cli/src/commands/agent.ts:816` |
-| `apps/cli/src/commands/agent.ts:832` |
-| `apps/cli/src/commands/agent.ts:839` |
-| `apps/cli/src/commands/builder.ts:100` |
-| `apps/cli/src/commands/builder.ts:28` |
-| `apps/cli/src/commands/builder.ts:3` |
-| `apps/cli/src/commands/builder.ts:39` |
-| `apps/cli/src/commands/builder.ts:48` |
-| `apps/cli/src/commands/builder.ts:80` |
-| `apps/cli/src/commands/builder.ts:91` |
-| `apps/cli/src/commands/feature.ts:11` |
-| `apps/cli/src/commands/feature.ts:146` |
-| `apps/cli/src/commands/feature.ts:149` |
-| `apps/cli/src/commands/feature.ts:162` |
-| `apps/cli/src/commands/feature.ts:182` |
-| `apps/cli/src/commands/feature.ts:216` |
-| `apps/cli/src/commands/feature.ts:224` |
-| `apps/cli/src/commands/feature.ts:237` |
-| `apps/cli/src/commands/feature.ts:250` |
-| `apps/cli/src/commands/feature.ts:259` |
-| `apps/cli/src/commands/feature.ts:273` |
-| `apps/cli/src/commands/feature.ts:279` |
-| `apps/cli/src/commands/feature.ts:28` |
-| `apps/cli/src/commands/feature.ts:292` |
-| `apps/cli/src/commands/feature.ts:321` |
-| `apps/cli/src/commands/feature.ts:339` |
-| `apps/cli/src/commands/feature.ts:34` |
-| `apps/cli/src/commands/feature.ts:350` |
-| `apps/cli/src/commands/feature.ts:365` |
-| `apps/cli/src/commands/feature.ts:39` |
-| `apps/cli/src/commands/feature.ts:418` |
-| `apps/cli/src/commands/feature.ts:422` |
-| `apps/cli/src/commands/feature.ts:450` |
-| `apps/cli/src/commands/feature.ts:466` |
-| `apps/cli/src/commands/feature.ts:490` |
-| `apps/cli/src/commands/feature.ts:505` |
-| `apps/cli/src/commands/feature.ts:54` |
-| `apps/cli/src/commands/feature.ts:66` |
-| `apps/cli/src/commands/feature.ts:71` |
-| `apps/cli/src/commands/feature.ts:96` |
-| `apps/cli/src/commands/history.ts:123` |
-| `apps/cli/src/commands/history.ts:154` |
-| `apps/cli/src/commands/history.ts:16` |
-| `apps/cli/src/commands/history.ts:172` |
-| `apps/cli/src/commands/history.ts:192` |
-| `apps/cli/src/commands/history.ts:209` |
-| `apps/cli/src/commands/history.ts:229` |
-| `apps/cli/src/commands/history.ts:248` |
-| `apps/cli/src/commands/history.ts:274` |
-| `apps/cli/src/commands/history.ts:281` |
-| `apps/cli/src/commands/history.ts:387` |
-| `apps/cli/src/commands/history.ts:404` |
-| `apps/cli/src/commands/history.ts:65` |
-| `apps/cli/src/commands/history.ts:73` |
-| `apps/cli/src/commands/history.ts:96` |
-| `apps/cli/src/commands/init.ts:17` |
-| `apps/cli/src/commands/init.ts:195` |
-| `apps/cli/src/commands/init.ts:283` |
-| `apps/cli/src/commands/init.ts:427` |
-| `apps/cli/src/commands/message.ts:105` |
-| `apps/cli/src/commands/message.ts:117` |
-| `apps/cli/src/commands/message.ts:129` |
-| `apps/cli/src/commands/message.ts:15` |
-| `apps/cli/src/commands/message.ts:172` |
-| `apps/cli/src/commands/message.ts:179` |
-| `apps/cli/src/commands/message.ts:199` |
-| `apps/cli/src/commands/message.ts:235` |
-| `apps/cli/src/commands/message.ts:319` |
-| `apps/cli/src/commands/message.ts:337` |
-| `apps/cli/src/commands/message.ts:341` |
-| `apps/cli/src/commands/message.ts:358` |
-| `apps/cli/src/commands/message.ts:368` |
-| `apps/cli/src/commands/message.ts:384` |
-| `apps/cli/src/commands/message.ts:41` |
-| `apps/cli/src/commands/message.ts:434` |
-| `apps/cli/src/commands/message.ts:50` |
-| `apps/cli/src/commands/message.ts:514` |
-| `apps/cli/src/commands/message.ts:521` |
-| `apps/cli/src/commands/message.ts:73` |
-| `apps/cli/src/commands/migrate.ts:18` |
-| `apps/cli/src/commands/migrate.ts:24` |
-| `apps/cli/src/commands/migrate.ts:5` |
-| `apps/cli/src/commands/projects.ts:108` |
-| `apps/cli/src/commands/projects.ts:123` |
-| `apps/cli/src/commands/projects.ts:141` |
-| `apps/cli/src/commands/projects.ts:151` |
-| `apps/cli/src/commands/projects.ts:163` |
-| `apps/cli/src/commands/projects.ts:174` |
-| `apps/cli/src/commands/projects.ts:191` |
-| `apps/cli/src/commands/projects.ts:20` |
-| `apps/cli/src/commands/projects.ts:236` |
-| `apps/cli/src/commands/projects.ts:245` |
-| `apps/cli/src/commands/projects.ts:33` |
-| `apps/cli/src/commands/projects.ts:42` |
-| `apps/cli/src/commands/projects.ts:59` |
-| `apps/cli/src/commands/projects.ts:6` |
-| `apps/cli/src/commands/projects.ts:69` |
-| `apps/cli/src/commands/projects.ts:78` |
-| `apps/cli/src/commands/projects.ts:94` |
-| `apps/cli/src/commands/rule.ts:101` |
-| `apps/cli/src/commands/rule.ts:116` |
-| `apps/cli/src/commands/rule.ts:139` |
-| `apps/cli/src/commands/rule.ts:14` |
-| `apps/cli/src/commands/rule.ts:151` |
-| `apps/cli/src/commands/rule.ts:159` |
-| `apps/cli/src/commands/rule.ts:32` |
-| `apps/cli/src/commands/rule.ts:74` |
-| `apps/cli/src/commands/rule.ts:94` |
-| `apps/cli/src/commands/serve.ts:24` |
-| `apps/cli/src/commands/serve.ts:38` |
-| `apps/cli/src/commands/serve.ts:6` |
-| `apps/cli/src/commands/serve.ts:61` |
-| `apps/cli/src/commands/shared-options.ts:31` |
-| `apps/cli/src/commands/status.ts:15` |
-| `apps/cli/src/commands/status.ts:22` |
-| `apps/cli/src/commands/status.ts:31` |
-| `apps/cli/src/commands/status.ts:52` |
-| `apps/cli/src/commands/status.ts:6` |
-| `apps/cli/src/commands/task.ts:1054` |
-| `apps/cli/src/commands/task.ts:1061` |
-| `apps/cli/src/commands/task.ts:1074` |
-| `apps/cli/src/commands/task.ts:1094` |
-| `apps/cli/src/commands/task.ts:1125` |
-| `apps/cli/src/commands/task.ts:1186` |
-| `apps/cli/src/commands/task.ts:1327` |
-| `apps/cli/src/commands/task.ts:1333` |
-| `apps/cli/src/commands/task.ts:1344` |
-| `apps/cli/src/commands/task.ts:1351` |
-| `apps/cli/src/commands/task.ts:1360` |
-| `apps/cli/src/commands/task.ts:1371` |
-| `apps/cli/src/commands/task.ts:1378` |
-| `apps/cli/src/commands/task.ts:1387` |
-| `apps/cli/src/commands/task.ts:1401` |
-| `apps/cli/src/commands/task.ts:1417` |
-| `apps/cli/src/commands/task.ts:1426` |
-| `apps/cli/src/commands/task.ts:1438` |
-| `apps/cli/src/commands/task.ts:1454` |
-| `apps/cli/src/commands/task.ts:1464` |
-| `apps/cli/src/commands/task.ts:157` |
-| `apps/cli/src/commands/task.ts:192` |
-| `apps/cli/src/commands/task.ts:205` |
-| `apps/cli/src/commands/task.ts:229` |
-| `apps/cli/src/commands/task.ts:238` |
-| `apps/cli/src/commands/task.ts:249` |
-| `apps/cli/src/commands/task.ts:269` |
-| `apps/cli/src/commands/task.ts:285` |
-| `apps/cli/src/commands/task.ts:292` |
-| `apps/cli/src/commands/task.ts:299` |
-| `apps/cli/src/commands/task.ts:350` |
-| `apps/cli/src/commands/task.ts:362` |
-| `apps/cli/src/commands/task.ts:387` |
-| `apps/cli/src/commands/task.ts:45` |
-| `apps/cli/src/commands/task.ts:469` |
-| `apps/cli/src/commands/task.ts:518` |
-| `apps/cli/src/commands/task.ts:553` |
-| `apps/cli/src/commands/task.ts:577` |
-| `apps/cli/src/commands/task.ts:590` |
-| `apps/cli/src/commands/task.ts:601` |
-| `apps/cli/src/commands/task.ts:632` |
-| `apps/cli/src/commands/task.ts:655` |
-| `apps/cli/src/commands/task.ts:677` |
-| `apps/cli/src/commands/task.ts:692` |
-| `apps/cli/src/commands/task.ts:703` |
-| `apps/cli/src/commands/task.ts:722` |
-| `apps/cli/src/commands/task.ts:731` |
-| `apps/cli/src/commands/task.ts:737` |
-| `apps/cli/src/commands/task.ts:742` |
-| `apps/cli/src/commands/task.ts:753` |
-| `apps/cli/src/commands/task.ts:763` |
-| `apps/cli/src/commands/task.ts:770` |
-| `apps/cli/src/commands/task.ts:780` |
-| `apps/cli/src/commands/task.ts:805` |
-| `apps/cli/src/commands/task.ts:837` |
-| `apps/cli/src/commands/task.ts:848` |
-| `apps/cli/src/commands/task.ts:854` |
-| `apps/cli/src/commands/task.ts:861` |
-| `apps/cli/src/commands/task.ts:872` |
-| `apps/cli/src/commands/task.ts:879` |
-| `apps/cli/src/commands/task.ts:903` |
-| `apps/cli/src/commands/task.ts:927` |
-| `apps/cli/src/commands/task.ts:934` |
-| `apps/cli/src/commands/task.ts:949` |
-| `apps/cli/src/commands/task.ts:959` |
-| `apps/cli/src/commands/task.ts:969` |
-| `apps/cli/src/commands/task.ts:981` |
-| `apps/cli/src/commands/task.ts:990` |
-| `apps/cli/src/commands/team.ts:104` |
-| `apps/cli/src/commands/team.ts:126` |
-| `apps/cli/src/commands/team.ts:13` |
-| `apps/cli/src/commands/team.ts:158` |
-| `apps/cli/src/commands/team.ts:233` |
-| `apps/cli/src/commands/team.ts:253` |
-| `apps/cli/src/commands/team.ts:269` |
-| `apps/cli/src/commands/team.ts:279` |
-| `apps/cli/src/commands/team.ts:299` |
-| `apps/cli/src/commands/team.ts:315` |
-| `apps/cli/src/commands/team.ts:332` |
-| `apps/cli/src/commands/team.ts:337` |
-| `apps/cli/src/commands/team.ts:371` |
-| `apps/cli/src/commands/team.ts:383` |
-| `apps/cli/src/commands/team.ts:392` |
-| `apps/cli/src/commands/team.ts:408` |
-| `apps/cli/src/commands/team.ts:426` |
-| `apps/cli/src/commands/team.ts:435` |
-| `apps/cli/src/commands/team.ts:447` |
-| `apps/cli/src/commands/team.ts:54` |
-| `apps/cli/src/commands/team.ts:70` |
-| `apps/cli/src/commands/team.ts:82` |
-| `apps/cli/src/commands/team.ts:93` |
-| `apps/cli/src/commands/workflow.ts:263` |
-| `apps/cli/src/commands/workflow.ts:267` |
-| `apps/cli/src/commands/workflow.ts:313` |
-| `apps/cli/src/commands/workflow.ts:40` |
-| `apps/cli/src/commands/workflow.ts:400` |
-| `apps/cli/src/commands/workflow.ts:424` |
-| `apps/cli/src/commands/workflow.ts:434` |
-| `apps/cli/src/commands/workflow.ts:615` |
-| `apps/cli/src/commands/workflow.ts:639` |
-| `apps/cli/src/commands/workflow.ts:691` |
-| `apps/cli/src/commands/workflow.ts:700` |
-| `apps/cli/src/commands/workflow.ts:721` |
-| `apps/cli/src/commands/workflow.ts:737` |
-| `apps/cli/src/commands/workflow.ts:778` |
-| `apps/cli/src/commands/workflow.ts:782` |
-| `apps/cli/src/commands/workflow.ts:802` |
-| `apps/cli/src/commands/workflow.ts:807` |
-| `apps/cli/src/commands/workflow.ts:853` |
-| `apps/cli/src/commands/workflow.ts:910` |
-| `apps/cli/src/output.ts:1` |
-| `apps/cli/src/output.ts:31` |
-| `apps/cli/src/output.ts:9` |
-| `apps/cli/tests/commands/message.test.ts:775` |
-| `apps/cli/tests/commands/task.test.ts:15` |
-| `apps/cli/tests/commands/task.test.ts:2545` |
-| `apps/cli/tests/commands/task.test.ts:388` |
-| `apps/cli/tests/output-envelope.test.ts:1` |
-| `apps/cli/tests/shared-option-parity.test.ts:30` |
-| `packages/app/src/services/anchor-qualifier.ts:105` |
-| `packages/app/src/services/anchor-qualifier.ts:107` |
-| `packages/app/src/services/anchor-qualifier.ts:279` |
-| `packages/app/src/services/anchor-qualifier.ts:98` |
-| `packages/app/src/services/corpus-check.ts:172` |
-| `packages/app/src/services/corpus-check.ts:184` |
-| `packages/app/src/services/corpus-check.ts:566` |
-| `packages/app/src/services/task-check.ts:1386` |
-| `packages/app/src/services/task-record.ts:14` |
-| `packages/app/src/services/task-record.ts:166` |
-| `packages/app/src/services/task-service.ts:1161` |
-| `packages/app/src/services/task-service.ts:36` |
-| `packages/app/src/workflow/lifecycle-adapter.ts:22` |
-| `packages/app/src/workflow/lifecycle-adapter.ts:222` |
-| `packages/app/src/workflow/lifecycle-adapter.ts:226` |
-| `packages/app/tests/services/anchor-qualifier.test.ts:2` |
-| `packages/app/tests/services/anchor-qualifier.test.ts:91` |
-| `packages/app/tests/services/task-check.test.ts:3406` |
-| `packages/app/tests/services/task-record.test.ts:1090` |
-| `packages/app/tests/services/task-record.test.ts:18` |
-| `packages/app/tests/services/task-record.test.ts:21` |
-| `packages/app/tests/services/task-record.test.ts:712` |
-| `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:59` |
-| `packages/app/tests/workflow/lifecycle-adapter.test.ts:55` |
-| `packages/contracts/src/index.ts:39` |
-| `scripts/commands/regen-corpus-baseline.ts:46` |
-| `scripts/commands/regen-corpus-baseline.ts:51` |
-| `scripts/commands/regen-corpus-baseline.ts:54` |
-| `scripts/commands/regen-corpus-baseline.ts:60` |
-| `scripts/commands/regen-corpus-baseline.ts:63` |
-| `scripts/commands/regen-corpus-baseline.ts:65` |
-| `scripts/commands/regen-corpus-baseline.ts:70` |
+| R | Where | What landed |
+|---|-------|-------------|
+| R1 | `docs/04_DESIGN.md:1626` — 4.2 Citation convention, prefer `path:symbol` | New subsection under §4 Output Conventions: preferred form, rot rationale, explicit line-anchor exception list, and the no-mass-rewrite constraint |
+| R1 | `config/corpus-baseline.json:2` — machine-generated snapshot note | Dated decision note recording the 0688 friction-review decision, in the field that already holds per-code diagnoses |
+| R2 | `docs/99_PROJECT_CONSTITUTION.md` rule **T11** — sweep-once discipline | Process authority: the single-task gate drives the iterate loop; the `--corpus` sweep runs once, at commit-prep |
+| R2 | `AGENTS.md` §Verification gate — "Sweep-once while iterating on a task" | Derived operational line pointing at T11 rather than restating it (99 owns process; this file is derived). `CLAUDE.md` / `GEMINI.md` symlink here |
+| R3 | commit `a93ebd05c` | Both conventions in one pass; the reachability chain holds end to end — the derived line names T11, and §4.2 carries form, reason, exception, and the F94 backlink |
+
+**Citation form.** The two subsection anchors above carry a line number because they are non-code
+files with no enclosing named symbol — the exception §4.2 states explicitly. The rule references
+(T11, §Verification gate) are cited by name instead, since a rule label does not rot.
+
+**No enforcement added.** No gate, lint rule, or finding code enforces the symbol form; the
+convention is documentation only, per the task's anti-pattern list. Enforcement, if it ever comes,
+is 0692's drift *report*, not a new checker. Existing citations were not rewritten — a mass rewrite
+would mint exactly the churn F94 closes.
+
+**Design hazard did not fire.** ADR-090 kept the baseline file, so the dated note landed in its
+note field as planned rather than being relocated into the ADR entry.
 ### Testing
 **Pipeline verify results**
 
@@ -430,9 +163,14 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — Symbol-anchor citation convention in `docs/04_DESIGN.md` §4.2 + dated corpus note | MET | static-ref + command |
-| R2 — Sweep-once discipline in verification-gate docs (constitution T11 + derived AGENTS.md line) | MET | static-ref + command |
-| R3 — One pass: both conventions land together; AGENTS.md reaches the constitution rule | MET | static-ref + command |
+| R1 | MET | Convention: `docs/04_DESIGN.md:1626` `### 4.2 Citation convention — prefer \`path:symbol\` over \`path:line\` (task 0694, F94)`; preferred form + scope at `:1634` ("named symbol (function, class, exported const). Applies to new citations in task files"); the rot rationale (the 0606 precedent) at `:1629-1630`; the stated line-anchor exception list at `:1636-1639`; the no-mass-rewrite constraint at `:1640`. Dated corpus note: `config/corpus-baseline.json:2` `note` field — "Dated decision note (0688 friction review, 2026-08-27): new task citations prefer path:symbol over path:line (docs/04_DESIGN.md §4.2, task 0694)." Verified this session: `rg -n "path:symbol" docs/04_DESIGN.md config/corpus-baseline.json` returns both anchors; each cited line re-read this run. |
+| R2 | MET | Authority: `docs/99_PROJECT_CONSTITUTION.md:209` `**T11 — sweep-once discipline (0688 review, 2026-08-27).** Iterating on a task uses the …` — states that the single-task check drives the iterate loop and `spur task check --corpus` runs once at commit-prep. Derived operational line: `AGENTS.md:363` ("**Sweep-once while iterating on a task:** drive the iterate loop with the single-task gate") through `:365` ("commit-prep, not per edit (constitution **T11**, task 0694). The corpus sweep is a commit gate,"), which points at T11 rather than restating the rule — the constitution conflict rule (99 owns process, AGENTS.md is derived) is honored. `CLAUDE.md` is a symlink to `AGENTS.md`, so the same lines serve both entry points. |
+| R3 | MET | Both conventions land in one pass: `git show --stat a93ebd05c` (`docs: sync ADR-091/090, friction-review consolidation, corpus status`) touches `docs/04_DESIGN.md` (+160), `docs/99_PROJECT_CONSTITUTION.md` (+10/-…), and `AGENTS.md` (+5) in a single commit. Reachability chain verified this run: `AGENTS.md:365` names constitution **T11** → `docs/99_PROJECT_CONSTITUTION.md:209` carries the rule; `docs/04_DESIGN.md:1626` §4.2 carries the citation form, reason, exception, and the F94 backlink. Documented deviation: the R1 dated corpus note landed one commit earlier, in `42c4aabbc` (`chore(corpus): atomic baseline regen`), because the note lives in the machine-regenerated `config/corpus-baseline.json` and had to ride the regeneration — the two *conventions* still landed together in `a93ebd05c` as the AC requires. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R5 — New citations prefer symbols over line numbers | MET | command | Command run this session: `rg -c "path:symbol\|Line anchors stay acceptable\|Line anchors rot" docs/04_DESIGN.md` → `4`, exit 0 — the preferred form, the rot reason, and the line-anchor exception are all present in §4.2. `rg -c "path:symbol over path:line" config/corpus-baseline.json` → `1`, exit 0 — the dated decision note exists and names "docs/04_DESIGN.md §4.2, task 0694". Anchors re-read this run: `docs/04_DESIGN.md:1626` (§4.2 heading, "(task 0694, F94)" backlink), `:1629-1630` (0606 `:528` → `:562` rot rationale), `:1633-1634` (preferred `path:symbol` form), `:1636-1639` (explicit exception list), `:1640` (new citations only, no mass rewrite), `config/corpus-baseline.json:2` (dated note). |
+| Scenario: R6 — The corpus sweep runs once per commit | MET | command | Commands run this session: `rg -c "T11 — sweep-once discipline" docs/99_PROJECT_CONSTITUTION.md` → `1`, exit 0; `rg -c "constitution \*\*T11\*\*, task 0694" AGENTS.md` → `1`, exit 0 — the rule is authored in the process authority and reached from the derived entry point. `git show --stat --format= a93ebd05c -- docs/04_DESIGN.md docs/99_PROJECT_CONSTITUTION.md AGENTS.md` → `3 files changed, 166 insertions(+), 9 deletions(-)`, exit 0 — both conventions land in one pass. Anchors re-read this run: `docs/99_PROJECT_CONSTITUTION.md:209-213` (single-task gate drives the iterate loop; `--corpus` once at commit-prep) and `AGENTS.md:363-365`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)
