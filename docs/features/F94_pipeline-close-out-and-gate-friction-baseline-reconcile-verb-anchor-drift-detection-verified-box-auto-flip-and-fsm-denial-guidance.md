@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F94"
 name: "Pipeline close-out and gate friction: baseline reconcile verb, anchor-drift detection, verified-box auto-flip, and FSM denial guidance"
-status: verifying
+status: done
 priority: P1
 tags: []
 created_at: "2026-08-27T19:43:44.288Z"
-updated_at: "2026-08-28T03:19:46.863Z"
+updated_at: "2026-08-28T03:26:22.958Z"
 ---
 
 # F94: Pipeline close-out and gate friction: baseline reconcile verb, anchor-drift detection, verified-box auto-flip, and FSM denial guidance
@@ -113,3 +113,4 @@ Feature: Pipeline close-out and gate friction
 ## History
 - 2026-08-28T01:01:06.233Z backlog → active (system)
 - 2026-08-28T03:19:46.863Z active → verifying (system)
+- 2026-08-28T03:26:22.958Z verifying → done (system)
