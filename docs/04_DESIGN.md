@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.56.0
+version: 1.57.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-27
+updated_at: 2026-08-28
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -897,7 +897,7 @@ remains packaged and directly invocable under the bounded coexistence and retire
 **History-anatomy surfaces (HA-S1 0658/0660):** skill `plugins/sp/skills/history-anatomy/` owns
 interpretation (mode contract, finding taxonomy, twelve-section report contract, `enrich`/`validate`
 rubrics); workflow `config/workflows/history-anatomy.yaml` owns the cache branch, deterministic stage
-ordering, one bounded correction pass, and atomic publication — the cache/digest/structure/publish
+ordering, a shared two-pass correction budget, and atomic publication — the cache/digest/structure/publish
 determinism is `plugins/sp/scripts/history-anatomy-cache.ts` (+ committed `.mjs` twin, ADR-065
 standard contract, ADR-079 digest-truth). Publication is reachable only from a passing validation
 state; a hit reuses model enrichment only and refreshes `validated_at` + the imported-snapshot banner

@@ -4,7 +4,7 @@ name: "history-anatomy enrich cannot reliably pass the structure gate: ledger an
 status: done
 template: issue
 created_at: 2026-08-27T17:50:02.492Z
-updated_at: "2026-08-27T23:17:26.672Z"
+updated_at: "2026-08-28T17:45:14.194Z"
 feature_id: B
 ---
 
@@ -61,15 +61,15 @@ release-blocking half of 0687's AC4/AC9.
 <!-- Clarifications and triage decisions. Keep empty if none. -->
 
 ### Design
+**Choice: (a) structure-gate/validate FAIL → shared bounded `correct` loop, with two total repair passes.**
 
-**Choice: (a) structure-gate FAIL → correct (one bounded pass), like validate.**
+Tradeoffs: (c) alone is proven insufficient — the 08-27 contract pin was ignored by the enrich model. (b) needs deterministic content transformers for model-authored prose and risks content damage. (a) reuses the existing `correct` machinery for every failure class and remains hard-bounded by a single run-scoped counter.
 
-Tradeoffs: (c) alone is proven insufficient — the 08-27 contract pin was ignored by the enrich model (Background RC1), so prompt hardening cannot carry R1/R2. (b) needs a new deterministic transformer per gate class (~3 normalizers, and placeholder/section-order repair risks content-mangling). (a) reuses the existing `correct` machinery, repairs all three classes uniformly, and stays bounded by the shared correction counter.
+**Load-bearing sub-fix:** the 0660 `correct` state shipped with a counter-only `onEnter` and no model dispatch, so retrying re-ran the gates on an unchanged candidate. The correction state must re-author `candidate.md`, then re-enter the deterministic structure gate before validation.
 
-**Load-bearing sub-fix:** the 0660 `correct` state shipped with a counter-only onEnter and **no model dispatch** — even the validate-FAIL loop re-ran gate+validate on an unchanged candidate and burned its one pass deterministically. Giving `correct` its agent.run is the root-cause fix; the structure-gate FAIL edge then rides the same bounded pass.
+**Re-audit hardening:** one shared pass was insufficient when structure repair consumed the counter before independent validation produced semantic findings (runs `3f5a45ea…` and `58e47f80…`). Two total passes are the minimum deterministic budget that permits one structure-driven repair followed by one validation-driven repair. The repair rubric covers legal ledger anchors, placeholders/section order, the complete field set for problem and positive findings, and quantitative/current-baseline full-digest reconciliation. Publication remains reachable only after independent validation PASS.
 
-Failure rate: before, every structure-gate/validate miss was terminal (3/3 observed runs failed ≥1 class, 0% in-loop recovery). After, a miss is terminal only if it (or a new class) also survives the single repair pass. R1's acceptance run exercises the repaired path end-to-end.
-
+Failure rate: before 0690, 3/3 observed malformed candidates terminated (0% recovery). The one-pass re-audit configuration published 0/2 runs this session. With the final two-pass budget and hardened rubric, the source-local acceptance run `a104d21b…` published successfully with structure-gate PASS and independent `Verdict: PASS` (1/1 final configuration).
 ### Plan
 
 1. `history-anatomy.yaml` transitions: reorder structure-gate exits — PASS→validate, FAIL+cap-exhausted→failed, FAIL→correct (shared correction-count bound).
@@ -91,34 +91,34 @@ Reproduced by inspection against the 3 failing runs' gate classes (4f3c5bcd, 68c
 Root cause: the workflow treats format-sensitive model output as one-shot and gives the bounded correction state no correcting action; any of the three deterministic gate classes therefore terminally fails nondeterministically-authored candidates.
 
 ### Solution
-Design (a): structure-gate FAIL now detours into the same one bounded correction pass as validate FAIL, and `correct` finally got the model dispatch 0660 shipped without (it was a counter-only no-op, so even validate-FAIL "correction" re-ran on unchanged input). The counter stays shared: one repair pass per run across both gates. The repair prompt names the gate's `.md`/`.ts`/`.json` or `path:line` set (P3).
+Design (a) is retained: structure-gate and validation failures share the `correct` state, which now performs real model repair and re-enters the deterministic gate. Re-audit evidence changed the retry ceiling from one to two total repairs: a structure-driven pass can be followed by one validation-driven pass, while a failure after the second repair remains terminal.
 
-| `config/workflows/history-anatomy.yaml:13-18` | Shape comment: `structure-gate` FAIL → `correct` (max 1) → gate re-run; exhausted → failed. Same bound on validate FAIL. |
-| `config/workflows/history-anatomy.yaml:231-262` | `correct` state: counter shell writes `correction-count`; baseline capture; repair `agent.run` (254 — re-anchors ledger rows to backticked `.md`/`.ts`/`.json` or `path:line`, strips placeholders/empty rows, restores canonical section order, overwrites only `candidate.md`); `assert-clean` (262). `vars.correctionCount` is the declared home; the file is the live bound. |
-| `config/workflows/history-anatomy.yaml:376-387` | `structure-gate` → failed on FAIL+`correction-count` exhausted; `structure-gate` → `correct` under the cap (0690). Publish/stamp reachability untouched. |
-| `plugins/sp/tests/skill-structure.test.ts:1000-1008` | Pins the bounded detour: `structure-gate->correct` + `structure-gate->failed` present, `structure-gate->publish`/`->stamp` absent; P3 prompt pin requires `.md`/`.ts`/`.json` or `path:line`. |
-| `plugins/sp/tests/history-anatomy-cache.test.ts:495-524` | R3 regression: `current #/pointer` ledger row fails `evidence-claim-without-anchor`; backticked path + `path:line` anchors pass; a 99333080-replica candidate reproduces all three observed classes by name. |
-| `docs/design/history-anatomy.md:131-135` | T3: FAIL at either `structure-gate` → the one correction pass → gate re-runs; second failure terminates. Anchor form named as backticked `.md`/`.ts`/`.json` or `path:line`. |
+| Evidence | Change |
+| --- | --- |
+| `config/workflows/history-anatomy.yaml:13-18` | Workflow shape documents the shared two-pass correction budget for both failure edges. |
+| `config/workflows/history-anatomy.yaml:231-263` | `correct` owns the run-scoped counter, clean-tree baseline, bounded repair dispatch, full repair rubric, and candidate-only write assertion. |
+| `config/workflows/history-anatomy.yaml:370-403` | Structure and validation retry guards use `< 2`; exhausted structure failures use `>= 2`; publication remains reachable only from validation PASS. |
+| `plugins/sp/tests/skill-structure.test.ts:972-1017` | Pins publish/stamp reachability, both correction edges, the two-pass bounds, anchor grammar, complete positive/problem field set, quantitative checks, and full-digest matching. |
+| `plugins/sp/tests/history-anatomy-cache.test.ts:495-524` | Directly covers legal ledger anchors and reproduces the three original structure-gate failure classes. |
+| `docs/design/history-anatomy.md:120-137` | T3 surface documentation records the two-pass shared budget and complete repair responsibilities. |
+| `docs/04_DESIGN.md:897-903` | Top-level workflow surface names the shared two-pass correction budget and validation-only publication boundary. |
 
-Rationale: (c)-style hardening was already tried and ignored by the model (Background RC1); (b) would need three new deterministic transformers with content-mangling risk on placeholder/section repair. The helper `history-anatomy-cache.{ts,mjs}` is deliberately untouched — the gate itself is correct; only the workflow's failure handling was broken.
+Root cause remained the workflow failure policy, not `history-anatomy-cache.{ts,mjs}`: format-sensitive model output had no effective repair action, then the initial one-pass repair budget could be consumed before semantic validation. No new helper, dependency, or public CLI surface was added.
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | command this turn: `bun run apps/cli/src/index.ts workflow run config/workflows/history-anatomy.yaml --vars '{"agent":"pi-deepseek"}' --json` exit 0, status=done, finalState=published, runId=b3f0d3a6-baab-4979-a6db-e11487ff627b, durationMs=685129; structure-gate after correct PASS at `.spur/run/b3f0d3a6-baab-4979-a6db-e11487ff627b-structure-gate.txt` line 1; validation `Verdict: PASS` at `.spur/run/b3f0d3a6-baab-4979-a6db-e11487ff627b-validation.txt` line 1; published `docs/report/2026-08-27-history-anatomy.md` (41873 bytes) frontmatter identity mode=daily date=2026-08-27 timezone=America/Los_Angeles bounds 2026-08-27T00:00:00.000-07:00..23:59:59.999-07:00 |
-| R2 | MET | Choice (a) live this run: enrich then structure-gate FAIL detoured to correct (log `structure-gate → correct`), correction-count=1, correct agent.run rewrote 12 ledger rows off `current #/`, re-gate PASS then validate PASS then published. Edges in `config/workflows/history-anatomy.yaml:374-386` (FAIL+cap-exhausted to failed; FAIL under cap to correct) and `config/workflows/history-anatomy.yaml:231-260` (correct onEnter: counter, baseline, agent.run, assert-clean). Shape comment `config/workflows/history-anatomy.yaml:17-18`. Pin `plugins/sp/tests/skill-structure.test.ts:1000-1005`. Test this turn: 135 pass / 0 fail. |
-| R3 | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md:178-184` still pins backticked `path.ext` / `path:line` (0690 diff did not touch the file; 0687 commit 8901a8b64 survives). Regex tests `plugins/sp/tests/history-anatomy-cache.test.ts:497` (`current #/pointer` fails evidence-claim-without-anchor), `plugins/sp/tests/history-anatomy-cache.test.ts:503` (backticked path + path:line pass), `plugins/sp/tests/history-anatomy-cache.test.ts:514` (99333080 replica reproduces all three classes by name). Published report this turn has 0 occurrences of `current #/`. |
+|-------------|--------|----------|
+| R1 | MET | Exact source-local command `bun run apps/cli/src/index.ts workflow run history-anatomy.yaml --vars '{"agent":"pi-deepseek"}' --json` exited 0 this turn with runId `a104d21b-dc8e-4f23-a2c9-d6f3f2a7ef6b`, status=done, finalState=published, transitionsTaken=11. Structure gate PASS: `.spur/run/a104d21b-dc8e-4f23-a2c9-d6f3f2a7ef6b-structure-gate.txt` line 1. Independent validation PASS: `.spur/run/a104d21b-dc8e-4f23-a2c9-d6f3f2a7ef6b-validation.txt` lines 1-28. Published `docs/report/2026-08-28-history-anatomy.md` (45,186 bytes) with daily identity, America/Los_Angeles bounds, run id, artifact digests, cacheDisposition=miss, and zero `current #/` anchors. |
+| R2 | MET | Choice (a) is implemented at `config/workflows/history-anatomy.yaml:231-263` and `config/workflows/history-anatomy.yaml:370-403`: both failure gates share a hard two-pass correction budget, correction re-authors only the candidate, and exhausted failures terminate. `plugins/sp/tests/skill-structure.test.ts:972-1017` pins both retry/exhaustion edges, `< 2`/`>= 2` bounds, validation-only publication, and the complete repair rubric. Live re-audit runs exercised `structure-gate -> correct -> structure-gate`; final configuration published 1/1. |
+| R3 | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md:178-184` pins backticked `.md`/`.ts`/`.json` or `path:line` anchors. `plugins/sp/tests/history-anatomy-cache.test.ts:495-524` proves `current #/pointer` fails, legal anchors pass, and the three original gate classes reproduce. Suite: 67 pass / 0 fail, 97.28% lines. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| [docs-only] template-only AC placeholder | N/A | n/a | Task AC section is an HTML comment only; no checklist items or Gherkin scenarios. Requirements table is the acceptance surface. |
-
+| [docs-only] template-only AC placeholder | N/A | n/a | The task AC section contains only its scaffold comment; R1-R3 are the executable acceptance surface. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 **SECU findings** (verify --force re-audit + leftover close-out)
 

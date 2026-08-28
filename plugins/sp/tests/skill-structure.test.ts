@@ -970,9 +970,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
     });
 
     // HA-S1 (0660 R2/R6): the two structural guarantees of the FSM — publication is reachable
-    // ONLY behind a passing validation, and correction is capped at exactly one pass. These are
+    // ONLY behind a passing validation, and correction is capped at two total passes. These are
     // guard/edge facts, so they are pinned against the YAML rather than left to prose.
-    test('history-anatomy.yaml gates publication and caps correction at one pass (0660 R2, R6)', () => {
+    test('history-anatomy.yaml gates publication and caps correction at two passes (0660 R2, R6; 0690)', () => {
         const wf = join(WORKFLOWS_DIR, 'history-anatomy.yaml');
         if (!existsSync(wf)) {
             return;
@@ -992,14 +992,15 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(edges).toContain('analyze->cache-probe');
         expect(edges).not.toContain('cache-probe->analyze');
 
-        // Correction: one pass only — the retry edge is bounded and the exhausted edge fails.
+        // Correction: two total passes — enough for structure then validation, still bounded.
         expect(edges).toContain('validate->correct');
         expect(edges).toContain('validate->failed');
         expect(edges).toContain('correct->structure-gate');
         expect(edges).not.toContain('correct->publish');
-        expect(text, 'the correction retry edge must be bounded to a single pass').toMatch(
-            /correction-count[^\n]*-lt 1/,
+        expect(text, 'the correction retry edge must be bounded to two total passes').toMatch(
+            /correction-count[^\n]*-lt 2/,
         );
+        expect(text).toMatch(/correction-count[^\n]*-ge 2/);
         // 0690: a structure-gate FAIL detours into the same bounded correction pass
         // instead of terminating, and still can never reach publish directly.
         expect(edges).toContain('structure-gate->correct');
@@ -1009,6 +1010,11 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // 0690 P3: the repair prompt must name the gate's extension set, not a generic
         // backticked `path` the evidence-claim-without-anchor regex would reject.
         expect(text).toMatch(/backticked `\.md`\/`\.ts`\/`\.json` path or a `path:line`/);
+        // A structure-triggered correction has no validation notes yet, so the same bounded pass
+        // must proactively reconcile evidence before it reaches validate (0690 re-audit).
+        expect(text).toContain('verify every quantitative claim (counts, durations, percentages, distributions)');
+        expect(text).toContain('ensure every problem and positive finding carries the full field set');
+        expect(text).toContain('current/baseline full-digest match');
     });
 
     // HA-S1 (0658 R4): the report contract freezes the section names and the per-finding

@@ -14,8 +14,8 @@
 #   start -> resolve-scope -> resolve-paths -> analyze -> cache-probe
 #            (hit  -> refresh-provenance -> publish -> published)
 #            (miss -> render -> enrich -> structure-gate -> validate -> stamp -> publish)
-#            (structure-gate FAIL -> correct (max 1) -> structure-gate; exhausted -> failed)
-#            (validate FAIL -> correct (max 1) -> structure-gate ...; exhausted -> failed)
+#            (structure-gate FAIL -> correct (max 2 total) -> structure-gate; exhausted -> failed)
+#            (validate FAIL -> correct (max 2 total) -> structure-gate ...; exhausted -> failed)
 #            (any all-paths failure -> failed)
 #
 # `analyze` precedes `cache-probe` deliberately: ADR-079 makes cache validity a DERIVED fact, so
@@ -230,14 +230,15 @@ states:
 
   - id: correct
     description: >
-      One bounded correction pass (0690). onEnter increments the counter; the retry edges guard on
-      the run-scoped correction-count file < 1 (`vars.correctionCount` is the declared home; the
-      file is the live bound), the second failure takes the -> failed edge. The counter is shared
-      by the structure-gate and validate FAIL edges, so the whole run gets exactly one repair. The
+      A two-pass correction budget (0690). onEnter increments the counter; retry edges guard on
+      the run-scoped correction-count file < 2 (`vars.correctionCount` is the declared home; the
+      file is the live bound), and a failure after the second repair takes the -> failed edge. The
+      counter is shared by the structure-gate and validate FAIL edges, so a structure repair can
+      still be followed by one validation-driven repair. The
       model half re-authors the candidate in place from the gate findings and validation notes —
       re-anchoring evidence rows to a backticked .md/.ts/.json path or path:line, stripping
-      placeholders, and restoring the canonical twelve-section order — before the deterministic
-      gate re-runs.
+      placeholders, restoring the canonical twelve-section order, and reconciling quantitative
+      claims against the current/baseline artifacts — before the deterministic gate re-runs.
     onEnter:
       - kind: shell
         options:
@@ -251,7 +252,7 @@ states:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Repair the candidate report .spur/run/${vars.__runId}-candidate.md in place: read the structure-gate findings in .spur/run/${vars.__runId}-structure-gate.txt and, when present, the validation notes in .spur/run/${vars.__runId}-validation.txt, then fix every listed problem per references/report-contract.md — rewrite evidence-ledger claim rows to carry a backticked `.md`/`.ts`/`.json` path or a `path:line` anchor (never `current #/...`), remove placeholders/TODO/FIXME markers and empty table rows, and restore the canonical twelve sections in their contract order. Overwrite the candidate file only. This operation never launches a workflow."
+          input: "Repair .spur/run/${vars.__runId}-candidate.md in place. Read its structure-gate findings, optional validation notes, references/report-contract.md, and the references/operations.md validate rubric; fix every violation. Use a backticked `.md`/`.ts`/`.json` path or a `path:line` anchor, never `current #/...`; remove placeholders and empty rows; restore the twelve-section order; ensure every problem and positive finding carries the full field set; verify every quantitative claim (counts, durations, percentages, distributions) and every current/baseline full-digest match against .spur/run/${vars.__runId}-history-anatomy-current.json and -baseline.json. Overwrite only the candidate; never launch a workflow."
           # Declared Layer-1 role (0538 R2): repair reuses enrich-class judgment.
           role: reviewer
           expectFile: .spur/run/${vars.__runId}-candidate.md
@@ -379,10 +380,10 @@ transitions:
     guard:
       kind: shell
       options:
-        command: '! grep -q "^PASS$" .spur/run/$__runId-structure-gate.txt 2>/dev/null && test "$(cat .spur/run/$__runId-correction-count 2>/dev/null || echo 0)" -ge 1'
+        command: '! grep -q "^PASS$" .spur/run/$__runId-structure-gate.txt 2>/dev/null && test "$(cat .spur/run/$__runId-correction-count 2>/dev/null || echo 0)" -ge 2'
   - from: structure-gate
     to: correct
-    description: Structure gate FAIL under the correction cap — one bounded repair pass (0690).
+    description: Structure gate FAIL under the shared two-pass correction cap (0690).
     guard:
       kind: always
 
@@ -395,11 +396,11 @@ transitions:
         command: 'grep -q "Verdict: PASS" .spur/run/$__runId-validation.txt 2>/dev/null'
   - from: validate
     to: correct
-    description: Validation FAIL under the correction cap — one bounded pass.
+    description: Validation FAIL under the shared two-pass correction cap.
     guard:
       kind: shell
       options:
-        command: '! grep -q "Verdict: PASS" .spur/run/$__runId-validation.txt 2>/dev/null && test "$(cat .spur/run/$__runId-correction-count 2>/dev/null || echo 0)" -lt 1'
+        command: '! grep -q "Verdict: PASS" .spur/run/$__runId-validation.txt 2>/dev/null && test "$(cat .spur/run/$__runId-correction-count 2>/dev/null || echo 0)" -lt 2'
   - from: validate
     to: failed
     description: Validation FAIL with the correction cap exhausted — terminate without publishing.

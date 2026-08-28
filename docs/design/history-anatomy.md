@@ -26,7 +26,7 @@ Baseline artifacts: `.spur/run/7fa52fa5-…-idea-eval-report.md` (idea evaluatio
 | --- | --- | --- |
 | `/sp:dev-find-issue` | Discoverability, argument hint, `reviewer` role, one skill invocation | Any analysis logic |
 | `sp:history-anatomy` | Mode validation, evidence policy, finding taxonomy, comparison semantics, report contract, `enrich` and `validate` rubrics | Cache branching, retry policy, publication |
-| `history-anatomy.yaml` | Cache decision, stage ordering, executor dispatch, one bounded correction loop, terminal status, atomic publication | Any finding, severity, or remediation judgment |
+| `history-anatomy.yaml` | Cache decision, stage ordering, executor dispatch, two-pass correction budget, terminal status, atomic publication | Any finding, severity, or remediation judgment |
 | Cache helper (`.mjs` twin per ADR-065) | Normalized semantic digest, metadata comparison, structural checks, atomic replace | Anything interpretive |
 | `spur history analyze` | DB aggregation → versioned JSON artifact | Rendering |
 | `spur history report --mode forensics <path>` | Deterministic rendering of one explicit artifact | DB access |
@@ -117,10 +117,10 @@ resolve scope
           → render both artifacts        (report --mode forensics <explicit-path>)
           → model enrichment             (sp:history-anatomy enrich)
           → deterministic structure gate (helper)
-              → FAIL: one correction pass → gate re-runs | terminal failure
+              → FAIL: correction (max two total) → gate re-runs | terminal failure
           → independent evidence validation (sp:history-anatomy validate)
               → PASS: atomic publish
-              → FAIL: the same one correction pass → gate re-runs | terminal failure
+              → FAIL: correction within the same two-pass budget → gate re-runs | terminal failure
 ```
 
 The workflow calls the same skill in explicit `enrich` and `validate` operations; those operations
@@ -128,11 +128,13 @@ never launch another workflow, which keeps the rubric single-sourced and prevent
 reads the mutable `latest.json` pointer — every analyze writes, and every render names, an explicit
 run-scoped path.
 
-Correction is capped at exactly one pass (0690): the counter is shared by the structure-gate and
-validation FAIL edges, and the `correct` pass re-authors the candidate in place from the gate
+Correction is capped at two total passes (0690): the counter is shared by the structure-gate and
+validation FAIL edges, allowing a structure repair followed by one validation-driven repair. Each
+`correct` pass re-authors the candidate in place from the gate
 findings and validation notes (backticked `.md`/`.ts`/`.json` path or `path:line` anchors, no
-placeholders, canonical twelve-section order) before the deterministic gate re-runs. A second
-failure at either gate terminates the run.
+placeholders, canonical twelve-section order, the full field set on problem and positive findings,
+and quantitative/current-baseline claims reconciled against both artifacts) before the deterministic
+gate re-runs. A failure after the second repair terminates the run.
 
 ## Report contract
 
