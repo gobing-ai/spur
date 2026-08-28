@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F821"
 name: "Feature status sync: derivation engine, refresh command, hook wiring"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-07-25T00:27:36.676Z"
-updated_at: "2026-07-28T00:31:39.627Z"
+updated_at: "2026-08-28T05:20:10.931Z"
 ---
 
 # R1: Feature status sync: derivation engine, refresh command, hook wiring
@@ -47,3 +47,5 @@ R5 @edge — after the backfill run, no linked done task sits under a feature st
 ## History
 - 2026-07-25T21:37:45.001Z backlog → active (system)
 - 2026-07-28T00:31:39.627Z moved R1 → F821 (system)
+- 2026-08-28T05:20:10.869Z active → verifying (system)
+- 2026-08-28T05:20:10.931Z verifying → done (system)
