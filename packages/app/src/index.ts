@@ -32,6 +32,16 @@ export {
     WorkflowRunLogSink,
 } from './observability/workflow-run-log-sink';
 export {
+    type CliEnvelope,
+    type EnvelopeCapableOutput,
+    type EnvelopeErrorPayload,
+    type EnvelopeOptions,
+    envelopeEnabled,
+    toEnvelopeError,
+    toEnvelopeJson,
+    writeJsonError,
+} from './output/envelope';
+export {
     createFileAgentInstanceStore,
     type RoleTargetResolution,
     resolveAgentSelector,

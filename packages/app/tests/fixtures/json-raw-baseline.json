@@ -1,0 +1,7 @@
+{
+    "agent list": "{\n  \"agents\": [\n    {\n      \"name\": \"claude\",\n      \"installed\": true,\n      \"version\": \"1.2.3\",\n      \"channels\": [],\n      \"error\": null\n    },\n    {\n      \"name\": \"codex\",\n      \"installed\": false,\n      \"version\": null,\n      \"channels\": [],\n      \"error\": null\n    }\n  ]\n}",
+    "agent doctor": "{\n  \"agents\": [\n    {\n      \"agent\": \"claude\",\n      \"installed\": true,\n      \"usable\": true,\n      \"tier\": 1,\n      \"version\": \"1.2.3\",\n      \"notes\": [],\n      \"capabilityTier\": \"standard\",\n      \"model\": null,\n      \"roles\": [],\n      \"elected\": []\n    }\n  ],\n  \"rolesSource\": \"config\",\n  \"cache\": {\n    \"hit\": false,\n    \"ageMs\": null,\n    \"path\": \".spur/run/agent-doctor.json\"\n  }\n}",
+    "rule run": "{\n  \"preset\": \"x\",\n  \"ruleCount\": 1,\n  \"findings\": [],\n  \"fixes\": []\n}",
+    "rule validate": "{\n  \"valid\": true,\n  \"kind\": \"file\",\n  \"source\": \"<FILE>\",\n  \"ruleCount\": 1,\n  \"rules\": [\n    \"sample-rule\"\n  ]\n}",
+    "rule validate invalid": "{\n  \"valid\": false,\n  \"kind\": \"file\",\n  \"source\": \"<CWD>/missing.yaml\",\n  \"errors\": [\n    \"File not found: <CWD>/missing.yaml\"\n  ]\n}"
+}

@@ -728,6 +728,8 @@ pruning) is untouched; without `--mode`, behavior is unchanged.
 
 **Operation-triggered refresh (feature E3, tasks 0549–0550).** Completing a task (`spur task update <wbs> done`) or a non-dry workflow run (`status: done`) enqueues a `history.refresh` job on the embedded job queue when `history.refresh.on_completion` is `true` in `.spur/config.yaml`. The key is **opt-in and defaults off**. Completions inside `history.refresh.debounce_ms` (default **600000**) join one pending job and stretch its covered window — a burst produces one refresh, not N. The job reuses `HistoryService.daily` over the six full-fidelity sources (`claude`, `codex`, `pi`, `omp`, `agy`, `grok`) so per-source isolation is unchanged; unsupported sources (`gemini`, `opencode`, `antigravity-ide`, `openclaw`, `hermes`) are reported as skipped. The worker that drains the queue is the existing server job worker (`HISTORY_REFRESH_JOB`); the completion hook itself never runs an import.
 
+**Schedule-triggered refresh (task 0696).** While the server scheduler runs, `history.refresh.schedule_minutes` (opt-in; unset = off) registers one interval entry that enqueues the same `history.refresh` job with `trigger: 'schedule'` every N minutes — a fixed cadence, so no coalescing (that is the completion trigger's burst concern). The job body is the identical incremental, checkpoint-resumed import-all → analyze → artifact path; the scheduler entry itself never runs an import. Because import is checkpointed, a server restart or an overlapping tick self-heals with no gap and no double-count. Config: `packages/config/src/index.ts` (`HistoryRefreshConfigSchema`); registration: `apps/server/src/serve.ts` (`registerSchedulerEntries`).
+
 `DailyResult.coverage` is `{ refreshed, skipped, window: { since, until } }`. Analyze stamps `bySession[].sessionState` (`in-progress` | `complete`): a session whose last stored message is not an assistant turn is in progress, and derived aggregates clip to the last complete turn so a partial turn cannot fabricate totals. Re-analyzing a growing session replaces the previous `bySession` row (one record per session, not one per refresh). Events: `history.refresh.enqueued`, `history.refresh.completed`, `history.refresh.skipped` (disabled). No new CLI noun.
 
 #### `spur history analyze [--since <iso>] [--until <iso>] [--source <s|all>] [--session <id>] [--run <runId>] [--task <wbs>] [--top <n>] [--out <path>] [--json]`
@@ -1032,6 +1034,7 @@ history:
   refresh:
     on_completion: false   # default; set true to enable
     debounce_ms: 600000    # coalescing window, floor 1000 ms
+    # schedule_minutes: 10 # opt-in; refresh every N min while the server scheduler runs (task 0696)
 ```
 
 The debounce default (600 000 ms = 10 min) follows task 0548's measured figures
@@ -1545,16 +1548,37 @@ Row-level deltas from the default rule:
   fingerprints (dedup keys, not CLI output). `rule list` and `task verifyall-aggregate`
   raw `JSON.stringify(x, null, 2)` sites were adopted — their formatting is identical to
   the `toJson` raw path, so byte-identity holds.
-- **Not adopted (service-side, outside the 14-module sweep) — flag advertised, flag ignored:**
-  four verbs register `SHARED_OPTIONS.jsonEnvelope` but emit their JSON from `packages/app`,
-  which never receives `options.jsonEnvelope`, so `--json-envelope` is silently a no-op on them.
-  Confirmed live 2026-08-27 at HEAD `1a2cfd75`: `agent list` and `agent doctor`
-  (`agent-service.ts:423,553,621`, private `toJson` at `:2132`); `rule run` and `rule validate`
-  (`rule-service.ts:332,368,397`, raw `JSON.stringify`). `packages/app` may not import
-  `apps/cli` (ADR-021), so closing this needs a seam-location decision, not a patch — **task
-  0697**. Until then these four are the only verbs whose advertised `--json-envelope` does
-  nothing; every other flag-registering verb honors it (`message inbox` and the `team` verbs
-  route through in-module helpers and are enveloped).
+- **Service-side adoption — CLOSED (task 0697, 2026-08-27).** The envelope helpers moved to
+  `packages/app/src/output/envelope.ts` (ADR-091 amendment 2026-08-27); `apps/cli/src/output.ts`
+  re-exports them, so all 99 sites adopted at 0693 are unedited. The verbs that emit their JSON
+  from a `packages/app` service now receive the decision through an `enveloped` option threaded
+  from the command layer, and `envelopeEnabled()` applies the same precedence
+  (explicit flag > `SPUR_JSON_ENVELOPE=1` > raw) — no service reads the env var itself:
+
+  | Verb | Emit site (post-0697) | Threaded from | Enveloped shape |
+  | --- | --- | --- | --- |
+  | `agent list` | `agent-service.ts` `list()` | `agent.ts` → `runAgentList` → `svc.list({enveloped})` | `{ok, data: {agents}}` |
+  | `agent doctor` | `agent-service.ts` `renderDoctor()` (2 sites) + role-ladder failure | `agent.ts` → `svc.doctor({enveloped})` | `{ok, data: {agents, rolesSource, cache}}`; failure → `{ok:false, error:{code:'INTERNAL_ERROR', details:{cliCode:'agent-resolution'}}}` |
+  | `agent run` | `agent-service.ts` `handleRunOutput()` + resolution failure | `agent.ts` → `commanderOptionsToFlags` → `flags['json-envelope']` | `{ok, data: {exitCode, stdout, …}}`; failure as above |
+  | `rule run` | `rule-service.ts` `evaluate()` | `rule.ts` → `service.evaluate({enveloped})` | `{ok, data: {preset, ruleCount, findings, fixes}}` |
+  | `rule validate` | `rule-service.ts` `validate()` (valid + invalid branches) | `rule.ts` → `service.validate({enveloped})` | `{ok, data: {valid, kind, source, …}}` |
+
+  `agent run` was **not** in the original four; the AC4 scan surfaced it as the same defect class
+  (it registers the flag and emits from the service) and it is closed with them. All five emit
+  **flat objects**, so `apiSuccessSchema` `{ok, data}` applies and `paginatedResponseSchema` does
+  not — the arrays inside (`agents`, `findings`) stay fields of the payload rather than being
+  unwrapped to the top level. The private `toJson` helper in `agent-service.ts` is deleted; every
+  emitter routes through the one seam.
+
+  **The inventory is now guarded, not swept by hand.** `apps/cli/tests/json-envelope-inventory.test.ts`
+  walks every `.command()` block registering `SHARED_OPTIONS.jsonEnvelope` (68 verbs) and fails on
+  any verb that advertises the flag without routing it to an envelope emitter — in-module, through
+  a module-level helper, or threaded to a service. The only permitted exception is its explicit
+  `KEPT_RAW` allowlist, which must stay in sync with the "Kept raw" bullet above; today it holds
+  one entry (`task verdict`, whose stdout doubles as the `.spur/run` artifact bytes). Raw-default
+  byte-identity for the service verbs is pinned against a pre-relocation baseline captured before
+  any edit: `packages/app/tests/fixtures/json-raw-baseline.json`, asserted by
+  `packages/app/tests/services/json-envelope-adoption.test.ts`.
 
 | Noun | Verb | Emit sites (`apps/cli/src/commands/<noun>.ts`) | Current shape | Deviation from ADR-091 envelope |
 | --- | --- | --- | --- | --- |
@@ -2611,5 +2635,3 @@ can't express). Web consumes via `fetchWithTimeout` + `resolveApiUrl` and native
 **Convention:** response envelopes use `{ data…, count }` for lists and `{ ok, ... }` for mutations,
 matching the existing board routes. Error shape: `{ error: string }` with the appropriate HTTP status.
 All team routes are Bun-gated (require `ServerContext`); they return 503 on the Cloudflare Workers path.
-**Schedule-triggered refresh (task 0696).** While the server scheduler runs, `history.refresh.schedule_minutes` (opt-in; unset = off) registers one interval entry that enqueues the same `history.refresh` job with `trigger: 'schedule'` every N minutes — a fixed cadence, so no coalescing (that is the completion trigger's burst concern). The job body is the identical incremental, checkpoint-resumed import-all → analyze → artifact path; the scheduler entry itself never runs an import. Because import is checkpointed, a server restart or an overlapping tick self-heals with no gap and no double-count. Config: `packages/config/src/index.ts` (`HistoryRefreshConfigSchema`); registration: `apps/server/src/serve.ts` (`registerSchedulerEntries`).
-    # schedule_minutes: 10 # opt-in; refresh every N min while the server scheduler runs (task 0696)

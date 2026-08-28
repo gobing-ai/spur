@@ -35,7 +35,11 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .option('--specs', 'List team specs instead of detected agents')
         .action(async (options) => {
             const svc = new AgentService({ cwd: context.cwd, env: context.env, output: context.output });
-            const code = await runAgentList(svc, context, { json: options.json, specs: options.specs });
+            const code = await runAgentList(svc, context, {
+                json: options.json,
+                jsonEnvelope: options.jsonEnvelope,
+                specs: options.specs,
+            });
             context.setExitCode(code);
         });
 
@@ -52,6 +56,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
             const code = await svc.doctor(
                 {
                     json: options.json === true,
+                    enveloped: options.jsonEnvelope,
                     agent: agentName,
                     probeHealth: options.probeHealth === true,
                     forceRefresh: options.forceRefresh === true,
@@ -252,7 +257,7 @@ async function runAgentList(
     opts: { json?: boolean; jsonEnvelope?: boolean; specs?: boolean },
 ): Promise<number> {
     if (!opts.specs) {
-        return svc.list({ json: opts.json ?? false });
+        return svc.list({ json: opts.json ?? false, enveloped: opts.jsonEnvelope });
     }
     const specs = await new TeamService(context).listAgentSpecs();
     if (opts.json) {

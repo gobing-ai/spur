@@ -1711,3 +1711,38 @@ Mirrored in task 0693 `### Q&A`. R4 unblocked.
 **Detail:** task 0693; feature F95; `docs/04_DESIGN.md` §4.1 (102-site shape inventory);
 `packages/contracts/src/shared.ts:24-39`; `apps/cli/src/output.ts:22`; incident evidence: task
 0688 (2026-08-27, four observed `--json` deviations).
+
+**Amendment 2026-08-27 (task 0697) — the envelope seam moves to `packages/app`.** The helpers
+(`envelopeEnabled`, `toEnvelopeJson`, `toEnvelopeError`, `writeJsonError`, and the `CliEnvelope` /
+`EnvelopeErrorPayload` / `EnvelopeOptions` types) now live in
+**`packages/app/src/output/envelope.ts`**, exported from `@gobing-ai/spur-app`.
+`apps/cli/src/output.ts` re-exports them, so all 99 call sites adopted at 0693 resolve unchanged
+and keep `import { toEnvelopeJson } from '../output'`. `CommandOutput`, `consoleOutput`, and
+`toJson` stay CLI-local; `writeJsonError` now accepts the structural `EnvelopeCapableOutput`
+(`{write, error}`), which both `CommandOutput` and the service output sinks already satisfy.
+
+*Why the move is forced, not chosen.* The 0693 sweep was scoped to `apps/cli/src/commands/**`, but
+five verbs emit their `--json` from a service in `packages/app` and so never saw
+`options.jsonEnvelope`: `agent list`, `agent doctor`, `rule run`, `rule validate` (the four filed
+on 0697) plus `agent run`, which AC4's inventory scan surfaced as the same defect class. The naive
+fix — importing the helpers from `apps/cli` into `packages/app` — is not merely discouraged, it is
+**circular against the workspace graph**: `apps/cli/package.json` already depends on
+`@gobing-ai/spur-app`, and five CLI modules import it at runtime. Moving the helpers down and
+re-exporting up is the only direction that adds no dependency edge. ADR-021 ("Functionality Lives
+in `packages/app`") independently points the same way, but the binding constraint is the graph.
+
+*Rejected alternatives.* (1) **`packages/contracts`** — that package is transport DTOs only
+(AGENTS.md § oRPC), and `envelopeEnabled` reads `process.env`, which is runtime behavior, not a
+DTO. (2) **Duplicating the helpers into `packages/app`** — a second envelope implementation inside
+the very task meant to finish adopting the first; ADR-091 exists to stop the repo growing another
+envelope. (A third, a new shared package for four functions, was rejected as ceremony.)
+
+*No consent gate.* This is an internal module relocation: no CLI noun, verb, or flag changes.
+`--json-envelope` already exists and was already consent-approved above, so the ADR-051 gate that
+governed 0693 does not apply here. The amendment exists so the next reader knows why
+`apps/cli/src/output.ts` became a re-export. The raw default and the deferred default-flip are
+unchanged.
+
+*Detail:* task 0697; `packages/app/src/output/envelope.ts`; `apps/cli/src/output.ts`;
+`docs/04_DESIGN.md` §4.1 (closed inventory); AC4 guard
+`apps/cli/tests/json-envelope-inventory.test.ts`.

@@ -27,6 +27,7 @@ import {
 } from '@gobing-ai/ts-rule-engine';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { configuredSecretValues, redactAndBound } from '../observability/agent-execution';
+import { toEnvelopeJson } from '../output/envelope';
 import {
     type SystemEventAction,
     type SystemEventProjectContext,
@@ -96,6 +97,12 @@ export interface RuleEvaluateOptions {
     fixMode?: FixMode;
     /** Preview fixes without writing (only meaningful with fixMode='auto'). */
     dryRun?: boolean;
+    /**
+     * ADR-091 `--json-envelope` decision threaded from the CLI (task 0697).
+     * `undefined` defers to `SPUR_JSON_ENVELOPE`; precedence is applied by
+     * `envelopeEnabled()`, never re-implemented here.
+     */
+    enveloped?: boolean;
 }
 
 /** Structured result returned by RuleService.evaluate(). */
@@ -137,6 +144,8 @@ export interface RuleValidateOptions {
     source: { kind: 'file' | 'preset'; value: string };
     validateSchema?: boolean;
     json: boolean;
+    /** ADR-091 `--json-envelope` decision threaded from the CLI (task 0697). */
+    enveloped?: boolean;
 }
 
 /** Structured result returned by RuleService.validate(). */
@@ -329,7 +338,7 @@ export class RuleService {
         if (json) {
             const payload: Record<string, unknown> = { preset, ruleCount: enabledCount, ...result };
             if (applied) payload.applied = applied;
-            this.context.output.write(JSON.stringify(payload, null, 2));
+            this.context.output.write(toEnvelopeJson(payload, { enveloped: opts.enveloped }));
         } else if (verbose) {
             // Verbose already streamed per-rule findings inline; print only a summary line.
             this.context.output.write(this.verboseSummary(result.findings, enabledCount));
@@ -359,13 +368,13 @@ export class RuleService {
      * Returns a structured result including the exit code the CLI should use.
      */
     async validate(opts: RuleValidateOptions): Promise<RuleValidateServiceResult> {
-        const { source, validateSchema, json } = opts;
+        const { source, validateSchema, json, enveloped } = opts;
 
         const errors = await this.collectValidationErrors(source, validateSchema);
         if (errors !== null) {
             const jsonPayload = { valid: false, kind: source.kind, source: source.value, errors };
             if (json) {
-                this.context.output.write(JSON.stringify(jsonPayload, null, 2));
+                this.context.output.write(toEnvelopeJson(jsonPayload, { enveloped }));
             } else {
                 this.context.output.error(
                     `invalid ${source.kind}: ${source.value}\n${errors.map((e) => `  - ${e}`).join('\n')}`,
@@ -394,7 +403,7 @@ export class RuleService {
 
         this.context.output.write(
             json
-                ? JSON.stringify(jsonPayload, null, 2)
+                ? toEnvelopeJson(jsonPayload, { enveloped })
                 : `valid ${jsonPayload.kind}: ${jsonPayload.source}\nrules: ${jsonPayload.ruleCount}${
                       ruleIds.length > 0 ? `\n${ruleIds.join('\n')}` : ''
                   }`,
