@@ -244,12 +244,18 @@ describe('agent run honors SPUR_JSON_ENVELOPE end-to-end (0697 F-R1)', () => {
 describe('raw default byte-identity vs pre-change baseline (0697 AC3)', () => {
     const fixtureDir = join(import.meta.dir, 'fixtures', 'raw-json-baseline');
 
+    // Pin the rule catalog to the repo's tracked config/rules so the baseline does
+    // not drift with the machine's global ~/.config/spur/rules (a stale global preset
+    // shadowed the bundled catalog and silently produced a different ruleCount).
+    const REPO_RULES_DIR = join(import.meta.dir, '..', '..', '..', 'config', 'rules');
+
     test('rule run --json emits the captured pre-change fixture bytes', async () => {
         delete process.env[ENVELOPE_ENV];
         const out = captureSink();
         const code = await main(['rule', 'run', '--json'], {
             cwd: mkdtempSync(join(tmpdir(), 'spur-baseline-')),
             output: out,
+            env: { ...process.env, SPUR_GLOBAL_RULES_DIR: REPO_RULES_DIR },
         });
         expect(code).toBe(0);
         const fixture = readFileSync(join(fixtureDir, 'rule-run.json'), 'utf8');
@@ -262,6 +268,7 @@ describe('raw default byte-identity vs pre-change baseline (0697 AC3)', () => {
         const code = await main(['rule', 'validate', '--json', '--kind', 'preset', 'recommended-pre-check'], {
             cwd: mkdtempSync(join(tmpdir(), 'spur-baseline-')),
             output: out,
+            env: { ...process.env, SPUR_GLOBAL_RULES_DIR: REPO_RULES_DIR },
         });
         expect(code).toBe(0);
         const fixture = readFileSync(join(fixtureDir, 'rule-validate-preset.json'), 'utf8');
