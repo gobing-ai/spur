@@ -619,3 +619,11 @@ socket binding. Signals: `EPERM: operation not permitted`, `FS_PERMISSION_DENIED
 `sandbox.network.allowLocalBinding`. Caveat: `spur agent doctor` reports `usable: true` from
 configuration alone — it never probes a real dispatch, so `usable` means *configured*, not
 *proven runnable under this sandbox*.
+
+Related operator-local trap (spur task 0689): adding a `permissions.allow` `write_file(**)` entry
+to an executor's own settings (e.g. `~/.gemini/antigravity-cli/settings.json`) is an **operator-
+local unblock, not the shipped fix**. It is per-machine and untracked, and it **masks shim
+regressions in local end-to-end runs**: a broken headless dispatch looks green on the patched
+machine while failing on every other machine and in CI. The fix belongs in the executor shim
+(print-mode permission affordance); keep the allow entry, if at all, as a documented convenience
+and never as the reason a run passes.

@@ -798,7 +798,10 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const BASELINE: Record<string, number> = {
             // 0687 R12: +696B engine-driven-sandbox note (allowWrite + allowLocalBinding
             // affordances, doctor caveat). Not permanent — split into references.
-            'dogfood-testing': 38_148,
+            // 0689 R4: 38148 → 38800 (+609B round-trip headroom) operator-local
+            // write_file(**) allow caveat — unblock-not-fix, masks shim regressions.
+            // Not permanent — split into references.
+            'dogfood-testing': 38_800,
             'code-verification': 30_488,
             wayfinder: 26_264,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN

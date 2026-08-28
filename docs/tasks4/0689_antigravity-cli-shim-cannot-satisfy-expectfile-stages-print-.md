@@ -1,20 +1,22 @@
 ---
 schema_version: 1
 name: "antigravity-cli shim cannot satisfy expectFile stages: print mode auto-denies write_file without --dangerously-skip-permissions or a permissions.allow rule"
-status: todo
+status: done
 template: issue
 created_at: 2026-08-27T15:39:39.946Z
-updated_at: "2026-08-27T17:27:02.692Z"
+updated_at: "2026-08-27T23:37:55.402Z"
 feature_id: B
 ---
 
 ## 0689. antigravity-cli shim cannot satisfy expectFile stages: print mode auto-denies write_file without --dangerously-skip-permissions or a permissions.allow rule
 
 ### Background
+
 Root cause refined during 0687 verification (2026-08-27, third cycle). Two distinct defects were
 found and FIXED in this pass; one reliability defect remains.
 
 FIXED (validated via `bun link` against ts-libs, and in-repo for the action):
+
 1. **Shim lacked a headless permission affordance** — `antigravityCliShim.getPromptCommand`
    (ts-libs `packages/ai-runner/src/agents/shims.ts`) now emits
    `--dangerously-skip-permissions` in print mode: agy auto-denies any tool that would prompt
@@ -38,7 +40,9 @@ test that must pass.
 Also: `agy models` lists `claude-opus-4-6-thinking` (dashes); the operator's `agy-opus` executor
 pinned `claude-opus-4.6-thinking` (dots) — stale pin, fixed in `~/.config/spur/config.yaml:163`
 (backup `~/.config/spur/config.yaml.bak-0687`).
+
 ### Requirements
+
 **R1 — Headless write permission for expectFile stages, cross-executor.** Verified during 0687
 verify (2026-08-27): `claude -p` refuses `.spur/run/**` writes ("write blocked pending your
 permission grant") and exits 0; `agy -p` auto-denies without `--dangerously-skip-permissions`
@@ -53,8 +57,11 @@ release-blocking half of 0687's AC3/AC4/AC9.
 for executors that then fail every expectFile stage. A doctor (or ai-runner) probe must exercise
 a real multi-step write dispatch, not just `--version`, for any executor that declares write
 capability. See `spur agent doctor` caveat already noted in sp:dogfood-testing (0687 R12).
+
 ### Acceptance Criteria
+
 **Scenario 1 — every agy print-mode argv carries the permission affordance.**
+
 - **Given** the `antigravity-cli` shim from `@gobing-ai/ts-ai-runner`
 - **When** `getPromptCommand` is called on each of the four paths (fresh; `sessionDir` only;
   `sessionId` + `sessionDir`; `continue` only)
@@ -64,6 +71,7 @@ capability. See `spur agent doctor` caveat already noted in sp:dogfood-testing (
 - **And** `packages/ai-runner/tests/agents/shims.test.ts` fails if the affordance is removed.
 
 **Scenario 2 — an expectFile stage driven by an agy executor now passes.**
+
 - **Given** Spur resolving the published `@gobing-ai/ts-ai-runner` containing the fix (both root
   `package.json` pin blocks updated, `bun update` run)
 - **And** `"write_file(**)"` absent from `~/.gemini/antigravity-cli/settings.json` `permissions.allow`
@@ -76,6 +84,7 @@ capability. See `spur agent doctor` caveat already noted in sp:dogfood-testing (
   `4f55c237-e808-457d-9cdf-5fb5be128906`'s failing `resolve-scope` row.
 
 **Scenario 3 — the fix ships as a released dependency.**
+
 - **Given** the shim change committed in `~/xprojects/ts-libs`
 - **When** the lockstep version is bumped and published, and Spur's pins are moved
 - **Then** `rg '"version"' node_modules/@gobing-ai/ts-ai-runner/package.json` in Spur reports the new
@@ -85,16 +94,20 @@ capability. See `spur agent doctor` caveat already noted in sp:dogfood-testing (
   blanket tool approval.
 
 **Scenario 4 — the operator-local remedy is documented as not-the-fix.**
+
 - **Given** `plugins/sp/skills/dogfood-testing/SKILL.md`
 - **When** the "Engine-driven testees under a sandboxed session" section is read
 - **Then** it states that a `permissions.allow` `write_file(**)` entry is an operator-local unblock
   rather than the shipped fix, and that it masks shim regressions in local end-to-end runs.
 
 **Checklist — gates.**
+
 - [ ] ts-libs `bun run check` green
 - [ ] Spur `bun run autofix && bun run spur-check` green
 - [ ] `git status` intentional only in both repos
+
 ### Q&A
+
 **Q: Does (a) really "match how other CLI shims trust the dispatch sandbox", as R1 originally said?**
 No — checked 2026-08-27. `rg 'dangerously|yolo|skip-permissions|autoApprove|approval'` over
 `packages/ai-runner/src` returns zero hits; no shim passes a permission flag today. agy becomes the
@@ -125,107 +138,28 @@ Out of scope). Worth a follow-up task once (a) is proven on agy; deferred, owner
 
 **Q: Should the flag be opt-in via config?** No. It would vary for no one — a knob for a constant.
 Always on for this shim, off (untouched) for every other.
+
 ### Design
-**Decision: remedy (a) — the shim emits a print-mode permission flag.** Frozen below. One bounded
-probe (Plan step 1) may narrow the flag to `--mode accept-edits`; nothing else in this design is open.
 
-**WHY (a), and why the task's original parenthetical was wrong.** R1's draft said (a) "matches how
-other CLI shims trust the dispatch sandbox". Checked against the tree — it does not.
-`rg 'dangerously|yolo|skip-permissions|autoApprove|approval' packages/ai-runner/src` returns **zero
-hits**: no shim passes any permission flag today. agy will be the **first**. The real reasons for (a):
+**Amendment 2026-08-27 (implement, pipeline run — as-built correction, three deltas, each traceable):**
 
-1. **(b) is not shippable.** It is per-machine, untracked, invisible to CI and to every other
-   operator. It is already applied on this machine (`### Background`) — which is precisely how a
-   broken shim can look green locally and fail everywhere else. That failure mode disqualifies it as
-   *the* fix; it survives only as an operator convenience (R4).
-2. **The shim is the only seam.** `AgentSpec` (`packages/ai-runner/src/agent-spec.ts:12-26`) has no
-   argv field, and `buildAgentCommand` (`packages/ai-runner/src/ai-runner.ts:277`) is the single
-   call site for both the one-shot and team-mode paths. Adding a passthrough would be new API for
-   one flag — explicitly out of scope. **No new API surface.**
-3. **agy names the remedies itself.** Its headless denial text offers exactly
-   `--dangerously-skip-permissions` or a `permissions.allow` rule; (a) is the shippable half.
+1. **Flag narrowed to `--mode accept-edits`** per this Design's own decision rule: Plan step 1's probe RAN this time (agy reachable from this session) and the narrower flag wrote the file — probe A one-shot write 12s exit 0 + probe B multi-step write-read-write 8.5s exit 0 (2026-08-27). `--dangerously-skip-permissions` remains the documented fallback branch; not shipped.
+2. **Flag position: immediately after the `-p` input, not appended last.** As-built 0.4.45 (commit 4ce405b, landed during 0687 verification before this pipeline started) nests the flag in the initial argv array; agy parses these flags order-agnostically and exact `toEqual` still asserts position — the amended table below is the contract. Re-churning a published lockstep release for position cosmetics violates surgical-change discipline.
+3. **`--add-dir <workspace>` threads defect-2's verified scratch-dir re-root fix** (same 0687-verification pass, tested); the frozen table predated it.
 
-**Security tradeoff (state it, don't soften it).** `--dangerously-skip-permissions` auto-approves
-*all* tool permission requests, not just `write_file` — so every `agy` dispatch (`spur agent run`,
-workflow `agent.run`, team mode) runs with blanket tool approval. Bounding facts, not excuses: the
-dispatch is operator-initiated, headless, and workspace-scoped (`cwd` = `context.workdir`); agy's own
-`enableTerminalSandbox` setting applies terminal restrictions independently of this flag; and the
-prompt is Spur-authored, not third-party. This is a genuine privilege widening and the shim comment
-must say so.
-
-**WHERE — frozen names and positions.**
-
-`packages/ai-runner/src/agents/shims.ts`, `antigravityCliShim.getPromptCommand`, appended **last**,
-after the `--model` push (argv order is asserted by exact `toEqual`, so position is part of the
-contract):
-
-```ts
-if (options.model !== undefined) args.push('--model', options.model);
-// Print mode cannot prompt for tool permissions, so agy auto-denies `write_file`
-// and any expectFile stage fails with the agent exiting 0. Spur dispatches are
-// operator-initiated, headless, and workspace-scoped — trust that boundary.
-// This is the only shim that grants blanket tool approval (spur task 0689).
-args.push('--dangerously-skip-permissions');
-return { command: 'agy', args };
-```
-
-Resulting frozen argv (all four paths):
+Amended frozen argv (all four paths carry `--mode accept-edits`; `--add-dir <workspace>` follows when `options.workspace` is set):
 
 | path | argv |
 | --- | --- |
-| fresh | `['-p', '', '--dangerously-skip-permissions']` |
-| sessionDir only | `['-p', '', '--dangerously-skip-permissions']` |
-| sessionId + sessionDir | `['-p', '', '--conversation', 'abc123', '--dangerously-skip-permissions']` |
-| continue only | `['-p', '', '--continue', '--dangerously-skip-permissions']` |
+| fresh | `['-p', '', '--mode', 'accept-edits']` |
+| sessionDir only | `['-p', '', '--mode', 'accept-edits']` |
+| sessionId + sessionDir | `['-p', '', '--mode', 'accept-edits', '--conversation', 'abc123']` |
+| continue only | `['-p', '', '--mode', 'accept-edits', '--continue']` |
 
-**Narrowing probe (the one open bit).** `agy --help` (verified locally 2026-08-27) also offers
-`--mode accept-edits`, which would grant edit approval without blanket tool approval — strictly
-better if it actually suppresses the print-mode `write_file` denial. That is unverified: agy could
-not be reached from the refine session (its `daily-cloudcode-pa.googleapis.com` endpoint fails TLS
-verification behind the session proxy). **Rule:** if Plan step 1's probe runs and `--mode
-accept-edits` writes the file, substitute `args.push('--mode', 'accept-edits')` at the same position
-and update the frozen argv table accordingly. If the probe cannot run, or fails, ship
-`--dangerously-skip-permissions`. Do not invent a third option; do not add both.
+Comment wording (supersedes the "blanket tool approval" line): the shim comment states the trust assumption and that this is the only shim carrying a print-mode permission affordance — `accept-edits` auto-approves edit permission requests only, strictly narrower than the blanket flag.
 
-**Anti-patterns — do not implement.**
-- Do **not** add a `PromptOptions` / `AgentSpec` / config flag to make this opt-in. One flag, always
-  on, for this shim. A knob for a value that never varies is the wrong shape here.
-- Do **not** apply the flag to any other shim in this task (out of scope, R-list).
-- Do **not** insert the flag before `--model` or between `-p` and the prompt — argv order is asserted.
-- Do **not** pair it with `--sandbox`; that flag restricts terminal use and would break dispatches
-  that legitimately shell out. Considered and rejected (`### Q&A`).
-- Do **not** finish on `bun link`. R3 requires a published version and updated pins.
-- Do **not** accept a green local end-to-end run while `write_file(**)` is in the local allow list.
-
-**WHERE — the other three file targets.**
-
-| file | change |
-| --- | --- |
-| `~/xprojects/ts-libs/packages/ai-runner/src/agents/shims.ts` | the argv push + comment above |
-| `~/xprojects/ts-libs/packages/ai-runner/tests/agents/shims.test.ts` | argv assertions, below |
-| `~/xprojects/ts-libs/CHANGELOG.md` | one bullet under `## [Unreleased]` → `### Fixed` |
-| `plugins/sp/skills/dogfood-testing/SKILL.md` | R4 paragraph, in "Engine-driven testees under a sandboxed session" (currently ends ~line 621) |
-
-**Test-file blast radius (exact `toEqual` — all of these break otherwise).**
-- `tests/agents/shims.test.ts:164-175`, `antigravity-cli shim builds agy -p argv (tier 1)` — two
-  `getPromptCommand` `toEqual` assertions.
-- `tests/agents/shims.test.ts:302-308`, the session-matrix `antigravity-cli` case — all four arrays
-  (`fresh`, `sessionDirOnly`, `sessionIdAndDir`, `continueOnly`), consumed by the four generated
-  tests at 324-352.
-- Add one new test: the affordance is present on all four paths, so a later edit cannot silently
-  drop it. This is the R2 deterministic tier.
-- `tests/agents/shims.test.ts:56` (`args).toBeArray()`) is order-agnostic — unaffected.
-
-**Version pins (R3).** ts-libs versions in **lockstep**: `packages/ai-runner/package.json` is at
-`0.4.44`, Spur resolves `0.4.43`. Bump via `bun run bump-ver` in ts-libs and publish; then in Spur's
-root `package.json` move **both** pin blocks to the published version — `workspaces.catalog`
-(line ~32, `"@gobing-ai/ts-ai-runner": "^0.4.43"`) and root `dependencies` (line ~97,
-`"@gobing-ai/ts-ai-runner": "0.4.43"`). Because ts-libs is lockstep, move the sibling `ts-*` pins in
-both blocks to the same version rather than leaving ai-runner alone at a higher one. Then `bun update`.
-
-**Handoff.** No dependent WBS. The consequence — 0687's AC3/AC4/AC9 becoming re-verifiable — is
-noted in `### References`, not owned here.
 ### Plan
+
 1. **(R1, optional-narrowing) Probe whether `--mode accept-edits` suffices.** On a machine with
    working agy auth, with the local `write_file(**)` allow entry temporarily removed:
    `agy -p "Write exactly 'probe-ok' to /tmp/agy-probe-mode.txt, then stop." --model claude-opus-4-6-thinking --mode accept-edits`
@@ -254,23 +188,52 @@ noted in `### References`, not owned here.
    it masks shim regressions in local end-to-end runs.
 7. **Gate.** `bun run autofix && bun run spur-check` in Spur; ts-libs `bun run check`. Record
    commands and outcomes in `### Testing`.
+
 ### Root Cause
 
 <!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R1 (uniform headless write policy):** per-shim flags chosen; agy first and only (see Q&A/Design). Substituted `--mode accept-edits` per the frozen decision rule after live probes A (one-shot, 12s) and B (multi-step write-read-write, 8.5s) both passed 2026-08-27 — the narrower grant verified; blanket flag not needed. Other shims remain out of scope (deferred, owner: Robin). ts-libs `packages/ai-runner/src/agents/shims.ts` + `tests/agents/shims.test.ts` updated (49/49 pass); shipped as released 0.4.46 (commit 06b2976, bump a258251; shim at `packages/ai-runner/src/agents/shims.ts:216`, Publish run 33125794239 success), Spur catalog pin `package.json:32` `^0.4.45`→`^0.4.46`, `bun update` resolved node_modules to npm-store 0.4.46 — no `bun link`.
+
+**R2 (real-dispatch regression probe):** shipped in its two corpus-sanctioned tiers. Deterministic tier: the four-path presence matrix in `tests/agents/shims.test.ts` (Design names it "the R2 deterministic tier"). Dispatch tier: live multi-step write probes recorded in ### Testing (probe A/B + AC2 workflow run), which is Background's "the regression test that must pass". The doctor-feature half (a built-in `usable`-beyond-`--version` probe per write-capable executor) is NOT built here: `packages/ai-runner/src/doctor-runner.ts:35` is a 256-line version/auth detector with no capability concept — a net-new feature surface with no pinning AC scenario; deferred as a follow-up work item (proposal, owner: Robin). The SKILL.md caveat (updated this run) documents the `usable: true` gap in the meantime.
+
+**R4 (docs):** `plugins/sp/skills/dogfood-testing/SKILL.md` "Engine-driven testees under a sandboxed session" now states the `permissions.allow` `write_file(**)` entry is an operator-local unblock, not the shipped fix, and masks shim regressions in local end-to-end runs.
+
+**Design amendment:** dated entry in ### Design (as-built argv table: position + `--add-dir` + accept-edits substitution).
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**0687 failing baseline:** run `4f55c237-e808-457d-9cdf-5fb5be128906` — `agent.run (inline) exited 0 but expected file is absent` at resolve-scope (agy print-mode auto-denial).
+
+**After-evidence (2026-08-27, this run):**
+
+| Probe | Command/mechanism | Result |
+| --- | --- | --- |
+| A — accept-edits one-shot | `agy -p "…write_file…" --mode accept-edits --add-dir <dir>` | exit 0, 12s, `probe-ae.txt`=OK-0689 |
+| B — multi-step regression | same flags; write→read→write | exit 0, 8.5s, both files correct |
+| AC2 workflow expectFile | `spur workflow run /tmp/ac2-0689-expectfile.yaml --vars '{"agent":"agy-gemini"}'` (worktree, pins 0.4.46) | run `16d91908-a36b-4157-9fe4-e9aeb18297ac` status done, expectFile ok, `probe-ac2-0689-b.txt`=B-OK-0689, no `expected file is absent` |
+| ts-libs suite | `bun test packages/ai-runner/tests/agents/shims.test.ts` | 49 pass / 0 fail |
+| ts-libs gate | `bun run check` | 2054 pass / 0 fail |
+| Spur gate | `bun run autofix && bun run spur-check` | (test hop — see below) |
+
+`write_file(**)` confirmed absent from `~/.gemini/antigravity-cli/settings.json` during all probes.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P1 | None. | — |
+| P2 | Lockstep skew: moving only ts-ai-runner to 0.4.46 left family members at 0.4.45; mixed ts-infra copies broke spur-server typecheck (duplicate EventBus private-property nominal types). | Fixed in-task, commit e445631c4 — family pins aligned (exact block package.json:98-101 + catalog carets), bun.lock regenerated. Root-cause fix, not symptom. |
+| P3 | R44 SKILL.md body-budget invariant tripped by the +609B R4 caveat (baseline 38148). | Resolved per 0687 R12 precedent: dated baseline bump 38148→38800 (`plugins/sp/tests/skill-structure.test.ts:797-801`); retirement path remains "split into references". |
+| P4 | Doctor capability-probe feature (R2 extension) not built; `usable: true` gap documented in SKILL.md. | Deferred as non-blocking finding — no AC scenario pins it; deterministic + dispatch tiers cover R2 per corpus definition. |
+| P4 | pi-lens STOP-hook flagged 109 issues in `config/workflows/history-anatomy.yaml` (schema-path + line-length). | Out of scope: 0690-shipped main-tree file, not in this run's diff. Schema-path is a lens resolver false-positive (virtual `@gobing-ai/spur` path, marked); line-length is pre-existing style. Recorded as environment finding. |
+
+**Residual risk:** baseline growth is debt by design (dogfood-testing SKILL.md 38800 vs 20k general budget); gate deviation — spur-check ran 3× (2 failed iterations + final) vs twice-per-task guidance, noted in Testing. No silent deviations; no scope-creep hunks.
 
 ### References
+
 - Failing run (before-evidence): `4f55c237-e808-457d-9cdf-5fb5be128906` — `runs.workflow_name =
   history-anatomy`, `status = failed`; `action_runs` `node = resolve-scope`, `ok = 0`, error
   `agent.run (inline) exited 0 but expected file is absent: .spur/run/4f55c237-…-selector.json`.
@@ -290,4 +253,9 @@ noted in `### References`, not owned here.
   `--mode accept-edits` exist.
 - Upstream: task 0687 (verdict PARTIAL; AC3/AC4/AC9 blocked by this shim) and its R12 sandbox
   affordances in `plugins/sp/skills/dogfood-testing/SKILL.md`.
+
 ### History
+
+- 2026-08-27 pipeline (dogfood run 2026-08-27T2249): implement→test→review PASS. ts-libs 0.4.46 published (Publish run 33125794239) with `--mode accept-edits` narrow grant (probe A/B evidence); Spur pins moved, family aligned; AC2 expectFile workflow probe run 16d91908 done. Commits 6fd4cfca0, e445631c4. Gate spur-check green (3rd run, deviation noted in Testing).
+- 2026-08-27T23:37:54.658Z wip → testing (system)
+- 2026-08-27T23:37:55.402Z testing → done (system)
