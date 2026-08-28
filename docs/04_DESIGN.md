@@ -1510,15 +1510,15 @@ type, absent on pre-0581 artifacts (schemaVersion stays 1).
 ### 4.1 CLI `--json` shape inventory (F95 / task 0693, swept 2026-08-27 @ emit set below)
 
 Per-noun inventory of every `--json`-bearing verb across the 14 noun modules under
-`apps/cli/src/commands/`, from a full `toJson(` / `JSON.stringify(` sweep (102 emit sites,
+`apps/cli/src/commands/`, from a full `toJson(` / `JSON.stringify(` sweep (104 emit sites,
 counts per module in parentheses). Target shape = the ADR-091 envelope
 (`{ok: true, data}` / `{ok: false, error: {code, message, details?}}`; paginated list verbs
 `{ok, data, meta}`). This table doubles as the migration ledger: rows gain a **Post-adoption**
 note as nouns adopt behind `--json-envelope` (plan step 8).
 
-**Post-adoption (task 0693 R4, 2026-08-27):** all 102 sites are accounted for — 99 adopted
+**Post-adoption (task 0693 R4, 2026-08-27; re-swept 2026-08-28):** all 104 sites are accounted for — 99 adopted
 behind the opt-in (`toJson(payload)` → `toEnvelopeJson(payload, { enveloped: options.jsonEnvelope })`;
-raw output stays byte-identical), 3 intentionally kept raw. Default rule per row: the "Current
+raw output stays byte-identical), 5 intentionally kept raw. Default rule per row: the "Current
 shape" column describes the **raw default that remains unchanged**; enveloped output wraps it
 as `{ok, data}` (single), `{ok, data, meta}` (list), or normalizes it (error envelopes).
 Row-level deltas from the default rule:
@@ -1577,14 +1577,15 @@ Row-level deltas from the default rule:
 | task | path | 1294 | flat-object `{wbs, filePath}` | unwrapped |
 | task | run-link | 1332 | flat-object | unwrapped |
 | task | scaffold-tests | 1368 | flat-object | unwrapped |
-| workflow (12) | validate | 266 | flat-object | unwrapped |
-| workflow | run | 398, 422, 430, 611 | flat-object (sync/async-fallback result, `{status:'failed', reason, hint}` failure, `{runId, status:'started', …}` handle, sync result) | unwrapped; failure is status-discriminated, not `{ok:false, error}` |
-| workflow | continue | 686 | flat-object | unwrapped |
-| workflow | clean | 729 | flat-object (`logsOnly ? logResult : {…result, logs}`) | unwrapped |
-| workflow | cancel | 769 | flat-object (status union incl. `not_found`) | not-found is a status value, not an error envelope |
-| workflow | list | 793 | flat-object (`WorkflowListResult`) | list verb without paginated `{ok, data, meta}` form |
-| workflow | trace | 895 | flat-object (timeline/summary union) | unwrapped |
-| workflow | (internal) | 1070, 1077 | `JSON.stringify` event fingerprints — **not CLI output** (dedup/dedupe keys) | none — counted in the 102 for sweep parity, no migration |
+| workflow (14) | validate | 273 | flat-object | unwrapped |
+| workflow | run | 406, 431, 440, 621 | flat-object (sync/async-fallback result, `{status:'failed', reason, hint}` failure, `{runId, status:'started', …}` handle, sync result) | unwrapped; failure is status-discriminated, not `{ok:false, error}` |
+| workflow | continue | 698 | flat-object | unwrapped |
+| workflow | clean | 744 | flat-object (`logsOnly ? logResult : {…result, logs}`) | unwrapped |
+| workflow | cancel | 788 | flat-object (status union incl. `not_found`) | not-found is a status value, not an error envelope |
+| workflow | list | 813 | flat-object (`WorkflowListResult`) | list verb without paginated `{ok, data, meta}` form |
+| workflow | show | 855, 864 | flat-object (`{name, kind, format, steps}` todo · `{name, kind, format, diagram}` mermaid) | **kept raw** — registers `SHARED_OPTIONS.jsonSupported`, not `jsonEnvelope`, so it never advertises the flag (added by task 0695 after the 0693 sweep; recorded 2026-08-28) |
+| workflow | trace | 946 | flat-object (timeline/summary union) | unwrapped |
+| workflow | (internal) | 1121, 1128 | `JSON.stringify` event fingerprints — **not CLI output** (dedup/dedupe keys) | none — counted in the 104 for sweep parity, no migration |
 | feature (11) | create | 33 | flat-object | unwrapped |
 | feature | show | 64 | flat-object `{…rest, content}` | unwrapped |
 | feature | update | 143 | flat-object | unwrapped |
@@ -1625,10 +1626,12 @@ Row-level deltas from the default rule:
 | serve (1) | serve | 37 | flat-object `{port, url, pid:null, running:false}` (dry probe) | unwrapped |
 | migrate (1) | migrate | 23 | flat-object | unwrapped |
 
-Sweep parity: 102 raw sites = 100 verb emit sites + 2 workflow internal fingerprints
-(1070/1077, footnoted above); per-module counts in the Noun column match the Plan step-1
-counts (task 26, workflow 12, feature 11, projects 10, message 10, history 9, team 6,
-agent 6, builder 4, rule 3, init 2, status/serve/migrate 1 each).
+Sweep parity: 104 raw sites = 102 verb emit sites + 2 workflow internal fingerprints
+(1121/1128, footnoted above); per-module counts in the Noun column match the live sweep
+(task 26, workflow 14, feature 11, projects 10, message 10, history 9, team 6,
+agent 6, builder 4, rule 3, init 2, status/serve/migrate 1 each). The 0693 sweep recorded
+102 sites / workflow 12; task 0695 added `workflow show --format todo|mermaid` (855/864),
+re-swept 2026-08-28 during the 0693 `--force` re-verify.
 
 Cross-cutting deviation classes (every row is an instance of one of these):
 
