@@ -4,7 +4,7 @@ name: "Remove the authentication signal from the doctor surface and collapse the
 status: done
 template: feature-impl
 created_at: 2026-08-26T18:52:01.244Z
-updated_at: "2026-08-26T23:03:48.885Z"
+updated_at: "2026-08-28T06:24:11.783Z"
 feature_id: B4
 priority: P2
 tags: ["cli", "agent", "doctor", "cleanup"]
@@ -156,7 +156,7 @@ No other new type, helper, flag, or option. Everything else in this task is a de
 ### Solution
 Collapse `doctor.probe` to usability-only classification and strip the auth signal from every doctor surface.
 
-- `packages/app/src/services/agent-service.ts:2428` — `withoutAuthenticated<T>` strips `authenticated` from a DoctorResult row; both `--json` builders spread it (role branch `:554`, `renderDoctor` `:621`) so the published field cannot leak through either payload.
+- `packages/app/src/services/agent-service.ts:2482` — `withoutAuthenticated<T>` strips `authenticated` from a DoctorResult row; both `--json` builders spread it (role branch `:571`, `renderDoctor` `:642`) so the published field cannot leak through either payload.
 - `packages/app/src/workflow/actions/doctor-probe.ts:26` — `parseDoctorJson` returns `{usable, resolvedAgent}` with `usable` defaulting true on parse failure; the auth classifier (`RELAY_FAMILY`, `ENV_MISS_PATTERN`, `AUTH_FAIL_PATTERN`, `ProbeClass`) is deleted; FAIL fires when the resolved executor reports `usable=false` or doctor exits non-zero, covering tier-2 executors where `renderDoctor` exits 0. Log line `:148` now reads `precheck: <exe>[ (resolved <x>)] usable=<bool>` with no `auth=`/`probe=` tokens.
 - `packages/app/tests/workflow/actions/doctor-probe.test.ts:50` — writes FAIL on a `usable:false` doctor row even though the command exited 0 (B4/0682 R4): this pin locks the added gate; the PASS pin at `:36` asserts a usable row (soft probe returns ok); the unparseable-output test at `:178` defaults `usable=true` and does not fail the run.
 - `packages/app/tests/services/agent-service.test.ts:303` — 0621 R1/R12 pin renamed for B4/0682 R2: the table stays auth-free AND `--json` carries no `authenticated` field (assertion inverted at `:338-347`).
@@ -172,8 +172,8 @@ Verification: `bun run format && bun run spur-check` rc=0 (~102 s); packages/app
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | renderAuth and the AuthState import are gone from src — `grep -rn 'renderAuth\|AuthState' packages/app/src apps/cli/src` returns zero matches this run. renderDoctorDetail (agent-service.ts:2524) emits status/pinned/health/version lines with no auth line. |
-| R2 | MET | Both --json builders spread `...withoutAuthenticated(result)` — role branch agent-service.ts:554 and renderDoctor agent-service.ts:621; the helper at agent-service.ts:2428 destructures `authenticated` off the DoctorResult before emission, so a field living on the published DoctorResult cannot leak through either path. Pins: agent-service.test.ts:303 ('R1/R12 (0621) + B4/0682 R2: no auth column, and --json carries no authenticated field'), assertion at :338-347; apps/cli/tests/commands/migrate-stubs.test.ts asserts absence through the real CLI main() flow. Live check this run: `agent doctor --json` → no entry has an `authenticated` key. |
+| R1 | MET | renderAuth and the AuthState import are gone from src — `grep -rn 'renderAuth\|AuthState' packages/app/src apps/cli/src` returns zero matches this run. renderDoctorDetail (agent-service.ts:2578) emits status/pinned/health/version lines with no auth line. |
+| R2 | MET | Both --json builders spread `...withoutAuthenticated(result)` — role branch agent-service.ts:571 and renderDoctor agent-service.ts:642; the helper at agent-service.ts:2482 destructures `authenticated` off the DoctorResult before emission, so a field living on the published DoctorResult cannot leak through either path. Pins: agent-service.test.ts:303 ('R1/R12 (0621) + B4/0682 R2: no auth column, and --json carries no authenticated field'), assertion at :338-347; apps/cli/tests/commands/migrate-stubs.test.ts asserts absence through the real CLI main() flow. Live check this run: `agent doctor --json` → no entry has an `authenticated` key. |
 | R3 | MET | doctor-probe.ts no longer defines RELAY_FAMILY, ENV_MISS_PATTERN, AUTH_FAIL_PATTERN, classifyDoctorProbe or ProbeClass — `grep -rn` over packages/app/src + apps/cli/src returns zero matches this run. parseDoctorJson (doctor-probe.ts:26) returns `{usable, resolvedAgent}` only; the log line at :148 reads `precheck: <exe>[ (resolved <x>)] usable=<bool>` with no auth=/probe= token. |
 | R4 | MET | parseDoctorJson (doctor-probe.ts:26) reads `.agents[0].usable` and defaults to true on absent/unparseable input; the action writes FAIL when !usable, ahead of the status-file write at :160, while the soft-probe return stays `ok: true` (:163). Pin: doctor-probe.test.ts:50 'writes FAIL on a usable:false doctor row even though the command exited 0 (B4/0682 R4)'. |
 | R5 | MET | Unchanged by diff inspection and still pinned: the .spur/run boundary check (doctor-probe.ts:62-83, tests :127 and :137), splitLaunchCommand metacharacter rejection (:87, tests :150 and :168), the divergence line for implementAgent !== agent (test :70), the status-file write at :160, and the soft-probe `return { ok: true, … }` at :163. Only the classification input changed. |
@@ -195,7 +195,7 @@ Verification: `bun run format && bun run spur-check` rc=0 (~102 s); packages/app
 | P3 | Correctness (record) | `docs/tasks4/0682_*.md` § Review | Corrected in the 2026-08-26 re-audit: this section previously read `verdict: UNKNOWN` while `.spur/run/0682-verdict.json` carried `PASS`. The bare-Review backfill wrote a placeholder verdict the artifact contradicted, so the durable task record misreported its own outcome. |
 | P4 | Security | `packages/app/src/workflow/actions/doctor-probe.ts:62-87` | No regression: the `.spur/run/` boundary check and `splitLaunchCommand` metacharacter rejection are untouched by the classifier collapse; removing the auth read removes a credential-file access rather than adding one. |
 | P4 | Correctness | `packages/app/src/workflow/actions/doctor-probe.ts:26-40`, `:144-163` | Usability-only classification closes the tier-2 hole: `renderDoctor` exits non-zero only for `!usable && tier === 1`, so a missing tier-2 executor would have PASSed silently without the `usable === false` gate. Soft-probe contract (`ok: true`) preserved. |
-| P4 | Architecture | `packages/app/src/services/agent-service.ts:2428` | `withoutAuthenticated` is applied at both `--json` emission sites (`:554`, `:621`) rather than at one, so a future third payload path is the only way the field could return — an acceptable seam for a two-site surface. |
+| P4 | Architecture | `packages/app/src/services/agent-service.ts:2482` | `withoutAuthenticated` is applied at both `--json` emission sites (`:571`, `:642`) rather than at one, so a future third payload path is the only way the field could return — an acceptable seam for a two-site surface. |
 | P4 | Scope | — | No P1–P2 findings. Deletion-only diff plus reconciled tests (T10 honored: the three auth-keyed tests were rewritten as usability assertions, not deleted to reach green). |
 ### References
 

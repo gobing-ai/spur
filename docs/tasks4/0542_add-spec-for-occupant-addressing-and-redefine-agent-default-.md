@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0535", "0536", "0541"]
 ac_numbering: task-local
 created_at: "2026-08-14T00:05:19.993Z"
-updated_at: "2026-08-14T04:42:42.943Z"
+updated_at: "2026-08-28T06:24:08.076Z"
 ---
 
 ## 0542. Add --spec for occupant addressing and redefine agent.default as a role
@@ -202,7 +202,7 @@ task finalizes; feature G4's occupant contract is preserved, not extended.
 - [x] Run `bun run autofix && bun run spur-check`
 ### Solution
 - **R1 — `--spec <id>` occupant addressing.** `apps/cli/src/commands/agent.ts:353-469` — `runAgentRun` reads `--spec` (canonical) or legacy `--agent <spec-id>`; `drainIntoPrompt` sets `spec-id` before the selector rewrite so the ADR-057 wave 1 occupant pin survives (`:414-431`); explicit `--spec` with an unknown id exits 2 without spawning (`:372-375`); legacy path warns once via `warnAgentSpecIdOnce` (`:480-486`, shim `agent-flag-spec-id` at `:477`). `runAgentLoop` (`:557-585`) reads `--spec` and keeps the empty-inbox idle behavior.
-- **R2 — `agent.default` redefined as the default role.** `packages/app/src/services/agent-service.ts:1328-1342` — three-way branch: role uses new semantics; configured executor warns once (`warnAgentDefaultExecutorOnce`, `:1672-1687`, shim `agent-default-executor` at `:1679`) and keeps legacy fallthrough; neither fails exit 2 naming both accepted sets. `resolveAgentAuto` (`:1087-1092`) propagates the R2 exit-2 instead of silently falling to Tier-1 priority.
+- **R2 — `agent.default` redefined as the default role.** `packages/app/src/services/agent-service.ts:1825-1842` — three-way branch: role uses new semantics; configured executor warns once (`warnAgentDefaultExecutorOnce`, `:2388-2394`, shim `agent-default-executor` at `:1679`) and keeps legacy fallthrough; neither fails exit 2 naming both accepted sets. `resolveAgentAuto` (`:1525-1530`) propagates the R2 exit-2 instead of silently falling to Tier-1 priority.
 - **R3 — loop keeps working.** `apps/cli/src/commands/agent.ts:557-585` — loop resolves via `--spec`, idles on empty inbox, exits cleanly on abort; existing loop tests updated for the `--spec` message and exit-2 missing-address code.
 - **R4 — config + surface docs same commit.** `config/config.example.yaml:39-47` (role-domain default `coder`), `apps/cli/schemas/spur-config.schema.json` (`agent.default` description), `docs/04_DESIGN.md` (agent.default role domain + spec-id addressing), `plugins/sp/skills/spur-cli/references/agent.md` (run/loop flag tables). Both new shims registered in `config/transition-shims.json` (`agent-flag-spec-id`, `agent-default-executor`); `bun run transition-shim-check` PASS 4/4.
 - **Tests.** `apps/cli/tests/commands/agent-spec-flag.test.ts` (fresh-process file so the process-global warn-once is observable — R1 canonical/legacy/unknown, 3 tests); `packages/app/tests/services/agent-service.test.ts` — `AgentService agent.default role domain (0542)` describe (role / executor-warns-once / neither-fails, 3 tests) + the retired pre-0126 legacy-default test updated to the R2 failure semantics; `apps/cli/tests/commands/agent.test.ts` loop tests updated for `--spec` and exit 2.
@@ -232,7 +232,7 @@ task finalizes; feature G4's occupant contract is preserved, not extended.
 | Req | Status | Evidence |
 | --- | --- | --- |
 | R1 --spec occupant addressing | MET | `apps/cli/src/commands/agent.ts:353-469` — canonical `--spec <id>` + legacy `--agent <spec-id>` (warn-once, shim agent-flag-spec-id); occupant pin survives rewrite; unknown spec exits 2; tests in `apps/cli/tests/commands/agent-spec-flag.test.ts` (3/3) |
-| R2 agent.default = default role | MET | `packages/app/src/services/agent-service.ts:1328-1342` three-way branch + `warnAgentDefaultExecutorOnce` (:1672-1687); `resolveAgentAuto` propagates exit-2 (:1087-1092); tests in `AgentService agent.default role domain (0542)` (3/3) |
+| R2 agent.default = default role | MET | `packages/app/src/services/agent-service.ts:1825-1842` three-way branch + `warnAgentDefaultExecutorOnce` (:2388-2394); `resolveAgentAuto` propagates exit-2 (:1525-1530); tests in `AgentService agent.default role domain (0542)` (3/3) |
 | R3 loop keeps working | MET | `runAgentLoop` reads `--spec`, idles on empty inbox; loop tests updated (exit 2 on missing address) |
 | R4 config + surface docs T3 | MET | `config/config.example.yaml`, `apps/cli/schemas/spur-config.schema.json`, `docs/04_DESIGN.md`, `plugins/sp/skills/spur-cli/references/agent.md`; both shims registered; `transition-shim-check` PASS 4/4 |
 
