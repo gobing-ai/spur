@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.57.0
+version: 1.58.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-28
@@ -1559,7 +1559,7 @@ Row-level deltas from the default rule:
   | --- | --- | --- | --- |
   | `agent list` | `agent-service.ts` `list()` | `agent.ts` → `runAgentList` → `svc.list({enveloped})` | `{ok, data: {agents}}` |
   | `agent doctor` | `agent-service.ts` `renderDoctor()` (2 sites) + role-ladder failure | `agent.ts` → `svc.doctor({enveloped})` | `{ok, data: {agents, rolesSource, cache}}`; failure → `{ok:false, error:{code:'INTERNAL_ERROR', details:{cliCode:'agent-resolution'}}}` |
-  | `agent run` | `agent-service.ts` `handleRunOutput()` + resolution failure | `agent.ts` → `commanderOptionsToFlags` → `flags['json-envelope']` | `{ok, data: {exitCode, stdout, …}}`; failure as above |
+  | `agent run` | `agent-service.ts` `handleRunOutput()` + resolution failure | `agent.ts` → `flags.jsonEnvelope` shim → `AgentService.run()` | `{ok, data: {exitCode, stdout, …}}`; failure as above |
   | `rule run` | `rule-service.ts` `evaluate()` | `rule.ts` → `service.evaluate({enveloped})` | `{ok, data: {preset, ruleCount, findings, fixes}}` |
   | `rule validate` | `rule-service.ts` `validate()` (valid + invalid branches) | `rule.ts` → `service.validate({enveloped})` | `{ok, data: {valid, kind, source, …}}` |
 

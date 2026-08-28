@@ -4,7 +4,7 @@ name: "Route service-layer JSON emission through the ADR-091 envelope seam"
 status: done
 template: feature-impl
 created_at: 2026-08-28T04:31:45.643Z
-updated_at: "2026-08-28T06:57:41.864Z"
+updated_at: "2026-08-28T19:31:20.558Z"
 feature_id: F95
 priority: P2
 ac_altitude: task-local
@@ -47,7 +47,7 @@ gap documented and routed here.
 
 ### Requirements
 
-- [ ] R1. **Record the seam-relocation decision** — a dated amendment to ADR-091 in
+- [x] R1. **Record the seam-relocation decision** — a dated amendment to ADR-091 in
       `docs/00_ADR.md` stating where the envelope helpers live after this task and why. This is an
       internal module relocation, not a public CLI surface change (no new noun, verb, or flag), so
       the ADR-051 consent gate does **not** apply; the amendment exists so the next reader knows
@@ -55,17 +55,17 @@ gap documented and routed here.
       (`packages/contracts`; duplicating the helpers) and the dependency-direction fact that rules
       out the naive option.
 
-- [ ] R2. **Wire the four confirmed verbs** — `agent list`, `agent doctor`, `rule run`,
+- [x] R2. **Wire the four confirmed verbs** — `agent list`, `agent doctor`, `rule run`,
       `rule validate` honor `--json-envelope` / `SPUR_JSON_ENVELOPE=1` with the same precedence as
       the CLI seam (explicit flag > env > raw), emitting `{ok: true, data}` / `{ok: true, data, meta}`
       on success and `{ok: false, error: {code, message, details?}}` on failure. The precedence is
       applied by the moved `envelopeEnabled()`, not re-implemented per service.
 
-- [ ] R3. **Raw-default byte-identity** — with neither the flag nor the env var set, all four verbs
+- [x] R3. **Raw-default byte-identity** — with neither the flag nor the env var set, all four verbs
       emit output byte-identical to the pre-change baseline. Guarded by regression tests that
       capture the baseline, not by inspection.
 
-- [ ] R4. **Close the inventory** — re-run the emit-site sweep with `packages/app` service emitters
+- [x] R4. **Close the inventory** — re-run the emit-site sweep with `packages/app` service emitters
       included, and update `docs/04_DESIGN.md` §4.1 so every verb that registers
       `SHARED_OPTIONS.jsonEnvelope` has a row stating whether it honors the flag. No verb may
       advertise the flag without either honoring it or carrying a documented kept-raw reason. The
@@ -357,28 +357,25 @@ Each entry cites the first changed line per file (`file:line`).
 | `packages/app/src/services/rule-service.ts:94` |
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | ADR-091 amendment `docs/00_ADR.md:1715-1740` (dated 2026-08-28, task 0697): owning module named (`packages/app/src/output/envelope.ts`), both rejected alternatives named with reasons (contracts = DTOs-only vs `process.env` runtime; duplication = second implementation), binding fact stated as workspace-graph circularity (`apps/cli` → `@gobing-ai/spur-app`, reverse import circular; ADR-021 corrected to non-binding), and explicit "No ADR-051 consent gate applies" |
-| R2 | MET | Helpers moved with precedence single-sourced in `envelopeEnabled` (`packages/app/src/output/envelope.ts:63-66`); threading: `apps/cli/src/commands/rule.ts:60,87` → `RuleService` `enveloped` (`rule-service.ts:95,144`) → `toEnvelopeJson` at `rule-service.ts:337,373,402`; `agent.ts:31-33,50-57` → `agent-service.ts:420-424` (list), `:575-577`/`:648-650` (doctor via `renderDoctor` `:612`); pseudo-envelopes at `agent-service.ts:539-547` and `:677-688` normalize to `{ok:false, error:{INTERNAL_ERROR, details.cliCode:'agent-resolution'}}` in enveloped mode only; private `toJson` deleted (grep: zero `function toJson` in agent-service.ts); no service reads the env var (grep: only `envelope.ts`) |
-| R3 | MET | Fixtures captured pre-edit: `apps/cli/tests/fixtures/raw-json-baseline/{rule-run.json,rule-validate-preset.json}` compared with exact `toBe` (no trim) in `apps/cli/tests/output-envelope.test.ts` ("raw default byte-identity" describe); agent verbs pinned structurally `raw.text === toJson(enveloped.data)` with documented in-test justification (host-specific payloads); formatter drift blocked by `biome.json:63-68` |
-| R4 | MET | Runnable default-deny sweep in `output-envelope.test.ts` ("jsonEnvelope registration sweep"): >50-target sanity assert; every flag-registering verb must emit, thread, or be in `DELEGATED_EMITTERS` with the delegate source verified to exist AND emit; §4.1-row regex check; `docs/04_DESIGN.md` §4.1 "Service-side adoption closed (task 0697)" supersedes the 0693 note, rows added/updated for `agent list`/`doctor`/`run` (`:1620-1622`) and `rule run`/`validate` |
+|-------------|--------|----------|
+| R1 | MET | `docs/00_ADR.md:1715` — dated ADR-091 amendment names the owner, rejected alternatives, dependency direction, and consent-gate disposition |
+| R2 | MET | `packages/app/src/output/envelope.ts:61`; `apps/cli/src/commands/agent.ts:30`; `apps/cli/src/commands/rule.ts:21`; executable coverage at `apps/cli/tests/output-envelope.test.ts:164` |
+| R3 | MET | pre-relocation fixture exercised by `packages/app/tests/services/json-envelope-adoption.test.ts:147` and exact-byte assertions at `packages/app/tests/services/json-envelope-adoption.test.ts:157` |
+| R4 | MET | default-deny scan at `apps/cli/tests/json-envelope-inventory.test.ts:100`; closed inventory at `docs/04_DESIGN.md:1551`; fix-pass artifacts: repo-root `.spur/run/0697-verify-answer.txt` lines 1-39 and `.spur/run/0697-verdict.json` lines 1-106 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
-| AC1 [docs-only] | MET | static-ref | `docs/00_ADR.md:1715-1740` — all four named elements verified present (owning module; contracts + duplication rejections; circular workspace graph as the binding fact, ADR-021 demoted to agreeing; explicit no-ADR-051-consent statement) |
-| AC2 | MET | test | `apps/cli/tests/output-envelope.test.ts` SERVICE_VERBS loop: all four verbs with `--json --json-envelope` parse via `apiSuccessSchema(z.unknown())` (flat `{ok,data}`; no paginated form, correct per task Q&A); env-only run text `===` flag-run text (exact string identity); post-fix `agent run` env case additionally parses via `apiErrorSchema` |
-| AC3 | MET | test | Same file "raw default byte-identity vs pre-change baseline": rule verbs exact-fixture `toBe`; agent verbs `raw === toJson(enveloped.data)` structural pin; green in post-fix gate (attested 6634/0) |
-| AC4 | MET | test | Same file sweep test: default-deny over every `.command()` block registering `SHARED_OPTIONS.jsonEnvelope`; offenders `[]`; delegated emitters verified to exist and emit in source; §4.1 row presence asserted |
-| AC5 | MET | command | `apps/cli/src/output.ts:5-13` re-exports all moved names from `@gobing-ai/spur-app` (`CommandOutput`/`consoleOutput`/`toJson` stay local); `packages/app/src/index.ts:36-43` exports the module; call sites unchanged (spot-checked `task.ts:45,195`, `feature.ts:66`, `message.ts:341`, `team.ts`, `serve.ts:45` — all keep the 0693 `{ enveloped: options.jsonEnvelope }` shape); cross-workspace `bunx tsc --noEmit` green in the post-fix gate (attested; re-run before commit) |
-
+|---------------------|--------|---------------|----------|
+| AC1 [docs-only] | MET | static-ref | `docs/00_ADR.md:1715` — all required amendment elements are present |
+| AC2 | MET | test | `apps/cli/tests/output-envelope.test.ts:164` — all four verbs validate and flag/env documents are identical; post-fix target 70 pass / 0 fail |
+| AC3 | MET | test | `packages/app/tests/services/json-envelope-adoption.test.ts:155` — raw output is byte-identical to the pre-relocation fixture |
+| AC4 | MET | test | `apps/cli/tests/json-envelope-inventory.test.ts:100` and `apps/cli/tests/output-envelope.test.ts:308` report zero ignored advertised verbs |
+| AC5 | MET | command | `apps/cli/src/output.ts:10` re-exports the seam; `bun run spur-check` typechecked every workspace and passed 6,669 tests |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **SECU findings** (pipeline verify step — verdict: PASS)
