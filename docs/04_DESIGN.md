@@ -1223,7 +1223,7 @@ Two top-level concerns:
   `tasks:`/`features:` blocks: `tasks.folders` (path → `{baseCounter, label?}`), `tasks.active`, `tasks.severity` (finding code → `error` | `warning` | `off`),
   `features.dir`. Under `agent`: `default` (default role), `executors` (tier → executor profiles), and
   `roles` (ADR-061 / 0572 — optional closed-vocabulary per-role tier/stage overrides merged per-field
-  over the `DEFAULT_AGENT_ROLES` constant; unknown role ids fail config load). Every finding emitted by task/feature check carries a stable machine code (e.g. `L3.plan-format`, `L4.feature-not-found`) registered in `packages/config/src/finding-codes.ts` (51 codes: L1×2, L2×5, L3×18 including `L3.status-claim-contradiction`; L4×26 — `L3.testing-coverage` retired by task 0688). `tasks.severity` overrides finding severities or drops findings (`off`) before pass gate evaluation; unknown codes fail config validation. The dogfood `L4.anchor-subject-mismatch: error` override was removed by task 0688 / ADR-088 (residue after the matcher fix is frozen-legacy warnings, not a worked-down true-positive set). The folder fields tolerate a blank/`null` value (an empty YAML key) and coerce to
+  over the `DEFAULT_AGENT_ROLES` constant; unknown role ids fail config load). Every finding emitted by task/feature check carries a stable machine code (e.g. `L3.plan-format`, `L4.feature-not-found`) registered in `packages/config/src/finding-codes.ts` (50 codes: L1×2, L2×5, L3×17; L4×26 — `L3.testing-coverage` retired by task 0688, `L3.status-claim-contradiction` retired by task 0691 / ADR-090). `tasks.severity` overrides finding severities or drops findings (`off`) before pass gate evaluation; unknown codes fail config validation. The dogfood `L4.anchor-subject-mismatch: error` override was removed by task 0688 / ADR-088 (residue after the matcher fix is frozen-legacy warnings, not a worked-down true-positive set). The folder fields tolerate a blank/`null` value (an empty YAML…
   the canonical default. `@gobing-ai/spur-config` is the SSOT; `apps/cli/schemas/spur-config.schema.json`
   mirrors it for editor/CI validation.
 
@@ -1602,15 +1602,14 @@ Source: delivery §1.1, design §10.
 | `spur task verifyall-aggregate`        | `--from-file <path>` `--json`                                                                                                             | 0/1     | Read a JSON array of `{wbs, outcome[, reason]}` and emit the deterministic batch verdict; NOT-STARTED excluded from the rollup. Default input `.spur/run/verifyall-batch-input.json`. Replaces agent-discretion rollup prose (task 0341). |
 | `spur task run-link <wbs>`             | `--source <src>` `--run-id <id>` `--json`                                                                                                | 0/1     | Record a pipeline provenance run-link for a task (used by `--next` auto chains to satisfy the testing→done guard). Idempotent: re-run prints already-exists and skips. `--source` default `chain`; `--run-id` auto-generated when omitted. Shared ensure helper with `task record` (task 0436). |
 
-**Projection-content additions (tasks 0625, 0688).** `spur task check` emits warning
-`L4.testing-verdict-stub` for the record-generated hollow Testing row. For a prose-free Solution
-change-map row, `L4.anchor-subject-mismatch` derives subject tokens from the cited path basename
-before evaluating the line (0625 R4; 0688 kept this fallback — a bare row still carries zero
-prose tokens for the ±20 window to rescue). The matcher reads the cited range plus
-±`ANCHOR_WINDOW_LINES` (20) and excludes every backticked anchor in the row from subject tokens
-(0688 R1/R2). `L3.testing-coverage` is retired (bunfig.toml already enforces 90/90);
-`L3.status-claim-contradiction` (error) flags Requirements checkbox vs Solution/Testing
-done/open-claim contradictions. Exact triggers and tokenization:
+**Projection-content additions (tasks 0625, 0688; ADR-090 / task 0691).** `spur task check` emits
+warning `L4.testing-verdict-stub` for the record-generated hollow Testing row. For a prose-free
+Solution change-map row, `L4.anchor-subject-mismatch` derives subject tokens from the cited path
+basename before evaluating the line (0625 R4). The matcher reads exactly the cited line range and
+excludes every backticked anchor in the row from subject tokens (0688 R1/R2; 0691 retired the
+±`ANCHOR_WINDOW_LINES` window — cited-range only). `L3.testing-coverage` is retired (bunfig.toml
+already enforces 90/90); `L3.status-claim-contradiction` is retired (ADR-090 F96 disposition
+DELETE). Exact triggers and tokenization:
 [`lifecycle-projection-integrity.md`](design/lifecycle-projection-integrity.md) §2.
 
 **Exit codes:** 0 success, 1 error, 2 invalid usage. Follows the design §10 `api-response` envelope

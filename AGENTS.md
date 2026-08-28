@@ -332,10 +332,10 @@ violation fails in ~0.3 s instead of after the 63 s test run.
 **`spur task check --corpus` — task/feature corpus, not code.** Sweeps every task and feature and fails on any
 structural error outside `config/corpus-baseline.json`. It exists because per-task gates run **once**,
 at a transition, and nothing re-validates afterwards — so both a bypassed gate and a tightened rule
-go unnoticed indefinitely. The baseline is two-sided: an unlisted error fails, **and** a listed entry
-that no longer reproduces fails, so it cannot rot into a silent suppression list. Adding or
-tightening a finding code obliges you to reconcile the fallout in the same commit (constitution
-**T10**).
+go unnoticed indefinitely. The baseline is a machine-regenerated snapshot (ADR-090): a finding
+outside it fails; a vanished entry retires at the next regeneration (`bun run
+scripts/commands/regen-corpus-baseline.ts`), never by hand. Adding or tightening a finding code
+obliges you to reconcile the fallout in the same commit (constitution **T10**).
 
 **`bun run transition-shim-check` — tracked compatibility shims.** Runs **second** (after
 `link-check`, before `lint`) in both `spur-check` and `spur-check-new` (task 0541, ADR-058); it costs

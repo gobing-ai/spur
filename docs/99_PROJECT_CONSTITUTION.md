@@ -193,7 +193,7 @@ names the docs that must be touched **in the same commit / same change**:
 | T7 | The doc map or process changes | this file → re-sync `AGENTS.md` (§4.4) → propagate to sibling projects |
 | T8 | A multi-wave batch is planned | schedule "doc sync" as an **explicit work item** — same-commit discipline does not survive on memory alone |
 | T9 | A design or feature item is added/changed | the satellite **first** (`docs/design/<slug>.md` or `docs/features/<id>_<slug>.md`), **then** its index row in `04`/`05` — same change (§4.5 rule 5) |
-| T10 | A corpus check rule is added or tightened (a new `L*` finding code, or an existing one raised to `error`) | run `bun run corpus-check` and reconcile the fallout **in the same change**: fix the newly-failing tasks/features, or add each to `config/corpus-baseline.json` with a reason and a date |
+| T10 | A corpus check rule is added or tightened (a new `L*` finding code, or an existing one raised to `error`) | run `bun run corpus-check` and reconcile the fallout **in the same change**: fix the newly-failing tasks/features, or accept them into the regenerated snapshot (`bun run scripts/commands/regen-corpus-baseline.ts`, ADR-090) |
 
 **T10 — why it exists.** Corpus checks run *once*, at a transition, against the rules that existed
 that day. Nothing re-validates afterwards, so tightening a rule silently converts previously-legal
@@ -206,10 +206,11 @@ why the rule changed, and the blast radius is smallest before anyone rebases ont
 reconciliation means the next unrelated contributor inherits a red gate they did not cause and
 cannot judge.
 
-The baseline is deliberately two-sided — an unlisted error fails the gate, **and** a listed entry
-that no longer reproduces fails it too. Without that second half the file rots into a silent
-suppression list, which is the same invisible debt in a new place. Delete an entry the moment its
-finding is fixed.
+The baseline is a machine-regenerated snapshot, not a hand-maintained list (ADR-090): a finding
+outside it fails the gate; an entry that stops reproducing simply retires at the next
+regeneration. Never hand-edit `config/corpus-baseline.json` — accepting a finding means
+regenerating the snapshot and committing the diff, where a suppressed finding stays visible as a
+count drop.
 
 ## 6. Edit principles per file
 
