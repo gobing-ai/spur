@@ -37,7 +37,7 @@ import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
 import type { CliContext } from '../context';
 import { maybeTriggerHistoryRefresh } from '../history-refresh';
-import { toJson } from '../output';
+import { toEnvelopeJson, writeJsonError } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
 import { renderWorkflowMermaid } from '../workflow/mermaid-render';
 import { resolveSpurBin } from '../workflow/resolve-spur-bin';
@@ -260,10 +260,11 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .argument('<file>', 'Workflow YAML file')
         .option(...SHARED_OPTIONS.noSchema)
         .option(...SHARED_OPTIONS.jsonSupported)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (file, options) => {
             const result = await makeSvc().validate(file, { validateSchema: options.schema });
             if (options.json) {
-                context.output.write(toJson(result));
+                context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
             } else if (result.valid) {
                 context.output.write(`workflow valid: ${result.workflow.name}`);
                 const c = result.composition;
@@ -309,6 +310,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option('--no-log', 'Opt out of writing the consolidated .spur/run/<RUNID>.log')
         .option('--steer', 'Accept local in-process steering commands on stdin at declared action boundaries')
         .option(...SHARED_OPTIONS.jsonSupported)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (file, options) => {
             const json = options.json === true;
             const silent = !json && options.silent === true;
@@ -395,7 +397,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     } finally {
                         clearWorkflowRunActive();
                     }
-                    if (json) context.output.write(toJson(result));
+                    if (json) context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     else if (!silent) {
                         context.output.write(
                             `workflow ${result.status}: ${result.workflowName} -> ${result.finalState} (async spawn failed, ran sync)`,
@@ -419,7 +421,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     const reason = 'async worker failed to start or register the run';
                     const hint = 'run the workflow synchronously (omit --async) to see the failure';
                     if (json) {
-                        context.output.write(toJson({ status: 'failed', reason, hint }));
+                        context.output.write(
+                            toEnvelopeJson({ status: 'failed', reason, hint }, { enveloped: options.jsonEnvelope }),
+                        );
                     } else if (!silent) {
                         context.output.write(`async spawn failed: ${reason} — ${hint}.`);
                     }
@@ -427,7 +431,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     return;
                 }
                 const asyncResult = { runId, status: 'started', workflowName: file };
-                if (json) context.output.write(toJson(asyncResult));
+                if (json) context.output.write(toEnvelopeJson(asyncResult, { enveloped: options.jsonEnvelope }));
                 else if (!silent) {
                     context.output.write(
                         `Started async run: ${runId}\nMonitor with: spur workflow trace ${runId} --follow`,
@@ -608,7 +612,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 ledger.unsubscribe();
                 steeringInput?.close();
             }
-            if (json) context.output.write(toJson(result));
+            if (json) context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
             else if (!silent) {
                 context.output.write(
                     `workflow ${result.status}: ${result.workflowName} -> ${result.finalState}${typeof result.reason === 'string' ? ` — ${result.reason}` : ''}`,
@@ -632,6 +636,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             'Inject a HITL gate answer before guard re-evaluation (0433). Does not imply --yes.',
         )
         .option(...SHARED_OPTIONS.jsonSupported)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (runId, options) => {
             const json = options.json === true;
             // Validate --answer enum (R1): commander does not natively enforce choices.
@@ -683,14 +688,16 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     ...(hitlAnswer !== undefined ? { hitlAnswer } : {}),
                 });
                 context.output.write(
-                    json ? toJson(result) : `workflow ${result.status}: ${result.workflowName} -> ${result.finalState}`,
+                    json
+                        ? toEnvelopeJson(result, { enveloped: options.jsonEnvelope })
+                        : `workflow ${result.status}: ${result.workflowName} -> ${result.finalState}`,
                 );
                 context.setExitCode(result.status === 'done' ? 0 : 1);
                 // Pipeline-run completion trigger (task 0549): resuming a paused run to a
                 // terminal state is a pipeline-run completion.
                 await maybeTriggerHistoryRefresh(context, 'pipeline-run', targetId);
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             } finally {
                 await ledger.flush();
@@ -711,6 +718,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option('--logs', 'Scope to retained run-log reclamation only (skip stale-run finalization)')
         .option(...SHARED_OPTIONS.dryRunWorkflowClean)
         .option(...SHARED_OPTIONS.jsonSupported)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             const dryRun = options.dryRun === true;
             const logsOnly = options.logs === true;
@@ -726,7 +734,11 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             const retentionDays = resolveWorkflowLogRetentionDays(context.spurConfig ?? null);
             const logResult = await svc.cleanRunLogs(retentionDays, dryRun);
             if (options.json) {
-                context.output.write(toJson(logsOnly ? logResult : { ...result, logs: logResult }));
+                context.output.write(
+                    toEnvelopeJson(logsOnly ? logResult : { ...result, logs: logResult }, {
+                        enveloped: options.jsonEnvelope,
+                    }),
+                );
             } else {
                 if (result !== undefined) {
                     const verb = dryRun ? 'Would finalize' : 'Finalized';
@@ -763,10 +775,11 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         )
         .argument('<run-id>', 'Run id to cancel')
         .option(...SHARED_OPTIONS.jsonSupported)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (runId, options) => {
             const result = await makeSvc(options.json).cancel(runId);
             if (options.json) {
-                context.output.write(toJson(result));
+                context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                 return;
             }
             if (result.status === 'not_found') {
@@ -786,11 +799,12 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .command('list')
         .description('List available workflow YAML files.')
         .option(...SHARED_OPTIONS.jsonSupported)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             const paths = resolveWorkflowPaths(context.spurConfig ?? null);
             const result = await makeSvc().list(paths);
             if (options.json) {
-                context.output.write(toJson(result));
+                context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
             } else {
                 context.output.write(formatListHuman(result));
             }
@@ -836,6 +850,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option(...SHARED_OPTIONS.pollWorkflow, '1000')
         .option('--output', 'With --follow: stream .spur/run/<RUNID>.log instead of the DB timeline')
         .option(...SHARED_OPTIONS.jsonSupported)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (runId, options) => {
             const svc = makeSvc();
             const last = parseInt(options.last, 10);
@@ -892,7 +907,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                       last,
                   });
             if (options.json) {
-                context.output.write(toJson(result));
+                context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
             } else if ('events' in result) {
                 context.output.write(formatTraceTimeline(result));
             } else {

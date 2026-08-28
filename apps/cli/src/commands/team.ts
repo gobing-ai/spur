@@ -10,7 +10,7 @@ import {
 } from '@gobing-ai/spur-app';
 import { EventBus } from '@gobing-ai/ts-infra';
 import type { CliContext } from '../context';
-import { toJson } from '../output';
+import { toEnvelopeJson, writeJsonError } from '../output';
 import { attachSystemEventLedger, type CliSystemEventLedger } from '../system-event-ledger';
 import { SHARED_OPTIONS } from './shared-options';
 
@@ -51,6 +51,7 @@ export function registerTeamCommand(program: Command, context: CliContext): void
     noun.command('status')
         .description('List agent specs and their run status; --by-team groups by team (0258 R4).')
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .option('--by-team', 'Group specs by their agent.team.<id> membership')
         .option('--server <url>', 'Server API URL for live run status', DEFAULT_SERVER)
         .action(async (options) => {
@@ -66,6 +67,7 @@ export function registerTeamCommand(program: Command, context: CliContext): void
         .option('--check', 'Dry-run: show the add/prune diff without writing')
         .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (team, options) => {
             const code = await runTeamUp(team, options, context);
             context.setExitCode(code);
@@ -77,6 +79,7 @@ export function registerTeamCommand(program: Command, context: CliContext): void
         .option('--purge', 'Also delete spur:generated specs (never manual / ref:)')
         .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (team, options) => {
             const code = await runTeamDown(team, options, context);
             context.setExitCode(code);
@@ -87,6 +90,7 @@ export function registerTeamCommand(program: Command, context: CliContext): void
         .argument('<agent-id>', 'Agent spec id')
         .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (agentId, options) => {
             const code = await runTeamStart(agentId, options, context);
             context.setExitCode(code);
@@ -97,6 +101,7 @@ export function registerTeamCommand(program: Command, context: CliContext): void
         .argument('<agent-id>', 'Agent spec id')
         .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (agentId, options) => {
             const code = await runTeamStop(agentId, options, context);
             context.setExitCode(code);
@@ -118,7 +123,10 @@ async function runTeamAssign(taskId: string, agentId: string, context: CliContex
 }
 
 /** `spur team status [--json] [--server <url>]` */
-async function runTeamStatus(options: { json?: boolean; server: string }, context: CliContext): Promise<number> {
+async function runTeamStatus(
+    options: { json?: boolean; jsonEnvelope?: boolean; server: string },
+    context: CliContext,
+): Promise<number> {
     const svc = new TeamService(context);
     const json = options.json === true;
     const status = await svc.getStatus();
@@ -147,7 +155,7 @@ async function runTeamStatus(options: { json?: boolean; server: string }, contex
         }
     }
     if (json) {
-        context.output.write(toJson(status));
+        context.output.write(toEnvelopeJson(status, { enveloped: options.jsonEnvelope }));
         return 0;
     }
     context.output.write(status.agents.map(formatStatusLine).join('\n'));
@@ -222,7 +230,7 @@ async function fetchServerProcesses(
 /** Send `spur team start <agent-id>` to the server and translate the response. */
 async function performTeamStart(
     agentId: string,
-    options: { server: string; json?: boolean },
+    options: { server: string; json?: boolean; jsonEnvelope?: boolean },
 ): Promise<
     | { ok: true; body: StartResponse }
     | { ok: false; error: string; status: number }
@@ -242,7 +250,7 @@ async function performTeamStart(
 /** `spur team start <agent-id> [--server <url>] [--json]` — spawn via server API. */
 async function runTeamStart(
     agentId: string,
-    options: { server: string; json?: boolean },
+    options: { server: string; json?: boolean; jsonEnvelope?: boolean },
     context: CliContext,
 ): Promise<number> {
     const result = await performTeamStart(agentId, options);
@@ -258,7 +266,7 @@ async function runTeamStart(
         return 1;
     }
     if (options.json) {
-        context.output.write(toJson(result.body));
+        context.output.write(toEnvelopeJson(result.body, { enveloped: options.jsonEnvelope }));
     } else {
         context.output.write(`started ${agentId} (pid=${result.body.pid}, status=${result.body.status ?? '?'})`);
     }
@@ -268,7 +276,7 @@ async function runTeamStart(
 /** Send `spur team stop <agent-id>` to the server and translate the response. */
 async function performTeamStop(
     agentId: string,
-    options: { server: string; json?: boolean },
+    options: { server: string; json?: boolean; jsonEnvelope?: boolean },
 ): Promise<
     | { ok: true; body: StopResponse }
     | { ok: false; error: string; status: number }
@@ -288,7 +296,7 @@ async function performTeamStop(
 /** `spur team stop <agent-id> [--server <url>] [--json]` — stop via server API. */
 async function runTeamStop(
     agentId: string,
-    options: { server: string; json?: boolean },
+    options: { server: string; json?: boolean; jsonEnvelope?: boolean },
     context: CliContext,
 ): Promise<number> {
     const result = await performTeamStop(agentId, options);
@@ -304,7 +312,7 @@ async function runTeamStop(
         return 1;
     }
     if (options.json) {
-        context.output.write(toJson(result.body));
+        context.output.write(toEnvelopeJson(result.body, { enveloped: options.jsonEnvelope }));
     } else {
         context.output.write(`stopped ${agentId}`);
     }
@@ -321,12 +329,12 @@ function formatStatusLine(agent: TeamStatusEntry): string {
 
 /** `spur team status --by-team` — group specs by their `team:<id>` membership (0258 R4). */
 async function runTeamStatusGrouped(
-    options: { json?: boolean; server?: string },
+    options: { json?: boolean; jsonEnvelope?: boolean; server?: string },
     context: CliContext,
 ): Promise<number> {
     const teams = await new TeamService(context).listTeams();
     if (options.json === true) {
-        context.output.write(toJson({ teams }));
+        context.output.write(toEnvelopeJson({ teams }, { enveloped: options.jsonEnvelope }));
         return 0;
     }
     if (teams.length === 0) {
@@ -360,6 +368,7 @@ async function makeTeamServiceWithLedger(
     const ledger = await attachSystemEventLedger(bus, context);
     const svc = new TeamService({
         ...context,
+        // SAFETY: TeamServiceEventBus is structurally the same ts-infra EventBus (see workflow.ts:248).
         eventBus: bus as unknown as TeamServiceEventBus,
         // 0543 R1: role-only members resolve through the Layer-1 role table —
         // same map AgentService receives for `--agent <role>`.
@@ -371,7 +380,7 @@ async function makeTeamServiceWithLedger(
 /** `spur team up <team> [--check] [--server <url>] [--json]` — materialize + best-effort start. */
 async function runTeamUp(
     team: string,
-    options: { check?: boolean; server: string; json?: boolean },
+    options: { check?: boolean; server: string; json?: boolean; jsonEnvelope?: boolean },
     context: CliContext,
 ): Promise<number> {
     const { svc, ledger } = await makeTeamServiceWithLedger(context);
@@ -380,7 +389,7 @@ async function runTeamUp(
         try {
             result = await svc.materializeTeam(team, { check: options.check === true });
         } catch (error) {
-            context.output.error(error instanceof Error ? error.message : String(error));
+            writeJsonError(context.output, options, error instanceof Error ? error.message : String(error));
             return 1;
         }
 
@@ -396,7 +405,7 @@ async function runTeamUp(
         }
 
         if (options.json === true) {
-            context.output.write(toJson({ ...result, started }));
+            context.output.write(toEnvelopeJson({ ...result, started }, { enveloped: options.jsonEnvelope }));
         } else {
             const verb = options.check === true ? 'would materialize' : 'materialized';
             const startNote = started.length > 0 ? `, started ${started.length}` : '';
@@ -414,7 +423,7 @@ async function runTeamUp(
 /** `spur team down <team> [--purge] [--server <url>] [--json]` — teardown + best-effort stop. */
 async function runTeamDown(
     team: string,
-    options: { purge?: boolean; server: string; json?: boolean },
+    options: { purge?: boolean; server: string; json?: boolean; jsonEnvelope?: boolean },
     context: CliContext,
 ): Promise<number> {
     const { svc, ledger } = await makeTeamServiceWithLedger(context);
@@ -423,7 +432,7 @@ async function runTeamDown(
         try {
             result = await svc.teardownTeam(team, { purge: options.purge === true });
         } catch (error) {
-            context.output.error(error instanceof Error ? error.message : String(error));
+            writeJsonError(context.output, options, error instanceof Error ? error.message : String(error));
             return 1;
         }
 
@@ -435,7 +444,7 @@ async function runTeamDown(
         }
 
         if (options.json === true) {
-            context.output.write(toJson({ ...result, stopped }));
+            context.output.write(toEnvelopeJson({ ...result, stopped }, { enveloped: options.jsonEnvelope }));
         } else {
             context.output.write(`team ${team}: stopped ${stopped.length}, purged ${result.purged.length}`);
         }

@@ -8,7 +8,7 @@ import {
     type WriteResult,
 } from '@gobing-ai/spur-app';
 import type { CliContext } from '../context';
-import { toJson } from '../output';
+import { toEnvelopeJson, writeJsonError } from '../output';
 import { makePlanningEmitter } from '../planning-emitter';
 import { makeLifecycleAdapter } from '../workflow/make-lifecycle-adapter';
 import { SHARED_OPTIONS } from './shared-options';
@@ -25,17 +25,18 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option('--parent <id>', 'Parent feature ID (child gets the next free digit 1-9)')
         .option(...SHARED_OPTIONS.folderFeatures)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (name, options) => {
             const svc = await makeService(context, options.folder);
             try {
                 const result = await svc.create(name, options.parent);
                 if (options.json) {
-                    context.output.write(toJson(result));
+                    context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                 } else {
                     context.output.write(`Created feature ${result.ref.id}: ${result.ref.filePath}`);
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -50,6 +51,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .argument('<id>', 'Feature ID')
         .option(...SHARED_OPTIONS.folderFeatures)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (id, options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -61,12 +63,12 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                 }
                 if (options.json) {
                     const { content, ...rest } = result;
-                    context.output.write(toJson({ ...rest, content }));
+                    context.output.write(toEnvelopeJson({ ...rest, content }, { enveloped: options.jsonEnvelope }));
                 } else {
                     context.output.write(result.content);
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -91,6 +93,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.fromFile)
         .option(...SHARED_OPTIONS.folderFeatures)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (id, status, options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -140,10 +143,10 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     return;
                 }
                 if (options.json) {
-                    context.output.write(toJson(result));
+                    context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -156,6 +159,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option('--to <status>', "Target status (default: 'done')")
         .option(...SHARED_OPTIONS.folderFeatures)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (id, options) => {
             const svc = await makeService(context, options.folder);
             const target = options.to ?? 'done';
@@ -175,7 +179,9 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                 let current = initial.status;
                 if (current === target) {
                     if (options.json) {
-                        context.output.write(toJson({ id, status: current, hops: history }));
+                        context.output.write(
+                            toEnvelopeJson({ id, status: current, hops: history }, { enveloped: options.jsonEnvelope }),
+                        );
                     } else {
                         context.output.write(`${id}: already at ${current}; no advance needed`);
                     }
@@ -207,13 +213,15 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     return;
                 }
                 if (options.json) {
-                    context.output.write(toJson({ id, status: current, hops: history }));
+                    context.output.write(
+                        toEnvelopeJson({ id, status: current, hops: history }, { enveloped: options.jsonEnvelope }),
+                    );
                 } else {
                     const trail = history.map((h) => `${h.from} → ${h.to}`).join(', ');
                     context.output.write(`${id}: advanced to ${current} (${trail})`);
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -226,6 +234,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.priorityFilter)
         .option(...SHARED_OPTIONS.folderFeatures)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -238,7 +247,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                 }
                 features.sort((a, b) => a.id.localeCompare(b.id));
                 if (options.json) {
-                    context.output.write(toJson(features));
+                    context.output.write(toEnvelopeJson(features, { enveloped: options.jsonEnvelope, kind: 'list' }));
                 } else if (features.length === 0) {
                     context.output.write('(no features)');
                 } else {
@@ -247,7 +256,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     }
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -261,12 +270,13 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.dryRunFeatureMap)
         .option(...SHARED_OPTIONS.folderFeatures)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (id, options) => {
             const svc = await makeService(context, options.folder);
             try {
                 const result = await svc.move(id, options.parent ?? null, { dryRun: options.dryRun === true });
                 if (options.json) {
-                    context.output.write(toJson(result));
+                    context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                 } else if (result.dryRun) {
                     context.output.write(`Dry run — ${result.movedCount} feature(s) would be re-IDed:`);
                     for (const [oldId, newId] of Object.entries(result.mapping)) {
@@ -279,7 +289,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     );
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -308,6 +318,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option('--all', 'Rewrite every feature ## Tasks region (explicit broad sweep)')
         .option(...SHARED_OPTIONS.folderFeatures)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -325,7 +336,10 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                 if (options.json) {
                     const featuresDir = options.folder ?? (await resolvePlanningFolders(context.fs)).featuresDir;
                     context.output.write(
-                        toJson({ index_path: `${featuresDir}/INDEX.md`, tasksUpdated: result.tasksUpdated }),
+                        toEnvelopeJson(
+                            { index_path: `${featuresDir}/INDEX.md`, tasksUpdated: result.tasksUpdated },
+                            { enveloped: options.jsonEnvelope },
+                        ),
                     );
                 } else {
                     context.output.write(
@@ -333,7 +347,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     );
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -348,6 +362,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.folderFeatures)
         .option('--fix', 'repair structural findings in place (heading presence/level/order, R-item checkboxes)')
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (id, options) => {
             const resolved = await resolvePlanningFolders(context.fs);
             const featuresDir = options.folder ?? context.fs.resolve(resolved.featuresDir);
@@ -400,11 +415,11 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     }
                 }
                 if (json) {
-                    context.output.write(toJson(results));
+                    context.output.write(toEnvelopeJson(results, { enveloped: options.jsonEnvelope, kind: 'list' }));
                 }
                 if (results.some((r) => !r.pass)) context.setExitCode(1);
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -432,6 +447,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.forceFeatureReopen)
         .option(...SHARED_OPTIONS.folderFeatures)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (id, options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -447,7 +463,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         forceConfirm: options.force,
                     });
                     if (options.json) {
-                        context.output.write(toJson(result));
+                        context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     } else {
                         context.output.write(
                             `Evaluated ${result.evaluated}/${result.totalFeatures} features; updated ${result.updatedCount} feature(s).`,
@@ -471,7 +487,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         forceConfirm: options.force,
                     });
                     if (options.json) {
-                        context.output.write(toJson(result));
+                        context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     } else {
                         const tag = result.applied
                             ? 'UPDATED'
@@ -486,7 +502,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     }
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });

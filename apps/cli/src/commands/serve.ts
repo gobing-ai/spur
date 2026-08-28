@@ -3,7 +3,7 @@ import type { Command } from '@commander-js/extra-typings';
 import { buildConfigFromEnv, DEFAULT_DATABASE_URL } from '@gobing-ai/spur-config';
 import { startServer } from '@gobing-ai/spur-server';
 import type { CliContext } from '../context';
-import { toJson } from '../output';
+import { toEnvelopeJson, writeJsonError } from '../output';
 import { SHARED_OPTIONS } from './shared-options';
 
 /** Resolve the database URL used by `spur serve`, matching normal CLI DB defaults. */
@@ -21,6 +21,7 @@ export function registerServeCommand(program: Command, context: CliContext, opti
         .option('--no-open', 'Skip opening the browser')
         .option(...SHARED_OPTIONS.cwdServe, context.cwd)
         .option(...SHARED_OPTIONS.jsonServePortUrl)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             try {
                 const env = process.env as Record<string, string | undefined>;
@@ -34,12 +35,15 @@ export function registerServeCommand(program: Command, context: CliContext, opti
                     // --json is a dry machine-readable probe: no server is started, so
                     // pid would be this CLI process (misleading). Omit pid; report ready=false.
                     context.output.write(
-                        toJson({
-                            port,
-                            url: `http://${host}:${port}`,
-                            pid: null,
-                            running: false,
-                        }),
+                        toEnvelopeJson(
+                            {
+                                port,
+                                url: `http://${host}:${port}`,
+                                pid: null,
+                                running: false,
+                            },
+                            { enveloped: options.jsonEnvelope },
+                        ),
                     );
                     return;
                 }
@@ -54,7 +58,7 @@ export function registerServeCommand(program: Command, context: CliContext, opti
                     webDistPath: config.server.webDistPath,
                 });
             } catch (err) {
-                context.output.error(err instanceof Error ? err.message : String(err));
+                writeJsonError(context.output, options, err instanceof Error ? err.message : String(err));
                 if (context.env?.SPUR_DEBUG === '1' && err instanceof Error && err.stack) {
                     context.output.error(err.stack);
                 }

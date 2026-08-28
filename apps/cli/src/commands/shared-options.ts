@@ -28,6 +28,10 @@ export type SharedOption = readonly [flags: string, description: string];
 export const SHARED_OPTIONS = {
     // ── cross-command exact pairs (identical text in every declaring module) ──
     json: ['--json', 'Output machine-readable JSON'] as const,
+    jsonEnvelope: [
+        '--json-envelope',
+        'With --json, wrap output in the standard {ok, data|error} envelope (ADR-091; default stays raw during the deprecation window)',
+    ] as const,
     jsonSupported: ['--json', 'Output machine-readable JSON where supported'] as const,
     section: ['--section <name>', 'Section name to replace'] as const,
     fromFile: ['--from-file <path>', 'File to read section body from (requires --section)'] as const,

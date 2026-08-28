@@ -1,6 +1,6 @@
 # CLI surface consistency — structural checks that every command file follows
 # the registerXxxCommand convention and that --json claims are backed by real
-# output serialization (toJson or JSON.stringify).
+# output serialization (toEnvelopeJson, toJson, or JSON.stringify).
 #
 # Part of the recommended-pre-check preset. Run:
 #   spur rule run --preset recommended-pre-check
@@ -10,7 +10,8 @@ include:
 
 exclude:
   - "apps/cli/src/commands/stubs.ts"
-  - "apps/cli/src/commands/shared-options.ts" # option registry, not a command module (consistency.test.ts excludes it too)
+  - "apps/cli/src/commands/shared-options.ts" # option registry, not a command
+  # module (consistency.test.ts excludes it too)
 
 rules:
   - id: cli-register-pattern
@@ -26,11 +27,12 @@ rules:
 
   - id: cli-json-output
     description: >
-      Command files that register --json options must call toJson() or
-      JSON.stringify() to produce machine-readable output.
+      Command files that register --json options must call toEnvelopeJson()
+      (ADR-091 envelope seam), toJson(), or JSON.stringify() to produce
+      machine-readable output.
     severity: error
     evaluator:
       type: rg
       config:
-        pattern: "toJson\\b|JSON\\.stringify\\b"
+        pattern: "toEnvelopeJson\\b|toJson\\b|JSON\\.stringify\\b"
         mode: require

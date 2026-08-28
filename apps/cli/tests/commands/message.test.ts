@@ -772,3 +772,72 @@ describe('spur message send --wait — seeded occupant resolves (G4 wave 2, R5)'
         }
     });
 });
+
+// 0693 R4: --json usage branches through the ADR-091 envelope seam (raw default +
+// enveloped opt-in), including the zod-validating error envelope path.
+describe('spur message send --json usage errors (0693 envelope adoption)', () => {
+    test('--json --to with --role emits the raw usage error object (exit 2)', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
+        try {
+            const code = await main(['message', 'send', '--json', '--to', 'a', '--role', 'reviewer', 'hi'], {
+                cwd,
+                output: out,
+                dbUrl,
+            });
+            expect(code).toBe(2);
+            const parsed = JSON.parse(out.messages[0] ?? '{}');
+            expect(parsed).toEqual({
+                error: { code: 'usage', message: 'message send accepts --to or --role, not both' },
+            });
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('--json --to with --role --json-envelope emits an apiErrorSchema envelope (exit 2)', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
+        try {
+            const code = await main(
+                ['message', 'send', '--json', '--json-envelope', '--to', 'a', '--role', 'reviewer', 'hi'],
+                { cwd, output: out, dbUrl },
+            );
+            expect(code).toBe(2);
+            const parsed = JSON.parse(out.messages[0] ?? '{}');
+            expect(parsed.ok).toBe(false);
+            expect(parsed.error.code).toBe('INTERNAL_ERROR');
+            expect(parsed.error.details.cliCode).toBe('usage');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('--json with empty --to emits the usage error (exit 2)', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
+        try {
+            const code = await main(['message', 'send', '--json', '--to', '', 'hi'], { cwd, output: out, dbUrl });
+            expect(code).toBe(2);
+            const parsed = JSON.parse(out.messages[0] ?? '{}');
+            expect(parsed.error.message).toBe('message send requires --to <id> or --role <name>');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('--json --json-envelope success wraps the queued payload under data', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
+        try {
+            const code = await main(['message', 'send', '--json', '--json-envelope', '--to', 'planner', 'hi'], {
+                cwd,
+                output: out,
+                dbUrl,
+            });
+            expect(code).toBe(0);
+            const parsed = JSON.parse(out.messages[0] ?? '{}');
+            expect(parsed.ok).toBe(true);
+            expect(parsed.data.toId).toBe('planner');
+            expect(parsed.data.status).toBe('queued');
+        } finally {
+            await cleanup();
+        }
+    });
+});

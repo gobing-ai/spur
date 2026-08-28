@@ -3,7 +3,7 @@ import type { Command } from '@commander-js/extra-typings';
 import type { CliContext } from '../context';
 import { CommandError } from '../errors';
 import { gitContext } from '../git-context';
-import { toJson } from '../output';
+import { toEnvelopeJson, writeJsonError } from '../output';
 import { SHARED_OPTIONS } from './shared-options';
 
 /** Register `spur status` command (optionally hidden from the top-level help listing). */
@@ -12,13 +12,14 @@ export function registerStatusCommand(program: Command, context: CliContext, opt
         .command('status', { hidden: options.hidden === true })
         .summary('show project, Git, and optional path status')
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .argument('[path]', 'Optional file/dir path to check')
         .action(async (path, options) => {
             try {
                 const code = await runStatusCore(path, options, context);
                 context.setExitCode(code);
             } catch (err) {
-                context.output.error(err instanceof Error ? err.message : String(err));
+                writeJsonError(context.output, options, err instanceof Error ? err.message : String(err));
                 context.setExitCode(1);
             }
         });
@@ -27,7 +28,7 @@ export function registerStatusCommand(program: Command, context: CliContext, opt
 /** Report basic project and Git status. */
 async function runStatusCore(
     path: string | undefined,
-    options: { json?: boolean },
+    options: { json?: boolean; jsonEnvelope?: boolean },
     context: CliContext,
 ): Promise<number> {
     const [packageJsonExists, spurConfigExists, git, agentSpecs] = await Promise.all([
@@ -48,7 +49,7 @@ async function runStatusCore(
     };
 
     if (options.json === true) {
-        context.output.write(toJson(status));
+        context.output.write(toEnvelopeJson(status, { enveloped: options.jsonEnvelope }));
     } else {
         context.output.write(
             [

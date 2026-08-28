@@ -14,7 +14,7 @@ import { bundledRulesRoot, listBundledRuleFiles } from '@gobing-ai/ts-rule-engin
 import { CLI_CONFIG } from '../config';
 import { SCAFFOLD_MANIFEST } from '../config/scaffold-manifest';
 import type { CliContext } from '../context';
-import { toJson } from '../output';
+import { toEnvelopeJson } from '../output';
 import { SHARED_OPTIONS } from './shared-options';
 
 /** Global user config root, relative to the home directory. */
@@ -192,6 +192,7 @@ export function registerInitCommand(program: Command, context: CliContext, optio
             'Also rewrite ~/.config/spur/config.yaml from the shipped global default (backed up first)',
         )
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             const json = options.json === true;
             const force = options.force === true;
@@ -279,7 +280,7 @@ export function registerInitCommand(program: Command, context: CliContext, optio
                     ...(misplacedKeys.length > 0 ? { misplacedGlobalKeys: misplacedKeys } : {}),
                 };
                 if (json) {
-                    context.output.write(toJson(payload));
+                    context.output.write(toEnvelopeJson(payload, { enveloped: options.jsonEnvelope }));
                 } else {
                     context.output.write('Already initialized — converged (no project files overwritten)');
                     for (const path of result.created) context.output.write(`  ✓ ${path}`);
@@ -423,14 +424,17 @@ export function registerInitCommand(program: Command, context: CliContext, optio
 
             if (json) {
                 context.output.write(
-                    toJson({
-                        ok: true,
-                        project: projectName,
-                        config: CLI_CONFIG.configFile,
-                        ...result,
-                        globalRulesSeeded: rulesSeeded,
-                        globalConfigSeeded: configSeeded,
-                    }),
+                    toEnvelopeJson(
+                        {
+                            ok: true,
+                            project: projectName,
+                            config: CLI_CONFIG.configFile,
+                            ...result,
+                            globalRulesSeeded: rulesSeeded,
+                            globalConfigSeeded: configSeeded,
+                        },
+                        { enveloped: options.jsonEnvelope },
+                    ),
                 );
             }
 

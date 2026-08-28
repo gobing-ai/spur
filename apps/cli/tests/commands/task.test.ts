@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { TaskService, WbsCollisionError } from '@gobing-ai/spur-app';
 import * as configModule from '@gobing-ai/spur-config/loader';
+import { apiErrorSchema } from '@gobing-ai/spur-contracts';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 import { type CapturedOutput, createCapturedOutput } from '../helpers';
@@ -382,6 +383,18 @@ describe('spur task CLI', () => {
         const exitCode = await main(['task', 'show', '9999'], { cwd, output });
         expect(exitCode).toBe(1);
         expect(output.errors.at(-1)).toContain('not found');
+    });
+
+    // 0693 R4: the generic catch failure surface under --json --json-envelope must emit the
+    // canonical apiErrorSchema envelope (writeJsonError), not plain stderr.
+    test('show 9999 --json --json-envelope emits an apiErrorSchema error envelope', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'show', '9999', '--json', '--json-envelope'], { cwd, output });
+        expect(exitCode).toBe(1);
+        const parsed = apiErrorSchema.parse(JSON.parse(output.messages.at(-1) ?? '{}'));
+        expect(parsed.ok).toBe(false);
+        expect(parsed.error.code).toBe('INTERNAL_ERROR');
+        expect(parsed.error.message).toContain('not found');
     });
 
     // ── show alias (0534 R1) ──
@@ -2529,7 +2542,7 @@ Only this section exists.
         return wbs;
     }
 
-    async function writeVerdict(wbs: string, verdictJson: object): Promise<void> {
+    async function writeVerdict(wbs: string, verdictJson: Record<string, unknown>): Promise<void> {
         const runDir = join(cwd, '.spur', 'run');
         await mkdir(runDir, { recursive: true });
         await writeFile(join(runDir, `${wbs}-verdict.json`), JSON.stringify(verdictJson), 'utf-8');

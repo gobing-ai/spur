@@ -11,7 +11,7 @@ import {
 } from '@gobing-ai/spur-app';
 import { makeColorize, shouldColor } from '../colors';
 import type { CliContext } from '../context';
-import { toJson } from '../output';
+import { toEnvelopeJson, writeJsonError } from '../output';
 import { SHARED_OPTIONS } from './shared-options';
 
 /** Register the `spur rule` command and its subcommands on the CLI program. */
@@ -29,6 +29,7 @@ export function registerRuleCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.dryRunRuleFix)
         .option(...SHARED_OPTIONS.verboseRule)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             const service = new RuleService(context);
             const preset = options.preset ?? 'recommended-pre-check';
@@ -70,6 +71,7 @@ export function registerRuleCommand(program: Command, context: CliContext): void
         .option('--kind <type>', 'Source kind: file or preset')
         .option(...SHARED_OPTIONS.noSchema)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (fileOrPreset, options) => {
             const service = new RuleService(context);
             const source = resolveSource(
@@ -89,13 +91,14 @@ export function registerRuleCommand(program: Command, context: CliContext): void
         .summary('List discovered rule files, or list resolved rules for a preset.')
         .option('--preset <name>', 'Preset to list rules for')
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             const service = new RuleService(context);
             const preset = options.preset;
             const result = await service.list(preset);
             context.output.write(
                 options.json
-                    ? JSON.stringify(result, null, 2)
+                    ? toEnvelopeJson(result, { enveloped: options.jsonEnvelope })
                     : preset === undefined
                       ? formatRuleFileList(result)
                       : formatPresetRuleList(result),
@@ -110,6 +113,7 @@ export function registerRuleCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.since)
         .option(...SHARED_OPTIONS.last, '20')
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (runId, options) => {
             const last = parseInt(options.last, 10);
             if (!Number.isInteger(last) || last < 1) {
@@ -132,7 +136,7 @@ export function registerRuleCommand(program: Command, context: CliContext): void
                 if (runId) {
                     const detail = await svc.traceDetail(runId);
                     if (options.json) {
-                        context.output.write(toJson(detail));
+                        context.output.write(toEnvelopeJson(detail, { enveloped: options.jsonEnvelope }));
                     } else {
                         context.output.write(formatTraceDetail(detail));
                     }
@@ -144,7 +148,7 @@ export function registerRuleCommand(program: Command, context: CliContext): void
                         limit: last,
                     });
                     if (options.json) {
-                        context.output.write(toJson({ runs }));
+                        context.output.write(toEnvelopeJson({ runs }, { enveloped: options.jsonEnvelope }));
                     } else if (runs.length === 0) {
                         context.output.write('No rule runs found.');
                     } else {
@@ -152,7 +156,7 @@ export function registerRuleCommand(program: Command, context: CliContext): void
                     }
                 }
             } catch (error) {
-                context.output.error(error instanceof Error ? error.message : String(error));
+                writeJsonError(context.output, options, error instanceof Error ? error.message : String(error));
                 context.setExitCode(1);
             }
         });

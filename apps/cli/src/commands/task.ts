@@ -42,7 +42,7 @@ import { type Colorize, makeColorize, shouldColor } from '../colors';
 import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
 import type { CliContext } from '../context';
 import { maybeTriggerHistoryRefresh } from '../history-refresh';
-import { toJson } from '../output';
+import { toEnvelopeJson, writeJsonError } from '../output';
 import { makePlanningEmitter } from '../planning-emitter';
 import { makeLifecycleAdapter } from '../workflow/make-lifecycle-adapter';
 import { SHARED_OPTIONS } from './shared-options';
@@ -154,6 +154,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         )
         .option('--allow-duplicate-name', 'Disable the dedup guard entirely (creates anyway)')
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (title, options) => {
             if (options.template !== undefined && !(TASK_VARIANTS as readonly string[]).includes(options.template)) {
                 context.output.error(
@@ -188,7 +189,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     // (task 0510 post-mortem): the envelope's WBS lives under `ref.id`,
                     // which differs from `task list/show --json` (`wbs`), and a script
                     // projecting `wbs` saw nulls and misread success as failure.
-                    context.output.write(toJson({ ...result, wbs: result.ref.id, filePath: result.ref.filePath }));
+                    context.output.write(
+                        toEnvelopeJson(
+                            { ...result, wbs: result.ref.id, filePath: result.ref.filePath },
+                            { enveloped: options.jsonEnvelope },
+                        ),
+                    );
                 } else {
                     context.output.write(`Created task ${result.ref.id}: ${result.ref.filePath}`);
                 }
@@ -196,16 +202,31 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 if (err instanceof WbsCollisionError) {
                     if (options.json) {
                         context.output.write(
-                            toJson({
-                                ok: false,
-                                error: {
-                                    code: 'wbs-collision',
-                                    message: err.message,
-                                    wbs: err.wbs,
-                                    existingPath: err.existingPath,
-                                    attemptedPath: err.attemptedPath,
+                            toEnvelopeJson(
+                                {
+                                    ok: false,
+                                    error: {
+                                        code: 'wbs-collision',
+                                        message: err.message,
+                                        wbs: err.wbs,
+                                        existingPath: err.existingPath,
+                                        attemptedPath: err.attemptedPath,
+                                    },
                                 },
-                            }),
+                                {
+                                    enveloped: options.jsonEnvelope,
+                                    error: {
+                                        code: 'INTERNAL_ERROR',
+                                        message: err.message,
+                                        details: {
+                                            cliCode: 'wbs-collision',
+                                            wbs: err.wbs,
+                                            existingPath: err.existingPath,
+                                            attemptedPath: err.attemptedPath,
+                                        },
+                                    },
+                                },
+                            ),
                         );
                     } else {
                         context.output.error(err.message);
@@ -214,23 +235,38 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 } else if (err instanceof DuplicateFollowUpError) {
                     if (options.json) {
                         context.output.write(
-                            toJson({
-                                ok: false,
-                                error: {
-                                    code: 'duplicate-follow-up',
-                                    message: err.message,
-                                    existingWbs: err.existingWbs,
-                                    existingName: err.existingName,
-                                    attemptedName: err.attemptedName,
+                            toEnvelopeJson(
+                                {
+                                    ok: false,
+                                    error: {
+                                        code: 'duplicate-follow-up',
+                                        message: err.message,
+                                        existingWbs: err.existingWbs,
+                                        existingName: err.existingName,
+                                        attemptedName: err.attemptedName,
+                                    },
                                 },
-                            }),
+                                {
+                                    enveloped: options.jsonEnvelope,
+                                    error: {
+                                        code: 'INTERNAL_ERROR',
+                                        message: err.message,
+                                        details: {
+                                            cliCode: 'duplicate-follow-up',
+                                            existingWbs: err.existingWbs,
+                                            existingName: err.existingName,
+                                            attemptedName: err.attemptedName,
+                                        },
+                                    },
+                                },
+                            ),
                         );
                     } else {
                         context.output.error(err.message);
                     }
                     context.setExitCode(3);
                 } else {
-                    context.output.error(String(err));
+                    writeJsonError(context.output, options, String(err));
                     context.setExitCode(1);
                 }
             }
@@ -246,20 +282,21 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .argument('<wbs>', 'Task WBS number')
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, options) => {
             const svc = await makeService(context, options.folder);
             try {
                 const result = await svc.show(wbs);
                 if (options.json) {
                     const { frontmatter, ...rest } = result;
-                    context.output.write(toJson({ ...rest, frontmatter }));
+                    context.output.write(toEnvelopeJson({ ...rest, frontmatter }, { enveloped: options.jsonEnvelope }));
                 } else {
                     context.output.write(
                         `${taskStatusIcon(result.status)} ${result.status.toUpperCase()} — ${result.wbs}\n\n${result.content}`,
                     );
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -310,6 +347,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--verdict-dir <path>', 'Directory holding <wbs>-verdict.json artifacts (default: .spur/run)')
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, status, options) => {
             const svc = await makeService(context, options.folder, options.lifecycle === false);
             try {
@@ -321,7 +359,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     }
                     const result = await svc.updateSection(wbs, options.section, options.fromFile);
                     if (options.json) {
-                        context.output.write(toJson(result));
+                        context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     } else {
                         for (const warning of result.warnings ?? []) {
                             context.output.error(warning);
@@ -346,7 +384,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         options.feature ?? options.priority ?? options.acNumbering ?? options.acAltitude ?? '';
                     const result = await svc.updateField(wbs, key, value);
                     if (options.json) {
-                        context.output.write(toJson(result));
+                        context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     } else {
                         context.output.write(`Set ${key}=${value} on task ${result.ref.id}`);
                     }
@@ -428,7 +466,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         if (guardOutcome.kind === 'noop') {
                             // R9: same-status no-op. Exit 0 so scripts/CI can idempotently re-run.
                             if (options.json) {
-                                context.output.write(toJson({ ok: true, noop: true, wbs, status: 'done' }));
+                                context.output.write(
+                                    toEnvelopeJson(
+                                        { ok: true, noop: true, wbs, status: 'done' },
+                                        { enveloped: options.jsonEnvelope },
+                                    ),
+                                );
                             } else {
                                 context.output.write(guardOutcome.message);
                             }
@@ -472,7 +515,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         }
                     }
                     if (options.json) {
-                        context.output.write(toJson(result));
+                        context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     } else {
                         context.output.write(`${result.ref.id}: ${result.fromStatus} → ${result.toStatus}`);
                         if (forcedDone && forcedDoneVerdict !== undefined) {
@@ -507,7 +550,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     context.output.error(`[${err.code}] ${err.message}`);
                     context.setExitCode(err.code === 'usage' ? 2 : 3);
                 } else {
-                    context.output.error(String(err));
+                    writeJsonError(context.output, options, String(err));
                     context.setExitCode(1);
                 }
             }
@@ -531,6 +574,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .argument('[values...]', 'WBS values (required for set/add/remove; forbidden for clear)')
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, op, values, options) => {
             const allowedOps = ['set', 'add', 'remove', 'clear'] as const;
             if (!allowedOps.includes(op as (typeof allowedOps)[number])) {
@@ -543,7 +587,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             try {
                 const result = await svc.mutateDependencies(wbs, typedOp, values);
                 if (options.json) {
-                    context.output.write(toJson(result));
+                    context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                 } else {
                     const list = result.dependencies.length > 0 ? result.dependencies.join(', ') : '(none)';
                     context.output.write(`Set dependencies on task ${result.ref.id}: [${list}]`);
@@ -554,7 +598,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     // usage → 2, all other validation codes → 3
                     context.setExitCode(err.code === 'usage' ? 2 : 3);
                 } else {
-                    context.output.error(String(err));
+                    writeJsonError(context.output, options, String(err));
                     context.setExitCode(1);
                 }
             }
@@ -585,6 +629,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .argument('[name]', 'Canonical section name (required for add; forbidden for init/list)')
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, op, name, options) => {
             const allowedOps = ['init', 'add', 'list'] as const;
             if (!allowedOps.includes(op as (typeof allowedOps)[number])) {
@@ -607,7 +652,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             try {
                 const result = await svc.mutateSections(wbs, typedOp, name);
                 if (options.json) {
-                    context.output.write(toJson(result));
+                    context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                 } else if (result.op === 'list') {
                     const m = result.matrix ?? { required: [], optional: [], forbidden: [] };
                     const present = result.present ?? [];
@@ -629,7 +674,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     context.output.error(`[${err.code}] ${err.message}`);
                     context.setExitCode(err.code === 'usage' ? 2 : 3);
                 } else {
-                    context.output.error(String(err));
+                    writeJsonError(context.output, options, String(err));
                     context.setExitCode(1);
                 }
             }
@@ -644,6 +689,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.featureFilterEdge)
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -654,7 +700,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     featureId: options.feature,
                 });
                 if (options.json) {
-                    context.output.write(toJson(tasks));
+                    context.output.write(toEnvelopeJson(tasks, { enveloped: options.jsonEnvelope, kind: 'list' }));
                 } else if (tasks.length === 0) {
                     context.output.write('(no tasks)');
                 } else {
@@ -673,7 +719,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     context.output.write(renderTaskBoard(tasks, boardTitle, color, columns));
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -682,17 +728,18 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .summary('Re-scan the task corpus and report counts (kanban.md retired — A17 cutover).')
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             const svc = await makeService(context, options.folder);
             try {
                 const result = await svc.refresh();
                 if (options.json) {
-                    context.output.write(toJson(result));
+                    context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                 } else {
                     context.output.write(`Corpus scanned — ${result.tasks} tasks across ${result.folders} folder(s)`);
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -703,6 +750,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.dryRunTaskReport)
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             try {
                 const foldersConfig = (await resolvePlanningFolders(context.fs)).foldersConfig;
@@ -712,12 +760,14 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 const migrator = new CorpusMigrator({ fs: context.fs, corpusDir });
                 const report = await migrator.migrate({ dryRun });
                 if (options.json) {
-                    context.output.write(toJson({ ok: true, dryRun, corpusDir, ...report }));
+                    context.output.write(
+                        toEnvelopeJson({ ok: true, dryRun, corpusDir, ...report }, { enveloped: options.jsonEnvelope }),
+                    );
                 } else {
                     context.output.write(renderMigrationReport(report, dryRun, corpusDir));
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -727,6 +777,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .summary('Qualify in-repo evidence anchors to repo-relative paths (0583 R1–R3).')
         .option(...SHARED_OPTIONS.dryRunTaskReport)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             try {
                 const dryRun = options.dryRun === true;
@@ -751,7 +802,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     .filter((r) => r.skipped !== undefined)
                     .map((r) => `${r.wbs}: ${r.skipped}`);
                 if (options.json) {
-                    context.output.write(toJson({ ok: true, dryRun, qualified, ambiguous, skipped, ...report }));
+                    context.output.write(
+                        toEnvelopeJson(
+                            { ok: true, dryRun, qualified, ambiguous, skipped, ...report },
+                            { enveloped: options.jsonEnvelope },
+                        ),
+                    );
                 } else if (dryRun) {
                     const lines = [
                         `Anchor qualification ${dryRun ? 'dry-run' : 'apply'} complete`,
@@ -778,7 +834,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     );
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -789,19 +845,20 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .argument('<wbs>', 'Parent task WBS number')
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, options) => {
             const svc = await makeService(context, options.folder);
             try {
                 const result = await svc.refreshRoster(wbs);
                 if (options.json) {
-                    context.output.write(toJson(result));
+                    context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                 } else if (!result.written) {
                     context.output.write(`Task ${wbs} has no sub-tasks — nothing to roster.`);
                 } else {
                     context.output.write(`Roster refreshed for ${wbs} (${result.childCount} sub-task(s)).`);
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -812,13 +869,19 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .requiredOption(...SHARED_OPTIONS.fileTaskBatch)
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             const svc = await makeService(context, options.folder);
             try {
                 const { children, parentsWired } = await svc.batchCreate(options.file);
                 if (options.json) {
                     const ids = children.map((r) => r.ref.id);
-                    context.output.write(toJson({ created: children.length, wbs: ids, parentsWired }));
+                    context.output.write(
+                        toEnvelopeJson(
+                            { created: children.length, wbs: ids, parentsWired },
+                            { enveloped: options.jsonEnvelope },
+                        ),
+                    );
                 } else {
                     context.output.write(`Created ${children.length} task(s)`);
                     for (const r of children) {
@@ -837,23 +900,38 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 if (err instanceof WbsCollisionError) {
                     if (options.json) {
                         context.output.write(
-                            toJson({
-                                ok: false,
-                                error: {
-                                    code: 'wbs-collision',
-                                    message: err.message,
-                                    wbs: err.wbs,
-                                    existingPath: err.existingPath,
-                                    attemptedPath: err.attemptedPath,
+                            toEnvelopeJson(
+                                {
+                                    ok: false,
+                                    error: {
+                                        code: 'wbs-collision',
+                                        message: err.message,
+                                        wbs: err.wbs,
+                                        existingPath: err.existingPath,
+                                        attemptedPath: err.attemptedPath,
+                                    },
                                 },
-                            }),
+                                {
+                                    enveloped: options.jsonEnvelope,
+                                    error: {
+                                        code: 'INTERNAL_ERROR',
+                                        message: err.message,
+                                        details: {
+                                            cliCode: 'wbs-collision',
+                                            wbs: err.wbs,
+                                            existingPath: err.existingPath,
+                                            attemptedPath: err.attemptedPath,
+                                        },
+                                    },
+                                },
+                            ),
                         );
                     } else {
                         context.output.error(err.message);
                     }
                     context.setExitCode(3);
                 } else {
-                    context.output.error(String(err));
+                    writeJsonError(context.output, options, String(err));
                     context.setExitCode(1);
                 }
             }
@@ -868,6 +946,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--transition <status>', 'Optional lifecycle transition (e.g. testing)')
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, options) => {
             const svc = await makeService(context, options.folder);
             try {
@@ -877,7 +956,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     transition: options.transition,
                 });
                 if (options.json) {
-                    context.output.write(toJson(result));
+                    context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                 } else {
                     const parts: string[] = [];
                     if (result.testingWritten) parts.push('Testing written');
@@ -887,7 +966,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     context.output.write(parts.join(', ') || 'no changes');
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -899,6 +978,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--from-answer <path>', 'Path to verify answer text file')
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, options) => {
             // Lazy-import to keep the barrel clean for typecheck.
             const { deriveVerdict, verdictRowsMatchScenarios } = await import('@gobing-ai/spur-app');
@@ -907,7 +987,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             try {
                 answerText = await context.fs.readFile(context.fs.resolve(answerPath));
             } catch {
-                context.output.error(`Answer file not found: ${answerPath}`);
+                writeJsonError(context.output, options, `Answer file not found: ${answerPath}`);
                 context.setExitCode(1);
                 return;
             }
@@ -971,13 +1051,14 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         )
         .option(...SHARED_OPTIONS.fromFileOutcomeRows)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             const inputPath = options.fromFile ?? '.spur/run/verifyall-batch-input.json';
             let raw: string;
             try {
                 raw = await context.fs.readFile(context.fs.resolve(inputPath));
             } catch {
-                context.output.error(`Batch input file not found: ${inputPath}`);
+                writeJsonError(context.output, options, `Batch input file not found: ${inputPath}`);
                 context.setExitCode(1);
                 return;
             }
@@ -990,7 +1071,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 }
                 rows = parsed;
             } catch (err) {
-                context.output.error(`Invalid batch input JSON: ${String(err)}`);
+                writeJsonError(context.output, options, `Invalid batch input JSON: ${String(err)}`);
                 context.setExitCode(1);
                 return;
             }
@@ -1010,7 +1091,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             const aggregation = aggregateBatchVerdicts(results);
 
             if (options.json) {
-                context.output.write(JSON.stringify(aggregation, null, 2));
+                context.output.write(toEnvelopeJson(aggregation, { enveloped: options.jsonEnvelope }));
             } else {
                 context.output.write(`Batch verdict: ${aggregation.verdict}`);
                 context.output.write(aggregation.summary);
@@ -1041,6 +1122,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--fix', 'repair structural findings in place (heading presence/level/order, R-item checkboxes)')
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, options) => {
             const json = options.json === true;
             // `--strict` elevates every advisory; `--strict-core` is the done-gate
@@ -1101,7 +1183,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     }
                     const result = await runCorpusCheck(context.cwd, options.since);
                     if (json) {
-                        context.output.write(toJson(result));
+                        context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     } else {
                         const e = result.bySeverity.error;
                         const w = result.bySeverity.warning;
@@ -1242,13 +1324,13 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 }
 
                 if (json) {
-                    context.output.write(toJson(results));
+                    context.output.write(toEnvelopeJson(results, { enveloped: options.jsonEnvelope, kind: 'list' }));
                 }
 
                 const hasError = results.some((r) => !r.pass);
                 if (hasError) context.setExitCode(1);
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -1259,13 +1341,14 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.strictTaskPath)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (filePath, options) => {
             const svc = await makeService(context, options.folder);
             try {
                 const result = await svc.resolve(filePath, { strict: options.strict === true });
                 if (result) {
                     if (options.json) {
-                        context.output.write(toJson(result));
+                        context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     } else {
                         context.output.write(`${result.wbs}  ${result.filePath}`);
                     }
@@ -1274,7 +1357,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     context.setExitCode(1);
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -1285,13 +1368,14 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .argument('<wbs>', 'Task WBS number')
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, options) => {
             const svc = await makeService(context, options.folder);
             try {
                 const filePath = await svc.getFilePath(wbs);
                 if (filePath !== null) {
                     if (options.json) {
-                        context.output.write(toJson({ wbs, filePath }));
+                        context.output.write(toEnvelopeJson({ wbs, filePath }, { enveloped: options.jsonEnvelope }));
                     } else {
                         context.output.write(filePath);
                     }
@@ -1300,7 +1384,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     context.setExitCode(1);
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -1314,6 +1398,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.sourceLink, 'chain')
         .option(...SHARED_OPTIONS.runIdTask)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, options) => {
             try {
                 const db = await context.getDb();
@@ -1329,7 +1414,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     existed: !ensured.created,
                 };
                 if (options.json) {
-                    context.output.write(toJson(result));
+                    context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                 } else if (ensured.created) {
                     context.output.write(
                         `Recorded pipeline run-link ${ensured.id} for task ${wbs} (source: ${options.source})`,
@@ -1338,7 +1423,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     context.output.write(`Pipeline run-link already exists for ${wbs} (${ensured.id}). Skipped.`);
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });
@@ -1350,6 +1435,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.fileTaskTest)
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, options) => {
             const { TaskScaffoldService, resolvePlanningFolders } = await import('@gobing-ai/spur-app');
             const foldersConfig = (await resolvePlanningFolders(context.fs)).foldersConfig;
@@ -1365,7 +1451,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     targetFile: options.file,
                 });
                 if (options.json) {
-                    context.output.write(toJson(result));
+                    context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                 } else {
                     context.output.write(
                         `Scaffolded tests for ${wbs} -> ${result.targetFile} (created: ${result.created}, skipped: ${result.skipped}, drifted: ${result.drifted})`,
@@ -1375,7 +1461,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     }
                 }
             } catch (err) {
-                context.output.error(String(err));
+                writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             }
         });

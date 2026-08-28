@@ -3,7 +3,7 @@ import type { Command } from '@commander-js/extra-typings';
 import { isPortLive, ProjectRegistry, startRegisteredProject } from '@gobing-ai/spur-app';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../context';
-import { toJson } from '../output';
+import { toEnvelopeJson } from '../output';
 import { SHARED_OPTIONS } from './shared-options';
 
 /**
@@ -17,6 +17,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
         .argument('<path>', 'Project root directory path')
         .option(...SHARED_OPTIONS.nameProjectDisplay)
         .option(...SHARED_OPTIONS.jsonProjectsResponse)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (pathArg, options) => {
             try {
                 const absolutePath = resolve(context.cwd, pathArg);
@@ -29,14 +30,21 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                 const entry = await registry.upsert({ path: absolutePath, name, port: 0 });
 
                 if (options.json) {
-                    context.output.write(toJson({ ok: true, project: entry }));
+                    context.output.write(
+                        toEnvelopeJson({ ok: true, project: entry }, { enveloped: options.jsonEnvelope }),
+                    );
                 } else {
                     context.output.write(`Registered project "${entry.name}" at ${entry.path}`);
                 }
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
                 if (options.json) {
-                    context.output.write(toJson({ ok: false, error: message }));
+                    context.output.write(
+                        toEnvelopeJson(
+                            { ok: false, error: message },
+                            { enveloped: options.jsonEnvelope, error: { code: 'INTERNAL_ERROR', message: message } },
+                        ),
+                    );
                 } else {
                     context.output.error(`Error: ${message}`);
                 }
@@ -48,6 +56,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
         .command('remove')
         .argument('<target>', 'Project display name or directory path')
         .option(...SHARED_OPTIONS.jsonProjectsResponse)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (target, options) => {
             try {
                 const registry = new ProjectRegistry();
@@ -57,14 +66,21 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                 }
 
                 if (options.json) {
-                    context.output.write(toJson({ ok: true, removed: target }));
+                    context.output.write(
+                        toEnvelopeJson({ ok: true, removed: target }, { enveloped: options.jsonEnvelope }),
+                    );
                 } else {
                     context.output.write(`Removed project "${target}" from registry`);
                 }
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
                 if (options.json) {
-                    context.output.write(toJson({ ok: false, error: message }));
+                    context.output.write(
+                        toEnvelopeJson(
+                            { ok: false, error: message },
+                            { enveloped: options.jsonEnvelope, error: { code: 'INTERNAL_ERROR', message } },
+                        ),
+                    );
                 } else {
                     context.output.error(`Error: ${message}`);
                 }
@@ -75,6 +91,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
     projectsCmd
         .command('list')
         .option(...SHARED_OPTIONS.jsonProjectsArray)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             try {
                 const registry = new ProjectRegistry();
@@ -88,7 +105,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                 );
 
                 if (options.json) {
-                    context.output.write(toJson({ projects }));
+                    context.output.write(toEnvelopeJson({ projects }, { enveloped: options.jsonEnvelope }));
                 } else {
                     if (projects.length === 0) {
                         context.output.write('No projects registered.');
@@ -103,7 +120,12 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
                 if (options.json) {
-                    context.output.write(toJson({ ok: false, error: message }));
+                    context.output.write(
+                        toEnvelopeJson(
+                            { ok: false, error: message },
+                            { enveloped: options.jsonEnvelope, error: { code: 'INTERNAL_ERROR', message } },
+                        ),
+                    );
                 } else {
                     context.output.error(`Error: ${message}`);
                 }
@@ -116,6 +138,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
         .argument('<target>', 'Project display name or path')
         .option(...SHARED_OPTIONS.portProjects, parseInt)
         .option(...SHARED_OPTIONS.jsonProjectsResponse)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (target, options) => {
             try {
                 const registry = new ProjectRegistry();
@@ -125,17 +148,20 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
 
                 if (options.json) {
                     context.output.write(
-                        toJson({
-                            ok: true,
-                            project: {
-                                name: result.name,
-                                path: result.path,
-                                port: result.port,
+                        toEnvelopeJson(
+                            {
+                                ok: true,
+                                project: {
+                                    name: result.name,
+                                    path: result.path,
+                                    port: result.port,
+                                },
+                                running: true,
+                                alreadyRunning: result.alreadyRunning,
+                                url: result.url,
                             },
-                            running: true,
-                            alreadyRunning: result.alreadyRunning,
-                            url: result.url,
-                        }),
+                            { enveloped: options.jsonEnvelope },
+                        ),
                     );
                 } else if (result.alreadyRunning) {
                     context.output.write(`Project "${result.name}" is already running at ${result.url}`);
@@ -145,7 +171,12 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
                 if (options.json) {
-                    context.output.write(toJson({ ok: false, error: message }));
+                    context.output.write(
+                        toEnvelopeJson(
+                            { ok: false, error: message },
+                            { enveloped: options.jsonEnvelope, error: { code: 'INTERNAL_ERROR', message } },
+                        ),
+                    );
                 } else {
                     context.output.error(`Error: ${message}`);
                 }
@@ -157,6 +188,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
         .command('stop')
         .argument('<target>', 'Project display name or path')
         .option(...SHARED_OPTIONS.jsonProjectsResponse)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (target, options) => {
             try {
                 const registry = new ProjectRegistry();
@@ -201,14 +233,21 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                 }
 
                 if (options.json) {
-                    context.output.write(toJson({ ok: true, stopped: entry.name }));
+                    context.output.write(
+                        toEnvelopeJson({ ok: true, stopped: entry.name }, { enveloped: options.jsonEnvelope }),
+                    );
                 } else {
                     context.output.write(`Stopped project "${entry.name}"`);
                 }
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
                 if (options.json) {
-                    context.output.write(toJson({ ok: false, error: message }));
+                    context.output.write(
+                        toEnvelopeJson(
+                            { ok: false, error: message },
+                            { enveloped: options.jsonEnvelope, error: { code: 'INTERNAL_ERROR', message } },
+                        ),
+                    );
                 } else {
                     context.output.error(`Error: ${message}`);
                 }

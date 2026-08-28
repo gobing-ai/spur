@@ -12,7 +12,7 @@ import {
 } from '@gobing-ai/spur-app';
 import { SystemEventDao, type SystemEventRow } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context';
-import { toJson } from '../output';
+import { toEnvelopeJson } from '../output';
 import { SHARED_OPTIONS } from './shared-options';
 
 /** Default sender used for operator-originated messages. */
@@ -38,6 +38,7 @@ export function registerMessageCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.untilMessage, collectSendUntil, [])
         .option(...SHARED_OPTIONS.timeout, parseTimeout)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (body, options) => {
             const svc = new TeamService(context);
             // 0685 R6: resolve --role to exactly one materialized instance spec id
@@ -46,7 +47,15 @@ export function registerMessageCommand(program: Command, context: CliContext): v
             if (options.role !== undefined && options.to !== undefined) {
                 const message = 'message send accepts --to or --role, not both';
                 if (options.json) {
-                    context.output.write(toJson({ error: { code: 'usage', message } }));
+                    context.output.write(
+                        toEnvelopeJson(
+                            { error: { code: 'usage', message } },
+                            {
+                                enveloped: options.jsonEnvelope,
+                                error: { code: 'INTERNAL_ERROR', message: message, details: { cliCode: 'usage' } },
+                            },
+                        ),
+                    );
                 } else {
                     context.output.error(message);
                 }
@@ -61,7 +70,19 @@ export function registerMessageCommand(program: Command, context: CliContext): v
                 );
                 if (!resolution.ok) {
                     if (options.json) {
-                        context.output.write(toJson({ error: { code: resolution.code, message: resolution.message } }));
+                        context.output.write(
+                            toEnvelopeJson(
+                                { error: { code: resolution.code, message: resolution.message } },
+                                {
+                                    enveloped: options.jsonEnvelope,
+                                    error: {
+                                        code: 'INTERNAL_ERROR',
+                                        message: resolution.message,
+                                        details: { cliCode: resolution.code },
+                                    },
+                                },
+                            ),
+                        );
                     } else {
                         context.output.error(resolution.message);
                     }
@@ -81,6 +102,7 @@ export function registerMessageCommand(program: Command, context: CliContext): v
         .description('List messages addressed to an agent.')
         .requiredOption(...SHARED_OPTIONS.agentIdMessage)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             const svc = new TeamService(context);
             const code = await runMessageInbox(svc, context, options);
@@ -92,6 +114,7 @@ export function registerMessageCommand(program: Command, context: CliContext): v
         .argument('<msg-id>', 'Message id to reply to')
         .argument('<body>', 'Reply body')
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (msgId, body, options) => {
             const svc = new TeamService(context);
             const code = await runMessageReply(svc, context, msgId, body, options);
@@ -103,6 +126,7 @@ export function registerMessageCommand(program: Command, context: CliContext): v
         .requiredOption(...SHARED_OPTIONS.agentIdWatch)
         .option('--interval <ms>', 'Poll interval in milliseconds', String(DEFAULT_WATCH_INTERVAL_MS))
         .option(...SHARED_OPTIONS.jsonMessageStream)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             const svc = new TeamService(context);
             const intervalMs = parseInterval(options.interval);
@@ -145,13 +169,24 @@ async function runMessageSend(
         until: SendWaitUntil[];
         timeout?: number;
         json?: boolean;
+        jsonEnvelope?: boolean;
     },
 ): Promise<number> {
     const trimmed = body.trim();
     if (trimmed === '') {
         if (options.json) {
             context.output.write(
-                toJson({ error: { code: 'usage', message: 'message send requires a non-empty body' } }),
+                toEnvelopeJson(
+                    { error: { code: 'usage', message: 'message send requires a non-empty body' } },
+                    {
+                        enveloped: options.jsonEnvelope,
+                        error: {
+                            code: 'INTERNAL_ERROR',
+                            message: 'message send requires a non-empty body',
+                            details: { cliCode: 'usage' },
+                        },
+                    },
+                ),
             );
         } else {
             context.output.error('message send requires a non-empty body');
@@ -161,7 +196,17 @@ async function runMessageSend(
     if (options.to === '') {
         if (options.json) {
             context.output.write(
-                toJson({ error: { code: 'usage', message: 'message send requires --to <id> or --role <name>' } }),
+                toEnvelopeJson(
+                    { error: { code: 'usage', message: 'message send requires --to <id> or --role <name>' } },
+                    {
+                        enveloped: options.jsonEnvelope,
+                        error: {
+                            code: 'INTERNAL_ERROR',
+                            message: 'message send requires --to <id> or --role <name>',
+                            details: { cliCode: 'usage' },
+                        },
+                    },
+                ),
             );
         } else {
             context.output.error('message send requires --to <id> or --role <name>');
@@ -187,7 +232,7 @@ async function runMessageSend(
 
     if (options.wait !== true) {
         if (options.json) {
-            context.output.write(toJson(result));
+            context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
         } else {
             context.output.write(`queued ${result.msgId} → ${result.toId}`);
         }
@@ -271,7 +316,7 @@ async function runMessageSend(
         if (satisfied !== null) {
             const payload = { msgId: result.msgId, toId: result.toId, status: result.status, wait: { satisfied } };
             if (options.json) {
-                context.output.write(toJson(payload));
+                context.output.write(toEnvelopeJson(payload, { enveloped: options.jsonEnvelope }));
             } else {
                 context.output.write(`queued ${result.msgId} → ${result.toId} (wait: ${satisfied})`);
             }
@@ -289,11 +334,11 @@ async function runMessageSend(
 async function runMessageInbox(
     svc: TeamService,
     context: CliContext,
-    options: { agent: string; json?: boolean },
+    options: { agent: string; json?: boolean; jsonEnvelope?: boolean },
 ): Promise<number> {
     const inbox = await svc.getInbox(options.agent);
     if (options.json) {
-        context.output.write(toJson(inbox));
+        context.output.write(toEnvelopeJson(inbox, { enveloped: options.jsonEnvelope }));
         return 0;
     }
     if (inbox.count === 0) {
@@ -310,7 +355,7 @@ async function runMessageReply(
     context: CliContext,
     msgId: string,
     body: string,
-    options: { json?: boolean },
+    options: { json?: boolean; jsonEnvelope?: boolean },
 ): Promise<number> {
     const trimmed = body.trim();
     if (trimmed === '') {
@@ -320,7 +365,7 @@ async function runMessageReply(
 
     const result = await svc.replyToMessage(msgId, trimmed);
     if (options.json) {
-        context.output.write(toJson(result));
+        context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
     } else {
         context.output.write(`replied ${result.msgId} → ${result.toId}`);
     }
@@ -336,6 +381,7 @@ function formatInboxLine(entry: InboxEntry): string {
 
 /** Options for the watch core loop. */
 export interface WatchOptions {
+    jsonEnvelope?: boolean;
     agent: string;
     intervalMs: number;
     json: boolean;
@@ -385,7 +431,7 @@ export async function runMessageWatch(
             if (!msg || seen.has(msg.id)) continue;
             seen.add(msg.id);
             if (options.json) {
-                output.write(toJson(msg));
+                output.write(toEnvelopeJson(msg, { enveloped: options.jsonEnvelope }));
             } else {
                 output.write(formatInboxLine(msg));
             }
@@ -465,9 +511,22 @@ function sendSleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /** Emit a typed send-wait failure (exit 1) with the `--json` error envelope. */
-function sendWaitFail(context: CliContext, options: { json?: boolean }, code: string, message: string): number {
+function sendWaitFail(
+    context: CliContext,
+    options: { json?: boolean; jsonEnvelope?: boolean },
+    code: string,
+    message: string,
+): number {
     if (options.json) {
-        context.output.write(toJson({ error: { code, message } }));
+        context.output.write(
+            toEnvelopeJson(
+                { error: { code, message } },
+                {
+                    enveloped: options.jsonEnvelope,
+                    error: { code: 'INTERNAL_ERROR', message: message, details: { cliCode: code } },
+                },
+            ),
+        );
     } else {
         context.output.error(`${code}: ${message}`);
     }

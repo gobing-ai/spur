@@ -1,6 +1,6 @@
 import type { Command } from '@commander-js/extra-typings';
 import type { CliContext } from '../context';
-import { toJson } from '../output';
+import { toEnvelopeJson } from '../output';
 import { bumpVer, dropTags } from '../release-ops';
 import { SHARED_OPTIONS } from './shared-options';
 
@@ -25,6 +25,7 @@ export function registerBuilderCommand(program: Command, context: CliContext): v
         .option('--all', 'bump every released package in one commit with per-package + aggregate tags')
         .option('--push', 'push the branch and release tag to origin')
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .argument('[target]', 'package id, or the version itself when bumping all')
         .argument('[version]', 'target semver version')
         .action(async (target, version, options) => {
@@ -35,13 +36,28 @@ export function registerBuilderCommand(program: Command, context: CliContext): v
                 await bumpVer(args, context.cwd, context.output);
                 if (options.json === true) {
                     context.output.write(
-                        toJson({ ok: true, verb: 'bump-ver', target: target ?? 'all', version: version ?? '' }),
+                        toEnvelopeJson(
+                            { ok: true, verb: 'bump-ver', target: target ?? 'all', version: version ?? '' },
+                            { enveloped: options.jsonEnvelope },
+                        ),
                     );
                 }
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
                 if (options.json === true) {
-                    context.output.write(toJson({ ok: false, verb: 'bump-ver', error: message }));
+                    context.output.write(
+                        toEnvelopeJson(
+                            { ok: false, verb: 'bump-ver', error: message },
+                            {
+                                enveloped: options.jsonEnvelope,
+                                error: {
+                                    code: 'INTERNAL_ERROR',
+                                    message: message,
+                                    details: { cliCode: 'bump-ver', verb: 'bump-ver' },
+                                },
+                            },
+                        ),
+                    );
                     context.setExitCode(1);
                     return;
                 }
@@ -61,6 +77,7 @@ export function registerBuilderCommand(program: Command, context: CliContext): v
         .option('--all', 'drop every released tag plus the aggregate tag')
         .option('--remote', 'also delete the tag(s) on origin')
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .argument('[target]', 'package id, or the version itself when dropping all')
         .argument('[version]', 'semver version of the tags to drop')
         .action(async (target, version, options) => {
@@ -71,13 +88,28 @@ export function registerBuilderCommand(program: Command, context: CliContext): v
                 await dropTags(args, context.cwd, context.output);
                 if (options.json === true) {
                     context.output.write(
-                        toJson({ ok: true, verb: 'drop-tags', target: target ?? 'all', version: version ?? '' }),
+                        toEnvelopeJson(
+                            { ok: true, verb: 'drop-tags', target: target ?? 'all', version: version ?? '' },
+                            { enveloped: options.jsonEnvelope },
+                        ),
                     );
                 }
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
                 if (options.json === true) {
-                    context.output.write(toJson({ ok: false, verb: 'drop-tags', error: message }));
+                    context.output.write(
+                        toEnvelopeJson(
+                            { ok: false, verb: 'drop-tags', error: message },
+                            {
+                                enveloped: options.jsonEnvelope,
+                                error: {
+                                    code: 'INTERNAL_ERROR',
+                                    message: message,
+                                    details: { cliCode: 'drop-tags', verb: 'drop-tags' },
+                                },
+                            },
+                        ),
+                    );
                     context.setExitCode(1);
                     return;
                 }

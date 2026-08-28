@@ -27,8 +27,8 @@ function flagKey(flagsLiteral: string): string {
 }
 
 describe('shared option registry parity', () => {
-    test('SHARED_OPTION_FLAGS covers exactly 28 shared flag strings', () => {
-        expect(SHARED_OPTION_FLAGS.size).toBe(28);
+    test('SHARED_OPTION_FLAGS covers exactly 29 shared flag strings', () => {
+        expect(SHARED_OPTION_FLAGS.size).toBe(29);
     });
 
     test('no literal declaration of a shared flag string in command modules', () => {

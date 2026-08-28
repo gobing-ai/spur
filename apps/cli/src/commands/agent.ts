@@ -17,7 +17,7 @@ import { type AgentSpec, isAgentName } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../context';
-import { toJson } from '../output';
+import { toEnvelopeJson, writeJsonError } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
 import { SHARED_OPTIONS } from './shared-options';
 
@@ -31,6 +31,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .command('list')
         .description('List detected coding agents, or team agent specs with --specs.')
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .option('--specs', 'List team specs instead of detected agents')
         .action(async (options) => {
             const svc = new AgentService({ cwd: context.cwd, env: context.env, output: context.output });
@@ -42,6 +43,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .command('doctor')
         .description('Check agent readiness.')
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .argument('[agent]', 'Agent to check')
         .option('--probe-health', 'Opt into model health probing (liveness questions are never cached)')
         .option('--force-refresh', 'Bypass the detection cache, re-run, and rewrite it')
@@ -72,6 +74,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .option(...SHARED_OPTIONS.modeAgent)
         .option(...SHARED_OPTIONS.cwdAgent)
         .option(...SHARED_OPTIONS.jsonSupported)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .option('--drain', 'Prepend pending inbox messages for --spec <id>')
         .argument('<prompt>', 'The prompt or slash command to execute')
         .action(async (prompt, options) => {
@@ -115,6 +118,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .option(...SHARED_OPTIONS.untilAgent, collectUntil, [])
         .option(...SHARED_OPTIONS.timeout, parseTimeout)
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (specId, options) => {
             // 0685 R6: --role resolves to exactly one materialized instance spec id;
             // the wait itself stays identity-pinned on the resolved id.
@@ -134,7 +138,19 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
                 if (!resolution.ok) {
                     context.setExitCode(resolution.code === 'unknown_selector' ? 2 : 1);
                     if (options.json) {
-                        context.output.write(toJson({ error: { code: resolution.code, message: resolution.message } }));
+                        context.output.write(
+                            toEnvelopeJson(
+                                { error: { code: resolution.code, message: resolution.message } },
+                                {
+                                    enveloped: options.jsonEnvelope,
+                                    error: {
+                                        code: 'INTERNAL_ERROR',
+                                        message: resolution.message,
+                                        details: { cliCode: resolution.code },
+                                    },
+                                },
+                            ),
+                        );
                     } else {
                         context.output.error(resolution.message);
                     }
@@ -164,6 +180,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .option('--autonomy <level>', 'Autonomy level')
         .option('--no-identity-preamble', 'Disable identity preamble')
         .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .argument('<id>', 'Agent spec id')
         .action(async (id, options) => {
             const flags = commanderOptionsToFlags(options);
@@ -232,7 +249,7 @@ export function validateAgentSelector(flags: Record<string, string | boolean>, c
 async function runAgentList(
     svc: AgentService,
     context: CliContext,
-    opts: { json?: boolean; specs?: boolean },
+    opts: { json?: boolean; jsonEnvelope?: boolean; specs?: boolean },
 ): Promise<number> {
     if (!opts.specs) {
         return svc.list({ json: opts.json ?? false });
@@ -240,19 +257,22 @@ async function runAgentList(
     const specs = await new TeamService(context).listAgentSpecs();
     if (opts.json) {
         context.output.write(
-            toJson({
-                specs: specs.map((spec) => ({
-                    id: spec.id,
-                    type: spec.type,
-                    purpose: spec.purpose,
-                    // 0544 R2: role and executor are DISTINCT fields — never merged.
-                    ...(typeof spec.config?.role === 'string' && spec.config.role.length > 0
-                        ? { role: spec.config.role }
-                        : {}),
-                    ...(spec.executor !== undefined ? { executor: spec.executor } : {}),
-                    path: `.spur/agents/${spec.id}.yaml`,
-                })),
-            }),
+            toEnvelopeJson(
+                {
+                    specs: specs.map((spec) => ({
+                        id: spec.id,
+                        type: spec.type,
+                        purpose: spec.purpose,
+                        // 0544 R2: role and executor are DISTINCT fields — never merged.
+                        ...(typeof spec.config?.role === 'string' && spec.config.role.length > 0
+                            ? { role: spec.config.role }
+                            : {}),
+                        ...(spec.executor !== undefined ? { executor: spec.executor } : {}),
+                        path: `.spur/agents/${spec.id}.yaml`,
+                    })),
+                },
+                { enveloped: opts.jsonEnvelope },
+            ),
         );
         return 0;
     }
@@ -305,13 +325,13 @@ async function runAgentCreate(
     try {
         const spec = await new TeamService(context).createAgentSpec(input);
         if (flags.json === true) {
-            context.output.write(toJson({ ok: true, spec }));
+            context.output.write(toEnvelopeJson({ ok: true, spec }, { enveloped: flags.jsonEnvelope === true }));
         } else {
             context.output.write(`created .spur/agents/${spec.id}.yaml`);
         }
         return 0;
     } catch (error) {
-        context.output.error(error instanceof Error ? error.message : String(error));
+        writeJsonError(context.output, flags, error instanceof Error ? error.message : String(error));
         return 1;
     }
 }
@@ -401,7 +421,7 @@ async function runAgentDelete(
         context.output.write(`deleted .spur/agents/${id}.yaml`);
         return 0;
     } catch (error) {
-        context.output.error(error instanceof Error ? error.message : String(error));
+        writeJsonError(context.output, flags, error instanceof Error ? error.message : String(error));
         return 1;
     }
 }
@@ -691,7 +711,7 @@ async function readLatestInvokeEvent(
 async function runAgentWait(
     context: CliContext,
     specId: string,
-    options: { run?: string; until: WaitUntil[]; timeout?: number; json?: boolean },
+    options: { run?: string; until: WaitUntil[]; timeout?: number; json?: boolean; jsonEnvelope?: boolean },
 ): Promise<number> {
     const untilList = options.until;
     if (untilList.length === 0) untilList.push('idle');
@@ -772,7 +792,7 @@ async function runAgentWait(
         if (result !== null) {
             const payload = { satisfied: result.satisfied, pin: result.pin };
             if (options.json) {
-                context.output.write(toJson(payload));
+                context.output.write(toEnvelopeJson(payload, { enveloped: options.jsonEnvelope }));
             } else {
                 context.output.write(`${pin.specId}/${pin.runId} reached ${result.satisfied}`);
             }
@@ -787,9 +807,21 @@ async function runAgentWait(
 }
 
 /** Emit a usage error (exit 2) for `agent wait`. */
-function waitUsageError(context: CliContext, options: { json?: boolean }, message: string): number {
+function waitUsageError(
+    context: CliContext,
+    options: { json?: boolean; jsonEnvelope?: boolean },
+    message: string,
+): number {
     if (options.json) {
-        context.output.write(toJson({ error: { code: 'usage', message } }));
+        context.output.write(
+            toEnvelopeJson(
+                { error: { code: 'usage', message } },
+                {
+                    enveloped: options.jsonEnvelope,
+                    error: { code: 'INTERNAL_ERROR', message: message, details: { cliCode: 'usage' } },
+                },
+            ),
+        );
     } else {
         context.output.error(message);
     }
@@ -797,9 +829,22 @@ function waitUsageError(context: CliContext, options: { json?: boolean }, messag
 }
 
 /** Emit a typed wait failure (exit 1) with the `--json` error envelope. */
-function waitFail(context: CliContext, options: { json?: boolean }, code: string, message: string): number {
+function waitFail(
+    context: CliContext,
+    options: { json?: boolean; jsonEnvelope?: boolean },
+    code: string,
+    message: string,
+): number {
     if (options.json) {
-        context.output.write(toJson({ error: { code, message } }));
+        context.output.write(
+            toEnvelopeJson(
+                { error: { code, message } },
+                {
+                    enveloped: options.jsonEnvelope,
+                    error: { code: 'INTERNAL_ERROR', message: message, details: { cliCode: code } },
+                },
+            ),
+        );
     } else {
         context.output.error(`${code}: ${message}`);
     }

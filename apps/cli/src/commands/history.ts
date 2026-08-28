@@ -13,7 +13,7 @@ import { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { CLI_CONFIG } from '../config';
 import type { CliContext } from '../context';
-import { toJson } from '../output';
+import { toEnvelopeJson } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
 import { SHARED_OPTIONS } from './shared-options';
 
@@ -62,6 +62,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.dryRunHistoryScan)
         .option('--source-timeout <ms>', 'Per-source timeout in milliseconds (default 600000 = 10 min)', '600000')
         .option(...SHARED_OPTIONS.jsonSupported)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             const source = options.source ?? 'all';
 
@@ -69,7 +70,17 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
             if (options.file && source === 'all') {
                 context.output.write(
                     options.json
-                        ? toJson({ status: 'error', message: '--file requires a single --source, not "all".' })
+                        ? toEnvelopeJson(
+                              { status: 'error', message: '--file requires a single --source, not "all".' },
+                              {
+                                  enveloped: options.jsonEnvelope,
+                                  error: {
+                                      code: 'INTERNAL_ERROR',
+                                      message: '--file requires a single --source, not "all".',
+                                      details: { cliCode: 'usage' },
+                                  },
+                              },
+                          )
                         : 'spur history import: --file requires a single --source, not "all".',
                 );
                 context.setExitCode(1);
@@ -82,7 +93,15 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
             if (mode !== 'full' && mode !== 'incremental' && mode !== 'force-file') {
                 const modeMsg = `Invalid history import mode "${mode}". Expected one of: full, incremental, force-file`;
                 if (options.json) {
-                    context.output.write(toJson({ status: 'error', message: modeMsg }));
+                    context.output.write(
+                        toEnvelopeJson(
+                            { status: 'error', message: modeMsg },
+                            {
+                                enveloped: options.jsonEnvelope,
+                                error: { code: 'INTERNAL_ERROR', message: modeMsg, details: { cliCode: 'usage' } },
+                            },
+                        ),
+                    );
                 } else {
                     context.output.error(modeMsg);
                 }
@@ -101,7 +120,17 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                     'spur history import: --file <path> --mode full without --dry-run is unsafe — full mode ' +
                     'treats the file as the authoritative source for reconciliation. Preview with --dry-run, ' +
                     'or import a single file with --mode force-file.';
-                context.output.write(options.json ? toJson({ status: 'error', message: unsafeMsg }) : unsafeMsg);
+                context.output.write(
+                    options.json
+                        ? toEnvelopeJson(
+                              { status: 'error', message: unsafeMsg },
+                              {
+                                  enveloped: options.jsonEnvelope,
+                                  error: { code: 'INTERNAL_ERROR', message: unsafeMsg, details: { cliCode: 'usage' } },
+                              },
+                          )
+                        : unsafeMsg,
+                );
                 context.setExitCode(1);
                 return;
             }
@@ -122,7 +151,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
             const provenance = await resolveImportProvenance(context.fs);
             context.output.write(
                 options.json
-                    ? toJson({ ...fanOut, provenance })
+                    ? toEnvelopeJson({ ...fanOut, provenance }, { enveloped: options.jsonEnvelope })
                     : `${formatProvenance(provenance)}\n${formatFanOutResult(fanOut)}`,
             );
             context.setExitCode(fanOut.exitCode);
@@ -140,6 +169,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         .option('--top <n>', 'Leaderboard depth for byTool/bySession', '20')
         .option('--out <path>', 'Write the artifact to this path instead of the dated reports dir')
         .option(...SHARED_OPTIONS.jsonArtifact)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             const svc = makeService();
             const source = options.source ?? 'all';
@@ -159,7 +189,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
             });
             context.output.write(
                 options.json
-                    ? toJson(artifact)
+                    ? toEnvelopeJson(artifact, { enveloped: options.jsonEnvelope })
                     : formatSummary({
                           totals: artifact.totals,
                           bySource: artifact.bySource,
@@ -176,6 +206,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         )
         .argument('[path]', 'Artifact JSON path (defaults to the latest.json pointer)')
         .option(...SHARED_OPTIONS.jsonParsedArtifact)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .option('--mode <name>', 'Report mode: default | forensics (registry-resolved; unknown names fail)')
         .option('--task <wbs>', 'Narrow to a single task WBS the artifact was analyzed with')
         .option('--top <n>', 'Leaderboard depth for byTool/bySession (re-slices the artifact)')
@@ -195,7 +226,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                     top,
                 });
                 if (options.json) {
-                    context.output.write(toJson(artifact));
+                    context.output.write(toEnvelopeJson(artifact, { enveloped: options.jsonEnvelope }));
                     context.setExitCode(0);
                     return;
                 }
@@ -214,7 +245,14 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                 context.setExitCode(0);
             } catch (e) {
                 const message = `spur history report failed: ${(e as Error).message}`;
-                context.output.write(options.json ? toJson({ status: 'error', message }) : message);
+                context.output.write(
+                    options.json
+                        ? toEnvelopeJson(
+                              { status: 'error', message },
+                              { enveloped: options.jsonEnvelope, error: { code: 'INTERNAL_ERROR', message } },
+                          )
+                        : message,
+                );
                 context.setExitCode(1);
             }
         });
@@ -233,12 +271,14 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         )
         .option('--root <path>', 'History root override (default: per-source platform dir)')
         .option(...SHARED_OPTIONS.jsonDaily)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
         .option('--mode <name>', 'Render the artifact as a .md sidecar in this mode after analyze (e.g. forensics)')
         .action(async (options) => {
             const svc = makeService();
             const sourceTimeout = Number.parseInt(options.sourceTimeout ?? '600000', 10) || 600_000;
 
             // System-event bus + ledger (task 0471 R2): per-invocation, flushed in finally.
+            // SAFETY: SystemEventBus is structurally the same ts-infra EventBus (see workflow.ts:248).
             const bus = new EventBus() as unknown as SystemEventBus;
             const ledger = await attachSystemEventLedger(bus, context);
 
@@ -344,7 +384,15 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
 
             if (failure !== null) {
                 context.output.write(
-                    options.json ? toJson({ error: failure.detail }) : `history daily failed: ${failure.detail}`,
+                    options.json
+                        ? toEnvelopeJson(
+                              { error: failure.detail },
+                              {
+                                  enveloped: options.jsonEnvelope,
+                                  error: { code: 'INTERNAL_ERROR', message: String(failure.detail) },
+                              },
+                          )
+                        : `history daily failed: ${failure.detail}`,
                 );
                 return;
             }
@@ -353,7 +401,9 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                 context.setExitCode(1);
                 return;
             }
-            context.output.write(options.json ? toJson(result) : formatDailyResult(result));
+            context.output.write(
+                options.json ? toEnvelopeJson(result, { enveloped: options.jsonEnvelope }) : formatDailyResult(result),
+            );
         });
 }
 
