@@ -84,6 +84,11 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .argument('<prompt>', 'The prompt or slash command to execute')
         .action(async (prompt, options) => {
             const flags = commanderOptionsToFlags(options);
+            // ADR-091: `--json-envelope` is tri-state on the run path — thread the
+            // explicit value under the camelCase key the service reads (the kebab-case
+            // conversion above would drop it); absent stays undefined so the service
+            // defers to SPUR_JSON_ENVELOPE.
+            if (options.jsonEnvelope !== undefined) flags.jsonEnvelope = options.jsonEnvelope;
             const code = await runAgentRun(prompt, context, flags);
             context.setExitCode(code);
         });

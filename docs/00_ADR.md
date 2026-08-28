@@ -1745,4 +1745,4 @@ unchanged.
 
 *Detail:* task 0697; `packages/app/src/output/envelope.ts`; `apps/cli/src/output.ts`;
 `docs/04_DESIGN.md` §4.1 (closed inventory); AC4 guard
-`apps/cli/tests/json-envelope-inventory.test.ts`.
+`apps/cli/tests/json-envelope-inventory.test.ts`

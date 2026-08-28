@@ -91,18 +91,14 @@ export interface RuleEvaluateOptions {
     file?: string;
     rule?: string;
     json: boolean;
+    /** ADR-091 opt-in envelope decision threaded from `--json-envelope` (undefined → env). */
+    enveloped?: boolean;
     verbose: boolean;
     color: Colorize;
     /** Fix collection/apply mode: 'none' (default) | 'suggest' | 'auto'. */
     fixMode?: FixMode;
     /** Preview fixes without writing (only meaningful with fixMode='auto'). */
     dryRun?: boolean;
-    /**
-     * ADR-091 `--json-envelope` decision threaded from the CLI (task 0697).
-     * `undefined` defers to `SPUR_JSON_ENVELOPE`; precedence is applied by
-     * `envelopeEnabled()`, never re-implemented here.
-     */
-    enveloped?: boolean;
 }
 
 /** Structured result returned by RuleService.evaluate(). */
@@ -144,7 +140,7 @@ export interface RuleValidateOptions {
     source: { kind: 'file' | 'preset'; value: string };
     validateSchema?: boolean;
     json: boolean;
-    /** ADR-091 `--json-envelope` decision threaded from the CLI (task 0697). */
+    /** ADR-091 opt-in envelope decision threaded from `--json-envelope` (undefined → env). */
     enveloped?: boolean;
 }
 

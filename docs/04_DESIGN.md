@@ -1637,13 +1637,16 @@ Row-level deltas from the default rule:
 | team | stop | 307 | flat-object (`result.body`) | unwrapped |
 | team | up | 399 | flat-object `{…result, started}` | unwrapped |
 | team | down | 438 | flat-object `{…result, stopped}` | unwrapped |
-| agent (6) | list | 243 (`--specs`); plain path emits service-side (`packages/app/src/services/agent-service.ts:423`) | flat-object `{specs:[…]}` / `{agents}` | unwrapped |
-| agent | doctor | (no site in module; emits service-side `packages/app/src/services/agent-service.ts:553,621,528,647`) | flat-object `{agents, rolesSource, cache…}`; errors pseudo-envelope `{error:{code:'agent-resolution', message}}` | outside the 14-module sweep (service emit); same deviation classes; no migration until its seam adopts |
+| agent (6) | list | 243 (`--specs`); plain path emits service-side (`agent-service.ts` `AgentService.list`) | flat-object `{specs:[…]}` / `{agents}` | unwrapped; plain path adopted 0697 — honors flag/env via threaded `enveloped` |
+| agent | doctor | service-side (`agent-service.ts` `AgentService.doctor` / `renderDoctor`; errors were pseudo-envelopes `{error:{code:'agent-resolution', message}}`) | flat-object `{agents, rolesSource, cache…}`; errors pseudo-envelope | adopted 0697 — success honors flag/env; enveloped errors normalize to `INTERNAL_ERROR` with `details.cliCode: 'agent-resolution'`; raw bytes unchanged |
+| agent | run | service-side (`agent-service.ts` `handleRunOutput`); failure pseudo-envelope `{error:{code:'agent-resolution', message}}` | flat-object `{exitCode, stdout, stderr, durationMs, …}` | adopted 0697 — honors flag/env via tri-state `jsonEnvelopeFlag(flags)` (absent → `SPUR_JSON_ENVELOPE`); raw bytes unchanged |
 | agent | wait | 137, 775, 792, 802 | errors pseudo-envelope `{error:{code:'usage'\|'wait_stalled'\|…, message}}`; success flat-object `{satisfied, pin}` | near-miss error shape (no `ok`), CLI-local codes |
 | agent | create | 308 | flat-object-with-ok `{ok:true, spec}` | top-level-`ok` conflict |
 | builder (4) | bump-ver | 38, 44 | `{ok:true, verb, target, version}` / `{ok:false, verb, error:"…"}` | top-level-`ok` conflict; string error |
 | builder | drop-tags | 74, 80 | same pattern | same |
-| rule (3) | list | 98 | flat-object (`RuleListServiceResult`) via **raw `JSON.stringify`** | unwrapped; bypasses `toJson` helper |
+| rule (3) | run | service-side (`packages/app/src/services/rule-service.ts` `RuleService.evaluate`, JSON branch) | flat-object `{preset, ruleCount, …engine result}` | unwrapped; adopted 0697 — honors flag/env via threaded `enveloped` |
+| rule | validate | service-side (`RuleService.validate`, both JSON branches) | flat-object `{valid, kind, source, …}` (`valid: false` carries `errors`) | unwrapped; adopted 0697 — `valid` stays a payload field; envelope `ok` is command success |
+| rule | list | 98 | flat-object (`RuleListServiceResult`) via **raw `JSON.stringify`** | unwrapped; bypasses `toJson` helper |
 | rule | trace | 135, 147 | flat-object detail / `{runs}` | unwrapped |
 | init (2) | init | 282, 426 | converged re-run flat-object `{…result, globalRulesSeeded, …}` (no `ok`); fresh run `{ok:true, project, config, …result}` | inconsistent between branches; top-level-`ok` on fresh path only |
 | status (1) | status | 51 | flat-object | unwrapped |

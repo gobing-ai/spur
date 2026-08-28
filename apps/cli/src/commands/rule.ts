@@ -57,9 +57,9 @@ export function registerRuleCommand(program: Command, context: CliContext): void
                 file,
                 rule,
                 json,
+                enveloped: options.jsonEnvelope,
                 verbose,
                 color,
-                enveloped: options.jsonEnvelope,
             });
             context.setExitCode(result.exitCode);
         });

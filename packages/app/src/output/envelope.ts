@@ -7,6 +7,27 @@ import type {
 } from '@gobing-ai/spur-contracts';
 import type { z } from 'zod';
 
+/**
+ * ADR-091 envelope helpers (task 0697 relocation).
+ *
+ * Moved verbatim from `apps/cli/src/output.ts` so service-layer JSON emitters in this
+ * package honor `--json-envelope` / `SPUR_JSON_ENVELOPE=1` (see the ADR-091 amendment in
+ * `docs/00_ADR.md`). Direction is forced by the workspace graph: `apps/cli` depends on
+ * `@gobing-ai/spur-app`, so the reverse import would be circular. The CLI re-exports
+ * these names from `apps/cli/src/output.ts`; the adopted call sites are unchanged.
+ */
+
+/** Structural output sink satisfied by both the CLI `CommandOutput` and service outputs. */
+export interface EnvelopeCapableOutput {
+    write(message: string): void;
+    error(message: string): void;
+}
+
+/** JSON stringify helper that keeps command output stable for automation. */
+function toJson(value: unknown): string {
+    return JSON.stringify(value, null, 2);
+}
+
 /** Contracts success envelope, inferred — never re-spelled (ADR-091). */
 type EnvelopeSuccess = z.infer<ReturnType<typeof apiSuccessSchema<z.ZodTypeAny>>>;
 /** Contracts paginated-list envelope, inferred — never re-spelled (ADR-091). */
@@ -14,17 +35,6 @@ type EnvelopeList = z.infer<ReturnType<typeof paginatedResponseSchema<z.ZodTypeA
 
 /** The canonical `{ok, data | error}` union for CLI `--json-envelope` output (ADR-091). */
 export type CliEnvelope = EnvelopeSuccess | EnvelopeList | z.infer<typeof apiErrorSchema>;
-
-/**
- * Structural output sink accepted by {@link writeJsonError}. Both the CLI's
- * `CommandOutput` (`apps/cli/src/output.ts`) and `RuleServiceOutput` /
- * `AgentServiceOutput` in this package already satisfy it, so the envelope
- * helpers stay usable from either side of the seam without a shared class.
- */
-export interface EnvelopeCapableOutput {
-    write(message: string): void;
-    error(message: string): void;
-}
 
 /** Error payload accepted by {@link toEnvelopeJson} via `opts.error`. */
 export interface EnvelopeErrorPayload {
@@ -48,11 +58,6 @@ export interface EnvelopeOptions {
     error?: EnvelopeErrorPayload;
 }
 
-/** JSON stringify helper that keeps command output stable for automation. */
-function stringify(value: unknown): string {
-    return JSON.stringify(value, null, 2);
-}
-
 /** True when the CLI should emit the enveloped shape (ADR-091): explicit flag > env > raw. */
 export function envelopeEnabled(explicit?: boolean): boolean {
     if (explicit !== undefined) return explicit;
@@ -67,19 +72,19 @@ export function envelopeEnabled(explicit?: boolean): boolean {
  * `INTERNAL_ERROR` with the local code carried in `error.details.cliCode`).
  */
 export function toEnvelopeJson(value: unknown, opts: EnvelopeOptions = {}): string {
-    if (!envelopeEnabled(opts.enveloped)) return stringify(value);
+    if (!envelopeEnabled(opts.enveloped)) return toJson(value);
     if (opts.error) return toEnvelopeError(opts.error.code, opts.error.message, opts.error.details);
     if (opts.kind === 'list') {
         const data = Array.isArray(value) ? value : [value];
         const meta = opts.meta ?? { hasMore: false, limit: Math.max(data.length, 1) };
-        return stringify({ ok: true as const, data, meta });
+        return toJson({ ok: true as const, data, meta });
     }
-    return stringify({ ok: true as const, data: value });
+    return toJson({ ok: true as const, data: value });
 }
 
 /** Build the canonical error-envelope string (contracts `apiErrorSchema` shape). */
 export function toEnvelopeError(code: ApiErrorCode, message: string, details?: unknown): string {
-    return stringify(
+    return toJson(
         details !== undefined
             ? { ok: false as const, error: { code, message, details } }
             : { ok: false as const, error: { code, message } },

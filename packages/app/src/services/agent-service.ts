@@ -442,11 +442,7 @@ export class AgentService {
     async doctor(
         args: {
             json: boolean;
-            /**
-             * ADR-091 `--json-envelope` decision threaded from the CLI (task 0697).
-             * `undefined` defers to `SPUR_JSON_ENVELOPE`; precedence lives in
-             * `envelopeEnabled()`, never re-implemented here.
-             */
+            /** ADR-091 opt-in envelope decision threaded from `--json-envelope` (undefined → env). */
             enveloped?: boolean;
             agent?: string;
             /** B4/0683 R1: opt into model health probing; without it no probe fires. */
@@ -612,6 +608,7 @@ export class AgentService {
         json: boolean,
         agent?: string,
         cache?: DoctorCacheInfo,
+        /** ADR-091 opt-in envelope decision threaded from `--json-envelope` (undefined → env). */
         enveloped?: boolean,
     ): number {
         // R6/AC5: warn (not block) when an executor's model is quota_exhausted or unavailable.
@@ -677,15 +674,13 @@ export class AgentService {
         });
         // `commanderOptionsToFlags` kebab-cases commander's camelCase keys, so the
         // `--json-envelope` flag arrives as `json-envelope` (agent.ts:223). Absent →
-        // undefined so `envelopeEnabled()` can fall through to SPUR_JSON_ENVELOPE.
-        const enveloped = flags['json-envelope'] === undefined ? undefined : booleanFlag(flags, 'json-envelope');
         if (!outcome.ok) {
             if (booleanFlag(flags, 'json')) {
                 this.ctx.output.write(
                     toEnvelopeJson(
                         { error: { code: 'agent-resolution', message: outcome.message } },
                         {
-                            enveloped,
+                            enveloped: jsonEnvelopeFlag(flags),
                             error: {
                                 code: 'INTERNAL_ERROR',
                                 message: outcome.message,
@@ -707,7 +702,7 @@ export class AgentService {
             outcome.coordination !== undefined
                 ? ((await this.getCoordinationRun(outcome.coordination.occupant.runId)) ?? undefined)
                 : undefined;
-        this.handleRunOutput(result, jsonOutput, coordination, outcome.invocation, enveloped);
+        this.handleRunOutput(result, jsonOutput, jsonEnvelopeFlag(flags), coordination, outcome.invocation);
         if (result.exitCode === 0) return 0;
         if (result.signal !== undefined) {
             this.ctx.output.error(`Agent terminated by signal: ${result.signal}`);
@@ -2124,9 +2119,10 @@ export class AgentService {
     private handleRunOutput(
         result: AgentRunResult,
         jsonOutput: boolean,
+        /** ADR-091 opt-in envelope decision threaded from `--json-envelope` (undefined → env). */
+        enveloped: boolean | undefined,
         coordination?: CoordinationRun,
         invocation?: AgentRunInvocation,
-        enveloped?: boolean,
     ): void {
         if (jsonOutput) {
             this.ctx.output.write(
@@ -2602,6 +2598,12 @@ function stringFlag(flags: Record<string, string | boolean>, name: string, fallb
 
 function booleanFlag(flags: Record<string, string | boolean>, name: string): boolean {
     return flags[name] === true;
+}
+
+/** ADR-091 tri-state `--json-envelope` read: explicit true/false wins, undefined defers to SPUR_JSON_ENVELOPE. */
+function jsonEnvelopeFlag(flags: Record<string, string | boolean>): boolean | undefined {
+    const value = flags['jsonEnvelope'];
+    return typeof value === 'boolean' ? value : undefined;
 }
 
 function numberFlag(flags: Record<string, string | boolean>, name: string): number | undefined {

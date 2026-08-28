@@ -4,7 +4,7 @@ name: "Remove the unreliable AUTH column from spur agent doctor table output"
 status: done
 template: feature-impl
 created_at: 2026-08-20T23:18:21.608Z
-updated_at: "2026-08-21T17:56:10.167Z"
+updated_at: "2026-08-28T18:18:19.624Z"
 feature_id: A3
 priority: P1
 dependencies: ["0613"]
@@ -90,6 +90,7 @@ the authority task's amendment records.
 - [x] Run `bun run lint` and `bun run test`
 
 ### Solution
+
 Removed the AUTH column from the `spur agent doctor` text table: the auth signal
 cannot distinguish "not authenticated" from "no probe registered for the provider",
 so the column misreported usable agents.
@@ -97,7 +98,7 @@ so the column misreported usable agents.
 - `renderDoctorTable` drops the `auth` row field, the `auth: 'AUTH'` header entry,
   its width computation, and the auth cell from the line template — remaining columns
   (`STATUS AGENT TIER VERSION MODEL`) stay aligned via the same `padEnd` width logic,
-  and the tier-1 summary footer is untouched (`packages/app/src/services/agent-service.ts:2137-2184`).
+  and the tier-1 summary footer is untouched (`packages/app/src/services/agent-service.ts:2513-2573`).
 - `renderAuth` is kept for `renderDoctorDetail`; the single-agent detail view is
   explicitly out of scope for this change (R4).
 - `--json` output is unchanged: `DoctorRow.authenticated` still flows through
@@ -105,28 +106,35 @@ so the column misreported usable agents.
   is unaffected (R2).
 - `docs/help/cmd_agent.md` §doctor documents the new table shape, the removal
   rationale, and the `--json` `authenticated` note (`docs/help/cmd_agent.md:142-147`).
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| Scenario: R12 — spur agent doctor omits the AUTH column from its table | MET | R1/R3/R4/R5: `renderDoctorTable` no longer has an `auth` field, `AUTH` header entry, or auth cell; remaining columns aligned via the same `line()`/`width()` logic and the footer untouched (`packages/app/src/services/agent-service.ts:2137-2184`); detail view out of scope, stated in the doc rationale (`docs/help/cmd_agent.md:142-147`); test asserts no `AUTH` header and shared 5-cell counts (`packages/app/tests/services/agent-service.test.ts:301-344`) |
+| Scenario: R12 — spur agent doctor omits the AUTH column from its table | MET | R1/R3/R4/R5: `renderDoctorTable` no longer has an `auth` field, `AUTH` header entry, or auth cell; remaining columns aligned via the same `line()`/`width()` logic and the footer untouched (`packages/app/src/services/agent-service.ts:2513-2573`); detail view out of scope, stated in the doc rationale (`docs/help/cmd_agent.md:142-147`); test asserts no `AUTH` header and shared 5-cell counts (`packages/app/tests/services/agent-service.test.ts:301-344`) |
 | Scenario: R16 — Machine-readable doctor output keeps the auth field | MET | R2/R5: `DoctorRow.authenticated` still flows through `svc.doctor({ json: true })`; asserted by the `parsed.agents[].authenticated` check in the `renderDoctorTable` test (`packages/app/tests/services/agent-service.test.ts:301-344`) and the smoke `agent doctor --json` run; doc records the `--json` note (`docs/help/cmd_agent.md:142-147`) |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
+
 | Priority | Kind | Finding | Ref |
-|---|---|---|---|
-| P4 | Verify | No P1–P3 findings. `renderDoctorTable` drops the `auth` field, `AUTH` header, width, and cell; columns still render through the same `line()`/`width()` logic (`packages/app/src/services/agent-service.ts:2137-2184`) | R1/R3 MET |
+| --- | --- | --- | --- |
+| P4 | Verify | No P1–P3 findings. `renderDoctorTable` drops the `auth` field, `AUTH` header, width, and cell; columns still render through the same `line()`/`width()` logic (`packages/app/src/services/agent-service.ts:2513-2573`) | R1/R3 MET |
 | P4 | Risk | `--json` contract preserved: `DoctorRow.authenticated` untouched, asserted by the `authenticated` check in the rewritten test and smoke run | R2 MET |
 | P4 | Verify | Single-agent detail rendering (`renderDoctorDetail` + `renderAuth`) explicitly left out of scope; rationale stated in Solution and docs | R4 MET |
 | P4 | Verify | `cmd_agent.md` §doctor documents the new table shape and removal rationale; the sole AUTH-asserting test rewritten; no other test/snapshot asserted AUTH (repo grep) | R5 MET |
+
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
 - 2026-08-21T17:55:39.930Z todo → wip (system)
 - 2026-08-21T17:55:40.524Z wip → testing (system)
 - 2026-08-21T17:56:10.167Z testing → done (system)

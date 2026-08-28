@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Route service-layer JSON emission through the ADR-091 envelope seam"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-28T04:31:45.643Z
-updated_at: "2026-08-28T04:48:38.634Z"
+updated_at: "2026-08-28T06:57:41.864Z"
 feature_id: F95
 priority: P2
 ac_altitude: task-local
@@ -13,6 +13,7 @@ ac_altitude: task-local
 ## 0697. Route service-layer JSON emission through the ADR-091 envelope seam
 
 ### Background
+
 ADR-091 (task 0693, feature F95) adopted the contracts envelope at the CLI seam
 `apps/cli/src/output.ts` behind the opt-in `--json-envelope` flag, and 0693 adopted it at 99 of
 102 emit sites across the 14 modules under `apps/cli/src/commands/`.
@@ -43,7 +44,9 @@ transports; logic lives in `packages/app`, ADR-021). Wiring the service layer th
 either relocating the envelope helpers to a shared package or threading an envelope decision
 through the service call signatures — an architecture choice, not a patch. 0693 closed with the
 gap documented and routed here.
+
 ### Requirements
+
 - [ ] R1. **Record the seam-relocation decision** — a dated amendment to ADR-091 in
       `docs/00_ADR.md` stating where the envelope helpers live after this task and why. This is an
       internal module relocation, not a public CLI surface change (no new noun, verb, or flag), so
@@ -72,11 +75,13 @@ gap documented and routed here.
 **Out of scope (non-goals):** flipping the enveloped shape to default (ADR-091 defers that to the
 end of its deprecation window); changing any payload fields, exit codes, or human output; migrating
 the `@gobing-ai/ts-utils` `ApiEnvelope`; per-site `API_ERROR_CODES` reclassification away from the
-`INTERNAL_ERROR` collapse, and stripping the `Error: ` prefix that `String(err)` call sites put in
+`INTERNAL_ERROR` collapse, and stripping the `Error:` prefix that `String(err)` call sites put in
 the envelope `message` (both are whole-surface follow-ups, filed separately); refactoring services
 to return payloads and let the CLI emit them (the larger inversion — noted in Design as the
 long-term shape, deliberately not done here).
+
 ### Acceptance Criteria
+
 - [ ] AC1. Given `apps/cli` already depends on `@gobing-ai/spur-app` (so the reverse import would be
       circular), when the seam decision lands as an ADR-091 amendment in `docs/00_ADR.md`, then it
       names the module that owns the helpers after the change, the two rejected alternatives, and
@@ -100,7 +105,9 @@ long-term shape, deliberately not done here).
 - [ ] AC5. Given the 99 CLI call sites already adopted at task 0693, when the helpers move out of
       `apps/cli/src/output.ts`, then none of those call sites is edited and `bunx tsc --noEmit`
       passes for every workspace — the re-export carries them unchanged.
+
 ### Q&A
+
 **2026-08-27 — refine `--depth ready`. Decisions closed before implementation:**
 
 - **Where the helpers live: `packages/app`, not `packages/contracts`.** Contracts is transport DTOs
@@ -123,7 +130,7 @@ long-term shape, deliberately not done here).
 - **`--json` raw baseline is captured before any edit.** Plan step 1. A baseline captured after the
   move would tautologically pass AC3.
 
-- **Deferred, with owner:** `INTERNAL_ERROR` → `NOT_FOUND` reclassification and the `Error: ` prefix
+- **Deferred, with owner:** `INTERNAL_ERROR` → `NOT_FOUND` reclassification and the `Error:` prefix
   strip on `String(err)` messages are whole-surface changes; a partial pass is worse than the current
   uniform collapse. Both stay F95 follow-ups, filed separately, not folded in here. The
   services-return-payloads inversion is the right long-term shape and is likewise deferred — it
@@ -133,7 +140,9 @@ long-term shape, deliberately not done here).
   `1a2cfd75` (857 pass / 6 fail with and without the 0693 close-out diff). They are test-isolation
   defects that read the operator's real environment. Recorded in Plan step 9 so the implementer does
   not chase them or read them as a regression.
+
 ### Design
+
 #### WHAT
 
 Move the ADR-091 envelope helpers **down** one package — out of `apps/cli/src/output.ts` into
@@ -243,7 +252,7 @@ the "Not adopted (service-side, outside the 14-module sweep)" bullet added at 06
 - **Do not** flip the default to enveloped, and do not add a seventh `API_ERROR_CODES` member.
 - **Do not** refactor services to return payloads for the CLI to emit. That inversion is the right
   long-term shape and is explicitly out of scope — it changes every service's return contract.
-- **Do not** reclassify `INTERNAL_ERROR` to `NOT_FOUND`, or strip the `Error: ` prefix from
+- **Do not** reclassify `INTERNAL_ERROR` to `NOT_FOUND`, or strip the `Error:` prefix from
   `String(err)` messages, in this task. Both are whole-surface changes; a partial pass leaves a more
   inconsistent surface than the current uniform collapse.
 
@@ -252,10 +261,12 @@ the "Not adopted (service-side, outside the 14-module sweep)" bullet added at 06
 `dependencies[]` is empty. **Assumes** task 0693 shipped the seam and the opt-in flag
 (`apps/cli/src/output.ts:63,75,87,100`; `shared-options.ts:31`) — this task relocates that code, it
 does not re-invent it. **Leaves for dependents:** the enveloped-by-default flip at the end of
-ADR-091's deprecation window, the `API_ERROR_CODES` per-site reclassification, and the `Error: `
+ADR-091's deprecation window, the `API_ERROR_CODES` per-site reclassification, and the `Error:`
 prefix strip — all F95 follow-ups. Does **not** re-own ADR-091's decisions; the amendment records
 where the code lives, never a new envelope shape.
+
 ### Plan
+
 1. **Capture the raw baseline first (R3 blocker).** Before any source edit, record the exact
    `--json` bytes of `agent list`, `agent doctor`, `rule run`, `rule validate` into a fixture the
    byte-identity test reads. A baseline captured after the move proves nothing.
@@ -293,19 +304,92 @@ where the code lives, never a new envelope shape.
 **Verification intent.** AC2/AC3 are executable (zod parse + fixture byte-compare). AC5 is
 executable (`tsc --noEmit` plus a diff-scope assertion). AC4 is executable **only if** step 7 lands
 as a test; if it degrades to a manual sweep, the requirement ships unverifiable — build the scan.
+
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+| ---------------------- |
+| `apps/cli/src/commands/agent.ts:265` |
+| `apps/cli/src/commands/agent.ts:38` |
+| `apps/cli/src/commands/agent.ts:59` |
+| `apps/cli/src/commands/agent.ts:87` |
+| `apps/cli/src/commands/rule.ts:60` |
+| `apps/cli/src/commands/rule.ts:87` |
+| `apps/cli/src/output.ts:0` |
+| `apps/cli/src/output.ts:2` |
+| `apps/cli/src/output.ts:36` |
+| `apps/cli/tests/output-envelope.test.ts:130` |
+| `apps/cli/tests/output-envelope.test.ts:2` |
+| `apps/cli/tests/output-envelope.test.ts:7` |
+| `packages/app/src/index.ts:34` |
+| `packages/app/src/output/envelope.ts:10` |
+| `packages/app/src/output/envelope.ts:100` |
+| `packages/app/src/output/envelope.ts:25` |
+| `packages/app/src/output/envelope.ts:27` |
+| `packages/app/src/output/envelope.ts:7` |
+| `packages/app/src/services/agent-service.ts:2120` |
+| `packages/app/src/services/agent-service.ts:2127` |
+| `packages/app/src/services/agent-service.ts:2180` |
+| `packages/app/src/services/agent-service.ts:2601` |
+| `packages/app/src/services/agent-service.ts:420` |
+| `packages/app/src/services/agent-service.ts:424` |
+| `packages/app/src/services/agent-service.ts:445` |
+| `packages/app/src/services/agent-service.ts:492` |
+| `packages/app/src/services/agent-service.ts:509` |
+| `packages/app/src/services/agent-service.ts:51` |
+| `packages/app/src/services/agent-service.ts:538` |
+| `packages/app/src/services/agent-service.ts:575` |
+| `packages/app/src/services/agent-service.ts:591` |
+| `packages/app/src/services/agent-service.ts:594` |
+| `packages/app/src/services/agent-service.ts:611` |
+| `packages/app/src/services/agent-service.ts:648` |
+| `packages/app/src/services/agent-service.ts:677` |
+| `packages/app/src/services/agent-service.ts:703` |
+| `packages/app/src/services/rule-service.ts:143` |
+| `packages/app/src/services/rule-service.ts:30` |
+| `packages/app/src/services/rule-service.ts:337` |
+| `packages/app/src/services/rule-service.ts:367` |
+| `packages/app/src/services/rule-service.ts:373` |
+| `packages/app/src/services/rule-service.ts:402` |
+| `packages/app/src/services/rule-service.ts:94` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+| ------------- | -------- | ---------- |
+| R1 | MET | ADR-091 amendment `docs/00_ADR.md:1715-1740` (dated 2026-08-28, task 0697): owning module named (`packages/app/src/output/envelope.ts`), both rejected alternatives named with reasons (contracts = DTOs-only vs `process.env` runtime; duplication = second implementation), binding fact stated as workspace-graph circularity (`apps/cli` → `@gobing-ai/spur-app`, reverse import circular; ADR-021 corrected to non-binding), and explicit "No ADR-051 consent gate applies" |
+| R2 | MET | Helpers moved with precedence single-sourced in `envelopeEnabled` (`packages/app/src/output/envelope.ts:63-66`); threading: `apps/cli/src/commands/rule.ts:60,87` → `RuleService` `enveloped` (`rule-service.ts:95,144`) → `toEnvelopeJson` at `rule-service.ts:337,373,402`; `agent.ts:31-33,50-57` → `agent-service.ts:420-424` (list), `:575-577`/`:648-650` (doctor via `renderDoctor` `:612`); pseudo-envelopes at `agent-service.ts:539-547` and `:677-688` normalize to `{ok:false, error:{INTERNAL_ERROR, details.cliCode:'agent-resolution'}}` in enveloped mode only; private `toJson` deleted (grep: zero `function toJson` in agent-service.ts); no service reads the env var (grep: only `envelope.ts`) |
+| R3 | MET | Fixtures captured pre-edit: `apps/cli/tests/fixtures/raw-json-baseline/{rule-run.json,rule-validate-preset.json}` compared with exact `toBe` (no trim) in `apps/cli/tests/output-envelope.test.ts` ("raw default byte-identity" describe); agent verbs pinned structurally `raw.text === toJson(enveloped.data)` with documented in-test justification (host-specific payloads); formatter drift blocked by `biome.json:63-68` |
+| R4 | MET | Runnable default-deny sweep in `output-envelope.test.ts` ("jsonEnvelope registration sweep"): >50-target sanity assert; every flag-registering verb must emit, thread, or be in `DELEGATED_EMITTERS` with the delegate source verified to exist AND emit; §4.1-row regex check; `docs/04_DESIGN.md` §4.1 "Service-side adoption closed (task 0697)" supersedes the 0693 note, rows added/updated for `agent list`/`doctor`/`run` (`:1620-1622`) and `rule run`/`validate` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+| --------------------- | -------- | --------------- | ---------- |
+| AC1 [docs-only] | MET | static-ref | `docs/00_ADR.md:1715-1740` — all four named elements verified present (owning module; contracts + duplication rejections; circular workspace graph as the binding fact, ADR-021 demoted to agreeing; explicit no-ADR-051-consent statement) |
+| AC2 | MET | test | `apps/cli/tests/output-envelope.test.ts` SERVICE_VERBS loop: all four verbs with `--json --json-envelope` parse via `apiSuccessSchema(z.unknown())` (flat `{ok,data}`; no paginated form, correct per task Q&A); env-only run text `===` flag-run text (exact string identity); post-fix `agent run` env case additionally parses via `apiErrorSchema` |
+| AC3 | MET | test | Same file "raw default byte-identity vs pre-change baseline": rule verbs exact-fixture `toBe`; agent verbs `raw === toJson(enveloped.data)` structural pin; green in post-fix gate (attested 6634/0) |
+| AC4 | MET | test | Same file sweep test: default-deny over every `.command()` block registering `SHARED_OPTIONS.jsonEnvelope`; offenders `[]`; delegated emitters verified to exist and emit in source; §4.1 row presence asserted |
+| AC5 | MET | command | `apps/cli/src/output.ts:5-13` re-exports all moved names from `@gobing-ai/spur-app` (`CommandOutput`/`consoleOutput`/`toJson` stay local); `packages/app/src/index.ts:36-43` exports the module; call sites unchanged (spot-checked `task.ts:45,195`, `feature.ts:66`, `message.ts:341`, `team.ts`, `serve.ts:45` — all keep the 0693 `{ enveloped: options.jsonEnvelope }` shape); cross-workspace `bunx tsc --noEmit` green in the post-fix gate (attested; re-run before commit) |
+
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
+
 - **Feature:** `docs/features/F95_cli-json-envelope-standard-normalized-ok-data-error-shape-across-spur-nouns.md`
 - **Upstream task:** `0693` — CLI JSON envelope standard: ADR, shape inventory, and gated
   implementation. Shipped the seam this task relocates (`apps/cli/src/output.ts:63,75,87,100`) and
@@ -322,4 +406,9 @@ as a test; if it degrades to a manual sweep, the requirement ships unverifiable 
   (service-side, outside the 14-module sweep)" bullet.
 - **Discovery evidence** — `docs/dogfood/2026-08-27-dev-verify-0693-dogfood.md` (P1/P2 findings from
   the `/sp:dev-verify 0693 --fix all` dogfood that surfaced the advertised-but-ignored flag).
+
 ### History
+
+- 2026-08-28T05:54:27.897Z todo → wip (system)
+- 2026-08-28T06:57:27.173Z wip → testing (system)
+- 2026-08-28T06:57:41.864Z testing → done (system)
