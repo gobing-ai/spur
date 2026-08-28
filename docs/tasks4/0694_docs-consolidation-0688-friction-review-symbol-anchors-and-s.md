@@ -4,7 +4,7 @@ name: "Docs consolidation — 0688 friction review: symbol anchors and sweep-onc
 status: todo
 template: feature-impl
 created_at: 2026-08-27T20:16:10.953Z
-updated_at: "2026-08-27T21:41:27.070Z"
+updated_at: "2026-08-27T23:34:44.133Z"
 feature_id: F94
 priority: P3
 dependencies: ["0691"]
@@ -34,11 +34,22 @@ Sequencing: the gate docs depend on the corpus gate & baseline simplification AD
 
 ### Acceptance Criteria
 
-- [ ] AC1. A new author finds the preferred `path:symbol` form, the reason, the line-anchor exception, and the dated decision note linking back to this feature.
-- [ ] AC2. The verification-gate docs state the sweep-once discipline (single-task check iterates; `--corpus` runs once before commit).
-- [ ] AC3. Both land in one pass across docs/04_DESIGN.md + the verification-gate docs.
+```gherkin
+Scenario: R5 — New citations prefer symbols over line numbers
+  Given the symbol-anchor convention documented in `docs/04_DESIGN.md` §4 with its dated corpus note
+  When a new author looks up the citation form
+  Then the preferred `path:symbol` form, the reason, and the line-anchor exception are found
+  And the dated decision note links back to this feature
+
+Scenario: R6 — The corpus sweep runs once per commit
+  Given the sweep-once discipline codified in the verification-gate docs (`docs/99_PROJECT_CONSTITUTION.md` + the derived `AGENTS.md` line)
+  When an agent iterates on a task
+  Then the docs state that single-task check drives the iterate loop and `spur task check --corpus` runs once before commit
+  And both conventions land in one pass across `docs/04_DESIGN.md` + the verification-gate docs
+```
 
 ### Q&A
+
 - **Where are "the verification-gate docs"?** `AGENTS.md` §Verification gate (:315–360) — there is no
   `docs/*verification*` file (verified 2026-08-27). Because `AGENTS.md` is derived and `99` owns
   process, the rule is authored in `docs/99_PROJECT_CONSTITUTION.md` and `AGENTS.md` carries the
@@ -56,7 +67,9 @@ Sequencing: the gate docs depend on the corpus gate & baseline simplification AD
 - **Deferred:** whether the convention ever gets enforced by a checker. Deferred to 0692's drift
   report outcome, on condition no new baselined finding class is minted while 0691 is undecided
   (owner: 0692's implementer).
+
 ### Design
+
 **WHAT.** One docs pass landing two conventions from the 0688 friction review: the symbol-anchor
 citation convention (R1) and the sweep-once discipline (R2).
 
@@ -79,6 +92,7 @@ citation convention (R1) and the sweep-once discipline (R2).
 carries the derived operational line. Do not write the rule only into `AGENTS.md`.
 
 **Frozen content decisions.**
+
 - Preferred citation form: `` `path:symbol` `` (e.g. `anchor-qualifier.ts:resolveRepoRoot`).
 - Line anchors stay acceptable for: a specific line in a non-code file, a diff hunk under review, a
   quoted log line, or code with no enclosing named symbol. State the exception explicitly — a
@@ -87,6 +101,7 @@ carries the derived operational line. Do not write the rule only into `AGENTS.md
   --corpus` (`bun run corpus-check`) runs **once**, at commit-prep.
 
 **Anti-patterns (do NOT implement).**
+
 - Do **not** add a gate, lint rule, or finding code enforcing `path:symbol` — this task is
   documentation only. Enforcement, if ever, is 0692's drift *report* (R1), not a new checker.
 - Do **not** rewrite existing `path:line` citations across the corpus. The convention governs **new**
@@ -100,7 +115,9 @@ carries the derived operational line. Do not write the rule only into `AGENTS.md
 targets `config/corpus-baseline.json`'s `note` field — 0691's option D would delete that file
 entirely. If the approved option retires the baseline, relocate the dated note into the ADR entry or
 `docs/04_DESIGN.md` §4 instead; do not author a note into a file 0691 is removing.
+
 ### Plan
+
 - [ ] 1. Confirm 0691's approved option before touching gate wording; if still unapproved, land the
       R1 half only and hold R2. → R2 sequencing.
 - [ ] 2. Add a citation-convention subsection under `docs/04_DESIGN.md` §4 Output Conventions:
@@ -117,6 +134,7 @@ entirely. If the approved option retires the baseline, relocate the dated note i
 - [ ] 7. Verify: a reader starting from `docs/04_DESIGN.md` §4 reaches the form, the reason, the
       exception, and the dated note; `AGENTS.md` reaches the constitution rule. Run
       `spur task check --corpus` once before the commit. → AC1, AC2, AC3.
+
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
@@ -130,6 +148,7 @@ entirely. If the approved option retires the baseline, relocate the dated note i
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
+
 - Parent feature: `docs/features/F94_pipeline-close-out-and-gate-friction-*.md` (R5, R6 rows)
 - Dependency: task 0691 (corpus gate & baseline simplification) — gate-doc half waits on its ADR approval
 - Sibling: task 0692 (close-out integrity) — owns the anchor-drift *report*; this task owns the citation *convention*
@@ -138,4 +157,5 @@ entirely. If the approved option retires the baseline, relocate the dated note i
 - `AGENTS.md` §Verification gate (:315–360), corpus sweep line (:321), "Targeted-test-first while iterating" (:357) — the derived surface and the shape to mirror
 - `config/corpus-baseline.json` `note` — established home for dated decision notes (conditional; see Design hazard)
 - Source session: task 0688 (2026-08-27); 0606 anchor-drift precedent (`eval-pipeline.ts:528` → `:562`)
+
 ### History

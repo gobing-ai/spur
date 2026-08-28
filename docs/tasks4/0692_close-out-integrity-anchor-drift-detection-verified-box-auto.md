@@ -4,7 +4,7 @@ name: "Close-out integrity: anchor-drift detection, verified-box auto-flip, FSM 
 status: todo
 template: feature-impl
 created_at: 2026-08-27T20:16:10.910Z
-updated_at: "2026-08-27T21:40:13.672Z"
+updated_at: "2026-08-27T23:34:43.612Z"
 feature_id: F94
 priority: P2
 ---
@@ -38,13 +38,33 @@ Three close-out frictions and one pre-existing bug from the 0688 session (2026-0
 
 ### Acceptance Criteria
 
-- [ ] AC1. Given a task citing `path:line` anchors that a source edit moved, when `task check` runs, then drift is reported naming the cited and current positions; stable citations stay silent.
-- [ ] AC2. Given a verdict marking requirements MET (or a mixed PARTIAL verdict), when `task record` writes, then exactly the proven boxes flip; ambiguous or unmentioned boxes stay untouched.
-- [ ] AC3. Given a denied feature/task transition, when the error renders, then it names the legal path and the command that reaches it (the `active → done` example included).
-- [ ] AC4. Given invocation from the repo root and from a nested directory, when the repo root is resolved, then both resolve to the same root.
-- [ ] AC5. Given the test suite, when it runs, then all four fixes are covered in one pass.
+```gherkin
+Scenario: R2 — Line-number anchor drift is caught at commit-prep, not post-commit
+  Given a task citing `path:line` anchors that a source edit moved
+  When `task check` re-resolves the citations against the current tree
+  Then drift is reported naming the cited and current positions
+  And stable citations stay silent
+
+Scenario: R3 — A verdict that marks a requirement MET/PASS leaves its boxes checked
+  Given a verdict marking requirements MET (or a mixed PARTIAL verdict)
+  When `task record` writes
+  Then exactly the proven boxes flip to checked
+  And ambiguous or unmentioned boxes stay untouched
+
+Scenario: R4 — A denied transition names the legal path
+  Given a denied feature/task transition (including `active → done`)
+  When the error renders
+  Then it names the legal path and the command that reaches it
+
+Scenario: R7 — Repo-root resolution does not depend on cwd
+  Given `resolveRepoRoot` invoked from the repo root and from outside the target project
+  When the repo root is resolved
+  Then both resolve to the same root
+  And the four fixes are covered in one test pass
+```
 
 ### Q&A
+
 - **Does AC4's nested-directory test reproduce the bug?** No. Verified 2026-08-27: `git rev-parse
   --show-toplevel` returns the same root from the repo root and from `docs/tasks4`. The real defect
   is the `process.cwd()` fallback when the process is outside the target project. AC4's *intent*
@@ -65,7 +85,9 @@ Three close-out frictions and one pre-existing bug from the 0688 session (2026-0
 - **Deferred:** whether the R1 drift report becomes its own finding code or a report section — left
   to implementation, on condition it does not mint a new baselined finding class while 0691's gate
   simplification is undecided (owner: this task's implementer).
+
 ### Design
+
 **WHAT.** Four independent close-out fixes landed on one surface and one test pass: anchor-drift
 reporting in `task check` (R1), verdict-driven checkbox auto-flip in the record path (R2),
 `GuardDeniedError` message enrichment in both FSMs (R3), and the `resolveRepoRoot` cwd-dependence
@@ -90,6 +112,7 @@ on the existing class. Reuse the `task-check.ts` checkbox parser for R2 rather t
 Verdict values are exactly `PASS | PARTIAL | FAIL | UNKNOWN` (`task-record.ts` `CanonicalVerifyVerdict`).
 
 **Precedence / algorithm.**
+
 - **R2 auto-flip is conservative by construction:** flip a box only when the verdict names that
   requirement id AND marks it MET/PASS. `PARTIAL` flips exactly the requirement ids the verdict
   proves and leaves the rest; `FAIL` / `UNKNOWN` flip nothing. A box the verdict does not mention is
@@ -99,6 +122,7 @@ Verdict values are exactly `PASS | PARTIAL | FAIL | UNKNOWN` (`task-record.ts` `
   check that silently edits the thing it is checking destroys the evidence.
 
 **Anti-patterns (do NOT implement).**
+
 - No new error class, no new finding-code family for R3 (message enrichment only).
 - No anchor auto-rewrite inside `task check` (see above).
 - No flipping of unmentioned boxes on a bare `PASS` verdict — that reintroduces the unchecked-box
@@ -118,7 +142,9 @@ nested-directory test passes today and proves nothing.
 this task owns the `packages/app` behavior change only, and leaves the symbol-anchor citation
 *convention* to 0694. If R1's drift report needs a documented citation convention, cite 0694's
 output rather than re-authoring it here.
+
 ### Plan
+
 - [ ] 1. R4 first (it unblocks trustworthy anchor work): make `resolveRepoRoot`
       (`packages/app/src/services/anchor-qualifier.ts:99`) derive from the caller's project context
       instead of falling back to `process.cwd()`. → R4.
@@ -138,6 +164,7 @@ output rather than re-authoring it here.
 - [ ] 9. One test pass: `bun run test` green across all four; confirm coverage holds at the 90/90
       bar. → R5, AC5.
 - [ ] 10. `bun run autofix && bun run spur-check`, then `spur task check --corpus` once before commit.
+
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
@@ -151,6 +178,7 @@ output rather than re-authoring it here.
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
+
 - Parent feature: `docs/features/F94_pipeline-close-out-and-gate-friction-*.md` (R2–R4 rows)
 - `packages/app/src/services/anchor-qualifier.ts` — `resolveRepoRoot` (:99), `ANCHOR_RE` (~:90), `anchorQualify` caller-scoping note (~:239–243)
 - `packages/app/src/services/task-check.ts` — checkbox parser (~:874–907), `L3.unchecked-checklist` emission
@@ -160,4 +188,5 @@ output rather than re-authoring it here.
 - `apps/cli/src/commands/task.ts:279`, `apps/server/src/middleware/error-handler.ts:127` — where denials surface to users
 - Source session: task 0688 (2026-08-27), commits f7402c21 / f60e5aec1; ADR-088 for the anchor matcher context
 - Sibling tasks: 0691 (gate/baseline simplification), 0694 (docs consolidation)
+
 ### History
