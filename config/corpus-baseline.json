@@ -1,5 +1,5 @@
 {
-    "note": "Machine-generated snapshot of observed corpus findings. Regenerate: bun run scripts/commands/regen-corpus-baseline.ts. Wave 2026-08-27 (ADR-090): single-sided gate; vanished entries retire via regeneration, not gate failure. Retires the ADR-083 per-entry reason/since annotations.",
+    "note": "Machine-generated snapshot of observed corpus findings. Regenerate: bun run scripts/commands/regen-corpus-baseline.ts. Wave 2026-08-27 (ADR-090): single-sided gate; vanished entries retire via regeneration, not gate failure. Retires the ADR-083 per-entry reason/since annotations. Dated decision note (0688 friction review, 2026-08-27): new task citations prefer path:symbol over path:line (docs/04_DESIGN.md §4.2, task 0694).",
     "entries": [
         {
             "kind": "feature",
@@ -2026,12 +2026,6 @@
         {
             "kind": "task",
             "id": "0036",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0036",
             "code": "L4.gate-language",
             "severity": "warning"
         },
@@ -2051,6 +2045,12 @@
             "kind": "task",
             "id": "0036",
             "code": "L4.readiness-blocked",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0036",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -2998,7 +2998,7 @@
         {
             "kind": "task",
             "id": "0067",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -3024,12 +3024,6 @@
             "id": "0068",
             "code": "L3.review-priority-table",
             "severity": "error"
-        },
-        {
-            "kind": "task",
-            "id": "0068",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
         },
         {
             "kind": "task",
@@ -3130,13 +3124,13 @@
         {
             "kind": "task",
             "id": "0072",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.feature-not-found",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0072",
-            "code": "L4.feature-not-found",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -3270,12 +3264,6 @@
             "id": "0076",
             "code": "L3.review-priority-table",
             "severity": "error"
-        },
-        {
-            "kind": "task",
-            "id": "0076",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
         },
         {
             "kind": "task",
@@ -3681,6 +3669,12 @@
         },
         {
             "kind": "task",
+            "id": "0087",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0088",
             "code": "L2.disallowed-section",
             "severity": "warning"
@@ -3696,12 +3690,6 @@
             "id": "0088",
             "code": "L3.review-priority-table",
             "severity": "error"
-        },
-        {
-            "kind": "task",
-            "id": "0088",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
         },
         {
             "kind": "task",
@@ -3868,6 +3856,12 @@
         {
             "kind": "task",
             "id": "0094",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0094",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning"
         },
@@ -3892,7 +3886,7 @@
         {
             "kind": "task",
             "id": "0095",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -3922,7 +3916,7 @@
         {
             "kind": "task",
             "id": "0096",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4012,7 +4006,7 @@
         {
             "kind": "task",
             "id": "0099",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4048,7 +4042,7 @@
         {
             "kind": "task",
             "id": "0100",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4108,7 +4102,7 @@
         {
             "kind": "task",
             "id": "0103",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4126,7 +4120,7 @@
         {
             "kind": "task",
             "id": "0104",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4186,7 +4180,7 @@
         {
             "kind": "task",
             "id": "0107",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4204,7 +4198,7 @@
         {
             "kind": "task",
             "id": "0108",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4222,7 +4216,7 @@
         {
             "kind": "task",
             "id": "0109",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4264,12 +4258,6 @@
         {
             "kind": "task",
             "id": "0111",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0111",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -4294,12 +4282,6 @@
         {
             "kind": "task",
             "id": "0112",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0112",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -4313,12 +4295,6 @@
             "kind": "task",
             "id": "0113",
             "code": "L3.unchecked-checklist",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0113",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -4336,7 +4312,7 @@
         {
             "kind": "task",
             "id": "0114",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4354,7 +4330,7 @@
         {
             "kind": "task",
             "id": "0115",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4367,12 +4343,6 @@
             "kind": "task",
             "id": "0116",
             "code": "L3.unchecked-checklist",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0116",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -4425,6 +4395,12 @@
         },
         {
             "kind": "task",
+            "id": "0117",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0118",
             "code": "L3.review-priority-table",
             "severity": "error"
@@ -4450,12 +4426,6 @@
         {
             "kind": "task",
             "id": "0119",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0119",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -4474,7 +4444,7 @@
         {
             "kind": "task",
             "id": "0120",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4486,7 +4456,7 @@
         {
             "kind": "task",
             "id": "0121",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4504,7 +4474,7 @@
         {
             "kind": "task",
             "id": "0123",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4522,7 +4492,7 @@
         {
             "kind": "task",
             "id": "0124",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4552,12 +4522,6 @@
         {
             "kind": "task",
             "id": "0126",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0126",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -4587,6 +4551,12 @@
         },
         {
             "kind": "task",
+            "id": "0127",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0128",
             "code": "L3.required-section-placeholder",
             "severity": "error"
@@ -4636,13 +4606,13 @@
         {
             "kind": "task",
             "id": "0131",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0131",
-            "code": "L4.missing-feature-id",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4661,6 +4631,12 @@
             "kind": "task",
             "id": "0132",
             "code": "L4.missing-feature-id",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0132",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4720,12 +4696,6 @@
         {
             "kind": "task",
             "id": "0134",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0134",
             "code": "L4.missing-feature-id",
             "severity": "warning"
         },
@@ -4751,12 +4721,6 @@
             "kind": "task",
             "id": "0136",
             "code": "L3.unchecked-checklist",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0136",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -4816,13 +4780,13 @@
         {
             "kind": "task",
             "id": "0139",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0139",
-            "code": "L4.missing-feature-id",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4852,7 +4816,7 @@
         {
             "kind": "task",
             "id": "0141",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4948,13 +4912,13 @@
         {
             "kind": "task",
             "id": "0147",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0147",
-            "code": "L4.missing-feature-id",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4966,17 +4930,17 @@
         {
             "kind": "task",
             "id": "0148",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0148",
             "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
+            "id": "0148",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0149",
             "code": "L3.unchecked-checklist",
             "severity": "warning"
@@ -4984,7 +4948,7 @@
         {
             "kind": "task",
             "id": "0149",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -4996,7 +4960,7 @@
         {
             "kind": "task",
             "id": "0150",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5038,7 +5002,7 @@
         {
             "kind": "task",
             "id": "0152",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5056,12 +5020,6 @@
         {
             "kind": "task",
             "id": "0153",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0153",
             "code": "L4.missing-feature-id",
             "severity": "warning"
         },
@@ -5080,12 +5038,6 @@
         {
             "kind": "task",
             "id": "0154",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0154",
             "code": "L4.missing-feature-id",
             "severity": "warning"
         },
@@ -5104,19 +5056,13 @@
         {
             "kind": "task",
             "id": "0155",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0155",
-            "code": "L4.missing-feature-id",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0156",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5140,13 +5086,13 @@
         {
             "kind": "task",
             "id": "0157",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0157",
-            "code": "L4.missing-feature-id",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5182,13 +5128,13 @@
         {
             "kind": "task",
             "id": "0159",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0159",
-            "code": "L4.missing-feature-id",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5200,19 +5146,13 @@
         {
             "kind": "task",
             "id": "0160",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0160",
             "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
-            "id": "0161",
-            "code": "L4.anchor-subject-mismatch",
+            "id": "0160",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5236,7 +5176,7 @@
         {
             "kind": "task",
             "id": "0162",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5272,7 +5212,7 @@
         {
             "kind": "task",
             "id": "0164",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5296,13 +5236,13 @@
         {
             "kind": "task",
             "id": "0165",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0165",
-            "code": "L4.missing-feature-id",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5327,12 +5267,6 @@
             "kind": "task",
             "id": "0166",
             "code": "L3.unchecked-checklist",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0166",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -5362,7 +5296,7 @@
         {
             "kind": "task",
             "id": "0168",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5380,12 +5314,6 @@
         {
             "kind": "task",
             "id": "0169",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0169",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -5398,19 +5326,13 @@
         {
             "kind": "task",
             "id": "0170",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0171",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0171",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -5433,6 +5355,12 @@
         },
         {
             "kind": "task",
+            "id": "0172",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0173",
             "code": "L3.requirements-checkbox",
             "severity": "warning"
@@ -5440,7 +5368,7 @@
         {
             "kind": "task",
             "id": "0173",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5453,12 +5381,6 @@
             "kind": "task",
             "id": "0174",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0174",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -5482,7 +5404,7 @@
         {
             "kind": "task",
             "id": "0175",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5500,13 +5422,13 @@
         {
             "kind": "task",
             "id": "0176",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0176",
-            "code": "L4.missing-feature-id",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5542,13 +5464,13 @@
         {
             "kind": "task",
             "id": "0178",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0178",
-            "code": "L4.missing-feature-id",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5560,13 +5482,13 @@
         {
             "kind": "task",
             "id": "0179",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0179",
-            "code": "L4.missing-feature-id",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5584,12 +5506,6 @@
         {
             "kind": "task",
             "id": "0180",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0180",
             "code": "L4.design-placeholder",
             "severity": "warning"
         },
@@ -5597,6 +5513,12 @@
             "kind": "task",
             "id": "0180",
             "code": "L4.missing-feature-id",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0180",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5614,12 +5536,6 @@
         {
             "kind": "task",
             "id": "0181",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0181",
             "code": "L4.design-placeholder",
             "severity": "warning"
         },
@@ -5627,18 +5543,18 @@
             "kind": "task",
             "id": "0181",
             "code": "L4.missing-feature-id",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0181",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0182",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0182",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -5712,12 +5628,6 @@
             "id": "0185",
             "code": "L3.review-priority-table",
             "severity": "error"
-        },
-        {
-            "kind": "task",
-            "id": "0185",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
         },
         {
             "kind": "task",
@@ -5788,7 +5698,7 @@
         {
             "kind": "task",
             "id": "0188",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5799,14 +5709,20 @@
         },
         {
             "kind": "task",
+            "id": "0189",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0190",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0191",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5824,7 +5740,7 @@
         {
             "kind": "task",
             "id": "0192",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5890,7 +5806,7 @@
         {
             "kind": "task",
             "id": "0197",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -5904,12 +5820,6 @@
             "id": "0198",
             "code": "L3.solution-file-line",
             "severity": "error"
-        },
-        {
-            "kind": "task",
-            "id": "0199",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
         },
         {
             "kind": "task",
@@ -5920,25 +5830,25 @@
         {
             "kind": "task",
             "id": "0200",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0201",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0202",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0203",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6058,12 +5968,6 @@
         {
             "kind": "task",
             "id": "0211",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0211",
             "code": "L4.missing-feature-id",
             "severity": "warning"
         },
@@ -6123,14 +6027,20 @@
         },
         {
             "kind": "task",
-            "id": "0214",
-            "code": "L4.anchor-subject-mismatch",
+            "id": "0213",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0214",
             "code": "L4.missing-feature-id",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0214",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6238,13 +6148,13 @@
         {
             "kind": "task",
             "id": "0221",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.rollup-missing-roster",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0221",
-            "code": "L4.rollup-missing-roster",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6268,7 +6178,7 @@
         {
             "kind": "task",
             "id": "0222",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6286,7 +6196,7 @@
         {
             "kind": "task",
             "id": "0223",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6304,7 +6214,7 @@
         {
             "kind": "task",
             "id": "0224",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6322,7 +6232,7 @@
         {
             "kind": "task",
             "id": "0226",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6346,19 +6256,13 @@
         {
             "kind": "task",
             "id": "0227",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0228",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0228",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -6400,7 +6304,7 @@
         {
             "kind": "task",
             "id": "0230",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6425,6 +6329,12 @@
             "kind": "task",
             "id": "0231",
             "code": "L4.anchor-subject-mismatch",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0231",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6472,12 +6382,6 @@
         {
             "kind": "task",
             "id": "0233",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0233",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -6496,7 +6400,7 @@
         {
             "kind": "task",
             "id": "0234",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6544,12 +6448,6 @@
         {
             "kind": "task",
             "id": "0236",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0236",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -6570,12 +6468,6 @@
             "id": "0237",
             "code": "L3.review-priority-table",
             "severity": "error"
-        },
-        {
-            "kind": "task",
-            "id": "0237",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
         },
         {
             "kind": "task",
@@ -6617,12 +6509,6 @@
             "kind": "task",
             "id": "0239",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0239",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -6633,14 +6519,14 @@
         },
         {
             "kind": "task",
-            "id": "0240",
-            "code": "L3.requirements-checkbox",
+            "id": "0239",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0240",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L3.requirements-checkbox",
             "severity": "warning"
         },
         {
@@ -6657,14 +6543,14 @@
         },
         {
             "kind": "task",
-            "id": "0241",
-            "code": "L3.requirements-checkbox",
+            "id": "0240",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0241",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L3.requirements-checkbox",
             "severity": "warning"
         },
         {
@@ -6694,7 +6580,7 @@
         {
             "kind": "task",
             "id": "0242",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6760,13 +6646,19 @@
         {
             "kind": "task",
             "id": "0245",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0245",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0246",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6779,12 +6671,6 @@
             "kind": "task",
             "id": "0247",
             "code": "L3.unchecked-checklist",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0247",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -6831,6 +6717,12 @@
         },
         {
             "kind": "task",
+            "id": "0249",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0250",
             "code": "L3.ac-empty",
             "severity": "error"
@@ -6850,7 +6742,7 @@
         {
             "kind": "task",
             "id": "0250",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6869,12 +6761,6 @@
             "kind": "task",
             "id": "0251",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0251",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -6899,6 +6785,12 @@
             "kind": "task",
             "id": "0252",
             "code": "L4.anchor-subject-mismatch",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0252",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6934,7 +6826,7 @@
         {
             "kind": "task",
             "id": "0254",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6946,7 +6838,7 @@
         {
             "kind": "task",
             "id": "0255",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6958,7 +6850,7 @@
         {
             "kind": "task",
             "id": "0256",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6970,7 +6862,7 @@
         {
             "kind": "task",
             "id": "0257",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6982,7 +6874,7 @@
         {
             "kind": "task",
             "id": "0258",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -6994,19 +6886,13 @@
         {
             "kind": "task",
             "id": "0259",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0260",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0260",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7024,12 +6910,6 @@
         {
             "kind": "task",
             "id": "0261",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0261",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -7037,12 +6917,6 @@
             "kind": "task",
             "id": "0262",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0262",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7055,12 +6929,6 @@
             "kind": "task",
             "id": "0263",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0263",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7078,19 +6946,13 @@
         {
             "kind": "task",
             "id": "0264",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0265",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0265",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7114,12 +6976,6 @@
         {
             "kind": "task",
             "id": "0266",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0266",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -7138,7 +6994,7 @@
         {
             "kind": "task",
             "id": "0267",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -7151,12 +7007,6 @@
             "kind": "task",
             "id": "0268",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0268",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7180,13 +7030,7 @@
         {
             "kind": "task",
             "id": "0269",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0270",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -7204,12 +7048,6 @@
         {
             "kind": "task",
             "id": "0271",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0271",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -7217,12 +7055,6 @@
             "kind": "task",
             "id": "0271",
             "code": "L4.uncovered-task-scenario",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0272",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7252,7 +7084,7 @@
         {
             "kind": "task",
             "id": "0274",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -7264,31 +7096,13 @@
         {
             "kind": "task",
             "id": "0275",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0275",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0276",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0276",
             "code": "L4.stale-line-anchor",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0277",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7300,13 +7114,7 @@
         {
             "kind": "task",
             "id": "0278",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0279",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -7324,12 +7132,6 @@
         {
             "kind": "task",
             "id": "0280",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0280",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -7342,12 +7144,6 @@
         {
             "kind": "task",
             "id": "0281",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0281",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -7355,12 +7151,6 @@
             "kind": "task",
             "id": "0282",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0282",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7379,12 +7169,6 @@
             "kind": "task",
             "id": "0283",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0283",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7420,12 +7204,6 @@
         {
             "kind": "task",
             "id": "0285",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0285",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -7438,12 +7216,6 @@
         {
             "kind": "task",
             "id": "0286",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0286",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -7451,12 +7223,6 @@
             "kind": "task",
             "id": "0287",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0287",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7469,12 +7235,6 @@
             "kind": "task",
             "id": "0288",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0288",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7487,12 +7247,6 @@
             "kind": "task",
             "id": "0289",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0289",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7505,12 +7259,6 @@
             "kind": "task",
             "id": "0290",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0290",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7523,12 +7271,6 @@
             "kind": "task",
             "id": "0291",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0291",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7541,12 +7283,6 @@
             "kind": "task",
             "id": "0292",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0292",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7557,14 +7293,14 @@
         },
         {
             "kind": "task",
-            "id": "0293",
-            "code": "L3.requirements-checkbox",
+            "id": "0292",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0293",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L3.requirements-checkbox",
             "severity": "warning"
         },
         {
@@ -7581,8 +7317,8 @@
         },
         {
             "kind": "task",
-            "id": "0294",
-            "code": "L4.anchor-subject-mismatch",
+            "id": "0293",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -7611,14 +7347,14 @@
         },
         {
             "kind": "task",
-            "id": "0296",
-            "code": "L3.requirements-checkbox",
+            "id": "0295",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0296",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L3.requirements-checkbox",
             "severity": "warning"
         },
         {
@@ -7642,13 +7378,13 @@
         {
             "kind": "task",
             "id": "0297",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0297",
-            "code": "L4.missing-feature-id",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -7684,13 +7420,13 @@
         {
             "kind": "task",
             "id": "0299",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0299",
-            "code": "L4.missing-feature-id",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -7702,13 +7438,13 @@
         {
             "kind": "task",
             "id": "0300",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0300",
-            "code": "L4.missing-feature-id",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -7757,12 +7493,6 @@
             "kind": "task",
             "id": "0303",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0303",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7786,12 +7516,6 @@
         {
             "kind": "task",
             "id": "0304",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0304",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -7799,12 +7523,6 @@
             "kind": "task",
             "id": "0305",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0305",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -7822,7 +7540,7 @@
         {
             "kind": "task",
             "id": "0306",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -7834,7 +7552,7 @@
         {
             "kind": "task",
             "id": "0307",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -7864,7 +7582,7 @@
         {
             "kind": "task",
             "id": "0309",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -7876,12 +7594,6 @@
         {
             "kind": "task",
             "id": "0310",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0310",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -7912,7 +7624,7 @@
         {
             "kind": "task",
             "id": "0312",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -7924,7 +7636,7 @@
         {
             "kind": "task",
             "id": "0313",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -7960,7 +7672,7 @@
         {
             "kind": "task",
             "id": "0315",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -7984,6 +7696,12 @@
         {
             "kind": "task",
             "id": "0316",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0316",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning"
         },
@@ -7996,7 +7714,7 @@
         {
             "kind": "task",
             "id": "0317",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8015,6 +7733,12 @@
             "kind": "task",
             "id": "0318",
             "code": "L4.anchor-subject-mismatch",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0318",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8032,7 +7756,7 @@
         {
             "kind": "task",
             "id": "0319",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8045,12 +7769,6 @@
             "kind": "task",
             "id": "0320",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0320",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -8068,7 +7786,7 @@
         {
             "kind": "task",
             "id": "0321",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8087,6 +7805,12 @@
             "kind": "task",
             "id": "0322",
             "code": "L4.anchor-subject-mismatch",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0322",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8116,7 +7840,7 @@
         {
             "kind": "task",
             "id": "0324",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8134,7 +7858,7 @@
         {
             "kind": "task",
             "id": "0325",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8152,7 +7876,7 @@
         {
             "kind": "task",
             "id": "0326",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8165,12 +7889,6 @@
             "kind": "task",
             "id": "0327",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0327",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -8189,12 +7907,6 @@
             "kind": "task",
             "id": "0328",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0328",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -8223,6 +7935,12 @@
         },
         {
             "kind": "task",
+            "id": "0329",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0330",
             "code": "L3.ac-empty",
             "severity": "error"
@@ -8236,7 +7954,7 @@
         {
             "kind": "task",
             "id": "0330",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8259,14 +7977,14 @@
         },
         {
             "kind": "task",
-            "id": "0332",
-            "code": "L3.requirements-checkbox",
+            "id": "0331",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0332",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L3.requirements-checkbox",
             "severity": "warning"
         },
         {
@@ -8279,12 +7997,6 @@
             "kind": "task",
             "id": "0333",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0333",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -8332,12 +8044,6 @@
         {
             "kind": "task",
             "id": "0336",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0336",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -8356,7 +8062,7 @@
         {
             "kind": "task",
             "id": "0338",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8374,7 +8080,7 @@
         {
             "kind": "task",
             "id": "0339",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8386,7 +8092,7 @@
         {
             "kind": "task",
             "id": "0340",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8403,14 +8109,14 @@
         },
         {
             "kind": "task",
-            "id": "0342",
-            "code": "L3.requirements-checkbox",
+            "id": "0341",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0342",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L3.requirements-checkbox",
             "severity": "warning"
         },
         {
@@ -8440,12 +8146,6 @@
         {
             "kind": "task",
             "id": "0343",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0343",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -8458,7 +8158,7 @@
         {
             "kind": "task",
             "id": "0344",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8488,7 +8188,7 @@
         {
             "kind": "task",
             "id": "0346",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8500,19 +8200,13 @@
         {
             "kind": "task",
             "id": "0347",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0348",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0348",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -8530,12 +8224,6 @@
         {
             "kind": "task",
             "id": "0349",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0349",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -8543,12 +8231,6 @@
             "kind": "task",
             "id": "0350",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0350",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -8572,12 +8254,6 @@
         {
             "kind": "task",
             "id": "0352",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0352",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -8590,12 +8266,6 @@
         {
             "kind": "task",
             "id": "0353",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0353",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -8603,12 +8273,6 @@
             "kind": "task",
             "id": "0354",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0354",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -8626,7 +8290,7 @@
         {
             "kind": "task",
             "id": "0355",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8686,12 +8350,6 @@
         {
             "kind": "task",
             "id": "0360",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0360",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -8710,7 +8368,7 @@
         {
             "kind": "task",
             "id": "0361",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8728,7 +8386,7 @@
         {
             "kind": "task",
             "id": "0362",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8747,6 +8405,12 @@
             "kind": "task",
             "id": "0363",
             "code": "L4.anchor-subject-mismatch",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0363",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8782,7 +8446,7 @@
         {
             "kind": "task",
             "id": "0365",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8794,7 +8458,7 @@
         {
             "kind": "task",
             "id": "0366",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8829,20 +8493,14 @@
         },
         {
             "kind": "task",
-            "id": "0370",
-            "code": "L4.anchor-subject-mismatch",
+            "id": "0369",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0370",
             "code": "L4.stale-line-anchor",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0371",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -8854,7 +8512,7 @@
         {
             "kind": "task",
             "id": "0372",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8867,12 +8525,6 @@
             "kind": "task",
             "id": "0373",
             "code": "L4.stale-line-anchor",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0374",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -8884,13 +8536,7 @@
         {
             "kind": "task",
             "id": "0375",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0376",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8902,19 +8548,7 @@
         {
             "kind": "task",
             "id": "0377",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0377",
             "code": "L4.stale-line-anchor",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0378",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -8931,6 +8565,12 @@
         },
         {
             "kind": "task",
+            "id": "0379",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0380",
             "code": "L3.requirements-checkbox",
             "severity": "warning"
@@ -8939,6 +8579,12 @@
             "kind": "task",
             "id": "0380",
             "code": "L4.anchor-subject-mismatch",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0380",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8950,7 +8596,7 @@
         {
             "kind": "task",
             "id": "0381",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -8962,19 +8608,13 @@
         {
             "kind": "task",
             "id": "0382",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0383",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0383",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -8992,7 +8632,7 @@
         {
             "kind": "task",
             "id": "0384",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9028,12 +8668,6 @@
         {
             "kind": "task",
             "id": "0389",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0389",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -9047,12 +8681,6 @@
             "kind": "task",
             "id": "0390",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0390",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -9082,7 +8710,7 @@
         {
             "kind": "task",
             "id": "0391",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9112,6 +8740,12 @@
         {
             "kind": "task",
             "id": "0392",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0392",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning"
         },
@@ -9130,7 +8764,7 @@
         {
             "kind": "task",
             "id": "0393",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9190,7 +8824,7 @@
         {
             "kind": "task",
             "id": "0396",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9214,7 +8848,7 @@
         {
             "kind": "task",
             "id": "0397",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9238,7 +8872,7 @@
         {
             "kind": "task",
             "id": "0398",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9268,6 +8902,12 @@
         {
             "kind": "task",
             "id": "0399",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0399",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning"
         },
@@ -9310,7 +8950,7 @@
         {
             "kind": "task",
             "id": "0401",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9448,12 +9088,6 @@
         {
             "kind": "task",
             "id": "0407",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0407",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -9472,7 +9106,7 @@
         {
             "kind": "task",
             "id": "0408",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9490,7 +9124,7 @@
         {
             "kind": "task",
             "id": "0410",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9502,13 +9136,7 @@
         {
             "kind": "task",
             "id": "0411",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0412",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9538,6 +9166,12 @@
         {
             "kind": "task",
             "id": "0413",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0413",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning"
         },
@@ -9580,13 +9214,19 @@
         {
             "kind": "task",
             "id": "0415",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0415",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0416",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9610,7 +9250,7 @@
         {
             "kind": "task",
             "id": "0417",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9628,7 +9268,7 @@
         {
             "kind": "task",
             "id": "0418",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9641,6 +9281,12 @@
             "kind": "task",
             "id": "0419",
             "code": "L4.anchor-subject-mismatch",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0419",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9664,7 +9310,7 @@
         {
             "kind": "task",
             "id": "0421",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9682,31 +9328,31 @@
         {
             "kind": "task",
             "id": "0422",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0422",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0423",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0424",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0425",
             "code": "L4.anchor-subject-mismatch",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0425",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9723,20 +9369,26 @@
         },
         {
             "kind": "task",
+            "id": "0426",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0427",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0428",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0429",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9747,20 +9399,20 @@
         },
         {
             "kind": "task",
+            "id": "0430",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0431",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0432",
             "code": "L3.requirements-format",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0432",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -9772,7 +9424,7 @@
         {
             "kind": "task",
             "id": "0433",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9783,6 +9435,12 @@
         },
         {
             "kind": "task",
+            "id": "0434",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0435",
             "code": "L3.requirements-format",
             "severity": "warning"
@@ -9790,13 +9448,13 @@
         {
             "kind": "task",
             "id": "0435",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0436",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -9988,7 +9646,7 @@
         {
             "kind": "task",
             "id": "0447",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10000,7 +9658,7 @@
         {
             "kind": "task",
             "id": "0448",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10012,7 +9670,7 @@
         {
             "kind": "task",
             "id": "0449",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10024,7 +9682,7 @@
         {
             "kind": "task",
             "id": "0450",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10036,13 +9694,7 @@
         {
             "kind": "task",
             "id": "0451",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0452",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10053,6 +9705,12 @@
         },
         {
             "kind": "task",
+            "id": "0452",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0453",
             "code": "L3.requirements-format",
             "severity": "warning"
@@ -10061,6 +9719,12 @@
             "kind": "task",
             "id": "0453",
             "code": "L4.anchor-subject-mismatch",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0453",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10114,7 +9778,7 @@
         {
             "kind": "task",
             "id": "0457",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10156,12 +9820,6 @@
         {
             "kind": "task",
             "id": "0463",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0463",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -10198,7 +9856,7 @@
         {
             "kind": "task",
             "id": "0466",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10234,12 +9892,6 @@
         {
             "kind": "task",
             "id": "0468",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0468",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -10264,7 +9916,7 @@
         {
             "kind": "task",
             "id": "0470",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10276,7 +9928,7 @@
         {
             "kind": "task",
             "id": "0471",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10295,6 +9947,12 @@
             "kind": "task",
             "id": "0472",
             "code": "L4.anchor-subject-mismatch",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0472",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10348,7 +10006,7 @@
         {
             "kind": "task",
             "id": "0474",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10366,7 +10024,7 @@
         {
             "kind": "task",
             "id": "0475",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10401,20 +10059,26 @@
         },
         {
             "kind": "task",
+            "id": "0477",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0478",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0479",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0480",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10427,12 +10091,6 @@
             "kind": "task",
             "id": "0481",
             "code": "L3.unchecked-checklist",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0481",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -10455,8 +10113,14 @@
         },
         {
             "kind": "task",
+            "id": "0482",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0483",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10468,19 +10132,19 @@
         {
             "kind": "task",
             "id": "0484",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0484",
             "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
+            "id": "0484",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0485",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10498,25 +10162,25 @@
         {
             "kind": "task",
             "id": "0486",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0487",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0488",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0488",
             "code": "L4.missing-feature-id",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0488",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10535,12 +10199,6 @@
             "kind": "task",
             "id": "0490",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0490",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -10582,19 +10240,13 @@
         {
             "kind": "task",
             "id": "0493",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0494",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0494",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -10607,12 +10259,6 @@
             "kind": "task",
             "id": "0495",
             "code": "L3.requirements-checkbox",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0495",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -10624,7 +10270,7 @@
         {
             "kind": "task",
             "id": "0496",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10642,7 +10288,7 @@
         {
             "kind": "task",
             "id": "0497",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10659,6 +10305,12 @@
         },
         {
             "kind": "task",
+            "id": "0498",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0499",
             "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
@@ -10667,6 +10319,12 @@
             "kind": "task",
             "id": "0499",
             "code": "L4.missing-feature-id",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0499",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10678,7 +10336,7 @@
         {
             "kind": "task",
             "id": "0501",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10690,13 +10348,13 @@
         {
             "kind": "task",
             "id": "0502",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0502",
-            "code": "L4.missing-feature-id",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10715,12 +10373,18 @@
             "kind": "task",
             "id": "0503",
             "code": "L4.missing-feature-id",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0503",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0504",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10738,19 +10402,19 @@
         {
             "kind": "task",
             "id": "0506",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0507",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0508",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10761,6 +10425,12 @@
         },
         {
             "kind": "task",
+            "id": "0510",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0512",
             "code": "L3.unchecked-checklist",
             "severity": "warning"
@@ -10768,19 +10438,13 @@
         {
             "kind": "task",
             "id": "0512",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0513",
             "code": "L3.unchecked-checklist",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0513",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -10799,6 +10463,12 @@
             "kind": "task",
             "id": "0514",
             "code": "L4.anchor-subject-mismatch",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0514",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10822,12 +10492,6 @@
         {
             "kind": "task",
             "id": "0516",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0516",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -10840,7 +10504,7 @@
         {
             "kind": "task",
             "id": "0517",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10852,7 +10516,7 @@
         {
             "kind": "task",
             "id": "0518",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10870,12 +10534,6 @@
         {
             "kind": "task",
             "id": "0520",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0520",
             "code": "L4.missing-feature-id",
             "severity": "warning"
         },
@@ -10894,13 +10552,13 @@
         {
             "kind": "task",
             "id": "0522",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0523",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10912,7 +10570,7 @@
         {
             "kind": "task",
             "id": "0525",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10924,13 +10582,13 @@
         {
             "kind": "task",
             "id": "0526",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0527",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10941,32 +10599,32 @@
         },
         {
             "kind": "task",
+            "id": "0528",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0529",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0530",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0531",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0533",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0534",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -10977,74 +10635,80 @@
         },
         {
             "kind": "task",
+            "id": "0534",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0535",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0536",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0537",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0538",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0539",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0540",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0541",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0542",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0543",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0544",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0545",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0546",
             "code": "L4.anchor-subject-mismatch",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0546",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11056,12 +10720,6 @@
         {
             "kind": "task",
             "id": "0547",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0549",
             "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
@@ -11074,37 +10732,37 @@
         {
             "kind": "task",
             "id": "0550",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0551",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0552",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0553",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0554",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0555",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11122,19 +10780,19 @@
         {
             "kind": "task",
             "id": "0557",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0558",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0559",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11158,25 +10816,25 @@
         {
             "kind": "task",
             "id": "0561",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.missing-feature-id",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0561",
-            "code": "L4.missing-feature-id",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0562",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0562",
             "code": "L4.missing-feature-id",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0562",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11199,14 +10857,26 @@
         },
         {
             "kind": "task",
+            "id": "0564",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0565",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0566",
             "code": "L4.anchor-subject-mismatch",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0566",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11242,12 +10912,6 @@
         {
             "kind": "task",
             "id": "0568",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0568",
             "code": "L4.missing-feature-id",
             "severity": "warning"
         },
@@ -11260,12 +10924,6 @@
         {
             "kind": "task",
             "id": "0569",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0569",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -11273,12 +10931,6 @@
             "kind": "task",
             "id": "0569",
             "code": "L4.uncovered-task-scenario",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0570",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -11320,7 +10972,7 @@
         {
             "kind": "task",
             "id": "0572",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11332,7 +10984,7 @@
         {
             "kind": "task",
             "id": "0573",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11349,8 +11001,8 @@
         },
         {
             "kind": "task",
-            "id": "0575",
-            "code": "L4.anchor-subject-mismatch",
+            "id": "0574",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11361,8 +11013,20 @@
         },
         {
             "kind": "task",
+            "id": "0575",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0576",
             "code": "L4.anchor-subject-mismatch",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0576",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11373,44 +11037,50 @@
         },
         {
             "kind": "task",
+            "id": "0577",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0578",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0579",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0580",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0581",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0582",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0583",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0584",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11434,19 +11104,13 @@
         {
             "kind": "task",
             "id": "0587",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0587",
             "code": "L4.uncovered-task-scenario",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0588",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -11482,7 +11146,7 @@
         {
             "kind": "task",
             "id": "0591",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11494,7 +11158,7 @@
         {
             "kind": "task",
             "id": "0592",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11506,7 +11170,7 @@
         {
             "kind": "task",
             "id": "0593",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11554,67 +11218,73 @@
         {
             "kind": "task",
             "id": "0600",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0601",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0603",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0604",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0606",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0607",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0608",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0609",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0610",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0612",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0614",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0615",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11631,20 +11301,26 @@
         },
         {
             "kind": "task",
+            "id": "0617",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0618",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0619",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0620",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11662,7 +11338,7 @@
         {
             "kind": "task",
             "id": "0622",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11680,7 +11356,7 @@
         {
             "kind": "task",
             "id": "0624",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11692,37 +11368,31 @@
         {
             "kind": "task",
             "id": "0625",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0625",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0628",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0629",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0631",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0632",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11733,62 +11403,62 @@
         },
         {
             "kind": "task",
+            "id": "0638",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0639",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0641",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0642",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0645",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0647",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0648",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0649",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0650",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0655",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0657",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11800,19 +11470,7 @@
         {
             "kind": "task",
             "id": "0658",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0658",
             "code": "L4.stale-line-anchor",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0659",
-            "code": "L4.anchor-subject-mismatch",
             "severity": "warning"
         },
         {
@@ -11824,13 +11482,13 @@
         {
             "kind": "task",
             "id": "0660",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0661",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11860,25 +11518,25 @@
         {
             "kind": "task",
             "id": "0664",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0665",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0666",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0667",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11890,43 +11548,43 @@
         {
             "kind": "task",
             "id": "0669",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0670",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
-            "id": "0672",
-            "code": "L4.anchor-subject-mismatch",
+            "id": "0671",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0674",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0676",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0680",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0681",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11938,13 +11596,7 @@
         {
             "kind": "task",
             "id": "0687",
-            "code": "L4.anchor-subject-mismatch",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0688",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -11980,25 +11632,37 @@
         {
             "kind": "task",
             "id": "0690",
-            "code": "L4.anchor-subject-mismatch",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0691",
-            "code": "L4.gate-language",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0692",
-            "code": "L4.gate-language",
+            "code": "L3.unchecked-checklist",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0692",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
             "id": "0693",
             "code": "L4.gate-language",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0693",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
@@ -12011,12 +11675,6 @@
             "kind": "task",
             "id": "0694",
             "code": "L4.gate-language",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0694",
-            "code": "L4.prerequisite-not-done",
             "severity": "warning"
         },
         {

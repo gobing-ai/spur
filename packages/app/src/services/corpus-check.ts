@@ -169,10 +169,10 @@ async function structuralSweep(projectRoot: string): Promise<{
     // task 0582). It was frozen to the active folder through 2026-08-17 because widening
     // it exposes the legacy corpora's accumulated drift — 404 errors across 180 `done`
     // tasks in docs/tasks{,2,3} — and forced a large config/corpus-baseline.json
-    // reconciliation. That reconciliation is now done: the backlog is baselined, and
-    // because the baseline is two-sided, a baselined error that stops reproducing fails
-    // the gate as stale. Leaving 84% of the corpus ungated is what let that drift grow
-    // unobserved in the first place; do not re-narrow this loop.
+    // reconciliation. That reconciliation is now done: the backlog is snapshotted, and a
+    // baselined finding that stops reproducing retires via regeneration rather than gate
+    // failure (ADR-090 single-sided gate). Leaving 84% of the corpus ungated is what let
+    // that drift grow unobserved in the first place; do not re-narrow this loop.
     for (const tasksDir of taskDirs) {
         if (!(await fs.exists(tasksDir))) continue;
         for (const fileName of await fs.readDir(tasksDir)) {
@@ -181,10 +181,10 @@ async function structuralSweep(projectRoot: string): Promise<{
             const result = await taskService.check(join(tasksDir, fileName), wbs, {
                 severityOverrides: planning.severityOverrides,
             });
-            // Capture EVERY severity — the ratchet reconciles warnings two-sided too
-            // (ADR-062 §3 / task 0582 R3); the old error-only filter is what let the
-            // 2289-warning backlog grow unobserved. Filtering happens at reconciliation,
-            // where severity is part of the acceptance contract.
+            // Capture EVERY severity — the snapshot records warnings too (ADR-062 §3 /
+            // task 0582 R3); the old error-only filter is what let the 2289-warning
+            // backlog grow unobserved. Severity filtering is a regeneration-time
+            // acceptance decision, not a sweep-time one.
             for (const finding of result.findings) {
                 findings.push({
                     kind: 'task',
@@ -563,8 +563,8 @@ export async function collectObservedFindings(projectRoot: string, since?: strin
  * A task emitting 33 findings for one key that later emits 1 still reconciles clean,
  * because 1 observation satisfies the key and the other 32 entries are unreachable. The
  * ratchet then detects only a key's *total* disappearance, never a partial reduction —
- * which is the suppression-list rot the two-sided design exists to prevent (ADR-050,
- * ADR-062). One key, one entry, one diagnosis.
+ * which is the suppression-list rot the keyed one-entry-per-finding design exists to
+ * prevent (ADR-050, ADR-062, ADR-090). One key, one entry, one diagnosis.
  */
 export function duplicateBaselineKeys(baseline: Baseline): Array<{ key: string; count: number }> {
     const counts = new Map<string, number>();

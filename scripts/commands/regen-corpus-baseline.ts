@@ -43,25 +43,31 @@ const entries = [...byKey.values()]
     .sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id) || a.code.localeCompare(b.code));
 
 const baseline: Baseline = {
-    note: 'Machine-generated snapshot of observed corpus findings. Regenerate: bun run scripts/commands/regen-corpus-baseline.ts. Wave 2026-08-27 (ADR-090): single-sided gate; vanished entries retire via regeneration, not gate failure. Retires the ADR-083 per-entry reason/since annotations.',
+    note: 'Machine-generated snapshot of observed corpus findings. Regenerate: bun run scripts/commands/regen-corpus-baseline.ts. Wave 2026-08-27 (ADR-090): single-sided gate; vanished entries retire via regeneration, not gate failure. Retires the ADR-083 per-entry reason/since annotations. Dated decision note (0688 friction review, 2026-08-27): new task citations prefer path:symbol over path:line (docs/04_DESIGN.md §4.2, task 0694).',
     entries,
 };
 
 const file = `${root}/config/corpus-baseline.json`;
-await Bun.write(file, `${JSON.stringify(baseline, null, 4)}\n`);
+const tmp = `${file}.tmp`;
+await Bun.write(tmp, `${JSON.stringify(baseline, null, 4)}\n`);
 
-// Round-trip: re-sweep and reconcile against what we just wrote. The snapshot
-// must cover the observed key set exactly — ok:true proves no observed finding
-// is outside the snapshot and no duplicate keys were emitted.
+// Round-trip: re-sweep and reconcile against what we just wrote (to the temp
+// path — the real file is only replaced after the assertion passes, so a failed
+// round-trip leaves the committed snapshot untouched). The snapshot must cover
+// the observed key set exactly — ok:true proves no observed finding is outside
+// the snapshot and no duplicate keys were emitted.
 const reobserved = await collectObservedFindings(root, since);
-const reread = (await Bun.file(file).json()) as Baseline;
+const reread = (await Bun.file(tmp).json()) as Baseline;
 const result = reconcileBaseline(reobserved, reread);
 if (!result.ok || reread.entries.length !== byKey.size) {
+    await Bun.$`rm -f ${tmp}`;
     console.error(
-        `regen-corpus-baseline: round-trip FAILED (ok=${result.ok}, wrote ${byKey.size}, reread ${reread.entries.length}, new=${result.newErrors.length + result.newWarnings.length}, dupes=${result.duplicateKeys.length}) — config/corpus-baseline.json is unreliable; do not commit.`,
+        `regen-corpus-baseline: round-trip FAILED (ok=${result.ok}, wrote ${byKey.size}, reread ${reread.entries.length}, new=${result.newErrors.length + result.newWarnings.length}, dupes=${result.duplicateKeys.length}) — snapshot NOT replaced; config/corpus-baseline.json is unchanged.`,
     );
     process.exit(1);
 }
+
+await Bun.$`mv ${tmp} ${file}`;
 
 console.log(
     `regen-corpus-baseline: wrote ${reread.entries.length} entries (${result.observed} observed findings, deduped by kind:id:code). Round-trip verified.`,
