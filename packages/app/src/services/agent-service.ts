@@ -1906,7 +1906,7 @@ export class AgentService {
             return {
                 ok: false,
                 exitCode: 2,
-                message: `Unknown agent: '${selector}'. Accepted: ${roleList}, ${executorList}, or 'auto'.`,
+                message: `Unknown agent: '${selector}'. Accepted: ${roleList}, ${executorList}, 'inline', or 'auto'.`,
             };
         }
         // R3 (0536): a bare coding-agent binary name (no matching executor entry)

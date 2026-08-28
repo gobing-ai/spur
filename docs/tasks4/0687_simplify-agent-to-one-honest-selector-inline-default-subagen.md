@@ -4,7 +4,7 @@ name: "Simplify --agent to one honest selector: inline default, subagent-first, 
 status: done
 template: issue
 created_at: 2026-08-27T04:45:22.880Z
-updated_at: "2026-08-27T19:40:24.287Z"
+updated_at: "2026-08-28T16:58:07.821Z"
 feature_id: B
 done_forced: "true"
 done_reason: "Selector/telemetry/classifier contract is MET (R1-R7, R9-R12). Residual AC3 write-path / AC4 published-report / AC9 Performance-section publication are covering tasks 0689 (agy expectFile shim) and 0690 (history-anatomy structure-gate reliability), not this diff. PARTIAL verdict retained as the honest record."
@@ -632,44 +632,45 @@ task 0689. Operator-approved machine-config fix applied: agy-opus model pin
 ### Testing
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/agent-service.ts:1319` — `stringFlag(flags, 'agent', 'inline')`; omission and explicit inline produce the same `raw` and the same code path (`:1325-1337`). Re-read this run. |
-| R2 | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md:40-47` — explicit inline resolves identically, 0508 eligibility generalized to all inline resolution; `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:72-77` — "Native-subagent dispatch (R2 eligibility)". Re-read this run. |
-| R3 | MET | `packages/app/src/services/agent-service.ts:1325-1337` — inline on dispatch surface resolves via `resolveAgentAuto()` + one warning; `apps/cli/src/commands/agent.ts:221` — validator returns null; `AGENT_INLINE_HEADLESS_MESSAGE` and all four call sites deleted (git diff `658dfa0db`). Real-run warning verbatim across six runs this session: `--agent inline requested on a headless surface (no host session); resolved agy-opus via role/capable-1 — substituted tier resolution`. |
-| R4 | MET | `resolveAgentAuto`/`resolvePinned` untouched by the diff; escalation ladder and classifier tests pass unmodified — 357 targeted tests this run, 0 fail. |
-| R5 | MET | Mechanism (b) chosen and stated plainly: `plugins/sp/commands/dev-find-issue.md:28` — "there is deliberately **no** host-session inline driver for `history-anatomy.yaml` (mechanism (b))". R5's own conditional permits (b) with plain documentation. |
-| R6 | MET | Sweeps this run: live residual hits all closed (agent.md, execution-workflow.md, next-router SKILL, contract test name/comments); only historical records, bannered supersession, ADR retrospective, and gitignored build artifacts remain. |
-| R7 | MET | `docs/00_ADR.md:1430` ADR-087 + "Retired by this ADR" clause (`:1459-1463`) naming ADR-046 and G5 explicitly (added this run). |
-| R9 | MET | `failure-classification.ts:89-119,133` — permission evidence short-circuits; `agent-run.ts:403,409-411` verbatim message; 24 classifier tests pass this run. |
-| R10 | MET | `apps/cli/src/commands/workflow.ts:227-239` — bus threaded; ledger 156/152 frozen pre-fix → 172/168+ this session. |
-| R11 | MET | Run e1060200: exactly one routed start/exit pair per dispatch, no dual-emit. Bounded analyze: `pairings: 2` (then 4 across 18 dispatches in the 08-27 candidate's artifact — `#/pairings`), non-null executor+role. |
-| R12 | MET | `plugins/sp/skills/dogfood-testing/SKILL.md:612-622` — both affordances (`allowLocalBinding`, `allowWrite`) + doctor caveat; operator applied the patch, probes pass. |
+| R1 | MET | packages/app/src/services/agent-service.ts:1368 defaults the selector to inline; omission and explicit inline enter the same branch. |
+| R2 | MET | plugins/sp/skills/spur-dev/references/cross-cutting.md:36 and inline-pipeline-driver.md:74 document the shared inline/subagent-first resolution contract. |
+| R3 | MET | packages/app/src/services/agent-service.ts:1374-1385 substitutes tier resolution with one warning on headless surfaces; apps/cli/src/commands/agent.ts:240 accepts inline. |
+| R4 | MET | The focused selector, AgentService, workflow action, classifier, and contract suites passed: 440 tests, 0 failures. |
+| R5 | MET | plugins/sp/commands/dev-find-issue.md:31 records permitted mechanism (b): history-anatomy intentionally has no host-session inline driver. |
+| R6 | MET | A fresh repository sweep found no live headless-inline rejection string; CLI and service unknown-selector diagnostics now list inline among accepted values. |
+| R7 | MET | docs/00_ADR.md:1448-1484 records ADR-087 and the retired contracts. |
+| R8 | MET | The task Solution documents the approved goal-equivalent supersession: precise quota/resource-exhaustion patterns replace the broader provider-specific wording. |
+| R9 | MET | packages/app/src/services/failure-classification.ts:89-133 detects permission evidence before exhaustion; agent-run.ts:399-413 preserves the offending error verbatim. |
+| R10 | MET | apps/cli/src/commands/workflow.ts:233-244 threads the workflow lifecycle event bus into dispatch. |
+| R11 | MET | Workflow run 8d2703d0-587e-48b2-afb4-ea152cd59194 completed with four non-null executor/agent/role pairings and no duplicate dispatch emissions. |
+| R12 | MET | plugins/sp/skills/dogfood-testing/SKILL.md:612-629 documents both sandbox affordances and the doctor caveat. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — omission and inline indistinguishable | MET | test | `packages/app/src/services/agent-service.ts:1319` — both produce `raw === 'inline'`, same branch; 357 targeted tests pass this run. |
-| AC2 — rejection string gone from repo | MET | command | `rg -n "requires a host session\|AGENT_INLINE_HEADLESS_MESSAGE" apps packages plugins docs` this run: no live code path, command doc, or skill reference; residuals are gitignored build artifacts, historical records, bannered supersession, ADR retrospective. |
-| AC3 — headless inline resolves with warning | PARTIAL | command | Warning verbatim present and selector never refuses across all six runs; run 63c615fe reached a successful agy dispatch (exit 0) after the model-pin fix. End-to-end resolve-scope completion requires an executor whose headless mode can write: pi-family succeeds, agy/claude do not (0689). Runs 072f87c8/68c765bd/99333080 reached resolve-scope→published-path on pi-deepseek. |
-| AC4 — operator's invocation produces a report | PARTIAL | command | Full chain now works through enrich: run 68c765bd wrote a complete 12-section candidate (35.9 KB, 8 findings + 3 positives, pairing fold live) and run 99333080 did the same (8+3, 5m49s). Both failed the deterministic structure gate on content rules (0689→no, 0690): ledger-anchor format, placeholder scan, section order. No `docs/report/2026-08-27-history-anatomy.md` published yet. |
-| AC5 — cross-provider quota patterns no longer fire | MET | test | `failure-classification.test.ts` this run: `contextWindow`/incidental `quota` → `undefined`; prose forms still → `resource-exhaustion`. R8 supersession documented in-task. |
-| AC6 — permission failures named, not escalated | MET | test | Three real 08-26 stderr strings → `undefined`, no escalation; `permissionFailureEvidence` returns the offending line verbatim; real-run message quoted in Testing. |
-| AC7 — workflow dispatches land in ledger | MET | command | sqlite3 on run e1060200: one start + one exit per dispatch, routing block (executor/role/tier/source); no dual-emit. Enrich runs also produced ledger rows (pairings fold `#/pairings` = 4 rows / 18 dispatches). |
-| AC8 — pairing analytics alive | MET | command | Bounded analyze this run: `pairings: 2` non-empty with non-null executor+role; the 08-27 candidate artifact carries 4 pairings across 18 dispatches — pre-0687 bounded windows returned `pairings: 0`. |
-| AC9 — run-cost dimension not structurally dead | PARTIAL | command | Pairing fold live and exercised in enrich: the 08-27 candidate's Performance analysis renders per-pairing cost/duration from the fold (pi-k3 $0.399/9 dispatches/121.7s mean; agy-opus/claude/pi-deepseek `not available`, never zero). The published report (and its frontmatter-bound Performance section) is blocked by 0690. |
-| AC10 — docs and ADR in same commit; spur-check green | MET | command | `658dfa0db` contains ADR-087 + code + command/skill/reference surfaces. This run: `bun run lint` clean; `bun run test` 6556 pass / 0 fail (before fix-pass additions; agent-run suite 115/115 after the absolute-path hint change); `validate-flag-contracts.ts --check` 71/71 surfaces agree. |
-| AC11 [docs-only] — sandbox requirement discoverable | MET | static-ref | `plugins/sp/skills/dogfood-testing/SKILL.md:612-622` names both affordances and the settings block; doctor caveat present. |
+| AC1 — omission and inline indistinguishable | MET | test | AgentService and CLI selector tests pass; both forms share the inline selector branch. |
+| AC2 — rejection string gone from live surfaces | MET | command | rg across apps, packages, plugins, and docs found no live rejection contract; CLI and service diagnostics list inline, proven by three focused assertions. |
+| AC3 — headless inline resolves with warning | MET | command | Exact workflow run 8d2703d0-587e-48b2-afb4-ea152cd59194 resolved inline to agy-opus with the substitution warning and continued through the full workflow. |
+| AC4 — operator invocation publishes a report | MET | command | The exact history-anatomy invocation finished in published state; its validation artifact says Verdict: PASS and docs/report/2026-08-27-history-anatomy.md was published. |
+| AC5 — incidental quota text does not fire | MET | test | The focused failure-classification suite passed with the precise resource-exhaustion patterns. |
+| AC6 — permission failures named, not escalated | MET | test | Permission classifier/action tests passed and the action preserves permission evidence verbatim. |
+| AC7 — workflow dispatches land in the ledger | MET | command | The successful workflow artifact contains four dispatch-derived pairings with executor, agent, and role populated. |
+| AC8 — pairing analytics alive | MET | command | Run 8d2703d0-587e-48b2-afb4-ea152cd59194 produced four non-empty pairing rows. |
+| AC9 — run-cost dimension not structurally dead | MET | command | docs/report/2026-08-27-history-anatomy.md:311 renders per-pairing cost and duration from the successful run. |
+| AC10 — docs and full gates green | MET | command | bun run autofix && bun run spur-check passed (6658 tests); bun run test-cf and bun run build also passed. |
+| AC11 — sandbox requirement discoverable | MET | static-ref | plugins/sp/skills/dogfood-testing/SKILL.md:612-629 names allowLocalBinding, allowWrite, and the doctor caveat. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
-**SECU findings** (pipeline verify step — verdict: PARTIAL)
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | R5 (a)→(b): CHANGED, permitted by R5's own conditional and documented in `dev-find-issue.md:28`. R7 as new ADR-087 instead of ADR-047 amendment: CHANGED, documented in Solution slice 2. R8 superseded: documented in-task. R1 value-table row count (4 kept, semantics identical): CHANGED, cosmetic. No silent deviations; no scope-creep hunks. |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+|----------|-----------|----------|---------|
+| P4 | structural gate | — | `spur task check 0687 --strict-core` passed with no findings. |
+| P4 | design conformance | — | R5 mechanism (b), ADR-087, and R8's goal-equivalent supersession are documented; no silent deviation or scope creep remains. |
+| P4 | evidence | — | Every behavioral acceptance criterion has fresh test or exact workflow evidence. |
 ### References
 
 **The run that produced this task**

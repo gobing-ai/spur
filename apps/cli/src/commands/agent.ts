@@ -230,11 +230,10 @@ function commanderOptionsToFlags(options: Record<string, unknown>): Record<strin
 
 /**
  * Validate an `--agent` value at the flag boundary, before any agent process
- * spawns (0536 R3). `omit`/`auto` pass. Explicit `inline` is rejected with the
- * frozen headless-surface message (G5 / ADR-047 amendment): a headless surface
- * cannot host a session, so `inline` never resolves to `agent.default` here. A
- * role, a configured executor, or a bare coding-agent binary name passes — the
- * service warns once under the registered shim (`agent-bare-binary-name`).
+ * spawns (0536 R3). Omitted, `auto`, and `inline` pass; AgentService substitutes
+ * tier resolution with a warning when `inline` reaches a headless surface (0687
+ * R3 / ADR-087). A role, configured executor, or bare coding-agent binary name
+ * also passes; the service warns once for a registered bare-binary shim.
  * Returns an error message, or null to proceed. Exported as a test seam.
  */
 export function validateAgentSelector(flags: Record<string, string | boolean>, context: CliContext): string | null {
@@ -247,7 +246,7 @@ export function validateAgentSelector(flags: Record<string, string | boolean>, c
     const roleList = [...context.agentRoles.keys()].join(', ');
     const executors = (context.agentConfig?.executors ?? []).map((e) => e.name);
     const executorList = executors.length > 0 ? executors.join(', ') : '(none configured)';
-    return `Unknown agent: '${raw}'. Accepted: role (${roleList}), configured executor (${executorList}), or 'auto'.`;
+    return `Unknown agent: '${raw}'. Accepted: role (${roleList}), configured executor (${executorList}), 'inline', or 'auto'.`;
 }
 
 /** `spur agent list [--json] [--specs]` — optionally list team agent specs instead of detection. */

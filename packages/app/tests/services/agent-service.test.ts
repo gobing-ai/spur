@@ -2172,6 +2172,7 @@ describe('AgentService executor-aware explicit --agent (0346)', () => {
         expect(diag).toContain('omp');
         expect(diag).toContain('omp-zai');
         expect(diag).toContain('claude');
+        expect(diag).toContain('inline');
     });
 
     test('R3 (0687): --agent inline substitutes tier resolution with a warning and spawns', async () => {
@@ -2337,6 +2338,7 @@ describe('AgentService role routing (0536)', () => {
         expect(diag).toContain('role');
         expect(diag).toContain('scribe');
         expect(diag).toContain('configured executor');
+        expect(diag).toContain('inline');
     });
 
     test('R3: a bare coding-agent binary name warns once and runs under the registered shim', async () => {

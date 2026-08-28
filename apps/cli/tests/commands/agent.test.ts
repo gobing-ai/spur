@@ -913,6 +913,7 @@ describe('runAgentRun role boundary (0536)', () => {
             expect(diag).toContain("Unknown agent: 'not-a-name'");
             expect(diag).toContain('role');
             expect(diag).toContain('codex-sol');
+            expect(diag).toContain('inline');
         } finally {
             rmSync(tempDir, { recursive: true, force: true });
         }
@@ -970,10 +971,9 @@ describe('runAgentRun role boundary (0536)', () => {
         }
     });
 
-    // G5 (ADR-047 amendment): explicit --agent inline is host-session-only; a
-    // headless surface cannot host a session, so the CLI boundary rejects it
-    // with the frozen message at exit 2 — no spawn, no agent.default fallback.
-    test('R1 (G5): validateAgentSelector returns the frozen message for inline; omit/auto stay null', async () => {
+    // ADR-087: the CLI boundary accepts inline. AgentService owns the headless
+    // substitution warning so every dispatch surface follows one resolution path.
+    test('R3 (0687): validateAgentSelector accepts inline, omitted, and auto selectors', async () => {
         const tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-inline-selector-'));
         const db = await createMigratedDb({ url: ':memory:' });
         try {
