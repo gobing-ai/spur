@@ -54,7 +54,9 @@ frontmatter scalar.
   cancelled`. Two transitions run a target-aware `check` guard (§7.5): `wip→testing` →
   `spur task check <wbs> --as testing`; `testing→done` → `spur task check <wbs> --as done`
   (F92 R3 — each evaluates the transition target, so `testing→done` checks the `done` row).
-  A failing gate blocks the transition.
+  A failing gate blocks the transition. The `wip→testing` guard additionally requires a Solution
+  section citing concrete `file:line` evidence — a missing/unsubstantiated Solution is rejected with
+  `[invalid-solution]`.
 - **`--no-lifecycle`**: suppress lifecycle workflow *run record* creation (use inside pipeline runs
   to avoid orphaned nested lifecycle runs). **It is not a guard bypass** — the `wip→testing` and
   `testing→done` `check` gates above still run; the CLI evaluates them inline when the FSM guard
@@ -229,6 +231,10 @@ only the exact corpus path, with no basename-WBS fallback. Returns exit `1` if n
 `--json` for structured output.
 
 ## `verdict <wbs>`
+
+There is **no `verify` verb**. The verify leg is three steps: the agent writes its structured
+evidence write-up to `.spur/run/<wbs>-verify-answer.txt`, then `spur task verdict <wbs>` derives
+the verdict artifact, then `spur task record <wbs>` lands it into the task.
 
 Derive a PASS / PARTIAL / FAIL / UNKNOWN verdict from a verify-step answer text file (the agent's
 structured evidence write-up). Replaces the pipeline's verify→record transition's previous grep/shell
