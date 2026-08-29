@@ -46,6 +46,9 @@ async function setup(): Promise<DbAdapter> {
         .filter(Boolean)) {
         await adapter.exec(statement);
     }
+    // CLI-owned column on top of the importer's schema (migration
+    // 0026_spur_cli_history_message_duration_source, task 0702 R2).
+    await adapter.exec('ALTER TABLE history_message ADD COLUMN duration_source TEXT');
     await adapter.exec(`CREATE TABLE history_run_session (
         run_id TEXT NOT NULL, source TEXT NOT NULL, session_id TEXT, exactness TEXT NOT NULL,
         mechanism TEXT NOT NULL, resolved_at TEXT NOT NULL

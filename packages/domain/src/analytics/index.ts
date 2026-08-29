@@ -20,6 +20,12 @@ export {
     RANKED_ARTIFACT_KEYS,
     semanticArtifactDigest,
 } from './artifact-digest';
+export {
+    DERIVED_DURATION_CEILING_MS,
+    type DeriveAssistantDurationsResult,
+    DURATION_SOURCE_DERIVED,
+    deriveAssistantDurations,
+} from './assistant-duration';
 export { cacheHitRatio, computeRecordCost, formatRatio, formatSummary } from './costs';
 export {
     type Bottleneck,

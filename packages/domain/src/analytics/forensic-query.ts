@@ -612,7 +612,15 @@ export interface StepSupportRow {
     source: string;
     assistantSteps: number;
     stepsWithUsage: number;
+    /** Steps carrying any duration — provider-reported plus ETL-derived. */
     stepsWithDuration: number;
+    /**
+     * Of {@link stepsWithDuration}, how many are ETL timestamp deltas rather than the
+     * provider's own measurement (0702 R2). A reader comparing latency across sources
+     * needs this: a derived value includes queue and network time, a provider one does
+     * not, and the two must never be presented as the same measurement.
+     */
+    stepsWithDerivedDuration: number;
     stepsWithCacheRead: number;
 }
 
@@ -750,6 +758,7 @@ export async function stepSupport(
                 COUNT(*) AS assistantSteps,
                 SUM(m.input_tokens IS NOT NULL OR m.output_tokens IS NOT NULL) AS stepsWithUsage,
                 SUM(m.duration_ms IS NOT NULL) AS stepsWithDuration,
+                SUM(m.duration_source IS 'derived') AS stepsWithDerivedDuration,
                 SUM(m.cache_read_tokens IS NOT NULL) AS stepsWithCacheRead
          FROM history_message m
          ${withStepPredicates(wm.where, "m.role = 'assistant'")}

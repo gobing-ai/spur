@@ -402,6 +402,7 @@ describe('renderForensics — per-step sections (0581)', () => {
                     assistantSteps: 81_726,
                     stepsWithUsage: 81_724,
                     stepsWithDuration: 12_900,
+                    stepsWithDerivedDuration: 0,
                     stepsWithCacheRead: 81_724,
                 },
             ],
@@ -471,7 +472,14 @@ describe('renderForensics — per-step sections (0581)', () => {
             topStepsByDuration: [],
             cacheWaste: { steps: 0, inputTokens: 0, topSteps: [] },
             stepSupport: [
-                { source: 'claude', assistantSteps: 4, stepsWithUsage: 0, stepsWithDuration: 0, stepsWithCacheRead: 0 },
+                {
+                    source: 'claude',
+                    assistantSteps: 4,
+                    stepsWithUsage: 0,
+                    stepsWithDuration: 0,
+                    stepsWithDerivedDuration: 0,
+                    stepsWithCacheRead: 0,
+                },
             ],
         });
         const out = renderForensics(a);

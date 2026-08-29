@@ -744,6 +744,14 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         sql: 'ALTER TABLE history_import_checkpoint ADD COLUMN source_mtime_ms REAL',
         addColumnIfMissing: { table: 'history_import_checkpoint', column: 'source_mtime_ms' },
     },
+    {
+        // 0702 R2: assistant-step duration provenance. NULL = the provider's own
+        // measurement (or none); 'derived' = an ETL timestamp delta, which includes
+        // queue and network time and must never be reported as provider-measured.
+        id: '0026_spur_cli_history_message_duration_source',
+        sql: 'ALTER TABLE history_message ADD COLUMN duration_source TEXT',
+        addColumnIfMissing: { table: 'history_message', column: 'duration_source' },
+    },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */

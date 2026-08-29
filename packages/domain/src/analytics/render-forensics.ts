@@ -1,4 +1,4 @@
-import type { HistoryArtifact, StepStat } from './artifact';
+import type { HistoryArtifact, StepStat, StepSupportEntry } from './artifact';
 import { selectorDigest } from './artifact';
 import type { DerivedVariables } from './derived';
 import { fmtBytes, fmtDur } from './render-report';
@@ -236,7 +236,7 @@ function renderPerStep(artifact: HistoryArtifact): string[] {
         );
         for (const e of artifact.stepSupport ?? []) {
             lines.push(
-                `| ${e.source} | ${e.assistantSteps.toLocaleString('en-US')} | ${e.stepsWithUsage > 0 ? 'yes' : 'no'} | ${e.stepsWithDuration > 0 ? 'yes' : 'no'} | ${e.stepsWithCacheRead > 0 ? 'yes' : 'no'} |`,
+                `| ${e.source} | ${e.assistantSteps.toLocaleString('en-US')} | ${e.stepsWithUsage > 0 ? 'yes' : 'no'} | ${timeSupport(e)} | ${e.stepsWithCacheRead > 0 ? 'yes' : 'no'} |`,
             );
         }
         lines.push('');
@@ -274,6 +274,19 @@ function renderTopStepsByTokens(artifact: HistoryArtifact): string[] {
     }
     lines.push('');
     return lines;
+}
+
+/**
+ * The Time column's support verdict. `derived` is not a weaker `yes` — it is a different
+ * measurement: an ETL timestamp delta that includes queue and network time, versus the
+ * provider's own number (0702 R2). Reporting both as `yes` would let a reader compare
+ * latency across sources that are not measuring the same thing.
+ */
+function timeSupport(e: StepSupportEntry): string {
+    if (e.stepsWithDuration === 0) return 'no';
+    if (e.stepsWithDerivedDuration === 0) return 'yes';
+    if (e.stepsWithDerivedDuration >= e.stepsWithDuration) return 'derived';
+    return 'yes (mixed)';
 }
 
 function renderTopStepsByDuration(artifact: HistoryArtifact): string[] {

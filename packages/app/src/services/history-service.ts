@@ -28,6 +28,7 @@ import {
     countToolCallsSince,
     type DriftRow,
     dataWindow,
+    deriveAssistantDurations,
     derivedWarnings,
     drift,
     type ForensicTotals,
@@ -389,6 +390,12 @@ export class HistoryService {
                 });
             }
             await dao.alignMessageProvenance();
+            // 0702 R2: fill assistant-step `duration_ms` the sources never wrote, from the
+            // timestamp delta to the preceding record. Labelled `duration_source='derived'`
+            // so no consumer can mistake it for the provider's own measurement. Additive and
+            // idempotent — a provider value always wins, and a later import only fills rows
+            // this pass could not reach.
+            await deriveAssistantDurations(db);
         }
         return result;
     }

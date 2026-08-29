@@ -147,7 +147,10 @@ export interface StepSupportEntry {
     source: string;
     assistantSteps: number;
     stepsWithUsage: number;
+    /** Steps carrying any duration — provider-reported plus ETL-derived. */
     stepsWithDuration: number;
+    /** Of {@link stepsWithDuration}, the ETL timestamp deltas rather than provider numbers (0702 R2). */
+    stepsWithDerivedDuration: number;
     stepsWithCacheRead: number;
 }
 
