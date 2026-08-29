@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.3.66] - 2026-08-28
+
+### Added
+
+- feat(domain): derive assistant-step duration with provenance (83e97931d)
+- feat(sp): add --triage mode to dev-review-session / session-review (0beb3be7c)
+
+### Fixed
+
+- fix(cli): honest --json-envelope failure surface and reachable test preload (0699) (7d8411002)
+- fix(gates): make corpus gates tell the truth (0700) (a2beb4d51)
+- fix(sp): worktree lifecycle safety + dev flag/spec drift contracts (0701) (4748fa566)
+- fix(analytics): pairing cost null-vs-zero honesty; drop dead correctionCount var (0702) (4e1a19588)
+- fix(gates): scope corpus sweep to the active task folder (ADR-092) (4c52995d2)
+- fix(sp): align dogfood and session-review harness contracts with 0713 (994cb0fe3)
+- fix(app): repair the verified findings from the 0713 dogfood sweep (f95648776)
+- fix(cli): route every --json failure path through writeJsonError (437979b1c)
+
+### Changed
+
+- docs: assess and streamline harness guidance (2f4e729ff)
+- docs(corpus): file 0698 findings and 0699-0702 children under F95 (060ce061b)
+- docs(corpus): add feature A6 harness trust and operational controls (2b373ff8a)
+- docs(corpus): file F95 dogfood findings task 0713; fix verify-leg docs (d5315709e)
+- docs(corpus): make task 0713 self-contained; inline all unsolved findings (0387df16b)
+- docs(features): get rid of the cancelled feature (0ec0d3a42)
+- docs(corpus): record verify outcomes and status flips for 0698-0700 (3d57c24f5)
+- docs(corpus): F95 to done — task records, ledgers, noun table, design sync (670c06a6b)
+- docs(publish): add zh draft on self-improving agents vs spur harness (9aa6483d4)
+- chore: allow python3 one-liners in local claude settings (83a79bffc)
+
 ## [0.3.65] - 2026-08-28
 
 ### Added
