@@ -1,17 +1,19 @@
 ---
 schema_version: 1
 name: "Remaining verified findings from the 2026-08-27 dogfood sweep and history-anatomy reports"
-status: todo
+status: testing
 template: issue
 created_at: 2026-08-28T22:05:05.989Z
-updated_at: "2026-08-28T22:49:26.343Z"
+updated_at: "2026-08-29T01:28:56.902Z"
 feature_id: F95
 ac_altitude: task-local
+dependencies: ["0699", "0700", "0701", "0702"]
 ---
 
 ## 0698. Remaining verified findings from the 2026-08-27 dogfood sweep and history-anatomy reports
 
 ### Background
+
 Two days of harness work (2026-08-27 → 2026-08-28) produced eleven dogfood reports and two
 history-anatomy reports. Between them they filed roughly 70 issues, findings, and advisories. This
 task is the **deduplicated, source-verified remainder**: every claim below was re-checked against
@@ -53,45 +55,47 @@ not-found error (R1); `git merge --ff-only` says success on a branch with zero c
 targeted-test loop says exit 1 on a green test (R6); the AC checkbox flip says nothing while never
 flipping a single AC box (R7). Each is cheap to fix individually. Together they are why several
 dogfood runs burned retries chasing phantom failures and shipped real ones.
+
 ### Requirements
+
 Each R-item is one root cause with one owner surface. Severity in brackets is the deduplicated
 severity across all source reports, not the highest single filing.
 
 - [ ] R1. **[P1] Under `--json --json-envelope`, no `spur` verb may report `ok: true` or emit no JSON at all on a failure path.** Today `task check 9999` and `feature check F999` both print `{"ok": true, "data": []}` to stdout with exit code 1, and `task path` / `task resolve` / `rule show` / `workflow show` / `agent show` print a bare stderr line and no JSON. Every verb that declares `SHARED_OPTIONS.jsonEnvelope` (68 today) must emit `{ok: false, error: {code, message}}` on every non-zero-exit path, and the surface must be enumerated rather than sampled.
 
-- [ ] R2. **[P2] `writeJsonError` must be able to carry an error code and must not leak the JS class prefix.** `packages/app/src/output/envelope.ts:99-109` hardcodes `INTERNAL_ERROR` and accepts no `details`, while ADR-091 (`docs/00_ADR.md:1664`, `:1708`) promises CLI-local codes collapse to `INTERNAL_ERROR` *with* `details.cliCode`. Thirty-five call sites pass `String(err)`, so the machine-readable message reads `"Error: Task 9999 not found in any registered task folder"`.
+- [x] R2. **[P2] `writeJsonError` must be able to carry an error code and must not leak the JS class prefix.** `packages/app/src/output/envelope.ts:99-109` hardcodes `INTERNAL_ERROR` and accepts no `details`, while ADR-091 (`docs/00_ADR.md:1664`, `:1708`) promises CLI-local codes collapse to `INTERNAL_ERROR` *with* `details.cliCode`. Thirty-five call sites pass `String(err)`, so the machine-readable message reads `"Error: Task 9999 not found in any registered task folder"`.
 
-- [ ] R3. **[P1] The `--worktree` lifecycle must commit the batch's writes before WT-4, and WT-4 must refuse to report success on an empty branch.** `plugins/sp/skills/spur-dev/references/execution-batch.md` WT-1…WT-7 never names a commit step; `git merge --ff-only "$BRANCH"` on a branch with zero commits succeeds trivially, after which create mode runs `git worktree remove` and `git branch -d` — deleting the tree that held the only copy of the work.
+- [x] R3. **[P1] The `--worktree` lifecycle must commit the batch's writes before WT-4, and WT-4 must refuse to report success on an empty branch.** `plugins/sp/skills/spur-dev/references/execution-batch.md` WT-1…WT-7 never names a commit step; `git merge --ff-only "$BRANCH"` on a branch with zero commits succeeds trivially, after which create mode runs `git worktree remove` and `git branch -d` — deleting the tree that held the only copy of the work.
 
-- [ ] R4. **[P2] Worktree setup must not reconfigure the operator's main repo, must not leak a branch on a failed create, and must state marker and DB-state ownership.** Four defects in one section: `bun install --frozen-lockfile` (no `--ignore-scripts`) runs the repo's `prepare: lefthook install` (`package.json:56`) against the worktree-*shared* `.git/hooks`; a failed `git worktree add -b` leaves the branch behind so the natural retry dies on "already exists"; WT-3 does not say which tree owns `.spur/run/worktree-<id>.json`; and WT-4/WT-5 do not migrate lifecycle DB state, so a merged branch's task file says `done` while the target tree's DB still says `todo`.
+- [x] R4. **[P2] Worktree setup must not reconfigure the operator's main repo, must not leak a branch on a failed create, and must state marker and DB-state ownership.** Four defects in one section: `bun install --frozen-lockfile` (no `--ignore-scripts`) runs the repo's `prepare: lefthook install` (`package.json:56`) against the worktree-*shared* `.git/hooks`; a failed `git worktree add -b` leaves the branch behind so the natural retry dies on "already exists"; WT-3 does not say which tree owns `.spur/run/worktree-<id>.json`; and WT-4/WT-5 do not migrate lifecycle DB state, so a merged branch's task file says `done` while the target tree's DB still says `todo`.
 
-- [ ] R5. **[P2] `bun test` must be green from any workspace directory on a clean tree.** Run from `apps/cli`, the suite is 880 pass / 6 fail at `HEAD`; run as `SPUR_SKIP_GLOBAL_CONFIG=true bun test` from the same directory it is 886 / 0. The six failures are machine-dependent, so neither a dogfood nor a `--fix` pass can use suite colour as a regression signal on that workspace.
+- [x] R5. **[P2] `bun test` must be green from any workspace directory on a clean tree.** Run from `apps/cli`, the suite is 880 pass / 6 fail at `HEAD`; run as `SPUR_SKIP_GLOBAL_CONFIG=true bun test` from the same directory it is 886 / 0. The six failures are machine-dependent, so neither a dogfood nor a `--fix` pass can use suite colour as a regression signal on that workspace.
 
-- [ ] R6. **[P2] The targeted-test-first command documented in `CLAUDE.md` must be able to exit 0.** `bun test <file> --test-name-pattern <name>` reports `1 pass / 0 fail` and exits **1**, because the repo-wide 90/90 coverage threshold in `bunfig.toml` is applied to a single-file run. The iteration contract every agent is told to use cannot signal success.
+- [x] R6. **[P2] The targeted-test-first command documented in `CLAUDE.md` must be able to exit 0.** `bun test <file> --test-name-pattern <name>` reports `1 pass / 0 fail` and exits **1**, because the repo-wide 90/90 coverage threshold in `bunfig.toml` is applied to a single-file run. The iteration contract every agent is told to use cannot signal success.
 
-- [ ] R7. **[P2] A verdict that marks an acceptance criterion MET must flip that criterion's checkbox, and `task check --fix` must repair what it reports.** `parseChecklist` recognises only `^(R\d+)`, so every `- [ ] AC1. …` box is invisible to `flipVerifiedCheckboxes` and stays unchecked forever; bold `- [ ] **R1.** …` is likewise invisible even though `L3.requirements-format` explicitly accepts that spelling. `structural-repair.ts` only ever *adds* a `[ ]` marker, never flips to `[x]`, while `task check --fix`'s help text claims "R-item checkboxes".
+- [x] R7. **[P2] A verdict that marks an acceptance criterion MET must flip that criterion's checkbox, and `task check --fix` must repair what it reports.** `parseChecklist` recognises only `^(R\d+)`, so every `- [ ] AC1. …` box is invisible to `flipVerifiedCheckboxes` and stays unchecked forever; bold `- [ ] **R1.** …` is likewise invisible even though `L3.requirements-format` explicitly accepts that spelling. `structural-repair.ts` only ever *adds* a `[ ]` marker, never flips to `[x]`, while `task check --fix`'s help text claims "R-item checkboxes".
 
-- [ ] R8. **[P2] A `done` task must not be able to carry a `PARTIAL — request-changes` Review verdict with no gate.** Task 0693 carries `**Verdict: PARTIAL — request-changes**` and, further down, a superseding `**Verdict: PASS**`; both remain, and no code in `packages/app/src` or `packages/config/src` mentions `request-changes`. `task record` backfills Review only when the section is bare and `sp:code-verification` Step 10 forbids verify from writing it, so nothing closes the loop.
+- [x] R8. **[P2] A `done` task must not be able to carry a `PARTIAL — request-changes` Review verdict with no gate.** Task 0693 carries `**Verdict: PARTIAL — request-changes**` and, further down, a superseding `**Verdict: PASS**`; both remain, and no code in `packages/app/src` or `packages/config/src` mentions `request-changes`. `task record` backfills Review only when the section is bare and `sp:code-verification` Step 10 forbids verify from writing it, so nothing closes the loop.
 
 - [ ] R9. **[P2] Feature-scenario coverage must not be structurally unsatisfiable for AC-numbered tasks.** DD-09 links a feature scenario to a task by normalized *title*; F95's scenarios are titled `R1 —`/`R2 —`/`R3 —` while task 0693's AC are `AC1`–`AC4`, so all three scenarios report `L4.uncovered-feature-scenario` forever on a `done`, linked, correctly-implemented task. Three separate runs "fixed" this by re-authoring task AC to copy feature scenario titles verbatim.
 
-- [ ] R10. **[P2] Pairing run cost must be able to say "no signal" instead of zero.** `packages/domain/src/analytics/pairings.ts:43` types `totalCostUsd` as a non-nullable `number`, `:132` defaults it to 0, and `:344` wraps the join in `COALESCE(SUM(h.cost_usd), 0)`. Live over 2026-08-27→28, four of six pairings report `0` — including `agy-opus`/reviewer with 16 dispatches. `0680 R6` requires absence to render `not available`, never zero; the type makes the distinction unrepresentable, so every report has to guess.
+- [x] R10. **[P2] Pairing run cost must be able to say "no signal" instead of zero.** `packages/domain/src/analytics/pairings.ts:43` types `totalCostUsd` as a non-nullable `number`, `:132` defaults it to 0, and `:344` wraps the join in `COALESCE(SUM(h.cost_usd), 0)`. Live over 2026-08-27→28, four of six pairings report `0` — including `agy-opus`/reviewer with 16 dispatches. `0680 R6` requires absence to render `not available`, never zero; the type makes the distinction unrepresentable, so every report has to guess.
 
-- [ ] R11. **[P2] Assistant-step duration must be attributable for the busiest sources.** Live `stepSupport` over 2026-08-27→28: claude 7,583 steps / **0** with duration, pi 3,650 / **0**, codex 1,396 / **0**, agy 356 / **0**; only omp (1,588/1,588) is complete and grok is partial (774/3,889). `derived-unattributed-time` fires on both report days and ~73% of the measured span cannot be attributed to llm/tool/idle.
+- [x] R11. **[P2] Assistant-step duration must be attributable for the busiest sources.** Live `stepSupport` over 2026-08-27→28: claude 7,583 steps / **0** with duration, pi 3,650 / **0**, codex 1,396 / **0**, agy 356 / **0**; only omp (1,588/1,588) is complete and grok is partial (774/3,889). `derived-unattributed-time` fires on both report days and ~73% of the measured span cannot be attributed to llm/tool/idle.
 
 - [ ] R12. **[P2] The `L4.dogfood-missing` gate must not depend on gitignored files.** `.gitignore:184` ignores `/docs/dogfood/*` with five tracked exceptions; 84 reports exist on disk. Forty-one features currently satisfy the gate from untracked files, so a fresh clone or a CI run flips roughly 36 features from passing to failing with no code change.
 
-- [ ] R13. **[P3] `sp:spur-dev` must not silently discard an undeclared flag.** `/sp:dev-refine 0693 … --worktree` was accepted and dropped: `plugins/sp/commands/dev-refine.md:4` does not declare it, `flag-glossary.md:406-410` scopes it away from `dev-refine`, only `plugins/sp/skills/next-router/SKILL.md:55` carries an unknown-flag rule, and `plugins/sp/scripts/validate-flag-contracts.ts` gates `--agent` only. The operator asked for isolation, silently got none, and lost seven section writes to a concurrent writer in that same run.
+- [x] R13. **[P3] `sp:spur-dev` must not silently discard an undeclared flag.** `/sp:dev-refine 0693 … --worktree` was accepted and dropped: `plugins/sp/commands/dev-refine.md:4` does not declare it, `flag-glossary.md:406-410` scopes it away from `dev-refine`, only `plugins/sp/skills/next-router/SKILL.md:55` carries an unknown-flag rule, and `plugins/sp/scripts/validate-flag-contracts.ts` gates `--agent` only. The operator asked for isolation, silently got none, and lost seven section writes to a concurrent writer in that same run.
 
-- [ ] R14. **[P3] `dev-operations.md` must not document a flag the command it describes rejects.** §5a lists `--next` among shared refine flags (`:239`) and carries a `--next` warning bullet (`:251`), while `plugins/sp/commands/dev-refineall.md:56` records `--next` as dropped by feature H8 on 2026-07-31 and the command's `argument-hint` omits it. `dev-operations.md` is the SSOT for what each command does.
+- [x] R14. **[P3] `dev-operations.md` must not document a flag the command it describes rejects.** §5a lists `--next` among shared refine flags (`:239`) and carries a `--next` warning bullet (`:251`), while `plugins/sp/commands/dev-refineall.md:56` records `--next` as dropped by feature H8 on 2026-07-31 and the command's `argument-hint` omits it. `dev-operations.md` is the SSOT for what each command does.
 
-- [ ] R15. **[P3] The dogfood driver's gates must cover mutating batch verbs and accept the drift-row form its own skill prescribes.** `detect-pipeline-driving.ts:50-62` omits `dev-refineall`/`refineall`/`dev-verifyall`/`verifyall` from `PIPELINE_TOKENS`, and `tokenMatches` is hyphen-word exact so nothing else covers them — a run that mutated three tasks, committed, and fast-forwarded `main` was reported `pipelineDriving: false`. Separately, `validate-report.ts:41` excludes `^\|\s*drift:` while `dogfood-testing/SKILL.md:159,218,418` prescribes the code-span form `` `drift:external` ``, so a correctly-tagged drift row is counted as a data row and refuses `status: complete`.
+- [x] R15. **[P3] The dogfood driver's gates must cover mutating batch verbs and accept the drift-row form its own skill prescribes.** `detect-pipeline-driving.ts:50-62` omits `dev-refineall`/`refineall`/`dev-verifyall`/`verifyall` from `PIPELINE_TOKENS`, and `tokenMatches` is hyphen-word exact so nothing else covers them — a run that mutated three tasks, committed, and fast-forwarded `main` was reported `pipelineDriving: false`. Separately, `validate-report.ts:41` excludes `^\|\s*drift:` while `dogfood-testing/SKILL.md:159,218,418` prescribes the code-span form `` `drift:external` ``, so a correctly-tagged drift row is counted as a data row and refuses `status: complete`.
 
-- [ ] R16. **[P3] `spur task update --section` should demote a same-level heading, not delete it.** `MarkdownDocument.stripSameLevelHeadings` (`packages/domain/src/planning/markdown-document.ts:411-427`) removes `###` lines from a task section body. The warning channel *does* work (`planning-write-service.ts:476` populates `warnings[]` from `strippedHeadings`), correcting the source report's claim — but under `--depth ready` an authored Design still loses every structural subheading, and in `--json` mode the warning only rides inside the payload where a shell caller reading stdout will not see it.
+- [x] R16. **[P3] `spur task update --section` should demote a same-level heading, not delete it.** `MarkdownDocument.stripSameLevelHeadings` (`packages/domain/src/planning/markdown-document.ts:411-427`) removes `###` lines from a task section body. The warning channel *does* work (`planning-write-service.ts:476` populates `warnings[]` from `strippedHeadings`), correcting the source report's claim — but under `--depth ready` an authored Design still loses every structural subheading, and in `--json` mode the warning only rides inside the payload where a shell caller reading stdout will not see it.
 
-- [ ] R17. **[P3] `L3.requirements-format` must not penalize the shape `--depth ready` mandates.** `packages/app/src/services/task-check.ts:656-679` counts blank-line-delimited *blocks*, not R-items, so four contiguous R-item lines collapse to one block; adding the two non-goals prose blocks the implement-ready checklist requires scores 1 numbered of 3 and warns. The scaffolded template passes only because it contains nothing but R-items.
+- [x] R17. **[P3] `L3.requirements-format` must not penalize the shape `--depth ready` mandates.** `packages/app/src/services/task-check.ts:656-679` counts blank-line-delimited *blocks*, not R-items, so four contiguous R-item lines collapse to one block; adding the two non-goals prose blocks the implement-ready checklist requires scores 1 numbered of 3 and warns. The scaffolded template passes only because it contains nothing but R-items.
 
-- [ ] R18. **[P3] The `L4 gate-language` advisory must not fire on a task that already models its gate.** `packages/app/src/services/task-check.ts:1266` tells the author to "model the gate as a frontmatter dependency **or** verify it" without ever reading `frontmatter.dependencies[]`. Task 0694 carries `dependencies: [0691]` and still warns on both Design and Plan — pure noise on exactly the well-formed case.
+- [x] R18. **[P3] The `L4 gate-language` advisory must not fire on a task that already models its gate.** `packages/app/src/services/task-check.ts:1266` tells the author to "model the gate as a frontmatter dependency **or** verify it" without ever reading `frontmatter.dependencies[]`. Task 0694 carries `dependencies: [0691]` and still warns on both Design and Plan — pure noise on exactly the well-formed case.
 
 - [ ] R19. **[P4] Four small corpus and config truths must be restored.** (a) `docs/features/B_agent-execution.md:26` reads `_No linked tasks._` while 0687/0689/0690 all carry `feature_id: B` — the only stale roster of 117 features. (b) `config/workflows/history-anatomy.yaml:76` declares `correctionCount: "0"`, which is never interpolated anywhere; the live bound is the run-scoped file `.spur/run/$__runId-correction-count`. (c) `### Q&A` is replaced wholesale by `task update --section`, so 0693's R3 gate entry destroyed six earlier refinement entries — an append-only history section with replace semantics. (d) `execution-batch.md` Step 1 defines abort vocabulary for cycle and unknown-selector but no zero-task rule, while `dev-operations.md` §5a already lists `empty set after filter` as an abort verdict; it is undefined whether create mode still cuts a worktree for an empty set.
 
@@ -104,7 +108,9 @@ humans, and is not filed as an R-item here.
 entries after the ADR-090 acceptance), un-ignoring `docs/dogfood/` as a delivery-contract change
 independent of R12's gate correctness, and any change to the `raw` (non-enveloped) `--json`
 byte-identity contract that ADR-091 deliberately froze.
+
 ### Acceptance Criteria
+
 Each scenario is a runnable regression. `AC1` is titled to match feature F95's third scenario
 verbatim so DD-09 links it and F95's standing `L4.uncovered-feature-scenario` warning clears.
 
@@ -212,7 +218,9 @@ Feature: Remaining verified findings from the 2026-08-27 harness sweep
     Then B lists its three tasks, the dead correctionCount var is gone or wired,
       Q&A appends rather than replaces, and a zero-task batch has a defined outcome
 ```
+
 ### Q&A
+
 **Q: Which filed items were dropped, and on what evidence?** Seven. Each was re-checked at `HEAD`
 (`dad078ad5`) on 2026-08-28.
 
@@ -267,7 +275,9 @@ The enumeration in R1 is the deliverable, not a sample.
 *should* declare `--worktree` is a `/sp:dev-*` surface change and, per ADR-051, needs explicit
 operator consent with design context. **Open, owner = operator.** Do not land a surface expansion
 under this task.
+
 ### Design
+
 #### WHAT — the shape of the fix
 
 Nineteen independent repairs across eight owner surfaces. No shared abstraction is introduced; the
@@ -285,7 +295,7 @@ when a gate reports success, ask what it actually proved.
 | R | Owner surface | Anchor | Shape of the change |
 | --- | --- | --- | --- |
 | R1 | `apps/cli/src/commands/*.ts` | `task.ts:1266-1269` then `:1326`; `feature.ts` check verb | Add the missing `return` after the not-found branch and route it through `writeJsonError`. Then enumerate all 68 `SHARED_OPTIONS.jsonEnvelope` verbs — a table-driven test that drives each failure path is cheaper than reading 110 `output.error(` sites |
-| R2 | `packages/app/src/output/envelope.ts` | `:99-109` | Add an optional 4th param `code: ApiErrorCode = 'INTERNAL_ERROR'` and an optional `details`; strip a leading `Error: ` inside the helper (or have callers pass `err instanceof Error ? err.message : String(err)` — the helper-side strip is the smaller diff and fixes all 35 sites at once) |
+| R2 | `packages/app/src/output/envelope.ts` | `:99-109` | Add an optional 4th param `code: ApiErrorCode = 'INTERNAL_ERROR'` and an optional `details`; strip a leading `Error:` inside the helper (or have callers pass `err instanceof Error ? err.message : String(err)` — the helper-side strip is the smaller diff and fixes all 35 sites at once) |
 | R3 | `plugins/sp/skills/spur-dev/references/execution-batch.md` | §WT-4, after §WT-3 | Insert `WT-3b — commit the batch's writes on $BRANCH before the terminal action`; make WT-4 assert `git rev-list --count $BASE_SHA..$BRANCH` is non-zero and fall to WT-5 when it is zero |
 | R4 | same file | §WT-2 create/reuse, §WT-3, §WT-4/5 | (a) prescribe `bun install --frozen-lockfile --ignore-scripts` and say why (`package.json:56` `prepare: lefthook install` rewrites the *shared* `.git/hooks`); (b) wrap the create in `git branch -D "$BRANCH"` on non-zero exit, or derive a fresh short-id per attempt; (c) state that the marker is written to the **invoking** tree and have WT-6's scan say so; (d) add a DB-state disposition line to WT-4/WT-5 (replay `spur task record` into the target tree, or state explicitly that file state is authoritative and DB resync is the operator's) |
 | R5 | `apps/cli/bunfig.toml` (new) | — | Add a `bunfig.toml` per workspace with `preload = ["../../tests/setup.ts"]` (which already sets `SPUR_SKIP_GLOBAL_CONFIG='true'` at `tests/setup.ts:58`). One file; proven to take 880/6 → 886/0 |
@@ -331,7 +341,9 @@ the ADR describing behaviour the helper does not have.
 - **Do not touch the raw (non-enveloped) `--json` byte-identity** that ADR-091 froze; R1/R2 change
   only the `--json-envelope` branch and the fixture baseline in
   `apps/cli/tests/` must stay byte-identical on the raw path.
+
 ### Plan
+
 **This task is now the tracking parent for the decomposition** (operator decision, 2026-08-28). Its
 `### Requirements` and `### Root Cause` remain the findings register — the single place where all
 nineteen root causes and their verified evidence live. Implementation happens in the four child tasks
@@ -339,8 +351,6 @@ below; 0698 closes when they do.
 
 Grouping is by **owner-surface family**, not by severity, so each child is one coherent commit with
 one test-file family and one reconciliation pass.
-
-
 
 | Child | R-items carried | Owner surface | Why grouped |
 | --- | --- | --- | --- |
@@ -380,6 +390,7 @@ that its own 17 × `L4.uncovered-task-scenario` and 3 × `L4.gate-language` warn
 | 0702 | History analytics telemetry honesty: pairing cost absence and assistant-step duration attribution | todo |
 <!-- END AUTO-GENERATED -->
 ### Root Cause
+
 Every claim below was reproduced against `HEAD` (`dad078ad5`) on 2026-08-28. Commands are literal and
 runnable from the repo root.
 
@@ -429,8 +440,8 @@ DB, which is deleted with the tree.
 **R5 — `apps/cli` is red on a clean tree.** Proven both ways:
 
 ```
-$ cd apps/cli && bun test                            #  880 pass /  6 fail
-$ cd apps/cli && SPUR_SKIP_GLOBAL_CONFIG=true bun test #  886 pass /  0 fail
+cd apps/cli && bun test                            #  880 pass /  6 fail
+cd apps/cli && SPUR_SKIP_GLOBAL_CONFIG=true bun test #  886 pass /  0 fail
 ```
 
 Failing: 4 × workflow list/run, 2 × agent-team role/executor. The assertion:
@@ -546,19 +557,73 @@ all carry `feature_id: B`; a sweep of all 117 features with an auto-generated bl
 interpolation. (c) `task update --section` routes to `MarkdownDocument.replaceSection`, so `### Q&A`
 is overwritten. (d) `execution-batch.md:414` lists `aborted (cycle or selector error before any run)`;
 `dev-operations.md` §5a lists `aborted (cycle / unknown selector / empty set after filter)`.
+
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+No code change in this run — 0698 is the tracking parent for the F95 decomposition (operator decision, 2026-08-28), so its Solution is by delegation, not edit. The file:line anchors below are the surfaces verified during this run's requirements traceability, owned by the children: envelope failure fall-through `apps/cli/src/commands/task.ts:1266-1326` and `packages/app/src/output/envelope.ts:99-109` (child 0699), checkbox flip `packages/domain/src/bdd/checklist.ts:49` and `packages/app/src/services/structural-repair.ts:22` (child 0700), worktree lifecycle `plugins/sp/skills/spur-dev/references/execution-batch.md` §WT-1…WT-7 (child 0701), analytics fold `packages/domain/src/analytics/pairings.ts:43,344` (child 0702). Verification evidence: `.spur/run/0698-verify-answer.txt:1`. Per Plan, 0698 closes when children 0699–0702 are done and its own warnings clear without 0698 being edited.
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PARTIAL (from verdict artifact)
+
+| Requirement | Status | Evidence |
+| ------------- | -------- | ---------- |
+| R1 | PARTIAL | Child 0699 PARTIAL: fall-through and no-JSON classes fixed on the design-named surface, 10-path table-driven e2e `apps/cli/tests/output-envelope.test.ts` green (901/0 suite); the required 68-verb enumeration is NOT built, so R1's own enumeration clause is unmet. |
+| R2 | MET | Child 0699 MET. Live re-probe this run: `bun run apps/cli/src/index.ts task show 9999 --json --json-envelope` → `{ok:false, error:{code:"INTERNAL_ERROR", message:"Task 9999 not found in any registered task folder", details:{cliCode:"NOT_FOUND"}}}`, no `Error:` prefix, exit 1. Unit tests pin default code, explicit code, details passthrough, prefix strip, raw-branch identity. |
+| R3 | MET | Child 0701 R1 MET (spec level): WT-3b commit step + WT-4 zero-commit guard (`git rev-list --count "$BASE_SHA..$BRANCH"` > 0, else WT-5 halt) in `execution-batch.md`; static contract pin `execution-batch-contract.test.ts` green. Live zero-commit WT-4 dry-run deferred (carried as AC3 UNMET). |
+| R4 | MET | Child 0701 R2 MET (spec level): `--ignore-scripts` + shared-`.git/hooks` rationale at both WT-2 sites, `git branch -D "$BRANCH"` cleanup on failed create, marker tree named (invoking tree), lifecycle-DB disposition paragraph; static pins green. Live hooks-hash capture and forced-failure retry deferred (carried as AC4 UNMET). |
+| R5 | MET | Child 0699 R3 MET: new `apps/cli/bunfig.toml` preload; `cd apps/cli && bun test` = 901 pass / 0 fail, exit 0, no `SPUR_SKIP_GLOBAL_CONFIG`. |
+| R6 | MET | Child 0699 R4 MET. Live re-probe this run: documented command `cd apps/cli && bun test tests/output-envelope.test.ts --test-name-pattern "wraps a payload"` → 1 pass / 0 fail, exit 0. CLAUDE.md documents the executed command. |
+| R7 | MET | Child 0700 R1/R1b MET: checklist id regex widened (AC + bold R ids) in `packages/domain/src/bdd/checklist.ts`; flip tests green; 5 bold R-boxes read `[x]` in 0700's own file; `--fix` help no longer claims R-item checkbox repair (`task.ts:1129`). |
+| R8 | MET | Child 0700 R2 MET: `L3.review-testing-contradiction` error registered (`task-check.ts:891`, finding-codes.ts), last-verdict capture; unit-tested both directions incl. superseding-PASS case. |
+| R9 | PARTIAL | Child 0700 R3 PARTIAL: `covers:` alias machinery + done-gate promotion landed, but the 0693 corpus rewrite with `covers:` aliases was deferred — grep of 0693 finds no `covers:` rows, so F95's coverage is not actually satisfiable for 0693 yet. |
+| R10 | MET | Child 0702 done/PASS: `totalCostUsd` nullable, `COALESCE(...,0)` dropped, render consumers updated (commit 4e1a19588). |
+| R11 | MET | Child 0702 done/PASS: assistant-step duration attribution landed per its PASS verdict (importer/ETL decision recorded in 0702 Solution). |
+| R12 | PARTIAL | Child 0700 R4 MET-with-caveat: gate is ledger-first (`feature-check.ts:581`) but the tracked ledger `docs/dogfood/INDEX.md` does not exist and `git ls-files docs/dogfood` = 5 legacy reports, so a fresh clone still falls back to the gitignored directory — the requirement's independence is not achieved end to end. |
+| R13 | MET | Child 0701 R3 MET: unknown-flag rule imported into `plugins/sp/skills/spur-dev/SKILL.md:237` (note in plan line or stop); no `/sp:dev-*` surface gained a flag. Behavioural proof not run (carried as AC13 UNMET). |
+| R14 | MET | Child 0701 R4 MET. Re-read this run: dev-operations.md §5a states "`--next` is not accepted (dropped by feature H8, 2026-07-31)"; `dev-refineall.md:56` carries the removal record; neither documents `--next` as accepted. |
+| R15 | MET | Child 0701 R5 MET: PIPELINE_TOKENS extended with dev-refineall/dev-verifyall/refineall/verifyall (`detect-pipeline-driving.ts:50`); drift code-span form accepted (`validate-report.ts:42`); pipeline-detect + report-contract tests green. |
+| R16 | MET | Child 0701 R6 MET: `stripSameLevelHeadings` demotes `###`→`####` and records `demotedHeadings`; warning reworded; tests green. |
+| R17 | MET | Child 0700 R5 MET: requirements-format check counts R-item lines, not blank-line blocks (`task-check.ts:666`); 0174 regression cases kept passing. |
+| R18 | MET | Child 0700 R6 MET: gate-language advisory suppressed when `frontmatter.dependencies` non-empty (`task-check.ts:1289`); `spur task check 0698` now clean of both codes (0700 AC9 live proof). |
+| R19 | PARTIAL | Partial across children: 19b correctionCount removed (0702 PASS) and 19c Q&A append landed (`planning-write-service.ts:548,587`, tests green); but 19a feature B roster untouched (0700 AC10 N/A — B still does not list 0687/0689/0690) and 19d zero-task rule exists only in spec with the live selector run deferred. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+| --------------------- | -------- | --------------- | ---------- |
+| AC1 (scenario "R3 — Implementation follows the approved ADR") | PARTIAL | test | Child 0699 AC1 PARTIAL: 10-path table-driven e2e green (ok:false + frozen code + parseable message + preserved exit codes on the design-named surface); the full 68-verb enumeration is absent, so the final clause remains unmet. |
+| AC2 | MET | command | Live re-probe this run: `task show 9999 --json --json-envelope` → `{ok:false, code:"INTERNAL_ERROR", details.cliCode:"NOT_FOUND"}`, message without `Error:` prefix, exit 1 — ADR-091 `:1708` collapse honoured. |
+| AC3 | PARTIAL | static-ref | WT-3b commit step + WT-4 zero-commit halt written; static contract pin green. Live zero-commit dry-run (WT-4 fails loudly, worktree retained per WT-5) deferred by child 0701. |
+| AC4 | PARTIAL | static-ref | `--ignore-scripts` prescription, failed-create branch cleanup, marker-tree ownership, DB disposition all written; live `.git/hooks` byte-identity capture and forced `worktree add -b` failure deferred by child 0701. |
+| AC5 | MET | command | `cd apps/cli && bun test` → 901 pass / 0 fail, exit 0, no operator env var (child 0699 R3; suite green via new apps/cli/bunfig.toml). |
+| AC6 | MET | command | Live re-probe this run: documented targeted-test command exits 0 (`1 pass / 0 fail`, exit=0). |
+| AC7 | MET | test | Checklist parser/flip tests green for AC-id and bold R-id boxes; 0700's own bold R-boxes flipped to `[x]` (5 counted); `--fix` claim repaired (text no longer promises R-item checkbox repair). |
+| AC8 | MET | test | `L3.review-testing-contradiction` fires on stale `PARTIAL - request-changes` Review + PASS Testing on terminal tasks, names `/sp:dev-review` as repair; superseding PASS authoritative; wip exempt — unit-tested. |
+| AC9 | PARTIAL | static-ref | `covers:` alias path implemented and unit-tested, unmatched-verdict promoted to feature done gate; but 0693's AC still carry no `covers:` aliases (corpus rewrite deferred), so F95 + 0693 coverage is not yet satisfiable in the live corpus. |
+| AC10 | MET | command | Child 0702 (done, PASS): `totalCostUsd` typed `number-or-null`, `COALESCE(...,0)` removed so absent cost rows yield null; render sort/formatter updated; commit 4e1a19588. |
+| AC11 | MET | command | Child 0702 (done, PASS): assistant-step duration attribution for claude/pi landed per its PASS verdict and record. |
+| AC12 | PARTIAL | static-ref | Gate reads tracked `docs/dogfood/INDEX.md` first (unit-tested) but that ledger does not exist on disk or in git; fresh-clone population still diverges from the working tree, so the scenario's identity claim is unmet end to end. |
+| AC13 | PARTIAL | static-ref | Unknown-flag rule present at `plugins/sp/skills/spur-dev/SKILL.md:237` ("noted in the plan line or the operation stops"); no behavioural run of `dev-refine --worktree` was performed to prove the plan-line/stop path. |
+| AC14 | PARTIAL | static-ref | Re-read this run: §5a lists "`--next` is not accepted (H8, 2026-07-31)"; dev-refineall.md documents the drop and its argument-hint omits `--next`; neither surface documents it as accepted. |
+| AC15 | MET | test | Batch-mutator tokens refuse with the pipeline-driving message (positives in slash+bare forms, negatives `refinealls-report`/`verifyally`); code-span `drift:external` ledger row excluded from data-row count — both test files green. |
+| AC16 | MET | test | Demote-not-delete verified: `###`→`####` with `demotedHeadings` recording and reworded warning; markdown-document + planning-write-service tests green. |
+| AC17 | MET | command | Requirements-format counts R-items (implement-ready shape no longer warns) and gate-language advisory suppressed for non-empty `dependencies`; child 0700's live proof: `task check 0698` clean of `uncovered-task-scenario` (was 17) and `gate-language` (was 3). |
+| AC18 | PARTIAL | static-ref | 19b done (correctionCount var gone, 0702 PASS); 19c done (Q&A appends with `#### Q&A entry — <iso-ts>`, `<!-- qa:replace -->` escape hatch, tests green); 19a unmet (feature B roster still reads "No linked tasks."); 19d static rule only (zero-task selector run deferred). |
+
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: FAIL)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P1 | evidence-rule-failed | — | Executable evidence missing for: AC14 |
 
 ### References
+
 **Verification baseline.** All claims re-checked at `HEAD` = `dad078ad5` on 2026-08-28.
 
 **Source reports (all in `docs/`, `docs/dogfood/*` is gitignored — see R12).**
@@ -627,4 +692,8 @@ is overwritten. (d) `execution-batch.md:414` lists `aborted (cycle or selector e
 (case-insensitive feature-id match), `6b89162e1` (feature not-found envelope), `cee844c45`
 (anchor-drift + verified-box auto-flip), `791dc9c94` (envelope adoption), `9043d390c` / `7dcddadbb` /
 `33e642f42` (0697 service-layer envelope seam).
+
 ### History
+
+- 2026-08-28T23:32:16.144Z todo → wip (system)
+- 2026-08-28T23:36:10.164Z wip → testing (system)
