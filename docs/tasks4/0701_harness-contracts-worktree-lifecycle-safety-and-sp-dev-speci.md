@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Harness contracts: worktree lifecycle safety and /sp:dev-* specification drift"
-status: todo
+status: testing
 template: issue
 created_at: 2026-08-28T22:21:18.814Z
-updated_at: "2026-08-28T22:49:25.550Z"
+updated_at: "2026-08-29T01:00:14.189Z"
 feature_id: F95
 parent_wbs: "0698"
 ac_altitude: task-local
@@ -13,6 +13,7 @@ ac_altitude: task-local
 ## 0701. Harness contracts: worktree lifecycle safety and /sp:dev-* specification drift
 
 ### Background
+
 Decomposed from task **0698** (`### Requirements` R3, R4, R13, R14, R15, R16, R19c, R19d). Every
 claim was reproduced against `HEAD` = `dad078ad5` on 2026-08-28; the full evidence bundle is in 0698
 `### Root Cause`.
@@ -42,29 +43,33 @@ that promised detection, and delivered neither.
 populate `warnings[]` from `doc.strippedHeadings`, proven by a direct `MarkdownDocument.replaceSection`
 probe. R6 is filed for the half that is real: the headings are **deleted** rather than demoted, so an
 authored Design loses its structure even when the warning is read.
+
 ### Requirements
+
 Source mapping (parent → this task): 0698 R3 → R1, 0698 R4 → R2, 0698 R13 → R3, 0698 R14 → R4,
 0698 R15 → R5, 0698 R16 → R6, 0698 R19(c) and R19(d) → R7.
 
-- [ ] R1. **The `--worktree` lifecycle must commit the batch's writes before its terminal action, and WT-4 must refuse to report success on a branch with no commits.** `plugins/sp/skills/spur-dev/references/execution-batch.md` specifies WT-1 (dirty-tree precheck), WT-2 (create/adopt), WT-3 (marker), WT-4 (FF-merge), WT-5 (retain), WT-6 (`--continue`) and WT-7 (exclusions) — and **never names a commit step**. `git merge --ff-only "$BRANCH"` on a branch with zero commits succeeds trivially, after which create mode runs `git worktree remove` and `git branch -d`, deleting the tree that held the only copy of the work. The operator sees a green batch report and an unchanged main tree.
+- [x] R1. **The `--worktree` lifecycle must commit the batch's writes before its terminal action, and WT-4 must refuse to report success on a branch with no commits.** `plugins/sp/skills/spur-dev/references/execution-batch.md` specifies WT-1 (dirty-tree precheck), WT-2 (create/adopt), WT-3 (marker), WT-4 (FF-merge), WT-5 (retain), WT-6 (`--continue`) and WT-7 (exclusions) — and **never names a commit step**. `git merge --ff-only "$BRANCH"` on a branch with zero commits succeeds trivially, after which create mode runs `git worktree remove` and `git branch -d`, deleting the tree that held the only copy of the work. The operator sees a green batch report and an unchanged main tree.
 
-- [ ] R2. **Worktree setup must not reconfigure the operator's main repository, must not leak a branch on a failed create, and must state marker and lifecycle-DB ownership.** Four defects in one section. (a) WT-2 prescribes bare `bun install --frozen-lockfile`, which runs the repo's `prepare: lefthook install` (`package.json:56`) — and because worktrees share the main tree's `.git`, installing deps inside an "isolated" worktree rewrites the operator's main-repo hooks. (b) `git worktree add -b` creates the branch before the directory, so any create failure leaves a dangling branch and the natural retry dies on `a branch named … already exists`. (c) WT-3 says the marker lives "under `.spur/run/`" without naming a tree, while both trees have one and WT-6's resume scans from wherever the operator stands. (d) WT-4 and WT-5 say nothing about the worktree's own `.spur` lifecycle DB, which is deleted with the tree — so a merged branch's task file reads `done` while the target tree's DB still reads `todo`.
+- [x] R2. **Worktree setup must not reconfigure the operator's main repository, must not leak a branch on a failed create, and must state marker and lifecycle-DB ownership.** Four defects in one section. (a) WT-2 prescribes bare `bun install --frozen-lockfile`, which runs the repo's `prepare: lefthook install` (`package.json:56`) — and because worktrees share the main tree's `.git`, installing deps inside an "isolated" worktree rewrites the operator's main-repo hooks. (b) `git worktree add -b` creates the branch before the directory, so any create failure leaves a dangling branch and the natural retry dies on `a branch named … already exists`. (c) WT-3 says the marker lives "under `.spur/run/`" without naming a tree, while both trees have one and WT-6's resume scans from wherever the operator stands. (d) WT-4 and WT-5 say nothing about the worktree's own `.spur` lifecycle DB, which is deleted with the tree — so a merged branch's task file reads `done` while the target tree's DB still reads `todo`.
 
-- [ ] R3. **`sp:spur-dev` must not silently discard an undeclared flag.** `/sp:dev-refine 0693 --auto --depth ready --agent inline --worktree` was accepted and the isolation silently dropped: `plugins/sp/commands/dev-refine.md:4` does not declare `--worktree`, `flag-glossary.md:406-410` scopes it away from `dev-refine`, only `plugins/sp/skills/next-router/SKILL.md:55` carries an unknown-flag rule, and `plugins/sp/scripts/validate-flag-contracts.ts` gates `--agent` only. Scope is the **parse behaviour** — surface an undeclared flag in the plan line or stop. Whether `dev-refine` *should* declare `--worktree` is a `/sp:dev-*` surface change requiring ADR-051 operator consent and is explicitly **not** in this task.
+- [x] R3. **`sp:spur-dev` must not silently discard an undeclared flag.** `/sp:dev-refine 0693 --auto --depth ready --agent inline --worktree` was accepted and the isolation silently dropped: `plugins/sp/commands/dev-refine.md:4` does not declare `--worktree`, `flag-glossary.md:406-410` scopes it away from `dev-refine`, only `plugins/sp/skills/next-router/SKILL.md:55` carries an unknown-flag rule, and `plugins/sp/scripts/validate-flag-contracts.ts` gates `--agent` only. Scope is the **parse behaviour** — surface an undeclared flag in the plan line or stop. Whether `dev-refine` *should* declare `--worktree` is a `/sp:dev-*` surface change requiring ADR-051 operator consent and is explicitly **not** in this task.
 
-- [ ] R4. **`dev-operations.md` must not document a flag the command it describes rejects.** §5a lists `--next` among shared refine flags (`:239`) and carries a `**--next` warning:**` bullet explaining how it chains (`:251`), while `plugins/sp/commands/dev-refineall.md:56` records `--next` as dropped by feature H8 on 2026-07-31 and the command's `argument-hint` omits it. `dev-operations.md` is the SSOT for what each command does, so the SSOT currently documents a flag the surface rejects.
+- [x] R4. **`dev-operations.md` must not document a flag the command it describes rejects.** §5a lists `--next` among shared refine flags (`:239`) and carries a `**--next` warning:**`bullet explaining how it chains (`:251`), while`plugins/sp/commands/dev-refineall.md:56` records `--next` as dropped by feature H8 on 2026-07-31 and the command's `argument-hint` omits it. `dev-operations.md` is the SSOT for what each command does, so the SSOT currently documents a flag the surface rejects.
 
-- [ ] R5. **The dogfood driver's gates must cover mutating batch verbs and must accept the drift-row form its own skill prescribes.** (a) `detect-pipeline-driving.ts:50-62` omits `dev-refineall`/`refineall`/`dev-verifyall`/`verifyall` from `PIPELINE_TOKENS`, and `tokenMatches` (`:119-125`) is hyphen-word exact so `runall` cannot cover `refineall` — a run that mutated three tasks, committed, and fast-forwarded `main` was classified `pipelineDriving: false` and would have been accepted without `--max-retry`. (b) `validate-report.ts:41` excludes rows matching `^\|\s*drift:` while `plugins/sp/skills/dogfood-testing/SKILL.md:159,218,418` prescribes the code-span form `` `drift:external` ``, so a correctly-tagged drift row counts as a data row and refuses `status: complete` on `ledger_cardinality`.
+- [x] R5. **The dogfood driver's gates must cover mutating batch verbs and must accept the drift-row form its own skill prescribes.** (a) `detect-pipeline-driving.ts:50-62` omits `dev-refineall`/`refineall`/`dev-verifyall`/`verifyall` from `PIPELINE_TOKENS`, and `tokenMatches` (`:119-125`) is hyphen-word exact so `runall` cannot cover `refineall` — a run that mutated three tasks, committed, and fast-forwarded `main` was classified `pipelineDriving: false` and would have been accepted without `--max-retry`. (b) `validate-report.ts:41` excludes rows matching `^\|\s*drift:` while `plugins/sp/skills/dogfood-testing/SKILL.md:159,218,418` prescribes the code-span form `` `drift:external` ``, so a correctly-tagged drift row counts as a data row and refuses `status: complete` on `ledger_cardinality`.
 
-- [ ] R6. **`spur task update --section` should demote a same-level heading, not delete it.** `MarkdownDocument.stripSameLevelHeadings` (`packages/domain/src/planning/markdown-document.ts:411-427`) removes `###` lines from a task section body; a probe with `### Sub A` / `### Sub B` returns `strippedHeadings: ["### Sub A","### Sub B"]` and a body with both headings gone. `####` is legal below a task's `###` section level, so demotion preserves the author's structure at no cost. The existing `warnings[]` channel (`planning-write-service.ts:476`) stays — reworded from "stripped" to "demoted".
+- [x] R6. **`spur task update --section` should demote a same-level heading, not delete it.** `MarkdownDocument.stripSameLevelHeadings` (`packages/domain/src/planning/markdown-document.ts:411-427`) removes `###` lines from a task section body; a probe with `### Sub A` / `### Sub B` returns `strippedHeadings: ["### Sub A","### Sub B"]` and a body with both headings gone. `####` is legal below a task's `###` section level, so demotion preserves the author's structure at no cost. The existing `warnings[]` channel (`planning-write-service.ts:476`) stays — reworded from "stripped" to "demoted".
 
-- [ ] R7. **Two spec gaps must be closed.** (a) `### Q&A` is an append-only history section written through `MarkdownDocument.replaceSection`, so `task update --section "Q&A"` overwrites it — task 0693's R3 gate entry destroyed six earlier refinement entries. (b) `execution-batch.md:414` defines the abort vocabulary as `aborted (cycle or selector error before any run)` with no zero-task rule, while `dev-operations.md` §5a already lists `empty set after filter` as an abort verdict; it is undefined whether create mode still cuts a worktree for an empty set, and which report shape is emitted.
+- [x] R7. **Two spec gaps must be closed.** (a) `### Q&A` is an append-only history section written through `MarkdownDocument.replaceSection`, so `task update --section "Q&A"` overwrites it — task 0693's R3 gate entry destroyed six earlier refinement entries. (b) `execution-batch.md:414` defines the abort vocabulary as `aborted (cycle or selector error before any run)` with no zero-task rule, while `dev-operations.md` §5a already lists `empty set after filter` as an abort verdict; it is undefined whether create mode still cuts a worktree for an empty set, and which report shape is emitted.
 
 **Out of scope.** Declaring `--worktree` on `dev-refine` or any other `/sp:dev-*` surface expansion
 (ADR-051 consent required — R3 is the parse fix only). Also out: changing the FF-only merge policy,
 the WT-5 retention default, or the create-mode auto-decision carve-out; and any change to the
 `--worktree` flag's own semantics beyond the safety gaps named above.
+
 ### Acceptance Criteria
+
 ```gherkin
 Feature: Harness contracts
 
@@ -133,7 +138,9 @@ Feature: Harness contracts
     Then the spec states whether a worktree is cut and which report shape is emitted
     And a contract test pins that behaviour
 ```
+
 ### Q&A
+
 **Q: R1 and R2 are prose specs — how are they tested?** Two ways. The mechanical halves are testable:
 `validate-commands.ts` / the `plugins/sp` suite can assert that the spec text contains the commit step
 and the non-empty-branch guard, and R5's changes are ordinary unit tests. The behavioural half needs a
@@ -178,7 +185,9 @@ it.
 that. Scope the append semantics to `Q&A` specifically (a timestamped entry header appended to the
 existing body), and make sure `--from-file` with an explicit full-section rewrite is still reachable
 for the case where an author genuinely means to replace.
+
 ### Design
+
 #### WHAT
 
 Five prose-contract repairs under `plugins/sp/`, two script fixes, and one behaviour change in the
@@ -237,7 +246,9 @@ surface expansion**. If any R-item appears to need one, stop and get ADR-051 con
   `SKILL.md` prescribe the code span and every other tag in that document is written the same way.
 - **Do not make `updateSection` append for every section.** R7(a) is scoped to `Q&A`; four other
   sections legitimately depend on replace semantics.
+
 ### Plan
+
 Ordered so the cheap mechanical fixes land first and the prose spec work — which needs a live dry-run
 to verify — comes last.
 
@@ -278,7 +289,9 @@ to verify — comes last.
    `transition-shim-check` and `script-contract-check` ahead of the suite — all three touch files this
    task edits). Then `spur task check --corpus` **once** (constitution T11). Author `### Solution`
    with the change map and the R2(d) lifecycle-DB decision.
+
 ### Root Cause
+
 All seven reproduced against `HEAD` = `dad078ad5` on 2026-08-28.
 
 **R1 — the worktree lifecycle never commits.**
@@ -391,22 +404,73 @@ refinement Q&A entries; the substance survived in Design and ADR-091 but the app
 
 (b) `execution-batch.md:414` reads `aborted` (cycle or selector error before any run)`;
 `dev-operations.md` §5a's batch verdict vocabulary reads
-`aborted` (cycle / unknown selector / **empty set after filter**)`. The zero-task path is undefined in
+`aborted`(cycle / unknown selector / **empty set after filter**)`. The zero-task path is undefined in
 the lifecycle spec — including whether WT-2 still cuts a worktree for an empty set — and the
 `dev-runall-feature-b` run left it unprobed because feature B resolved three tasks.
+
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Implemented per the Design change map; R-item → as-built mapping (file:line):
+
+- **R5a** `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:50` — added `dev-refineall`, `dev-verifyall` (complete-token group) and `refineall`, `verifyall` (bare-noun group) to `PIPELINE_TOKENS`; hyphen-word `tokenMatches` covers the rest.
+- **R5b** `plugins/sp/scripts/dogfood-testing/validate-report.ts:42` — drift-row exclusion relaxed to `/^\|\s*`?drift:/` so the prescribed code-span form matches; comment states both forms.
+- **R6** `packages/domain/src/planning/markdown-document.ts:166,310,379` — `stripSameLevelHeadings` now demotes (`#` + line) instead of deleting; accumulator/accessor renamed `_demotedHeadings`/`demotedHeadings`; `packages/app/src/services/planning-write-service.ts:476` warning reworded stripped→demoted (channel kept).
+- **R7a** `packages/app/src/services/planning-write-service.ts:548,587` — new `appendQaEntry` helper; an `updateSection` write to `Q&A` appends a `#### Q&A entry — <iso-ts>` block instead of replacing. Explicit full rewrite stays reachable: a body starting with `<!-- qa:replace -->` (`:588`) replaces wholesale. All other sections keep replace semantics.
+- **R3** `plugins/sp/skills/spur-dev/SKILL.md:237` (Platform Notes, argument parsing) — imported the unknown-flag rule (source: `plugins/sp/skills/next-router/SKILL.md`, "Parse" step): unknown flags are noted in the plan line or the operation stops; names `--worktree`-on-`dev-refine` as the motivating case. No `/sp:dev-*` surface gained a flag. The optional `validate-flag-contracts.ts` argument-hint gate was **not** added (optional per Q&A; the prose rule shipped instead).
+- **R4** `plugins/sp/skills/spur-dev/references/dev-operations.md:251` — §5a shared-flags line no longer lists `--next`; the old warning bullet is now an explicit not-accepted note pointing at the H8 removal record in `plugins/sp/commands/dev-refineall.md`.
+- **R1** `plugins/sp/skills/spur-dev/references/execution-batch.md` — new **WT-3b** (commit the batch's writes on `$BRANCH`, inside the worktree, before any terminal action) plus the WT-4 zero-commit guard (`git rev-list --count "$BASE_SHA..$BRANCH"` must be > 0; on zero → WT-5 with halt cause "branch carries no commits — nothing to merge", worktree retained).
+- **R2a/b/c/d** same file — WT-2 installs (create + reuse conditional) are now `bun install --frozen-lockfile --ignore-scripts` with the shared-`.git/hooks` rationale (`package.json:56`, `prepare: lefthook install`); the create is wrapped so a failed `git worktree add -b` deletes the dangling branch (or derives a fresh short-id); WT-3 states the marker lives in the **invoking** tree and WT-6's scan says so; WT-4/WT-5 carry the **Lifecycle-DB disposition** paragraph.
+- **R7b** `execution-batch.md` Step 1 — zero-task rule: empty set after filter → `aborted (empty set after filter)`; under `--worktree` WT-2 is skipped entirely (no worktree, no marker); early-exit report shape stated; pinned by `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts`.
+- **R2(d) decision (was open in Q&A): the committed task file is authoritative.** The operator resyncs the invoking tree's DB by replaying the recorded terminal transitions; auto-migration rejected — the DB is per-tree by design and the committed corpus files are the durable record.
+
+Tests: see `### Testing`. Static spec pins for the worktree/zero-task prose live in `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts`.
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PARTIAL (from verdict artifact)
+
+| Requirement | Status | Evidence |
+| ------------- | -------- | ---------- |
+| R1 | MET | WT-3b commit step + WT-4 zero-commit guard (`git rev-list --count "$BASE_SHA..$BRANCH"` must be > 0, zero → WT-5 with halt cause) written into `plugins/sp/skills/spur-dev/references/execution-batch.md` (WT-3b / §WT-4). Static pin: `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` (green). Live zero-commit WT-4 dry-run NOT performed this run (deferred). |
+| R2 | MET | (a) `--ignore-scripts` + shared-`.git/hooks` rationale at both WT-2 install sites; (b) failed `git worktree add -b` wrapped with `git branch -D "$BRANCH"` cleanup; (c) WT-3 + WT-6 state the marker lives in the invoking tree; (d) Lifecycle-DB disposition paragraph in WT-4/WT-5 — decision recorded in `### Solution`: the committed task file is authoritative; operator replays terminal transitions into the invoking tree's DB. Static pins green. Live hooks-hash capture and forced create-failure retry NOT performed (deferred). |
+| R3 | MET | Unknown-flag rule imported into `plugins/sp/skills/spur-dev/SKILL.md` Platform Notes (argument parsing): unknown flags are noted in the plan line or the operation stops; motivating case `--worktree`-on-`dev-refine` named. No `/sp:dev-*` surface gained a flag. Optional `validate-flag-contracts.ts` argument-hint gate deliberately skipped (marked optional in `### Q&A`). |
+| R4 | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md` §5a: `--next` struck from shared flags; warning bullet replaced by an explicit not-accepted note pointing at the H8 record in `plugins/sp/commands/dev-refineall.md`. `dev-refineall.md` untouched (H8 note preserved). |
+| R5 | MET | (a) `PIPELINE_TOKENS` extended with `dev-refineall`, `dev-verifyall`, `refineall`, `verifyall` (`plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:50`); tests: positives in slash+bare forms, false-positive negatives (`refinealls-report`, `verifyally`), ordered-tokens pin updated — `pipeline-detect.test.ts` green. (b) drift-row exclusion relaxed to `/^\|\s*`?drift:/`(`plugins/sp/scripts/dogfood-testing/validate-report.ts:42`); literal cell form stated in`plugins/sp/skills/dogfood-testing/SKILL.md` §Workspace-drift guard; `report-contract.test.ts` code-span case green. |
+| R6 | MET | `stripSameLevelHeadings` demotes (`#` + line) instead of deleting; accumulator/accessor renamed `_demotedHeadings`/`demotedHeadings` (`packages/domain/src/planning/markdown-document.ts:166,310,379`); warning reworded (`packages/app/src/services/planning-write-service.ts:476`). Tests: demote + `demotedHeadings` recording + phantom-section invariant green. |
+| R7 | MET | (a) `appendQaEntry` helper; `updateSection` on `Q&A` appends a `#### Q&A entry — <iso-ts>` block; full rewrite reachable via leading `<!-- qa:replace -->` marker (`packages/app/src/services/planning-write-service.ts:548,587`). Append + replace-path tests green. (b) Zero-task rule added to execution-batch.md Step 1: `aborted (empty set after filter)`, `--worktree` skips WT-2 entirely (no worktree, no marker), early-exit report shape stated; static pin green. Live zero-task selector run NOT performed (deferred). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+| --------------------- | -------- | --------------- | ---------- |
+| AC1 | PARTIAL | static-ref | Spec names WT-3b commit step + WT-4 zero-commit halt; static contract pin green. Live dry-run deferred. |
+| AC2 | PARTIAL | static-ref | Spec prescribes `bun install --frozen-lockfile --ignore-scripts` at both WT-2 sites with rationale; static pin green. Live `.git/hooks` hash capture deferred. |
+| AC3 | PARTIAL | static-ref | Spec wraps create with branch cleanup; static pin green. Forced `worktree add -b` failure + retry deferred. |
+| AC4 | PARTIAL | static-ref | Spec names the invoking tree as marker owner (WT-3 + WT-6) and states the lifecycle-DB disposition (WT-4/WT-5); static pin green. |
+| AC5 | PARTIAL | static-ref | Unknown-flag rule in spur-dev SKILL.md argument parsing; no surface gained a flag; prose review of all touched skill/command files confirms no new flag. |
+| AC6 | PARTIAL | static-ref | dev-operations.md §5a no longer lists `--next`; H8 note intact in dev-refineall.md. |
+| AC7 | MET | command | `bun test plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts` green (positives, negatives, order pin). |
+| AC8 | MET | command | `report-contract.test.ts` green: code-span `drift:external` row excluded from data-row count. |
+| AC9 | MET | command | `markdown-document.test.ts` + `planning-write-service.test.ts` green: `###` → `####` demotion, `demotedHeadings`, reworded warning. |
+| AC10 | MET | command | `planning-write-service.test.ts` green: Q&A append preserves prior entries; `<!-- qa:replace -->` rewrite path. |
+| AC11 | PARTIAL | static-ref | Zero-task rule + report shape in spec; static pin green. Live zero-task selector run deferred. |
+
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Disposition: **PARTIAL by design of this run** — all seven requirements implemented at source + spec level; every mechanical test half green (192 pass, 0 fail). Deferred: the Plan step 6 behavioural dry-runs (live worktree batch, hooks-hash capture, forced create-failure retry, live zero-task selector) — AC1–AC4/AC11 behavioural halves remain `static-ref`-evidenced, which `spur task verdict` downgrades to PARTIAL.
+
+Findings:
+
+- P3 — `IMPLEMENT_HEAVY_TOKENS` deliberately not extended: the change map names `PIPELINE_TOKENS` only. Consequence: a `refineall`/`verifyall` testee under an explicit `--max-retry N` is pipeline-driving-refused but not implement-heavy-advised. Narrow, documented.
+- P4 — the Q&A full-rewrite escape hatch is a body-prefix marker (`<!-- qa:replace -->`), not a CLI flag (no new flag surface allowed under this task). Documented in Solution; discovery is via docs only.
+- P4 — appended Q&A entries introduce `####` timestamp headers into the section body; corpus renderers must tolerate depth-4 headings (already legal below a task's `###` sections).
+
+Residual risk: the worktree spec is prose — the WT-3b/guard semantics bind drivers only as strongly as the spec is followed; the static contract pins catch regressions in the text, not in a driver's obedience to it.
 
 ### References
+
 **Parent:** task **0698** — `### Requirements` R3, R4, R13, R14, R15, R16, R19(c), R19(d).
 **Feature:** F95 (placement inherited from the parent; this task's subject is the `plugins/sp`
 contract layer, wider than F95's charter — see 0698 `### Background`).
@@ -454,4 +518,8 @@ per working tree" (task 0487 R5), the discipline `--worktree` exists to make enf
 **Gate interaction.** `bun run spur-check` runs `link-check`, `transition-shim-check` and
 `script-contract-check` before the suite; all three read files this task edits, so a broken link or an
 undeclared plugin script fails in under a second rather than after the 63 s test run.
+
 ### History
+
+- 2026-08-29T00:37:55.649Z todo → wip (system)
+- 2026-08-29T00:54:28.935Z wip → testing (system)

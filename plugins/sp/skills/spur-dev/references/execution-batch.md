@@ -61,6 +61,7 @@ function normalizeArgs(raw: Args): Args {
 ```
 
 **Normalization rules (performed by the command layer before the skill sees $ARGUMENTS, or by the batch resolver):**
+
 - If `--feature FOO` is present and `--tasks` is absent, treat the effective selector as `feature:FOO`.
 - If both are present, `--tasks` wins (with a one-line note in the batch report).
 
@@ -101,7 +102,7 @@ bun run apps/cli/src/index.ts feature check <id> --strict --json
 kickoff** — the driver never re-queries `spur task list` to recompute membership mid-batch (R2.1).
 
 | Selector form | Regex / match | Resolution |
-|---|---|---|
+| --- | --- | --- |
 | Explicit WBS list | `^[0-9, ]+$` | Split on comma; validate each token is a 4-digit WBS; collect the explicit set. (R1.1) |
 | `feature:<id>` (via `--tasks` or `--feature <id>`) | literal `feature:` prefix or `--feature` flag | `spur task list --feature <id> --json`; collect `wbs` from each row. The `--feature` flag is sugar that becomes `--tasks feature:<id>` at the command layer. (R1.3) |
 | `ready` | literal `ready` | Resolve the union of `spur task list --status todo --json` + `spur task list --status backlog --json`, drop tasks with open children (R1.5, umbrella-parent exclusion below), then keep only tasks whose every `dependencies[]` entry resolves to `status == done` (via `spur task show <dep> --json | jq '{wbs, status, dependencies, feature_id}'` — R5 metadata-only). Report each excluded task with its unmet dependency. (R1.4) |
@@ -185,7 +186,7 @@ node "$(superskill script path sp batch-preflight.mjs)" \
 ```
 
 | Result | Batch action |
-|--------|----------------|
+| -------- | ---------------- |
 | `action: run` | Launch `task-pipeline.yaml` for this WBS (happy path **unchanged**) |
 | `action: skip` code **A2** | Do not launch; report `preflight-skip` + unmet deps (mirrors TABLE A2) |
 | `action: skip` code **A7** | Do not launch; report blocked (handover is operator-side) |
@@ -253,7 +254,7 @@ Only two flags cross the orchestrator→pipeline boundary; both are merged into 
 `--vars` JSON:
 
 | Flag | Effect on per-task `--vars` |
-|---|---|
+| --- | --- |
 | `--auto` | sets `"profile":"auto"` (skips the HITL approve gate). Omitting it forwards nothing, so the pipeline uses its default profile (standard — HITL pause surfaces to the operator). (R4.2) |
 | `--agent <value>` | omit/`inline` in interactive sequential mode selects the host driver and is not forwarded. `auto` or a name sets **both** `"agent":"<value>"` and `"implementAgent":"<value>"` so every workflow `agent.run` step — including implement — spawns that executor. Headless omit/inline falls through the executor precedence chain. To pin ONLY implement, pass `--vars '{"implementAgent":"..."}'` separately; that explicit var selects the subprocess path. (R4.3, tasks 0483/0503) |
 
@@ -283,7 +284,7 @@ node "$(superskill script path sp batch-preflight.mjs)" --wbs <wbs> --status <st
 ```
 
 | Rule | Detail |
-|------|--------|
+| ------ | -------- |
 | Budget | **≤ 1** recovery consult per WBS per batch — never loop until done |
 | Default | Print the exact child command in the batch report |
 | `--auto` batch | May dispatch the child **once** when cardinality is 1 and the hop is a single lifecycle command |
@@ -294,7 +295,6 @@ Helper: `recoveryHint(status, wbs)` in `plugins/sp/scripts/batch-preflight.ts`. 
 in next-router; this only maps status → primary TABLE A hop for recovery.
 
 ### 3.3c Bounded feature-sync retry suppression (task 0411)
-
 
 During a batch, the per-task `record` step and the wrap-up `feature-transition` step each invoke
 feature status sync. When a feature is L4-gate-blocked (e.g. not all linked tasks are `done`), the
@@ -413,6 +413,14 @@ The per-task outcome vocabulary: `done` | `failed` | `blocked` | `skipped` | `no
 The batch verdict: `clean` (all attempted tasks `done`) | `halted` (a failure stopped the batch) |
 `aborted` (cycle or selector error before any run).
 
+**Zero-task rule (task 0701 R7b).** A selector that resolves to an **empty set after the status
+filter** is an `aborted` verdict (`aborted (empty set after filter)`), matching dev-operations.md
+§5a. Under `--worktree`, **WT-2 is skipped entirely**: no worktree is cut and no WT-3 marker is
+written for a batch with nothing to run. The early-exit report carries zero per-task rows,
+`Steps: 0 derived, 0 executed`, and the `aborted` verdict; no WT-3b commit step and no WT-4/WT-5
+terminal action runs. A contract test pins this
+(`plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts`).
+
 ## Worktree isolation (`--worktree [<name>]`)
 
 When a batch command (`dev-runall`, `dev-refineall`, `dev-verifyall`) is invoked with
@@ -487,7 +495,12 @@ Create one worktree on a new branch cut from the current HEAD's ref (the **base 
 BASE_REF=$(git rev-parse --abbrev-ref HEAD)
 BASE_SHA=$(git rev-parse HEAD)
 BRANCH="sp/<command>-<selector-slug>-<short-id>"     # e.g. sp/runall-h1-a3f2
-git worktree add "../<repo>-<command>-<selector-slug>-<short-id>" -b "$BRANCH" "$BASE_REF"
+# `git worktree add -b` creates the branch BEFORE the directory, so a failed create leaves a
+# dangling branch and the natural retry dies on "a branch named ... already exists"
+# (task 0701 R2b). Wrap the create: on failure, delete the branch — or derive a fresh
+# short-id per attempt — before surfacing the error.
+git worktree add "../<repo>-<command>-<selector-slug>-<short-id>" -b "$BRANCH" "$BASE_REF" \
+  || { git branch -D "$BRANCH"; false; }
 ```
 
 Branch and directory names are derived (command + selector slug + short id); the create path never
@@ -497,10 +510,15 @@ not resolve is an error, not a create).
 A fresh worktree has no `node_modules` (gitignored), so the first `bun test` or
 typecheck fails on the first workspace import. Install before any task work:
 
-    cd "../<worktree-dir>" && bun install --frozen-lockfile
+    cd "../<worktree-dir>" && bun install --frozen-lockfile --ignore-scripts
 
 `--frozen-lockfile` pins the worktree to `bun.lock` rather than re-resolving,
-so the worktree's dependency tree matches the base ref's.
+so the worktree's dependency tree matches the base ref's. `--ignore-scripts` is required, not
+stylistic (task 0701 R2a): worktrees share the main tree's `.git`, and this repo's `prepare`
+script is `lefthook install` (`package.json`) — a bare install rewrites the operator's
+main-repo hooks from inside the "isolated" tree. Scripts are skipped only at this call site;
+a normal clone keeps `prepare`. The worktree still gets a usable dependency tree — the install
+exists so the first `bun test` resolves workspace imports.
 
 #### Reuse mode (`--worktree <name>`)
 
@@ -510,8 +528,8 @@ invoking tree's current HEAD ref (not the worktree's branch) and `BASE_SHA` is
 `git merge-base <BASE_REF> <BRANCH>` — so WT-4's FF-merge lands the worktree's accumulated commits
 onto the invoking tree's base ref, exactly as create mode does.
 
-`bun install --frozen-lockfile` runs **only when `node_modules` is absent** in the resolved
-worktree. A warm reused tree does not re-pay the install; a cold one (hand-made, or a retained tree
+`bun install --frozen-lockfile --ignore-scripts` runs **only when `node_modules` is absent** in
+the resolved worktree (same `--ignore-scripts` rationale as create mode — task 0701 R2a). A warm reused tree does not re-pay the install; a cold one (hand-made, or a retained tree
 whose deps were removed) installs exactly once before the first task. This is the R3 conditional
 install rule (source: task 0481) — create mode always installs because a fresh tree is always cold.
 
@@ -570,7 +588,9 @@ verb) whose path argument you control.
 
 Worktree identity lives on disk under `.spur/run/`, not only in the orchestrator's memory, so a
 session that dies mid-batch is recoverable. Write the marker at creation and update it at the
-terminal transition (merged / retained). Schema:
+terminal transition (merged / retained). The marker is written to the **invoking** tree's
+`.spur/run/` (task 0701 R2c) — the tree where the driver process started, not the worktree's own
+`.spur/run/` — so WT-6's resume scan finds it regardless of where the operator stands. Schema:
 
 ```json
 {
@@ -617,6 +637,22 @@ Reuse mode resolves the marker by the resolved worktree's `path` (not by `comman
   (AGENTS.md one-writer-per-tree; task 0487 R5). Overridable with `--force` (the operator can tell
   a crashed-session marker from a live-session one; the harness cannot).
 
+### WT-3b — Commit the batch's writes on `$BRANCH` (task 0701 R1)
+
+Before any terminal action, commit the batch's corpus writes **on `$BRANCH`, inside the
+worktree** — including the generated task files under `docs/tasks*/` and the kanban index:
+
+```bash
+cd "../<worktree-dir>"
+git add <files-the-batch-wrote>
+git commit -m "<type>(<scope>): <command> <selector> batch writes"
+cd - >/dev/null
+```
+
+The FF-only git merge carries only commits — uncommitted writes in the worktree would be left
+behind by the merge and then destroyed by create mode's `git worktree remove`. WT-3b exists so
+that can never happen.
+
 ### WT-4 — Success path (R4)
 
 When the batch completes with **no failed task**, fast-forward-merge the worktree branch onto the
@@ -629,12 +665,20 @@ only what it created*):
 # Run these from the main tree (not inside the worktree) - you merge the worktree branch
 # back onto the base ref there:
 git checkout "$BASE_REF"
+# Guard (task 0701 R1): a zero-commit branch makes the FF-only git merge exit 0
+# ("Already up to date") while merging nothing — the two lines below would then delete
+# the worktree holding the only copy of the batch's writes. Refuse instead:
+[ "$(git rev-list --count "$BASE_SHA..$BRANCH")" -gt 0 ] \
+  || { echo "halt: branch carries no commits - nothing to merge" >&2; false; }   # -> WT-5
 git merge --ff-only "$BRANCH"          # FF-only: never rebase, merge-commit, or resolve conflicts
 # if FF succeeded:
 git worktree remove "../<worktree-dir>"
 git branch -d "$BRANCH"
 # update marker: status = "merged"
 ```
+
+On the zero-commit guard firing, fall through to **WT-5** with the halt cause *"branch carries no
+commits — nothing to merge"*: the worktree and branch are retained, never removed (task 0701 R1).
 
 #### Reuse mode — merge, retain
 
@@ -667,12 +711,23 @@ risk losing work); WT-5 retains the worktree and branch whenever FF is impossibl
 Reuse mode is **narrower** than the carve-out (it merges but does not delete the branch), so the
 carve-out text needs no widening.
 
+**Lifecycle-DB disposition (task 0701 R2d).** The worktree has its own `.spur` lifecycle DB, and
+WT-4/WT-5 remove or retain that tree — the DB state does **not** travel with the merge. The
+**committed task file is authoritative**: after a green merge the branch's task files read
+`done`/`testing` while the invoking tree's DB still reports the pre-batch statuses. Re-sync
+explicitly by replaying the recorded terminal transitions in the invoking tree (`spur task update
+<wbs> <status>` per task, then `spur task record <wbs>`), or treat the batch report's per-task
+table as the source of truth. This is a deliberate choice over auto-migrating DB state: the DB is
+per-tree by design and the committed corpus files are the durable record.
+
 ### WT-5 — Failure path: retain and report (R5)
 
 On any per-task failure, batch halt, HITL pause that ends the run, or non-FF merge from WT-4, the
 worktree directory and branch are left **intact**. No destructive automation on this path under any
 flag combination (`--auto`, `--force`, `--keep-going` — all leave the worktree in place). Update the
-marker: `status = "retained"`. Emit a retention report in the existing halt-report shape:
+marker: `status = "retained"`. The worktree's own `.spur` lifecycle DB is retained with the tree,
+so nothing is lost on this path (see the WT-4 lifecycle-DB disposition for the merged case —
+task 0701 R2d). Emit a retention report in the existing halt-report shape:
 
 ```
 ## Worktree retained — <command> <selector>
@@ -706,7 +761,8 @@ its WT-3 marker rather than creating a second one. Marker lookup tries two paths
    This path covers the common resume shapes: the operator remembers the name used last time, or
    passes the path (tier-1 match).
 2. **Command+selector fallback (bare `--worktree` or absent flag)** — scan
-   `.spur/run/worktree-*.json` for a marker whose `command` + `selector` match the current
+   `.spur/run/worktree-*.json` **in the invoking tree** (where WT-3 wrote the marker —
+   task 0701 R2c) for a marker whose `command` + `selector` match the current
    invocation and whose `status` is `active` or `retained`. Create-mode runs that did not name their
    tree resolve here.
 3. **Found by either path** → `cd` into the marker's `path`, skip WT-1/WT-2 (no new worktree), and
@@ -769,7 +825,7 @@ time. Before launching a full `spur-check-new`:
 ## AC traceability
 
 | AC | Where satisfied |
-|---|---|
+| --- | --- |
 | R1.1–R1.4 (selector grammar) | Step 1 — selector resolution table |
 | R1.5 (umbrella-parent exclusion) | Step 1 — "Umbrella-parent exclusion" paragraph |
 | R2.1 (freeze at kickoff) | Step 2.1 |
@@ -793,6 +849,7 @@ time. Before launching a full `spur-check-new`:
 When a batch contains tasks with **zero dependency edges between them** and **no file-overlap conflicts**, the orchestrator can fan them out in parallel instead of running them sequentially. This is an **orchestrator-level optimization** — the per-task pipeline (`task-pipeline.yaml`) is unchanged; only the execution order differs.
 
 **Decision framework:** `sp:parallel-execution` owns the full fan-out decision logic and patterns. Consult its [fan-out-patterns.md](../../parallel-execution/references/fan-out-patterns.md) before parallelizing. The orchestrator's responsibility is:
+
 1. Identify the independent subset from the topo-sorted batch (tasks with no edges to each other).
 2. Check for file-overlap conflicts (two tasks touching the same `file:line` range must serialize).
 3. Verify token budget supports N-way fan-out.
@@ -802,7 +859,6 @@ When a batch contains tasks with **zero dependency edges between them** and **no
 **Parallel vs. sequential:** the default is sequential (topo-sort order). Parallel is an opt-in via `--mode parallel` on `sp:super-planner` or `/sp:dev-parallel`. When in doubt, run sequentially — parallel is only beneficial when tasks are provably independent.
 
 **See also:** `sp:parallel-execution` skill, `sp:super-planner` agent (parallel mode), `/sp:dev-parallel` command.
-
 
 ## Subagent execution disciplines
 

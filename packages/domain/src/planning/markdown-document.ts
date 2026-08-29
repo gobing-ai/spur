@@ -162,8 +162,8 @@ export class MarkdownDocument {
     private _frontmatter: ParsedFrontmatter | null;
     private _preamble: string;
     private readonly _sections: Section[];
-    /** Same-level heading lines stripped from section bodies during this doc's mutations (R2). */
-    private readonly _strippedHeadings: string[] = [];
+    /** Same-level heading lines demoted from section bodies during this doc's mutations (R2, 0701 R6). */
+    private readonly _demotedHeadings: string[] = [];
     /** Section names that appeared more than once in the source — dropped at parse time, keeping first. */
     private readonly _duplicateSectionNames: string[] = [];
 
@@ -302,13 +302,13 @@ export class MarkdownDocument {
     }
 
     /**
-     * Same-level heading lines stripped from section bodies during mutations (R2).
+     * Same-level heading lines demoted one level deeper from section bodies during mutations (R2, 0701 R6).
      * Empty unless a `replaceSection`/`insertSection` body carried `###`/`##` lines.
      * The I/O boundary (CLI output seam) surfaces these as warnings; the document
      * layer stays pure and never writes to a console itself.
      */
-    get strippedHeadings(): readonly string[] {
-        return this._strippedHeadings;
+    get demotedHeadings(): readonly string[] {
+        return this._demotedHeadings;
     }
 
     /**
@@ -398,13 +398,13 @@ export class MarkdownDocument {
      * re-parse {@link findHeadings} would treat them as new sections, producing
      * phantom entries that fail the closed-world L2 check. Rather than throw on
      * the write hot path (which would force an agent regenerate+retry), this
-     * removes the offending lines and warns, so the write self-heals.
+     * demotes the offending lines one level deeper and warns, so the write self-heals.
      *
      * Code-fence state is tracked exactly as in {@link findHeadings}, so a
      * heading-shaped line inside a ``` block is content, not a heading, and is
      * preserved verbatim.
      *
-     * Stripped lines are recorded on {@link strippedHeadings} so a caller at the
+     * Demoted lines are recorded on {@link demotedHeadings} so a caller at the
      * I/O boundary (the CLI output seam) can surface them — the document layer is
      * pure and never writes to a console/stderr itself.
      */
@@ -420,7 +420,11 @@ export class MarkdownDocument {
                 continue;
             }
             if (!inCodeBlock && line.startsWith(prefix)) {
-                this._strippedHeadings.push(line);
+                // Demote instead of delete (task 0701 R6): `####` is legal below
+                // the task `###` section level, so the author's sub-structure
+                // survives the write while re-parse still sees no phantom.
+                this._demotedHeadings.push(line);
+                kept.push(`#${line}`);
                 continue;
             }
             kept.push(line);

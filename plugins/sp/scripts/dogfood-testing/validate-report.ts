@@ -37,8 +37,9 @@ function countLedgerDataRows(markdown: string): number | null {
         .filter((line) => line.trim().startsWith('|'))
         .filter((line) => !/^\|[\s:|-]+\|?\s*$/.test(line.trim()))
         // drift:external rows are documentary (task 0296) — included in the table but
-        // subtracted from the executed-step count, per the @1.2 cardinality contract.
-        .filter((line) => !/^\|\s*drift:/.test(line.trim()));
+        // subtracted from the executed-step count, per the @1.2 cardinality contract;
+        // the prescribed code-span form (`drift:external`) matches too (task 0701 R5b).
+        .filter((line) => !/^\|\s*`?drift:/.test(line.trim()));
     // Minus the header row; what remains are data rows.
     return Math.max(rows.length - 1, 0);
 }

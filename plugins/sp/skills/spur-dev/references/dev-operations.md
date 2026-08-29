@@ -236,7 +236,7 @@ must not be changed without updating the backing skill.
 - **Purpose:** Batch-refine a set of tasks (or all refine-eligible tasks under a feature) — resolve a set, topo-sort by dependencies, run per-task `refine`, emit a summary report. Planning-half counterpart of `verifyall` / `runall` for the just-in-time spec-completion gate. With `--depth ready`, batch **implement-ready** freeze before multi-agent implement or runall.
 - **Inputs:**
   - `--feature <id>` **or** `--tasks <selector>` (required — at least one). `--feature` is sugar for `--tasks feature:<id>` (shared selector grammar: explicit WBS list, `feature:<id>`, `ready`, status pseudo-list — [execution-batch.md](execution-batch.md) Step 1). If both are present, `--tasks` wins (one-line note in the report).
-  - Shared refine flags (passed through to each per-task refine): `--focus <mode>`, `--description <text>`, `--depth <standard|ready>`, `--agent <inline|auto|name>`, `--auto`, `--next`.
+  - Shared refine flags (passed through to each per-task refine): `--focus <mode>`, `--description <text>`, `--depth <standard|ready>`, `--agent <inline|auto|name>`, `--auto`.
   - Batch-only flags: `--keep-going` (continue independents after a failure; default halt), `--status <s>` (filter resolved membership; default **`backlog,todo`** — planning-side fill candidates), `--json` (machine-readable batch report).
 - **Backing:** `sp:spur-dev` skill, `refineall` operation (orchestrates; per-task body is the single-task `refine` operation — never a second refine implementation).
 - **Behavior:**
@@ -248,7 +248,7 @@ must not be changed without updating the backing skill.
   6. Emit a batch report (markdown or `--json`) that records `depth` once at the header.
 - **Per-task outcome vocabulary:** `refined` (synthesis wrote sections) | `SKIP` (already meets the active depth bar under `--auto`) | `failed` | `skipped` (dep failed under `--keep-going`) | `not-attempted` (halted) | `blocked` (unmet out-of-set dep).
 - **Batch verdict:** `clean` (all attempted tasks `refined` or `SKIP`) | `halted` (a failure stopped the batch) | `aborted` (cycle / unknown selector / empty set after filter).
-- **`--next` warning:** Passing `--next` chains **each** successful refine into `/sp:dev-run <wbs> --mode implement --auto --next`, which can balloon into implement+verify execution for every task. Prefer refineall without `--next`, then `/sp:dev-runall --feature <id>` for execution. Document the risk in the batch report header when `--next` is set.
+- **`--next` is not accepted** (dropped by feature H8, 2026-07-31 — see `plugins/sp/commands/dev-refineall.md` for the removal record). Chain execution explicitly: refineall, then `/sp:dev-runall --feature <id>`.
 - **`--auto` recommendation:** Batch refine without `--auto` requires per-task interactive Q&A and does not scale. Default operator path: `/sp:dev-refineall --feature <id> --auto`. For implement handoffs: `/sp:dev-refineall --feature <id> --auto --depth ready`.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="refineall $ARGUMENTS")` → per task `Skill(skill="sp:spur-dev", args="refine <wbs> $SHARED_FLAGS")` (shared flags include `--depth` when set).
 

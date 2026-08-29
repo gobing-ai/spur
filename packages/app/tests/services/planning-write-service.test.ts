@@ -212,6 +212,40 @@ describe('PlanningWriteService', () => {
             expect(doc.getSection('Solution')).toContain('New solution body');
         });
 
+        test('Q&A appends a timestamped entry and keeps prior entries (task 0701 R7a)', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+
+            await svc.updateSection(ref, 'Q&A', 'First answer.\n');
+            await svc.updateSection(ref, 'Q&A', 'Second answer.\n');
+
+            const written = await readBack(ref);
+            const doc = MarkdownDocument.parse(written, 'task');
+            const qa = doc.getSection('Q&A') ?? '';
+            expect(qa).toContain('First answer.');
+            expect(qa).toContain('Second answer.');
+            expect(qa).toContain('#### Q&A entry —');
+        });
+
+        test('Q&A replace marker keeps an explicit full rewrite reachable (task 0701 R7a)', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+
+            await svc.updateSection(ref, 'Q&A', 'First answer.\n');
+            await svc.updateSection(ref, 'Q&A', '<!-- qa:replace -->\nOnly this remains.\n');
+
+            const written = await readBack(ref);
+            const doc = MarkdownDocument.parse(written, 'task');
+            const qa = doc.getSection('Q&A') ?? '';
+            expect(qa).not.toContain('First answer.');
+            expect(qa).toContain('Only this remains.');
+            expect(qa).not.toContain('qa:replace');
+        });
+
         test('emits task.updated event (non-status change)', async () => {
             const fs = makeFs();
             const events: Array<{ event: string; data?: unknown }> = [];

@@ -234,6 +234,11 @@ or `args="refine <wbs>"` for task refinement, or `args="refineall --feature <id>
 batch refine under a feature (add `--depth ready` for implement-ready freeze). Use `spur agent run`
 for isolated LLM invocations within pipeline steps.
 
+**Argument parsing.** Split `$ARGUMENTS` into target + flags before dispatching. Unknown flags are
+not silently dropped: note them in the plan line, or stop (rule imported from `next-router`,
+task 0701 R3 — e.g. `--worktree` on `dev-refine` is undeclared, so it must be surfaced, never
+discarded).
+
 ### Codex / OpenClaw / OpenCode / Antigravity
 
 Run `spur` CLI via the Bash tool; parse `--json` output. Invoke this skill directly for

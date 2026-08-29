@@ -473,9 +473,9 @@ export class PlanningWriteService {
         };
         await this.emitter.emit(event);
 
-        const warnings = doc.strippedHeadings.map(
+        const warnings = doc.demotedHeadings.map(
             (line) =>
-                `Stripped same-level heading from section body (would become a phantom section): "${line}". ` +
+                `Demoted same-level heading one level deeper in section body (would become a phantom section): "${line}". ` +
                 'Use bullet lists, tables, or **bold** labels for sub-structure instead.',
         );
 
@@ -542,6 +542,12 @@ function applyMutation(doc: MarkdownDocument, mutation: MutationDescriptor): voi
                     mutation.sectionName.toLowerCase() === 'acceptance criteria'
                         ? normalizeAcFence(mutation.sectionBody)
                         : mutation.sectionBody;
+                if (mutation.sectionName.toLowerCase() === 'q&a') {
+                    // Q&A is append-only history (task 0701 R7a): append a
+                    // timestamped entry instead of replacing prior entries.
+                    appendQaEntry(doc, body);
+                    break;
+                }
                 doc.replaceSection(mutation.sectionName, body);
             }
             break;
@@ -570,6 +576,24 @@ function appendHistoryLine(doc: MarkdownDocument, timestamp: string, from: strin
     const line = `- ${timestamp} ${from} → ${to} (${actor})`;
     const updated = existing.length > 0 ? `${existing.trimEnd()}\n${line}\n` : `${line}\n`;
     doc.replaceSection('History', updated);
+}
+
+/**
+ * Append a timestamped entry to the `### Q&A` history section (task 0701 R7a).
+ * A plain section write appends rather than replaces, so prior entries survive.
+ * An explicit full rewrite stays reachable: start the body with the
+ * `<!-- qa:replace -->` marker to replace the section wholesale.
+ */
+function appendQaEntry(doc: MarkdownDocument, body: string): void {
+    const REPLACE_MARKER = '<!-- qa:replace -->';
+    if (body.trimStart().startsWith(REPLACE_MARKER)) {
+        doc.replaceSection('Q&A', body.trimStart().slice(REPLACE_MARKER.length).trimStart());
+        return;
+    }
+    const existing = doc.getSection('Q&A') ?? '';
+    const entry = `#### Q&A entry — ${new Date().toISOString()}\n\n${body.trim()}\n`;
+    const updated = existing.trim().length > 0 ? `${existing.trimEnd()}\n\n${entry}` : entry;
+    doc.replaceSection('Q&A', updated);
 }
 
 /** Resolve the event name from the mutation kind and whether the status changed. */

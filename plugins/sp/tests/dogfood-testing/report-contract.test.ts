@@ -87,6 +87,17 @@ describe('dogfood @1.2 report contract (task 0276)', () => {
         expect(result.ok).toBe(true);
     });
 
+    test('validator — code-span `drift:external` rows do not count toward executed steps (task 0701 R5b)', () => {
+        const driftRow =
+            '| `drift:external` | — | drift | src/x.ts | P2 — workspace drift | — | — | — | hash diff | — |';
+        const mutated = passFixture.replace(
+            '| 2 execute | 1 | PASS | — | — | ~800 | ~300 | 27% | command output + prior plan reused | ~5s |',
+            `| 2 execute | 1 | PASS | — | — | ~800 | ~300 | 27% | command output + prior plan reused | ~5s |\n${driftRow}`,
+        );
+        const result = validateReport(mutated);
+        expect(result.ok).toBe(true);
+    });
+
     test('validator — missing ledger section with declared steps is a cardinality failure', () => {
         const mutated = passFixture.replace(/### 3\. Monitor Ledger[\s\S]*?(?=### 4\.)/, '');
         const result = validateReport(mutated);

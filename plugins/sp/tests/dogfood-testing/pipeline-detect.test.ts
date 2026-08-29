@@ -36,6 +36,11 @@ describe('dogfood-pipeline-detect — detectPipelineDriving word-boundary contra
             // Long-form noun appearing as its own word (no leading space required).
             ['bun run apps/cli/src/index.ts task run 0042', 'bare `run` noun'],
             ['spur task runall --feature M1', 'bare `runall` noun'],
+            // Mutating batch verbs (task 0701 R5a): refineall/verifyall refused.
+            ['/sp:dev-refineall --feature F95', 'dev-refineall slash form'],
+            ['/sp:dev-verifyall --feature F95', 'dev-verifyall slash form'],
+            ['spur task refineall --feature F95', 'bare `refineall` noun'],
+            ['spur task verifyall --feature F95', 'bare `verifyall` noun'],
         ];
 
         for (const [input, label] of positives) {
@@ -72,6 +77,8 @@ describe('dogfood-pipeline-detect — detectPipelineDriving word-boundary contra
             ['the testee is a runaway process', 'run inside runaway'],
             ['spur prerun-check', 'run inside prerun'],
             ['trundle along', 'run inside trundle'],
+            ['spur refinealls-report', 'refineall inside refinealls'],
+            ['a verifyally bad string', 'verifyall inside verifyally'],
             // `wrap` must NOT match inside `wrapper`, `wraparound`.
             ['use the wrapper pattern', 'wrap inside wrapper'],
             ['wraparound indexing', 'wrap inside wraparound'],
@@ -113,9 +120,13 @@ describe('dogfood-pipeline-detect — detectPipelineDriving word-boundary contra
             '--next',
             'dev-runall',
             'dev-wrapall',
+            'dev-refineall',
+            'dev-verifyall',
             'dev-run',
             'dev-wrap',
             'dev-idea',
+            'refineall',
+            'verifyall',
             'runall',
             'wrapall',
             'run',

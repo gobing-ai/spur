@@ -657,7 +657,7 @@ describe('MarkdownDocument', () => {
     // -----------------------------------------------------------------------
 
     describe('replaceSection() — same-level heading stripping (R2)', () => {
-        test('strips a ### Sub-heading body line so re-parse has no phantom section', () => {
+        test('demotes a ### Sub-heading body line to #### so re-parse has no phantom section', () => {
             const doc = MarkdownDocument.parse(TASK_FILE, 'task');
             doc.replaceSection('Background', 'Real content.\n### Sub-heading\nMore content.');
             const out = doc.serialize();
@@ -666,19 +666,23 @@ describe('MarkdownDocument', () => {
             const reparsed = MarkdownDocument.parse(out, 'task');
             expect(reparsed.sectionNames).not.toContain('Sub-heading');
             expect(reparsed.sectionNames).toEqual(doc.sectionNames);
-            // The stripped line's text does not survive as a heading.
-            expect(out).not.toContain('### Sub-heading');
+            // The heading survives one level deeper (task 0701 R6), not as ###.
+            expect(out).toContain('#### Sub-heading');
+            expect(out).not.toMatch(/^### Sub-heading$/m);
             // Real content is preserved.
             expect(reparsed.getSection('Background')).toContain('Real content.');
             expect(reparsed.getSection('Background')).toContain('More content.');
         });
 
-        test('records each stripped same-level heading on strippedHeadings', () => {
+        test('demotes same-level headings and records them on demotedHeadings (0701 R6)', () => {
             const doc = MarkdownDocument.parse(TASK_FILE, 'task');
             doc.replaceSection('Background', 'Text.\n### Phantom1\n### Phantom2\nMore.');
-            expect(doc.strippedHeadings).toHaveLength(2);
-            expect(doc.strippedHeadings[0]).toContain('Phantom1');
-            expect(doc.strippedHeadings[1]).toContain('Phantom2');
+            expect(doc.demotedHeadings).toHaveLength(2);
+            expect(doc.demotedHeadings[0]).toContain('Phantom1');
+            expect(doc.demotedHeadings[1]).toContain('Phantom2');
+            const out = doc.serialize();
+            expect(out).toContain('#### Phantom1');
+            expect(out).toContain('#### Phantom2');
         });
 
         test('does NOT strip ### inside a fenced code block', () => {

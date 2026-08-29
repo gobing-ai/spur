@@ -417,7 +417,9 @@ wrote that the driver recorded in the ledger (testee-attributed writes). Anythin
 
 - Append a **warning ledger row** tagged `drift:external` in the Step column: paths in `Fix Applied`,
   `Outcome: drift`, `Basis: <fingerprint diff>`. Do NOT mark the step PASSED/FIXED on account of
-  drift; the row records the drift, it does not change a step's outcome.
+  drift; the row records the drift, it does not change a step's outcome. The Step cell is the
+  literal code span `` `drift:external` `` — backticks included; the report validator excludes
+  both the bare and the code-span form from the data-row count (task 0701 R5b).
 - Emit a **mandatory report finding** under §6 Findings — `P2 — workspace drift detected during
   run; attribution to external writer` — naming the drifted paths and the snapshot delta. The report
   explicitly states the run's evidence is degraded, not voided.
