@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.36.0
+version: 1.37.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-08-29
@@ -346,6 +346,30 @@ so other job types keep multiple pending rows); a burst inside `debounce_ms` joi
 (earliest `windowStart`, latest `windowEnd`) instead of enqueuing a duplicate. Consumption is
 server-side: `spur serve`'s job worker runs the job body, which reuses `HistoryService.daily`'s
 import-all fan-out with per-source isolation. Coalescing shapes in `04 §3`.
+
+### History refresh process isolation (accepted design — ADR-101; not yet built)
+
+E31 moves only the expensive execution across an OS-process seam. Schedule, completion, and Board
+manual producers converge on the existing app-layer history enqueue function. A partial unique
+SQLite index covering `history.refresh` rows in either `pending` or `processing` state is the
+single-flight authority across every producer and server process; pending requests merge, while a
+request arriving during processing returns `already-running` without inserting a follow-up row.
+
+The server queue handler unwraps `Job.payload`, then awaits `ProcessExecutor.run` against the same
+PATH-independent Spur entrypoint that launched `serve`, invoking `history daily --json` in the
+project root. Awaiting preserves queue completion/retry truth while the child process isolates
+synchronous filesystem and `bun:sqlite` work from the Hono/oRPC event loop. The child and server
+share the WAL database; the existing 5-second SQLite busy timeout bounds lock contention. Concrete
+payload, enqueue-result, process, and transport shapes live in
+`docs/design/history-refresh-process-isolation.md`.
+
+Enforceable invariants after E31 ships:
+
+1. No producer calls raw queue enqueue for `history.refresh`; all use the shared enqueue function.
+2. The database contains at most one `history.refresh` row whose state is `pending` or `processing`.
+3. History import/analyze filesystem and SQLite work never executes in the server process.
+4. A queue handler consumes `Job.payload`; it never interprets the queue envelope as business data.
+5. Child failure or malformed output fails the queue attempt; it is never converted to success.
 
 **Watermark policy** (E3/0550): `analyze` bounds derived values to a still-appending session's **last
 complete turn** (`packages/domain/src/analytics/watermark.ts`), so a half-written session never

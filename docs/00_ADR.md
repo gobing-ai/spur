@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.33.0
+version: 1.34.0
 owner: Robin Min
 updated_at: 2026-08-29
 read_before: any structural change; before diverging from a decision
@@ -1992,3 +1992,16 @@ metrics derive from existing records and report missing attribution as null with
 **Why.** Activity and token volume do not measure harness reliability; verified outcomes do.
 
 **Detail:** `03 §24`; task 0712; ADR-071.
+
+## ADR-101: History Refresh Uses Process Isolation and Database Single-Flight
+
+**Status:** Accepted (design) · **Date:** 2026-08-29
+
+**Decision.** Every queued history refresh runs the existing `spur history daily` pipeline in a
+child process, and one database constraint admits at most one pending-or-processing
+`history.refresh` job per project.
+
+**Why.** The existing CLI and queue seams provide event-loop isolation and cross-process exclusion
+without adding another worker runtime or coordination plane.
+
+**Detail:** `03 §7`; `docs/design/history-refresh-process-isolation.md`; feature E31.
