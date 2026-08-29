@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.67] - 2026-08-29
+
+### Fixed
+
+- fix(task-check): right-size line-anchor checks and harden verdict-table parsing (defae2cfd)
+
+### Changed
+
+- docs(corpus): file task 0715 sync; flip F91 back to active (78e3a7ef4)
+- docs(sp): route all 11 spur nouns in spur-cli refs and thin expert-spur (abd2894b3)
+- chore(wrapup): task 0714 learnings and metrics (8791a87dd)
+- docs(adr): land ADR-093-100 and reconcile shipped statuses to the canon (72669548d)
+- docs(corpus): refine task 0714 into post-F95 drift reconciliation; reopen F91 (b84b590d6)
+
 ## [0.3.66] - 2026-08-28
 
 ### Added
