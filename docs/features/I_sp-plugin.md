@@ -46,6 +46,7 @@ Feature: sp plugin capability ownership
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0600 | Align plugins/sp scripts to the superskill entrypoint contract and record the ADR | done |
+| 0715 | Synchronize expert-spur and spur-cli with the complete CLI surface | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
