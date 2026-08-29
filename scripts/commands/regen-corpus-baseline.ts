@@ -43,7 +43,7 @@ const entries = [...byKey.values()]
     .sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id) || a.code.localeCompare(b.code));
 
 const baseline: Baseline = {
-    note: 'Machine-generated snapshot of observed corpus findings. Regenerate: bun run scripts/commands/regen-corpus-baseline.ts. Wave 2026-08-27 (ADR-090): single-sided gate; vanished entries retire via regeneration, not gate failure. Retires the ADR-083 per-entry reason/since annotations. Dated decision note (0688 friction review, 2026-08-27): new task citations prefer path:symbol over path:line (docs/04_DESIGN.md §4.2, task 0694).',
+    note: 'Machine-generated snapshot of observed corpus findings. Regenerate: bun run scripts/commands/regen-corpus-baseline.ts. Wave 2026-08-28 (ADR-092): sweep scope is the ACTIVE task folder only; docs/tasks{,2,3} are read-only history. Single-sided gate (ADR-090): vanished entries retire via regeneration, not gate failure. Retires the ADR-083 per-entry reason/since annotations. Dated decision note (0688 friction review, 2026-08-27): new task citations prefer path:symbol over path:line (docs/04_DESIGN.md §4.2, task 0694).',
     entries,
 };
 

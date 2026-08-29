@@ -1256,6 +1256,8 @@ change, and the backward-compatibility rule for pre-addition artifacts.
 
 ## ADR-081: Board Module Shell Convention — One-Row Header, Append-Only Tabs, Density-First Full-Bleed
 
+**Status:** Accepted (design) · **Date:** 2026-08-24 · **Feature:** F72
+
 **Amendment (2026-08-26).** The full-bleed rule now applies to the **board body only**; the
 module **header** rides the shared centered `max-w-[1600px]` rail (History/Observability parity),
 so the two modules' headers align at the same width while Tasks' lanes keep every available
@@ -1307,7 +1309,14 @@ error-envelope codes, regression-test matrix).
 
 ## ADR-083: The Anchor-Citation Class Is a Dated Legacy Set — Frozen Pending F91's Matcher Decision
 
-**Status:** Accepted (design) · **Date:** 2026-08-25 · **Feature:** F61
+**Status:** Superseded by ADR-090 (2026-08-27) · **Date:** 2026-08-25 · **Feature:** F61
+
+> **Superseded.** ADR-090 deletes the dated-legacy-set mechanism rather than re-using it: "the
+> dated-legacy-set mechanism (freeze, per-code diagnosis paragraphs, repair-campaign conditioning)
+> is deleted, not re-used. The frozen sets' entries do not migrate." The measured probe evidence
+> below remains the record of why a repair campaign was the wrong call; the mechanism it selected
+> is retired. Status corrected 2026-08-28 (task 0700) — it had read `Accepted (design)` since the
+> supersession.
 
 **Decision.** The anchor-citation class — `L4.anchor-subject-mismatch` and `L4.stale-line-anchor` —
 is reconciled as a **dated legacy set**: the 2026-08-25 findings are accepted into the baseline
@@ -1485,7 +1494,7 @@ motive behind both is satisfied by the mandatory substitution warning, not by re
 
 ## ADR-088: The Anchor-Subject Gate Is a Warning Signal, Not an Error Verdict
 
-**Status:** Accepted · **Date:** 2026-08-27 · **Task:** 0688
+**Status:** Accepted — severity ruling stands; reconcile practice superseded by ADR-090 · **Date:** 2026-08-27 · **Task:** 0688
 
 **Decision.** The dogfood `L4.anchor-subject-mismatch: error` severity override
 (`.spur/config.yaml` `tasks.severity`) is removed; the check runs at its default warning severity
@@ -1746,3 +1755,75 @@ unchanged.
 *Detail:* task 0697; `packages/app/src/output/envelope.ts`; `apps/cli/src/output.ts`;
 `docs/04_DESIGN.md` §4.1 (closed inventory); AC4 guard
 `apps/cli/tests/json-envelope-inventory.test.ts`
+
+## ADR-092: The Corpus Sweep Scopes to Open Work — Archived Folders Are Read-Only History
+
+**Status:** Accepted · **Date:** 2026-08-28 · **Task:** 0700 · **Amends:** ADR-062 §1, ADR-050
+
+**Decision.** `spur task check --corpus` sweeps the **active task folder only**. The archived
+corpora (`docs/tasks`, `docs/tasks2`, `docs/tasks3`) remain fully resolvable — the task locator and
+every feature check still read them, so cross-folder `feature_id`, `parent_wbs`, and `dependencies`
+edges resolve exactly as before — but they are no longer re-derived as findings. Only the check loop
+narrows.
+
+The narrowing is **folder-scoped, not status-scoped**, deliberately: terminal-status rules
+(`L3.unchecked-checklist`, `L4.testing-verdict-stub`) exist to validate completion records and must
+keep running on freshly-closed work in the active folder.
+
+**No rule is retired and no severity changes.** Every finding code keeps firing at its declared
+severity on the swept scope.
+
+- **Amends ADR-062 §1** ("the corpus sweep covers every configured task folder, not just the active
+  one"). That clause is replaced by the active-folder scope above.
+- **Amends ADR-050.** Its "continuous, unbypassable" framing described a gate that, measured on
+  2026-08-28, suppressed 99.24% of what it observed. The gate is continuous over open work; it is
+  not, and was never, unbypassable over the whole corpus.
+- **Constitution T10 is unaffected.** The same-commit obligation for newly-failing findings stands;
+  it simply applies to a scope where the findings have a consumer.
+
+**Why.** Measured on 2026-08-28. The *before* column is `HEAD` `dad078ad5`; the *after* column is
+`HEAD` `4748fa566`, after tasks 0699–0701 landed concurrently and added rules of their own — so the
+absolute counts shift slightly while the scope ratio does not:
+
+| Measure | Before (`dad078ad5`) | After (`4748fa566`) |
+| --- | --- | --- |
+| Observed findings per sweep | 5,264 | 1,554 |
+| Suppressed by baseline | 5,224 (99.24%) | — |
+| Baseline snapshot entries | 1,949 | 405 |
+| Sweep wall-clock | 57.4 s | 24.8 s |
+
+Three independent measurements make the archived scope indefensible:
+
+1. **71.4% of all observed findings came from `docs/tasks{,2,3}`** — 487 tasks of which 482 (99%)
+   are `done` or `cancelled`. A drift finding on a task closed two months ago has no consumer, and
+   no wave has ever repaired one.
+2. **The baseline was never a curated exception list.** Mining the `since` field of the pre-ADR-090
+   snapshot: 1,858 of 1,917 entries (96.9%) arrived in exactly three mass-acceptance events
+   (2026-08-17: 1,127; 2026-08-21: 307; 2026-08-27: 424). Fifty-nine entries accreted incrementally
+   across the other 17 days. Each wave was a snapshot of whatever the rules were saying that day.
+3. **Key granularity amplifies acceptance without bound.** Keys are `kind:id:code`, so one entry
+   blanket-accepts every present and future finding of that code on that entity —
+   `L4.stale-line-anchor` absorbs 2,463 findings under 474 keys (5.2×); `L4.scenario-unverified`
+   absorbs 350 under 39 (9×).
+
+ADR-090 named this exact pathology in its own text — *"1,580 of 1,797 task entries (88%) sit on
+archived folders — closed work the repo has declined to repair across three waves"* and *"ratchet
+debt with no exit: each wave mints more, none is ever paid down"* — and then fixed the wrong layer.
+Snapshot regeneration made **carrying** the debt cheap; it did not stop **generating** it. ADR-062
+§1's own landing commit is the proof: it widened the scope and minted 1,127 entries in the same
+change.
+
+**What the accumulated baseline is for now.** Suppression was the temporary use. With the scope
+narrowed, the snapshot's remaining value is as a **repair queue**, not an exemption list: 387 keys
+over open work is small enough to pay down, where 1,949 over closed work was not. The historical
+`since`-annotated copy retains one further use — identifying which codes mint debt in waves (a
+retire-or-narrow signal) versus which accrete slowly (real signal).
+
+**Consequences.** (1) `config/corpus-baseline.json` is regenerated at the new scope: 1,949 → 387
+entries, round-trip verified. (2) `packages/app/tests/services/corpus-check.test.ts` inverts its
+scope assertion — the active folder is swept, an archived folder is not. (3) The stale untracked
+`apps/cli/config/corpus-baseline.json` (604 KB, pre-ADR-090 two-sided schema with per-entry
+`reason`/`since`) is deleted; it is a build artifact that outlived its mechanism.
+
+**Detail:** `packages/app/src/services/corpus-check.ts` `structuralSweep`;
+`scripts/commands/regen-corpus-baseline.ts`; `99 §5 T10`; `docs/04_DESIGN.md` corpus-gate section.

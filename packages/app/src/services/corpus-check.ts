@@ -165,15 +165,28 @@ async function structuralSweep(projectRoot: string): Promise<{
     const taskService = new TaskCheckService(fs, await loadTaskMatrix(projectRoot), locator);
     const findings: CorpusError[] = [];
 
-    // Sweep scope is EVERY configured task folder, not just the active one (ADR-062 §1,
-    // task 0582). It was frozen to the active folder through 2026-08-17 because widening
-    // it exposes the legacy corpora's accumulated drift — 404 errors across 180 `done`
-    // tasks in docs/tasks{,2,3} — and forced a large config/corpus-baseline.json
-    // reconciliation. That reconciliation is now done: the backlog is snapshotted, and a
-    // baselined finding that stops reproducing retires via regeneration rather than gate
-    // failure (ADR-090 single-sided gate). Leaving 84% of the corpus ungated is what let
-    // that drift grow unobserved in the first place; do not re-narrow this loop.
-    for (const tasksDir of taskDirs) {
+    // Sweep scope is the ACTIVE task folder only (ADR-092, amending ADR-062 §1).
+    //
+    // ADR-062 §1 widened this loop to every configured folder in 2026-08-17 and the same
+    // commit minted 1,127 baseline entries to absorb the result. Three waves later the
+    // measured shape (2026-08-28) was: 5,264 observed findings, 5,224 suppressed (99.24%),
+    // 40 surviving — and 71.4% of the observations came from docs/tasks{,2,3}, whose 487
+    // tasks are 99% done or cancelled. ADR-090 already named that debt "ratchet debt with
+    // no exit"; it made carrying the debt cheaper instead of removing its source.
+    //
+    // Archived folders are read-only history: a `done` task closed two months ago has no
+    // consumer for a drift finding, and no wave has ever repaired one. Narrowing here takes
+    // observations 5,264 → 1,506 and the snapshot 1,949 → 387 entries while keeping every
+    // rule and every severity intact.
+    //
+    // Deliberately folder-scoped, NOT status-scoped: terminal-status rules
+    // (`L3.unchecked-checklist`, `L4.testing-verdict-stub`) exist to validate completion
+    // records and must keep running on freshly-closed work in the active folder.
+    //
+    // `taskDirs` stays the FULL configured set — the locator and the feature checks below
+    // resolve cross-folder edges through it, so a feature linking an archived task still
+    // resolves. Only the check loop narrows.
+    for (const tasksDir of [activeTasksDir]) {
         if (!(await fs.exists(tasksDir))) continue;
         for (const fileName of await fs.readDir(tasksDir)) {
             const wbs = fileName.match(/^(\d{4})_.+\.md$/)?.[1];

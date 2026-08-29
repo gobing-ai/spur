@@ -154,12 +154,14 @@ describe('runCorpusCheck', () => {
         expect(result.ok).toBe(false);
     });
 
-    test('sweeps every configured task folder, not only the active one', async () => {
+    test('sweeps the active task folder only; archived folders are read-only history (ADR-092)', async () => {
         const root = corpusFixture();
-        // docs/tasks is active; docs/tasks2 is configured but inactive. Before ADR-062
-        // the per-file check ran only over the active folder, so a structural error here
-        // was invisible to the gate — which is how 404 errors accumulated across 84% of
-        // the corpus (task 0582 R1).
+        // docs/tasks is active; docs/tasks2 is configured but inactive (archived).
+        // ADR-062 §1 swept every configured folder and the same commit minted 1,127
+        // baseline entries to absorb the result. Measured 2026-08-28: 71.4% of observed
+        // findings came from archived folders whose tasks are 99% done/cancelled, and
+        // 99.24% of all observations were suppressed. ADR-092 narrows the check loop to
+        // the active folder; the archived corpora stay resolvable but unswept.
         write(
             root,
             '.spur/config.yaml',
@@ -175,9 +177,13 @@ describe('runCorpusCheck', () => {
             ].join('\n'),
         );
         write(root, 'docs/tasks2/0101_broken.md', 'not task markdown\n');
+        write(root, 'docs/tasks/0002_broken.md', 'not task markdown\n');
 
         const result = await runCorpusCheck(root);
-        expect(result.newErrors.some((e) => e.id === '0101')).toBe(true);
+        // Active folder is swept.
+        expect(result.newErrors.some((e) => e.id === '0002')).toBe(true);
+        // Archived folder is not.
+        expect(result.newErrors.some((e) => e.id === '0101')).toBe(false);
         expect(result.ok).toBe(false);
     });
 
