@@ -12,7 +12,7 @@ import {
 } from '@gobing-ai/spur-app';
 import { SystemEventDao, type SystemEventRow } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context';
-import { toEnvelopeJson } from '../output';
+import { toEnvelopeJson, writeJsonError } from '../output';
 import { SHARED_OPTIONS } from './shared-options';
 
 /** Default sender used for operator-originated messages. */
@@ -131,7 +131,12 @@ export function registerMessageCommand(program: Command, context: CliContext): v
             const svc = new TeamService(context);
             const intervalMs = parseInterval(options.interval);
             if (intervalMs === null) {
-                context.output.error(`invalid --interval "${options.interval}" (expected a positive integer ms)`);
+                writeJsonError(
+                    context.output,
+                    options,
+                    `invalid --interval "${options.interval}" (expected a positive integer ms)`,
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(2);
                 return;
             }
@@ -359,7 +364,7 @@ async function runMessageReply(
 ): Promise<number> {
     const trimmed = body.trim();
     if (trimmed === '') {
-        context.output.error('message reply requires a non-empty body');
+        writeJsonError(context.output, options, 'message reply requires a non-empty body', 'VALIDATION_FAILED');
         return 2;
     }
 

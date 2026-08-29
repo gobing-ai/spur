@@ -157,8 +157,11 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (title, options) => {
             if (options.template !== undefined && !(TASK_VARIANTS as readonly string[]).includes(options.template)) {
-                context.output.error(
+                writeJsonError(
+                    context.output,
+                    options,
                     `Unknown template variant "${options.template}". Valid: ${TASK_VARIANTS.join(', ')}`,
+                    'VALIDATION_FAILED',
                 );
                 context.setExitCode(2);
                 return;
@@ -167,7 +170,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 options.dedupeWithin !== undefined &&
                 (!Number.isInteger(options.dedupeWithin) || options.dedupeWithin <= 0)
             ) {
-                context.output.error('--dedupe-within must be a positive integer');
+                writeJsonError(
+                    context.output,
+                    options,
+                    '--dedupe-within must be a positive integer',
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(2);
                 return;
             }
@@ -360,7 +368,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             try {
                 if (options.section !== undefined) {
                     if (options.fromFile === undefined) {
-                        context.output.error('--from-file is required with --section');
+                        writeJsonError(
+                            context.output,
+                            options,
+                            '--from-file is required with --section',
+                            'VALIDATION_FAILED',
+                        );
                         context.setExitCode(2);
                         return;
                     }
@@ -433,8 +446,11 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                             }
                             const ok = await runDoneGateCheck(context, wbs, options.folder, status);
                             if (!ok) {
-                                context.output.error(
+                                writeJsonError(
+                                    context.output,
+                                    options,
                                     `Lifecycle transition blocked: \`spur task check ${wbs}\` failed. Fix the findings before transitioning to ${status}.`,
+                                    'GUARD_DENIED',
                                 );
                                 context.setExitCode(1);
                                 return;
@@ -485,7 +501,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                             return;
                         }
                         if (guardOutcome.kind === 'deny') {
-                            context.output.error(guardOutcome.message);
+                            writeJsonError(context.output, options, guardOutcome.message, 'GUARD_DENIED');
                             context.setExitCode(1);
                             return;
                         }
@@ -554,7 +570,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 }
             } catch (err) {
                 if (err instanceof SectionMutationError) {
-                    context.output.error(`[${err.code}] ${err.message}`);
+                    writeJsonError(context.output, options, `[${err.code}] ${err.message}`, 'INTERNAL_ERROR');
                     context.setExitCode(err.code === 'usage' ? 2 : 3);
                 } else {
                     writeJsonError(context.output, options, String(err));
@@ -585,7 +601,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .action(async (wbs, op, values, options) => {
             const allowedOps = ['set', 'add', 'remove', 'clear'] as const;
             if (!allowedOps.includes(op as (typeof allowedOps)[number])) {
-                context.output.error(`Unknown op "${op}". Allowed: ${allowedOps.join(', ')}.`);
+                writeJsonError(
+                    context.output,
+                    options,
+                    `Unknown op "${op}". Allowed: ${allowedOps.join(', ')}.`,
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(2);
                 return;
             }
@@ -601,7 +622,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 }
             } catch (err) {
                 if (err instanceof DependencyMutationError) {
-                    context.output.error(`[${err.code}] ${err.message}`);
+                    writeJsonError(context.output, options, `[${err.code}] ${err.message}`, 'INTERNAL_ERROR');
                     // usage → 2, all other validation codes → 3
                     context.setExitCode(err.code === 'usage' ? 2 : 3);
                 } else {
@@ -640,18 +661,33 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .action(async (wbs, op, name, options) => {
             const allowedOps = ['init', 'add', 'list'] as const;
             if (!allowedOps.includes(op as (typeof allowedOps)[number])) {
-                context.output.error(`Unknown op "${op}". Allowed: ${allowedOps.join(', ')}.`);
+                writeJsonError(
+                    context.output,
+                    options,
+                    `Unknown op "${op}". Allowed: ${allowedOps.join(', ')}.`,
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(2);
                 return;
             }
             const typedOp = op as (typeof allowedOps)[number];
             if (typedOp === 'add' && typeof name !== 'string') {
-                context.output.error('op "add" requires a section name argument.');
+                writeJsonError(
+                    context.output,
+                    options,
+                    'op "add" requires a section name argument.',
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(2);
                 return;
             }
             if ((typedOp === 'init' || typedOp === 'list') && name !== undefined) {
-                context.output.error(`op "${typedOp}" takes no section name argument.`);
+                writeJsonError(
+                    context.output,
+                    options,
+                    `op "${typedOp}" takes no section name argument.`,
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(2);
                 return;
             }
@@ -678,7 +714,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 }
             } catch (err) {
                 if (err instanceof SectionMutationError) {
-                    context.output.error(`[${err.code}] ${err.message}`);
+                    writeJsonError(context.output, options, `[${err.code}] ${err.message}`, 'INTERNAL_ERROR');
                     context.setExitCode(err.code === 'usage' ? 2 : 3);
                 } else {
                     writeJsonError(context.output, options, String(err));
@@ -988,7 +1024,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, options) => {
             // Lazy-import to keep the barrel clean for typecheck.
-            const { deriveVerdict, verdictRowsMatchScenarios } = await import('@gobing-ai/spur-app');
+            const { deriveVerdict } = await import('@gobing-ai/spur-app');
             const answerPath = options.fromAnswer ?? `.spur/run/${wbs}-verify-answer.txt`;
             let answerText: string;
             try {
@@ -1005,30 +1041,14 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             const taskCheckPassed = true; // Pipeline runs its own check guard
             const result = deriveVerdict(answerText, taskCheckPassed);
 
-            // Dogfood 2026-08-15 (feature I3): rows keyed by bare R1-style ids
-            // parse and derive a verdict but are credited by NO feature scenario
-            // at the L4 verifying→done gate — surfacing only as opaque
-            // L4.scenario-unverified findings there. Warn early and actionable.
-            try {
-                const svc = await makeService(context, options.folder);
-                const task = await svc.show(wbs);
-                const featureId = task.frontmatter.feature_id;
-                if (typeof featureId === 'string' && featureId.length > 0) {
-                    const resolved = await resolvePlanningFolders(context.fs);
-                    const names = await context.fs.readDir(context.fs.resolve(resolved.featuresDir));
-                    const name = names.find((n) => n.startsWith(`${featureId}_`) && n.endsWith('.md'));
-                    if (name !== undefined) {
-                        const raw = await context.fs.readFile(context.fs.resolve(`${resolved.featuresDir}/${name}`));
-                        if (!verdictRowsMatchScenarios(result.requirements, raw)) {
-                            context.output.error(
-                                `warning: no verdict row matches any scenario in feature ${featureId} — key rows by scenario title or AC-N alias, or the feature done gate reports L4.scenario-unverified`,
-                            );
-                        }
-                    }
-                }
-            } catch {
-                // Diagnostic only — never fail the verdict on lookup problems.
-            }
+            // 0700 R3/AC5: the "no verdict row matches any scenario" complaint used to be
+            // re-emitted here on every derivation. It is now a finding at the feature done
+            // gate (`L4.verdict-rows-match-no-scenario`, feature-check.ts), where it can be
+            // acted on. Two reasons the warning had to go rather than sit alongside it:
+            // it fired every run with no way to clear it, and it read only `requirements`
+            // while the gate credits `[...requirements, ...acceptanceCriteria]` — so a
+            // verdict whose scenario keys live in the AC table (the answer-file contract's
+            // own shape) was warned about a block that would never happen.
 
             // Emit verdict artifact.
             const jsonOut = JSON.stringify({ wbs, ...result, source: 'spur-task-verdict' }, null, 2);
@@ -1321,7 +1341,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     for (const w of wbsPattern) {
                         const fileName = entries.find((n) => n.startsWith(`${w}_`) && n.endsWith('.md'));
                         if (!fileName) {
-                            context.output.error(`Task ${w} not found`);
+                            writeJsonError(context.output, options, `Task ${w} not found`, 'NOT_FOUND');
                             context.setExitCode(1);
                             continue;
                         }

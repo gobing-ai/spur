@@ -244,7 +244,7 @@ describe('agent run honors SPUR_JSON_ENVELOPE end-to-end (0697 F-R1)', () => {
 describe('raw default byte-identity vs pre-change baseline (0697 AC3)', () => {
     const fixtureDir = join(import.meta.dir, 'fixtures', 'raw-json-baseline');
 
-    // Pin the rule catalog to the repo's tracked config/rules so the baseline does
+    // Pin the rule catalog to the repo's tracked rule directory so the baseline does
     // not drift with the machine's global ~/.config/spur/rules (a stale global preset
     // shadowed the bundled catalog and silently produced a different ruleCount).
     const REPO_RULES_DIR = join(import.meta.dir, '..', '..', '..', 'config', 'rules');
@@ -503,6 +503,22 @@ const FAILURE_CASES: Array<{
         exit: 1,
         code: 'NOT_FOUND',
         viaEnv: true,
+    },
+    // 0699 R1 close-out: verbs whose failure paths were bare stderr until the sweep.
+    { label: 'feature refresh with no scope', argv: ['feature', 'refresh'], exit: 2, code: 'VALIDATION_FAILED' },
+    { label: 'feature sync with no id', argv: ['feature', 'sync'], exit: 2, code: 'VALIDATION_FAILED' },
+    { label: 'task deps unknown op', argv: ['task', 'deps', '0693', 'bogus'], exit: 2, code: 'VALIDATION_FAILED' },
+    {
+        label: 'task sections unknown op',
+        argv: ['task', 'sections', '0693', 'bogus'],
+        exit: 2,
+        code: 'VALIDATION_FAILED',
+    },
+    {
+        label: 'workflow trace --poll below the floor',
+        argv: ['workflow', 'trace', 'r1', '--poll', '0'],
+        exit: 1,
+        code: 'VALIDATION_FAILED',
     },
 ];
 

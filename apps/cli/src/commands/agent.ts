@@ -310,12 +310,17 @@ async function runAgentCreate(
     flags: Record<string, string | boolean>,
 ): Promise<number> {
     if (id === undefined) {
-        context.output.error('agent create requires <id>');
+        writeJsonError(context.output, jsonFlags(flags), 'agent create requires <id>', 'VALIDATION_FAILED');
         return 2;
     }
     const type = typeof flags.type === 'string' ? flags.type : '';
     if (type === '') {
-        context.output.error('agent create requires --type <agent-type>');
+        writeJsonError(
+            context.output,
+            jsonFlags(flags),
+            'agent create requires --type <agent-type>',
+            'VALIDATION_FAILED',
+        );
         return 2;
     }
     const tags = typeof flags.tags === 'string' ? flags.tags : '';
@@ -435,6 +440,20 @@ async function runAgentDelete(
     }
 }
 
+/**
+ * The `--json` / `--json-envelope` pair, read out of the kebab-cased flags record the
+ * agent verbs pass around (0699 R1). `runAgentRun`/`runAgentCreate` never see the raw
+ * commander `options`, so their failure paths need this to reach `writeJsonError`.
+ * `jsonEnvelope` stays tri-state: absent defers to `SPUR_JSON_ENVELOPE`.
+ */
+function jsonFlags(flags: Record<string, string | boolean>): { json?: boolean; jsonEnvelope?: boolean } {
+    const envelope = flags.jsonEnvelope ?? flags['json-envelope'];
+    return {
+        json: flags.json === true,
+        jsonEnvelope: typeof envelope === 'boolean' ? envelope : undefined,
+    };
+}
+
 /** Execute `spur agent run <prompt> [flags]`. */
 export async function runAgentRun(
     prompt: string | undefined,
@@ -465,12 +484,17 @@ export async function runAgentRun(
             // R1 (0542): an explicit --spec must resolve to a real team spec — a
             // typo'd id must not silently fall through to auto resolution.
             if (typeof flags.spec === 'string' && flags.spec !== '' && rewritten['spec-id'] !== flags.spec) {
-                context.output.error(`--spec "${flags.spec}" does not match a team agent spec`);
+                writeJsonError(
+                    context.output,
+                    jsonFlags(flags),
+                    `--spec "${flags.spec}" does not match a team agent spec`,
+                    'VALIDATION_FAILED',
+                );
                 return 2;
             }
             const invalid = validateAgentSelector(rewritten, context);
             if (invalid !== null) {
-                context.output.error(invalid);
+                writeJsonError(context.output, jsonFlags(flags), invalid, 'VALIDATION_FAILED');
                 return 2;
             }
             return await svc.run(drained, rewritten, deps);
@@ -481,7 +505,7 @@ export async function runAgentRun(
         // with the frozen headless-surface message, zero spawn, no fallback.
         const invalid = validateAgentSelector(flags, context);
         if (invalid !== null) {
-            context.output.error(invalid);
+            writeJsonError(context.output, jsonFlags(flags), invalid, 'VALIDATION_FAILED');
             return 2;
         }
         return await svc.run(prompt, flags, deps);

@@ -60,7 +60,7 @@ export function registerServeCommand(program: Command, context: CliContext, opti
             } catch (err) {
                 writeJsonError(context.output, options, err instanceof Error ? err.message : String(err));
                 if (context.env?.SPUR_DEBUG === '1' && err instanceof Error && err.stack) {
-                    context.output.error(err.stack);
+                    writeJsonError(context.output, options, err.stack, 'INTERNAL_ERROR');
                 }
                 context.setExitCode(1);
             }

@@ -106,10 +106,15 @@ export function writeJsonError(
     code: ApiErrorCode = 'INTERNAL_ERROR',
     details?: unknown,
 ): void {
+    // 0699 R1: `message` is typed `string`, but call sites forward values decoded from
+    // server JSON and `catch` bindings, where the declared type is a claim rather than a
+    // guarantee. An error emitter that throws while reporting an error is the worst
+    // failure mode available, so normalize before touching string methods.
+    const text = typeof message === 'string' ? message : String(message);
     if (options.json && envelopeEnabled(options.jsonEnvelope)) {
-        const bare = message.startsWith('Error: ') ? message.slice('Error: '.length) : message;
+        const bare = text.startsWith('Error: ') ? text.slice('Error: '.length) : text;
         output.write(toEnvelopeError(code, bare, details));
         return;
     }
-    output.error(message);
+    output.error(text);
 }

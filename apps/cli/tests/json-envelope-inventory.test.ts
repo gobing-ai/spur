@@ -126,3 +126,144 @@ describe('AC4 — no CLI verb advertises --json-envelope and ignores it', () => 
         }
     });
 });
+
+/**
+ * Task 0699 R1 — every flag-declaring verb's failure paths are enveloped.
+ *
+ * R1's property is behavioral: no verb declaring `--json-envelope` may exit non-zero while
+ * writing a bare stderr line and no JSON. `tests/output-envelope.test.ts` drives a sample of
+ * them end-to-end; this is the static census over **all 68**, so the guarantee is a property of
+ * the source rather than of whichever verbs someone remembered to probe.
+ *
+ * A `context.output.error(...)` site is a *failure* site when a non-zero exit follows it
+ * (`setExitCode(n>0)`, `return n>0`, `process.exit(n>0)`). A failure site is **enveloped** when
+ * the JSON path cannot reach it — it is the `else` of a branch that emitted JSON, or it sits
+ * after an `if (options.json …) { … return; }` guard. Everything else must call `writeJsonError`,
+ * which picks the envelope or the bare stderr line from the same `options`.
+ */
+describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () => {
+    interface Site {
+        noun: string;
+        verb: string;
+        line: number;
+    }
+
+    /** Index of `{` matching the `}` that ends at `lines[closeIdx]`, or -1. */
+    function matchingOpen(lines: string[], closeIdx: number): number {
+        let depth = 0;
+        for (let i = closeIdx; i >= 0; i--) {
+            for (const ch of [...(lines[i] as string)].reverse()) {
+                if (ch === '}') depth++;
+                else if (ch === '{' && --depth === 0) return i;
+            }
+        }
+        return -1;
+    }
+
+    /** True when the JSON path provably cannot reach this stderr line. */
+    function jsonPathCannotReach(lines: string[], errIdx: number): boolean {
+        const prev = (lines[errIdx - 1] ?? '').trim();
+        // `} else {` — the `if` half emitted the JSON.
+        if (/^\}\s*else\s*\{$/.test(prev)) return true;
+        // `}` closing an `if (options.json …) { … return; }` guard.
+        if (prev === '}') {
+            const open = matchingOpen(lines, errIdx - 1);
+            if (open >= 0) {
+                const head = lines[open] as string;
+                const block = lines.slice(open, errIdx - 1).join('\n');
+                if (/if\s*\(\s*(?:options|flags)\.json\b/.test(head) && /\breturn\b/.test(block)) return true;
+            }
+        }
+        return false;
+    }
+
+    function unenvelopedFailureSites(): Site[] {
+        const sites: Site[] = [];
+        for (const file of readdirSync(COMMANDS_DIR).filter((f) => f.endsWith('.ts'))) {
+            const noun = file.replace(/\.ts$/, '');
+            const lines = readFileSync(join(COMMANDS_DIR, file), 'utf8').split('\n');
+
+            const blocks: Array<{ verb: string; start: number; end: number }> = [];
+            let verb: string | undefined;
+            let start = 0;
+            for (const [i, line] of lines.entries()) {
+                const m = line.match(/\.command\(\s*'([^']+)'/);
+                if (!m) continue;
+                if (verb !== undefined) blocks.push({ verb, start, end: i });
+                verb = m[1] as string;
+                start = i + 1;
+            }
+            if (verb !== undefined) blocks.push({ verb, start, end: lines.length });
+            const advertising = blocks.filter((b) =>
+                lines.slice(b.start, b.end).join('\n').includes('SHARED_OPTIONS.jsonEnvelope'),
+            );
+            if (advertising.length === 0) continue;
+
+            // Module-level helpers an advertising block calls are in scope too — the agent
+            // and team verbs do their argument validation one hop down.
+            const fns: Array<{ name: string; start: number; end: number }> = [];
+            for (const [i, line] of lines.entries()) {
+                const m = line.match(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_]+)/);
+                if (m) fns.push({ name: m[1] as string, start: i + 1, end: lines.length });
+            }
+            for (let k = 0; k < fns.length - 1; k++)
+                (fns[k] as { end: number }).end = (fns[k + 1] as { start: number }).start - 1;
+            const calledNames = new Set(
+                advertising.flatMap((b) =>
+                    Array.from(
+                        lines
+                            .slice(b.start, b.end)
+                            .join('\n')
+                            .matchAll(/\b([a-z][A-Za-z0-9_]*)\s*\(/g),
+                        (m) => m[1] as string,
+                    ),
+                ),
+            );
+            const helpers = fns.filter((fn) => calledNames.has(fn.name));
+
+            for (const [i, line] of lines.entries()) {
+                if (!line.includes('context.output.error(')) continue;
+                const ln = i + 1;
+                const block = advertising.find((b) => ln > b.start && ln <= b.end);
+                const helper = helpers.find((fn) => ln >= fn.start && ln <= fn.end);
+                if (block === undefined && helper === undefined) continue;
+
+                let end = i;
+                let depth = 0;
+                let started = false;
+                for (; end < lines.length; end++) {
+                    for (const ch of lines[end] as string) {
+                        if (ch === '(') {
+                            depth++;
+                            started = true;
+                        } else if (ch === ')') depth--;
+                    }
+                    if (started && depth <= 0) break;
+                }
+                const trailer = lines.slice(end + 1, end + 7).join('\n');
+                const exitsNonZero =
+                    /setExitCode\(\s*[1-9]/.test(trailer) ||
+                    /setExitCode\(\s*[1-9]/.test(lines[end] as string) ||
+                    /^\s*return\s+[1-9]\d*\s*;/m.test(trailer) ||
+                    /process\.exit\(\s*[1-9]/.test(trailer);
+                if (!exitsNonZero) continue; // a warning beside a successful run, not a failure path
+                if (jsonPathCannotReach(lines, i)) continue;
+                sites.push({ noun, verb: block?.verb ?? `${helper?.name}()`, line: ln });
+            }
+        }
+        return sites;
+    }
+
+    test('the census reaches every flag-declaring verb, not a sample', () => {
+        const advertising = collectVerbBlocks().filter((b) => b.body.includes('SHARED_OPTIONS.jsonEnvelope'));
+        expect(advertising.length).toBe(68);
+        expect(new Set(advertising.map((b) => `${b.noun} ${b.verb}`)).size).toBe(advertising.length);
+    });
+
+    test('no failure path under a flag-declaring verb writes bare stderr instead of JSON', () => {
+        const offenders = unenvelopedFailureSites().map(
+            (s) => `${s.noun} ${s.verb} — apps/cli/src/commands/${s.noun}.ts:${s.line}`,
+        );
+        expect(offenders).toEqual([]);
+    });
+});

@@ -322,25 +322,43 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             const silent = !json && options.silent === true;
             const quiet = !json && options.quiet === true;
             if (!json && options.quiet === true && options.verbose === true) {
-                context.output.error('--quiet and --verbose are mutually exclusive');
+                writeJsonError(
+                    context.output,
+                    options,
+                    '--quiet and --verbose are mutually exclusive',
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(2);
                 return;
             }
             if (!json && options.silent === true && (options.quiet === true || options.verbose === true)) {
-                context.output.error('--silent cannot be combined with --quiet or --verbose');
+                writeJsonError(
+                    context.output,
+                    options,
+                    '--silent cannot be combined with --quiet or --verbose',
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(2);
                 return;
             }
             if (options.steer === true && (json || options.async === true)) {
-                context.output.error(
+                writeJsonError(
+                    context.output,
+                    options,
                     '--steer is synchronous and in-process; it cannot be combined with --json or --async',
+                    'VALIDATION_FAILED',
                 );
                 context.setExitCode(2);
                 return;
             }
             const requestedDetail = options.detail as string | undefined;
             if (requestedDetail !== undefined && !['minimal', 'invocation', 'full'].includes(requestedDetail)) {
-                context.output.error('--detail must be one of: minimal, invocation, full');
+                writeJsonError(
+                    context.output,
+                    options,
+                    '--detail must be one of: minimal, invocation, full',
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(2);
                 return;
             }
@@ -352,11 +370,14 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             // Nested-run refusal (task 0610 R4). Refuse BEFORE any side effect — no run record, no
             // worktree, no agent spawn.
             if (process.env[WORKFLOW_RUN_ACTIVE_ENV] === '1') {
-                context.output.error(
+                writeJsonError(
+                    context.output,
+                    options,
                     `workflow run: refusing to start — already inside an active workflow run (${WORKFLOW_RUN_ACTIVE_ENV}=1).\n` +
                         'A pipeline that starts another pipeline forks a worktree and an agent run per level, without bound.\n' +
                         'If you are an agent running inside a pipeline step: do NOT start a pipeline here. Report what you\n' +
                         'needed and let the operator run it from a clean shell.',
+                    'VALIDATION_FAILED',
                 );
                 context.setExitCode(1);
                 return;
@@ -650,7 +671,12 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             if (options.answer !== undefined) {
                 const v = String(options.answer).toLowerCase();
                 if (v !== 'yes' && v !== 'no' && v !== 'cancel') {
-                    context.output.error(`Invalid --answer value "${options.answer}" - must be yes, no, or cancel.`);
+                    writeJsonError(
+                        context.output,
+                        options,
+                        `Invalid --answer value "${options.answer}" - must be yes, no, or cancel.`,
+                        'VALIDATION_FAILED',
+                    );
                     context.setExitCode(2);
                     return;
                 }
@@ -669,7 +695,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     // Discover the most recent paused run (E3).
                     const latest = await svc.latestPausedRun();
                     if (latest === null) {
-                        context.output.error('No paused workflow run to continue.');
+                        writeJsonError(context.output, options, 'No paused workflow run to continue.', 'NOT_FOUND');
                         context.setExitCode(1);
                         return;
                     }
@@ -684,7 +710,12 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                             node: 'continue',
                         });
                         if (answer.value !== 'yes') {
-                            context.output.error(`Aborted - run ${latest.runId} not resumed.`);
+                            writeJsonError(
+                                context.output,
+                                options,
+                                `Aborted - run ${latest.runId} not resumed.`,
+                                'GUARD_DENIED',
+                            );
                             context.setExitCode(1);
                             return;
                         }
@@ -731,7 +762,12 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             const force = options.force === true;
             const minutes = force ? 0 : Number.parseInt(options.olderThan ?? '30', 10);
             if (!Number.isFinite(minutes) || minutes < 0) {
-                context.output.error(`Invalid --older-than value: ${options.olderThan}`);
+                writeJsonError(
+                    context.output,
+                    options,
+                    `Invalid --older-than value: ${options.olderThan}`,
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(2);
                 return;
             }
@@ -789,7 +825,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 return;
             }
             if (result.status === 'not_found') {
-                context.output.error(`Run ${runId} not found.`);
+                writeJsonError(context.output, options, `Run ${runId} not found.`, 'NOT_FOUND');
                 context.setExitCode(1);
                 return;
             }
@@ -902,38 +938,58 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             const svc = makeSvc();
             const last = parseInt(options.last, 10);
             if (Number.isNaN(last) || last < 1) {
-                context.output.error('--last must be a positive integer');
+                writeJsonError(context.output, options, '--last must be a positive integer', 'VALIDATION_FAILED');
                 context.setExitCode(1);
                 return;
             }
             const pollMs = parseInt(options.poll, 10);
             if (Number.isNaN(pollMs) || pollMs < 50) {
-                context.output.error('--poll must be an integer of at least 50ms');
+                writeJsonError(
+                    context.output,
+                    options,
+                    '--poll must be an integer of at least 50ms',
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(1);
                 return;
             }
             if (options.follow === true && runId === undefined) {
-                context.output.error('--follow requires a run-id');
+                writeJsonError(context.output, options, '--follow requires a run-id', 'VALIDATION_FAILED');
                 context.setExitCode(1);
                 return;
             }
             if (options.follow === true && options.json === true) {
-                context.output.error('--follow is a human streaming mode and cannot be combined with --json');
+                writeJsonError(
+                    context.output,
+                    options,
+                    '--follow is a human streaming mode and cannot be combined with --json',
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(1);
                 return;
             }
             if (options.output === true && options.follow !== true) {
-                context.output.error('--output requires --follow');
+                writeJsonError(context.output, options, '--output requires --follow', 'VALIDATION_FAILED');
                 context.setExitCode(1);
                 return;
             }
             if (options.output === true && options.json === true) {
-                context.output.error('--output is a human streaming mode and cannot be combined with --json');
+                writeJsonError(
+                    context.output,
+                    options,
+                    '--output is a human streaming mode and cannot be combined with --json',
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(1);
                 return;
             }
             if (options.status !== undefined && !['done', 'failed', 'running'].includes(options.status)) {
-                context.output.error('--status must be one of: done, failed, running');
+                writeJsonError(
+                    context.output,
+                    options,
+                    '--status must be one of: done, failed, running',
+                    'VALIDATION_FAILED',
+                );
                 context.setExitCode(1);
                 return;
             }

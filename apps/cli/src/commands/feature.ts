@@ -100,7 +100,12 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                 let result: WriteResult | undefined;
                 if (options.section !== undefined) {
                     if (options.fromFile === undefined) {
-                        context.output.error('--from-file is required with --section');
+                        writeJsonError(
+                            context.output,
+                            options,
+                            '--from-file is required with --section',
+                            'VALIDATION_FAILED',
+                        );
                         context.setExitCode(2);
                         return;
                     }
@@ -112,13 +117,23 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         context.output.write(`Updated section '${options.section}' in feature ${result.ref.id}`);
                     }
                 } else if (options.fromFile !== undefined) {
-                    context.output.error('--section is required with --from-file');
+                    writeJsonError(
+                        context.output,
+                        options,
+                        '--section is required with --from-file',
+                        'VALIDATION_FAILED',
+                    );
                     context.setExitCode(2);
                     return;
                 }
                 if (options.field !== undefined) {
                     if (options.value === undefined) {
-                        context.output.error('--value is required with --field');
+                        writeJsonError(
+                            context.output,
+                            options,
+                            '--value is required with --field',
+                            'VALIDATION_FAILED',
+                        );
                         context.setExitCode(2);
                         return;
                     }
@@ -127,7 +142,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         context.output.write(`Updated ${options.field} on feature ${result.ref.id}`);
                     }
                 } else if (options.value !== undefined) {
-                    context.output.error('--field is required with --value');
+                    writeJsonError(context.output, options, '--field is required with --value', 'VALIDATION_FAILED');
                     context.setExitCode(2);
                     return;
                 }
@@ -138,7 +153,12 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     }
                 }
                 if (result === undefined) {
-                    context.output.error('Either <status>, --field/--value, or --section/--from-file is required');
+                    writeJsonError(
+                        context.output,
+                        options,
+                        'Either <status>, --field/--value, or --section/--from-file is required',
+                        'VALIDATION_FAILED',
+                    );
                     context.setExitCode(2);
                     return;
                 }
@@ -208,7 +228,12 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     next = forwardPath[current];
                 }
                 if (current !== target) {
-                    context.output.error(`${id}: cannot reach '${target}' from '${current}' along the forward path`);
+                    writeJsonError(
+                        context.output,
+                        options,
+                        `${id}: cannot reach '${target}' from '${current}' along the forward path`,
+                        'GUARD_DENIED',
+                    );
                     context.setExitCode(1);
                     return;
                 }
@@ -323,12 +348,22 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
             const svc = await makeService(context, options.folder);
             try {
                 if (options.all && options.feature) {
-                    context.output.error('--feature <id> and --all are mutually exclusive');
+                    writeJsonError(
+                        context.output,
+                        options,
+                        '--feature <id> and --all are mutually exclusive',
+                        'VALIDATION_FAILED',
+                    );
                     context.setExitCode(2);
                     return;
                 }
                 if (!options.all && !options.feature) {
-                    context.output.error('--feature <id> or --all is required (refusing silent all-features sweep)');
+                    writeJsonError(
+                        context.output,
+                        options,
+                        '--feature <id> or --all is required (refusing silent all-features sweep)',
+                        'VALIDATION_FAILED',
+                    );
                     context.setExitCode(2);
                     return;
                 }
@@ -452,7 +487,12 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
             const svc = await makeService(context, options.folder);
             try {
                 if (!options.all && !id) {
-                    context.output.error('Feature ID is required unless --all is passed');
+                    writeJsonError(
+                        context.output,
+                        options,
+                        'Feature ID is required unless --all is passed',
+                        'VALIDATION_FAILED',
+                    );
                     context.setExitCode(2);
                     return;
                 }

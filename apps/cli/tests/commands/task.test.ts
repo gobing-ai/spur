@@ -2435,8 +2435,9 @@ Only this section exists.
     // ── update --section warnings (line 112) ──
     test('update --section with a body containing a same-level heading emits warnings to error channel', async () => {
         // WHY: a section body that itself contains a same-level markdown heading (###)
-        // gets stripped by PlanningWriteService, which populates result.warnings.
-        // The non-JSON path (line 111-112) routes those warnings to the error channel.
+        // is demoted one level deeper by PlanningWriteService (task 0701 changed this from
+        // an outright strip), which populates result.warnings. The non-JSON path routes
+        // those warnings to the error channel.
         const cOut = createCapturedOutput();
         await main(['task', 'create', 'Warn section task'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
@@ -2453,7 +2454,7 @@ Only this section exists.
             output,
         });
         expect(exitCode).toBe(0);
-        expect(output.errors.some((e) => e.includes('Stripped same-level heading'))).toBe(true);
+        expect(output.errors.some((e) => e.includes('Demoted same-level heading'))).toBe(true);
     });
     test('path with non-existent folder exits 1 (path catch block)', async () => {
         // --folder points at a non-existent dir; WBS 9999 exists in no folder.

@@ -241,7 +241,12 @@ async function performTeamStart(
         const res = await teamFetch(url, { method: 'POST' });
         const body = (await res.json()) as StartResponse;
         if (res.ok) return { ok: true, body };
-        return { ok: false, error: body.error ?? `start failed: ${res.status}`, status: res.status };
+        // The server's JSON `error` is untrusted input — its declared string type is a
+        // claim, not a guarantee (0699 R1). When it arrives as an envelope, take its
+        // message rather than serializing the whole object: the server attaches a stack
+        // with absolute paths, which has no business on the CLI's stdout.
+        const detail = errorText(body.error);
+        return { ok: false, error: detail ?? `start failed: ${res.status}`, status: res.status };
     } catch (err) {
         return { ok: false, transportError: err };
     }
@@ -256,13 +261,16 @@ async function runTeamStart(
     const result = await performTeamStart(agentId, options);
     if ('transportError' in result) {
         const err = result.transportError;
-        context.output.error(
+        writeJsonError(
+            context.output,
+            options,
             `Cannot reach server at ${options.server} — is spur serve running? (${err instanceof Error ? err.message : String(err)})`,
+            'INTERNAL_ERROR',
         );
         return 1;
     }
     if (!result.ok) {
-        context.output.error(result.error);
+        writeJsonError(context.output, options, result.error, 'INTERNAL_ERROR');
         return 1;
     }
     if (options.json) {
@@ -274,6 +282,19 @@ async function runTeamStart(
 }
 
 /** Send `spur team stop <agent-id>` to the server and translate the response. */
+/** Narrow an untrusted server `error` field to a single human line (0699 R1). */
+function errorText(raw: unknown): string | undefined {
+    if (typeof raw === 'string') return raw;
+    if (raw !== null && typeof raw === 'object' && 'message' in raw) {
+        const message = (raw as { message?: unknown }).message;
+        if (typeof message === 'string' && message !== '') return message;
+        if ('code' in raw && typeof (raw as { code?: unknown }).code === 'string') {
+            return (raw as { code: string }).code;
+        }
+    }
+    return raw === undefined ? undefined : JSON.stringify(raw);
+}
+
 async function performTeamStop(
     agentId: string,
     options: { server: string; json?: boolean; jsonEnvelope?: boolean },
@@ -287,7 +308,12 @@ async function performTeamStop(
         const res = await teamFetch(url, { method: 'POST' });
         const body = (await res.json()) as StopResponse;
         if (res.ok) return { ok: true, body };
-        return { ok: false, error: body.error ?? `stop failed: ${res.status}`, status: res.status };
+        // The server's JSON `error` is untrusted input — its declared string type is a
+        // claim, not a guarantee (0699 R1). When it arrives as an envelope, take its
+        // message rather than serializing the whole object: the server attaches a stack
+        // with absolute paths, which has no business on the CLI's stdout.
+        const detail = errorText(body.error);
+        return { ok: false, error: detail ?? `stop failed: ${res.status}`, status: res.status };
     } catch (err) {
         return { ok: false, transportError: err };
     }
@@ -302,13 +328,16 @@ async function runTeamStop(
     const result = await performTeamStop(agentId, options);
     if ('transportError' in result) {
         const err = result.transportError;
-        context.output.error(
+        writeJsonError(
+            context.output,
+            options,
             `Cannot reach server at ${options.server} — is spur serve running? (${err instanceof Error ? err.message : String(err)})`,
+            'INTERNAL_ERROR',
         );
         return 1;
     }
     if (!result.ok) {
-        context.output.error(result.error);
+        writeJsonError(context.output, options, result.error, 'INTERNAL_ERROR');
         return 1;
     }
     if (options.json) {
