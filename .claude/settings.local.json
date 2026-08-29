@@ -55,7 +55,8 @@
       "Edit(//tmp/**)",
       "Edit(//private/tmp/**)",
       "WebFetch(domain:registry.npmjs.org)",
-      "Bash(bun run *)"
+      "Bash(bun run *)",
+      "Bash(python3 -c ' *)"
     ]
   },
   "skillOverrides": {
