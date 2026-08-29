@@ -3309,3 +3309,148 @@ describe('verdictRowsMatchScenarios (dogfood 2026-08-15, feature I3)', () => {
         expect(verdictRowsMatchScenarios([{ id: 'AC-1 (Given x / When y / Then z)' }], ac)).toBe(true);
     });
 });
+
+// ── 0700 R4: the dogfood gate reads the tracked ledger, not the machine ──
+
+test('0700 R4: a report named in the tracked INDEX.md ledger satisfies the gate', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'spur-r4-ledger-'));
+    const featuresDir = join(dir, 'features');
+    const tasksDir = join(dir, 'tasks');
+    const dogfoodDir = join(dir, 'dogfood');
+    mkdirSync(featuresDir, { recursive: true });
+    mkdirSync(tasksDir, { recursive: true });
+    mkdirSync(dogfoodDir, { recursive: true });
+    // No report on disk at all — the ledger alone is the evidence.
+    writeFileSync(join(dogfoodDir, 'INDEX.md'), '- 2026-08-28-run-L-dogfood.md\n- 2026-08-28-run-M-dogfood.md\n');
+    writeFileSync(
+        join(featuresDir, 'L_sr.md'),
+        [
+            '---',
+            'schema_version: 1',
+            'id: "L"',
+            'name: "Self-Ref Feature"',
+            'status: verifying',
+            'priority: P1',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# L: Self-Ref Feature',
+            '',
+            '## Goal',
+            '',
+            'g',
+            '',
+            '## Scope',
+            '',
+            'In scope: x',
+            '',
+            '## Acceptance Criteria',
+            '',
+            'Feature: L',
+            '',
+            '  Scenario: self-ref',
+            '    Given x',
+        ].join('\n'),
+    );
+    writeFileSync(
+        join(tasksDir, '0001_sr.md'),
+        [
+            '---',
+            'schema_version: 1',
+            'name: "Self-ref task"',
+            'status: done',
+            'feature_id: L',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Self-ref task',
+            '',
+            '### Solution',
+            '',
+            'Modified packages/app/src/workflow/lifecycle-adapter.ts to add gate.',
+        ].join('\n'),
+    );
+    const svc = new FeatureCheckService(createNodeFileSystem());
+    const result = await svc.check(join(featuresDir, 'L_sr.md'), 'L', {
+        featuresDir,
+        tasksDir,
+        dogfoodDir,
+    });
+    rmSync(dir, { recursive: true, force: true });
+    const dogfoodFindings = result.findings.filter((f) => f.message.includes('dogfood'));
+    expect(dogfoodFindings).toHaveLength(0);
+});
+
+test('0700 R4: an untracked report on disk does not satisfy a ledger without the feature', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'spur-r4-untracked-'));
+    const featuresDir = join(dir, 'features');
+    const tasksDir = join(dir, 'tasks');
+    const dogfoodDir = join(dir, 'dogfood');
+    mkdirSync(featuresDir, { recursive: true });
+    mkdirSync(tasksDir, { recursive: true });
+    mkdirSync(dogfoodDir, { recursive: true });
+    // The machine has the report; the tracked ledger does not name L.
+    writeFileSync(join(dogfoodDir, '2026-08-28-run-L-dogfood.md'), 'report body\n');
+    writeFileSync(join(dogfoodDir, 'INDEX.md'), '- 2026-08-28-run-M-dogfood.md\n');
+    writeFileSync(
+        join(featuresDir, 'L_sr.md'),
+        [
+            '---',
+            'schema_version: 1',
+            'id: "L"',
+            'name: "Self-Ref Feature"',
+            'status: verifying',
+            'priority: P1',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# L: Self-Ref Feature',
+            '',
+            '## Goal',
+            '',
+            'g',
+            '',
+            '## Scope',
+            '',
+            'In scope: x',
+            '',
+            '## Acceptance Criteria',
+            '',
+            'Feature: L',
+            '',
+            '  Scenario: self-ref',
+            '    Given x',
+        ].join('\n'),
+    );
+    writeFileSync(
+        join(tasksDir, '0001_sr.md'),
+        [
+            '---',
+            'schema_version: 1',
+            'name: "Self-ref task"',
+            'status: done',
+            'feature_id: L',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Self-ref task',
+            '',
+            '### Solution',
+            '',
+            'Modified packages/app/src/workflow/lifecycle-adapter.ts to add gate.',
+        ].join('\n'),
+    );
+    const svc = new FeatureCheckService(createNodeFileSystem());
+    const result = await svc.check(join(featuresDir, 'L_sr.md'), 'L', {
+        featuresDir,
+        tasksDir,
+        dogfoodDir,
+    });
+    rmSync(dir, { recursive: true, force: true });
+    const dogfoodFindings = result.findings.filter((f) => f.message.includes('dogfood'));
+    expect(dogfoodFindings).toHaveLength(1);
+});

@@ -1157,3 +1157,34 @@ describe('flipVerifiedCheckboxes', () => {
         expect(out).toContain('- [ ] R2. two');
     });
 });
+
+describe('flipVerifiedCheckboxes — AC ids and bold emphasis (0700 R1)', () => {
+    test('a verdict row keyed AC1 flips the AC1 box', () => {
+        const body = '- [ ] AC1. envelope decision recorded\n- [ ] AC2. inventory lands\n';
+        const out = flipVerifiedCheckboxes(
+            body,
+            makeVerdict({
+                verdict: 'PASS',
+                requirements: [
+                    { id: 'AC1', status: 'MET', evidenceType: '', evidence: 'e' },
+                    { id: 'AC2', status: 'UNMET', evidenceType: '', evidence: 'e' },
+                ],
+            }),
+        );
+        expect(out).toContain('- [x] AC1.');
+        expect(out).toContain('- [ ] AC2.');
+    });
+
+    test('a bold R row flips when the verdict proves it MET', () => {
+        const body = '- [ ] **R1.** first\n- [ ] **R2.** second\n';
+        const out = flipVerifiedCheckboxes(
+            body,
+            makeVerdict({
+                verdict: 'PASS',
+                requirements: [{ id: 'R2', status: 'MET', evidenceType: '', evidence: 'e' }],
+            }),
+        );
+        expect(out).toContain('- [x] **R2.**');
+        expect(out).toContain('- [ ] **R1.**');
+    });
+});

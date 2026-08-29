@@ -65,6 +65,29 @@ export function normalizeTitle(title: string): string {
 }
 
 /**
+ * `covers:` alias syntax (0700 R3): an AC row may declare which feature
+ * scenario(s) it implements — `- [x] AC1. (covers: R1 — The envelope decision)
+ * The ADR lands.` — so coverage stops depending on title mimicry. Semicolons
+ * separate multiple aliases inside one `(covers: ...)` clause.
+ */
+const COVERS_RE_SOURCE = '\\(covers:\\s*([^)]*)\\)';
+
+function stripCoversClause(text: string): string {
+    return text.replace(new RegExp(COVERS_RE_SOURCE, 'gi'), ' ').replace(/\s+/g, ' ').trim();
+}
+
+function extractCoversAliases(text: string): string[] {
+    const out: string[] = [];
+    for (const m of text.matchAll(new RegExp(COVERS_RE_SOURCE, 'gi'))) {
+        for (const part of (m[1] ?? '').split(';')) {
+            const alias = part.trim();
+            if (alias.length > 0) out.push(alias);
+        }
+    }
+    return out;
+}
+
+/**
  * Check whether a task's acceptance criteria covers the feature's scenarios.
  *
  * @param featureAc  Feature-level AC (the spec — all expected scenarios)
@@ -101,11 +124,16 @@ export function checkAcCoverage(
     const featureTitles = new Set(featureParsed.map(normalizeTitle));
     const taskTitles = new Set(taskParsed.map(normalizeTitle));
 
-    // Checklist items: treated as task scenarios by their normalized text
+    // Checklist items: treated as task scenarios by their normalized text.
+    // 0700 R3: an explicit `covers:` alias contributes its target titles to the
+    // covering set; the item's remaining text still counts as before.
     const checklistTitles = new Set<string>();
     if (taskChecklist) {
         for (const item of taskChecklist) {
-            checklistTitles.add(normalizeTitle(item.text));
+            checklistTitles.add(normalizeTitle(stripCoversClause(item.text)));
+            for (const alias of extractCoversAliases(item.text)) {
+                checklistTitles.add(normalizeTitle(alias));
+            }
         }
     }
 
@@ -128,6 +156,19 @@ export function checkAcCoverage(
     // Check checklist items against feature scenarios
     if (taskChecklist) {
         for (const item of taskChecklist) {
+            // 0700 R3: an explicit `covers:` claim is validated against the
+            // feature's scenarios directly — an alias naming no feature scenario
+            // is a broken coverage claim (still flagged), while the item's own
+            // descriptive text is not a coverage claim at all.
+            const aliases = extractCoversAliases(item.text);
+            if (aliases.length > 0) {
+                for (const alias of aliases) {
+                    if (!featureTitles.has(normalizeTitle(alias))) {
+                        uncovered.push(item.text);
+                    }
+                }
+                continue;
+            }
             const normalized = normalizeTitle(item.text);
             if (!featureTitles.has(normalized) && !taskTitles.has(normalized)) {
                 uncovered.push(item.text);

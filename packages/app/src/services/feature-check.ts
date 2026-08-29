@@ -569,7 +569,20 @@ export class FeatureCheckService extends PlanningCheckService {
             if (touchesSelfRef && dogfoodDir !== undefined) {
                 let hasDogfood = false;
                 try {
-                    const entries = await this.fs.readDir(dogfoodDir);
+                    // 0700 R4: the gate must read repository state, not
+                    // machine-local files. docs/dogfood/ is gitignored, so a
+                    // readdir decided feature readiness from evidence a fresh
+                    // clone does not have (41 features passed on untracked
+                    // reports). The tracked ledger docs/dogfood/INDEX.md is the
+                    // evidence source when present; readdir stays as the
+                    // fallback for a ledger-less tree.
+                    let entries: string[];
+                    try {
+                        const ledger = await this.fs.readFile(`${dogfoodDir}/INDEX.md`);
+                        entries = ledger.split('\n');
+                    } catch {
+                        entries = await this.fs.readDir(dogfoodDir);
+                    }
                     // R5b (0625): anchor the match to a filename segment, not a raw
                     // substring. `f.includes('A3')` matched any filename merely
                     // CONTAINING `A3` — an unrelated report (or a report for another
@@ -735,6 +748,28 @@ export class FeatureCheckService extends PlanningCheckService {
             }
         }
 
+        // 0700 R3 (AC5): promote the verdict-time "no verdict row matches any
+        // scenario" stderr warning to a finding here at the feature done gate,
+        // where it can be acted on, instead of re-warning on every `task
+        // verdict` derivation. Warning by default; --strict (the done gate)
+        // elevates it to error, so done-task evidence keyed to nothing in the
+        // feature cannot advance silently.
+        for (const [taskWbs, artifact] of artifacts) {
+            if (artifact.diagnostics.artifactError === 'artifact is missing') continue;
+            const rows = [...artifact.requirements, ...artifact.acceptanceCriteria];
+            if (rows.length === 0) continue;
+            const anyMatch = rows.some((r) => scenarioAliases.some((sc) => rowMatchesScenario(r.id, sc)));
+            if (!anyMatch) {
+                findings.push({
+                    layer: 'L4',
+                    code: FINDING_CODES.L4_VERDICT_ROWS_MATCH_NO_SCENARIO,
+                    severity: 'warning',
+                    section: 'Acceptance Criteria',
+                    message: `Task ${taskWbs} verdict evidence (${artifact.path}) carries ${rows.length} row(s) matching no scenario of this feature — key rows by scenario title or AC-N alias (repair: /sp:dev-verify ${taskWbs})`,
+                });
+            }
+        }
+
         for (const sc of scenarioAliases) {
             const linked = covers[sc.title] ?? [];
             if (linked.length === 0) continue; // orphan — already handled above
@@ -806,6 +841,9 @@ export class FeatureCheckService extends PlanningCheckService {
                 },
             };
         }
+        // SAFETY: readGuardVerdictArtifact returns the artifact only when the
+        // JSON root parsed; every field is re-validated by decodeVerdictRows
+        // below, so the unknown-shaped cast cannot smuggle a bad row through.
         const parsed = loaded.artifact as unknown as {
             verdict?: unknown;
             requirements?: unknown;

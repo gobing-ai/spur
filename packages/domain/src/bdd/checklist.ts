@@ -22,7 +22,9 @@ export interface ChecklistItem {
  * Parse checklist items from markdown content.
  *
  * Recognizes both `- [ ]` and `- [x]` (also `* [ ]` / `* [x]`) syntax.
- * R-id prefixes like "R1:", "R2 -" are extracted into `requirementId`.
+ * Id prefixes like "R1:", "R2 -", "**R3.**", "AC1." are extracted into
+ * `requirementId` (0700 R1 added AC ids and bold emphasis so verdict-driven
+ * checkbox flips can see every row spelling the format gate accepts).
  */
 export function parseChecklist(content: string): ChecklistItem[] {
     const lines = content.split('\n');
@@ -46,7 +48,12 @@ export function parseChecklist(content: string): ChecklistItem[] {
         const rawText = (match[2] ?? '').trim();
         const line = i + 1;
 
-        const reqIdMatch = rawText.match(/^(R\d+)\s*[:\-—]?\s*(.*)$/);
+        // 0700 R1: ids may be `R\d+` or `AC\d+`, dot-terminated, and wrapped
+        // in bold/italic emphasis (`**R1.** ...`) — the spellings task-check's
+        // format gate already accepts. Without the AC/emphasis forms,
+        // `flipVerifiedCheckboxes` skipped every AC row and every bold R row:
+        // no AC checkbox had ever flipped.
+        const reqIdMatch = rawText.match(/^[*_]{0,2}\s*((?:AC|R)\d+)\.?[*_]{0,2}\s*[:\-—]?\s*(.*)$/);
         if (reqIdMatch) {
             items.push({
                 text: (reqIdMatch[2] ?? '').trim(),

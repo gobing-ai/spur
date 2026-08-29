@@ -1126,7 +1126,10 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.asTaskF92)
         .option('--corpus', 'Sweep every task and feature against config/corpus-baseline.json')
         .option('--since <ref>', 'Scope the corpus fog check to changes since a git ref (requires --corpus)')
-        .option('--fix', 'repair structural findings in place (heading presence/level/order, R-item checkboxes)')
+        .option(
+            '--fix',
+            "repair structural findings in place (heading presence/level/order; adds missing R-item checkbox markers — flipping verified boxes is task record's job, not --fix)",
+        )
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)

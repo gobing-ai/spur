@@ -36,6 +36,7 @@ export const ALL_FINDING_CODES = [
     'L3.scope-delineation',
     'L3.one-active-goal',
     'L3.children-limit',
+    'L3.review-testing-contradiction',
 
     // L4: Traceability & integrity
     'L4.design-placeholder',
@@ -56,6 +57,7 @@ export const ALL_FINDING_CODES = [
     'L4.orphan-scenarios',
     'L4.uncovered-task-scenario',
     'L4.uncovered-feature-scenario',
+    'L4.verdict-rows-match-no-scenario',
     'L4.verifying-incomplete-tasks',
     'L4.dogfood-missing',
     'L4.stale-line-anchor',
@@ -105,6 +107,7 @@ export const FINDING_CODES = {
     L3_SCOPE_DELINEATION: 'L3.scope-delineation',
     L3_ONE_ACTIVE_GOAL: 'L3.one-active-goal',
     L3_CHILDREN_LIMIT: 'L3.children-limit',
+    L3_REVIEW_TESTING_CONTRADICTION: 'L3.review-testing-contradiction',
 
     // L4
     L4_DESIGN_PLACEHOLDER: 'L4.design-placeholder',
@@ -125,6 +128,7 @@ export const FINDING_CODES = {
     L4_ORPHAN_SCENARIOS: 'L4.orphan-scenarios',
     L4_UNCOVERED_TASK_SCENARIO: 'L4.uncovered-task-scenario',
     L4_UNCOVERED_FEATURE_SCENARIO: 'L4.uncovered-feature-scenario',
+    L4_VERDICT_ROWS_MATCH_NO_SCENARIO: 'L4.verdict-rows-match-no-scenario',
     L4_DOGFOOD_MISSING: 'L4.dogfood-missing',
     L4_VERIFYING_INCOMPLETE_TASKS: 'L4.verifying-incomplete-tasks',
     L4_STALE_LINE_ANCHOR: 'L4.stale-line-anchor',

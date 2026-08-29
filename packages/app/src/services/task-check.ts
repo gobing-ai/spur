@@ -647,29 +647,36 @@ export class TaskCheckService extends PlanningCheckService {
         // Requirements: R-numbering (warning, only when section has real content)
         const reqBody = doc.getSection('Requirements');
         if (reqBody !== null && !isPlaceholderBody(reqBody)) {
-            // Split into blocks by blank lines. Each block is a candidate requirement
-            // item. A block whose first line is R-numbered counts as numbered. This is
-            // line-count tolerant: multi-line R-item bodies (continuation lines, detail
-            // paragraphs) don't dilute the ratio the way per-line counting does, so a
-            // well-structured Requirements section with multi-paragraph R-items doesn't
-            // false-positive (the 0174 dogfood bug).
+            // 0700 R5: count R-numbered *item lines*, not blank-line blocks.
+            // Four contiguous R-item lines are one block, so the block ratio read
+            // 1-of-3 once the implement-ready checklist's non-goals prose blocks
+            // were added, and a well-formed section warned. A plain prose block
+            // AFTER the first R-item is that item's continuation (a blank-line
+            // separated paragraph), not a standalone section — exempt; preamble
+            // prose and bold-labeled blocks (`**Out of scope.**`, `**Non-goals.**`)
+            // still count against the ratio. Multi-line R-item bodies still count
+            // once per item, so the line-count tolerance the block form exists to
+            // provide (the 0174 dogfood bug) survives.
             const blocks = reqBody
                 .trim()
                 .split(/\n\s*\n/)
                 .filter((b) => b.trim().length > 0);
+            const R_ITEM_RE = /^\s*[-*]?\s*(?:\[[ xX]\]\s*)?[*_]{0,2}R\d+\.?[*_]{0,2}\s/;
             let numbered = 0;
+            let proseBlocks = 0;
+            let seenItem = false;
             for (const block of blocks) {
-                const firstLine = block.trimStart().split('\n')[0] ?? '';
-                // Accept an optional list-bullet prefix, an optional task-list checkbox,
-                // and optional bold/italic emphasis around the R-number:
-                // "- [ ] R1. …" / "- R1. …" / "* R1. …" / "R1. …" / "- [ ] **R1.** …".
-                // Emphasis is a natural way to write R-items and was previously rejected,
-                // so a correctly-structured Requirements section warned for a cosmetic reason.
-                if (/^\s*[-*]?\s*(?:\[[ xX]\]\s*)?[*_]{0,2}R\d+\.?[*_]{0,2}\s/.test(firstLine)) {
-                    numbered++;
+                const itemLines = block.split('\n').filter((l) => R_ITEM_RE.test(l)).length;
+                if (itemLines > 0) {
+                    numbered += itemLines;
+                    seenItem = true;
+                    continue;
+                }
+                if (!seenItem || /^\s*[*_]{1,2}[^*_\s]/.test(block.trimStart())) {
+                    proseBlocks++;
                 }
             }
-            if (numbered === 0 || numbered < blocks.length * 0.5) {
+            if (numbered === 0 || proseBlocks > numbered) {
                 findings.push({
                     layer: 'L3',
                     code: FINDING_CODES.L3_REQUIREMENTS_FORMAT,
@@ -867,6 +874,36 @@ export class TaskCheckService extends PlanningCheckService {
                     section: '',
                     message: `Task is ${status} but carries ${openBoxes} unchecked checklist box(es) — flip to [x] or remove before closing`,
                 });
+            }
+
+            // 0700 R2: a closed task must not carry a non-passing Review
+            // verdict beside a PASS Testing verdict. Nothing reconciles a stale
+            // Review: `task record` backfills `### Review` only when the
+            // section is bare, and the verify pass is barred from writing
+            // `## Review` — so 0693's `PARTIAL — request-changes` lived on a
+            // done task unchecked. Semantics (decided in 0700 ### Solution):
+            // the LAST `Verdict:` line in the section is authoritative — an
+            // append is a correction — so only a task whose final Review
+            // verdict still contradicts a PASS Testing verdict is flagged.
+            const reviewBody = doc.getSection('Review');
+            const testingBody = doc.getSection('Testing');
+            if (reviewBody !== null && testingBody !== null) {
+                const lastVerdict = (body: string): string => {
+                    const lines = [...body.matchAll(/\**\s*Verdict\b\**\s*[:：]?\s*([^*()\n]+)/gi)];
+                    return (lines[lines.length - 1]?.[1] ?? '').replace(/\*/g, '').trim();
+                };
+                const reviewVerdict = lastVerdict(reviewBody);
+                const nonPassing = /\bPARTIAL\b|\bFAIL\b|request-changes/i.test(reviewVerdict);
+                const testingVerdict = lastVerdict(testingBody);
+                if (nonPassing && /^PASS\b/i.test(testingVerdict)) {
+                    findings.push({
+                        layer: 'L3',
+                        code: FINDING_CODES.L3_REVIEW_TESTING_CONTRADICTION,
+                        severity: 'error',
+                        section: 'Review',
+                        message: `Review verdict is "${reviewVerdict}" while Testing records PASS — reconcile the stale Review via /sp:dev-review (semantics: the last Verdict line in the section is authoritative)`,
+                    });
+                }
             }
         }
     }
@@ -1250,6 +1287,11 @@ export class TaskCheckService extends PlanningCheckService {
     }
 
     private checkGateLanguage(doc: MarkdownDocument, findings: CheckFindings[]): void {
+        // 0700 R6: a task that already models its gate via a non-empty
+        // frontmatter `dependencies` list has done exactly what this advisory
+        // demands — repeating the advice there is pure noise (0694, 0698).
+        const declaredDeps = doc.frontmatterData?.dependencies;
+        if (Array.isArray(declaredDeps) && declaredDeps.length > 0) return;
         for (const section of ['Background', 'Requirements', 'Design', 'Acceptance Criteria', 'Plan']) {
             const body = doc.getSection(section);
             if (body === null) continue;

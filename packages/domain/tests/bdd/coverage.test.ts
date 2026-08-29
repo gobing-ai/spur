@@ -264,3 +264,35 @@ describe('normalizeTitle — bracket tags (task 0398 R7)', () => {
         );
     });
 });
+
+describe('checkAcCoverage — covers: alias (0700 R3)', () => {
+    const featureAc = `Feature: F
+  Scenario: R1 — The envelope decision is recorded as an ADR
+    Given x
+  Scenario: R2 — The current shapes are inventoried per noun
+    Given x`;
+
+    test('explicit covers: aliases satisfy coverage without title mimicry', () => {
+        const taskAc = [
+            '- [x] AC1. (covers: R1 — The envelope decision is recorded as an ADR) The ADR lands.',
+            '- [x] AC2. (covers: R2 — The current shapes are inventoried per noun) The inventory lands.',
+        ].join('\n');
+        const result = checkAcCoverage(featureAc, taskAc, parseChecklist(taskAc));
+        expect(result.orphans).toHaveLength(0);
+        expect(result.uncovered).toHaveLength(0);
+    });
+
+    test('an alias naming no feature scenario is still flagged', () => {
+        const taskAc = '- [x] AC1. (covers: R9 — Not a real scenario) Whatever.';
+        const result = checkAcCoverage(featureAc, taskAc, parseChecklist(taskAc));
+        expect(result.uncovered).toHaveLength(1);
+        expect(result.orphans).toHaveLength(2);
+    });
+
+    test('alias-bearing item text is not double-flagged as an uncovered title', () => {
+        const taskAc =
+            '- [x] AC1. (covers: R1 — The envelope decision is recorded as an ADR) decided in docs/00_ADR.md';
+        const result = checkAcCoverage(featureAc, taskAc, parseChecklist(taskAc));
+        expect(result.uncovered).toHaveLength(0);
+    });
+});

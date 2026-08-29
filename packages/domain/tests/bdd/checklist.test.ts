@@ -92,3 +92,34 @@ More prose
         expect(getItem(items, 0).text).toBe('checkbox item');
     });
 });
+
+describe('parseChecklist — id forms (0700 R1)', () => {
+    test('extracts AC ids', () => {
+        const items = parseChecklist('- [ ] AC1. The envelope decision is recorded');
+        expect(getItem(items, 0).requirementId).toBe('AC1');
+        expect(getItem(items, 0).text).toBe('The envelope decision is recorded');
+    });
+
+    test('extracts bold R ids', () => {
+        const items = parseChecklist('- [ ] **R1.** Something important');
+        expect(getItem(items, 0).requirementId).toBe('R1');
+        expect(getItem(items, 0).text).toBe('Something important');
+    });
+
+    test('extracts bold checked AC ids', () => {
+        const items = parseChecklist('- [x] **AC2.** Another row');
+        expect(getItem(items, 0).requirementId).toBe('AC2');
+        expect(getItem(items, 0).checked).toBe(true);
+    });
+
+    test('plain R ids unchanged', () => {
+        const items = parseChecklist('- [ ] R1: anchor drift detection');
+        expect(getItem(items, 0).requirementId).toBe('R1');
+        expect(getItem(items, 0).text).toBe('anchor drift detection');
+    });
+
+    test('prose mentioning R1 mid-sentence is not an id', () => {
+        const items = parseChecklist('- [ ] prose about R1 in the middle');
+        expect(getItem(items, 0).requirementId).toBeUndefined();
+    });
+});

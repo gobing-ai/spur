@@ -3452,3 +3452,197 @@ describe('0625 R4 — Solution change-map anchor drift detection', () => {
         });
     });
 });
+
+/** Feature fixture local to the 0700 block (file-scope helpers live inside describes). */
+function feature0700(id: string, scenarios: string[]): string {
+    const ac = [
+        '```gherkin',
+        `Feature: ${id}`,
+        '',
+        ...scenarios.flatMap((sc) => [`  Scenario: ${sc}`, '    Given x']),
+        '```',
+    ];
+    return [
+        '---',
+        'schema_version: 1',
+        `id: ${id}`,
+        `name: "Feature ${id}"`,
+        'status: active',
+        'priority: P1',
+        'created_at: 2026-06-13T00:00:00.000Z',
+        'updated_at: 2026-06-13T00:00:00.000Z',
+        '---',
+        '',
+        `# ${id}: Feature ${id}`,
+        '',
+        '## Goal',
+        '',
+        'g',
+        '',
+        '## Scope',
+        '',
+        'In scope: x',
+        '',
+        '## Acceptance Criteria',
+        '',
+        ...ac,
+    ].join('\n');
+}
+
+// ── 0700 R5: requirements-format counts R-items, not blank-line blocks ──
+
+const REQ_SECTION_TAIL = [
+    '',
+    '### Acceptance Criteria',
+    '',
+    '```gherkin',
+    'Feature: T',
+    '  Scenario: s',
+    '    Given x',
+    '```',
+].join('\n');
+
+const formatFindingsOf = async (reqBody: string) => {
+    const content = [
+        taskFm({ feature_id: 'F1', status: 'backlog', name: 'Shape task' }),
+        '',
+        '### Requirements',
+        '',
+        reqBody,
+        REQ_SECTION_TAIL,
+    ].join('\n');
+    const { fs, path, cleanup } = seedEnv({
+        taskContent: content,
+        features: { F1: feature0700('F1', ['the real scenario']) },
+    });
+    const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+    cleanup();
+    return result.findings.filter(
+        (f) => f.code.includes('requirements-format') || f.code.includes('REQUIREMENTS_FORMAT'),
+    );
+};
+
+test('0700 R5: contiguous R-items plus non-goals prose blocks do not warn', async () => {
+    const findings = await formatFindingsOf(
+        [
+            '- [ ] R1. First requirement with body',
+            '- [ ] R2. Second requirement with body',
+            '- [ ] R3. Third requirement with body',
+            '- [ ] R4. Fourth requirement with body',
+            '',
+            '**Out of scope.** Re-tightening the drift detector is a separate decision.',
+            '',
+            '**Non-goals.** No CLI surface changes.',
+        ].join('\n'),
+    );
+    expect(findings).toHaveLength(0);
+});
+
+test('0700 R5: multi-paragraph R-item bodies still do not false-positive (0174)', async () => {
+    const findings = await formatFindingsOf(
+        [
+            '- [ ] R1. First requirement',
+            '',
+            'Continuation paragraph of R1 carrying detail lines.',
+            '',
+            '- [ ] R2. Second requirement',
+            '',
+            'Second continuation paragraph.',
+        ].join('\n'),
+    );
+    expect(findings).toHaveLength(0);
+});
+
+test('0700 R5: prose-dominated requirements still warn', async () => {
+    const findings = await formatFindingsOf(
+        [
+            'Some intro prose without any R numbers.',
+            '',
+            '- [ ] R1. The only real item',
+            '',
+            '**Notes.** Extra bold prose block.',
+        ].join('\n'),
+    );
+    expect(findings.length).toBeGreaterThanOrEqual(1);
+});
+
+// ── 0700 R6: gate-language advisory reads frontmatter dependencies ──
+
+const gateLanguageFindingsOf = async (overrides: Record<string, unknown>) => {
+    // taskFm already emits the `### Background` skeleton — fill its body rather
+    // than appending a duplicate section (getSection reads the first match).
+    const content = taskFm({ feature_id: 'F1', status: 'backlog', name: 'Gate task', ...overrides }).replace(
+        '### Background\n\ntext',
+        '### Background\n\nThis step is a HITL approval merge event before the capstone.',
+    );
+    const { fs, path, cleanup } = seedEnv({
+        taskContent: content,
+        features: { F1: feature0700('F1', ['the real scenario']) },
+    });
+    const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+    cleanup();
+    return result.findings.filter((f) => f.code.includes('gate-language'));
+};
+
+test('0700 R6: no advisory when the task already declares a dependency', async () => {
+    const findings = await gateLanguageFindingsOf({ dependencies: ['0691'] });
+    expect(findings).toHaveLength(0);
+});
+
+test('0700 R6: advisory still fires without declared dependencies', async () => {
+    const findings = await gateLanguageFindingsOf({});
+    expect(findings.length).toBeGreaterThanOrEqual(1);
+});
+
+// ── 0700 R2: stale non-passing Review beside PASS Testing on a closed task ──
+
+const closedTaskWith = async (reviewBody: string, status = 'done') => {
+    const content = [
+        taskFm({ feature_id: 'F1', status, name: 'Closed task' }),
+        '',
+        '### Solution',
+        '',
+        'Did the thing.',
+        '',
+        '### Testing',
+        '',
+        '**Verdict: PASS** (R1–R4 MET, AC1–AC4 MET).',
+        '',
+        '### Review',
+        '',
+        reviewBody,
+        REQ_SECTION_TAIL,
+    ].join('\n');
+    const { fs, path, cleanup } = seedEnv({
+        taskContent: content,
+        features: { F1: feature0700('F1', ['the real scenario']) },
+    });
+    const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+    cleanup();
+    return result.findings.filter((f) => f.code.includes('review-testing-contradiction'));
+};
+
+test('0700 R2: stale PARTIAL — request-changes Review beside PASS Testing is flagged as an error', async () => {
+    const findings = await closedTaskWith(
+        '**Verdict: PARTIAL — request-changes** (blocks gate; R1–R3 MET, R4/AC4 PARTIAL).',
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.severity).toBe('error');
+    expect(findings[0]?.message).toContain('/sp:dev-review');
+});
+
+test('0700 R2: a superseding PASS appended to the Review is authoritative — no finding', async () => {
+    const findings = await closedTaskWith(
+        [
+            '**Verdict: PARTIAL — request-changes** (blocks gate; superseded below).',
+            '',
+            '**Verdict: PASS** (R1–R4 MET, AC1–AC4 MET). Supersedes the PARTIAL — request-changes above.',
+        ].join('\n'),
+    );
+    expect(findings).toHaveLength(0);
+});
+
+test('0700 R2: the rule is gated on terminal status — a wip task is not flagged', async () => {
+    const findings = await closedTaskWith('**Verdict: PARTIAL — request-changes** (blocks gate).', 'wip');
+    expect(findings).toHaveLength(0);
+});
