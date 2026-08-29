@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.32.0
+version: 1.33.0
 owner: Robin Min
-updated_at: 2026-08-27
+updated_at: 2026-08-29
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -148,10 +148,13 @@ statuses, and decision outcomes remain stable; future changes follow the append-
 
 ## ADR-020: Task and Feature Planning Join the CLI
 
-- **Status:** Accepted (design) · **Date:** 2026-06-11
+- **Status:** Accepted · **Date:** 2026-06-11
 - **Decision:** Commit `spur task` and `spur feature`; Markdown remains SSOT and SQLite derived. Keep the LLM planning pipeline in skills, not a new CLI noun. Parent checks warn on roll-up inconsistencies or missing rosters; `task refresh-roster` owns roster generation.
 - **Why:** The heavily used planning stack belongs in Spur's validated application layer, not an agent-plugin tree.
 - **Detail:** `03 §12`; `04 §7.1`; `01 §5.1`.
+
+**Amendment (2026-08-29).** Status corrected to Accepted: the task/feature CLI, Markdown authority,
+derived SQLite state, and skill-owned planning pipeline are shipped. **Detail:** `03 §12`; `04 §7`.
 
 ## ADR-021: Functionality Lives in `packages/app`
 
@@ -356,10 +359,13 @@ escalation test in `packages/app/tests/services/agent-service.test.ts`.
 
 ## ADR-045: Retained All-in-One Workflow Run Log
 
-- **Status:** Accepted (design) · **Date:** 2026-08-04
+- **Status:** Accepted · **Date:** 2026-08-04
 - **Decision:** Write one retained `.spur/run/<RUNID>.log` containing foreground rendering, child output, and consumed steering input; allow `--no-log`, clean by policy, and follow through `workflow trace <RUNID> --follow --output`. Keep trace JSONL and partial salvage separate.
 - **Why:** Async runs discarded the exact narration operators need for live diagnosis and postmortems.
 - **Detail:** `docs/design/workflow-run-log.md`; `03 §6`; feature D2.
+
+**Amendment (2026-08-29).** Status corrected to Accepted: feature D2 is done and the retained run-log
+sink plus trace-follow surface are shipped. **Detail:** `03 §6`; `docs/design/workflow-run-log.md`.
 
 ## ADR-046: Workflow-Specific Rejection of `--agent inline`
 
@@ -368,7 +374,7 @@ escalation test in `packages/app/tests/services/agent-service.test.ts`.
 
 ## ADR-047: Unified Agent Semantics, Session Affinity, and Live Output
 
-- **Status:** Accepted (design) · **Date:** 2026-08-05 · **Feature:** H83 · **Supersedes:** ADR-046 · **Amends:** ADR-041
+- **Status:** Accepted · **Date:** 2026-08-05 · **Feature:** H83 · **Supersedes:** ADR-046 · **Amends:** ADR-041
 - **Decision:** Use one `--agent` table everywhere: interactive omit/`inline` stays in the host session; headless omit/`inline` resolves `agent.default`, `auto` uses tier routing, and names select executors. Workflow hops remain subprocesses, share run-scoped resumable sessions when supported, and stream pipe output live without TTY/stdin. Host-stage control inversion remains deferred.
 - **Why:** This removes contradictory semantics and host-session contamination while preserving auditability and timeout isolation.
 - **Detail:** feature H83; cross-cutting/flag glossary; agent runner/runtime seams; ADR-045.
@@ -414,6 +420,9 @@ removes. The stable greppable message (not a new exit code) carries attribution;
 is already crowded.
 
 **Detail:** `04 §7.8`; `docs/design/agent-inline-host-session.md`; task 0565.
+
+**Amendment (2026-08-29).** Status corrected to Accepted: H83 is done; current selector semantics are
+this entry as amended and ADR-087. **Detail:** `03 §19`; `04 §2.1`.
 
 ## ADR-048: `task record` Owns Done Walk and Run-Link
 
@@ -547,7 +556,7 @@ is already crowded.
 
 ## ADR-052: Team-Scoped Board Composition with Separate Control and Message Planes
 
-- **Status:** Accepted (design) · **Date:** 2026-08-11 · **Feature:** G3 · **Supersedes:** ADR-042
+- **Status:** Accepted · **Date:** 2026-08-11 · **Feature:** G3 · **Supersedes:** ADR-042
 - **Decision:** Use `agent.team.<teamId>` as the v1 workspace context. Teams exclusively owns roster,
   process lifecycle, terminal I/O, and activity; Inbox owns durable messages only; the Workspace Board
   module composes team-scoped Teams, Inbox, and Tasks views. Add no workspace schema, service, API, or
@@ -556,6 +565,9 @@ is already crowded.
   viewer duplicate authority without a current requirement.
 - **Detail:** `docs/design/workspace-design.md`;
   `docs/plans/2026-08-11-g3-team-inbox-workspace-boundary-brainstorm.md`; task 0197.
+
+**Amendment (2026-08-29).** Status corrected to Accepted: feature G3 is done and the Workspace Board
+composition is shipped without a second workspace authority. **Detail:** `03 §14`; workspace design.
 
 ## ADR-053: Parity Harness Diffs Agent-Facing Surfaces Against the Live Monorepo CLI
 
@@ -650,7 +662,7 @@ Accepted (design) → Accepted.
 
 ## ADR-057: Inter-Agent Coordination Is a Runtime-Mediated Control Plane
 
-**Status:** Accepted (waves 1–2 shipped) · **Date:** 2026-08-12 · **Feature:** G4
+**Status:** Accepted · **Date:** 2026-08-12 · **Feature:** G4
 
 **Decision.** Coding agents coordinate only through Spur’s two existing channels — durable `spur message` / `inbox_messages`, and the supervised process pipe. There is no third IPC transport, no agent-to-agent socket, no terminal scrape, and no keystroke injection. The Board is a client, not a wait or command authority. New verbs stay on `agent` / `message` (ADR-051).
 
@@ -665,6 +677,9 @@ Accepted (design) → Accepted.
 **Amendment (2026-08-13, 0531).** Wave 3 snapshot-then-follow shipped: `followSystemEventsAfter` over the existing `system_events` ledger (global monotonic `sequence` auto-assigned at persist; `idx_system_events_sequence`). First-class `blocked` / optional `agent report-state` remain accepted design.
 
 **Detail:** task 0531; `03 §17`; `docs/design/inter-agent-control-plane.md` §8.
+
+**Amendment (2026-08-29).** Status normalized to the canonical vocabulary; wave state remains in the
+dated amendments above. No decision changed.
 
 ## ADR-058: Tracked Transition Shims — Two-Sided Manifest Gate
 
@@ -716,7 +731,7 @@ fact, and mixing observed with inferred figures hides the confidence of each.
 
 ## ADR-061: The Role→Tier SSOT Is Code in packages/config, Not the Plugin Markdown
 
-**Status:** Accepted · **Date:** 2026-08-16 · **Feature:** B3
+**Status:** Superseded by ADR-078 · **Date:** 2026-08-16 · **Feature:** B3
 
 **Decision.** The Layer-1 role → tier/stages map's single source of truth is
 `DEFAULT_AGENT_ROLES` in `packages/config/src/index.ts`, with an optional, closed-vocabulary
@@ -735,6 +750,9 @@ shape was frozen by a test inside the plugin, i.e. the plugin tested the CLI's d
 
 **Detail:** `packages/config/src/index.ts` (`DEFAULT_AGENT_ROLES`, `AgentRoleConfigSchema`);
 `apps/cli/src/context.ts` (`resolveAgentRoles`); `04` `agent.roles`; task 0572.
+
+**Amendment (2026-08-29).** Status corrected to Superseded by ADR-078, which moved the SSOT from
+the code constant to layered config while retaining a byte-identical fallback.
 
 ## ADR-062: Corpus Gates Verify Evidence Content, and Every Severity Is Ratcheted
 
@@ -897,7 +915,7 @@ I8 change — see the first amendment.)
 
 ## ADR-066: Cataloged System Events Use Exhaustive Server-Side Presenters
 
-**Status:** Accepted (design) · **Date:** 2026-08-19 · **Feature:** J9
+**Status:** Accepted · **Date:** 2026-08-19 · **Feature:** J9
 
 **Decision.** Every cataloged System Event resolves through a typed, event-name-keyed server presenter that owns its authored description, retained fields, summary behavior, and explicit outcome derivation or unsupported classification; clients render the canonical result and do not interpret event payloads.
 
@@ -905,9 +923,12 @@ I8 change — see the first amendment.)
 
 **Detail:** `03 §16.1`; `docs/design/event-tracking.md` §11; `docs/design/actionable-observability-context.md` §System Event semantic presentation.
 
+**Amendment (2026-08-29).** Status corrected to Accepted: J9's catalog presenters are shipped and
+exhaustively tested. **Detail:** `03 §16.1`; event-tracking design.
+
 ## ADR-067: Stored Event Facts Are Stable; Derived Presentation Reprojects on Read
 
-**Status:** Accepted (design) · **Date:** 2026-08-19 · **Amends:** ADR-056 · **Feature:** J9
+**Status:** Accepted · **Date:** 2026-08-19 · **Amends:** ADR-056 · **Feature:** J9
 
 **Decision.** A valid stored canonical v2 System Event keeps its persisted `data` and `context` unchanged, while history reads recompute only `presentation` through the current catalog presenter; no ledger row is rewritten.
 
@@ -915,15 +936,21 @@ I8 change — see the first amendment.)
 
 **Detail:** `03 §16.1`; `docs/design/actionable-observability-context.md` §Projection paths.
 
+**Amendment (2026-08-29).** Status corrected to Accepted: history reads reproject presentation while
+preserving stored event facts. **Detail:** `03 §16.1`.
+
 ## ADR-068: Missing Event Semantics Are Captured at the Producing Boundary
 
-**Status:** Accepted (design) · **Date:** 2026-08-19 · **Feature:** J9
+**Status:** Accepted · **Date:** 2026-08-19 · **Feature:** J9
 
 **Decision.** Facts absent from bounded event data are added where they are known: planning mutations emit their section locus, workflow composition emits workflow and step identity, and the upstream queue-consumer contract emits its configured queue name; presenters and clients never infer or backfill absent facts.
 
 **Why.** Reconstructing identity or outcome from unrelated configuration, job types, or event names would turn diagnostic presentation into a guess.
 
 **Detail:** `03 §16.1`; `docs/design/event-tracking.md` §§6–7/11.
+
+**Amendment (2026-08-29).** Status corrected to Accepted: producing-boundary enrichment is shipped
+for the J9 event set. **Detail:** `03 §16.1`; event-tracking design.
 
 ## ADR-069: Workflow YAML Orchestrates Owned Capabilities
 
@@ -973,7 +1000,7 @@ sub-threshold classified programs need no entry. agent.run severity bands are fr
 
 ## ADR-070: Workflow Progress Reprojects Persisted Execution Truth
 
-**Status:** Proposed · **Date:** 2026-08-19 · **Feature:** D5
+**Status:** Accepted · **Date:** 2026-08-19 · **Feature:** D5
 
 **Decision.** Workflow progress is a pure read projection of the resolved definition and existing
 persisted run, phase, transition, action, and artifact rows; System Events only wake re-queries, and
@@ -983,9 +1010,13 @@ bounded polling remains the convergence fallback.
 
 **Detail:** `03 §21`; `docs/design/workflow-observability.md` §D5 detailed progress projection.
 
+**Amendment (2026-08-29).** Accepted after implementation: the persisted progress projection,
+definition-digest merge, event-wakeup follower, polling fallback, and record-only inline journal are
+shipped. **Why.** D5 now has one replay authority in code, not only in design. **Detail:** `03 §21`.
+
 ## ADR-071: Mutation After Verification Invalidates the Proof
 
-**Status:** Proposed · **Date:** 2026-08-19 · **Feature:** D5
+**Status:** Accepted (design) · **Date:** 2026-08-19 · **Feature:** D5
 
 **Decision.** Every proof-bearing action declares repository/corpus state effects separately from
 evidence writes; `write` or `may-write` invalidates prior proof, and PASS is valid only when the
@@ -994,6 +1025,12 @@ quality, review, and observe-only verification evidence names one unchanged fina
 **Why.** A verdict cannot prove tree state that was allowed to change after the verdict was produced.
 
 **Detail:** `03 §20.3`; `docs/design/workflow-composition-contract.md` §Verification proof state.
+
+**Amendment (2026-08-29).** Accepted as the binding design. Digest capture/recheck shipped, but the
+canonical task pipeline still verifies with `--fix all`, and the docs pipeline still writes a
+synthetic PASS; neither may claim the final proof invariant until tasks 0703/0704 land. **Why.** A
+partial bracket detects only post-verdict mutation, not whether all evidence observed one state.
+**Detail:** `03 §20.3`; tasks 0703/0704.
 
 ## ADR-072: One Canonical Pipeline per Lifecycle Boundary
 
@@ -1015,7 +1052,7 @@ graph from init seeding) is removed as now-dead, together with the two tests ass
 
 ## ADR-073: System Event Table Cells Project Human Identity
 
-**Status:** Accepted (design) · **Date:** 2026-08-19 · **Feature:** J91
+**Status:** Accepted · **Date:** 2026-08-19 · **Feature:** J91
 
 **Decision.** Observability System Events table columns display only human correlators; opaque event ids and remediation commands that embed those ids remain in the tooltip and expanded payload.
 
@@ -1023,15 +1060,21 @@ graph from init seeding) is removed as now-dead, together with the two tests ass
 
 **Detail:** `03 §16.2`; `docs/design/system-events-human-table.md`.
 
+**Amendment (2026-08-29).** Status corrected to Accepted: J91's human-correlator table projection is
+shipped. **Detail:** `03 §16.2`.
+
 ## ADR-074: Coding-Agent Identity Is an Optional Presentation Projection
 
-**Status:** Accepted (design) · **Date:** 2026-08-19 · **Feature:** J91
+**Status:** Accepted · **Date:** 2026-08-19 · **Feature:** J91
 
 **Decision.** Coding-agent / executor identity is an optional `presentation.agent` string projected by the envelope from bounded payload facts in a fixed order; it is never `context.producer`, never inferred by the Board, and omitted when the event has no executor.
 
 **Why.** Producer names the emitting package; the diagnostic question is which coding agent executed the request, and that fact already exists on agent-bearing payloads.
 
 **Detail:** `03 §16.2`; `docs/design/system-events-human-table.md`.
+
+**Amendment (2026-08-29).** Status corrected to Accepted: optional agent identity is projected at
+the envelope boundary and rendered by the Board. **Detail:** `03 §16.2`.
 
 ## ADR-075: Wait and Message Stay Identity-Pinned — No Role Addressing
 
@@ -1256,7 +1299,7 @@ change, and the backward-compatibility rule for pre-addition artifacts.
 
 ## ADR-081: Board Module Shell Convention — One-Row Header, Append-Only Tabs, Density-First Full-Bleed
 
-**Status:** Accepted (design) · **Date:** 2026-08-24 · **Feature:** F72
+**Status:** Accepted · **Date:** 2026-08-24 · **Feature:** F72
 
 **Amendment (2026-08-26).** The full-bleed rule now applies to the **board body only**; the
 module **header** rides the shared centered `max-w-[1600px]` rail (History/Observability parity),
@@ -1285,9 +1328,12 @@ rule, and the embed rule written down once rather than re-derived per module.
 tab contract, controlled-prop seam, and card enrichment shapes; mechanism placement in
 `docs/03_ARCHITECTURE.md` §14.5.
 
+**Amendment (2026-08-29).** Status corrected to Accepted: F72's Tasks shell, URL-backed filters,
+append-only tabs, centered header rail, and full-bleed board body are shipped. **Detail:** `03 §14.5`.
+
 ## ADR-082: Merged Config Loads Once at the Composition Root — the Only App-Config Source
 
-**Status:** Accepted (design) · **Date:** 2026-08-24 · **Feature:** A5
+**Status:** Accepted · **Date:** 2026-08-24 · **Feature:** A5
 
 **Decision.** Every Spur process loads app config exactly once at its composition root via the
 merged `loadSpurConfig` (global defaults + project override, validated once — 0640) and threads
@@ -1306,6 +1352,9 @@ against 15 globally defined executors, reproduced 2026-08-24).
 **Detail:** `docs/03_ARCHITECTURE.md` §1.2.1 (mechanism + invariants);
 `docs/design/universal-config-loading.md` (context shapes, consumer rewiring table, `--json`
 error-envelope codes, regression-test matrix).
+
+**Amendment (2026-08-29).** Status corrected to Accepted: A5 is done and CLI/server composition
+roots own the merged config load. **Detail:** `03 §1.2.1`.
 
 ## ADR-083: The Anchor-Citation Class Is a Dated Legacy Set — Frozen Pending F91's Matcher Decision
 
@@ -1390,7 +1439,7 @@ bun run apps/cli/src/index.ts task check --corpus --json > /tmp/corpus.json
 
 ## ADR-084: Environment-Improvement Lens Projects Into Existing Report Owners
 
-**Status:** Accepted (design) · **Date:** 2026-08-26 · **Feature:** I9
+**Status:** Accepted · **Date:** 2026-08-26 · **Feature:** I9
 
 **Decision.** Harvest vendor `vendors/misc/retro` as one plugin-level environment-improvement mapping projected into `sp:dogfood-testing` report §6 and `sp:history-anatomy` report section 9. Do not add a third analysis skill, `/sp:dev-retro`, or a public CLI noun. History-anatomy's closed category vocabulary stays frozen — retro names occupy `<signal>` or owner-surface only. The mapping is the single category table and carries the implementer-versus-reviewer placement rule.
 
@@ -1403,9 +1452,12 @@ that duplicates the two report owners. `/sp:dev-review-session` is a distinct cu
 review surface: it reviews the active conversation, uses this lens only to place supported
 improvement proposals, and performs no imported-history analysis.
 
+**Amendment (2026-08-29).** Status corrected to Accepted: I9's shared mapping is shipped in both
+report owners without a third analysis surface. **Detail:** `03 §22`.
+
 ## ADR-085: Environment Remediations Remain Operator Proposals
 
-**Status:** Accepted (design) · **Date:** 2026-08-26 · **Feature:** I9
+**Status:** Accepted · **Date:** 2026-08-26 · **Feature:** I9
 
 **Decision.** Environment-lens remediations are operator proposals only. Dogfood fix-mode must not `Edit`/`Write` `AGENTS.md`, skills, rules, or other environment sources for an environment-tagged finding. History-anatomy already forbids applied changes; I9 does not add a second mutation source.
 
@@ -1416,6 +1468,9 @@ improvement proposals, and performs no imported-history analysis.
 **Amendment (2026-08-27 · ADR-089):** `sp:session-review` inherits present-don't-apply for process
 and environment improvements. Its complete report is read-only: no source/doc edit, corpus write,
 workflow launch, or indexed-context append.
+
+**Amendment (2026-08-29).** Status corrected to Accepted: I9 and session review enforce
+present-don't-apply. **Detail:** `03 §22`.
 
 ## ADR-086: Materialized Agent Instances Are Runtime State, Not Committed Spec Files
 
@@ -1494,7 +1549,7 @@ motive behind both is satisfied by the mandatory substitution warning, not by re
 
 ## ADR-088: The Anchor-Subject Gate Is a Warning Signal, Not an Error Verdict
 
-**Status:** Accepted — severity ruling stands; reconcile practice superseded by ADR-090 · **Date:** 2026-08-27 · **Task:** 0688
+**Status:** Accepted · **Date:** 2026-08-27 · **Task:** 0688
 
 **Decision.** The dogfood `L4.anchor-subject-mismatch: error` severity override
 (`.spur/config.yaml` `tasks.severity`) is removed; the check runs at its default warning severity
@@ -1526,6 +1581,9 @@ class) is baselined as a dated set. (4) 04_DESIGN §2.1 and
 
 **Detail:** task 0688; feature F91; `config/corpus-baseline.json` note § 2026-08-27.
 
+**Amendment (2026-08-29).** Status normalized to Accepted. ADR-090 supersedes only this entry's
+reconciliation practice; the warning-severity decision remains active.
+
 ## ADR-089: Active Session Review Is Inline and Separate from Imported-History Forensics
 
 **Status:** Accepted · **Date:** 2026-08-27
@@ -1543,7 +1601,7 @@ contracts; combining them would unfreeze history-anatomy's two-mode and twelve-s
 
 ## ADR-090: The Corpus Gate Goes Single-Sided on New Findings — Dated Residue Retires with Its Wave
 
-**Status:** Approved — A+C compose (operator, 2026-08-27, task 0691 R2) · **Date:** 2026-08-27 · **Task:** 0691 · **Feature:** F94 (absorbs F96)
+**Status:** Accepted · **Date:** 2026-08-27 · **Task:** 0691 · **Feature:** F94 (absorbs F96)
 
 **Decision.** The corpus gate stops reconciling dated residue and keeps one ratchet: **a finding
 not in the baseline fails; a baseline entry that stops reproducing no longer does.** The baseline
@@ -1634,6 +1692,9 @@ efficiency"). Plan steps 5–7 (implementation, verification, anti-pattern confi
 **Detail:** task 0691; feature F94; feature F96 (cancelled into 0691); ADR-050 → ADR-062 →
 ADR-083 → ADR-088 chain; `99 §5 T10`; `config/corpus-baseline.json` (1,916 entries, measured
 2026-08-27).
+
+**Amendment (2026-08-29).** Status normalized to Accepted; the operator approval remains recorded
+above. ADR-093 now limits the snapshot's pass-waiver role to temporary debt.
 
 ## ADR-091: The CLI `--json` Surface Adopts the Contracts Envelope Behind an Opt-In `--json-envelope` Flag
 
@@ -1827,3 +1888,107 @@ scope assertion — the active folder is swept, an archived folder is not. (3) T
 
 **Detail:** `packages/app/src/services/corpus-check.ts` `structuralSweep`;
 `scripts/commands/regen-corpus-baseline.ts`; `99 §5 T10`; `docs/04_DESIGN.md` corpus-gate section.
+
+## ADR-093: Gate-Waiver Baselines Are Temporary Debt Registers
+
+**Status:** Accepted (design) · **Date:** 2026-08-29
+
+**Decision.** A committed baseline that changes a current gate result from FAIL to PASS may waive
+only pre-existing findings and only temporarily. It must name its bounded scope, owner, review date,
+and objective remediation or removal condition; new findings fail closed, and regeneration cannot
+silently roll waivers forward. Reference snapshots that only detect drift or measure regressions are
+not waivers.
+
+**Why.** A permanent or self-renewing waiver silently redefines failure as success and destroys the
+sensor's value.
+
+**Detail:** `03 §23`; ADR-058 (temporary compatibility manifest); ADR-090/092 (current corpus
+snapshot, pending migration to this contract).
+
+## ADR-094: Constrained Agent Stages Require Host-Enforced Capability Attestation
+
+**Status:** Accepted (design) · **Date:** 2026-08-29
+
+**Decision.** Spur continues to delegate sandbox enforcement to installed agents, but a constrained
+stage must declare required filesystem, network, process, and external-mutation capabilities; the
+resolved executor must attest host enforcement before dispatch, and unknown or unavailable is a
+hard refusal.
+
+**Why.** Delegating sandbox ownership does not prove that a selected executor enforces the stage's
+constraints.
+
+**Detail:** `03 §24`; task 0706; ADR-012.
+
+## ADR-095: Runtime Budgets Use Measured Usage; Unknown Is Never Zero
+
+**Status:** Accepted (design) · **Date:** 2026-08-29
+
+**Decision.** Agent actions may declare wall-clock, token, and cost limits; Spur enforces them from
+typed measured usage at supported safe boundaries and fails a required but unmeasurable budget.
+Offline pipeline baselines remain regression sensors, not runtime limits.
+
+**Why.** Retrospective totals and nullable baselines cannot bound an active autonomous run.
+
+**Detail:** `03 §24`; task 0707; ADR-060/076.
+
+## ADR-096: Safety Trip Wires Reuse Existing Fail-Closed Workflow Boundaries
+
+**Status:** Accepted (design) · **Date:** 2026-08-29
+
+**Decision.** A closed deterministic catalog maps retry exhaustion, budget or capability failure,
+proof invalidation, and bounded-output overflow to existing workflow failure transitions and bounded
+events at safe boundaries; no model judge, policy DSL, or second controller participates.
+
+**Why.** Operational signals are useful controls only when they deterministically stop unsafe
+continuation.
+
+**Detail:** `03 §24`; task 0708; ADR-035/056.
+
+## ADR-097: Review and Verification Are Context-Independent by Construction
+
+**Status:** Accepted (design) · **Date:** 2026-08-29
+
+**Decision.** Built-in review and final verification run in fresh sessions with recorded executor
+provenance; P0/P1 work also requires an executor distinct from implementation, failing closed when
+no eligible independent executor exists.
+
+**Why.** A nominal reviewer that inherits implementation context can repeat the same assumptions
+instead of independently testing them.
+
+**Detail:** `03 §24`; task 0710; ADR-026/047.
+
+## ADR-098: Escalation Packets Project Existing Evidence
+
+**Status:** Accepted (design) · **Date:** 2026-08-29
+
+**Decision.** A blocked or failed run emits one versioned, bounded, redacted JSON escalation packet
+that references existing task, run, proof, artifact, budget, capability, and event evidence and
+states the exact operator decision required; it copies no logs and adds no persistence plane.
+
+**Why.** Evidence already exists, but fragmented evidence is not an actionable handoff.
+
+**Detail:** `03 §24`; task 0709; ADR-044/056.
+
+## ADR-099: Checkpoints and Indexed Context Are Freshness-Bound Derived State
+
+**Status:** Accepted (design) · **Date:** 2026-08-29
+
+**Decision.** Checkpoints and indexed-context artifacts carry schema, owner, source commit/digest,
+time, state, next action, and artifact references; resume validates freshness, and cleanup removes
+only expired, unreferenced, regenerable state within its confined owner path.
+
+**Why.** Derived memory without freshness and retention rules becomes a stale competing authority.
+
+**Detail:** `03 §24`; task 0711; ADR-044/079.
+
+## ADR-100: Verified-Outcome Metrics Require Digest-Bound PASS Evidence
+
+**Status:** Accepted (design) · **Date:** 2026-08-29
+
+**Decision.** A verified result is a done task with a PASS verdict bound to the final proof digest;
+force-done, synthetic, missing, mismatched, or invalidated verdicts do not count. Correction and cost
+metrics derive from existing records and report missing attribution as null with coverage.
+
+**Why.** Activity and token volume do not measure harness reliability; verified outcomes do.
+
+**Detail:** `03 §24`; task 0712; ADR-071.

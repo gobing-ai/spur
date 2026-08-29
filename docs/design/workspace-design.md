@@ -3,10 +3,12 @@ doc: design/workspace
 feature_id: G3
 owns: SURFACE + mechanism for team-scoped Board composition
 authority: derived (ADR wins on conflict)
-updated_at: 2026-08-11
+updated_at: 2026-08-29
 ---
 
 # Workspace Board module — team-scoped composition
+
+**Status:** built (ADR-052; feature G3).
 
 ADR-052 defines the v1 boundary: an existing Team is the workspace context. G3 adds a Board
 composition view, not a second domain entity.

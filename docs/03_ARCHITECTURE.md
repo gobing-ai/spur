@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.35.0
+version: 1.36.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-27
+updated_at: 2026-08-29
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -87,7 +87,7 @@ folder literals, and the server's legacy `docs/.tasks/config.jsonc` read. All co
 the typed result from the single facade; config-shape types (`TaskFoldersConfig`) have one owner.
 Enforced by `config/rules/boundary/config-loading-ownership.yaml`.
 
-### 1.2.1 Composition-root merged-config wiring (accepted design — ADR-082)
+### 1.2.1 Composition-root merged-config wiring (built — ADR-082)
 
 The merged `loadSpurConfig` result is loaded **once per process at the composition root** — CLI
 `main()`, server startup — and threaded through the dispatch/service context as the only
@@ -369,7 +369,7 @@ contracts, `history-anatomy.yaml` owns the cache branch / bounded correction / a
 and `history-anatomy-cache.ts` (+ committed `.mjs` twin, ADR-065 standard contract) computes the
 semantic artifact digest — the deterministic half always reruns, only model judgment is cacheable
 (ADR-079). Shapes: `docs/design/history-anatomy.md`. I9 environment-improvement projection
-(accepted design — ADR-084/085; not yet built): §22;
+(built — ADR-084/085): §22;
 `docs/design/environment-improvement-lens.md`.
 
 **History Board read plane (E8).** The six `history.*` oRPC procedures delegate through
@@ -570,7 +570,7 @@ task ## Acceptance Criteria (subset coverage)
 - `plugins/sp` centralizes agent-facing behavior in **skills** (Fat Skills — ADR-023); slash
   commands and subagents are thin wrappers of skills. Skills delegate deterministic execution to
   CLI verbs where they exist, but are not limited to CLI wrapping. The environment-improvement
-  lens (accepted design — ADR-084/085; not yet built) is a plugin-level mapping projected into
+  lens (built — ADR-084/085) is a plugin-level mapping projected into
   those skills' report contracts, not a third analysis skill: §22.
 - Cross-cutting needs reuse the owning ts-libs package (`ts-utils` output/errors, `ts-runtime`
   FileSystem, `.spur/config.yaml` via ADR-017) — no parallel local re-implementations.
@@ -602,8 +602,10 @@ a complete or partial feature transition cannot leave the corpus gate unobserved
 Content checks close the remaining projection gaps at read time. `TaskCheckService` flags the
 record-generated hollow Testing row and derives subject tokens from a bare Solution change-map
 path before checking its cited line. `FeatureCheckService` treats a dogfood artifact as proof only
-when the feature ID is a delimited filename segment. Every new warning remains subject to the
-per-severity two-sided corpus baseline.
+when the feature ID is a delimited filename segment. The corpus sweep covers the active task folder
+and reconciles new findings single-sided against the generated snapshot (ADR-090/092). That snapshot
+is the current gate-waiver exception and must migrate to ADR-093 before another waiver wave is
+accepted; it is temporary debt, not a permanent pass rule.
 
 Enforceable invariants:
 
@@ -702,7 +704,7 @@ variants onto daisyUI's **own** `--color-primary`, which would otherwise place a
 accent on screen (0420 finding F-01). Module code carries **no hex literals and no Tailwind palette
 classes** — every surface resolves a `spur-*` token.
 
-### 14.5 Module shell convention (ADR-081 proposed — History/Observability shell built; Tasks full-bleed instance built 0663, F72)
+### 14.5 Module shell convention (built — ADR-081; feature F72)
 
 A multi-view Board module composes a **shell**: `<Module>Shell.tsx` plus an append-only `tabs.ts`
 (`{ id, label, component }`; never reorder or rename — the tab strip and persisted UI state key on
@@ -1024,11 +1026,12 @@ dangling executor reference fails loudly at drain, spawning nothing.
 Shapes: `04 §2.1` (`agent.roles`); `packages/config/src/index.ts` (`DEFAULT_AGENT_ROLES`,
 `AgentRoleConfigSchema`); `config/config.global.yaml` (the ADR-078 SSOT); `plugins/sp/references/roles.md` (projection).
 
-## 20. Workflow Composition and Canonical Pipelines (ADR-072 accepted; ADR-069/071 proposed — taste gate pending)
+## 20. Workflow Composition and Canonical Pipelines (ADR-069/072 accepted; ADR-071 accepted design)
 
-D5 proposes an existing-seam, infrastructure-first migration. Workflow definitions remain the
+D5 implemented an existing-seam, infrastructure-first migration. Workflow definitions remain the
 orchestration graph; they do not become a second application layer. Shared deterministic behavior
-is deepened behind existing application and persistence interfaces before any live pipeline moves.
+is owned behind existing application and persistence interfaces. The remaining gap is proof
+finality in the canonical task/docs pipelines (ADR-071; tasks 0703/0704).
 
 ### 20.1 Options and decision
 
@@ -1038,13 +1041,13 @@ is deepened behind existing application and persistence interfaces before any li
 | Add a generalized workflow DSL, progress store, and event-driven controller | duplicates engine, persistence, and replay authority | largest one-way change and migration surface | rejected |
 | Extend existing app capabilities, engine action seam, persistence rows, and read projection | localizes changes behind proven owners | incremental, fixtureable, and reversible per pipeline | recommended |
 
-The proposed option has the smallest new interface: a checked composition baseline, two narrowly
+The selected option has the smallest new interface: a checked composition baseline, two narrowly
 owned deterministic action capabilities, a proof-input fingerprint, and a read projection. It adds
 no package, transport, data store, or public CLI surface.
 
 The rejected taste-gate details require three narrower decisions:
 
-| Seam | Candidates | Proposed choice | Strongest reason |
+| Seam | Candidates | Choice | Strongest reason |
 | --- | --- | --- | --- |
 | Proof establishment | trust a post-fix verdict; combine mutation and proof in one new capability; split remediation from observe-only proof | split remediation from the final `--fix none` verification | a PASS can name one state without trusting a capability that may edit it |
 | Gate execution | opaque shell string; structured executable/args; new gate DSL | literal executable/args invoking a named project script | it maps directly to `ProcessExecutor` and makes quoting and trust ownership explicit |
@@ -1131,7 +1134,7 @@ Enforceable invariants:
 
 ### 20.4 Canonical topology and migration
 
-The proposed target retains separate workflows where the lifecycle and rollback boundary is real:
+The canonical topology retains separate workflows where the lifecycle and rollback boundary is real:
 docs, wrap-up, idea/design review, task execution, and integration-HEAD PR review. Planning is a
 duplicate front half and was absorbed into the canonical idea/dev-plan path, resolving
 ADR-029's deferral (ADR-072 accepted 2026-08-20; `planning-pipeline.yaml` deleted).
@@ -1140,7 +1143,7 @@ candidate was **deleted rather than promoted** (ADR-076 accepted 2026-08-20): it
 and declared a fifth model query against the canonical pipeline's four, so promoting it would have
 added cost against a goal of reducing it.
 
-The proposed migration order keeps rollback local:
+The migration order keeps rollback local; step 5 remains open under tasks 0703/0704:
 
 1. Baseline every reviewed graph and freeze pipeline2 promotion.
 2. Build projection, gate, artifact, and proof-state prerequisites without migrating a pipeline.
@@ -1154,7 +1157,7 @@ Role selection stays on `agent.run`. Identity-pinned wait/message operations con
 exact occupant; a role never becomes a mutable coordination address. PR-review pending/unavailable
 stays advisory unless a later policy decision explicitly makes it blocking.
 
-## 21. Workflow Progress Projection (proposed — ADR-070; taste gate pending)
+## 21. Workflow Progress Projection (built — ADR-070)
 
 `WorkflowProgressProjection` is a pure application read module built inside `packages/app` beside
 `WorkflowService`; it is not a new engine, DAO schema, or controller. Its narrow interface accepts a
@@ -1296,3 +1299,51 @@ Invariants (enforceable):
    cache, task creation, or indexed-context append (ADR-089).
 
 Shapes: `docs/design/environment-improvement-lens.md`; `docs/design/session-review.md`.
+
+## 23. Baseline Taxonomy and Waiver Lifecycle (accepted design — ADR-093; enforcement pending)
+
+Baseline files are classified by effect, not filename:
+
+| Class | Current artifact | Gate effect | Lifecycle |
+| --- | --- | --- | --- |
+| Gate waiver | `config/corpus-baseline.json` | matching current findings pass | temporary debt; migrate before the next acceptance wave |
+| Reference contract | `config/workflow-composition-baseline.json` | drift from reviewed workflow facts fails | durable while the reviewed contract exists |
+| Regression budget | `config/pipeline-budgets.json` | measured regression beyond a numeric ceiling fails | durable; `null` means unenforced measurement debt, not an exemption |
+| Transition manifest | `config/transition-shims.json` | undeclared and stale shims both fail | temporary by construction; complete only when empty (ADR-058) |
+
+A gate-waiver record must identify bounded scope, owner, review date, and an objective remediation or
+removal condition. New findings never inherit an existing waiver, and regeneration may remove
+resolved debt but cannot silently accept new debt. Missing or expired governance metadata must fail
+closed once the ADR-093 enforcement lands. Until then, the current corpus snapshot is legacy debt;
+ADR-090/092 describe its present behavior, not permission to keep it indefinitely.
+
+## 24. Production Autonomy Contracts (accepted design — ADR-094–100; not yet built)
+
+These controls extend existing owners; they add no agent runtime, workflow engine, event bus,
+analytics store, or memory authority:
+
+```text
+agent.run requirement
+  -> executor resolution -> host capability attestation -> dispatch
+  -> typed usage at safe boundary -> budget/trip-wire decision
+  -> existing failure transition -> bounded escalation artifact
+
+repository state D -> fresh review(D) -> fresh verify(D) -> verified result(D)
+
+checkpoint/index -> freshness validation -> resume or ignore -> confined retention cleanup
+```
+
+| Concern | Existing owner reused | Current gap | Implementation |
+| --- | --- | --- | --- |
+| Capability enforcement | executor config + `agent.run` resolution | host enforcement is not attested | 0706 / ADR-094 |
+| Live budgets | action timeout + typed runner results | token/cost are nullable or retrospective | 0707 / ADR-095 |
+| Trip wires | workflow guards/failure edges + System Events | signals lack one deterministic stop mapping | 0708 / ADR-096 |
+| Independent judgment | reviewer/verifier roles + agent sessions | fresh context and executor separation are not enforced | 0710 / ADR-097 |
+| Escalation | run artifacts + event ledger + messages | evidence has no canonical handoff projection | 0709 / ADR-098 |
+| Memory lifecycle | checkpoints + `.spur/context` indexes + workflow cleanup | freshness and retention contracts are uneven | 0711 / ADR-099 |
+| Outcome accounting | verdicts + proof digest + history/run records | activity is measured; verified-result quality is not | 0712 / ADR-100 |
+
+Capability, budget, proof, and trip-wire failures are deterministic and fail closed at existing safe
+boundaries. Raw prompts, output, and logs remain bounded references rather than packet/event content.
+Unavailable measurement stays unavailable; it never becomes zero. The always-loaded guide byte gate
+is process enforcement owned by `99 §6.7` and task 0705, so it does not receive a project ADR.

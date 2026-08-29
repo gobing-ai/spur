@@ -1,12 +1,12 @@
 # Workflow composition contract
 
 **Area:** workflow definition composition, deterministic action ownership, pipeline promotion, and run artifacts.
-**Status:** proposed; operator taste gate pending (D5, ADR-069/071/072).
+**Status:** composition/projection infrastructure built; proof-finality completion pending (ADR-071; tasks 0703/0704).
 **Authority:** derived; decisions live in `00_ADR`, module boundaries in `03_ARCHITECTURE`.
 
 ## Target workflow inventory
 
-| Workflow | Lifecycle boundary | Proposed disposition |
+| Workflow | Lifecycle boundary | Disposition |
 |---|---|---|
 | `task-pipeline.yaml` | one task from precheck through recorded completion | canonical; absorb only a proof-preserving pipeline2 delta |
 | ~~`task-pipeline2.yaml`~~ | *(deleted 2026-08-20)* | **removed under ADR-076** — unreferenced duplicate declaring a 5th model query against the canonical pipeline's 4; deleted rather than promoted |
@@ -39,7 +39,7 @@ recording every shell program in the manifest; it is a follow-up, not part of th
 
 ## Composition baseline
 
-The proposed checked manifest is `config/workflow-composition-baseline.json`. It records resolved
+The checked manifest is `config/workflow-composition-baseline.json`. It records resolved
 facts, not executable behavior. The first baseline must describe the live definitions truthfully:
 
 ```json
@@ -189,7 +189,7 @@ Contract:
 - A failed final attempt fails the action. Empty, missing, or malformed result data never becomes PASS.
 
 The live `qualityGateCmd` and `gateProbeCmd` shell strings remain baseline facts until the target
-action has parity; they are not part of the proposed target contract.
+action has parity; they are not part of the final contract.
 
 ### `run.artifact`
 
@@ -237,8 +237,9 @@ bounded `--fix all` remediation hop, then returns to the structured quality gate
 record/done; a mismatch fails closed.
 
 The current task pipeline cannot claim this proof state because its verification action uses
-`--fix all`. Pipeline2 additionally runs an editing-capable residual sweep after the verdict. Both
-are `may-write`; neither existing graph is eligible for promotion under this proposed contract.
+`--fix all`. The former pipeline2 also ran an editing-capable residual sweep after the verdict and
+was deleted under ADR-076. Task 0703 must make the canonical graph observe-only before ADR-071 can
+move from accepted design to built.
 
 ## Run-definition binding
 
@@ -277,6 +278,6 @@ and bundle parity, and explicit operator approval before deleting a live definit
 
 ## Consent boundary
 
-This proposal adds no public `spur` noun, verb, flag, JSON field, or human-output contract. Internal
+This contract adds no public `spur` noun, verb, flag, JSON field, or human-output contract. Internal
 projection use may extend existing application interfaces. Exposing it through `spur workflow`
 requires a separate ADR-051 surface decision with operator consent.

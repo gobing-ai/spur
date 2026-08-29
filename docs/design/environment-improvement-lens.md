@@ -3,13 +3,13 @@ doc: design/environment-improvement-lens
 feature_id: I9
 owns: SURFACE — plugin-level environment-improvement mapping and its two report projections
 authority: derived (ADR wins on conflict)
-updated_at: 2026-08-27
+updated_at: 2026-08-29
 ---
 
 # Environment-improvement lens
 
 **Area:** `plugins/sp/references/environment-lens.md` mapping SSOT; `sp:dogfood-testing` report §6; `sp:history-anatomy` report section 9.
-**Status:** accepted design (ADR-084/085; not yet built).
+**Status:** built (ADR-084/085; feature I9).
 **Authority:** decisions in `00` (ADR-084 ownership, ADR-085 present-don't-apply); mechanism in `03 §22`; this satellite owns shapes. History-anatomy report/cache contracts remain [`history-anatomy.md`](history-anatomy.md). Dogfood protocol remains `sp:dogfood-testing@1.2` in `plugins/sp/skills/dogfood-testing/references/report-template.md`.
 
 Baseline: `docs/plans/2026-08-26-retro-skills-brainstorm.md` (Approach 1).

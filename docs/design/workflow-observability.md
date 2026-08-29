@@ -1,7 +1,7 @@
 # Workflow run observability
 
 **Area:** `spur workflow run`, `spur workflow trace`, workflow/agent lifecycle events.
-**Status:** implementation foundation built (0114/0310/0365); D5 progress projection proposed, taste gate pending.
+**Status:** built; D5 persisted progress projection accepted and shipped (ADR-070).
 **Authority:** derived; CLI shapes are indexed by `04_DESIGN §1`; ADR-035 owns the control-plane boundary.
 
 ## Runtime contract
@@ -147,7 +147,7 @@ Cross-process steering is intentionally disabled. Its required durable protocol 
 
 ## D5 detailed progress projection
 
-**Status:** proposed; operator taste gate pending (ADR-070).
+**Status:** built (ADR-070; task 0603).
 
 `WorkflowProgressProjection` is an internal application DTO. It is derived on demand and is not a
 new table or event payload:
