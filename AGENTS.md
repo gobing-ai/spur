@@ -201,6 +201,23 @@ bun run apps/cli/src/index.ts <noun> <verb> … --json
 spur <noun> --help
 ```
 
+| Noun       | Purpose                                                              |
+| ---------- | -------------------------------------------------------------------- |
+| `agent`    | Run and inspect supported coding agents                              |
+| `builder`  | Release plumbing: version bumps and release tags                     |
+| `feature`  | Feature tree + AC gates → **`sp:spur-cli`**                          |
+| `history`  | Import and analyze coding-agent history                              |
+| `message`  | Durable inter-agent messages                                         |
+| `projects` | Multi-project registry                                               |
+| `rule`     | Constraint rules and presets → **`sp:spur-cli`**                     |
+| `self`     | Inspect and manage the Spur installation itself                      |
+| `task`     | Task corpus → **`sp:spur-cli`**                                      |
+| `team`     | Team agent assignments and status                                    |
+| `workflow` | Workflow YAML validate/execute → **`sp:spur-cli`**                   |
+
+`help` is Commander-generated and is not a noun. This table is the AGENTS.md side of the
+`cli-surface-parity` R4 gate: it must match `spur --help` exactly.
+
 **Public-surface consent:** adding, changing, or removing a public `spur` noun/verb requires
 explicit operator consent with design context. Public commands live under existing nouns unless no
 noun can own the action. Internal self-development commands belong in `scripts/commands`; repo

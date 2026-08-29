@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F95"
 name: "CLI JSON envelope standard: normalized ok-data-error shape across spur nouns"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-27T19:43:56.365Z"
-updated_at: "2026-08-28T02:53:20.872Z"
+updated_at: "2026-08-29T05:35:47.347Z"
 ---
 
 # F95: CLI JSON envelope standard: normalized ok-data-error shape across spur nouns
@@ -68,7 +68,13 @@ Feature: CLI JSON envelope standard
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0693 | CLI JSON envelope standard: ADR, shape inventory, and gated implementation in one task | done |
-| 0697 | Route service-layer JSON emission through the ADR-091 envelope seam | todo |
+| 0697 | Route service-layer JSON emission through the ADR-091 envelope seam | done |
+| 0698 | Remaining verified findings from the 2026-08-27 dogfood sweep and history-anatomy reports | done |
+| 0699 | Honest success and failure signals: close the --json-envelope failure surface and repair the developer test loop | done |
+| 0700 | Corpus gates tell the truth: checkbox flip, Review reconciliation, scenario coverage, and three misfiring signals | done |
+| 0701 | Harness contracts: worktree lifecycle safety and /sp:dev-* specification drift | done |
+| 0702 | History analytics telemetry honesty: pairing cost absence and assistant-step duration attribution | done |
+| 0713 | Verified findings from the 2026-08-28 F95 dogfood runall sweep (runall-f95-inline-01) | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -76,3 +82,5 @@ Feature: CLI JSON envelope standard
 ## History
 
 - 2026-08-28T02:53:20.872Z backlog → active (system)
+- 2026-08-29T05:23:07.589Z active → verifying (system)
+- 2026-08-29T05:35:47.347Z verifying → done (system)

@@ -4,7 +4,7 @@ name: "Route service-layer JSON emission through the ADR-091 envelope seam"
 status: done
 template: feature-impl
 created_at: 2026-08-28T04:31:45.643Z
-updated_at: "2026-08-28T19:31:20.558Z"
+updated_at: "2026-08-29T05:05:29.178Z"
 feature_id: F95
 priority: P2
 ac_altitude: task-local
@@ -82,27 +82,27 @@ long-term shape, deliberately not done here).
 
 ### Acceptance Criteria
 
-- [ ] AC1. Given `apps/cli` already depends on `@gobing-ai/spur-app` (so the reverse import would be
+- [x] AC1. Given `apps/cli` already depends on `@gobing-ai/spur-app` (so the reverse import would be
       circular), when the seam decision lands as an ADR-091 amendment in `docs/00_ADR.md`, then it
       names the module that owns the helpers after the change, the two rejected alternatives, and
       the dependency-direction fact — and states that no ADR-051 consent gate applies because no
       CLI noun, verb, or flag changes.
 
-- [ ] AC2. Given each of `agent list`, `agent doctor`, `rule run`, `rule validate`, when invoked
+- [x] AC2. Given each of `agent list`, `agent doctor`, `rule run`, `rule validate`, when invoked
       with `--json --json-envelope`, then stdout parses against `apiSuccessSchema` from
       `packages/contracts/src/shared.ts` — all four emit flat objects, so `{ok: true, data}` is the
       expected form and `paginatedResponseSchema` does not apply — and the same command with
       `SPUR_JSON_ENVELOPE=1` and no flag produces the identical document.
 
-- [ ] AC3. Given each of the same four verbs invoked with `--json` alone, when compared against the
+- [x] AC3. Given each of the same four verbs invoked with `--json` alone, when compared against the
       pre-change baseline captured in the test fixture, then the bytes are identical.
 
-- [ ] AC4. Given a static scan of every `.command()` block registering `SHARED_OPTIONS.jsonEnvelope`,
+- [x] AC4. Given a static scan of every `.command()` block registering `SHARED_OPTIONS.jsonEnvelope`,
       when the scan is re-run after the change, then every such verb either emits through the
       envelope seam or appears in the `docs/04_DESIGN.md` §4.1 kept-raw list with a reason — the
       scan surfaces no verb that advertises the flag and ignores it.
 
-- [ ] AC5. Given the 99 CLI call sites already adopted at task 0693, when the helpers move out of
+- [x] AC5. Given the 99 CLI call sites already adopted at task 0693, when the helpers move out of
       `apps/cli/src/output.ts`, then none of those call sites is edited and `bunx tsc --noEmit`
       passes for every workspace — the re-export carries them unchanged.
 
@@ -363,20 +363,21 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/00_ADR.md:1715` — dated ADR-091 amendment names the owner, rejected alternatives, dependency direction, and consent-gate disposition |
-| R2 | MET | `packages/app/src/output/envelope.ts:61`; `apps/cli/src/commands/agent.ts:30`; `apps/cli/src/commands/rule.ts:21`; executable coverage at `apps/cli/tests/output-envelope.test.ts:164` |
-| R3 | MET | pre-relocation fixture exercised by `packages/app/tests/services/json-envelope-adoption.test.ts:147` and exact-byte assertions at `packages/app/tests/services/json-envelope-adoption.test.ts:157` |
-| R4 | MET | default-deny scan at `apps/cli/tests/json-envelope-inventory.test.ts:100`; closed inventory at `docs/04_DESIGN.md:1551`; fix-pass artifacts: repo-root `.spur/run/0697-verify-answer.txt` lines 1-39 and `.spur/run/0697-verdict.json` lines 1-106 |
+| R1 | MET | `docs/00_ADR.md:1724-1745` — dated ADR-091 amendment re-read this run: "**Amendment 2026-08-27 (task 0697) — the envelope seam moves to `packages/app`.**" Names the owning module after the change (`packages/app/src/output/envelope.ts`, exported from `@gobing-ai/spur-app`), states the dependency-direction fact that forces it (`apps/cli/package.json` already depends on `@gobing-ai/spur-app`, so the reverse import is circular against the workspace graph — `:1738-1741`), and records both rejected alternatives at `:1743-1745` (`packages/contracts` — transport DTOs only, and `envelopeEnabled` reads `process.env`; duplicating the helpers — a second envelope implementation). |
+| R2 | MET | All four verbs re-probed this run against `apiSuccessSchema` (script under `packages/contracts/tmp/z2.ts` importing `../src/shared`, removed after the run): `agent list`, `agent doctor`, `rule run --preset default`, `rule validate --preset default` each parse **true** under `--json --json-envelope`. Precedence verified by comparing the flag document against `SPUR_JSON_ENVELOPE=1` with no flag: byte-identical for `agent list`, `rule run`, `rule validate`; `agent doctor` differs only in `cache.ageMs` (wall-clock, `.spur/run/…` `207c207`, `7686` vs `7873`) — a flag-vs-flag control run differs in the same single field, so the delta is clock non-determinism, not a precedence defect. Threading sites: `packages/app/src/services/agent-service.ts` `list()` / `renderDoctor()`, `packages/app/src/services/rule-service.ts` `evaluate()` / `validate()`, each receiving `{enveloped}` from the command layer; precedence applied once by `packages/app/src/output/envelope.ts:62` `envelopeEnabled`, not re-implemented per service. |
+| R3 | MET | `cd packages/app && bun test tests/services/json-envelope-adoption.test.ts` → **25 pass / 0 fail** (110ms), asserting raw-default bytes against the pre-relocation fixture `packages/app/tests/fixtures/json-raw-baseline.json`. Live control this run: with neither flag nor env set, top-level shapes are unchanged and unenveloped — `agent list` → `{agents…}`, `agent doctor` → `{agents, rolesSource, cache…}`, `rule run` → `{preset, ruleCount, findings…}`, `rule validate` → `{valid, kind, source…}`. |
+| R4 | MET | `docs/04_DESIGN.md:1551-1573` — the "Not adopted (service-side…)" bullet is replaced by "**Service-side adoption — CLOSED (task 0697, 2026-08-27)**" with a per-verb emit-site / threading / enveloped-shape table. Closure is machine-guarded, not eyeballed: `apps/cli/tests/json-envelope-inventory.test.ts` walks every `.command()` block registering `SHARED_OPTIONS.jsonEnvelope` and fails any verb that advertises the flag without routing it to an envelope emitter, with `KEPT_RAW` (`apps/cli/tests/json-envelope-inventory.test.ts:23-27`, one entry: `task verdict`) as the only permitted exception, mirrored in §4.1. `cd apps/cli && bun test tests/json-envelope-inventory.test.ts tests/output-envelope.test.ts` → **44 pass / 0 fail** (5.93s). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 [docs-only] | MET | static-ref | `docs/00_ADR.md:1715` — all required amendment elements are present |
-| AC2 | MET | test | `apps/cli/tests/output-envelope.test.ts:164` — all four verbs validate and flag/env documents are identical; post-fix target 70 pass / 0 fail |
-| AC3 | MET | test | `packages/app/tests/services/json-envelope-adoption.test.ts:155` — raw output is byte-identical to the pre-relocation fixture |
-| AC4 | MET | test | `apps/cli/tests/json-envelope-inventory.test.ts:100` and `apps/cli/tests/output-envelope.test.ts:308` report zero ignored advertised verbs |
-| AC5 | MET | command | `apps/cli/src/output.ts:10` re-exports the seam; `bun run spur-check` typechecked every workspace and passed 6,669 tests |
+| AC1 | MET | command | Five content probes re-run this session over `sed -n '1724,1750p' docs/00_ADR.md`, each `grep -c` returning 1 (exit 0): `packages/app/src/output/envelope.ts` (the owning module named), `circular against the workspace graph` (the dependency-direction fact), `Rejected alternatives`, `packages/contracts` and `Duplicating the helpers` (both rejected alternatives). ADR-051 non-applicability: `grep -c 'ADR-051 consent gate does \*\*not\*\* apply' docs/tasks4/0697_*.md` → 1, and `git log -1 -S"'--json-envelope'," -- apps/cli/src/commands/shared-options.ts` attributes the flag's registration to `791dc9c94 feat(cli): adopt opt-in JSON envelope across all nouns` (task 0693) — 0697 introduced no noun, verb, or flag. |
+| AC2 | MET | command | Four verbs × `--json --json-envelope` parsed against `apiSuccessSchema` from `packages/contracts/src/shared.ts:24` → all **true**, all flat `{ok, data}` (no `paginatedResponseSchema` involvement, as the AC predicts). `SPUR_JSON_ENVELOPE=1` with no flag reproduced the identical document for `agent list` / `rule run` / `rule validate`; `agent doctor` matched on every field except the wall-clock `cache.ageMs`, which a same-flag control run also varies. |
+| AC3 | MET | test | `cd packages/app && bun test tests/services/json-envelope-adoption.test.ts` → **25 pass / 0 fail**, comparing `--json`-alone bytes against the pre-change fixture `packages/app/tests/fixtures/json-raw-baseline.json`. |
+| AC4 | MET | test | `cd apps/cli && bun test tests/json-envelope-inventory.test.ts` (part of the 44-pass run above) performs exactly this static scan over `.command()` blocks registering `SHARED_OPTIONS.jsonEnvelope`, asserting `offenders` is empty and that every `KEPT_RAW` entry still exists and still advertises the flag. No verb advertises the flag and ignores it. |
+| AC5 | MET | command | `bun run typecheck` (`bun run --filter '*' typecheck`) this run → **exit 0 for all seven workspaces** (`spur-config`, `spur-domain`, `spur-contracts`, `spur`, `spur-app`, `spur-web`, `spur-server`). The 99 adopted call sites are carried unedited by the re-export at `apps/cli/src/output.ts:10-19`; live count re-measured this run: `rg -c 'toEnvelopeJson\(' apps/cli/src/commands/` → **99**. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
 **SECU findings** (pipeline verify step — verdict: PASS)
 
@@ -384,7 +385,6 @@ Each entry cites the first changed line per file (`file:line`).
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-
 ### References
 
 - **Feature:** `docs/features/F95_cli-json-envelope-standard-normalized-ok-data-error-shape-across-spur-nouns.md`

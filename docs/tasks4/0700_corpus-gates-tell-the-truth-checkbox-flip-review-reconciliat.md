@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Corpus gates tell the truth: checkbox flip, Review reconciliation, scenario coverage, and three misfiring signals"
-status: testing
+status: done
 template: issue
 created_at: 2026-08-28T22:21:18.557Z
-updated_at: "2026-08-29T00:35:19.491Z"
+updated_at: "2026-08-29T05:20:54.817Z"
 feature_id: F95
 parent_wbs: "0698"
 ac_altitude: task-local
@@ -56,7 +56,7 @@ Source mapping (parent → this task): 0698 R7 → R1, 0698 R8 → R2, 0698 R9 �
 
 - [x] R2. **A `done` or `cancelled` task must not be able to carry a `PARTIAL`/`FAIL`/`request-changes` Review verdict beside a PASS Testing verdict with no gate.** `grep -rn "request-changes" packages/app/src packages/config/src` returns nothing. `task record` backfills `### Review` only when the section is bare (`task-service.ts:1147`), and `sp:code-verification` Step 10 forbids the verify pass from writing `## Review` at all, so nothing in the system can reconcile a stale one. Task 0693 demonstrates the end state: `**Verdict: PARTIAL — request-changes**` at `:272` and `**Verdict: PASS**` at `:315`, both live on a `done` task.
 
-- [ ] R3. **Feature-scenario coverage must be satisfiable without a task copying its feature's scenario titles.** DD-09 links a feature scenario to a task by normalized *title* (`feature-check.ts:446`, `:519`, `:627-650`). Feature F95's scenarios are titled `R1 —`/`R2 —`/`R3 —`; task 0693's acceptance criteria are `AC1`–`AC4`; nothing matches, so a `done`, linked, correctly-implemented task leaves its feature reporting `L4.uncovered-feature-scenario` forever, and `apps/cli/src/commands/task.ts:1013-1020` re-emits the same complaint on every `task verdict` derivation. The inverse rule (`L4.uncovered-task-scenario`, the DD-09 subset check) fires 17 times on task 0698 for legitimate work outside its parent feature's scenario list.
+- [x] R3. **Feature-scenario coverage must be satisfiable without a task copying its feature's scenario titles.** DD-09 links a feature scenario to a task by normalized *title* (`feature-check.ts:446`, `:519`, `:627-650`). Feature F95's scenarios are titled `R1 —`/`R2 —`/`R3 —`; task 0693's acceptance criteria are `AC1`–`AC4`; nothing matches, so a `done`, linked, correctly-implemented task leaves its feature reporting `L4.uncovered-feature-scenario` forever, and `apps/cli/src/commands/task.ts:1013-1020` re-emits the same complaint on every `task verdict` derivation. The inverse rule (`L4.uncovered-task-scenario`, the DD-09 subset check) fires 17 times on task 0698 for legitimate work outside its parent feature's scenario list.
 
 - [x] R4. **The `L4.dogfood-missing` gate must not decide a feature's fate from gitignored files.** `.gitignore:184` ignores `/docs/dogfood/*` with five tracked exceptions; 84 reports exist on disk. `feature-check.ts:575-585` scans that directory for a filename segment matching the feature id, so **41** features currently pass the gate on evidence that is not in the repository — a fresh clone or a CI run flips roughly 36 of them to failing with no code change.
 
@@ -64,7 +64,7 @@ Source mapping (parent → this task): 0698 R7 → R1, 0698 R8 → R2, 0698 R9 �
 
 - [x] R6. **The `L4` gate-language advisory must not fire on a task that already models its gate.** `task-check.ts:1266` emits `"<section> contains gate language; model the gate as a frontmatter dependency or verify it before treating the task as ready"` without ever reading `frontmatter.dependencies`. Task 0694 carries `dependencies: [0691]` and is warned on both Design and Plan; task 0698 is warned three times. The advisory is pure noise on exactly the well-formed case.
 
-- [ ] R7. **Feature B's task roster must match the corpus.** `docs/features/B_agent-execution.md:25-27` reads `_No linked tasks._` while tasks 0687, 0689 and 0690 all carry `feature_id: B`. A sweep of all 117 features carrying an `AUTO-GENERATED` block found this is the **only** stale roster, so the fix is a resync, not a mechanism change — but confirm why it drifted before closing, since a one-off that nobody noticed for a day is a signal about when the block is regenerated.
+- [x] R7. **Feature B's task roster must match the corpus.** `docs/features/B_agent-execution.md:25-27` reads `_No linked tasks._` while tasks 0687, 0689 and 0690 all carry `feature_id: B`. A sweep of all 117 features carrying an `AUTO-GENERATED` block found this is the **only** stale roster, so the fix is a resync, not a mechanism change — but confirm why it drifted before closing, since a one-off that nobody noticed for a day is a signal about when the block is regenerated.
 
 **Out of scope.** Re-tightening the `L4.stale-line-anchor` drift detector (474 baselined entries
 after the ADR-090 acceptance) — that is a separate decision recorded in 0698. Also out: un-ignoring
@@ -400,45 +400,41 @@ Parser + gate changes across domain and app:
 - Both new finding codes registered — packages/app/src/services/finding-codes.ts.
 
 ### Testing
-
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | `packages/domain/src/bdd/checklist.ts:51` — id regex widened to `(?:AC |
-| R1b | MET | `apps/cli/src/commands/task.ts:1129` — `--fix` help no longer claims R-item checkbox repair (repair kind only inserts `[ ]` markers). |
-| R2 | MET | `packages/app/src/services/task-check.ts:891` — `L3.review-testing-contradiction` (error) on terminal tasks with stale non-passing Review + PASS Testing; last-verdict capture stops at bold/parenthetical (`[^*(\n]+`) so a superseding PASS prose sentence cannot pollute the verdict. Both directions unit-tested; code registered in `finding-codes.ts`. |
-| R3 | PARTIAL | Machinery done: `covers:` alias extraction/`stripCoversClause`/`extractCoversAliases` (`packages/domain/src/bdd/coverage.ts:73-79`) validated in the subset loop, and AC5 unmatched-verdict promoted to the feature done gate (`L4.verdict-rows-match-no-scenario`). Deferred by run scope: rewriting 0693's AC with `covers:` aliases via CLI (corpus edit). |
-| R4 | MET | `packages/app/src/services/feature-check.ts:581` — dogfood gate reads the tracked `docs/dogfood/INDEX.md` ledger first, readdir fallback retained; unit-tested. Note: the ledger file itself is a corpus-side artifact not created in this run. |
-| R5 | MET | `packages/app/src/services/task-check.ts:666` — counts R-item lines not blank-line blocks; warns only when prose blocks outnumber numbered items. 0174 multi-paragraph regression cases kept passing. |
-| R6 | MET | `packages/app/src/services/task-check.ts:1289` — gate-language advisory suppressed when frontmatter `dependencies` is non-empty; both directions unit-tested. Live proof: `spur task check 0698` is now clean (was 3 gate-language + 17 uncovered-task-scenario warnings; AC9). |
+|-------------|--------|----------|
+| R1 | MET | Checkbox flipping proven live, not inferred. `packages/domain/src/bdd/checklist.ts:56` now extracts `((?:AC |
+| R2 | MET | `packages/app/src/services/task-check.ts:879-908` — `L3.review-testing-contradiction`, severity `error`, gated on terminal status, with last-`Verdict:`-line-wins semantics so an appended correction supersedes. Both directions pinned by `packages/app/tests/services/task-check.test.ts:3681-3704`; `cd packages/app && bun test tests/services/task-check.test.ts` → **154 pass / 0 fail** (164ms). Live negative control: task 0693 carries `**Verdict: PARTIAL — request-changes**` at `:272` and `**Verdict: PASS** … Supersedes the PARTIAL — request-changes above.` at `:315`, and `task check 0693 --strict-core` emits **no** contradiction finding — the supersession path the rule is built for. |
+| R3 | MET | Two halves, both closed. (a) Title mimicry: `covers:` aliases at `packages/domain/src/bdd/coverage.ts:73-81` (`COVERS_RE_SOURCE`, `stripCoversClause`, `extractCoversAliases`) are consumed in the subset loop at `:133-134` and `:163`; `cd packages/domain && bun test tests/bdd` → **111 pass / 0 fail**. Live: `feature check F95 --strict --json` → `pass: true`, **zero findings**, and `task check 0698` reports **0** `L4.uncovered-task-scenario` (was 17). (b) The re-emission half — R3 names `apps/cli/src/commands/task.ts:1013-1020` re-emitting the same complaint on every `task verdict` derivation — was still live at the start of this run and fired on all four derivations. **Fixed this run:** the block is removed (`apps/cli/src/commands/task.ts:1008-1015` now carries the rationale comment), leaving the actionable finding at the feature done gate, `packages/app/src/services/feature-check.ts:765` `L4.verdict-rows-match-no-scenario`. The removed warning was also a **false positive**: it passed only `result.requirements` to `verdictRowsMatchScenarios`, while the gate credits `[...requirements, ...acceptanceCriteria]` (`packages/app/src/services/feature-check.ts:759`, `:810`) — a verdict keyed by scenario title in the AC table, which is exactly the answer-file contract's shape, was warned about a block that would never occur. |
+| R4 | MET | The gate now decides from repository state, end to end. `packages/app/src/services/feature-check.ts:581` reads the tracked ledger first (unit-tested; `cd packages/app && bun test tests/services/feature-check.test.ts` → **106 pass / 0 fail**), and the close-out supplied the ledger the mechanism needed: `.gitignore:189-193` now carries `!/docs/dogfood/INDEX.md` beside the README exception, and `docs/dogfood/INDEX.md` lists the five reports `git ls-files docs/dogfood` returns, with the regeneration command in its own header. `git check-ignore -v docs/dogfood/INDEX.md` is now silent. **Proven, not assumed:** `docs/dogfood/2026-08-01-sp-dev-verifyall-H8-dogfood.md` sits untracked in the working tree, and `feature check H8` still reports `L4.dogfood-missing` — the untracked file no longer clears the gate. The honest consequence is loud and was accepted deliberately: **60** of 116 features now report `L4.dogfood-missing` (warning severity — only one feature fails overall, and F95 is unaffected), which is the population a fresh clone always had. |
+| R5 | MET | `packages/app/src/services/task-check.ts:660-687` — the format gate now counts R-item **lines** (`R_ITEM_RE` accepts `- [ ] **R1.**` and bare forms) rather than blocks, and only counts a prose block against the score when it precedes the first item or opens with emphasis. Live control: task 0699's Requirements is four contiguous R-items plus the `**Out of scope.**` prose block — the exact implement-ready shape R5 names — and `task check 0699 --strict-core` emits **no** `L3.requirements-format` finding. |
+| R6 | MET | `packages/app/src/services/task-check.ts:1309-1314` — `checkGateLanguage` returns early when `doc.frontmatterData?.dependencies` is a non-empty array. Both directions observed live this run: task 0698 (`dependencies: [0699, 0700, 0701, 0702]`) reports **0** `L4.gate-language` findings where it previously drew three; tasks 0699 and 0701, which carry gate language and declare **no** dependencies, are still warned. The advisory now fires only on the case it was written for. |
+| R7 | MET | Cause confirmed, then resynced. **Why it drifted:** `spur feature refresh` refuses a bare sweep — scope must be explicit via `--feature <id>` or `--all` (task 0625 R5a / ADR-051 consent, per `feature refresh --help`), and nothing regenerates the auto-gen block on `task create` or on a `feature_id` link. A feature whose tasks were linked without someone separately running the scoped refresh keeps a stale roster indefinitely; B is the only one of 117 that hit it. **Fix this run:** `spur feature refresh --feature B --json` → `{"tasksUpdated": 1}`; `docs/features/B_agent-execution.md:25-31` now lists 0687, 0689, 0690 (all `done`), matching `task list --feature B --json` → `['0687','0689','0690']`. `docs/features/INDEX.md` also caught up by dropping the deleted cancelled F96 row. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
-| AC1 | MET | test | checklist parser + flip tests: bold and AC-id boxes parse with ids; flip tests green in domain `bdd/checklist` + app task-record suites. |
-| AC2 | MET | command | `bun run src/index.ts task check --help \| grep -c 'R-item checkboxes'` → 0 (run this turn from current src). Src anchor `apps/cli/src/commands/task.ts:1129`. Note: installed `spur` bundle is stale and still prints the old text; source is authoritative. |
-| AC3 | MET | test | `task-check.test.ts` R2 cases: stale PARTIAL flagged as error naming /sp:dev-review; superseding PASS authoritative; wip not flagged. |
-| AC4 | PARTIAL | test | `covers:` alias path implemented and unit-tested; corpus rewrite of 0693 AC deferred. |
-| AC5 | MET | test | done-gate promotion emits blocking `L4.verdict-rows-match-no-scenario`. |
-| AC6 | MET | test | ledger-first dogfood gate unit-tested with readdir fallback. |
-| AC7 | MET | test | R5 cases: implement-ready shape (items + prose) no longer warns; multi-paragraph bodies still clean. |
-| AC8 | MET | test | R6 cases: declared dependency suppresses; no dependency still warns. |
-| AC9 | MET | command | `bun apps/cli/src/index.ts task check 0698 --json` (current src, this turn): 0 × uncovered-task-scenario, 0 × gate-language (was 17 + 3). Remaining warnings are pre-existing baselined categories (anchor-subject-mismatch 3, prerequisite-not-done 4 — subtasks 0701/0702 still open, stale-line-anchor 2). |
-| AC10 | N/A | manual-review | Deferred with R7 by the run's narrow-scope order; feature B roster untouched this turn. |
-
+|---------------------|--------|---------------|----------|
+| AC1 — A MET acceptance criterion flips its own checkbox | MET | command | Live on task 0697 this run: before, `### Acceptance Criteria` read `- [ ] AC1` through `- [ ] AC5` on a `done` task; after `spur task record 0697 --verdict-file .spur/run/0697-verdict.json`, `grep -o '^- \[.\] AC[0-9]'` returns `[x]` for all five. The verdict-unmentioned-box half holds structurally: `flipVerifiedCheckboxes` (`packages/app/src/services/task-record.ts:191`) skips any item whose `requirementId` is absent from the proven set, and the intermediate run where AC1 was PARTIAL left exactly that box at `[ ]` while AC2–AC5 flipped — the untouched case, observed. |
+| AC2 — task check --fix repairs or stops advertising the repair | MET | command | The AC's **second branch** is the one taken. `spur task check 0702 --fix --json` this run → `repairs: []` with the `L3.unchecked-checklist` finding still reported, and `spur task check --help` now reads `--fix  repair structural findings in place (heading presence/level/order; adds missing R-item checkbox markers — flipping verified boxes is task record's job, not --fix)` (`apps/cli/src/commands/task.ts:1151`). The help text no longer claims to repair R-item checkboxes, so the disclaimer and the behavior agree. |
+| AC3 — A done task cannot hide a request-changes Review | MET | test | Positive: `packages/app/tests/services/task-check.test.ts:3681` asserts a stale `PARTIAL — request-changes` Review beside PASS Testing on a closed task is flagged as an **error** naming the contradiction and routing to `/sp:dev-review` (`packages/app/src/services/task-check.ts:901-905`). Negative: `:3690` asserts a superseding `**Verdict: PASS**` clears it, and `:3701` asserts a `wip` task is not flagged. `cd packages/app && bun test tests/services/task-check.test.ts` → **154 pass / 0 fail**. Live agreement case: task 0693 emits no such finding. |
+| AC4 — Feature scenario coverage is satisfiable without title mimicry | MET | command | `bun run apps/cli/src/index.ts feature check F95 --strict --json` this run → `"pass": true` with `findings: []` — no `L4.uncovered-feature-scenario` on title mismatch. The per-row half: `task check 0698` reports **0** `L4.uncovered-task-scenario` findings, down from the 17 the requirement records, because the `covers:` alias path (`packages/domain/src/bdd/coverage.ts:73-81`) lets a task declare coverage without copying its feature's scenario titles. |
+| AC5 — An unmatched verdict is blocking where it can be acted on | MET | command | The finding side was already in place at `packages/app/src/services/feature-check.ts:756-770` (`L4.verdict-rows-match-no-scenario`, warning by default, elevated to error by `--strict`, i.e. the done gate). The "not a stderr warning at task verdict time" side was **not**: the warning fired on every derivation this session until removed. **Fixed this run** — the block at `apps/cli/src/commands/task.ts` is deleted and `verdictRowsMatchScenarios` dropped from its import; re-running `task verdict 0699 --from-answer …` now emits the artifact with **no** stderr line. Regression check: `cd apps/cli && bun test tests/commands/task.test.ts` → **171 pass / 0 fail**; `bun run typecheck` → exit 0 for all seven workspaces; no test asserted the removed warning. |
+| AC6 — The dogfood gate does not depend on untracked files | MET | command | The identity the scenario asserts now holds. `ls docs/dogfood/ |
+| AC7 — Requirements format accepts the implement-ready shape | MET | command | Task 0699's Requirements is precisely the shape the scenario describes — four contiguous R-item lines followed by an `**Out of scope.**` prose block — and `bun run apps/cli/src/index.ts task check 0699 --strict-core --json` this run reports **no** `L3.requirements-format` finding. The multi-paragraph half is structural — the format gate counts R-item **lines** matched by `R_ITEM_RE` within each block and increments `proseBlocks` only for a block that precedes the first item or opens with emphasis, so an R-item with a multi-paragraph body cannot false-positive (`packages/app/src/services/task-check.ts:664-679`). |
+| AC8 — The gate-language advisory reads the dependency it demands | MET | command | Both halves observed live. Task 0698 declares `dependencies: [0699, 0700, 0701, 0702]` and `task check 0698 --json` reports **0** `L4.gate-language` findings (previously three). Tasks 0699 and 0701 carry gate language with no declared dependency and are **still** warned — `task check 0699 --strict-core` reports `L4.gate-language` on Background and Acceptance Criteria. The early return that reads `frontmatterData.dependencies` is at `packages/app/src/services/task-check.ts:1314`. |
+| AC9 — Task 0698 checks clean without being edited | MET | command | `bun run apps/cli/src/index.ts task check 0698 --json` this run, against 0698's content unedited by this leg: **0** `L4.uncovered-task-scenario` and **0** `L4.gate-language` findings. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
+<!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: FAIL)
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-
 ### References
 
 **Parent:** task **0698** — `### Requirements` R7, R8, R9, R12, R17, R18, R19(a). **Feature:** F95
@@ -490,3 +486,4 @@ this task completes), `1a2cfd75e` (case-insensitive feature-id match — the alr
 
 - 2026-08-28T23:58:35.278Z todo → wip (system)
 - 2026-08-29T00:29:48.707Z wip → testing (system)
+- 2026-08-29T05:20:54.817Z testing → done (system)

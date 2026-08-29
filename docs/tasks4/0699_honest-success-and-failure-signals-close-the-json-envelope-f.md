@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Honest success and failure signals: close the --json-envelope failure surface and repair the developer test loop"
-status: testing
+status: done
 template: issue
 created_at: 2026-08-28T22:21:18.215Z
-updated_at: "2026-08-28T23:55:29.332Z"
+updated_at: "2026-08-29T05:20:04.430Z"
 feature_id: F95
 parent_wbs: "0698"
 ac_altitude: task-local
@@ -46,7 +46,7 @@ would be the wrong size, not because they belong to the envelope decision.
 
 Source mapping: R1 ← 0698 R1, R2 ← 0698 R2, R3 ← 0698 R5, R4 ← 0698 R6.
 
-- [ ] R1. **No verb that declares `--json-envelope` may report `ok: true`, or emit no JSON at all, on a path that exits non-zero.** Today `spur task check 9999` and `spur feature check F999` print `{"ok": true, "data": [], "meta": {...}}` to stdout with exit code 1, and `task path` / `task resolve` / `rule show` / `workflow show` / `agent show` print a bare stderr line and no JSON. The deliverable is the **enumeration** of all 68 verbs declaring `SHARED_OPTIONS.jsonEnvelope`, not a fix to the handful this sweep happened to name — the ten-verb probe was a sample of a fall-through pattern, and 110 raw `context.output.error(` calls live in `apps/cli/src/commands`.
+- [x] R1. **No verb that declares `--json-envelope` may report `ok: true`, or emit no JSON at all, on a path that exits non-zero.** Today `spur task check 9999` and `spur feature check F999` print `{"ok": true, "data": [], "meta": {...}}` to stdout with exit code 1, and `task path` / `task resolve` / `rule show` / `workflow show` / `agent show` print a bare stderr line and no JSON. The deliverable is the **enumeration** of all 68 verbs declaring `SHARED_OPTIONS.jsonEnvelope`, not a fix to the handful this sweep happened to name — the ten-verb probe was a sample of a fall-through pattern, and 110 raw `context.output.error(` calls live in `apps/cli/src/commands`.
 
 - [x] R2. **`writeJsonError` must be able to carry an error code and must not leak the JS class prefix into the machine-readable message.** `packages/app/src/output/envelope.ts:99-109` hardcodes `INTERNAL_ERROR` and accepts no `details`, so an enveloped consumer cannot distinguish a missing record from an internal fault. Thirty-five call sites pass `String(err)`, producing `"message": "Error: Task 9999 not found in any registered task folder"`. ADR-091 (`docs/00_ADR.md:1664`, `:1708`) promises CLI-local codes collapse to `INTERNAL_ERROR` **with `details.cliCode`**; only six hand-rolled sites honour it. Either the helper gains the capability or the ADR paragraph is corrected — both must end up saying the same thing in the same commit (constitution **T3**).
 
@@ -328,9 +328,9 @@ every agent following the documented contract reads a green test as a failure.
 `code: ApiErrorCode = 'INTERNAL_ERROR'` and `details?: unknown` (frozen names, module-internal —
 ADR-051 not triggered), forwarded to `toEnvelopeError`; a leading `Error:` is stripped from the
 enveloped message only, leaving the raw stderr branch byte-identical (AC4). The not-found throw at
-`packages/app/src/services/task-service.ts:1670` now carries `cliCode: 'NOT_FOUND'`, surfaced by
+`packages/app/src/services/task-service.ts:1675` now carries `cliCode: 'NOT_FOUND'`, surfaced by
 `task show` as `INTERNAL_ERROR` + `details.cliCode` — the ADR-091 compat paragraph
-(`docs/00_ADR.md:1708`) already promises exactly this, so helper and ADR agree with no ADR text
+(`docs/00_ADR.md:1673`) already promises exactly this, so helper and ADR agree with no ADR text
 change (AC3, T3 satisfied without a design-doc edit).
 
 **Failure surface (R1).** Every bare `context.output.error` exit path on the design-named verbs now
@@ -360,44 +360,36 @@ caveat.
 **Enumeration scope (honest).** The table-driven e2e test covers the ten design-named failure
 paths plus the raw-byte-identity guard; a full 68-verb failure-driver table needs a per-verb
 failure fixture and is recorded as residual work, so R1/AC1 is certified PARTIAL, not MET.
-
 ### Testing
-
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | PARTIAL | Fall-through and no-JSON classes fixed on the design-named surface: source-local `bun run apps/cli/src/index.ts task check 9999 --json --json-envelope` now emits `{"ok":false,"error":{"code":"NOT_FOUND",...}}` exit 1 (was `ok:true`); same for `feature check F999`, `task path 9999`, `task resolve /nope/nope.ts`; `rule trace` flag guards and `workflow show` file/format/parse paths (env opt-in; verb declares `--json` only — no `--json-envelope` flag exists on the current surface) emit the error envelope; `task check` exit-2 usage guards envelop `VALIDATION_FAILED`. Table-driven e2e test `apps/cli/tests/output-envelope.test.ts` `enveloped failure surface is honest end-to-end (0699 R1/R2)` covers 10 failure paths (exit + ok:false + frozen code + no bare stderr) and runs green in the 901/0 suite. NOT MET in full: the 68-verb enumeration table is not built — the fixed set is the design-named verb set, so AC1 is PARTIAL by its own last clause. |
-| R2 | MET | `packages/app/src/output/envelope.ts` `writeJsonError(output, options, message, code = 'INTERNAL_ERROR', details?)` forwards both to `toEnvelopeError` and strips a leading `Error:` in the enveloped branch only; `task-service.ts:1670` throw carries `cliCode: 'NOT_FOUND'`; `bun run apps/cli/src/index.ts task show 9999 --json --json-envelope` emits `error.code=INTERNAL_ERROR`, `details.cliCode=NOT_FOUND`, message exactly `Task 9999 not found in any registered task folder` (no `Error:` prefix), exit 1 — AC2's second allowed shape. Unit tests pin default code, explicit code, details passthrough, prefix strip, raw-branch identity. ADR-091 `:1708` already promises this collapse, so helper and ADR agree with no ADR text change (AC3 MET, T3: code and doc say the same thing in the same commit). |
-| R3 | MET | New `apps/cli/bunfig.toml` (`[test] preload = ["../../tests/setup.ts"]`); `cd apps/cli && bun test` = 901 pass / 0 fail, exit 0, no `SPUR_SKIP_GLOBAL_CONFIG` on the command line (was 880/6). Sibling check: `apps/server` passes `--preload ./tests/setup.ts` in its test script; `packages/*`/`apps/web` workspace-local runs show no config-layer failure; `packages/app` has one pre-existing cwd-dependent `resolveRepoRoot` failure under `packages/app` (different class: git-root resolution, not global-config layering) — out of this task's scope, flagged as follow-up. |
-| R4 | MET | Decision recorded in `### Solution`: workspace-cwd targeting, not `--coverage=false` (verified invalid in this bun: prints usage, exit 1) and no threshold change (90/90 intact). Command executed BEFORE being written down: `cd apps/cli && bun test tests/output-envelope.test.ts --test-name-pattern "wraps a payload"` → `1 pass / 0 fail`, exit 0; the identical selection from the repo root exits 1 on the whole-repo denominator. CLAUDE.md §Build & verification now documents exactly that command with the root-cwd caveat (AC6 MET). |
+|-------------|--------|----------|
+| R1 | MET | **The enumeration exists and the property holds.** `apps/cli/tests/json-envelope-inventory.test.ts:130-263` is a static census over **all 68** flag-declaring verbs — not a sample — that classifies every `context.output.error(` site reachable from a flag-declaring verb (in-block or one helper hop), keeps only those followed by a non-zero exit, and fails on any the JSON path can still reach. It reports **zero** offenders. Mutation-checked this run: reverting one converted site (`apps/cli/src/commands/serve.ts:63`) made the guard fail, naming that verb and its line, so it bites rather than passing vacuously. **Conversions this run:** 54 failure sites across `agent`, `feature`, `message`, `serve`, `task`, `team`, `workflow` now emit through `writeJsonError` with an `API_ERROR_CODES` value (`VALIDATION_FAILED` / `NOT_FOUND` / `GUARD_DENIED` / `INTERNAL_ERROR`); `writeJsonError(` sites went 55 → **106**, bare `context.output.error(` 94 → **42**, and every one of the 42 survivors is either a warning beside a successful run or the non-JSON branch of a site whose JSON half already emits the envelope. `agent.ts` needed a `jsonFlags()` adapter because its helpers receive the kebab-cased flags record, never commander's `options`. Live probes: `feature refresh`, `feature sync`, `task deps 0693 bogus`, `task sections 0693 bogus` each emit `{"ok":false,"error":{"code":"VALIDATION_FAILED",…}}` on stdout with exit 2, where each previously wrote a bare stderr line and no JSON. |
+| R2 | MET | `packages/app/src/output/envelope.ts:102-113` — `writeJsonError(output, options, message, code: ApiErrorCode = 'INTERNAL_ERROR', details?)` re-read this run: both new parameters forwarded to `toEnvelopeError` (`:86`), and the `Error: ` prefix stripped in the **enveloped branch only** so the raw stderr branch stays byte-identical. The not-found throw at `packages/app/src/services/task-service.ts:1675` sets `err.cliCode = 'NOT_FOUND'`. Live probe: `task show 9999 --json --json-envelope` → `code: "INTERNAL_ERROR"`, `details.cliCode: "NOT_FOUND"`, message exactly `Task 9999 not found in any registered task folder` (no `Error: ` prefix), exit 1. Unit coverage: `apps/cli/tests/output-envelope.test.ts:406` `writeJsonError code/details capability (0699 R2)`. |
+| R3 | MET | The requirement is that `bun test` report **the same** result from any workspace directory with no operator-set environment variable. Re-run this session from `apps/cli` as the working directory: `env -u SPUR_SKIP_GLOBAL_CONFIG bun test` → **901 pass / 0 fail** (31.4s, 56 files), and `SPUR_SKIP_GLOBAL_CONFIG=true bun test` on the same tree agrees. The six global-config-bleed failures R3 names are gone: they no longer resolve the operator's real `~/.config/spur/config.yaml` in place of each test's temp fixture. |
+| R4 | MET | The documented iterate loop was executed, not merely written down: `cd apps/cli && bun test tests/output-envelope.test.ts --test-name-pattern "wraps a payload"` → `1 pass / 39 filtered out / 0 fail`, **exit 0** (146ms). The command as documented in `CLAUDE.md` (§ Build & verification, "Targeted-test loop — run from inside the workspace, never the repo root (task 0699 R4)") is the command run here, together with the explanation that the workspace `bunfig.toml` carries no repo-wide coverage denominator. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
-| AC1 R3 — Implementation follows the approved ADR | PARTIAL | test | 10-path table-driven e2e in `apps/cli/tests/output-envelope.test.ts` asserts `ok:false` + frozen `error.code` + parseable message on every drive, exit codes preserved; fall-through verbs no longer serialise `ok:true`. The full 68-verb enumeration list is NOT in the test — the design-named surface is — so the last AC1 clause is unmet this attempt. |
-| AC2 — The envelope distinguishes not-found from internal fault | MET | command | `bun run apps/cli/src/index.ts task show 9999 --json --json-envelope` → `{"ok":false,"error":{"code":"INTERNAL_ERROR","message":"Task 9999 not found in any registered task folder","details":{"cliCode":"NOT_FOUND"}}}`, exit 1; message does not begin with `Error:`. |
-| AC3 — ADR-091 and the shipped helper agree | MET | test | Helper now carries `details.cliCode` via the new `details` parameter (ADR-091 `:1708` promise honoured); unit test `explicit code and details pass through to the envelope` pins it. No ADR paragraph change required, so T3 same-commit is satisfied by agreement, not by edit. |
-| AC4 — The raw JSON path is byte-identical | MET | test | `writeJsonError` raw branch untouched (`output.error(message)` verbatim; unit test asserts byte-identical stderr, empty stdout); e2e `raw --json failure path stays byte-identical` pins `task path 9999 --json` → bare stderr, no stdout; all pre-existing raw-path fixtures in the 901/0 apps/cli suite pass unchanged. |
-| AC5 — Every workspace suite is green on a clean tree | MET | command | `cd apps/cli && bun test` → 901 pass / 0 fail, exit 0, no env var (appsWith operator-populated `~/.config/spur/config.yaml` present). |
-| AC6 — The documented iterate command exits 0 on a passing test | MET | command | Documented command `cd apps/cli && bun test tests/output-envelope.test.ts --test-name-pattern "wraps a payload"` executed → exit 0; CLAUDE.md text is the executed command verbatim. |
-
+|---------------------|--------|---------------|----------|
+| R3 — Implementation follows the approved ADR | MET | test | All four clauses hold. Stdout carries `{ok:false,error:{code,message}}` and never `{ok:true}` on a failure path, and the message carries no `Error: ` prefix — `apps/cli/tests/output-envelope.test.ts:509-547` asserts exactly that per case, plus `sink.err === ''` so no bare stderr line stands in for the envelope; the case list grew this run with `feature refresh`, `feature sync`, `task deps`, `task sections` and `workflow trace --poll 0`. "No verb exits non-zero while emitting no JSON at all" is now a checked property rather than a hope: `apps/cli/tests/json-envelope-inventory.test.ts:130-263` enumerates all **68** flag-declaring verbs and reports zero unenveloped failure sites, and a deliberate regression makes it fail. `cd apps/cli && bun test tests/json-envelope-inventory.test.ts tests/output-envelope.test.ts` → **51 pass / 0 fail** (6.77s). |
+| AC2 — The envelope distinguishes not-found from internal fault | MET | command | `bun run apps/cli/src/index.ts task show 9999 --json --json-envelope` this run → `{"ok":false,"error":{"code":"INTERNAL_ERROR","message":"Task 9999 not found in any registered task folder","details":{"cliCode":"NOT_FOUND"}}}`, exit 1 — the scenario's second allowed shape (`INTERNAL_ERROR` carrying `details.cliCode`), message verbatim, no `Error: ` prefix. |
+| AC3 — ADR-091 and the shipped helper agree | MET | command | ADR-091's compat promise re-read this run at `docs/00_ADR.md:1673` ("`INTERNAL_ERROR` with the CLI-local code carried in `error.details.cliCode`"), restated in the operator-approval block at `:1717`. The helper carries exactly that capability (`packages/app/src/output/envelope.ts:102-113`), so the first branch of the AC holds and no ADR text change is owed — constitution T3 satisfied without a doc edit. Probed this run: `sed -n '1673p' docs/00_ADR.md |
+| AC4 — The raw JSON path is byte-identical | MET | test | `apps/cli/tests/output-envelope.test.ts:560` drives `task path 9999 --json` (no envelope flag) and asserts `stdout === ''` with the bare `Task 9999 not found` line on stderr — the pre-change raw contract. Broader raw-path pinning against the recorded fixture `packages/app/tests/fixtures/json-raw-baseline.json`: `cd packages/app && bun test tests/services/json-envelope-adoption.test.ts` → **25 pass / 0 fail**. |
+| AC5 — Every workspace suite is green on a clean tree | MET | command | `cd apps/cli && env -u SPUR_SKIP_GLOBAL_CONFIG bun test` → **901 pass / 0 fail** (31.37s). **Fix-pass repair this run:** the run initially reported 900/1. The failure was *not* global-config bleed — `spur task CLI > update --section with a body containing a same-level heading emits warnings to error channel` (`apps/cli/tests/commands/task.test.ts:2457`) asserted the warning string `Stripped same-level heading`, but commit `4748fa566` (task 0701) changed the behavior from stripping to demoting, so the shipped text is now `Demoted same-level heading one level deeper in section body …` (`packages/app/src/services/planning-write-service.ts:478`). The assertion and its WHY comment were updated to the shipped behavior; the test passes and the suite is green. |
+| AC6 — The documented iterate command exits 0 on a passing test | MET | command | `cd apps/cli && bun test tests/output-envelope.test.ts --test-name-pattern "wraps a payload"` → `1 pass / 0 fail`, **exit 0**. This is verbatim the command `CLAUDE.md` documents as the targeted-test loop, executed here to prove it. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
+<!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PARTIAL)
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
-| ---------- | ----------- | ---------- | ---------- |
+|----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | task-check | — | `spur task check 0699` → PASS (two pre-existing L4 gate-language warnings inherited from the task text, non-blocking). |
-| P4 | scope-creep | — | Changes limited to the envelope seam, the design-named CLI failure paths, the new workspace bunfig, the envelope test file, CLAUDE.md §Build & verification, and the task-service cliCode marker. No CLI surface added or removed (ADR-051 not triggered). Tasks 0700-0702 untouched. |
-| P4 | regression-tests | — | `cd apps/cli && bun test` 901 pass / 0 fail exit 0; `bun test packages/app/tests/services/task-service.test.ts` 110 pass / 0 fail; `bunx tsc --noEmit` (apps/cli) clean; root typecheck across workspaces clean except the then-open test-file TS errors, fixed and re-verified. |
-| P4 | evidence-integrity | — | R4 command executed and exit observed before CLAUDE.md was edited; verdict honestly PARTIAL on the one unmet clause. |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-
 ### References
 
 **Parent:** task **0698** — `### Requirements` R1, R2, R5, R6; full evidence bundle in its
@@ -438,3 +430,4 @@ must keep truthful.
 
 - 2026-08-28T23:38:59.563Z todo → wip (system)
 - 2026-08-28T23:55:29.332Z wip → testing (system)
+- 2026-08-29T05:20:04.430Z testing → done (system)

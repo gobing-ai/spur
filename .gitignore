@@ -180,13 +180,17 @@ docs/.ftree/
 
 /apps/web/coverage
 /apps/web/.coverage
-# Local dogfood run reports (gitignored); keep README tracked for always-on delivery docs
+# Local dogfood run reports (gitignored); keep README and the tracked ledger.
+# INDEX.md is the L4.dogfood-missing gate's evidence source (0700 R4 / ADR-090): the gate
+# must decide a feature's fate from repository state, not from whatever run reports happen
+# to sit in one machine's working tree.
 /docs/dogfood/*
 /docs/session-forensics-report-generation.md
 /docs/design/prototypes/
 /docs/report/*-history-anatomy.md
 /docs/memo.md
 !/docs/dogfood/README.md
+!/docs/dogfood/INDEX.md
 
 .scratch/
 /.pi-subagents/

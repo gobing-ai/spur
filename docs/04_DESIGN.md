@@ -702,6 +702,49 @@ skipped records at the source level — `degraded` status + non-zero exit — wh
 isolation intact. The compensating signals remain the artifact's error counts and the `history.*`
 events.
 
+##### Assistant-step duration provenance — `duration_source` (task 0702 R2, T3)
+
+Four of six sources (`claude`, `pi`, `codex`, `agy`) write no per-step `duration_ms`, so
+bottleneck ranking and per-model latency were unusable for the two busiest of them and roughly
+73% of the measured span could not be attributed to llm/tool/idle. The provider-side fix lives
+upstream in `@gobing-ai/ts-llm-jsonl-importer` and costs a lockstep family bump plus a publish;
+the transcripts already carry a per-record `ts`, so the ETL derives the value instead.
+
+**Frozen name.** `history_message.duration_source` (migration
+`0026_spur_cli_history_message_duration_source`), a nullable `TEXT`:
+
+| Value | Meaning |
+| --- | --- |
+| `NULL` | `duration_ms` is the provider's own measurement, or the step has none |
+| `'derived'` | `duration_ms` is an ETL timestamp delta — includes queue and network time |
+
+**Derivation.** `deriveAssistantDurations()` (`packages/domain/src/analytics/assistant-duration.ts`)
+runs once per non-dry-run `history import`, after `alignMessageProvenance()`. For each `assistant`
+row with a valid `ts` and no `duration_ms`, it takes the delta to the preceding record in the same
+`(source, session_id)` by `seq`, at exact millisecond resolution
+(`unixepoch(ts, 'subsec')` — the `julianday` form loses ~1ms to double-precision rounding).
+
+Three rules keep the number honest, each pinned by a test in
+`packages/domain/tests/analytics/assistant-duration.test.ts`:
+
+- **A provider value always wins.** The `UPDATE` re-asserts `duration_ms IS NULL`, so the pass is
+  additive and idempotent; re-running after a later import only fills rows it could not reach.
+- **A session gap is never billed as work.** Deltas above `DERIVED_DURATION_CEILING_MS` (30 min)
+  stay unmeasured — attributing an overnight gap to a step would corrupt the ranking this exists
+  to make usable.
+- **Absent is not zero (0680 R6).** A non-positive delta (shared timestamp, out-of-order records)
+  leaves the row unmeasured rather than writing `0`.
+
+**Reporting contract.** `stepSupport` carries `stepsWithDerivedDuration` alongside
+`stepsWithDuration`, and the forensics **Section Support** table's Time column reads `yes`
+(provider), `derived` (ETL only), `yes (mixed)`, or `no`. A derived value is not a weaker `yes` —
+it measures something different, and a reader comparing latency across sources must be able to see
+which is which. Nothing may present the two as the same measurement.
+
+**Not a backfill of history.** Rows imported before the migration gain their derived value on the
+next `history import`, not through a one-time migration pass; until then they render as unmeasured
+(never as zero).
+
 #### `spur history daily [--since <iso>] [--until <iso>] [--root <path>] [--source-timeout <ms>] [--mode <name>] [--json]`
 
 Run-once daily pipeline (task 0470 R6): **import-all → analyze → write artifact → prune** reports
@@ -1543,11 +1586,13 @@ Row-level deltas from the default rule:
 - **Class-3 top-level-`ok` payloads** move under `data` unchanged; the envelope `ok` is
   recomputed as command success (task migrate, migrate-anchors, check --corpus, noop,
   agent create, init fresh run, projects/builder success payloads).
-- **Kept raw (3 sites, not adopted):** `task verdict` (writes the `.spur/run` verdict
-  artifact consumed by pipeline code, not CLI stdout) and the two workflow internal event
-  fingerprints (dedup keys, not CLI output). `rule list` and `task verifyall-aggregate`
-  raw `JSON.stringify(x, null, 2)` sites were adopted — their formatting is identical to
-  the `toJson` raw path, so byte-identity holds.
+- **Kept raw (5 sites, not adopted):** `task verdict` (writes the `.spur/run` verdict
+  artifact consumed by pipeline code, not CLI stdout), the two workflow internal event
+  fingerprints (dedup keys, not CLI output), and the two `workflow show` `toJson` sites
+  (`apps/cli/src/commands/workflow.ts:866,875` — the verb deliberately does not advertise
+  `--json-envelope`, so no enveloped path exists to route to). `rule list` and
+  `task verifyall-aggregate` raw `JSON.stringify(x, null, 2)` sites were adopted — their
+  formatting is identical to the `toJson` raw path, so byte-identity holds.
 - **Service-side adoption — CLOSED (task 0697, 2026-08-27).** The envelope helpers moved to
   `packages/app/src/output/envelope.ts` (ADR-091 amendment 2026-08-27); `apps/cli/src/output.ts`
   re-exports them, so all 99 sites adopted at 0693 are unedited. The verbs that emit their JSON
