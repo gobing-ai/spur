@@ -400,6 +400,7 @@ export type {
     VerifyVerdict,
 } from './services/task-record';
 export {
+    isRecordAuthoredReview,
     parseVerdict,
     readVerdict,
     renderReview,

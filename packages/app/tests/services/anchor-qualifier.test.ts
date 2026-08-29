@@ -85,8 +85,13 @@ describe('resolveRepoRoot', () => {
     });
 
     test('resolves git repo root when projectRoot is omitted', async () => {
+        // 0713 R3b: assert the git toplevel, not `process.cwd()` — they coincide only when the
+        // suite is launched from the repo root, which made this test cwd-dependent.
+        const toplevel = Bun.spawnSync(['git', 'rev-parse', '--show-toplevel'], { cwd: process.cwd() })
+            .stdout.toString()
+            .trim();
         const root = await resolveRepoRoot(undefined);
-        expect(root).toBe(process.cwd());
+        expect(root).toBe(toplevel);
     });
 
     test('R4: hint resolves the target project root when cwd is outside the project', async () => {

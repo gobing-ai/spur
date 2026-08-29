@@ -435,6 +435,29 @@ function unescapeTablePipe(s: string): string {
 }
 
 /**
+ * Marks a `## Review` body as `task record`'s own fallback backfill rather than an authored
+ * review (0713 R2). Record must never overwrite a review the coordinator wrote, but it must
+ * be able to replace *its own* earlier output: without this, a first `record` on a bare
+ * section wrote a FAIL header, and the re-record that followed an updated verdict found the
+ * section non-bare and skipped it, leaving the stale verdict on the task forever.
+ */
+export const RECORD_REVIEW_MARKER = '<!-- spur:record-review -->';
+
+/**
+ * The pre-marker shape of record's own output, kept so tasks written before the marker
+ * existed are still recognized as record-authored and can be refreshed once.
+ */
+const LEGACY_RECORD_REVIEW_RE = /^\*\*SECU findings\*\* \(pipeline verify step — verdict: [A-Z]+\)/;
+
+/** True when a `## Review` body is record's own backfill and may be replaced. */
+export function isRecordAuthoredReview(body: string | null): boolean {
+    if (body === null) return false;
+    const trimmed = body.trim();
+    if (trimmed.startsWith(RECORD_REVIEW_MARKER)) return true;
+    return LEGACY_RECORD_REVIEW_RE.test(trimmed);
+}
+
+/**
  * Render the `## Review` section body from a verdict.
  *
  * Produces a P1–P4 priority findings table. When there are no P1–P3 check
@@ -446,6 +469,8 @@ function unescapeTablePipe(s: string): string {
  */
 export function renderReview(v: VerifyVerdict): string {
     const lines: string[] = [];
+    lines.push(RECORD_REVIEW_MARKER);
+    lines.push('');
     lines.push(`**SECU findings** (pipeline verify step — verdict: ${v.verdict})`);
     lines.push('');
     lines.push('| Priority | Dimension | Location | Finding |');

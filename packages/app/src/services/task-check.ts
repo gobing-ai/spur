@@ -1127,6 +1127,26 @@ export class TaskCheckService extends PlanningCheckService {
                 section: 'Plan',
                 message: 'Parent task has sub-tasks but its Plan has no sub-task roster (decomposition.md)',
             });
+            return;
+        }
+
+        // 0713 R1: a Plan roster is an ordering claim the batch resolver cannot read.
+        // `dev-runall`/`dev-verifyall` topo-sort on frontmatter `dependencies[]` only, so a
+        // parent whose Plan says "implementation happens in the children below" but declares
+        // no edges ties on WBS and is resolved FIRST — its verify ran before any child was
+        // implemented and reported 37 unmet requirements. Name the missing edges here, where
+        // the roster and the frontmatter can be compared, rather than leaving the batch to
+        // discover the contradiction by running in the wrong order.
+        const declared = new Set(this.extractDependencyWbs(doc.frontmatterData?.dependencies));
+        const undeclared = openKids.filter((kid) => !declared.has(kid.wbs)).map((kid) => kid.wbs);
+        if (undeclared.length > 0) {
+            findings.push({
+                layer: 'L4',
+                code: FINDING_CODES.L4_ROLLUP_ROSTER_NOT_DECLARED_DEPENDENCY,
+                severity: 'warning',
+                section: 'Plan',
+                message: `Plan rosters open sub-task(s) ${undeclared.join(', ')} that frontmatter dependencies[] does not declare — batch ordering reads dependencies[], not the Plan (repair: spur task deps ${wbs} add ${undeclared.join(' ')})`,
+            });
         }
     }
 

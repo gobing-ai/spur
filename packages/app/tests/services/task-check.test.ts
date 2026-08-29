@@ -2102,6 +2102,59 @@ describe('TaskCheckService', () => {
         expect(rollup).toHaveLength(0);
     });
 
+    test('0713 R1: a Plan roster whose children are not declared dependencies warns, naming them', async () => {
+        // The state that mis-ordered the 2026-08-28 batch: the Plan says the children carry
+        // the work, but `dependencies[]` is empty, so the resolver ties on WBS and runs the
+        // parent first — its verify reported 37 unmet requirements against unimplemented kids.
+        const { fs, path, cleanup } = seedEnv({
+            wbs: '0001',
+            taskContent: parentBody({ wbs: '0001', status: 'wip', withRoster: true }),
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: { '0002': childBody('0001', 'wip') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const undeclared = result.findings.filter((f) => f.code === 'L4.rollup-roster-not-declared-dependency');
+        expect(undeclared).toHaveLength(1);
+        expect(undeclared[0]?.severity).toBe('warning');
+        expect(undeclared[0]?.section).toBe('Plan');
+        expect(undeclared[0]?.message).toContain('0002');
+        // The message carries the exact repair, not just the complaint.
+        expect(undeclared[0]?.message).toContain('spur task deps 0001 add 0002');
+    });
+
+    test('0713 R1: the same roster with the dependency declared is silent', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            wbs: '0001',
+            taskContent: [
+                taskFm({ feature_id: 'F1', status: 'wip', name: 'Parent task', dependencies: ['0002'] }),
+                '',
+                '### Plan',
+                '',
+                '| Sub-task | Status |',
+                '| -------- | ------ |',
+                '| 0002 | open |',
+            ].join('\n'),
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: { '0002': childBody('0001', 'wip') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        expect(result.findings.filter((f) => f.code === 'L4.rollup-roster-not-declared-dependency')).toHaveLength(0);
+    });
+
+    test('0713 R1: a closed child needs no dependency edge — it cannot be mis-ordered', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            wbs: '0001',
+            taskContent: parentBody({ wbs: '0001', status: 'wip', withRoster: true }),
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: { '0002': childBody('0001', 'done') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        expect(result.findings.filter((f) => f.code === 'L4.rollup-roster-not-declared-dependency')).toHaveLength(0);
+    });
+
     test('roll-up: parent with children but no roster table warns (R2 — the 0109 gap)', async () => {
         const { fs, path, cleanup } = seedEnv({
             wbs: '0001',
@@ -2127,7 +2180,10 @@ describe('TaskCheckService', () => {
         });
         const result = await new TaskCheckService(fs, matrix).check(path, '0001');
         cleanup();
-        const roster = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('roster'));
+        // Keyed to the code, not the word "roster": 0713 R1 added a second Plan-roster
+        // finding whose message also contains it, and this test is about the missing-roster
+        // warning specifically.
+        const roster = result.findings.filter((f) => f.code === 'L4.rollup-missing-roster');
         expect(roster).toHaveLength(0);
     });
 

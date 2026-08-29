@@ -35,6 +35,7 @@ import {
     escapeTablePipe,
     flipVerifiedCheckboxes,
     gitDiffU0,
+    isRecordAuthoredReview,
     type RecordOptions,
     type RecordResult,
     readVerdict,
@@ -1141,10 +1142,12 @@ export class TaskService {
 
         // ── Review section (R2) — fallback-only (F92 0593 R1) ──
         // The review coordinator (super-reviewer /dev-review) writes the authored
-        // `## Review`. This bare-Review backfill is a standalone compatibility
-        // fallback ONLY: it fires when the section is bare (absent/placeholder),
-        // never overwrites authored Review, and is not normal ownership.
-        if (sectionIsBare(doc, 'Review')) {
+        // `## Review`. This backfill is a standalone compatibility fallback ONLY: it
+        // fires when the section is bare (absent/placeholder) or still holds record's
+        // own earlier output, never overwrites authored Review, and is not normal
+        // ownership. Recognising its own output is what makes re-record idempotent
+        // (0713 R2): before it, a stale FAIL header outlived the verdict that replaced it.
+        if (sectionIsBare(doc, 'Review') || isRecordAuthoredReview(doc.getSection('Review'))) {
             const reviewBody = renderReview(verdict);
             await this.writeService.updateSection(ref, 'Review', reviewBody);
             result.reviewWritten = true;

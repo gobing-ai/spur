@@ -923,6 +923,73 @@ describe('TaskService.record', () => {
         }
     });
 
+    test("0713 R2: re-recording a changed verdict replaces record's own stale Review header", async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-record-0713r2-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        await fs.ensureDir(join(root, '.spur', 'run'));
+        const writeService = new PlanningWriteService({ fs });
+        const svc = new TaskService({ fs, tasksDir: dir, writeService, sectionMatrix: RECORD_SECTION_MATRIX });
+        try {
+            const created = await svc.create({ title: 'Record 0713 R2 stale header' });
+            const wbs = created.ref.id;
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            const reviewOf = async (): Promise<string> =>
+                MarkdownDocument.parse(await fs.readFile(created.ref.filePath), 'task').getSection('Review') ?? '';
+
+            // First record: bare Review takes the fallback backfill, verdict FAIL.
+            await fs.writeFile(verdictPath, JSON.stringify({ wbs, verdict: 'FAIL', requirements: [], checks: [] }));
+            expect((await svc.record(wbs, { verdictFile: verdictPath })).reviewWritten).toBe(true);
+            expect(await reviewOf()).toContain('verdict: FAIL');
+
+            // Re-record after the verdict changed. Before 0713 R2 the section was no longer
+            // bare, so this was skipped and `verdict: FAIL` outlived the verdict itself.
+            await fs.writeFile(verdictPath, JSON.stringify({ wbs, verdict: 'PASS', requirements: [], checks: [] }));
+            expect((await svc.record(wbs, { verdictFile: verdictPath })).reviewWritten).toBe(true);
+
+            const review = await reviewOf();
+            expect(review).toContain('verdict: PASS');
+            expect(review).not.toContain('verdict: FAIL');
+            // Exactly one header — the replacement must not append beside the old one.
+            expect(review.match(/verdict: /g) ?? []).toHaveLength(1);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('0713 R2: an authored Review is never replaced by a re-record', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-record-0713r2b-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        await fs.ensureDir(join(root, '.spur', 'run'));
+        const writeService = new PlanningWriteService({ fs });
+        const svc = new TaskService({ fs, tasksDir: dir, writeService, sectionMatrix: RECORD_SECTION_MATRIX });
+        try {
+            const created = await svc.create({ title: 'Record 0713 R2 authored review' });
+            const wbs = created.ref.id;
+            // The review coordinator's three-dimensional findings — record must not touch these.
+            await writeService.updateSection(
+                created.ref,
+                'Review',
+                '| Priority | Dimension | Location | Finding |\n| --- | --- | --- | --- |\n| P2 | correctness | `src/a.ts:1` | authored by the review coordinator |\n',
+            );
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify({ wbs, verdict: 'PASS', requirements: [], checks: [] }));
+
+            const result = await svc.record(wbs, { verdictFile: verdictPath });
+
+            expect(result.reviewWritten).toBe(false);
+            const review =
+                MarkdownDocument.parse(await fs.readFile(created.ref.filePath), 'task').getSection('Review') ?? '';
+            expect(review).toContain('authored by the review coordinator');
+            expect(review).not.toContain('SECU findings');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
     test('R4: idempotent — re-recording PASS to done does not duplicate the run-link', async () => {
         const root = mkdtempSync(join(tmpdir(), 'spur-record-r4b-'));
         const dir = join(root, 'tasks');
