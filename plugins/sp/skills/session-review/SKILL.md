@@ -1,6 +1,6 @@
 ---
 name: session-review
-description: "Review the active coding-agent session, distinguish resolved and open issues with evidence, and propose bounded improvements. With --triage: apply pure-doc / one-to-two-line fixes inline, then file remaining findings as one new task. Triggers: review this session, session wrap-up, immediate retrospective, what happened, what was resolved, triage findings."
+description: "Review the active coding-agent session: separate resolved from open issues with evidence, propose bounded improvements. With --triage, apply pure-doc / 1–2-line fixes inline and file the rest as one task. Triggers: review this session, wrap-up, triage findings."
 license: Apache-2.0
 version: 1.1.0
 metadata:

@@ -408,24 +408,22 @@ no fix applications and a clean tree at finalize needs no drift row.
 
 ### What drift is — and is not
 
-**Drift** = a tracked file changes that neither the driver nor the testee ledger row names.
-**Explained** set = files named in ledger `Fix Applied` cells (driver fixes) plus files the testee
-wrote that the driver recorded in the ledger (testee-attributed writes). Anything else in
-`git status --porcelain` that is new or modified since baseline is drift.
+**Drift** = a tracked file changes that neither the driver nor a testee ledger row names.
+**Explained** set = files named in ledger `Fix Applied` cells (driver fixes) plus testee writes the
+driver recorded in the ledger. Anything else new or modified in `git status --porcelain` since
+baseline is drift.
 
 ### On detecting drift
 
 - Append a **warning ledger row** tagged `drift:external` in the Step column: paths in `Fix Applied`,
-  `Outcome: drift`, `Basis: <fingerprint diff>`. Do NOT mark the step PASSED/FIXED on account of
-  drift; the row records the drift, it does not change a step's outcome. The Step cell is the
-  literal code span `` `drift:external` `` — backticks included; the report validator excludes
-  both the bare and the code-span form from the data-row count (task 0701 R5b).
+  `Outcome: drift`, `Basis: <fingerprint diff>`. Do NOT mark the step PASSED/FIXED because of
+  drift; the row records the drift, it does not change a step's outcome. Write the Step cell as
+  the code span `` `drift:external` `` — the validator drops it from the data-row count (0701 R5b).
 - Emit a **mandatory report finding** under §6 Findings — `P2 — workspace drift detected during
-  run; attribution to external writer` — naming the drifted paths and the snapshot delta. The report
-  explicitly states the run's evidence is degraded, not voided.
-- The driver **never** claims drifted files as its own or the testee's work. A fix ledger row's
-  `Fix Applied` cites only the file:line the driver changed; drift rows cite the drifted paths
-  separately.
+  run; attribution to external writer` — naming the drifted paths and the snapshot delta. The
+  report states the run's evidence is degraded, not voided.
+- The driver **never** claims drifted files as its own or the testee's work: a fix row's
+  `Fix Applied` cites only what the driver changed; drift rows cite drifted paths separately.
 
 ### Worktree advisory (mutating dogfoods)
 

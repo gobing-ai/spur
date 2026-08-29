@@ -18,7 +18,7 @@ function countLedgerDataRows(markdown) {
   const nextHeading = after.search(/^### /m);
   const body = nextHeading === -1 ? after : after.slice(0, nextHeading);
   const rows = body.split(`
-`).filter((line) => line.trim().startsWith("|")).filter((line) => !/^\|[\s:|-]+\|?\s*$/.test(line.trim())).filter((line) => !/^\|\s*drift:/.test(line.trim()));
+`).filter((line) => line.trim().startsWith("|")).filter((line) => !/^\|[\s:|-]+\|?\s*$/.test(line.trim())).filter((line) => !/^\|\s*`?drift:/.test(line.trim()));
   return Math.max(rows.length - 1, 0);
 }
 function declaredExecutedSteps(markdown) {
