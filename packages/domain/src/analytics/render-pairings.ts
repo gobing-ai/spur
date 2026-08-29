@@ -45,8 +45,18 @@ export function renderPairings(artifact: HistoryArtifact): string {
 /** The shared ranking precedence: success desc, then escalations asc, then cost asc. */
 function comparePairings(a: PairingStat, b: PairingStat): number {
     return (
-        b.successRate - a.successRate || totalEscalations(a) - totalEscalations(b) || a.totalCostUsd - b.totalCostUsd
+        b.successRate - a.successRate ||
+        totalEscalations(a) - totalEscalations(b) ||
+        compareCost(a.totalCostUsd, b.totalCostUsd)
     );
+}
+
+/** Null cost (no signal) sorts after every measured cost and never compares as $0.00 (0702 R1). */
+function compareCost(a: number | null, b: number | null): number {
+    if (a === null && b === null) return 0;
+    if (a === null) return 1;
+    if (b === null) return -1;
+    return a - b;
 }
 
 function renderPairingsSection(artifact: HistoryArtifact): string[] {
@@ -105,7 +115,8 @@ interface ExecutorMeasure {
     dispatches: number;
     successRate: number;
     escalations: number;
-    costUsd: number;
+    /** `null` = none of the owned pairings carried a measured cost (0702 R1). */
+    costUsd: number | null;
 }
 
 /**
@@ -123,13 +134,19 @@ function measureExecutor(entry: LadderEntry, pairings: PairingStat[]): ExecutorM
         dispatches,
         successRate: dispatches > 0 ? successes / dispatches : 0,
         escalations: owned.reduce((sum, p) => sum + totalEscalations(p), 0),
-        costUsd: owned.reduce((sum, p) => sum + p.totalCostUsd, 0),
+        // 0702 R1: null costs never coerce to 0 — the aggregate is null until the
+        // first measured pairing lands, then measured rows accumulate (partial signal
+        // keeps the measured part; it never silently reads as free).
+        costUsd: owned.reduce<number | null>(
+            (sum, p) => (sum === null ? p.totalCostUsd : p.totalCostUsd === null ? sum : sum + p.totalCostUsd),
+            null,
+        ),
     };
 }
 
 /** The same shared precedence, applied to measured executors. Negative = `a` measures better. */
 function compareMeasured(a: ExecutorMeasure, b: ExecutorMeasure): number {
-    return b.successRate - a.successRate || a.escalations - b.escalations || a.costUsd - b.costUsd;
+    return b.successRate - a.successRate || a.escalations - b.escalations || compareCost(a.costUsd, b.costUsd);
 }
 
 function renderLadderDiffSection(artifact: HistoryArtifact): string[] {
@@ -194,9 +211,9 @@ function pct(rate: number): string {
     return `${(rate * 100).toFixed(1)}%`;
 }
 
-/** Cost as a dollar string: `1` → `$1.00`. */
-function usd(cost: number): string {
-    return `$${cost.toFixed(2)}`;
+/** Cost as a dollar string; `null` = no cost signal → `not available` (0680 R6 / 0702 R1), never `$0.00`. */
+function usd(cost: number | null): string {
+    return cost === null ? 'not available' : `$${cost.toFixed(2)}`;
 }
 
 /** Mean duration via the shared formatter; `0` = none measured → `n/a` (never a fabricated zero). */

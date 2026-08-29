@@ -44,7 +44,6 @@
 #   spurBin   — PATH-independent spur invocation (overridden by CLI at run start)
 #   __runId   — run-scoped id for explicit artifact paths (allocated in start)
 #   stepTimeoutMs — agent.run budget for enrich/validate
-#   correctionCount — bounded correction loop counter file path bits (name resolved in correct)
 
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
@@ -73,7 +72,6 @@ vars:
   spurBin: "spur"
   __runId: ""
   stepTimeoutMs: "1800000"
-  correctionCount: "0"
   workflowFile: "config/workflows/history-anatomy.yaml"
   contractVersion: "1"
   reportDir: "docs/report"
@@ -231,8 +229,11 @@ states:
   - id: correct
     description: >
       A two-pass correction budget (0690). onEnter increments the counter; retry edges guard on
-      the run-scoped correction-count file < 2 (`vars.correctionCount` is the declared home; the
-      file is the live bound), and a failure after the second repair takes the -> failed edge. The
+      the run-scoped correction-count file
+      `.spur/run/$__runId-correction-count` < 2 (the live bound — the
+      former `vars.correctionCount` declared-but-unread var was removed,
+      0702 R3), and a failure after the second repair takes the -> failed
+      edge. The
       counter is shared by the structure-gate and validate FAIL edges, so a structure repair can
       still be followed by one validation-driven repair. The
       model half re-authors the candidate in place from the gate findings and validation notes —

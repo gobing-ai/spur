@@ -39,8 +39,9 @@ export interface PairingStat {
     unknownOutcomes: number;
     /** Escalation counts keyed by `agent.invoke.escalated.trigger`; {} when none. */
     escalations: Record<string, number>;
-    /** Folded `history_message.cost_usd` through the run→session mapping; 0 = no folded cost (absent-not-zero contract). */
-    totalCostUsd: number;
+    /** Folded `history_message.cost_usd` through the run→session mapping. `null` = no cost signal
+     * reached this pairing (absent, never zero — 0680 R6 / 0702 R1); `0` = a genuinely free pairing. */
+    totalCostUsd: number | null;
     /** Mean measured duration across dispatches with one; 0 = none measured (never a fabricated zero). */
     meanDurationMs: number;
 }
@@ -73,7 +74,9 @@ export interface PairingSummaryOptions {
  * Cost folds through the run→session mapping (`history_run_session`) into the
  * typed `history_message.cost_usd` column exactly as {@link roleTokenSummary}
  * does. Rates are computed in TS after the fetch (small N; no SQL ratio
- * gymnastics).
+ * gymnastics). The SUM carries no COALESCE (0702 R1): a pairing whose mapping
+ * matched no measured cost rows folds to `null` — "no signal" stays distinct
+ * from a genuinely free pairing's real `0`.
  *
  * Never-fabricate (R1): a pairing exists only when it has ≥1 attributed
  * dispatch — zero-attribution pairings are absent, never zero-valued. A
@@ -129,7 +132,7 @@ export async function pairingSummary(db: DbAdapter, spec: PairingSummaryOptions 
             failures: d.failures,
             unknownOutcomes: d.dispatches - known,
             escalations: {},
-            totalCostUsd: 0,
+            totalCostUsd: null,
             meanDurationMs: d.durationCount > 0 ? d.durationTotal / d.durationCount : 0,
         });
     }
@@ -141,7 +144,14 @@ export async function pairingSummary(db: DbAdapter, spec: PairingSummaryOptions 
     for (const f of foldRows) {
         const entry = byKey.get(pairingKey(f.executor, f.role));
         if (entry === undefined) continue;
-        entry.totalCostUsd += f.totalCostUsd;
+        // 0702 R1: `null` = no measured cost yet — it stays null until the first measured
+        // fold row lands; measured rows then accumulate over it (never null → 0 coercion).
+        entry.totalCostUsd =
+            entry.totalCostUsd === null
+                ? f.totalCostUsd
+                : f.totalCostUsd === null
+                  ? entry.totalCostUsd
+                  : entry.totalCostUsd + f.totalCostUsd;
     }
 
     // Deterministic order — never optimizer-dependent.
@@ -309,7 +319,8 @@ async function loadEscalations(db: DbAdapter, spec: PairingSummaryOptions): Prom
 interface FoldRow {
     executor: string;
     role: string;
-    totalCostUsd: number;
+    /** `null` = the join matched no measured cost rows (no COALESCE — 0702 R1). */
+    totalCostUsd: number | null;
 }
 
 /**
@@ -341,7 +352,7 @@ async function loadFolds(db: DbAdapter, spec: PairingSummaryOptions): Promise<Fo
                  WHERE m.session_id IS NOT NULL
              )
              SELECT m.executor AS executor, m.role AS role,
-                    COALESCE(SUM(h.cost_usd), 0) AS totalCostUsd
+                    SUM(h.cost_usd) AS totalCostUsd
              FROM mapped m
              LEFT JOIN history_message h
                ON h.source = m.source AND h.session_id = m.session_id

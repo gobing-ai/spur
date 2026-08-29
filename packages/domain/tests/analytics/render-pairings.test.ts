@@ -103,6 +103,43 @@ describe('renderPairings (task 0574)', () => {
         expect(idx('c-zero-esc-costy')).toBeLessThan(idx('d-low-esc-costy'));
     });
 
+    // -----------------------------------------------------------------------
+    // 0702 R1 — null cost renders `not available`, never `$0.00`, and sorts last.
+    // -----------------------------------------------------------------------
+
+    test('R1 (0702): null cost renders not available, real zero stays $0.00, nulls sort last', () => {
+        const pairings = [
+            pairing({ executor: 'a-measured', totalCostUsd: 3.0 }),
+            pairing({ executor: 'b-free', totalCostUsd: 0 }),
+            pairing({ executor: 'c-absent', totalCostUsd: null }),
+        ];
+        const out = renderPairings(artifact(pairings));
+        expect(out).toContain('$0.00'); // a genuinely free pairing keeps its real zero
+        expect(out).toContain('not available'); // no-signal renders the 0680 R6 marker
+        const free = out.indexOf('| b-free ');
+        const measured = out.indexOf('| a-measured ');
+        const absent = out.indexOf('| c-absent ');
+        expect(free).toBeGreaterThan(-1);
+        expect(measured).toBeGreaterThan(free); // ascending measured cost
+        expect(absent).toBeGreaterThan(measured); // null last — never read as $0.00
+    });
+
+    test('R1 (0702): ladder cost aggregation never coerces a null pairing cost to 0', () => {
+        const pairings = [
+            pairing({ executor: 'mixed-exec', successRate: 0.5, totalCostUsd: 2.0 }),
+            pairing({ executor: 'mixed-exec', role: 'reviewer', successRate: 0.5, totalCostUsd: null }),
+            pairing({ executor: 'absent-exec', successRate: 0.8, totalCostUsd: null }),
+        ];
+        const ladder = [ladderEntry({ name: 'mixed-exec' }), ladderEntry({ name: 'absent-exec', order: 1 })];
+        const out = renderPairings(artifact(pairings, ladder));
+        // mixed-exec measures $2.00: the measured part survives, the null part is
+        // not coerced into it (a silent `?? 0` would still print $2.00 here — the
+        // distinction is proven by absent-exec's line below).
+        // absent-exec owns only null-cost pairings → its aggregate is `not available`,
+        // never $0.00, and it inverts above mixed-exec on success.
+        expect(out).toContain('cost=not available vs $2.00');
+    });
+
     test('R1: groups rows into one ranked table per role', () => {
         const out = renderPairings(
             artifact([

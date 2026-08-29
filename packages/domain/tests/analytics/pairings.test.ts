@@ -238,6 +238,63 @@ describe('pairingSummary (feature J8 / task 0573)', () => {
     });
 
     // -----------------------------------------------------------------------
+    // 0702 R1 — absent / genuinely-free / unmeasured costs are three distinct
+    // signals: `null` = no cost reached the pairing, `0` = a real free pairing.
+    // -----------------------------------------------------------------------
+
+    test('R1 (0702): absent, genuinely-free, and unmeasured costs stay distinct', async () => {
+        const db = await setupDb();
+        // unmapped-exec: a dispatch whose run has NO run→session mapping → no signal.
+        await insertStart(db, 's1', '2026-08-13T01:00:00.000Z', {
+            role: 'coder',
+            executor: 'unmapped-exec',
+            agent: 'pi',
+            model: 'pi-1',
+            runId: 'run-u',
+            executionId: 'exec-u',
+        });
+        // free-exec: mapping + a message with a real 0 cost → genuinely free.
+        await insertStart(db, 's2', '2026-08-13T02:00:00.000Z', {
+            role: 'coder',
+            executor: 'free-exec',
+            agent: 'pi',
+            model: 'pi-1',
+            runId: 'run-f',
+            executionId: 'exec-f',
+        });
+        await insertMapping(db, { runId: 'run-f', source: 'pi', sessionId: 'sess-free', exactness: 'exact' });
+        await insertMessage(db, {
+            record_hash: 'm-free',
+            session_id: 'sess-free',
+            seq: 1,
+            ts: '2026-08-13T02:02:00.000Z',
+            cost: 0,
+        });
+        // null-cost-exec: mapping + messages whose cost_usd is NULL (unmeasured) → no signal.
+        await insertStart(db, 's3', '2026-08-13T03:00:00.000Z', {
+            role: 'coder',
+            executor: 'null-cost-exec',
+            agent: 'pi',
+            model: 'pi-1',
+            runId: 'run-n',
+            executionId: 'exec-n',
+        });
+        await insertMapping(db, { runId: 'run-n', source: 'pi', sessionId: 'sess-nc', exactness: 'exact' });
+        await insertMessage(db, {
+            record_hash: 'm-nc',
+            session_id: 'sess-nc',
+            seq: 1,
+            ts: '2026-08-13T03:02:00.000Z',
+        });
+
+        const pairings = await pairingSummary(db, WINDOW);
+
+        expect(byPairing(pairings, 'unmapped-exec', 'coder').totalCostUsd).toBeNull();
+        expect(byPairing(pairings, 'free-exec', 'coder').totalCostUsd).toBe(0);
+        expect(byPairing(pairings, 'null-cost-exec', 'coder').totalCostUsd).toBeNull();
+    });
+
+    // -----------------------------------------------------------------------
     // P1 regression — one (executor, role) spanning multiple model values
     // -----------------------------------------------------------------------
 
