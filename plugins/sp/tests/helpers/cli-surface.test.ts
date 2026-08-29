@@ -138,9 +138,9 @@ describe('cli-surface — captureCliSurface failure branches', () => {
 });
 
 describe('cli-surface — 0516 scope parsers (explicit exclusions + ADR-054 boundary)', () => {
-    test('R1 — parseTierCExclusions reads the live Tier C table: three reasoned nouns incl. help', () => {
+    test('R1 — parseTierCExclusions reads generated help as the sole exclusion', () => {
         const exclusions = parseTierCExclusions(readFileSync(FACADE_SKILL, 'utf8'));
-        expect(exclusions.map((e) => e.noun)).toEqual(['history', 'projects', 'help']);
+        expect(exclusions.map((e) => e.noun)).toEqual(['help']);
         for (const exclusion of exclusions) {
             expect(exclusion.reason.length, `noun "${exclusion.noun}" must carry a reason`).toBeGreaterThan(0);
         }

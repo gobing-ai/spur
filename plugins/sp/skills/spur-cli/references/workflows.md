@@ -264,6 +264,12 @@ spur workflow list     [--json]
 spur workflow trace    [run-id] [--workflow <name>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]
 ```
 
+### `show` - project a definition
+
+`spur workflow show <file>` renders the declared graph as Mermaid. `--format todo` instead emits a
+declared-step checklist; `--json` serializes the selected projection. This verb intentionally does
+not advertise `--json-envelope` because its JSON projection is a kept-raw document surface.
+
 | Flag (on `run`) | Effect |
 | --------------- | ------ |
 | `--vars <json>` | Per-run variable overrides (JSON object). Merged over the workflow's `vars`. Values must be strings. User vars win over injected defaults (`spurBin`). |

@@ -1,6 +1,6 @@
 ---
 name: spur-cli-agent
-description: "spur-cli noun reference: operate `spur agent` as the coding-agent execution surface - run prompts via detected or named agents, manage team agent specs, run the persistent self-draining loop, and check agent readiness. The concrete levers (--model, --agent) behind the dispatch-surface escalation rule."
+description: "spur-cli noun reference: operate `spur agent` as the coding-agent execution surface - run prompts, wait on pinned occupants, manage team agent specs, run the persistent self-draining loop, and check readiness."
 see_also:
   - spur-cli
 ---
@@ -9,7 +9,7 @@ see_also:
 
 `spur agent` is the CLI for **running and inspecting coding agents**. It wraps the agents the
 operator already has installed (Claude Code, Codex, omp, OpenCode, Antigravity, etc.) behind a
-uniform `run` / `loop` / `spec` surface, so the rest of the harness can dispatch work without
+uniform run, wait, loop, and spec-management surface, so the rest of the harness can dispatch work without
 hard-coding a specific agent.
 
 This is a **companion reference**, not an orchestrator. It documents *what each verb is and how to
@@ -30,8 +30,9 @@ that before using `run` for fan-out dispatch.
 | `edit <id>` | Open an agent spec in `$EDITOR`, or print its path | - |
 | `delete <id>` | Remove an agent spec | `--force` |
 
-All verbs accept `--json` for machine consumption. **Exit codes:** `0` success, `1` error, `2`
-invalid usage.
+`list`, `doctor`, `run`, `wait`, and `create` accept `--json` plus `--json-envelope`. `loop`, `edit`,
+and `delete` are human/process-control surfaces. **Exit codes:** `0` success, `1` failure, and `2`
+invalid usage; `run` can also propagate the invoked agent's non-zero result.
 
 ## `run` - execute a prompt via a coding agent
 
@@ -56,6 +57,7 @@ through a coding agent as an external process, producing a persisted run record 
 | `--spec <id>` | Team agent spec id (occupant addressing, 0542 R1). Pairs with `--drain`; with `--spec` alone the run is addressed to the occupant without touching the inbox. A legacy `--agent <spec-id>` still works during the transition with a one-time warning (shim `agent-flag-spec-id`). |
 | `--drain` | Prepend pending inbox messages addressed to `--spec <id>` before the prompt. |
 | `--json` | Output machine-readable JSON where supported. |
+| `--json-envelope` | Wrap JSON using the facade's standard output contract. |
 
 `--json` adds a `resolved` block (`{ role?, tier?, executor?, agent, source }`) reporting the
 resolution decision — the role, its tier, and the executor that won for role routing; the pin for
@@ -125,6 +127,7 @@ exits 2 naming the accepted vocabulary. Resolution collapses onto the same ident
 
 | Flag | Purpose |
 | ------ | --------- |
+| `--role <name>` | Resolve a Layer-1 role or executor name to exactly one materialized instance; mutually exclusive with `[specId]`. |
 | `--run <runId>` | Pin a specific run id (default: the spec's latest run). |
 | `--until <state>` | Lifecycle state to wait for (repeatable OR): `idle` \| `working` \| `invoke-exit` \| `blocked`. Default `idle`. |
 | `--timeout <ms>` | Caller deadline. Undefined = no deadline (stall budget still applies). |

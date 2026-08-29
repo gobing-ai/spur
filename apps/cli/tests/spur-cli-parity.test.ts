@@ -21,18 +21,21 @@ const EXPECTED_TIER_A_VERBS = {
         'list',
         'refresh',
         'migrate',
+        'migrate-anchors',
         'refresh-roster',
         'batch-create',
         'record',
         'verdict',
+        'verifyall-aggregate',
         'check',
         'resolve',
         'path',
         'run-link',
+        'scaffold-tests',
     ],
     feature: ['create', 'show', 'update', 'advance', 'list', 'move', 'refresh', 'check', 'sync'],
     rule: ['run', 'validate', 'list', 'trace'],
-    workflow: ['validate', 'run', 'continue', 'clean', 'cancel', 'list', 'trace'],
+    workflow: ['validate', 'run', 'continue', 'clean', 'cancel', 'list', 'show', 'trace'],
 } satisfies Record<string, string[]>;
 
 // Critical task verbs required by task 0317
@@ -45,6 +48,8 @@ const TIER_B_VERB_FLOOR: Record<string, string[]> = {
     message: ['send', 'inbox', 'reply', 'watch'],
     team: ['assign', 'status', 'up', 'down', 'start', 'stop'],
     self: ['init', 'migrate', 'serve', 'status'],
+    history: ['import', 'analyze', 'report', 'daily'],
+    projects: ['add', 'remove', 'list', 'start', 'stop'],
 };
 
 // ---------------------------------------------------------------------------

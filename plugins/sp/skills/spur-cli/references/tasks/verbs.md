@@ -223,6 +223,18 @@ the active tasks folder (or `--folder`).
 | `--folder <path>` | Custom tasks folder. |
 | `--json` | Machine-readable report envelope. |
 
+## `migrate-anchors`
+
+Qualify ambiguous in-repo evidence anchors to repo-relative paths across the task corpus. Run
+`--dry-run` first: unambiguous matches are reported in `qualified`, multiple matches in `ambiguous`
+without rewriting, and schema-incompatible files in `skipped`. The write path uses the planning
+service rather than raw file edits.
+
+```bash
+spur task migrate-anchors --dry-run --json
+spur task migrate-anchors --json
+```
+
 ## `resolve <file-path>`
 
 Map a file path to its **owning task** — returns the WBS + task file. Strategies, in order: direct
@@ -329,6 +341,19 @@ A free-form prose answer (no tables, or tables missing the required headers) yie
 the artifact source and directs the operator to `/sp:dev-verify <wbs>`. Re-run verify with the
 table format above.
 
+## `verifyall-aggregate`
+
+Read a JSON array of `{wbs,outcome[,reason]}` rows from `--from-file` (default
+`.spur/run/verifyall-batch-input.json`) and derive one deterministic batch verdict. Valid outcomes
+are `PASS`, `PARTIAL`, `FAIL`, `NOT-STARTED`, and `UNKNOWN`; `NOT-STARTED` rows are reported but
+excluded from rollup. Exit `1` when the aggregate verdict is `FAIL` or the input is invalid.
+
+## `scaffold-tests <wbs>`
+
+Generate BDD stubs from the task's Acceptance Criteria. `--file <path>` overrides the target test
+file; `--folder <path>` overrides task lookup. JSON reports the target plus created, skipped,
+drifted, and warning results.
+
 ## `refresh-roster <wbs>`
 
 Regenerate a parent task's sub-task roster block in `## Plan` — the marker-delimited table that the
@@ -367,12 +392,15 @@ spur task sections <wbs> <init|add|list> [name] [--folder] [--json]
 spur task list     [--status <s>] [--phase <p>] [--parent <wbs>] [--feature <id>] [--folder] [--json]
 spur task refresh  [--folder] [--json]
 spur task migrate  [--dry-run] [--folder] [--json]
+spur task migrate-anchors [--dry-run] [--json]
 spur task refresh-roster <wbs> [--folder] [--json]
 spur task batch-create --file <path> [--folder] [--json]
 spur task record   <wbs> [--verdict-file <p>] [--solution-from-diff] [--transition <s>] [--folder] [--json]
 spur task verdict  <wbs> [--from-answer <p>] [--folder] [--json]
+spur task verifyall-aggregate [--from-file <path>] [--json]
 spur task check    [wbs] [--strict] [--as <status>] [--strict-core] [--folder] [--json]
 spur task resolve  <file-path> [--strict] [--folder] [--json]
 spur task path     <wbs> [--folder] [--json]
 spur task run-link <wbs> [--source <src>] [--run-id <id>] [--json]
+spur task scaffold-tests <wbs> [--file <path>] [--folder] [--json]
 ```

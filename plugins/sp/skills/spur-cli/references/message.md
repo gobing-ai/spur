@@ -24,8 +24,8 @@ use it well*.
 | `reply <msg-id> <body>` | Thread a reply to a message | `--json` |
 | `watch` | Follow an agent inbox - surface new messages as they arrive | `--agent <id>` `--interval <ms>` `--json` |
 
-All verbs accept `--json` for machine consumption. **Exit codes:** `0` success, `1` error, `2`
-invalid usage.
+All verbs accept `--json` and `--json-envelope`. `watch` applies the envelope per emitted row.
+**Exit codes:** `0` success, `1` error, `2` invalid usage.
 
 ## `send` - enqueue a message
 

@@ -26,7 +26,7 @@ use it well*.
 | `start <agent-id>` | Start a supervised agent process (requires `spur serve`) | `--server <url>` `--json` |
 | `stop <agent-id>` | Stop a supervised agent process (requires `spur serve`) | `--server <url>` `--json` |
 
-All verbs accept `--json` for machine consumption. `--server <url>` (default:
+All verbs except the text-only `assign` accept `--json` and `--json-envelope`. `--server <url>` (default:
 `http://localhost:3000/api`) targets the supervisor API started by `spur serve`. **Exit codes:** `0`
 success, `1` error, `2` invalid usage.
 
