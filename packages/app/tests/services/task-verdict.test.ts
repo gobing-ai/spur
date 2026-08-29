@@ -68,6 +68,23 @@ const REQUIREMENT_THEN_AC_ANSWER = [
     '| Scenario: CLI emits JSON | MET | test | `apps/cli/tests/foo.test.ts:42` |',
 ].join('\n');
 
+// Task 0714 R3: a SECUA Review table after the requirement table. The P2 row's
+// Finding cell contains UNMET, which the inherited status-column index used to
+// parse as an UNMET requirement — silently flipping the aggregate to FAIL
+// (reproduced by task 0713).
+const SECUA_AFTER_REQUIREMENTS_ANSWER = [
+    '| Req | Status | Evidence |',
+    '|-----|--------|----------|',
+    '| R1 | MET | `src/foo.ts:10` |',
+    '',
+    '### SECUA Review',
+    '',
+    '| Priority | Finding | Evidence |',
+    '|----------|---------|----------|',
+    '| P1 | Injection guard verified | clean |',
+    '| P2 | Fallback path unverified — UNMET | none |',
+].join('\n');
+
 describe('deriveVerdict', () => {
     test('PASS: all MET + task check passes', () => {
         const result = deriveVerdict(MET_ANSWER, true);
@@ -109,6 +126,14 @@ describe('deriveVerdict', () => {
     test('FAIL with task check failed still FAIL (FAIL takes priority)', () => {
         const result = deriveVerdict(FAIL_ANSWER, false);
         expect(result.verdict).toBe('FAIL');
+    });
+
+    test('a heading closes the requirement table — SECUA rows never become requirements (0714 R3)', () => {
+        const result = deriveVerdict(SECUA_AFTER_REQUIREMENTS_ANSWER, true);
+        expect(result.requirements).toHaveLength(1);
+        expect(result.requirements[0]?.id).toBe('R1');
+        expect(result.requirements[0]?.status).toBe('MET');
+        expect(result.verdict).toBe('PASS');
     });
 
     test('PARTIAL: behavior-bearing AC marked MET with static-only evidence is downgraded', () => {

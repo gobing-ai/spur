@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Post-F95 corpus drift reconciliation: re-point shifted anchors, fix matcher false positives, baseline verdict-rows findings"
-status: todo
+status: done
 template: issue
 created_at: 2026-08-29T06:16:26.174Z
-updated_at: "2026-08-29T06:49:11.363Z"
+updated_at: "2026-08-29T16:29:57.045Z"
 feature_id: F91
 ac_altitude: task-local
 ---
@@ -43,11 +43,11 @@ This refinement replaces the historical re-point campaign with the smallest prec
 the F95 verdict-row gate, adds the omitted parser regression, and reconciles only the reviewed
 post-release snapshot population.
 ### Requirements
-- [ ] R1. Right-size `checkLineAnchors` without weakening its factual checks: every citation still checks repository-relative path existence and line bounds; terminal (`done`/`cancelled`) records stop running subject/drift heuristics; live records run subject matching only when the citing row contains exactly one line anchor and yields real subject tokens. Delete the filename-derived fallback and whole-file “first matching token is the new line” scan; both manufacture locations from weak tokens rather than verify evidence.
-- [ ] R2. Preserve `L4.verdict-rows-match-no-scenario` and reconcile its 29 released-tree legacy findings through the ADR-090/T10 generated-snapshot path. Review the complete candidate diff first: it may accept only the already-dispositioned dogfood flip, A6 in-flight state, verdict-row legacy population, and any residual reviewed findings; no manual baseline edits and no unexplained code class.
-- [ ] R3. Close `extractRequirements` at the first markdown heading after its table opens, mirroring `extractAcceptanceCriteria`, so a following SECUA table cannot add requirement rows or change the aggregate verdict. Keep the existing header-name variants, escaped-pipe handling, and malformed-row behavior unchanged.
-- [ ] R4. Set task 0714’s AC altitude to `task-local`, update the task-check surface documentation for R1, and leave the F95/F91 shipped contracts intact: no new finding code, CLI noun, verb, flag, or severity change.
-- [ ] R5. Targeted regressions pass and `bun run corpus-check` exits 0 with zero new findings after the reviewed snapshot regeneration.
+- [x] R1. Right-size `checkLineAnchors` without weakening its factual checks: every citation still checks repository-relative path existence and line bounds; terminal (`done`/`cancelled`) records stop running subject/drift heuristics; live records run subject matching only when the citing row contains exactly one line anchor and yields real subject tokens. Delete the filename-derived fallback and whole-file “first matching token is the new line” scan; both manufacture locations from weak tokens rather than verify evidence.
+- [x] R2. Preserve `L4.verdict-rows-match-no-scenario` and reconcile its 29 released-tree legacy findings through the ADR-090/T10 generated-snapshot path. Review the complete candidate diff first: it may accept only the already-dispositioned dogfood flip, A6 in-flight state, verdict-row legacy population, and any residual reviewed findings; no manual baseline edits and no unexplained code class.
+- [x] R3. Close `extractRequirements` at the first markdown heading after its table opens, mirroring `extractAcceptanceCriteria`, so a following SECUA table cannot add requirement rows or change the aggregate verdict. Keep the existing header-name variants, escaped-pipe handling, and malformed-row behavior unchanged.
+- [x] R4. Set task 0714’s AC altitude to `task-local`, update the task-check surface documentation for R1, and leave the F95/F91 shipped contracts intact: no new finding code, CLI noun, verb, flag, or severity change.
+- [x] R5. Targeted regressions pass and `bun run corpus-check` exits 0 with zero new findings after the reviewed snapshot regeneration.
 
 **Out of scope.** Re-pointing citations in completed tasks; rewriting historical Testing/Solution
 evidence; removing path-existence or line-bounds checks; removing or demoting
@@ -196,17 +196,72 @@ Verified surfaces: ADR-090/ADR-092 in `docs/00_ADR.md`; T10/T11 in
 `extractAcceptanceCriteria` in `packages/app/src/services/task-verdict.ts`; task 0713’s reproduced
 findings and task 0700’s shipped verdict-row rule.
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/services/task-check.ts:1323` |
+| `packages/app/src/services/task-check.ts:1333` |
+| `packages/app/src/services/task-check.ts:1340` |
+| `packages/app/src/services/task-check.ts:1402` |
+| `packages/app/src/services/task-check.ts:410` |
+| `packages/app/src/services/task-check.ts:939` |
+| `packages/app/src/services/task-verdict.ts:101` |
+| `packages/app/tests/services/anchor-qualifier.test.ts:14` |
+| `packages/app/tests/services/anchor-qualifier.test.ts:265` |
+| `packages/app/tests/services/task-check.test.ts:3036` |
+| `packages/app/tests/services/task-check.test.ts:3043` |
+| `packages/app/tests/services/task-check.test.ts:3350` |
+| `packages/app/tests/services/task-check.test.ts:3356` |
+| `packages/app/tests/services/task-check.test.ts:3384` |
+| `packages/app/tests/services/task-check.test.ts:3454` |
+| `packages/app/tests/services/task-check.test.ts:3460` |
+| `packages/app/tests/services/task-check.test.ts:3463` |
+| `packages/app/tests/services/task-check.test.ts:3470` |
+| `packages/app/tests/services/task-check.test.ts:3473` |
+| `packages/app/tests/services/task-check.test.ts:3479` |
+| `packages/app/tests/services/task-check.test.ts:3482` |
+| `packages/app/tests/services/task-check.test.ts:3491` |
+| `packages/app/tests/services/task-check.test.ts:3493` |
+| `packages/app/tests/services/task-check.test.ts:3496` |
+| `packages/app/tests/services/task-check.test.ts:3502` |
+| `packages/app/tests/services/task-check.test.ts:3531` |
+| `packages/app/tests/services/task-verdict.test.ts:131` |
+| `packages/app/tests/services/task-verdict.test.ts:71` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/task-check.ts:939-940` plumbs effective status into `checkLineAnchors`; `:1404-1406` terminal (`done`/`cancelled`) records stop after path-existence + line-bounds; `:1415` live matching requires exactly one parsed anchor on the citing row; `:1418-1419` requires real subject tokens; exact-range failure still emits `L4.anchor-subject-mismatch` (`:1425-1433`). `extractPathSubjectTokens` deleted (0 references repo-wide) and the whole-file drift-location scan deleted; bounds checks retained for every status (missing-path/out-of-bounds tests `packages/app/tests/services/task-check.test.ts:3406,3420`). |
+| R2 | MET | `L4.verdict-rows-match-no-scenario` rule code unchanged (no diff touches `packages/config/src/finding-codes.ts` or any CLI surface). Legacy population reconciled through the generated snapshot: `config/corpus-baseline.json` regenerated via `bun run scripts/commands/regen-corpus-baseline.ts`; verdict-rows feature keys recorded 0 → 13; regeneration is idempotent (re-run produced byte-identical file, md5 match) so no manual baseline edits; diff reviewed by kind:id:code — additions are the dispositioned dogfood flips, A6 in-flight scenario-unverified, and the active-corpus legacy verdict-rows population; historical-folder entries retire via the ADR-092 active-only sweep note in the regenerated header. |
+| R3 | MET | `packages/app/src/services/task-verdict.ts:101-108` closes the requirement table (resets `inTable` + `colMap`) at the first markdown heading after it opens, before the non-table guard; reopen path via existing header detection unchanged; header variants, escaped-pipe handling, and malformed-row behavior untouched. Regression `packages/app/tests/services/task-verdict.test.ts:131` proves a SECUA table with an UNMET Finding cell no longer adds requirement rows or flips the aggregate. |
+| R4 | MET | Frontmatter `ac_altitude: task-local` set via `spur task update 0714 --ac-altitude task-local` (visible in `spur task show 0714` frontmatter). `docs/04_DESIGN.md:1842` (migrate-anchors row) and `:1855-1857` (projection-content additions) now state: bounds always apply including terminal records; live subject matching requires one unambiguous subject-bearing single-anchor row; no filename-derived subjects; no relocation scan. No new finding code, noun, verb, flag, or severity change (diff file list contains no `packages/config` or `apps/cli` command files). |
+| R5 | MET | Commands this run: focused `packages/app` tests (task-check, task-verdict, anchor-qualifier) 222 pass / 0 fail; `bun run corpus-check` exit 0 — errors 4 observed / 4 baselined / 0 new, warnings 841 observed / 279 baselined / 0 new (run twice, second after regeneration); `bun run spur-check` exit 0; `task check 0714` → PASS. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Historical evidence keeps factual checks without heuristic churn | MET | test | `packages/app/tests/services/task-check.test.ts:3393-3435` — done task with moved cited subject stays silent (3393); done task still reports missing path (3406) and out-of-bounds line (3420). |
+| Scenario: R2 — Live evidence matching requires an unambiguous subject | MET | test | `packages/app/tests/services/task-check.test.ts:3438-3504` — live single-anchor absent-subject reports `L4.anchor-subject-mismatch` (3438); present-subject silent (3452); bare-anchor row never assigned a subject (3463); multi-anchor row skipped as ambiguous (3491). |
+| Scenario: R3 — The F95 verdict-row gate survives snapshot reconciliation | MET | command | `bun run corpus-check` exit 0 with 0 new findings; legacy verdict-rows keys recorded by the generated `config/corpus-baseline.json` (13 feature-key entries vs 0 before); fail-on-new gate code untouched by this diff, so an unrecorded key still fails. |
+| Scenario: R4 — SECUA rows never become requirements | MET | test | `packages/app/tests/services/task-verdict.test.ts:131-138` — requirement table followed by SECUA table with UNMET Finding cell parses exactly 1 requirement (R1 MET) and aggregate stays PASS. |
+| Scenario: R5 — The reconciled corpus gate is clean | MET | command | `bun run corpus-check` exit 0 (841 warnings / 4 errors, all baselined, 0 new) and `bun run spur-check` exit 0 after R1-R4. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | 6/6 Design WHERE claims DONE: R1 matcher narrowing (`packages/app/src/services/task-check.ts:939-940,1404-1419`), R1 fixture replacement (`packages/app/tests/services/task-check.test.ts:3350`), R3 boundary before the non-table continue with no new helper (`packages/app/src/services/task-verdict.ts:101-108`), R3 SECUA status-word fixture (`packages/app/tests/services/task-verdict.test.ts:71-88`), R4 docs contract (`docs/04_DESIGN.md:1842,1855-1857`), R2 script-only baseline regeneration (md5-idempotent). |
+| P4 | scope-creep | — | 8/8 changed files map to the task: task-check.ts (R1), task-verdict.ts (R3), 3 test files (R1 fixtures + T10 same-change fallout for the deleted `extractPathSubjectTokens` export), docs/04_DESIGN.md (R4), config/corpus-baseline.json (R2, generated), 0714 task file (pipeline lifecycle metadata only). |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | proof-input-digest | — | 84a27707d57c5411 |
 ### References
 - Release baseline: `acc12ff95` (`@gobing-ai/spur-v0.3.66`).
 - Task 0713 — F95 close-out findings and the two reproduced matcher/parser false positives.
@@ -217,3 +272,6 @@ findings and task 0700’s shipped verdict-row rule.
 - Task 0590 — AC-table heading boundary and shared escaped-pipe parser; requirements-table boundary was not included.
 - `docs/99_PROJECT_CONSTITUTION.md` T10/T11 — same-change fallout reconciliation and sweep-once discipline.
 ### History
+- 2026-08-29T15:36:28.328Z todo → wip (system)
+- 2026-08-29T16:29:43.844Z wip → testing (system)
+- 2026-08-29T16:29:57.045Z testing → done (system)

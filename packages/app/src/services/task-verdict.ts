@@ -98,6 +98,16 @@ function extractRequirements(text: string): VerdictRequirement[] {
 
     for (const line of lines) {
         const trimmed = line.trim();
+        // Section boundary (task 0714 R3): a markdown heading after the requirement table
+        // opened closes it — mirrors extractAcceptanceCriteria (task 0590) so a following
+        // `### SECUA Review` table cannot add requirement rows or move the aggregate
+        // verdict. Must run before the non-table guard below, which would otherwise
+        // swallow the heading before the flag could ever reset.
+        if (inTable && /^#{1,6}\s/.test(trimmed)) {
+            inTable = false;
+            colMap = null;
+            continue;
+        }
         if (!trimmed.startsWith('|')) continue;
 
         const cells = splitTableCells(trimmed);

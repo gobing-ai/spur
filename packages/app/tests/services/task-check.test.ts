@@ -3033,11 +3033,14 @@ describe('classifyExternalEvidence — frozen external form (0584 R1/R2)', () =>
 });
 
 describe('accepted baseline debt in TaskCheckService.check (0586 R1, R2, R5)', () => {
+    // Status `testing` (0714 R1): the anchor-subject matcher only runs on live records,
+    // so this fixture must be non-terminal for the mismatch finding to fire and the
+    // baseline-debt machinery below to have something to accept/elevate.
     const brokenTask = [
         '---',
         'schema_version: 1',
         'name: "Anchor mismatch task"',
-        'status: done',
+        'status: testing',
         'created_at: 2026-06-13T00:00:00.000Z',
         'updated_at: 2026-06-13T00:00:00.000Z',
         '---',
@@ -3344,13 +3347,13 @@ describe('0625 R3 — hollow-Testing stub detection', () => {
     });
 });
 
-describe('0625 R4 — Solution change-map anchor drift detection', () => {
-    function seedChangeMap(row: string, fileContent: string) {
+describe('0714 R1 — anchor content matching: terminal suppression + live precision', () => {
+    function seedChangeMap(row: string, fileContent: string, status = 'testing') {
         const content = [
             '---',
             'schema_version: 1',
             'name: "Change-map task"',
-            'status: done',
+            `status: ${status}`,
             'created_at: 2026-06-13T00:00:00.000Z',
             'updated_at: 2026-06-13T00:00:00.000Z',
             '---',
@@ -3378,41 +3381,106 @@ describe('0625 R4 — Solution change-map anchor drift detection', () => {
         return env;
     }
 
-    test('a bare change-map row citing a drifted line reports L4.anchor-subject-mismatch', async () => {
-        // Symbol `registerCancel` is at line 1; the row cites line 3 where nothing
-        // of the sort lives. Path-derived subject (`workflow`) must not match.
+    const noContentWarnings = (result: { findings: Array<{ code: string }> }) =>
+        result.findings.filter(
+            (f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR || f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH,
+        );
+
+    // — Terminal records: path existence + line bounds only (ADR-092 — completed
+    // records are history); heuristics never run, so later code churn cannot
+    // manufacture warnings against evidence that is no longer current work.
+    describe('terminal records keep factual checks without heuristic churn', () => {
+        test('a done task whose cited subject moved elsewhere in the file stays silent', async () => {
+            // Pre-0714 this shape reported drift ("now sits at line 3").
+            const { fs, path, cleanup } = seedChangeMap(
+                '`workflow.ts:1` — closes `registerCancel`',
+                'export function other() {}\nconst pad = 1;\nexport function registerCancel() {}\n',
+                'done',
+            );
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            expect(noContentWarnings(result)).toHaveLength(0);
+        });
+
+        test('a done task still reports a missing path', async () => {
+            const { fs, path, cleanup } = seedChangeMap(
+                '`does-not-exist.ts:1` — closes `registerCancel`',
+                'export function registerCancel() {}\n',
+                'done',
+            );
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            const stale = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
+            expect(stale.length).toBeGreaterThanOrEqual(1);
+            expect(stale[0]?.message).toMatch(/file not found/i);
+        });
+
+        test('a done task still reports an out-of-bounds line', async () => {
+            const { fs, path, cleanup } = seedChangeMap(
+                '`workflow.ts:99` — closes `registerCancel`',
+                'export function registerCancel() {}\n',
+                'done',
+            );
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            const stale = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
+            expect(stale.length).toBeGreaterThanOrEqual(1);
+            expect(stale[0]?.message).toMatch(/outside file|line 99/);
+        });
+    });
+
+    // — Live records: matching requires exactly one anchor on the citing row and
+    // real subject tokens; failure is exact-range only, never a file-wide guess.
+    describe('live records match only an unambiguous subject-bearing single-anchor row', () => {
+        test('a cited range that lacks the row subject reports L4.anchor-subject-mismatch', async () => {
+            const { fs, path, cleanup } = seedChangeMap(
+                '`workflow.ts:1` — closes `registerCancel`',
+                'export function other() {}\nconst unused = 1;\n',
+            );
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
+            expect(mismatch).toHaveLength(1);
+            expect(mismatch[0]?.message).toContain('workflow.ts:1');
+        });
+    });
+
+    test('a live single-anchor row whose subject is present stays silent', async () => {
         const { fs, path, cleanup } = seedChangeMap(
-            '`workflow.ts:3`',
-            'export function registerCancel() {}\nexport function other() {}\nconst unused = 1;\n',
+            '`workflow.ts:1` — closes `registerCancel`',
+            'export function registerCancel() {}\nconst unused = 1;\n',
         );
         const result = await new TaskCheckService(fs, matrix).check(path, '0001');
         cleanup();
 
-        const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
-        expect(mismatch).toHaveLength(1);
-        expect(mismatch[0]?.message).toContain('workflow.ts:3');
+        expect(noContentWarnings(result)).toHaveLength(0);
     });
 
-    test('a bare change-map row whose cited line names the path-derived symbol reports no mismatch', async () => {
-        const { fs, path, cleanup } = seedChangeMap(
-            '`workflow.ts:1`',
-            'export function registerWorkflow() {}\nexport function other() {}\nconst unused = 1;\n',
-        );
+    test('a bare anchor row names no subject and is never assigned one', async () => {
+        // Pre-0714 the filename-derived fallback manufactured a subject from the
+        // basename and could report this row; a path basename is not evidence.
+        const { fs, path, cleanup } = seedChangeMap('`workflow.ts:1`', 'const unrelated = true;\n');
         const result = await new TaskCheckService(fs, matrix).check(path, '0001');
         cleanup();
 
-        const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
-        expect(mismatch).toHaveLength(0);
+        expect(noContentWarnings(result)).toHaveLength(0);
     });
 
-    // 0688 R2 / AC2: every anchor in the row is excluded from subject tokens, not
-    // just the one under test — a sibling anchor's path can never appear in this
-    // citation's source, so a correct multi-anchor row used to report.
+    // 0688 R2 / AC2 retained: sibling anchors stay out of the token set. 0714 goes
+    // further — multi-anchor rows have no anchor↔subject association at all, so
+    // matching is skipped and an absent subject no longer reports (the pre-0714
+    // "exclusion does not blunt detection" expectation is inverted by design).
     test('an evidence row carrying two anchors does not report when the subject is present', async () => {
         const { fs, path, cleanup } = seedChangeMap(
-            '`workflow.ts:1` and `workflow2.ts:3` — closes `registerCancel`',
+            '`workflow.ts:1` and `workflow2.ts:1` — closes `registerCancel`',
             'export function registerCancel() {}\nconst unused = 1;\n',
         );
+        const root = join(path, '..', '..');
+        writeFileSync(join(root, 'workflow2.ts'), 'const pad = 1;\n');
         const result = await new TaskCheckService(fs, matrix).check(path, '0001');
         cleanup();
 
@@ -3420,16 +3488,18 @@ describe('0625 R4 — Solution change-map anchor drift detection', () => {
         expect(mismatch).toHaveLength(0);
     });
 
-    test('exclusion does not blunt detection — an absent subject with sibling anchors still reports', async () => {
+    test('a multi-anchor row with an absent subject is not matched (association is ambiguous)', async () => {
         const { fs, path, cleanup } = seedChangeMap(
-            '`workflow.ts:1` and `workflow2.ts:3` — closes `renderForensics`',
+            '`workflow.ts:1` and `workflow2.ts:1` — closes `renderForensics`',
             'export function registerCancel() {}\nconst unused = 1;\n',
         );
+        const root = join(path, '..', '..');
+        writeFileSync(join(root, 'workflow2.ts'), 'const pad = 1;\n');
         const result = await new TaskCheckService(fs, matrix).check(path, '0001');
         cleanup();
 
         const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
-        expect(mismatch).toHaveLength(1);
+        expect(mismatch).toHaveLength(0);
     });
 
     // 0688 AC3: subject matching is matching-only — bounds still use the cited
@@ -3458,54 +3528,6 @@ describe('0625 R4 — Solution change-map anchor drift detection', () => {
         const stale = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
         expect(stale.length).toBeGreaterThanOrEqual(1);
         expect(stale[0]?.message).toMatch(/file not found/i);
-    });
-
-    // 0692 R1: a moved cited symbol reports drift; a stable anchor stays silent.
-    describe('0692 R1 — anchor-drift detection', () => {
-        test('a moved anchor reports drift naming cited and current positions', async () => {
-            const { fs, path, cleanup } = seedChangeMap(
-                '`workflow.ts:1` — closes `registerCancel`',
-                'export function other() {}\nconst pad = 1;\nexport function registerCancel() {}\n',
-            );
-            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-            cleanup();
-
-            const drift = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
-            expect(drift).toHaveLength(1);
-            expect(drift[0]?.message).toContain('cited at 1');
-            expect(drift[0]?.message).toContain('now sits at line 3');
-            expect(drift[0]?.message).toContain('registercancel');
-        });
-
-        test('a stable anchor stays silent — no drift, no mismatch', async () => {
-            const { fs, path, cleanup } = seedChangeMap(
-                '`workflow.ts:3` — closes `registerCancel`',
-                'export function other() {}\nconst pad = 1;\nexport function registerCancel() {}\n',
-            );
-            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-            cleanup();
-
-            const relevant = result.findings.filter(
-                (f) =>
-                    f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR ||
-                    f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH,
-            );
-            expect(relevant).toHaveLength(0);
-        });
-
-        test('a subject absent from the file entirely keeps the plain mismatch (no drift)', async () => {
-            const { fs, path, cleanup } = seedChangeMap(
-                '`workflow.ts:1` — closes `registerCancel`',
-                'export function other() {}\nconst pad = 1;\nexport function somethingElse() {}\n',
-            );
-            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-            cleanup();
-
-            const drift = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
-            expect(drift).toHaveLength(0);
-            const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
-            expect(mismatch).toHaveLength(1);
-        });
     });
 });
 

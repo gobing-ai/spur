@@ -408,39 +408,6 @@ export function citedLinesNameSubject(subjectTokens: string[], cited: string): b
     return subjectTokens.every(isRowId);
 }
 
-/**
- * Identifier tokens from a `## Solution` change-map row's own path (task 0625 R4).
- *
- * A bare change-map row (`| \`apps/cli/src/commands/workflow.ts:744\` |`) carries
- * no prose, so `extractSubjectTokens` yields nothing and subject-matching cannot
- * fire — 0620 cited `workflow.ts:744` while the symbol sat at `:759` and the gate
- * was silent. When a Solution row yields no tokens, derive the subject from the
- * path itself: split the basename on `-`/`_`/`.` boundaries and take the
- * identifier-like pieces (`mermaid-render` → `mermaid`, `render`), then reuse the
- * existing `citedLinesNameSubject` matcher. The whole-path basename (`workflow.ts`)
- * is a weak subject — it names the file, not the symbol — so it is deliberately
- * NOT a token; only the delimited identifier pieces are.
- *
- * 0688 R1 disposition: kept. The ±20-line window rescues prose rows; a bare
- * row still carries zero subject tokens, and this fallback is the sole thing
- * that makes its drift (0620) matchable at all.
- */
-export function extractPathSubjectTokens(path: string): string[] {
-    const basename = path.split('/').pop() ?? '';
-    const stem = basename.replace(/\.[^.]+$/, ''); // drop the extension
-    const tokens = new Set<string>();
-    for (const part of stem.split(/[-_.]+/)) {
-        if (!/^[A-Za-z][A-Za-z0-9]*$/.test(part)) continue;
-        const lower = part.toLowerCase();
-        // A two-character stem (`ts` in `workflow.ts` is dropped by extension
-        // strip, but `cmd` from `cmd_workflow` is a real token) — keep ≥ 3 chars
-        // and reject pure extension-like short identifiers.
-        if (lower.length < 3) continue;
-        tokens.add(lower);
-    }
-    return [...tokens];
-}
-
 function hasAdjacentFileLineColumns(body: string): boolean {
     const lines = body.split('\n');
     for (const line of lines) {
@@ -969,7 +936,8 @@ export class TaskCheckService extends PlanningCheckService {
         // Re-check backtick citations ``path:line`` / ``path:start-end`` against
         // the working tree: file must exist and the line number must fall within
         // the file. Warning-only (L4) — does not block done unless elevated.
-        await this.checkLineAnchors(doc, tasksDir, findings);
+        // Content heuristics see the effective status (task 0714 R1).
+        await this.checkLineAnchors(doc, tasksDir, findings, status);
 
         // Resolve feature_id from either snake_case or legacy kebab-case key.
         const featureId = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
@@ -1352,12 +1320,24 @@ export class TaskCheckService extends PlanningCheckService {
      * Solution against the working tree. Emits L4.stale-line-anchor warnings when
      * the file is missing or the line is out of range (dogfood F81 P2).
      *
-     * Caps findings per section to 5 so a heavily-cited section does not flood
-     * the report. Subject-name matching (line content names the R-item) stays an
-     * agent re-verify responsibility — this gate is existence + bounds only.
+     * Caps findings per section to 5. Task 0714 R1 narrows content matching to
+     * its provable form: every citation gets repository-relative path existence
+     * and line bounds regardless of status; terminal records (`done`/`cancelled`)
+     * stop there — their evidence is historical (ADR-092) and re-running subject
+     * heuristics after later code moves only manufactures churn. A live record is
+     * subject-matched only when its citing row carries exactly one parsed anchor
+     * and yields real subject tokens; failed exact-range matching then reports
+     * `L4.anchor-subject-mismatch`. No filename-derived subjects and no whole-file
+     * "first matching line" scan: neither verifies evidence, both guess it.
      */
-    private async checkLineAnchors(doc: MarkdownDocument, tasksDir: string, findings: CheckFindings[]): Promise<void> {
+    private async checkLineAnchors(
+        doc: MarkdownDocument,
+        tasksDir: string,
+        findings: CheckFindings[],
+        status: string,
+    ): Promise<void> {
         const projectRoot = resolveProjectRootFromTasksDir(tasksDir);
+        const terminal = status === 'done' || status === 'cancelled';
         for (const section of ['Testing', 'Solution'] as const) {
             const body = doc.getSection(section);
             if (body === null || isPlaceholderBody(body)) continue; // External-evidence form (task 0584 R1): a named origin + backticked
@@ -1419,68 +1399,39 @@ export class TaskCheckService extends PlanningCheckService {
                             message: `Stale line anchor \`${cite.raw}\` — line ${cite.startLine}${cite.endLine ? `-${cite.endLine}` : ''} outside file (${lineCount} lines)`,
                         });
                         reported++;
-                    } else {
-                        // R4/R5 (task 0583): subject matching — the cited lines must
-                        // name the requirement/AC row's subject. Extract subject tokens
-                        // from the citing row (the line that carries this citation) and
-                        // require one to appear in the cited window. Warning until the
-                        // R1 qualification pass has landed (severity-override promotes).
-                        const citedWindow =
-                            raw
-                                .split('\n')
-                                .slice(cite.startLine - 1, cite.endLine ?? cite.startLine)
-                                .join('\n') || '';
-                        const citingRow =
-                            body.split('\n').find((l) => l.includes(`\`${cite.raw}\``)) ??
-                            body.split('\n').find((l) => l.includes(cite.raw)) ??
-                            '';
-                        const tokens = extractSubjectTokens(citingRow);
-                        // R4 (0625): a bare Solution change-map row carries no
-                        // subject tokens, so subject-matching had nothing to match
-                        // and a drifted anchor passed (0620: `workflow.ts:744` vs
-                        // symbol at `:759`). Derive the subject from the row's own
-                        // path basename and reuse the same matcher.
-                        const effectiveTokens =
-                            tokens.length === 0 && section === 'Solution'
-                                ? extractPathSubjectTokens(cite.path)
-                                : tokens;
-                        if (!citedLinesNameSubject(effectiveTokens, citedWindow)) {
-                            // 0692 R1: before reporting a generic subject mismatch,
-                            // look for the subject elsewhere in the file. Found on a
-                            // different line ⇒ the anchor drifted (an edit moved the
-                            // symbol; precedent 0606 `:528` → `:562`) — report the
-                            // cited vs current position. Not found anywhere ⇒ keep
-                            // the plain mismatch. Report only; `anchorQualify` owns
-                            // rewrites. The scan cannot hit a window line — reaching
-                            // here means no subject token appears in the window.
-                            let driftLine = -1;
-                            const fileLines = raw.split('\n');
-                            for (let i = 0; i < fileLines.length; i++) {
-                                if (citedLinesNameSubject(effectiveTokens, fileLines[i] ?? '')) {
-                                    driftLine = i + 1;
-                                    break;
-                                }
-                            }
-                            if (driftLine > 0) {
-                                findings.push({
-                                    layer: 'L4',
-                                    code: FINDING_CODES.L4_STALE_LINE_ANCHOR,
-                                    severity: 'warning',
-                                    section,
-                                    message: `Anchor drift \`${cite.raw}\` — subject (${effectiveTokens.join(', ')}) cited at ${cite.startLine}${cite.endLine ? `-${cite.endLine}` : ''} now sits at line ${driftLine}; re-point the citation`,
-                                });
-                                reported++;
-                                continue;
-                            }
-                            findings.push({
-                                layer: 'L4',
-                                code: FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH,
-                                severity: 'warning',
-                                section,
-                                message: `Anchor \`${cite.raw}\` subject mismatch — cited lines do not name the requirement's subject (${effectiveTokens.join(', ') || 'none identifiable'}). Rewrite the citation to point at the code that implements this row.`,
-                            });
-                            reported++;
-                        }
+                        continue;
+                    }
+                    // Task 0714 R1: terminal records keep only the factual checks above;
+                    // subject/drift heuristics never run against historical evidence.
+                    if (terminal) continue;
+                    const citingRow =
+                        body.split('\n').find((l) => l.includes(`\`${cite.raw}\``)) ??
+                        body.split('\n').find((l) => l.includes(cite.raw)) ??
+                        '';
+                    // A row carrying several anchors provides no anchor↔subject
+                    // association, so no row-level token set can be attributed to THIS
+                    // citation (task 0688 excluded sibling anchors from tokens; 0714
+                    // skips matching when the association itself is ambiguous).
+                    if (extractBacktickLineAnchors(citingRow).length !== 1) continue;
+                    // A tokenless row names no subject — nothing to assert (and no
+                    // filename-derived fallback: a path basename does not prove what
+                    // the citation moved).
+                    const tokens = extractSubjectTokens(citingRow);
+                    if (tokens.length === 0) continue;
+                    const citedWindow =
+                        raw
+                            .split('\n')
+                            .slice(cite.startLine - 1, cite.endLine ?? cite.startLine)
+                            .join('\n') || '';
+                    if (!citedLinesNameSubject(tokens, citedWindow)) {
+                        findings.push({
+                            layer: 'L4',
+                            code: FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH,
+                            severity: 'warning',
+                            section,
+                            message: `Anchor \`${cite.raw}\` subject mismatch — cited lines do not name the requirement's subject (${tokens.join(', ') || 'none identifiable'}). Rewrite the citation to point at the code that implements this row.`,
+                        });
+                        reported++;
                     }
                 } catch {
                     // Unreadable — skip bounds; existence already passed.
