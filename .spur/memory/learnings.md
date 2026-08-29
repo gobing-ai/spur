@@ -911,3 +911,27 @@ Verification: 354 targeted tests passed; typecheck passed; diff/frontmatter/inde
 - **§4.5 rule 5 reaches landing tasks, not just wrap-ups.** The satellite's consent table gained the 0695 row but the `04` §0 index row still said "current through 0625" — detail-first, then index, same change-set, applies to whoever edits the satellite.
 - **Behavior-identical refactors don't open `03`.** `03_ARCHITECTURE.md` had zero findings: no module boundary, data flow, or invariant changed, so §6.4 rule 4 (mechanism replacement) doesn't trigger even though `renderRunPlan` was rebuilt on a shared builder. Zero-finding audits still list the checks that returned zero.
 
+<think>OK. So ADR-083 (lines around 1370-1450) describes the matcher behavior pre-0714. It says:
+> "The matcher (`citedLinesNameSubject`, `extractSubjectTokens`, the cited-window slice in `checkLineAnchors`) stays byte-for-byte unchanged"
+
+But task 0714 R1 *did* change `checkLineAnchors` (and `extractPathSubjectTokens` was deleted).
+
+This is a potential drift issue but it's complicated. The ADR-083 was about NOT changing the matcher as part of the baseline reconciliation. Task 0714 changed it via F91 ownership ("Feature F91 owns the matcher"). So this isn't really drift — it's an ADR amendment situation.
+
+Looking at this more carefully, this is actually a T1 trigger — task 0714 made changes to the matcher mechanism that should have an ADR entry. But task 0714's R4 says:
+> Set task 0714's AC altitude to `task-local`, update the task-check surface documentation for R1, and leave the F95/F91 shipped contracts intact: no new finding code, CLI noun, verb, flag, or severity change.
+
+So this is a NARROWING of the matcher, not a new finding code or severity change. Task 0714 itself says it does NOT make a new decision — it just narrows the matcher's heuristic without changing its public contract.
+
+But wait, the constitution's ADR rule says (§6.1 rule 6):
+> Before any code that contradicts an ADR: the superseding entry lands first (§5 row 2).
+
+Task 0714 didn't contradict ADR-083 — ADR-083 said the matcher stays unchanged *in that specific reconciliation campaign*. Task 0714 is doing a different campaign (post-F95 reconciliation), and F91 owns the matcher.
+
+Actually, looking more carefully at ADR-083, it says "F91 owns the matcher". F91 is "done". So technically task 0714 is doing follow-up work to F91, not contradicting ADR-083.
+
+But there might be a case for an ADR amendment. Let me look at the §3 of 03_ARCHITECTURE.md to see if there's drift there too.
+
+Actually let me also check if docs/03_ARCHITECTURE.md has any stale references to checkLineAnchors or anchor subject matching.]<]minimax[>[<tool_call>
+]<]minimax[>[<invoke name="read">]<]minimax[>[<path>/Users/robin/xprojects/spur-new/docs/03_ARCHITECTURE.md]<]minimax[>[</path>]<]minimax[>[<offset>570]<]minimax[>[</offset>]<]minimax[>[<limit>80]<]minimax[>[</limit>]<]minimax[>[</invoke>
+]<]minimax[>[</tool_call>
