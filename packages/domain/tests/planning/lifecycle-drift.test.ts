@@ -143,17 +143,18 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         expect(yaml.initialState).toBe('precheck');
     });
 
-    test('R1: precheck→implement is guarded by doctor status + `task check`, with fail-closed fall-through', () => {
+    test('R1: precheck→implement is guarded by size status + `task check`, with fail-closed fall-through', () => {
         const toImpl = yaml.transitions.find((t) => t.from === 'precheck' && t.to === 'implement');
         expect(toImpl?.guard?.kind).toBe('shell');
-        // Soft doctor status file + task check (fleet reliability: soft probe → status → branch).
+        // Deterministic size status file + task check.
         // Guard command must reference a task check — whether literal `spur` or
         // `${vars.spurBin}` (ADR-026 PATH-independent spur invocation).
         const passCmd = String(toImpl?.guard?.options?.command ?? '');
         expect(passCmd).toMatch(/task check/);
-        expect(passCmd).toMatch(/precheck-doctor\.status/);
+        expect(passCmd).toMatch(/precheck-size\.status/);
+        expect(passCmd).not.toMatch(/precheck-doctor\.status/);
         // Declaration order: PASS first, then fail-closed `always` fall-through (soft probe
-        // pattern — doctor FAIL and/or task check red both land on `failed` without inverted
+        // pattern — size FAIL and/or task check red both land on `failed` without inverted
         // shell guards that race set -e). `always` is safe only AFTER the PASS guard.
         const idxPass = yaml.transitions.findIndex((t) => t.from === 'precheck' && t.to === 'implement');
         const idxFail = yaml.transitions.findIndex((t) => t.from === 'precheck' && t.to === 'failed');

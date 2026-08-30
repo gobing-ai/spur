@@ -2,9 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { parse } from 'yaml';
-import { DoctorProbeActionRunner } from '../../../packages/app/src/workflow/actions/doctor-probe';
 
 interface PipelineAction {
     kind: string;
@@ -34,33 +32,6 @@ function commandFor(stateId: string, shellIndex = 0): string {
     const command = commands[shellIndex];
     if (command === undefined) throw new Error(`missing shell command ${shellIndex} for ${stateId}`);
     return command;
-}
-
-interface DoctorProbeAction {
-    kind: string;
-    options?: { resultFile?: string; spurBin?: string; agent?: string; implementAgent?: string };
-}
-
-/** Resolve the `doctor.probe` action's options with `${vars.*}` templates filled from a map. */
-function doctorProbeOptions(
-    vars: Record<string, string>,
-): Required<Pick<DoctorProbeAction['options'], 'resultFile' | 'spurBin' | 'agent' | 'implementAgent'>> {
-    const action = PIPELINE.states
-        .find((state) => state.id === 'precheck')
-        ?.onEnter?.find((a) => a.kind === 'doctor.probe') as DoctorProbeAction | undefined;
-    if (action?.options?.resultFile === undefined) {
-        throw new Error('precheck does not declare a doctor.probe action');
-    }
-    const fill = (value: string | undefined, fallback: string): string => {
-        if (value === undefined) return fallback;
-        return value.replace(/\$\{vars\.(\w+)\}/g, (_m, name: string) => vars[name] ?? '');
-    };
-    return {
-        resultFile: fill(action.options.resultFile, '.spur/run/precheck-doctor.status'),
-        spurBin: fill(action.options.spurBin, 'spur'),
-        agent: fill(action.options.agent, ''),
-        implementAgent: fill(action.options.implementAgent, ''),
-    };
 }
 
 function executable(dir: string, name: string, body: string): string {
@@ -101,56 +72,14 @@ function runShell(command: string, cwd: string, env: Record<string, string>): { 
 }
 
 describe('0503 task-pipeline resilience', () => {
-    test('usable executor passes while an unusable one fails with remediation (B4/0682 usability-only probe)', async () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-0503-doctor-'));
-        const doctor = executable(
-            dir,
-            'spur-doctor',
-            [
-                'if [ "$3" = "codex" ]; then',
-                `  printf '%s\\n' '{"agents":[{"agent":"codex","usable":false}]}'`,
-                'else',
-                `  printf '%s\\n' '{"agents":[{"agent":"omp-dsv4-flash-volc","usable":true,"modelStatus":{"detail":"API key not found for provider volc"}}]}'`,
-                'fi',
-            ].join('\n'),
-        );
-        // Behavior parity (task 0608 / D6 R5): the precheck doctor probe moved from the
-        // extracted shell program to the `doctor.probe` built-in action kind, so this
-        // test drives the real runner + NodeProcessExecutor against the same fake doctor
-        // binary the shell program used, asserting identical PASS/FAIL + output lines.
-        const runner = new DoctorProbeActionRunner(new NodeProcessExecutor(), createNodeFileSystem(dir));
+    test('precheck remains deterministic and does not probe executor health (0723 bypass)', () => {
+        const precheck = PIPELINE.states.find((state) => state.id === 'precheck');
+        const commands = precheck?.onEnter?.map((action) => action.options?.command ?? '') ?? [];
 
-        const omp = await runner.execute(
-            doctorProbeOptions({
-                wbs: '0503',
-                spurBin: doctor,
-                agent: 'omp-dsv4-flash-volc',
-                implementAgent: 'omp-dsv4-flash-volc',
-            }),
-            { runId: 'r1', stateOrNodeId: 'precheck', workdir: dir, vars: {}, env: {} },
-        );
-        expect(omp.ok).toBe(true);
-        expect((omp.data as { status: string }).status).toBe('PASS');
-        // Auth no longer classifies anything — a usable relay row passes even though
-        // the CLI cannot see its agent-owned credentials.
-        expect((omp.data as { output: string[] }).output.join('\n')).toContain(
-            'precheck: omp-dsv4-flash-volc usable=true',
-        );
-        expect(readFileSync(join(dir, '.spur/run/0503-precheck-doctor.status'), 'utf8').trim()).toBe('PASS');
-
-        const codex = await runner.execute(
-            doctorProbeOptions({ wbs: '0504', spurBin: doctor, agent: 'codex', implementAgent: 'codex' }),
-            { runId: 'r2', stateOrNodeId: 'precheck', workdir: dir, vars: {}, env: {} },
-        );
-        expect(codex.ok).toBe(true);
-        expect((codex.data as { status: string }).status).toBe('FAIL');
-        expect((codex.data as { output: string[] }).output.join('\n')).toContain(
-            'precheck: FAIL - executor codex is not usable per doctor',
-        );
-        expect((codex.data as { output: string[] }).output.join('\n')).toContain(
-            'pass --vars \'{"agent":"<usable-executor>"}\'',
-        );
-        expect(readFileSync(join(dir, '.spur/run/0504-precheck-doctor.status'), 'utf8').trim()).toBe('FAIL');
+        expect(precheck?.onEnter?.some((action) => action.kind === 'doctor.probe')).toBe(false);
+        expect(commands.join('\n')).not.toContain('agent doctor');
+        expect(commandFor('precheck', 2)).toContain('task-size-precheck.ts');
+        expect(commandFor('precheck', 2)).not.toContain('--executor');
     });
 
     test('a transient transition error retries once and preserves the broken path in output', () => {

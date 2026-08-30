@@ -307,32 +307,27 @@
             "modelQueries": ["implement", "test-fix", "review", "verify"],
             "actions": {
                 "precheck:onEnter:0": {
-                    "kind": "doctor.probe",
-                    "stateEffect": "read",
-                    "evidenceEffect": "write"
-                },
-                "precheck:onEnter:1": {
                     "kind": "shell",
                     "invocation": "DIRTY=$(git status --porcelain -- . ':(exclude)docs/tasks*' ':(exclude)docs/features' 2>/dev/null); if [ -n \"$DIRTY\" ]; then\n  echo \"precheck: WARNING - working tree has uncommitted non-corpus changes; commit or stash before starting a new task:\";\n  echo \"$DIRTY\";\nfi; CORPUS_DIRTY=$(git status --porcelain -- ':(glob)docs/tasks*/**' 2>/dev/null); if [ -n \"$CORPUS_DIRTY\" ]; then\n  echo \"precheck: NOTE - task corpus has uncommitted changes; review before staging with this task:\";\n  echo \"$CORPUS_DIRTY\";\nfi; exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "none",
                     "disposition": "GLUE"
                 },
-                "precheck:onEnter:2": {
+                "precheck:onEnter:1": {
                     "kind": "note",
                     "stateEffect": "read",
                     "evidenceEffect": "none"
                 },
-                "precheck:onEnter:3": {
+                "precheck:onEnter:2": {
                     "kind": "shell",
                     "invocation": "if [ \"$profile\" = auto ]; then\n  FID=$($spurBin task show $wbs --json 2>/dev/null |\n  jq -r '.feature_id // .frontmatter.feature_id // empty' 2>/dev/null);\n  if [ -n \"$FID\" ]; then\n    $spurBin feature sync \"$FID\" --force --json 2>/dev/null ||\n    $spurBin feature update \"$FID\" active 2>/dev/null || true;\n  fi;\nfi; exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "none",
                     "disposition": "GLUE"
                 },
-                "precheck:onEnter:4": {
+                "precheck:onEnter:3": {
                     "kind": "shell",
-                    "invocation": "SIZE_FILE=\".spur/run/$wbs-precheck-size.status\" && mkdir -p .spur/run && if [ -f plugins/sp/scripts/task-size-precheck.ts ]; then bun plugins/sp/scripts/task-size-precheck.ts \"$wbs\" --spur-bin \"$spurBin\" --max-reqs \"$maxImplementReqs\" --max-plan-items \"$maxImplementPlanItems\" --executor \"$implementAgent\"; else\n  echo \"task-size-precheck skipped — plugins/sp/scripts/task-size-precheck.ts not present in project.\" >&2 &&\n  echo \"PASS\" > \"$SIZE_FILE\";\nfi && exit 0",
+                    "invocation": "SIZE_FILE=\".spur/run/$wbs-precheck-size.status\" && mkdir -p .spur/run && if [ -f plugins/sp/scripts/task-size-precheck.ts ]; then bun plugins/sp/scripts/task-size-precheck.ts \"$wbs\" --spur-bin \"$spurBin\" --max-reqs \"$maxImplementReqs\" --max-plan-items \"$maxImplementPlanItems\"; else\n  echo \"task-size-precheck skipped — plugins/sp/scripts/task-size-precheck.ts not present in project.\" >&2 &&\n  echo \"PASS\" > \"$SIZE_FILE\";\nfi && exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "write",
                     "disposition": "EXT"
@@ -488,7 +483,7 @@
                     "evidenceEffect": "write"
                 }
             },
-            "digest": "sha256:fd3a33934587a223950d869c6940a8ae219c72c6c911f37f073758f9e9555f50"
+            "digest": "sha256:4098c91f865e9879987bb6049be911f021fe6a26843eced1085f631f33f1e47e"
         },
         "wrapup-pipeline": {
             "definition": "config/workflows/wrapup-pipeline.yaml",
