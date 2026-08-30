@@ -41,7 +41,8 @@ export interface HistoryRefreshPayload {
 export type HistoryRefreshEnqueueResult =
     | { status: 'disabled' }
     | { status: 'enqueued'; jobId: string; payload: HistoryRefreshPayload }
-    | { status: 'coalesced'; jobId: string; payload: HistoryRefreshPayload };
+    | { status: 'coalesced'; jobId: string; payload: HistoryRefreshPayload }
+    | { status: 'already-running'; jobId: string; payload: HistoryRefreshPayload };
 
 /** Options for {@link enqueueHistoryRefresh}. */
 export interface HistoryRefreshEnqueueOptions {
@@ -51,6 +52,8 @@ export interface HistoryRefreshEnqueueOptions {
     trigger: HistoryRefreshTriggerPoint;
     /** WBS (task-done) or run id (pipeline-run) — informational. */
     triggerId?: string;
+    /** Explicit import mode for manual/schedule refreshes; omitted → job default (incremental). */
+    importMode?: 'full' | 'incremental';
     /** Clock seam for deterministic tests (default `Date.now`). */
     now?: () => number;
 }
@@ -93,36 +96,56 @@ export async function enqueueHistoryRefresh(
     db: DbAdapter,
     options: HistoryRefreshEnqueueOptions,
 ): Promise<HistoryRefreshEnqueueResult> {
-    const { onCompletion, debounceMs } = resolveHistoryRefreshTrigger(options.config);
-    if (!onCompletion) return { status: 'disabled' };
+    const triggerConfig = resolveHistoryRefreshTrigger(options.config);
+    // Manual refreshes are explicit user intent — never gated. The schedule trigger
+    // fires only while an interval is configured (0716 R3); completion triggers stay
+    // behind the on_completion opt-in. One gate, before any DB access.
+    let enabled = triggerConfig.onCompletion;
+    if (options.trigger === 'manual') enabled = true;
+    if (options.trigger === 'schedule') enabled = triggerConfig.scheduleMinutes !== null;
+    if (!enabled) return { status: 'disabled' };
     const now = options.now?.() ?? Date.now();
+    // Manual and scheduled refreshes are user-facing "run it now" requests: a fresh
+    // job becomes due immediately, and joining one only SHORTENS the pending due
+    // time — a due burst is never delayed behind the debounce window (0716 R2).
+    const immediate = options.trigger === 'manual' || options.trigger === 'schedule';
     const incoming: HistoryRefreshPayload = {
         trigger: options.trigger,
         triggerId: options.triggerId ?? null,
         windowStart: now,
         windowEnd: now,
+        ...(options.importMode !== undefined ? { importMode: options.importMode } : {}),
     };
     const result = await enqueueCoalesced(db, {
         type: HISTORY_REFRESH_JOB,
         payload: incoming,
-        debounceMs,
+        debounceMs: triggerConfig.debounceMs,
+        immediate,
         now: options.now,
         // Join the burst: keep the earliest windowStart, extend windowEnd to the latest
-        // completion so the covered window spans the whole burst (R2).
+        // completion so the covered window spans the whole burst (R2). Trigger identity
+        // stays with the FIRST producer; `full` dominates the import mode, and an
+        // explicit mode on either side survives a join with a payload that lacks one.
         mergePayload: (existing, next) => {
             const prev = parsePayload(existing);
             const curr = parsePayload(next);
+            const importMode =
+                prev.importMode === 'full' || curr.importMode === 'full'
+                    ? 'full'
+                    : (prev.importMode ?? curr.importMode);
             return {
                 trigger: prev.trigger,
                 triggerId: prev.triggerId,
                 windowStart: Math.min(prev.windowStart, curr.windowStart),
                 windowEnd: Math.max(prev.windowEnd, curr.windowEnd),
+                ...(importMode !== undefined ? { importMode } : {}),
             };
         },
     });
     // P3 review fix: `enqueueCoalesced` now returns the POST-merge payload, so an
     // enqueue-time observable carries the merged burst window (not just the current
-    // completion's [now, now]) when this call joined a pending job.
+    // completion's [now, now]) when this call joined a pending job. For 0716 the
+    // same shape covers `already-running`: the IN-FLIGHT job's id and payload.
     return { status: result.status, jobId: result.jobId, payload: parsePayload(result.payload) };
 }
 

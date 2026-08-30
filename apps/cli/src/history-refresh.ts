@@ -45,6 +45,7 @@ export async function maybeTriggerHistoryRefresh(
                 triggerId,
                 jobId: result.jobId,
                 coalesced: result.status === 'coalesced',
+                outcome: result.status,
                 windowStart: result.payload.windowStart,
                 windowEnd: result.payload.windowEnd,
                 severity: 'info',

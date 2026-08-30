@@ -40,14 +40,16 @@ function cleanup(p: Project): void {
     rmSync(p.cwd, { recursive: true, force: true });
 }
 
-async function jobRows(p: Project): Promise<Array<{ type: string; status: string }>> {
+async function jobRows(p: Project): Promise<Array<{ id: string; type: string; status: string }>> {
     const db = await p.context.getDb();
-    return db.queryAll("SELECT type, status FROM queue_jobs WHERE type = 'history.refresh'");
+    return db.queryAll("SELECT id, type, status FROM queue_jobs WHERE type = 'history.refresh'");
 }
 
-async function eventRows(p: Project): Promise<Array<{ event_name: string }>> {
+async function eventRows(p: Project): Promise<Array<{ event_name: string; payload_json: string }>> {
     const db = await p.context.getDb();
-    return db.queryAll("SELECT event_name FROM system_events WHERE event_name = 'history.refresh.enqueued'");
+    return db.queryAll(
+        "SELECT event_name, payload_json FROM system_events WHERE event_name = 'history.refresh.enqueued'",
+    );
 }
 
 describe('maybeTriggerHistoryRefresh (task 0549 R1/R3)', () => {
@@ -58,8 +60,13 @@ describe('maybeTriggerHistoryRefresh (task 0549 R1/R3)', () => {
             const jobs = await jobRows(p);
             expect(jobs.length).toBe(1);
             expect(jobs[0]?.status).toBe('pending');
-            expect((await eventRows(p)).length).toBe(1);
-            expect(p.output.errors.length).toBe(0);
+            const events = await eventRows(p);
+            expect(events.length).toBe(1);
+            expect(JSON.parse(events[0]?.payload_json ?? '{}').data).toMatchObject({
+                outcome: 'enqueued',
+                coalesced: false,
+                jobId: jobs[0]?.id,
+            });
         } finally {
             cleanup(p);
         }

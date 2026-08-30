@@ -310,12 +310,12 @@ describe('LiveHistoryBoardService', () => {
         const svc = new LiveHistoryBoardService({
             triggerImport: async (mode) => ({
                 runId: 'history-refresh-test',
-                status: 'started',
+                status: 'queued',
                 message: `${mode} import queued`,
             }),
         });
         const res = await svc.triggerImport('incremental');
-        expect(res.status).toBe('started');
+        expect(res.status).toBe('queued');
     });
 
     test('fresh-rollup latency regression: median of 5 serial reads <50ms per tab (50 sessions, 500 messages, 252 tool calls incl. 2 skill)', async () => {
@@ -328,7 +328,7 @@ describe('LiveHistoryBoardService', () => {
 
         const svc = new LiveHistoryBoardService({
             db,
-            triggerImport: async () => ({ runId: 'history-refresh-benchmark', status: 'started', message: 'queued' }),
+            triggerImport: async () => ({ runId: 'history-refresh-benchmark', status: 'queued', message: 'queued' }),
         });
 
         const reads: [string, () => Promise<unknown>][] = [

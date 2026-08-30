@@ -10,8 +10,16 @@ import type { DailyOptions, DailyResult, HistoryService } from '../../src/servic
 import type { SystemEventBus } from '../../src/services/system-event-tap';
 
 /** Config fixture — only `history.refresh` matters to the trigger. */
-function config(onCompletion: boolean, debounceMs = 60_000): SpurConfig {
-    return { history: { refresh: { on_completion: onCompletion, debounce_ms: debounceMs } } } as unknown as SpurConfig;
+function config(onCompletion: boolean, debounceMs = 60_000, scheduleMinutes: number | null = null): SpurConfig {
+    return {
+        history: {
+            refresh: {
+                on_completion: onCompletion,
+                debounce_ms: debounceMs,
+                ...(scheduleMinutes !== null ? { schedule_minutes: scheduleMinutes } : {}),
+            },
+        },
+    } as unknown as SpurConfig;
 }
 
 interface QueueRow {
@@ -95,9 +103,108 @@ describe('enqueueHistoryRefresh (task 0549 R1–R4)', () => {
             const rows = await refreshRows(db);
             expect(rows.length).toBe(1); // exactly one refresh for the whole burst
             const payload = JSON.parse(rows[0]?.payload ?? '{}') as { windowStart: number; windowEnd: number };
+
             expect(payload.windowStart).toBe(t0); // earliest completion
             expect(payload.windowEnd).toBe(t0 + 40_000); // latest completion
             expect(rows[0]?.next_retry_at).toBe(t0 + 40_000 + 600_000); // debounce from last join (R4 window)
+        } finally {
+            db.close();
+        }
+    });
+});
+
+describe('enqueueHistoryRefresh single-flight producers (task 0716)', () => {
+    test('manual trigger bypasses config gating and is due immediately', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const t0 = 1_000_000;
+            const result = await enqueueHistoryRefresh(db, {
+                config: config(false),
+                trigger: 'manual',
+                importMode: 'full',
+                now: () => t0,
+            });
+            expect(result.status).toBe('enqueued');
+            const rows = await refreshRows(db);
+            expect(rows.length).toBe(1);
+            expect(rows[0]?.next_retry_at).toBe(t0); // immediate: due now, not t0 + debounce
+            expect(JSON.parse(rows[0]?.payload ?? '{}')).toMatchObject({ trigger: 'manual', importMode: 'full' });
+        } finally {
+            db.close();
+        }
+    });
+
+    test('schedule trigger is gated on schedule_minutes (R3)', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const t0 = 1_000_000;
+            const off = await enqueueHistoryRefresh(db, { config: config(true), trigger: 'schedule', now: () => t0 });
+            expect(off).toEqual({ status: 'disabled' });
+            expect((await refreshRows(db)).length).toBe(0);
+            const on = await enqueueHistoryRefresh(db, {
+                config: config(false, 60_000, 30),
+                trigger: 'schedule',
+                now: () => t0,
+            });
+            expect(on.status).toBe('enqueued');
+            const rows = await refreshRows(db);
+            expect(rows.length).toBe(1);
+            expect(rows[0]?.next_retry_at).toBe(t0); // scheduled ticks are also immediate
+        } finally {
+            db.close();
+        }
+    });
+
+    test('an in-flight import reports already-running instead of stacking a second job (R4)', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const t0 = 1_000_000;
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, next_retry_at)
+                 VALUES ('job-live', '${HISTORY_REFRESH_JOB}', '{"trigger":"manual","triggerId":null,"windowStart":${t0},"windowEnd":${t0}}', 'processing', 1, 0, ${t0}, ${t0}, NULL)`,
+            );
+            const result = await enqueueHistoryRefresh(db, {
+                config: config(false),
+                trigger: 'manual',
+                now: () => t0 + 5_000,
+            });
+            expect(result.status).toBe('already-running');
+            if (result.status !== 'disabled') {
+                expect(result.jobId).toBe('job-live');
+                expect(result.payload).toMatchObject({ trigger: 'manual' });
+            }
+            expect((await refreshRows(db)).length).toBe(1); // nothing stacked behind the live job
+        } finally {
+            db.close();
+        }
+    });
+
+    test('manual join merges importMode (full dominates) and never delays an earlier due time', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const t0 = 1_000_000;
+            await enqueueHistoryRefresh(db, {
+                config: config(true, 600_000),
+                trigger: 'task-done',
+                triggerId: '0716',
+                importMode: 'incremental',
+                now: () => t0,
+            });
+            const manual = await enqueueHistoryRefresh(db, {
+                config: config(false),
+                trigger: 'manual',
+                importMode: 'full',
+                now: () => t0 + 30_000,
+            });
+            expect(manual.status).toBe('coalesced');
+            if (manual.status !== 'disabled') {
+                expect(manual.payload).toMatchObject({ importMode: 'full', windowStart: t0, windowEnd: t0 + 30_000 });
+            }
+            const rows = await refreshRows(db);
+            expect(rows.length).toBe(1);
+            // Debounced pending row sat at t0 + 600k; the immediate manual join pulls due IN to now.
+            expect(rows[0]?.next_retry_at).toBe(t0 + 30_000);
+            expect(JSON.parse(rows[0]?.payload ?? '{}')).toMatchObject({ importMode: 'full' });
         } finally {
             db.close();
         }

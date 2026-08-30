@@ -910,13 +910,12 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
         description: 'A completion-triggered history refresh was enqueued, naming its window.',
         fields: [
             field('trigger', 'Trigger'),
+            field('triggerId', 'Trigger id'),
             field('jobId', 'Queue job'),
             field('windowStart', 'Window start'),
             field('windowEnd', 'Window end'),
             field('coalesced', 'Coalesced'),
-            field('refreshed', 'Refreshed'),
-            field('skipped', 'Skipped'),
-            field('reason', 'Reason'),
+            field('outcome', 'Outcome'),
         ],
         summary: ({ data }) => {
             const start = s(data, 'windowStart');
@@ -927,7 +926,12 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
         },
         outcome: {
             support: 'derived',
-            derive: ({ data }) => (at(data, 'skipped') === true ? s(data, 'reason') : undefined),
+            // Single outcome: joining a pending or in-flight job is the notable
+            // result; a plain fresh enqueue is the uninteresting default.
+            derive: ({ data }) => {
+                const status = s(data, 'outcome');
+                return status !== undefined && status !== 'enqueued' ? status : undefined;
+            },
         },
     },
 

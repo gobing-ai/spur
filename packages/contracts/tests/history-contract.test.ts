@@ -477,14 +477,22 @@ describe('historyContract', () => {
         const input = historyTriggerImportInputSchema.parse({});
         expect(input.mode).toBe('incremental');
 
+        // Task 0716 R4: the receipt status narrows to the single-flight writer's
+        // outcomes — a synchronous 'completed' can no longer occur.
         const resp = historyTriggerImportResponseSchema.parse({
             ok: true,
             data: {
                 runId: 'run-1234',
-                status: 'completed',
-                message: 'Import done',
+                status: 'queued',
+                message: 'Import queued',
             },
         });
         expect(resp.data.runId).toBe('run-1234');
+        expect(() =>
+            historyTriggerImportResponseSchema.parse({
+                ok: true,
+                data: { runId: 'run-1234', status: 'completed', message: 'Import done' },
+            }),
+        ).toThrow();
     });
 });

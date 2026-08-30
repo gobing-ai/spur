@@ -264,7 +264,7 @@ describe('enqueueCoalesced (task 0549 R2)', () => {
     test('concurrent enqueues from two connections coalesce to ONE pending job (cross-process R2)', async () => {
         // Two adapters on the same file DB simulate two processes (parallel agents in
         // runall, sharing .spur/spur.db). The partial unique index
-        // (queue_jobs_history_refresh_pending_unique) makes the lookup-then-insert
+        // (queue_jobs_history_refresh_active_unique) makes the lookup-then-insert
         // atomic: one INSERT wins, the other conflicts and joins — exactly one job for
         // the burst, never two (P2 review fix).
         const dir = mkdtempSync(join(tmpdir(), 'spur-coalesce-'));
@@ -306,11 +306,11 @@ describe('enqueueCoalesced (task 0549 R2)', () => {
         }
     });
 
-    test('a claimed (processing) job is invisible to the join — next completion enqueues fresh', async () => {
+    test('a claimed (processing) job is single-flight: the next producer gets already-running (0716 R4)', async () => {
         const db = await createMigratedDb({ url: ':memory:' });
         try {
             const t0 = 1_000_000;
-            await enqueueCoalesced(db, {
+            const first = await enqueueCoalesced(db, {
                 type: 'history.refresh',
                 payload: { start: t0, end: t0 },
                 debounceMs: 60_000,
@@ -325,8 +325,11 @@ describe('enqueueCoalesced (task 0549 R2)', () => {
                 debounceMs: 60_000,
                 now: () => t0 + 5,
             });
-            expect(after.status).toBe('enqueued');
-            expect((await rows(db)).length).toBe(2);
+            expect(after.status).toBe('already-running');
+            expect(after.jobId).toBe(first.jobId);
+            // The in-flight job's payload is surfaced (parsed), and NO second row exists.
+            expect(after.payload).toEqual({ start: t0, end: t0 });
+            expect((await rows(db)).length).toBe(1);
         } finally {
             db.close();
         }
@@ -358,11 +361,11 @@ describe('enqueueCoalesced (task 0549 R2)', () => {
         }
     });
 
-    test('retries when the pending job is claimed between read and update', async () => {
+    test('a pending job claimed between read and update resolves to already-running (0716 R4)', async () => {
         const db = await createMigratedDb({ url: ':memory:' });
         try {
             const t0 = 1_000_000;
-            await enqueueCoalesced(db, {
+            const first = await enqueueCoalesced(db, {
                 type: 'history.refresh',
                 payload: { start: t0, end: t0 },
                 debounceMs: 60_000,
@@ -374,16 +377,16 @@ describe('enqueueCoalesced (task 0549 R2)', () => {
                 const row = await original<T>(sql, ...params);
                 if (
                     typeof sql === 'string' &&
-                    sql.includes('SELECT id, payload FROM queue_jobs') &&
+                    sql.includes('SELECT id, payload') &&
                     row !== undefined &&
                     row !== null &&
                     typeof row === 'object' &&
                     'id' in row
                 ) {
-                    await db.run(
-                        "UPDATE queue_jobs SET status = 'processing' WHERE id = ?",
-                        (row as { id: string }).id,
-                    );
+                    // The adapter generic erases the row shape; the coalescing SELECT
+                    // projects `id` directly, so the narrowed read is safe here.
+                    const claimed = row as { id: string };
+                    await db.run("UPDATE queue_jobs SET status = 'processing' WHERE id = ?", claimed.id);
                 }
                 return row;
             }) as typeof db.queryFirst;
@@ -395,11 +398,14 @@ describe('enqueueCoalesced (task 0549 R2)', () => {
                 mergePayload: mergeWindow,
                 now: () => t0 + 1,
             });
-            // Pass 0: INSERT conflicts, SELECT finds the pending row, we claim it,
-            // UPDATE misses, loop continues. Pass 1: INSERT wins (processing is
-            // invisible to the unique pending index).
-            expect(after.status).toBe('enqueued');
-            expect((await rows(db)).length).toBe(2);
+            // Pass 0: INSERT conflicts, SELECT finds the pending row, the interceptor
+            // claims it, the guarded UPDATE misses. Pass 1: INSERT conflicts with the
+            // now-PROCESSING row (active index) and no pending row remains — the
+            // in-flight job is reported instead of duplicated behind it.
+            expect(after.status).toBe('already-running');
+            expect(after.jobId).toBe(first.jobId);
+            expect(after.payload).toEqual({ start: t0, end: t0 });
+            expect((await rows(db)).length).toBe(1);
         } finally {
             db.close();
         }
@@ -415,7 +421,9 @@ describe('enqueueCoalesced (task 0549 R2)', () => {
                 debounceMs: 1000,
                 now: () => 1,
             }),
-        ).rejects.toThrow('enqueueCoalesced: could not enqueue history.refresh after 3 attempts');
+        ).rejects.toThrow(
+            'enqueueCoalesced: history.refresh stayed active past 3 attempts without a resolvable outcome',
+        );
     });
 
     test('fallback insert after three claimed-mid-merge passes still enqueues', async () => {
@@ -440,8 +448,183 @@ describe('enqueueCoalesced (task 0549 R2)', () => {
         expect(result).toEqual({ status: 'enqueued', jobId: 'fallback-id', payload: { x: 1 } });
         expect(inserts).toBe(4);
     });
+
+    test('a PROCESSING row on another connection yields already-running — no duplicate (cross-process R4)', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-singleflight-'));
+        const file = join(dir, 'spur.db');
+        try {
+            const dbA = await createMigratedDb({ url: file });
+            const dbB = await createMigratedDb({ url: file });
+            try {
+                const t0 = 1_000_000;
+                const first = await enqueueCoalesced(dbA, {
+                    type: 'history.refresh',
+                    payload: { start: t0, end: t0 },
+                    debounceMs: 60_000,
+                    now: () => t0,
+                });
+                // A worker on connection A claims the job.
+                await dbA.run("UPDATE queue_jobs SET status = 'processing' WHERE id = ?", first.jobId);
+
+                // Producers on connection B must NOT enqueue behind the running job.
+                const [rB1, rB2] = await Promise.all([
+                    enqueueCoalesced(dbB, {
+                        type: 'history.refresh',
+                        payload: { start: t0 + 5_000, end: t0 + 5_000 },
+                        debounceMs: 60_000,
+                        now: () => t0 + 5_000,
+                    }),
+                    enqueueCoalesced(dbB, {
+                        type: 'history.refresh',
+                        payload: { start: t0 + 7_000, end: t0 + 7_000 },
+                        debounceMs: 60_000,
+                        now: () => t0 + 7_000,
+                    }),
+                ]);
+                expect(rB1.status).toBe('already-running');
+                expect(rB2.status).toBe('already-running');
+                expect(rB1.jobId).toBe(first.jobId);
+                expect(rB2.jobId).toBe(first.jobId);
+                const all = await rows(dbA);
+                expect(all.length).toBe(1); // still exactly the one active row
+                expect(all[0]?.status).toBe('processing');
+            } finally {
+                dbA.close();
+                dbB.close();
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('immediate join SHORTENS the pending due time; a later immediate join never extends it (0716 R2)', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const t0 = 1_000_000;
+            // Debounced completion first: due t0 + 60s.
+            const first = await enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { start: t0, end: t0 },
+                debounceMs: 60_000,
+                now: () => t0,
+            });
+            expect(first.status).toBe('enqueued');
+
+            // Immediate join 30s later pulls the due time in to now.
+            const join = await enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { start: t0 + 30_000, end: t0 + 30_000 },
+                debounceMs: 60_000,
+                immediate: true,
+                mergePayload: mergeWindow,
+                now: () => t0 + 30_000,
+            });
+            expect(join.status).toBe('coalesced');
+            expect((await rows(db))[0]?.next_retry_at).toBe(t0 + 30_000);
+
+            // A later immediate join does NOT push the due time back out.
+            await enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { start: t0 + 50_000, end: t0 + 50_000 },
+                debounceMs: 60_000,
+                immediate: true,
+                mergePayload: mergeWindow,
+                now: () => t0 + 50_000,
+            });
+            expect((await rows(db))[0]?.next_retry_at).toBe(t0 + 30_000);
+        } finally {
+            db.close();
+        }
+    });
+
+    test('immediate request with no active job enqueues a fresh job due now', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const t0 = 1_000_000;
+            const result = await enqueueCoalesced(db, {
+                type: 'history.refresh',
+                payload: { trigger: 'manual' },
+                debounceMs: 60_000,
+                immediate: true,
+                now: () => t0,
+            });
+            expect(result.status).toBe('enqueued');
+            expect((await rows(db))[0]?.next_retry_at).toBe(t0);
+        } finally {
+            db.close();
+        }
+    });
 });
 
+describe('migration 0027: history refresh active single-flight (task 0716)', () => {
+    test('retires duplicate ACTIVE rows keeping the oldest, swaps the pending index for the active one', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            // Rewind to the pre-0027 shape: pending-only index + two ACTIVE rows.
+            await db.exec('DROP INDEX queue_jobs_history_refresh_active_unique');
+            await db.exec(
+                "CREATE UNIQUE INDEX queue_jobs_history_refresh_pending_unique ON queue_jobs (type) WHERE type = 'history.refresh' AND status = 'pending'",
+            );
+            await db.run("DELETE FROM queue_jobs WHERE type = 'history.refresh'");
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, next_retry_at)
+                 VALUES ('job-old', 'history.refresh', '{"start":1,"end":1}', 'pending', 0, 3, 1000, 1000, 61000)`,
+            );
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, next_retry_at)
+                 VALUES ('job-new', 'history.refresh', '{"start":2,"end":2}', 'processing', 0, 3, 2000, 2000, NULL)`,
+            );
+            await db.run('DELETE FROM "__spur_cli_migrations" WHERE id LIKE "0027%"');
+
+            await applyCliMigrations(db);
+
+            const retired = await db.queryAll<{ id: string; status: string; last_error: string | null }>(
+                "SELECT id, status, last_error FROM queue_jobs WHERE type = 'history.refresh' ORDER BY created_at ASC",
+            );
+            expect(retired).toEqual([
+                { id: 'job-old', status: 'pending', last_error: null },
+                {
+                    id: 'job-new',
+                    status: 'failed',
+                    last_error:
+                        'retired by migration 0027_spur_cli_history_refresh_active_unique: superseded duplicate active history refresh',
+                },
+            ]);
+            // Index swap landed: only the active index remains.
+            const indexes = await db.queryAll<{ name: string }>(
+                "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'queue_jobs_history_refresh%'",
+            );
+            expect(indexes.map((i) => i.name)).toEqual(['queue_jobs_history_refresh_active_unique']);
+            // The active index actually enforces single-flight.
+            expect(
+                db.run(
+                    `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, next_retry_at)
+                     VALUES ('job-dup', 'history.refresh', '{}', 'pending', 0, 3, 3000, 3000, NULL)`,
+                ),
+            ).rejects.toThrow();
+        } finally {
+            db.close();
+        }
+    });
+
+    test('journals without executing when queue_jobs is absent (foundation-only DBs)', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await db.exec('DROP TABLE queue_jobs');
+            await db.run('DELETE FROM "__spur_cli_migrations" WHERE id LIKE "0027%"');
+
+            const applied = await applyCliMigrations(db);
+
+            expect(applied).toBe(1); // 0027 journaled and skipped, missing table untouched
+            const journaled = await db.queryFirst<{ id: string }>(
+                'SELECT id FROM "__spur_cli_migrations" WHERE id LIKE "0027%"',
+            );
+            expect(journaled?.id).toBe('0027_spur_cli_history_refresh_active_unique');
+        } finally {
+            db.close();
+        }
+    });
+});
 describe('findPendingQueueJob / updatePendingQueueJob', () => {
     test('findPendingQueueJob returns undefined when no pending row exists', async () => {
         const db = await createMigratedDb({ url: ':memory:' });

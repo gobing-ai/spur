@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
+import { createMigratedDb } from '@gobing-ai/spur-domain';
 import type { ApplicationRuntime, ApplicationStopReason } from '@gobing-ai/ts-infra/application';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { serverBootstrapConfig } from '../src/bootstrap';
@@ -641,7 +642,6 @@ describe('startServer', () => {
 
     test('registerSchedulerEntries enqueues history.refresh on schedule_minutes (opt-in, task 0696)', async () => {
         const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
-        const enqueued: Array<{ type: string; payload: unknown }> = [];
         const scheduler = {
             register: (cron: string, action: () => Promise<void>) => {
                 registered.push({ cron, action });
@@ -649,23 +649,28 @@ describe('startServer', () => {
             start: async () => {},
             stop: async () => {},
         };
+        // Task 0716 R3: the tick rides the shared single-flight writer, so the
+        // assertion targets a real migrated DB instead of an enqueue spy.
+        const db = await createMigratedDb({ url: ':memory:' });
         const ctx = {
-            jobQueue: async () => ({
-                enqueue: async (type: string, payload: unknown) => {
-                    enqueued.push({ type, payload });
-                    return `${type}-id`;
-                },
-            }),
+            getDb: async () => db,
             eventBus: () => ({ emit: async () => {} }),
         } as unknown as ServerContext;
         const spurConfig = { history: { refresh: { schedule_minutes: 10 } } } as never;
 
-        registerSchedulerEntries(scheduler, ctx, spurConfig);
-        expect(registered.map((r) => r.cron)).toEqual(['300000', '600000', '600000']);
-        await registered[2]?.action();
-        expect(enqueued).toHaveLength(1);
-        expect(enqueued[0]?.type).toBe(HISTORY_REFRESH_JOB);
-        expect(enqueued[0]?.payload).toMatchObject({ trigger: 'schedule', triggerId: null });
+        try {
+            registerSchedulerEntries(scheduler, ctx, spurConfig);
+            expect(registered.map((r) => r.cron)).toEqual(['300000', '600000', '600000']);
+            await registered[2]?.action();
+            const row = await db.queryFirst<{ type: string; payload: string; status: string }>(
+                'SELECT type, payload, status FROM queue_jobs',
+            );
+            expect(row?.type).toBe(HISTORY_REFRESH_JOB);
+            expect(row?.status).toBe('pending');
+            expect(JSON.parse(row?.payload ?? '{}')).toMatchObject({ trigger: 'schedule', triggerId: null });
+        } finally {
+            db.close();
+        }
     });
 
     test('registerSchedulerEntries skips the history refresh entry when schedule_minutes is unset', () => {

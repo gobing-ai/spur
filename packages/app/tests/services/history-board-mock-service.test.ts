@@ -169,6 +169,6 @@ describe('MockHistoryBoardService', () => {
     test('triggerImport returns receipt with runId', async () => {
         const receipt = await service.triggerImport('incremental');
         expect(receipt.runId).toBeDefined();
-        expect(receipt.status).toBe('completed');
+        expect(receipt.status).toBe('queued');
     });
 });

@@ -295,7 +295,7 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `history.import.completed` | source(s), files/messages, duration, exit code, artifact | `[history] import · {source|sources}` | `exitCode` |
 | `history.analyze.completed` | source(s), duration, exit code, artifact | `[history] analyze · {source|sources}` | `exitCode` |
 | `history.daily.failed` | source(s), `detail`, `reason`, `exitCode` | `[history] daily failed` | `reason` / `exitCode` |
-| `history.refresh.enqueued` | `trigger`, `jobId`, window, coalesced/refreshed/skipped | `[history] refresh · {windowStart} -> {windowEnd}` | `reason` when skipped |
+| `history.refresh.enqueued` | `trigger`/`triggerId`, `jobId`, window, `coalesced`, `outcome` | `[history] refresh · {windowStart} -> {windowEnd}` | `outcome` when coalesced/already-running |
 | `rule.run.start` | `runId`, rule count, evaluator | `[rule] run {runId} started` | — |
 | `rule.eval.start` | `runId`, `ruleId`, evaluator, index/total | `[rule] {ruleId} evaluating` | — |
 | `rule.eval.done` | `runId`, `ruleId`, findings count, duration, severity | `[rule] {ruleId} evaluated` | `findings` |

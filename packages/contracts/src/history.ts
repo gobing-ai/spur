@@ -459,7 +459,7 @@ export const historyTriggerImportInputSchema = z.object({
 /** Trigger import response payload data schema. */
 export const historyTriggerImportResponseDataSchema = z.object({
     runId: z.string(),
-    status: z.string(),
+    status: z.enum(['queued', 'coalesced', 'already-running']),
     message: z.string(),
 });
 

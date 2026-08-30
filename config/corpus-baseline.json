@@ -195,6 +195,12 @@
         },
         {
             "kind": "feature",
+            "id": "E31",
+            "code": "L4.scenario-unverified",
+            "severity": "warning"
+        },
+        {
+            "kind": "feature",
             "id": "E4",
             "code": "L2.missing-required-section",
             "severity": "warning"

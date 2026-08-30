@@ -3,9 +3,9 @@ import type { SectionMatrix } from '@gobing-ai/spur-app';
 import {
     AgentService,
     configuredSecretValues,
+    enqueueHistoryRefresh,
     type FeatureActionJob,
     HISTORY_REFRESH_JOB,
-    type HistoryRefreshPayload,
     handleHistoryRefreshJob,
     JobHandlerRegistry,
     JobWorkerService,
@@ -170,15 +170,13 @@ export function registerSchedulerEntries(
     const scheduleMinutes = resolveHistoryRefreshTrigger(spurConfig ?? null).scheduleMinutes;
     if (scheduleMinutes !== null) {
         register(String(scheduleMinutes * 60_000), HISTORY_REFRESH_JOB, async () => {
-            const queue = await ctx.jobQueue();
-            const now = Date.now();
-            const payload: HistoryRefreshPayload = {
+            // Single-flight writer (task 0716 R3): scheduled refreshes coalesce through
+            // the queue table instead of a raw enqueue, so a pending or in-flight
+            // refresh absorbs the tick instead of stacking a second job behind it.
+            await enqueueHistoryRefresh(await ctx.getDb(), {
+                config: spurConfig ?? null,
                 trigger: 'schedule',
-                triggerId: null,
-                windowStart: now,
-                windowEnd: now,
-            };
-            await queue.enqueue(HISTORY_REFRESH_JOB, payload, { maxRetries: 1 });
+            });
         });
     }
 }
