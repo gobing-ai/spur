@@ -100,6 +100,8 @@ Feature: Corpus gate integrity
 | 0584 | Task authoring contract: external-evidence citation form and AC-altitude declaration | done |
 | 0625 | Close the 2026-08-21 dogfood residue: lifecycle projections and gates that report a state the tree contradicts | done |
 | 0688 | Right-size the post-implementation task gate: drop no-signal citation checks, keep real drift detection | done |
+| 0714 | Post-F95 corpus drift reconciliation: re-point shifted anchors, fix matcher false positives, baseline verdict-rows findings | done |
+| 0721 | Fail closed on hollow MET verdict evidence in task-verdict derivation | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
