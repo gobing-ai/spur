@@ -57,6 +57,12 @@
         },
         {
             "kind": "feature",
+            "id": "A31",
+            "code": "L4.orphan-scenarios",
+            "severity": "warning"
+        },
+        {
+            "kind": "feature",
             "id": "A4",
             "code": "L4.dogfood-missing",
             "severity": "warning"
@@ -191,12 +197,6 @@
             "kind": "feature",
             "id": "E2",
             "code": "L4.dogfood-missing",
-            "severity": "warning"
-        },
-        {
-            "kind": "feature",
-            "id": "E31",
-            "code": "L4.scenario-unverified",
             "severity": "warning"
         },
         {
@@ -1696,12 +1696,6 @@
         {
             "kind": "task",
             "id": "0712",
-            "code": "L4.prerequisite-not-done",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0717",
             "code": "L4.prerequisite-not-done",
             "severity": "warning"
         }
