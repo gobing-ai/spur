@@ -63,9 +63,11 @@ Per entry point the load order is: **command md → `Skill()` → `SKILL.md` →
 | --- | --- | --- | --- |
 | 0 | `plugins/sp/commands/dev-*.md` (33 files, 32–128 lines each) | 1,622 | entry-specific |
 | 1 — spine core | `skills/spur-dev/SKILL.md` + `cross-cutting.md` (709), `dev-operations.md` (549), `flag-glossary.md` (439), `glossary.md` (95) | ~1,792 | **unconditional** spine (loaded for every dev-* command) |
-| 1 — spine routing | `execution-batch.md` (799), `execution-workflow.md` (361), `planning-workflow.md` (355), `inline-pipeline-driver.md` (130) | ~1,645 | **on-demand** (per command half) |
+| 1 — spine routing | `execution-batch.md` (956), `execution-workflow.md` (368), `planning-workflow.md` (355), `inline-pipeline-driver.md` (172) | ~1,851 | **on-demand** (per command half) |
 | 2 — specialized | `ac-style-guide` (229), `product-planning` (206), `feature-link-helper` (191), `gate-checklists` (175), `done-housekeeping` (164), `idea-evaluation` (80), `decision-brief` (80), `section-batching` (40) | ~1,165 | **on-demand** (per entry point) |
 | 3 | dispatched competency skills (`sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, …) | — | on-demand |
+
+> **Correction (2026-08-30, task 0720 wrapup):** the spine-routing counts above were re-measured from the current tree — `execution-batch.md` grew 799→956 (0701 + c25f0c141 + 0720), `execution-workflow.md` 361→368, `inline-pipeline-driver.md` 130→172. The other rows remain the 2026-08-15 snapshot; re-measure before relying on any specific count.
 
 **Attribution ceiling:** per-file *token* cost is **not recoverable from current data**. The ETL
 records per-message totals (input/cache/output) and per-tool-call metadata, but not which reference

@@ -958,3 +958,51 @@ Actually let me also check if docs/03_ARCHITECTURE.md has any stale references t
 - docs/design/event-tracking.md emitter path:line refs are approximate audit-baseline refs (row 36 cites :47, actual emit :41 since 2026-08-14) — do not "fix" them during feature drift passes unless the batch actually moved the code.
 - ADR built-status convention: flip "Accepted (design)" → "Accepted" via an in-place Status edit plus a dated > **Amendment (date).** Built: block naming the tasks (ADR-056 precedent; constitution §6.1 rules 3/5/8); never rewrite the decision body.
 
+Done. Summary:
+
+**Doc-evolve wrapup (task 0720) — drift audit + repair**
+- Ran a §7 drift audit scoped to 0720's change (a plugin skill-reference + contract-test change; no public CLI surface). Only one verifiable factual drift in the scoped set: `execution-batch.md` line count in `docs/design/dev-spine-cost-and-drift.md` (claimed 799, actually 956).
+- **Repaired:** `docs/design/dev-spine-cost-and-drift.md:66,69` — refreshed the spine-routing counts (execution-batch 799→956, execution-workflow 361→368, inline-pipeline-driver 130→172, subtotal ~1,645→~1,851) plus a dated correction note flagging the rest as a 2026-08-15 snapshot.
+- **Zero drift:** `docs/00_ADR.md` (no decision reversed — R2d no-replay is consistent with ADR-026/048, no public API change), `docs/03_ARCHITECTURE.md` (0720 touches no described mechanism; corpus-check claims reflect the untouched command), `docs/04_DESIGN.md` (no new surface; §7.8 pointer to execution-batch.md still accurate), and `run-record-contract.md` (0720's new artifact family postdates the 0598 analysis; no contradiction — noted, not edited).
+- No task/feature corpus touched; satellites carry no frontmatter so no §4.3 bump applied.
+
+**Artifact:** `/Users/robin/xprojects/spur-new/.spur/run/wrapup-learnings.md` written (learnings from 0720, grouped by date + WBS).
+
+---
+
+# Wrap-up Learnings — task 0720
+
+## 2026-08-30 · WBS 0720 — Fix E31 integration friction (orphaned serve daemons, corpus gate cost, R2d verdict disposition)
+
+### Conventions (what to keep doing)
+
+- **Evidence persistence precedes destructive cleanup.** A worktree batch persists its report and per-task verdict JSONs to the invoking tree (`.spur/run/worktree-<marker-id>-batch-report.md`, `.spur/run/worktree-<marker-id>-verdicts/<wbs>-verdict.json`) before any worktree removal — so a green batch can never destroy its own evidence.
+- **Single ownership of lifecycle state.** Committed task files own lifecycle status; persisted invoking-tree artifacts own batch/verdict evidence. No post-merge `task update`/`task record` replay, no `task_run_links` import, no timestamp-only corpus churn.
+- **Reuse the existing identity scheme.** Marker-id namespacing (`worktree-<marker-id>-*`) gives collision-free artifact identity — no new public flag or DTO needed for a new artifact family.
+- **Reuse mode still persists the Step 5 report** even though it keeps its operator-owned tree.
+- **Verify-only is a legitimate task outcome** when a guardrail already exists (R2: `bun run corpus-check` already the corpus-only fast path; zero-diff on `package.json`/`AGENTS.md` was the pass condition).
+- **Fail-closed over fail-open:** a surviving holder routes to WT-5 with worktree + branch retained, halts, and reports PID (mandatory) + listening port (best-effort) before any prune/remove/branch delete.
+
+### Errors fixed (root causes)
+
+- **Orphaned daemons defeat worktree removal (R1):** serve proof daemons (PPID 1, ports 3000/3005) held the removed worktree as CWD → `git worktree remove` ENOTEMPTY, `rm -rf` os error 66, while `git worktree prune` had already deregistered the tree — three confusing partial states. Fix: exact-absolute-path `lsof -t +D` holder enumeration, TERM → bounded 6×1s wait → KILL survivors → re-query; only an empty set proceeds to `git worktree remove` + `git branch -d`.
+- **Quoted `$SURVIVORS` broke KILL for multi-PID sets:** `kill -KILL "$SURVIVORS"` passes a newline-separated PID list as one argument, so KILL never fires for ≥2 survivors — exactly the canonical E31 case. Unquote, mirroring the correct TERM line.
+- **`lsof` enumeration semantics:** `-t <dir>` matches only the dir; `-t +D <dir>` walks the tree and matches any open fd under it (over-matches CWD holders but errs toward removal success). The holder-scope comment must describe the enumeration it sits on, and `+D` is a full-tree walk — with node_modules present the bounded wait bounds *iterations*, not wall-clock.
+- **Post-merge gate cost (R2):** `spur-check-new` runs the full ~6766-test suite (~126s) plus corpus sweep; re-running it after a baseline-only JSON fix re-runs everything. `bun run corpus-check` is the corpus-only fast path and should be the iteration loop for corpus-only changes.
+- **R2d lifecycle replay (R3):** `task record` after files were already merged as `done` wrote `updated_at`-only churn and never persisted the copied verdicts as `task_run_links`; verdict JSONs under the worktree `.spur/run/` were effectively discarded on worktree removal (only survived because manually copied first).
+
+### Patterns (what worked)
+
+- **Static contract pins over prose:** extend `execution-batch-contract.test.ts` with 4 new pins (11 total, 38 expects) covering the TERM/wait/KILL/re-query sequence, the fail-closed empty-set gate, and the absence of replay instructions (`not.toContain('Re-sync')`, `not.toContain('task update <wbs>')`, `not.toContain('spur task record <wbs>')`).
+- **Negative/absence pins** assert what must *not* regress (one-shot `xargs` kill, replay instructions) — cheap insurance on an executable orchestration contract.
+- **Repoint shifted anchors in the same commit** when insertions move referenced line ranges (References anchor drifted off the R2d paragraph after edits).
+- **Fix in the contract, not the caller:** `execution-batch.md` is the SSOT the inline batch driver reads; the two-file fix closed the real failure boundary without touching runtime app code.
+
+### Gotchas (watch out next time)
+
+- **PID-reuse TOCTOU** between lsof enumeration and KILL (~1s window) is a pre-existing, accepted residual risk for a spec contract.
+- **Negative global pins can false-trip** on future unrelated prose — accepted per the mandated absence pins.
+- **Reuse-mode code block has no inline WT-4a persistence callout**; the Step 5 paragraph is SSOT and explicitly covers reuse mode — don't add a duplicate.
+- **`kill` failures must not be ignored** and one unverified signal is not cleanup — the bounded TERM→KILL sequence with re-query is the minimum.
+- **Never repair timestamp churn with `git checkout`** — that fixes the symptom, not the no-replay contract.
+- **`+D` over-match is fail-safe** (errs toward removal success), but comment wording must not claim it is CWD-only.
