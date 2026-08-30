@@ -421,6 +421,23 @@ written for a batch with nothing to run. The early-exit report carries zero per-
 terminal action runs. A contract test pins this
 (`plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts`).
 
+**Evidence persistence (worktree batches — task 0720 R3).** A worktree batch's Step 5 report and
+verdict artifacts live in the worktree's own `.spur/run/` while the batch runs — exactly the tree
+create-mode WT-4 deletes. Before any WT-4 removal, persist them into the **invoking** tree, which
+survives removal:
+
+- Write the emitted batch report to `.spur/run/worktree-<marker-id>-batch-report.md`.
+- Copy each attempted task's `.spur/run/<wbs>-verdict.json` from the worktree to
+  `.spur/run/worktree-<marker-id>-verdicts/<wbs>-verdict.json`.
+- Make the report's per-task verdict references use those persisted invoking-tree paths, not the
+  worktree-local paths that removal deletes.
+
+Evidence persistence precedes destructive cleanup: a persistence failure (unreadable verdict file,
+disk-full, missing directory) routes to **WT-5** — the worktree and branch are retained so a green
+batch can never destroy its own evidence. Reuse mode retains its operator-owned tree but still
+persists the Step 5 report under the invoking tree; the reused tree's `.spur/run/` remains the live
+copy while that tree lives on.
+
 ## Worktree isolation (`--worktree [<name>]`)
 
 When a batch command (`dev-runall`, `dev-refineall`, `dev-verifyall`) is invoked with
@@ -671,18 +688,52 @@ git checkout "$BASE_REF"
 [ "$(git rev-list --count "$BASE_SHA..$BRANCH")" -gt 0 ] \
   || { echo "halt: branch carries no commits - nothing to merge" >&2; false; }   # -> WT-5
 git merge --ff-only "$BRANCH"          # FF-only: never rebase, merge-commit, or resolve conflicts
-# if FF succeeded:
-# Guard: orphaned daemons holding the worktree as CWD (e.g. `serve` test daemons
-# from proof runs) make `git worktree remove` fail ENOTEMPTY and can defeat rm -rf.
-# `git worktree prune` still deregisters the tree, so finish with lsof+fuser kill:
-lsof -t "$(pwd)/../<worktree-dir>" | xargs -r kill 2>/dev/null
+# if FF succeeded — WT-4a evidence persistence (Step 5, task 0720 R3) runs FIRST:
+# persist the batch report + verdict artifacts into the invoking tree's .spur/run/
+# before anything below touches the worktree. Persistence failure routes to WT-5.
+#
+# WT-4b — bounded CWD-holder cleanup (task 0720 R1). Resolve the EXACT absolute
+# worktree path; a relative path or a stale entry matches the wrong processes.
+WT_PATH="$(cd "../<worktree-dir>" && pwd)"
+# Holders = processes with any open fd under the worktree tree (lsof +D walks the
+# tree; CWD holders are the common case but +D also catches open-file holders —
+# over-match errs toward removal success; a plain -t <dir> matches only the
+# directory itself). Orphaned `serve` proof daemons (PPID 1) are exactly this
+# class: they defeat `git worktree remove` (ENOTEMPTY), defeat rm -rf, while
+# `git worktree prune` still deregisters the tree. Note +D is a full-tree walk,
+# so the wait loop below bounds ITERATIONS (6 × 1s ticks + walk cost), not
+# wall-clock.
+HOLDERS="$(lsof -t +D "$WT_PATH" 2>/dev/null | sort -u)"
+if [ -n "$HOLDERS" ]; then
+  kill -TERM $HOLDERS 2>/dev/null            # 1) TERM first, all holders (unquoted — word-split PID list)
+  for _ in 1 2 3 4 5 6; do                   # 2) bounded wait: 6 × 1s ticks
+    sleep 1
+    [ -z "$(lsof -t +D "$WT_PATH" 2>/dev/null)" ] && break
+  done
+  SURVIVORS="$(lsof -t +D "$WT_PATH" 2>/dev/null | sort -u)"
+  if [ -n "$SURVIVORS" ]; then
+    kill -KILL $SURVIVORS 2>/dev/null       # 3) KILL only the survivors (unquoted — one arg per PID)
+    sleep 1
+  fi
+fi
+# 4) Re-query: only an EMPTY holder set may proceed to remove/prune/branch delete.
+FINAL="$(lsof -t +D "$WT_PATH" 2>/dev/null | sort -u)"
+if [ -n "$FINAL" ]; then
+  PORTS="$(lsof -nP -a -p "$(echo "$FINAL" | paste -sd, -)" -iTCP -sTCP:LISTEN 2>/dev/null \
+    | awk 'NR>1 {print $9}' | sort -u | paste -sd' ' -)"
+  echo "halt: worktree still held by PID(s): $FINAL ${PORTS:+listening: $PORTS}" >&2
+  exit 1                                     # -> WT-5: retain worktree + branch,
+fi                                           #   NO prune/remove/branch delete
 git worktree remove "../<worktree-dir>"
 git branch -d "$BRANCH"
 # update marker: status = "merged"
 ```
 
-On the zero-commit guard firing, fall through to **WT-5** with the halt cause *"branch carries no
-commits — nothing to merge"*: the worktree and branch are retained, never removed (task 0701 R1).
+On either guard firing — zero-commit branch (task 0701 R1), or surviving CWD holders (task 0720 R1)
+— fall through to **WT-5**: the worktree and branch are retained, never removed. While any holder
+remains, do **not** run `git worktree prune`, `git worktree remove`, or branch deletion. The holder
+halt report names every surviving PID; the listening port is best-effort — a CWD holder may own no
+socket, and `lsof` port discovery failing must not hide the PIDs.
 
 #### Reuse mode — merge, retain
 
@@ -715,18 +766,28 @@ risk losing work); WT-5 retains the worktree and branch whenever FF is impossibl
 Reuse mode is **narrower** than the carve-out (it merges but does not delete the branch), so the
 carve-out text needs no widening.
 
-**Lifecycle-DB disposition (task 0701 R2d).** The worktree has its own `.spur` lifecycle DB, and
-WT-4/WT-5 remove or retain that tree — the DB state does **not** travel with the merge. The
-**committed task file is authoritative**: after a green merge the branch's task files read
-`done`/`testing` while the invoking tree's DB still reports the pre-batch statuses. Re-sync
-explicitly by replaying the recorded terminal transitions in the invoking tree (`spur task update
-<wbs> <status>` per task, then `spur task record <wbs>`), or treat the batch report's per-task
-table as the source of truth. Replay-order note (session 2026-08-29, bf8c integration): the merge
-already lands the branch's terminal task-file sections, so `task update <wbs> done` returns
-`noop: true` (files already read done) and `task record` only bumps `updated_at` timestamps —
-restore that churn with `git checkout -- docs/tasks*/`. Record-first ordering is fine; the per-tree
-`task_run_links` rows intentionally never travel with the merge. This is a deliberate choice over auto-migrating DB state: the DB is
-per-tree by design and the committed corpus files are the durable record.
+**Lifecycle-DB disposition (task 0701 R2d, amended by 0720).** The worktree has its own `.spur`
+lifecycle DB, and WT-4/WT-5 remove or retain that tree — the DB state does **not** travel with the
+merge. One contract, no alternatives:
+
+- **Committed task files own lifecycle state.** The **committed task file is authoritative**: after
+  a green merge the branch's task files already read `done`/`testing` in the invoking tree; no
+  `spur task update` or `spur task record` replay runs post-merge. Replay is not "one of two
+  options" — it is removed: it writes `updated_at`-only churn and can never restore worktree-only
+  DB rows.
+- **The persisted invoking-tree artifacts own evidence.** The Step 5 batch report at
+  `.spur/run/worktree-<marker-id>-batch-report.md` and the copied verdict JSONs under
+  `.spur/run/worktree-<marker-id>-verdicts/` (written before WT-4 removal) are the batch/verdict
+  record.
+- **Per-worktree lifecycle DB rows intentionally do not travel.** No `task_run_links` import, no
+  cross-database provenance synthesis — the DB is per-tree by design.
+- **No timestamp-only corpus churn.** Post-merge the invoking tree's DB statuses may read stale
+  relative to the committed files; that divergence is accepted, not repaired. Do not run
+  `task update`/`task record` to "catch up" the DB, and do not repair churn with
+  `git checkout -- docs/tasks*/`.
+
+This is a deliberate choice over auto-migrating DB state: the committed corpus files are the durable
+record and the persisted run artifacts are the evidence record.
 
 ### WT-5 — Failure path: retain and report (R5)
 

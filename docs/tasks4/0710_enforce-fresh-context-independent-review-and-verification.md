@@ -130,5 +130,7 @@ intended reviewer separation. No policy compares resolved implementation and rev
 - `packages/app/src/observability/agent-execution.ts`
 - `packages/config/src/index.ts` — role/executor configuration.
 - `packages/app/tests/workflow/actions/agent-run.test.ts`
+
 ### History
+
 - 2026-08-28 — created from the approved harness comparison implementation lane; researched, decomposed, linked to A6, and passed the task-local readiness gate.

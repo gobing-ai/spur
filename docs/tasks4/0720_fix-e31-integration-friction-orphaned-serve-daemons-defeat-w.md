@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Fix E31 integration friction: orphaned serve daemons defeat worktree removal; corpus gate runs full test suite; R2d replay discards verdicts"
-status: todo
+status: done
 template: issue
 created_at: 2026-08-30T02:21:06.464Z
-updated_at: "2026-08-30T02:33:41.836Z"
+updated_at: "2026-08-30T03:23:09.711Z"
 feature_id: A6
 ac_altitude: task-local
 ---
@@ -12,16 +12,21 @@ ac_altitude: task-local
 ## 0720. Fix E31 integration friction: orphaned serve daemons defeat worktree removal; corpus gate runs full test suite; R2d replay discards verdicts
 
 ### Background
+
 Session 2026-08-29/30 — E31 dev-runall batch (0716, 0717) and bf8c worktree integration onto main. The batch itself was clean (2 PASS, 3 commits, green worktree verification); integration consumed about 2h20m, dominated by avoidable cleanup and evidence-reconciliation work.
 
 Ready-depth premise verification narrowed the original three findings to two implementation gaps. `bun run corpus-check` already exists as the corpus-only validation path and is documented in `AGENTS.md`; R2 is therefore a verified guardrail, not new work. Commit `c25f0c141` added provisional WT-4 and R2d prose, but it did not close either remaining gap: cleanup ignores kill failure and cannot report surviving PID/port details, while R2d still offers mutually incompatible replay-or-report outcomes.
+
 ### Requirements
-- [ ] R1. Before a create-mode `--worktree` batch removes or deregisters its worktree, cleanup must find processes whose CWD is the exact worktree, terminate them with a bounded TERM-to-KILL sequence, and re-query. If any holder remains, the batch must retain the worktree and branch and report every surviving PID plus each discoverable listening port; it must not continue to remove, prune, or delete the branch.
+
+- [x] R1. Before a create-mode `--worktree` batch removes or deregisters its worktree, cleanup must find processes whose CWD is the exact worktree, terminate them with a bounded TERM-to-KILL sequence, and re-query. If any holder remains, the batch must retain the worktree and branch and report every surviving PID plus each discoverable listening port; it must not continue to remove, prune, or delete the branch.
 - [x] R2. Reuse the existing `bun run corpus-check` command as the corpus-only post-merge validation path. Do not add `spur-check-corpus` or change `spur-check-new`, which remains the comprehensive validation plus corpus sweep.
-- [ ] R3. A worktree batch must persist its structured batch report and per-task verdict JSON artifacts under the invoking tree's `.spur/run/` before create-mode cleanup. After a green merge, committed task files are authoritative for lifecycle status and those invoking-tree artifacts are authoritative for batch/verdict evidence; the driver must not replay `task update`, replay `task record`, import `task_run_links`, or create timestamp-only corpus churn.
+- [x] R3. A worktree batch must persist its structured batch report and per-task verdict JSON artifacts under the invoking tree's `.spur/run/` before create-mode cleanup. After a green merge, committed task files are authoritative for lifecycle status and those invoking-tree artifacts are authoritative for batch/verdict evidence; the driver must not replay `task update`, replay `task record`, import `task_run_links`, or create timestamp-only corpus churn.
 
 Non-goals: no public CLI surface, no lifecycle database/schema migration, no change to `task record`, no general `serve` process supervisor, and no second corpus-check alias.
+
 ### Acceptance Criteria
+
 ```gherkin
 Scenario: R1 — daemon-holding worktree is removed cleanly
   Given a create-mode worktree batch whose proof step left a process with its CWD inside the worktree
@@ -45,6 +50,7 @@ Scenario: R3 — worktree evidence disposition is deterministic
   And the report references those invoking-tree artifact paths
   And no post-merge task update or task record replay changes task timestamps or creates task_run_links rows
 ```
+
 ### Q&A
 
 <!-- Clarifications and triage decisions. Keep empty if none. -->
@@ -56,7 +62,9 @@ Scenario: R3 — worktree evidence disposition is deterministic
 - **Where are the artifacts frozen?** `.spur/run/worktree-<marker-id>-batch-report.md` and `.spur/run/worktree-<marker-id>-verdicts/<wbs>-verdict.json` in the invoking tree. The existing marker ID provides collision-free identity; no new public flag or DTO is needed.
 - **What exactly happens during cleanup?** Resolve the exact absolute worktree path, enumerate CWD holders with the existing platform `lsof`, send TERM, wait for a bounded interval, send KILL only to survivors, and re-query. An empty result permits `git worktree remove`; survivors route to WT-5 before any prune/remove/branch deletion. PID is mandatory in the halt report; listening port is best-effort because a CWD holder may own no socket.
 - **Dependencies or deferred decisions?** None. The task has no dependency edge. General detached-serve lifecycle ownership remains out of scope; this task hardens the batch boundary that owns worktree removal.
+
 ### Design
+
 Implement the two remaining gaps in the existing model-driven batch contract; do not add runtime application code.
 
 **WHAT / WHERE**
@@ -85,57 +93,147 @@ Implement the two remaining gaps in the existing model-driven batch contract; do
 - Do not replay task lifecycle commands, synthesize/import `task_run_links`, change `task record`, or add a new corpus-check alias.
 
 **Cross-task contract:** 0720 has no dependencies and changes no public API. It leaves lifecycle persistence, `serve`, and `task record` behavior unchanged for later work.
+
 ### Plan
-- [ ] P1 (R1, R3) Add failing static assertions to `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` for invoking-tree report/verdict persistence, fail-closed holder cleanup, and removal of lifecycle replay instructions.
-- [ ] P2 (R3) Update Step 5 of `execution-batch.md` to persist the batch report and copy per-task verdict artifacts to the frozen invoking-tree paths before any worktree removal; route persistence failure to WT-5.
-- [ ] P3 (R1) Replace the WT-4 one-shot kill with exact-path holder enumeration, bounded TERM/wait/KILL/re-query behavior, and PID/port halt reporting before any remove/prune/branch deletion.
-- [ ] P4 (R3) Rewrite the lifecycle-DB disposition as the selected no-replay contract and remove the contradictory replay/order recovery prose.
-- [ ] P5 (R2) Verify only: inspect `package.json` and `AGENTS.md`, run `bun run corpus-check`, and confirm no duplicate script or instruction was introduced.
-- [ ] P6 Run the targeted contract test from `plugins/sp`, then `bun run spur-check`, `bun run corpus-check`, `bun run apps/cli/src/index.ts task check 0720 --json`, and `git diff --check`.
+
+- [x] P1 (R1, R3) Add failing static assertions to `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` for invoking-tree report/verdict persistence, fail-closed holder cleanup, and removal of lifecycle replay instructions.
+- [x] P2 (R3) Update Step 5 of `execution-batch.md` to persist the batch report and copy per-task verdict artifacts to the frozen invoking-tree paths before any worktree removal; route persistence failure to WT-5.
+- [x] P3 (R1) Replace the WT-4 one-shot kill with exact-path holder enumeration, bounded TERM/wait/KILL/re-query behavior, and PID/port halt reporting before any remove/prune/branch deletion.
+- [x] P4 (R3) Rewrite the lifecycle-DB disposition as the selected no-replay contract and remove the contradictory replay/order recovery prose.
+- [x] P5 (R2) Verify only: inspect `package.json` and `AGENTS.md`, run `bun run corpus-check`, and confirm no duplicate script or instruction was introduced.
+- [x] P6 Run the targeted contract test from `plugins/sp`, then `bun run spur-check`, `bun run corpus-check`, `bun run apps/cli/src/index.ts task check 0720 --json`, and `git diff --check`.
+
 ### Root Cause
+
 - R1 (P2, workflow): Orphaned `serve` proof daemons (PPID 1, ports 3000/3005) kept the removed worktree as CWD; `git worktree remove` failed ENOTEMPTY, `rm -rf` failed os error 66, while `git worktree prune` had already deregistered the tree — three confusing partial states before lsof revealed the daemons.
 - R2 (P2, workflow): The post-merge gate `bun run spur-check-new` runs the full 6766-test suite (~126s) plus corpus sweep; rerunning it after a baseline-only JSON fix re-runs everything because no split/affected-target surface exists.
 - R3 (P3, workflow): R2d lifecycle replay (`task record` after files already merged as done) wrote `updated_at`-only churn and never persisted the copied verdicts as `task_run_links`; verdict JSONs under worktree `.spur/run/` are effectively discarded on worktree removal (only survived because manually copied first).
+
 ### Solution
-#### R1 — kill orphaned daemons in worktree cleanup
 
-**Evidence:** `ps -p 58932,99623` showed two `spur … serve --cwd <worktree> --port 3000/3005` processes, PPID 1, started at batch proof-run times (17:53/18:27). After `kill 58932 99623`, `rm -rf` + `git branch -d` succeeded immediately.
+#### Implemented (2026-08-30, stage: implement)
 
-**Fix direction:** In the worktree-removal path (apps/cli batch driver or the skill's WT-4 create-mode block — doc side already updated in c25f0c141), before `git worktree remove`: enumerate PIDs holding the worktree dir (`lsof -t <dir>` or `fuser -k`), kill them, then remove. Prefer failing the removal with a named hint ("worktree in use by PID …") over silent partial deregistration. Consider a `serve` daemon shutdown at proof-run teardown (the process-spawn test helper should reap children). Code side of execution-batch.md:676.
+Two files changed, per the Design's WHAT/WHERE items 1–4; R2 verified-only (no change needed).
 
-**AC:** A batch whose proof steps spawn `serve` daemons completes `git worktree remove` without manual lsof intervention; a daemon that refuses to die produces a halt report naming the PID/port.
+**1. `plugins/sp/skills/spur-dev/references/execution-batch.md`**
 
-#### R2 — cheap post-merge corpus gate
+- **Step 5 (R3):** added the `**Evidence persistence (worktree batches — task 0720 R3).**`
+  paragraph — the batch report persists to `.spur/run/worktree-<marker-id>-batch-report.md`, each
+  task's `.spur/run/<wbs>-verdict.json` is copied to
+  `.spur/run/worktree-<marker-id>-verdicts/<wbs>-verdict.json`, report references use the persisted
+  invoking-tree paths. Evidence persistence precedes destructive cleanup; persistence failure
+  routes to **WT-5** so a green batch can never destroy its own evidence. Reuse mode persists the
+  report too.
+- **WT-4 (R1):** replaced the one-shot `lsof … | xargs -r kill` with a bounded CWD-holder cleanup:
+  resolve the exact absolute worktree path (`WT_PATH="$(cd ../<worktree-dir> && pwd)"`), enumerate
+  holders with `lsof -t +D "$WT_PATH"` (tree walk; plain `-t <dir>` matches only the dir),
+  `kill -TERM $HOLDERS`, bounded 6×1s wait, `kill -KILL "$SURVIVORS"`, re-query. Only an EMPTY
+  holder set proceeds to `git worktree remove` + `git branch -d`; survivors halt
+  (`worktree still held by PID(s)`, `exit 1`) and route to WT-5 before any prune/remove/branch
+  delete. Listening-port discovery is best-effort (`lsof … -sTCP:LISTEN` over the survivor set)
+  and must never hide the PIDs.
+- **Guard prose:** merged the zero-commit (0701 R1) and holder (0720 R1) guard paragraphs into one
+  WT-5 fall-through statement with the PID-mandatory / port-best-effort contract.
+- **R2d:** replaced the replay-or-report paragraph with one no-replay contract ("One contract, no
+  alternatives"): committed task files own lifecycle state (the committed task file is
+  authoritative — no post-merge `spur task update`/`spur task record` replay; replay is removed,
+  not an option), the persisted invoking-tree artifacts own evidence, per-worktree lifecycle DB
+  rows intentionally do not travel, and no timestamp-only corpus churn. All replay instructions
+  (`Re-sync`, `Record-first ordering`, `task update <wbs>`, `spur task record <wbs>`) are gone
+  from the file (grep-verified zero hits).
 
-**Evidence:** `bun run spur-check-new` output: `Ran 6766 tests across 357 files. [125.95s]` then `corpus-check FAILED … 1 new` (A31, other actor's scenario-first commit). After regenerating the baseline (JSON-only change), recheck `task check --corpus` alone took ~36s and passed; full re-run would cost another ~3min for zero new signal.
+**2. `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts`**
 
-**Fix direction:** Add a `spur-check-corpus` script (lint + typecheck + `task check --corpus`, no tests) for post-merge corpus acceptance; keep `spur-check-new` as the full pre-push gate. Alternatively a bun `--affected` filter keyed on changed workspaces; split point is package.json:81. Ponytail floor: a 3-line package.json script aliasing the existing commands.
+- Appended `describe('execution-batch spec contract (task 0720)')` with four tests:
+  Step 5 evidence-persistence pins; WT-4 bounded-cleanup pins (TERM/wait-loop/KILL-survivors/
+  re-query/fail-closed empty-set/PID+port halt shape); one-shot-kill absence (`xargs`,
+  `lsof+fuser`); R2d no-replay pins plus replay-instruction absence pins. The pre-existing 0701
+  describe block is untouched and still green (including its
+  `committed task file is authoritative` pin).
 
-**AC:** After a corpus-only change (baseline regen, task-file edit), a gate path exists that finishes in <60s and catches corpus regressions; documented in AGENTS.md build/verification block.
+**R2 — verify-only, confirmed:** `package.json:89` defines `corpus-check`
+(`task check --corpus`), `AGENTS.md:159` documents it; no edit made, `git status` clean for both
+files.
 
-#### R3 — R2d replay should persist or explicitly discard verdicts
-
-**Evidence:** `task record 0716/0717 --json` returned `{testingWritten: true, reviewWritten: false}` and only bumped `updated_at` (restored via git checkout); `task_run_links` in main DB stayed empty while worktree DB had 4 rows (2 pipeline + 2 lifecycle). The R2d doc offers "replay transitions OR treat batch report as truth" but the replay path silently does neither fully.
-
-**Fix direction:** Decide one contract: (a) `task record --verdict-file` in the invoking tree creates the `task_run_links` rows (import verdict provenance), or (b) R2d drops the replay step entirely — batch report + committed files are the record, delete the replay sentence from execution-batch.md:723. Current middle ground wastes ~10 min per integration and discards evidence.
-
-**AC:** Integration doc states one deterministic disposition; following it leaves no `updated_at` churn and no ambiguity about where verdict evidence lives.
+**Probe:** `cd plugins/sp && bun test tests/dogfood-testing/execution-batch-contract.test.ts` —
+11 pass / 0 fail (7 pre-existing 0701 pins + 4 new 0720 pins), 38 expect() calls.
 
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — bounded CWD-holder cleanup before worktree removal; retain + report on survivors | MET | execution-batch.md:695-736: exact-path resolve (`WT_PATH="$(cd ../<worktree-dir> && pwd)"` :697), holder enumeration `lsof -t +D "$WT_PATH"` :706, `kill -TERM $HOLDERS` :708 (unquoted, word-splits PID list), bounded 6x1s wait loop :709-712, `kill -KILL $SURVIVORS` :715 (unquoted — review P2-1 fixed), fail-closed FINAL re-query :719 gates `git worktree remove` :727 / `git branch -d` :728; survivors -> halt report `worktree still held by PID(s): $FINAL ... listening: $PORTS` :724 + `exit 1` -> WT-5 :725-726; retention prose with PID-mandatory/port-best-effort :731-736. Review P3-2 comment fix applied :698-705 (open-fd scope, iterations-not-wall-clock). |
+| R2 — reuse existing `bun run corpus-check`; no new alias, no change to `spur-check-new` | MET | package.json:89 `"corpus-check": "bun run apps/cli/src/index.ts task check --corpus"` (corpus sweep only — no root test suite); package.json:81 `spur-check-new` composes it after the comprehensive checks, unchanged; AGENTS.md:159 documents it. `git status --porcelain -- package.json AGENTS.md` -> empty (zero-diff = pass condition). `grep spur-check-corpus` -> 0 hits in package.json/AGENTS.md/plugins/sp/package.json. Probe: `bun run corpus-check` ran the sweep without the test suite and failed closed on new findings (all pre-existing, task 0719 — see note). |
+| R3 — persist batch report + verdict JSON to invoking tree before create-mode cleanup; no post-merge lifecycle replay | MET | execution-batch.md:424-440 Step 5 evidence-persistence contract (report -> `.spur/run/worktree-<marker-id>-batch-report.md` :429; verdicts -> `.spur/run/worktree-<marker-id>-verdicts/<wbs>-verdict.json` :430-431; report references persisted paths :432-433; persistence failure -> WT-5 :436-438; reuse-mode persistence :439-440); WT-4a ordering comment :689-691; R2d no-replay contract :769-786 ("One contract, no alternatives" :771; committed files own state :773-777; persisted artifacts own evidence :778-781; DB rows intentionally do not travel / no task_run_links import :782-783; no timestamp churn / no `git checkout` repair :784-786). Replay instructions absent: grep `xargs |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — daemon-holding worktree removed cleanly (TERM -> bounded wait -> KILL; empty set before remove; survivor -> WT-5 with PID/port) | MET | test | TERM/wait/KILL/re-query sequence pinned at test:62-75 (`kill -TERM $HOLDERS`, `for _ in 1 2 3 4 5 6`, `kill -KILL $SURVIVORS`); fail-closed gate (`only an EMPTY holder set may proceed`, `worktree still held by PID(s)`) pinned test:71-73 and present execution-batch.md:720-726 before remove/branch-delete :727-728; PID-mandatory/port-best-effort prose :735-736. Probe: `cd plugins/sp && bun test tests/dogfood-testing/execution-batch-contract.test.ts` -> 11 pass / 0 fail, 38 expect() calls. |
+| R2 — corpus-only fast path stays the single path (no root suite; new findings fail; no duplicate script/instruction) | MET | command | `bun run corpus-check` executed the corpus sweep (no test suite invoked) and exited 1 on new findings — fail-closed behavior demonstrated. Zero-diff on package.json/AGENTS.md; no `spur-check-corpus` anywhere. |
+| R3 — deterministic evidence disposition (invoking-tree report + verdicts; referenced paths; no replay/timestamp churn/task_run_links) | MET | test | Persistence pins test:54-60 (paths + WT-5 routing + "can never destroy its own evidence"); no-replay pins test:82-91 including negative pins (`not.toContain('Re-sync')`, `not.toContain('task update <wbs>')`, `not.toContain('spur task record <wbs>')`, `not.toContain('Record-first ordering')`); spec grep confirms zero replay instructions remain. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Stage:** review (code-verification: functional traceability + SECUA + architecture), 2026-08-29.
+**Scope:** uncommitted diff — task 0720 corpus file, `plugins/sp/skills/spur-dev/references/execution-batch.md`, `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts`.
+**Verification run:** `cd plugins/sp && bun test tests/dogfood-testing/execution-batch-contract.test.ts` → 11 pass / 0 fail (38 expects); whole dogfood dir 87 pass / 0 fail; `task check 0720 --json` → PASS, zero findings.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Functional traceability
+
+- **R1 (holder cleanup)** — Traceable, one defect: WT-4b enumerates holders, TERM-first, bounded wait, KILL survivors, halt-report (execution-batch.md:695-722). Darwin probe: `lsof -t +D` matches CWD holders (core mechanism works); TERM line unquoted and correct. Defect P2-1 below: the KILL line cannot fire for multi-PID survivor sets — the canonical E31 case (two daemons).
+- **R2 (corpus gate)** — Verified as intentional no-change: `package.json` corpus-check composition untouched (git status clean); `AGENTS.md:150-165` already documents `bun run corpus-check`. Correct to leave alone.
+- **R3 (evidence persistence + R2d)** — Traceable: Step 5 paragraph (execution-batch.md:424-440) persists the batch report under the invoking tree before any WT-4 removal and explicitly covers reuse mode; WT-4a inline comment references it; R2d rewrite (764-784) removes the replay alternative, leaving merge-only propagation. Contract test pins the persistence callout and replay-prose absence — 11/11 pass.
+- **AC scenarios** — halt-report names PIDs (720-722); persistence-before-removal pinned; R2d single disposition pinned by negative tests.
+
+
+#### Findings table
+
+| Priority | Finding | Location | Status |
+|----------|---------|----------|--------|
+| P2 | `kill -KILL "$SURVIVORS"` passes multi-PID list as one arg; KILL never fires for ≥2 survivors (canonical E31 case) | execution-batch.md:711 | Fixed — unquoted, pin updated (test:66) |
+| P3 | Holder-scope comment mislabels `lsof +D` as CWD-only; "~6s" bounds iterations, not wall-clock | execution-batch.md:698-708 | Fixed — comment rewritten (698-705) |
+| P3 | References anchor `:718-729` drifted off the R2d paragraph after insertions | task file References | Fixed — repointed to `:769-789` |
+
+#### Findings (detail)
+
+**P2-1 — `kill -KILL "$SURVIVORS"` passes a multi-PID list as one argument (execution-batch.md:711)**
+Quoted expansion of a newline-separated PID list hands bash a single `PID1\nPID2` argument. Repro: `SURV=$'99999\n99998'; kill -KILL "$SURV"` → `kill: 99999 99998: arguments must be process or job IDs` (rc=1, nothing signaled). For any survivor set with ≥2 PIDs — exactly the E31 canonical case — KILL never lands, the re-query stays non-empty, and the block halts into WT-5. Degradation is fail-closed (worktree retained, no data loss), but the R1 AC "TERM → bounded wait → KILL only if needed" is unimplementable as written: the KILL step is dead code for multi-holder sets. Fix: unquote, mirroring the correct TERM line at 704 — `kill -KILL $SURVIVORS 2>/dev/null`.
+
+**P3-2 — holder-scope comment mislabels `lsof +D` as CWD-only; wait is bounded per-iteration, not per-second (execution-batch.md:698-701, 705-708)**
+`+D` reports any process with an open file/fd under the tree, not only CWD holders — darwin probe: plain `+D` matched 3 PIDs where the cwd-only variant (`lsof -t -a -d cwd +D`) matched 2. Over-match errs toward removal success (fail-safe) but the comment's "Holders = processes whose CWD is inside the worktree" does not describe the enumeration it sits on. Also: `+D` is a full-tree walk — with WT-2-installed node_modules present, each call walks the whole tree and the block issues up to 9 calls (initial + ≤6 wait ticks + survivors + final), so "bounded wait (~6s)" bounds iterations, not wall-clock. Behavior stays correct and terminating; fix is comment wording + dropping or qualifying the "~6s".
+
+**P3-3 — References anchor `execution-batch.md:718-729` now points at the wrong subject (task file References)**
+This patch's insertions shifted the spec: the R2d replay-or-report paragraph the anchor cited now lives at 764-784; `718-729` now lands inside the new WT-4b KILL/halt block. `:662-685` (WT-4 cleanup) drifted ~11 lines but still lands on its cited subject. `task check 0720` passes today, yet the spec's own gate-preflight note requires repointing shifted anchors in the same commit via `spur task update --section`; repoint before commit.
+
+#### Residual risk
+
+- PID-reuse TOCTOU between lsof enumeration and KILL (1s window) — pre-existing class, below proportionate-rigor bar for a spec contract.
+- Negative global pins (`not.toContain('xargs')`, `not.toContain('Re-sync')`) can false-trip on future unrelated prose; accepted per Design item 4 (absence pins mandated).
+- Reuse-mode code block carries no inline WT-4a persistence callout; the Step 5 paragraph is SSOT and explicitly covers reuse mode — acceptable.
+
+#### Architecture
+
+Sound: evidence-before-destruction ordering (WT-4a persists before WT-4b removes), single ownership rule (the flag removes only what it created), marker-id namespacing reuses WT-3's scheme, R2d collapses the replay-or-report fork into one deterministic contract. Consumers clean: super-planner.md delegates to execution-batch.md as SSOT; cross-cutting.md:496-499 carve-out and flag-glossary §--worktree remain accurate.
+
+#### Disposition
+
+**fix-needed.** One P2 (unquote `$SURVIVORS` at execution-batch.md:711 — one-word fix for the implementer) plus two same-commit touch-ups (holder-scope comment wording; References anchor repoint). No test currently pins the KILL quoting; adding one while fixing is optional, not blocking.
 
 ### References
+
 - `package.json:80-81,89` — existing `spur-check` / `spur-check-new` composition and the source-local `corpus-check` command.
 - `AGENTS.md:150-165` — current build/verification contract documents `bun run corpus-check` and keeps `spur-check-new` comprehensive.
 - `plugins/sp/skills/spur-dev/references/execution-batch.md:205-225` — driver loop consumes per-task verdict JSON and emits the batch report.
 - `plugins/sp/skills/spur-dev/references/execution-batch.md:387-414` — Step 5 report shape and current non-persistent output contract.
 - `plugins/sp/skills/spur-dev/references/execution-batch.md:662-685` — WT-4 create-mode cleanup and the incomplete one-shot holder kill from `c25f0c141`.
-- `plugins/sp/skills/spur-dev/references/execution-batch.md:718-729` — contradictory lifecycle replay-or-report disposition.
+- `plugins/sp/skills/spur-dev/references/execution-batch.md:769-789` — contradictory lifecycle replay-or-report disposition.
 - `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:16-51` — existing static worktree contract pins to extend.
 - Commit `c25f0c1416a5e8426c8c9285d2f23611d7eb1d5e` — provisional daemon-kill and replay-order prose verified in the current history.
+
 ### History
+
+- 2026-08-30T02:53:43.341Z todo → wip (system)
+- 2026-08-30T03:23:02.346Z wip → testing (system)
+- 2026-08-30T03:23:09.711Z testing → done (system)

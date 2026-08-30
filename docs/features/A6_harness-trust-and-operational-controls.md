@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A6"
 name: "Harness trust and operational controls"
-status: backlog
+status: active
 priority: P0
 tags: []
 created_at: "2026-08-28T23:07:08.583Z"
-updated_at: "2026-08-28T23:09:17.055Z"
+updated_at: "2026-08-30T03:23:05.948Z"
 ---
 
 # A6: Harness trust and operational controls
@@ -121,6 +121,7 @@ Feature: Harness trust and operational controls
 | 0710 | Enforce fresh-context independent review and verification | todo |
 | 0711 | Govern checkpoint and indexed-context freshness and retention | todo |
 | 0712 | Derive verified-result and correction-cost operational metrics | todo |
+| 0720 | Fix E31 integration friction: orphaned serve daemons defeat worktree removal; corpus gate runs full test suite; R2d replay discards verdicts | testing |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -134,3 +135,4 @@ Implementation should preserve the comparison report's adaptation rule: reuse Sp
 executor registry, event ledger, artifact ownership, cleanup surface, and history plane. The PDF is an external design
 input, not source code or an authority to reproduce.
 ## History
+- 2026-08-30T03:23:05.948Z backlog → active (system)

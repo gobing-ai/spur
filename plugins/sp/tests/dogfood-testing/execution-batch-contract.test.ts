@@ -49,3 +49,45 @@ describe('execution-batch spec contract (task 0701)', () => {
         expect(SPEC).toContain('WT-2 is skipped entirely');
     });
 });
+
+describe('execution-batch spec contract (task 0720)', () => {
+    test('Step 5 — worktree evidence persists to the invoking tree before removal', () => {
+        expect(SPEC).toContain('Evidence persistence (worktree batches');
+        expect(SPEC).toContain('.spur/run/worktree-<marker-id>-batch-report.md');
+        expect(SPEC).toContain('.spur/run/worktree-<marker-id>-verdicts/<wbs>-verdict.json');
+        expect(SPEC).toContain('routes to **WT-5** — the worktree and branch are retained');
+        expect(SPEC).toContain('can never destroy its own evidence');
+    });
+
+    test('WT-4 — bounded CWD-holder cleanup: enumerate, TERM, bounded wait, KILL survivors, re-query', () => {
+        expect(SPEC).toContain('WT-4b — bounded CWD-holder cleanup');
+        expect(SPEC).toContain('lsof -t +D "$WT_PATH"');
+        expect(SPEC).toContain('kill -TERM $HOLDERS');
+        expect(SPEC).toContain('kill -KILL $SURVIVORS');
+        // bounded wait loop, not an unverified single signal
+        expect(SPEC).toMatch(/for _ in 1 2 3 4 5 6; do/);
+        // PID mandatory, port best-effort — port absence must not hide the PID
+        expect(SPEC).toContain('names every surviving PID');
+        expect(SPEC).toContain('the listening port is best-effort');
+        // fail-closed: removal proceeds only on an empty re-queried holder set
+        expect(SPEC).toContain('only an EMPTY holder set may proceed');
+        expect(SPEC).toContain('worktree still held by PID(s)');
+    });
+
+    test('WT-4 — the one-shot lsof|xargs kill is gone', () => {
+        expect(SPEC).not.toContain('xargs');
+        expect(SPEC).not.toContain('lsof+fuser');
+    });
+
+    test('R2d — lifecycle disposition is no-replay; committed files own state, persisted artifacts own evidence', () => {
+        expect(SPEC).toContain('One contract, no alternatives');
+        expect(SPEC).toContain('Committed task files own lifecycle state');
+        expect(SPEC).toContain('The persisted invoking-tree artifacts own evidence');
+        expect(SPEC).toContain('intentionally do not travel');
+        // replay instructions removed
+        expect(SPEC).not.toContain('Re-sync');
+        expect(SPEC).not.toContain('spur task record <wbs>');
+        expect(SPEC).not.toContain('task update <wbs>');
+        expect(SPEC).not.toContain('Record-first ordering');
+    });
+});
