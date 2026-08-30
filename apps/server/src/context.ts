@@ -101,6 +101,11 @@ const DEFAULT_PLANNING_FOLDERS: PlanningFolders = {
     foldersConfig: { active_folder: DEFAULT_TASKS_DIR, folders: { [DEFAULT_TASKS_DIR]: { baseCounter: 0 } } },
 };
 
+// A history refresh can spend up to 10 minutes on EACH of six sequential sources,
+// then analyze the multi-GB database. The upstream 30-second default lets another
+// server reset and reclaim the same processing row while its child is still alive.
+const SERVER_QUEUE_VISIBILITY_TIMEOUT_MS = 2 * 60 * 60_000;
+
 /**
  * Server job-queue handle — the ts-infra `JobQueue` producer interface
  * (`enqueue`/`enqueueBatch`/`stats`), backed by `DBJobQueue` over `QueueJobDao`.
@@ -614,7 +619,11 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
             queueConsumerPromise ??= (async () => {
                 const { createQueueConsumer } = await import('@gobing-ai/spur-domain');
                 const db = await this.getDb();
-                return createQueueConsumer(db, { events: eventsBus as never, queueName: 'server-jobs' });
+                return createQueueConsumer(db, {
+                    events: eventsBus as never,
+                    queueName: 'server-jobs',
+                    visibilityTimeout: SERVER_QUEUE_VISIBILITY_TIMEOUT_MS,
+                });
             })();
             return queueConsumerPromise;
         },

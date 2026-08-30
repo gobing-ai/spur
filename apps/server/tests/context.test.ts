@@ -334,6 +334,31 @@ describe('createServerContext', () => {
         expect(typeof c1.processOnce).toBe('function');
     });
 
+    test('queueConsumer does not reclaim a history refresh after the upstream 30-second default', async () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, {
+            cwd: '/tmp/test',
+            fs: testFs,
+            dbUrl: ':memory:',
+            jobQueueEnabled: true,
+        });
+        const db = await ctx.getDb();
+        const now = Date.now();
+        await db.run(
+            `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, processing_at)
+             VALUES ('long-refresh', 'history.refresh', '{}', 'processing', 0, 3, ?, ?, ?)`,
+            now - 31_000,
+            now - 31_000,
+            now - 31_000,
+        );
+
+        expect(await (await ctx.queueConsumer()).processOnce()).toBe(0);
+        expect(
+            (await db.queryFirst<{ status: string }>("SELECT status FROM queue_jobs WHERE id = 'long-refresh'"))
+                ?.status,
+        ).toBe('processing');
+    });
+
     test('scheduler() throws when disabled (default)', () => {
         const appRt = makeAppRt();
         const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });

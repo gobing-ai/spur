@@ -365,6 +365,10 @@ share the WAL database; the existing 5-second SQLite busy timeout bounds lock co
 payload, enqueue-result, process, and transport shapes live in
 `docs/design/history-refresh-process-isolation.md`.
 
+The server queue uses a two-hour visibility timeout. `history daily` imports six sources sequentially,
+with a ten-minute bound per source, before analysis; the generic 30-second queue default would let a
+second server reset and reclaim the same processing row while the first child was still running.
+
 Enforced invariants (E31 built — 0716–0717):
 
 1. No producer calls raw queue enqueue for `history.refresh`; all use the shared enqueue function.
@@ -372,6 +376,8 @@ Enforced invariants (E31 built — 0716–0717):
 3. History import/analyze filesystem and SQLite work never executes in the server process.
 4. A queue handler consumes `Job.payload`; it never interprets the queue envelope as business data.
 5. Child failure or malformed output fails the queue attempt; it is never converted to success.
+6. A live refresh remains leased beyond its supported import/analyze duration; another server cannot
+   reclaim it at the generic 30-second visibility boundary.
 
 **Watermark policy** (E3/0550): `analyze` bounds derived values to a still-appending session's **last
 complete turn** (`packages/domain/src/analytics/watermark.ts`), so a half-written session never
