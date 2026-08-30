@@ -357,9 +357,11 @@ single-flight authority across every producer and server process; pending reques
 request arriving during processing returns `already-running` without inserting a follow-up row.
 
 The server queue handler unwraps `Job.payload`, then awaits `ProcessExecutor.run` against the same
-PATH-independent Spur entrypoint that launched `serve`, invoking `history daily --json
---json-envelope` in the
-project root. Awaiting preserves queue completion/retry truth while the child process isolates
+PATH-independent Spur entrypoint that launched `serve`, invoking `--no-logo history daily` in the
+project root. The child's exit code is the verdict: its stdout is the human daily summary, kept as
+bounded failure detail and never parsed as a payload (the `--json` envelope embeds the whole analyze
+artifact, which outgrew the handler's output bound on 2026-08-30 and failed healthy refreshes).
+Awaiting preserves queue completion/retry truth while the child process isolates
 synchronous filesystem and `bun:sqlite` work from the Hono/oRPC event loop. The child and server
 share the WAL database; the existing 5-second SQLite busy timeout bounds lock contention. Concrete
 payload, enqueue-result, process, and transport shapes live in

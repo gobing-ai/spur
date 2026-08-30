@@ -91,8 +91,21 @@ function safeJsonParse(raw: string): Partial<HistoryRefreshPayload> | null {
 /** Env var carrying the validated refresh payload across the child-process boundary (task 0717). */
 export const HISTORY_REFRESH_CONTEXT_ENV = 'SPUR_HISTORY_REFRESH_CONTEXT';
 
-/** Bound on accepted child output; a child that exceeds it fails the attempt instead of growing memory. */
+/**
+ * Bound on accepted child output; a child that exceeds it fails the attempt instead of
+ * growing memory. The child prints the human daily summary (~1 KB), never the `--json`
+ * envelope — that one embeds the whole analyze artifact, which grows without bound with
+ * the imported corpus (its `loops` section alone passed 2 MB on 2026-08-30) and would be
+ * silently truncated here, then rejected as "invalid JSON".
+ */
 const HISTORY_REFRESH_MAX_OUTPUT = 1_000_000;
+
+/** Bounded tail of child output used as failure detail on queue events. */
+function outputTail(text: string): string {
+    const trimmed = text.trim();
+    if (trimmed === '') return '';
+    return `: ${trimmed.length > 400 ? `…${trimmed.slice(-400)}` : trimmed}`;
+}
 
 /**
  * Strict validation of the refresh payload at the queue/child boundary. Unlike the
@@ -225,15 +238,16 @@ export interface HistoryRefreshJobDeps {
 
 /**
  * Queue-job body (task 0717): run the refresh as an isolated child process —
- * `<invocation> history daily --json --json-envelope` in the project root — and only
- * await its exit, so a long import never blocks the server event loop (R1) and the
- * entrypoint is PATH-independent (R2). Only `job.payload` crosses the boundary: it is
- * validated, serialized into `SPUR_HISTORY_REFRESH_CONTEXT`, and the child owns every
- * `history.*` business event — the parent emits nothing here.
+ * `<invocation> --no-logo history daily` in the project root — and only await its exit,
+ * so a long import never blocks the server event loop (R1) and the entrypoint is
+ * PATH-independent (R2). Only `job.payload` crosses the boundary: it is validated,
+ * serialized into `SPUR_HISTORY_REFRESH_CONTEXT`, and the child owns every `history.*`
+ * business event — the parent emits nothing here.
  *
- * Failure policy (R4): spawn failure, non-zero exit, and unparseable output are all
- * queue-attempt failures — this throws so the queue's `failOrRetry` records the
- * retry/failure state and emits `queue.job.*` truthfully.
+ * Failure policy (R4): spawn failure and non-zero exit are queue-attempt failures — this
+ * throws so the queue's `failOrRetry` records the retry/failure state and emits
+ * `queue.job.*` truthfully. The child's exit code is the verdict; its stdout is failure
+ * detail only, never a payload the parent parses.
  */
 export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, job: Job<unknown>): Promise<void> {
     // Strict payload validation at the boundary: envelope/payload drift must fail the
@@ -244,7 +258,11 @@ export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, job: 
     if ('error' in split) throw new Error(split.error);
     const result = await deps.executor.run({
         command: split.command,
-        args: [...split.leadingArgs, 'history', 'daily', '--json', '--json-envelope'],
+        // Human summary, not `--json`: the child's exit code is the whole success contract
+        // here (it owns every `history.*` event and writes the artifact itself), while the
+        // JSON envelope would ship the entire analyze artifact through the pipe for nothing.
+        // `--no-logo` keeps the startup banner off now that `--json` no longer suppresses it.
+        args: [...split.leadingArgs, '--no-logo', 'history', 'daily'],
         cwd: deps.cwd,
         env: {
             [HISTORY_REFRESH_CONTEXT_ENV]: JSON.stringify(payload),
@@ -252,34 +270,15 @@ export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, job: 
         },
         maxOutput: HISTORY_REFRESH_MAX_OUTPUT,
     });
-    // Bounded child stderr detail for queue events: last 400 chars.
-    const stderrDetail =
-        result.stderr === '' ? '' : `: ${result.stderr.length > 400 ? `…${result.stderr.slice(-400)}` : result.stderr}`;
+    // Bounded child output as failure detail for queue events: last 400 chars. The daily
+    // summary reports the failing sources on stdout, so it leads; stderr is the fallback.
+    const stderrDetail = outputTail(result.stderr);
     if (result.exitCode === null) {
         const signalDetail = result.signal === undefined ? '' : ` (${result.signal})`;
         throw new Error(`history refresh child terminated before a normal exit${signalDetail}${stderrDetail}`);
     }
     if (result.exitCode !== 0) {
-        let stdoutDetail = '';
-        try {
-            const failure = JSON.parse(result.stdout) as { ok?: unknown; error?: { message?: unknown } };
-            const message = failure.ok === false ? failure.error?.message : undefined;
-            if (typeof message === 'string' && message !== '') {
-                stdoutDetail = `: ${message.length > 400 ? `…${message.slice(-400)}` : message}`;
-            }
-        } catch {
-            // Non-JSON stdout is not useful failure detail; bounded stderr remains the fallback.
-        }
-        throw new Error(`history daily exited ${result.exitCode}${stdoutDetail || stderrDetail}`);
-    }
-    let parsed: { ok?: unknown; data?: unknown };
-    try {
-        parsed = JSON.parse(result.stdout) as { ok?: unknown; data?: unknown };
-    } catch (e) {
-        throw new Error(`history daily emitted invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
-    }
-    if (parsed.ok !== true || typeof parsed.data !== 'object' || parsed.data === null) {
-        throw new Error('history daily emitted an unexpected JSON shape (expected {ok:true,data})');
+        throw new Error(`history daily exited ${result.exitCode}${outputTail(result.stdout) || stderrDetail}`);
     }
 }
 

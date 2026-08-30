@@ -292,10 +292,8 @@ describe('parseHistoryRefreshContext (task 0717 plan step 1)', () => {
 describe('handleHistoryRefreshJob (task 0717: isolated child process)', () => {
     const validPayload = { trigger: 'task-done', triggerId: '0549', windowStart: 1, windowEnd: 2 };
 
-    test('R2/R3: splits the invocation, runs history daily --json --json-envelope in cwd, passes payload as child context', async () => {
-        const { executor, runs } = fakeExecutor({
-            stdout: JSON.stringify({ ok: true, data: { fanOut: { exitCode: 0 } } }),
-        });
+    test('R2/R3: splits the invocation, runs history daily in cwd, passes payload as child context', async () => {
+        const { executor, runs } = fakeExecutor({ stdout: 'history daily\nexit_code: 0' });
         await handleHistoryRefreshJob(
             { cwd: '/proj', databaseUrl: '/proj/.spur/spur.db', invocation: 'bun run /x/spur.ts', executor },
             jobOf({ ...validPayload, importMode: 'full' }),
@@ -303,7 +301,7 @@ describe('handleHistoryRefreshJob (task 0717: isolated child process)', () => {
         expect(runs).toHaveLength(1);
         const run = runs[0] as RecordedRun;
         expect(run.command).toBe('bun');
-        expect(run.args).toEqual(['run', '/x/spur.ts', 'history', 'daily', '--json', '--json-envelope']);
+        expect(run.args).toEqual(['run', '/x/spur.ts', '--no-logo', 'history', 'daily']);
         expect(run.cwd).toBe('/proj');
         expect(run.maxOutput).toBe(1_000_000); // output bounded before queue completion
         expect(run.env?.DATABASE_URL).toBe('/proj/.spur/spur.db');
@@ -360,10 +358,10 @@ describe('handleHistoryRefreshJob (task 0717: isolated child process)', () => {
         expect(message.length).toBeLessThanOrEqual('history daily exited 2: '.length + 401);
     });
 
-    test('R4: non-zero JSON envelope reports the bounded child error before stderr', async () => {
+    test('R4: non-zero exit reports the bounded child summary before stderr', async () => {
         const { executor } = fakeExecutor({
             exitCode: 2,
-            stdout: JSON.stringify({ ok: false, error: { message: `prefix-${'x'.repeat(500)}` } }),
+            stdout: `prefix-${'x'.repeat(500)}`,
             stderr: 'generic stderr',
         });
         let message = '';
@@ -372,30 +370,26 @@ describe('handleHistoryRefreshJob (task 0717: isolated child process)', () => {
         } catch (e) {
             message = (e as Error).message;
         }
-        expect(message.startsWith('history daily exited 2: …')).toBe(true);
+        expect(message.startsWith('history daily exited 2: \u2026')).toBe(true);
         expect(message).not.toContain('generic stderr');
         expect(message.length).toBeLessThanOrEqual('history daily exited 2: '.length + 401);
     });
 
-    test('R4: unparseable child stdout rejects', async () => {
-        const { executor } = fakeExecutor({ exitCode: 0, stdout: '<html>proxy error</html>' });
+    // Regression: the child prints a human summary, never a JSON payload the parent parses.
+    // While it did, a daily result larger than the output bound arrived truncated and a
+    // successful refresh failed the queue attempt as "invalid JSON" (queue_jobs, 2026-08-30).
+    test('R4: exit 0 succeeds whatever the child printed, including truncated output', async () => {
+        const { executor } = fakeExecutor({ exitCode: 0, stdout: `{"ok":true,"data":{"artifact":{"lo` });
         await expect(
             handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor }, jobOf(validPayload)),
-        ).rejects.toThrow('history daily emitted invalid JSON');
-    });
-
-    test('R4: child JSON without {ok:true,data} rejects', async () => {
-        const { executor } = fakeExecutor({ exitCode: 0, stdout: JSON.stringify({ ok: false }) });
-        await expect(
-            handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor }, jobOf(validPayload)),
-        ).rejects.toThrow('unexpected JSON shape');
+        ).resolves.toBeUndefined();
     });
 
     test('R1: a held-open child leaves the server event loop responsive', async () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0717-'));
         try {
             const script = join(dir, 'slow-child.js');
-            await Bun.write(script, 'await Bun.sleep(400);\nconsole.log(JSON.stringify({ ok: true, data: {} }));\n');
+            await Bun.write(script, 'await Bun.sleep(400);\nconsole.log("history daily\\nexit_code: 0");\n');
             const executor = new NodeProcessExecutor();
             const pending = handleHistoryRefreshJob(
                 { cwd: dir, invocation: `${process.execPath} ${script}`, executor },

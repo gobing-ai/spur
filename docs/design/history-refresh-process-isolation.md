@@ -36,7 +36,7 @@ schedule | completion | Board manual import
        NodeProcessExecutor.run (awaited Promise)
                   │
                   ▼
-same Spur entrypoint history daily --json (child process)
+same Spur entrypoint --no-logo history daily (child process)
                   │
                   ▼
       shared WAL SQLite + history artifacts
@@ -53,15 +53,16 @@ to Hono/oRPC while the child is active.
 - The history job runner splits that trusted invocation with the existing `splitLaunchCommand()`
   helper and calls the existing `ProcessExecutor` seam with:
   - `cwd`: project root;
-  - args: `<leading args> history daily --json --json-envelope`;
-  - a bounded output buffer large enough for `DailyResult`;
+  - args: `<leading args> --no-logo history daily`;
+  - a bounded output buffer; the child prints the ~1 KB human summary, not the `--json` envelope,
+    whose embedded analyze artifact grows without bound with the corpus;
   - `SPUR_HISTORY_REFRESH_CONTEXT`: serialized, validated `HistoryRefreshPayload` for this child
     invocation only.
 - `history daily` uses that internal context to select `full` or `incremental` import and attach
   `trigger`/window metadata to its existing `history.*` events. Normal interactive invocations,
   where the variable is absent, are unchanged.
-- A non-zero exit, spawn failure, or invalid JSON result throws from the handler. The existing queue
-  consumer then owns retry/failure state and `queue.job.retrying|failed` events.
+- A non-zero exit or spawn failure throws from the handler; child stdout is bounded failure detail
+  only. The existing queue consumer then owns retry/failure state and `queue.job.retrying|failed` events.
 
 No public noun or verb is added. `SPUR_HISTORY_REFRESH_CONTEXT` is an internal parent-to-child
 contract, not project configuration; malformed values fail before import starts.
