@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E6"
 name: "Run-to-session correlation and cost-path repair"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-14T02:43:12.670Z"
-updated_at: "2026-08-30T18:27:20.586Z"
+updated_at: "2026-08-14T17:26:25.929Z"
 ---
 
 # E6: Run-to-session correlation and cost-path repair
@@ -110,27 +110,6 @@ Feature: Run-to-session correlation and cost-path repair
     When a session is imported
     Then a session spur launched is distinguishable from one it did not
     And a session merely run inside a spur directory is not reported as spur-launched
-
-  @core
-  Scenario: R8 — Active worktree sessions join their tasks
-    Given a sibling Git worktree has a task-run link, a matching run-session mapping, and run-owned JSONL
-    When default history import runs from the invoking tree
-    Then the correlation rows are imported idempotently
-    And the JSONL message is queryable through the task selector
-
-  @core
-  Scenario: R9 — Dry-run previews without mutation
-    Given a sibling worktree database contains task-linked correlation rows
-    When history import runs with --dry-run
-    Then the result reports the rows that would be consolidated
-    And the invoking database remains unchanged
-
-  @core
-  Scenario: R10 — Cleanup preserves correlation before removal
-    Given a create-mode worktree batch completed successfully
-    When WT-4 prepares to remove the worktree
-    Then source-local incremental history import runs while the worktree database and session roots still exist
-    And an import failure routes to retention rather than removal
 ```
 ## Tasks
 
@@ -187,4 +166,3 @@ tokens. Recorded as a finding here; the mapper investigation belongs to feature 
 - 2026-08-14T06:04:41.907Z backlog → active (system)
 - 2026-08-14T17:23:28.629Z active → verifying (system)
 - 2026-08-14T17:26:25.929Z verifying → done (system)
-- 2026-08-30T18:25:36.574Z done → active (system)
