@@ -672,6 +672,10 @@ git checkout "$BASE_REF"
   || { echo "halt: branch carries no commits - nothing to merge" >&2; false; }   # -> WT-5
 git merge --ff-only "$BRANCH"          # FF-only: never rebase, merge-commit, or resolve conflicts
 # if FF succeeded:
+# Guard: orphaned daemons holding the worktree as CWD (e.g. `serve` test daemons
+# from proof runs) make `git worktree remove` fail ENOTEMPTY and can defeat rm -rf.
+# `git worktree prune` still deregisters the tree, so finish with lsof+fuser kill:
+lsof -t "$(pwd)/../<worktree-dir>" | xargs -r kill 2>/dev/null
 git worktree remove "../<worktree-dir>"
 git branch -d "$BRANCH"
 # update marker: status = "merged"
@@ -717,7 +721,11 @@ WT-4/WT-5 remove or retain that tree — the DB state does **not** travel with t
 `done`/`testing` while the invoking tree's DB still reports the pre-batch statuses. Re-sync
 explicitly by replaying the recorded terminal transitions in the invoking tree (`spur task update
 <wbs> <status>` per task, then `spur task record <wbs>`), or treat the batch report's per-task
-table as the source of truth. This is a deliberate choice over auto-migrating DB state: the DB is
+table as the source of truth. Replay-order note (session 2026-08-29, bf8c integration): the merge
+already lands the branch's terminal task-file sections, so `task update <wbs> done` returns
+`noop: true` (files already read done) and `task record` only bumps `updated_at` timestamps —
+restore that churn with `git checkout -- docs/tasks*/`. Record-first ordering is fine; the per-tree
+`task_run_links` rows intentionally never travel with the merge. This is a deliberate choice over auto-migrating DB state: the DB is
 per-tree by design and the committed corpus files are the durable record.
 
 ### WT-5 — Failure path: retain and report (R5)
