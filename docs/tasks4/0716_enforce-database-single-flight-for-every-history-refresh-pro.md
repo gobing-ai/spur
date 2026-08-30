@@ -4,7 +4,7 @@ name: "Enforce database single-flight for every history refresh producer"
 status: done
 template: feature-impl
 created_at: 2026-08-29T23:11:49.388Z
-updated_at: "2026-08-30T00:33:08.539Z"
+updated_at: "2026-08-30T04:24:34.751Z"
 feature_id: E31
 priority: P1
 tags: ["history", "reliability", "sqlite"]
@@ -110,46 +110,31 @@ Single-flight for every history refresh producer is now enforced in the database
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Single app-layer fn `enqueueHistoryRefresh` (packages/app/src/services/history-refresh-service.ts:95-150) returning enqueued/coalesced/already-running (:41-45); all three producers routed through it: schedule apps/server/src/serve.ts:170-181, Board manual apps/server/src/context.ts:420-446, completion CLI apps/cli/src/history-refresh.ts:34. Merge keeps earliest start/latest end with full dominating incremental (history-refresh-service.ts:129-143). Immediate never delays an earlier due: packages/domain/src/db.ts:239,291 (join due = min(existing, now)); completion debounce intact (debounced joins slide window, db.ts:239 non-immediate due = now+debounceMs). Tests: packages/domain/tests/db.test.ts:500-538 (immediate join shortens due, later immediate never extends), db.test.ts:540-556 (fresh immediate due now), db.test.ts:228-262 (debounced burst coalesces, window spans all), packages/app/tests/services/history-refresh-service.test.ts:84 (burst of 5 coalesces to one job), :117 (manual ungated + immediate), :137 (schedule gated on schedule_minutes), :182 (full dominates, never delays earlier due). |
-| R2 | MET | Migration 0027 pending-or-processing unique index: packages/domain/src/migrations.ts:76 (base schema index for fresh DBs), migrations.ts:675-693 (retire duplicate active rows to terminal failed with audit last_error keeping oldest created_at ASC id ASC, drop pending-only index, create active index), migrations.ts:783-791 (CLI_MIGRATIONS entry), migrations.ts:911-929 (skip guard journals without executing when queue_jobs absent), drizzle/0027_spur_cli_history_refresh_active_unique.sql (mirror). Two SQLite connections cannot create a concurrent active refresh: packages/domain/tests/db.test.ts:264-307 (two connections on one file DB, concurrent Promise.all enqueues admit exactly one pending row, outcomes {enqueued, coalesced}, same jobId); index-level enforcement db.test.ts:599-604 (duplicate active INSERT rejects). Cannot claim concurrent active: db.test.ts:452-498 (processing row on connection A; two concurrent producers on connection B both get already-running with the in-flight jobId, exactly 1 row), db.test.ts:364-412 (claimed-between-read-and-update race resolves already-running), db.test.ts:309-336 (processing is single-flight). No unhandled uniqueness error: writer db.ts:236-327 (INSERT ON CONFLICT DO NOTHING + guarded UPDATE WHERE status=pending RETURNING + bounded 3-pass retry; exhaustion is a loud throw db.ts:322-325, never a silent drop) with db.test.ts:414-427. Closed outcome through existing events: apps/cli/src/history-refresh.ts:41-52 (ledger emit carries outcome), packages/app/src/services/event-names.ts:909-935 (presenter exposes outcome), docs/design/event-tracking.md:298 (canonical matrix row). Board import response narrowed to queued |
+| R1 | MET | `packages/app/src/services/history-refresh-service.ts:157-211` routes every producer through one result-bearing writer; `packages/app/tests/services/history-refresh-service.test.ts:157-249` proves manual/schedule gating, already-running, merge, mode dominance, due-time behavior, and the shared retry policy. |
+| R2 | MET | `packages/domain/src/migrations.ts:668-692` installs the pending-or-processing unique index after deterministic duplicate retirement; `packages/domain/tests/db.test.ts:265-308`, `packages/domain/tests/db.test.ts:453-499`, and `packages/domain/tests/db.test.ts:560-605` prove cross-connection enqueue/claim exclusion and migration enforcement. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — All producers share one pending-or-processing invariant | MET | test | Pending-or-processing invariant: partial unique index migrations.ts:76,692 covers status IN (pending, processing); writer returns already-running for in-flight (db.ts:305-310). No second pending row created for scheduled, completion, or manual producers: packages/app/tests/services/history-refresh-service.test.ts:158 (in-flight import reports already-running instead of stacking a second job), :137, :117, :84, :63; db.test.ts:309-336, 364-412, 452-498 (rows.length = 1 assertions). No second refresh starts concurrently: consumer claims the single row, others get already-running (db.test.ts:452-498 asserts 1 processing row remains). Observable coalesced/already-running outcome: result union history-refresh-service.ts:41-45; Board status/message context.ts:436-444 (apps/server/tests/context.test.ts:283-310: trigger joins pending -> coalesced, in-flight -> already-running with runId preserved); CLI ledger emit apps/cli/tests/history-refresh.test.ts:43-65 (asserts data.outcome, coalesced, jobId). |
-| R2 — Concurrent producers cannot bypass single-flight | MET | test | Two independent connections on one SQLite file enqueue concurrently: packages/domain/tests/db.test.ts:264-307 — exactly one pending refresh admitted (rows.length = 1), deterministic outcomes {enqueued, coalesced}, both producers get the same jobId, merged payload spans both; no uniqueness error escapes (writer handles conflict, db.ts:246-260,301). Claim race also deterministic: db.test.ts:364-412 (claimed-between-read-and-update -> already-running, 1 row). Index itself rejects duplicate active rows: db.test.ts:599-604 (second active INSERT rejects). Foundation-only DBs: db.test.ts:610-626 (0027 journaled and skipped, applied=1). |
+| Scenario: R1 — All producers share one pending-or-processing invariant | MET | test | `packages/app/tests/services/history-refresh-service.test.ts:157-249` and `packages/domain/tests/db.test.ts:453-499`; fresh `bun run spur-check` passed 6779 tests. |
+| Scenario: R2 — Concurrent producers cannot bypass single-flight | MET | test | `packages/domain/tests/db.test.ts:265-308` races two SQLite connections and asserts one row/deterministic outcomes; `packages/domain/tests/db.test.ts:560-605` proves the index rejects a duplicate active row. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 | Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | behavior-change | packages/domain/src/db.ts:250 | Schedule producer silently lost `maxRetries: 1`: the old `serve.ts` path enqueued with `{ maxRetries: 1 }`; the unified writer hardcodes `max_retries 3`. Bounded retry bump is defensible for idempotent refresh jobs but undocumented in the task Solution. |
-| P4 | docs | docs/04_DESIGN.md:1112-1114 | Event description drift (still `trigger/jobId/windowStart/windowEnd`; missing `triggerId`/`coalesced`/`outcome`). Predates 0716 (0549 added `coalesced` without updating it); canonical matrix at `docs/design/event-tracking.md:298` is correct. |
-**Verdict: approve.** No requirement/AC gaps found. Two P4 observations (non-blocking) below.
+| --- | --- | --- | --- |
+| P4 | — | — | No P1–P3 findings; functional, SECUA, and architecture verdicts PASS. |
 
-Reviewed the full working-tree diff (20 files, +657 −145, plus untracked `drizzle/0027_spur_cli_history_refresh_active_unique.sql`) against R1 (single app-layer enqueue fn), R2 (migration + deterministic outcomes), R3/R4 (pending-or-processing invariant across concurrent producers).
+**Verdict: approve.**
 
-**Correctness (race semantics) — sound.**
-- `packages/domain/src/db.ts:236-327` `enqueueCoalesced`: atomic `INSERT … ON CONFLICT DO NOTHING` (db.ts:246-260) against the active partial index; conflict → pending select → guarded `UPDATE … WHERE status='pending' RETURNING` (db.ts:292-300); processing select → `already-running` with in-flight id (db.ts:307-310). Bounded 3-pass loop covers claim-between-read-and-update; exhaustion is loud (`enqueueCoalesced: … stayed active past 3 attempts`, db.ts:322-325) — never a silent drop, never a fake outcome.
-- `immediate` semantics: fresh due = now (db.ts:239); join due = `min(pending.next_retry_at ?? now, now)` (db.ts:291) — immediate never delays an earlier due; debounced joins slide the window (completion debounce intact, R1).
-- No-target `ON CONFLICT DO NOTHING` is safe: only the scoped partial index can conflict for this type; other job types unaffected.
+| Requirement | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/services/history-refresh-service.ts:157-211` routes completion, schedule, and manual producers through one writer and preserves outcome/merge/due-time semantics; `packages/app/tests/services/history-refresh-service.test.ts:157-249` covers every producer and the shared `max_retries = 3` policy. |
+| R2 | MET | `packages/domain/src/migrations.ts:668-692` installs the pending-or-processing unique index after deterministic duplicate retirement; `packages/domain/tests/db.test.ts:265-308`, `packages/domain/tests/db.test.ts:453-499`, and `packages/domain/tests/db.test.ts:560-605` prove cross-connection enqueue/claim exclusion and migration enforcement. |
 
-**Data/migration safety — sound.**
-- `packages/domain/src/migrations.ts:664-692` (0027): deterministic retirement keeps oldest active survivor (`created_at ASC, id ASC`), others → auditable terminal `failed` with `last_error`, `processing_at=NULL`; retirement UPDATE precedes DROP old/CREATE new index (correct order); idempotent re-run.
-- Base schema creates the active index for fresh DBs (`migrations.ts:76`); 0027 skip-guard journals-without-executing when `queue_jobs` is absent (foundation-only DBs, `migrations.ts:907-929`) — and `queue_jobs` has exactly one creation surface (`QUEUE_JOBS_SCHEMA_SQL`), so no path can create the table without the active index.
-- Drizzle mirror `drizzle/0027_spur_cli_history_refresh_active_unique.sql` matches CLI SQL exactly; sequence follows 0026.
+SECUA: the database constraint remains the concurrency authority; conflict handling is bounded and fails loudly; other queue job types retain multiplicity. Architecture: the existing app writer/domain constraint seam is deep and directly testable; no new lock service or producer-specific path was introduced.
 
-**API/contract surface — sound.**
-- `enqueueHistoryRefresh` (`packages/app/src/services/history-refresh-service.ts:95-150`): gating before any DB access (:100-106), `immediate` for manual/schedule (:111), merge keeps first producer's trigger identity + min/max window + `full` dominates `incremental` (:129-143).
-- Board `triggerImport` (`apps/server/src/context.ts:420-446`): disabled → loud throw; outcomes map to `queued`|`coalesced`|`already-running` with per-outcome messages; `runId` = in-flight job id for already-running. Contract narrowed at `packages/contracts/src/history.ts:462`. CLI emit always a real outcome (`disabled` short-circuits before emit, `apps/cli/src/history-refresh.ts:35-52`). Event payload honest; ledger presenter updated (`packages/app/src/services/event-names.ts:910-930`); canonical matrix `docs/design/event-tracking.md:298` updated. Web safe: `SourcesTab.tsx:16,101-105` renders status as an opaque string.
+Resolved prior P4 observations: the unified retry value is asserted and documented as intentional in `docs/04_DESIGN.md` and `docs/design/history-refresh-process-isolation.md`; the event surface now documents and retains trigger/window/import-mode metadata.
 
-**Tests — present and passing.** Two-connection race proofs (`packages/domain/tests/db.test.ts`: cross-connection pending race, processing-on-another-connection, claimed-between-read-and-update, immediate never-extend), migration 0027 rewind test with index-swap + enforcement assertions (db.test.ts:559-604), foundation-only journal+skip test; producer outcome suite, Board DTO narrowing, contract rejection of `'completed'`, scheduler against real migrated DB. Targeted run: **184 tests pass, 0 fail** (domain db+migrations 75, app service+contracts 27, server+cli 82).
-
-**Findings (non-blocking):**
-- **P4** — Schedule producer silently lost `maxRetries: 1`: old `serve.ts` path used `queue.enqueue(HISTORY_REFRESH_JOB, payload, { maxRetries: 1 })`; the unified writer hardcodes `max_retries 3` (db.ts:250). Bounded retry bump is defensible for idempotent refresh jobs, but it is an undocumented behavior change (not in the task Solution).
-- **P4** — `docs/04_DESIGN.md:1112-1114` event description drift (still `trigger/jobId/windowStart/windowEnd`; missing `triggerId`/`coalesced`/`outcome`). Predates this task (0549 added `coalesced` without updating it); canonical matrix in `docs/design/event-tracking.md` is correct.
-
-**Observation (correct per spec):** a later debounced completion join can push due time out beyond an immediate join's shortened due — R1 binds only immediate requests not to delay an earlier due; completion debounce intact is exactly this behavior.
-
-**Requirement/AC gaps: none.** Nothing committed; no suppressions introduced.
+Fresh checks: `bun run autofix` completed with all workspace typechecks passing; `cd packages/app && bun test tests/services/history-refresh-service.test.ts` passed 21 tests; `cd apps/server && bun test tests/index.test.ts` passed 4 tests.
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
