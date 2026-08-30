@@ -1995,7 +1995,7 @@ metrics derive from existing records and report missing attribution as null with
 
 ## ADR-101: History Refresh Uses Process Isolation and Database Single-Flight
 
-**Status:** Accepted (design) · **Date:** 2026-08-29
+**Status:** Accepted · **Date:** 2026-08-29
 
 **Decision.** Every queued history refresh runs the existing `spur history daily` pipeline in a
 child process, and one database constraint admits at most one pending-or-processing
@@ -2005,3 +2005,7 @@ child process, and one database constraint admits at most one pending-or-process
 without adding another worker runtime or coordination plane.
 
 **Detail:** `03 §7`; `docs/design/history-refresh-process-isolation.md`; feature E31.
+
+**Amendment (2026-08-29).** Built: 0716 (database single-flight, unique index
+`queue_jobs_history_refresh_active_unique`) and 0717 (isolated child-process execution via
+`SPUR_HISTORY_REFRESH_CONTEXT`).

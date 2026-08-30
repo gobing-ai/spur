@@ -935,3 +935,26 @@ But there might be a case for an ADR amendment. Let me look at the §3 of 03_ARC
 Actually let me also check if docs/03_ARCHITECTURE.md has any stale references to checkLineAnchors or anchor subject matching.]<]minimax[>[<tool_call>
 ]<]minimax[>[<invoke name="read">]<]minimax[>[<path>/Users/robin/xprojects/spur-new/docs/03_ARCHITECTURE.md]<]minimax[>[</path>]<]minimax[>[<offset>570]<]minimax[>[</offset>]<]minimax[>[<limit>80]<]minimax[>[</limit>]<]minimax[>[</invoke>
 ]<]minimax[>[</tool_call>
+## 2026-08-29
+
+### 0716 — Database single-flight for history refresh producers
+
+- Unique-index migration pattern (0027_spur_cli_history_refresh_active_unique): when tightening a coalescing index, drop the old pending-only index, deterministically retire superseded duplicates FIRST (keep oldest survivor by created_at ASC, id ASC; demote the rest to status='failed' with audit last_error, processing_at=NULL), then create the replacement covering status IN ('pending','processing'). The migration must never depend on ambient row order.
+- Fresh-DB vs migrated-DB duality: the base schema already carries the new index, so the migration runner journals 0027 but skips execution when queue_jobs doesn't exist yet (runner skip guard); keep the drizzle/ SQL mirror in lockstep.
+- enqueueCoalesced gained a third outcome: a processing row found (pre-scan or claimed between read and update) returns {status:'already-running', jobId, payload}; a bounded 3-attempt loop throws loudly on exhaustion (enqueueCoalesced: <type> stayed active past 3 attempts) instead of returning a fake outcome. Merge semantics: earliest windowStart, latest windowEnd, full dominates incremental; an immediate join only shortens due time (min(existing, now)), never delays an earlier due.
+- Closed outcome vocabulary surfaced end-to-end: enqueueHistoryRefresh union disabled|enqueued|coalesced|already-running (manual trigger ungated + immediate; schedule gated on history.refresh.schedule_minutes); Board contracts narrowed to a strict answer grammar z.enum(['queued','coalesced','already-running']) — enum verdicts at the API boundary beat stringly outcomes.
+- Emit-side observability: maybeTriggerHistoryRefresh emits history.refresh.enqueued with source/renderer/trigger/triggerId/jobId/coalesced/outcome/windowStart/windowEnd/severity, best-effort only (stderr warning; never changes the CLI exit code).
+
+### 0717 — Isolated child-process execution for queued refreshes
+
+- Parent→child env-contract design: SPUR_HISTORY_REFRESH_CONTEXT carries the serialized, validated payload; parseHistoryRefreshContext returns null when the env is absent (interactive history daily unchanged) and throws on malformed JSON/shape → CLI exits 1 BEFORE EventBus/ledger/import creation, so a bad contract can never emit partial history.* rows. The child owns all history.* emission; the parent server emits none (no duplicate events).
+- Strict payload gate: the queue handler unwraps ONLY job.payload via validateHistoryRefreshPayload; a whole queue envelope arriving as payload fails the attempt — kills the envelope-drift bug class. Validation runs before any spawn.
+- DI seam for spawnability: HistoryRefreshJobDeps {cwd, invocation, executor} — the child opens its own DB/agentConfig from cwd (shared WAL DB + 5s busy timeout preserved, contention behaviorally tested); executor injection keeps ProcessExecutor mockable.
+- PATH-independent re-invocation: resolveSpurBin() returns "<execPath> <mainModule>" at serve bootstrap and flows into startServer as optional spurInvocation (omission degrades to a run-time split failure, keeping existing callsites compiling); splitLaunchCommand splits argv only — no shell string evaluation (accepted ceiling: a space inside a single token's path; argv-only is the injection-safety win).
+- Child command: "<leading args> history daily --json --json-envelope", awaited via executor.run in the project root; output bounded at HISTORY_REFRESH_MAX_OUTPUT = 1 MB; spawn failure / non-zero exit / invalid JSON / wrong {ok:true,data} shape all throw and map onto the existing queue retry state — retry/failure ownership stays with the queue consumer; the handler never converts failure to success.
+
+### wrap-hop doc-audit notes
+
+- docs/design/event-tracking.md emitter path:line refs are approximate audit-baseline refs (row 36 cites :47, actual emit :41 since 2026-08-14) — do not "fix" them during feature drift passes unless the batch actually moved the code.
+- ADR built-status convention: flip "Accepted (design)" → "Accepted" via an in-place Status edit plus a dated > **Amendment (date).** Built: block naming the tasks (ADR-056 precedent; constitution §6.1 rules 3/5/8); never rewrite the decision body.
+

@@ -341,13 +341,13 @@ history system emits `history.*` events to the event ledger for observability.
 job on the feature-A2 embedded job queue at task-done and pipeline-run completion — never inline on
 the firing operation. `enqueueCoalesced` (`packages/domain/src/db.ts`) makes the lookup-then-insert
 atomic under cross-process concurrency via a **partial unique index** on `queue_jobs`
-(`queue_jobs_history_refresh_pending_unique`, scoped to `type='history.refresh' AND status='pending'`
+(`queue_jobs_history_refresh_active_unique`, scoped to `type='history.refresh' AND status IN ('pending','processing')`
 so other job types keep multiple pending rows); a burst inside `debounce_ms` joins the pending job
-(earliest `windowStart`, latest `windowEnd`) instead of enqueuing a duplicate. Consumption is
-server-side: `spur serve`'s job worker runs the job body, which reuses `HistoryService.daily`'s
-import-all fan-out with per-source isolation. Coalescing shapes in `04 §3`.
+(earliest `windowStart`, latest `windowEnd`) instead of enqueuing a duplicate, and a producer arriving while a refresh is `processing` receives
+`already-running`. Consumption is server-side: `spur serve`'s job worker spawns the daily pipeline
+in an isolated child process (E31 below). Coalescing shapes in `04 §3`.
 
-### History refresh process isolation (accepted design — ADR-101; not yet built)
+### History refresh process isolation (ADR-101; built — 0716–0717)
 
 E31 moves only the expensive execution across an OS-process seam. Schedule, completion, and Board
 manual producers converge on the existing app-layer history enqueue function. A partial unique
@@ -356,14 +356,14 @@ single-flight authority across every producer and server process; pending reques
 request arriving during processing returns `already-running` without inserting a follow-up row.
 
 The server queue handler unwraps `Job.payload`, then awaits `ProcessExecutor.run` against the same
-PATH-independent Spur entrypoint that launched `serve`, invoking `history daily --json` in the
+PATH-independent Spur entrypoint that launched `serve`, invoking `history daily --json --json-envelope` in the
 project root. Awaiting preserves queue completion/retry truth while the child process isolates
 synchronous filesystem and `bun:sqlite` work from the Hono/oRPC event loop. The child and server
 share the WAL database; the existing 5-second SQLite busy timeout bounds lock contention. Concrete
 payload, enqueue-result, process, and transport shapes live in
 `docs/design/history-refresh-process-isolation.md`.
 
-Enforceable invariants after E31 ships:
+Enforced invariants (E31 built — 0716–0717):
 
 1. No producer calls raw queue enqueue for `history.refresh`; all use the shared enqueue function.
 2. The database contains at most one `history.refresh` row whose state is `pending` or `processing`.
@@ -402,8 +402,8 @@ the server transport SQL-free. `HistoryService.analyze()` refreshes checkpoint-k
 models after producing the forensic artifact. Board reads use those models only when their recorded
 history version matches the current projection version and import checkpoint; absent or stale models
 fall back to the exact indexed queries. Manual Board imports enqueue the existing `history.refresh`
-job, whose worker runs
-`HistoryService.daily()` with the requested import mode. Shapes: `docs/design/history-board-module.md`.
+job, whose worker spawns the daily pipeline in an isolated child process with the requested
+import mode (0717). Shapes: `docs/design/history-board-module.md`.
 
 **Run→session correlation (E6, ADR-059).** Every DB-backed `spur agent run` watermarks the
 agent's session root before dispatch and resolves the produced session after exit
