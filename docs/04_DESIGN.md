@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.60.0
+version: 1.61.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-29
@@ -83,6 +83,16 @@ When collaborating with the design team:
 
 All commands accept `--json` for machine-readable output and return a meaningful exit code. The
 binary is `spur` (`apps/cli/src/index.ts`, run under Bun).
+
+**Startup banner policy (A31/0719):** the interactive entry `runCli()` prints the ASCII logo
+exactly once unless the raw argv carries an exact `--no-logo`, `--json`, `--quiet`, or `--silent`
+token. The policy is owned by the `shouldRenderBanner()` seam at the composition root
+(`apps/cli/src/index.ts`): near-miss tokens do not match, command-owned banners (e.g. the history
+report/staleness banners) are unaffected, and programmatic `main()` callers never receive the
+logo. `--no-logo` is a root-level option: listed once in top-level help, accepted before or after
+nested noun/verb tokens, and it changes no command output or exit code — it only removes the
+startup decoration. `--json` output is therefore always JSON-first, including early config
+failures.
 
 ### 1.0 CLI grammar
 

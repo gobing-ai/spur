@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { createBufferTarget, setDefaultOutputTargets } from '@gobing-ai/ts-utils';
-import { bannerText, main, runCli } from '../../src';
+import { bannerText, main, runCli, shouldRenderBanner } from '../../src';
 import { noopSetExitCode } from '../../src/context';
 import { gitContext } from '../../src/git-context';
 import { consoleOutput } from '../../src/output';
-import { createCapturedOutput, createTempProject } from '../helpers';
+import { createCapturedOutput, createTempProject, runCli as runCliSubprocess } from '../helpers';
 
 describe('CLI dispatch and status', () => {
     test('renders help, version, and unknown command output', async () => {
@@ -164,5 +164,99 @@ describe('CLI dispatch and status', () => {
     test('noopSetExitCode is callable', () => {
         noopSetExitCode(0);
         noopSetExitCode(1);
+    });
+});
+
+describe('startup banner policy (A31/0719)', () => {
+    const bannerFirstLine =
+        bannerText()
+            .split('\n')
+            .find((line) => line.trim() !== '') ?? '';
+
+    test('shouldRenderBanner is exact-token: suppression tokens match, near-misses do not (R2/R5)', () => {
+        // Default human mode renders.
+        expect(shouldRenderBanner([])).toBe(true);
+        expect(shouldRenderBanner(['task', 'show', '0719'])).toBe(true);
+        // Each exact suppression token wins, wherever it sits.
+        for (const token of ['--no-logo', '--json', '--quiet', '--silent']) {
+            expect(shouldRenderBanner([token])).toBe(false);
+            expect(shouldRenderBanner([token, 'task', 'show', '0719'])).toBe(false);
+            expect(shouldRenderBanner(['task', 'show', '0719', token])).toBe(false);
+        }
+        // Similar tokens are NOT suppression tokens — logo stays on.
+        for (const nearMiss of [
+            '--no-logos',
+            '--no_logo',
+            '--no-logo=1',
+            '--NO-LOGO',
+            '--jsonx',
+            '--JSON',
+            '--quietly',
+            '--silent=1',
+        ]) {
+            expect(shouldRenderBanner([nearMiss])).toBe(true);
+        }
+    });
+
+    test('root help lists --no-logo exactly once, and the option is accepted before and after the command path (R1)', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+
+        expect(await main(['help'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
+        const helpOutput = output.messages.join('\n');
+        expect(helpOutput.match(/--no-logo/g)).toHaveLength(1);
+        // main() itself never renders the banner (R4 programmatic contract).
+        expect(helpOutput).not.toContain(bannerFirstLine);
+
+        // Placement: accepted as a root option both before and after nested tokens.
+        expect(await main(['--no-logo', 'help'], { cwd, output: createCapturedOutput(), dbUrl: ':memory:' })).toBe(0);
+        expect(await main(['help', '--no-logo'], { cwd, output: createCapturedOutput(), dbUrl: ':memory:' })).toBe(0);
+    });
+
+    test('runCli renders the banner once by default; exact --no-logo suppresses it with output and exit status unchanged (R2/R4)', async () => {
+        const dir = await createTempProject();
+        try {
+            await runCliSubprocess(['init', '--name', 'fixture'], dir);
+            // Human mode: the logo renders exactly once before command output.
+            const human = await runCliSubprocess(['status'], dir);
+            expect(human.code).toBe(0);
+            expect(human.stdout.split(bannerFirstLine)).toHaveLength(2);
+
+            // Explicit suppression: logo absent, command output and exit code intact.
+            const suppressed = await runCliSubprocess(['status', '--no-logo'], dir);
+            expect(suppressed.code).toBe(0);
+            expect(suppressed.stdout).not.toContain(bannerFirstLine);
+            expect(suppressed.stdout.length).toBeGreaterThan(0);
+        } finally {
+            await Bun.spawn(['rm', '-rf', dir]).exited;
+        }
+    });
+
+    test('runCli keeps --json stdout JSON-first, including early config failures (R3)', async () => {
+        // Automatic suppression on a healthy project: stdout begins with the JSON document.
+        const dir = await createTempProject();
+        try {
+            await runCliSubprocess(['init', '--name', 'fixture'], dir);
+            const ok = await runCliSubprocess(['status', '--json'], dir);
+            expect(ok.code).toBe(0);
+            expect(ok.stdout.startsWith('{')).toBe(true);
+            expect(ok.stdout).not.toContain(bannerFirstLine);
+        } finally {
+            await Bun.spawn(['rm', '-rf', dir]).exited;
+        }
+
+        // Early config failure: the JSON error envelope is the first stdout byte — no banner.
+        const broken = await createTempProject();
+        await Bun.write(join(broken, '.spur', 'config.yaml'), 'this is: not: valid: yaml: [unclosed\n');
+        try {
+            const failing = await runCliSubprocess(['status', '--json'], broken);
+            expect(failing.code).not.toBe(0);
+            expect(failing.stdout.startsWith('{')).toBe(true);
+            expect(failing.stdout).not.toContain(bannerFirstLine);
+            const envelope = JSON.parse(failing.stdout) as { error?: { code?: string } };
+            expect(envelope.error?.code).toBe('config');
+        } finally {
+            await Bun.spawn(['rm', '-rf', broken]).exited;
+        }
     });
 });

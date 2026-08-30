@@ -141,6 +141,10 @@ async function runCommandDispatch(
         writeErr: (str: string) => output.error(str),
     });
     program.option('-v, --cli-verbose', 'Show internal diagnostics');
+    // Global startup-decoration opt-out (A31/0719). Registered at the composition root so the
+    // token is accepted before or after nested noun/verb tokens; runCli() consumes it via raw
+    // argv, so this registration only owns help visibility and parse acceptance.
+    program.option('--no-logo', 'Suppress the startup ASCII banner');
 
     // Register every noun command group — UNCHANGED (R3).
     registerAgentCommand(program, context);
@@ -187,10 +191,19 @@ export function bannerText(): string {
     return figlet.textSync(CLI_CONFIG.binaryLabel, { font: 'Standard' });
 }
 
+/**
+ * Startup-banner policy (A31/0719) — single composition-root owner. Exact argv
+ * tokens only: near-misses like `--no-logos` must not suppress the logo. `main()`
+ * never consults this — programmatic dispatch stays banner-free by construction.
+ */
+export function shouldRenderBanner(argv: readonly string[]): boolean {
+    return !argv.some((arg) => arg === '--no-logo' || arg === '--json' || arg === '--quiet' || arg === '--silent');
+}
+
 /** CLI entry point extracted for test coverage. Does NOT call process.exit(). */
 export async function runCli(): Promise<number> {
     const argv = process.argv.slice(2);
-    if (!argv.some((arg) => arg === '--json' || arg === '--quiet' || arg === '--silent')) {
+    if (shouldRenderBanner(argv)) {
         consoleOutput.write(bannerText());
     }
     return main();
