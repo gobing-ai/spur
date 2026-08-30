@@ -27,10 +27,10 @@ import { SystemEventDao } from '@gobing-ai/spur-domain';
 import type { ApplicationRuntime, ApplicationStopReason } from '@gobing-ai/ts-infra/application';
 import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { createApp, serverBootstrapConfig } from './bootstrap';
 import { createServerContext, type ServerContext, type ServerScheduler } from './context';
-import { registerSystemEventTap, type SystemEventBus } from './modules/events/system-event-tap';
+import { registerSystemEventTap } from './modules/events/system-event-tap';
 import { openUrl } from './open-url';
 
 /**
@@ -93,6 +93,8 @@ export interface StartServerOptions {
     dbUrl?: string;
     webDistPath?: string | null;
     keepAlive?: boolean;
+    /** PATH-independent Spur invocation for the isolated history-refresh child (task 0717). */
+    spurInvocation?: string;
 }
 
 /**
@@ -486,17 +488,19 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 registry.register(TASK_ACTION_JOB, (payload) => handleTaskActionJob(ctx, env, payload));
                 registry.register(FEATURE_ACTION_JOB, (payload) => handleFeatureActionJob(ctx, env, payload));
                 // Completion-triggered history refresh (task 0549): enqueued (coalesced)
-                // by CLI trigger points; consumed here.
-                registry.register(HISTORY_REFRESH_JOB, (payload) =>
+                // by CLI trigger points; consumed here. Since 0717 the job body runs
+                // `history daily` in an isolated child process, so the server only
+                // awaits its exit — the child owns every `history.*` event.
+                const refreshExecutor = new NodeProcessExecutor();
+                registry.register(HISTORY_REFRESH_JOB, (job) =>
                     handleHistoryRefreshJob(
                         {
-                            getDb: () => ctx.getDb(),
                             cwd: ctx.cwd,
-                            ...(spurConfig?.agent !== undefined ? { agentConfig: spurConfig.agent } : {}),
-                            // SAFETY: the server EventBus is a superset of SystemEventBus (same emit(name, payload) contract); the narrow type only restricts which names the refresh job may emit.
-                            bus: ctx.eventBus() as unknown as SystemEventBus,
+                            // Omitted invocation fails loudly in splitLaunchCommand at run time.
+                            invocation: options.spurInvocation ?? '',
+                            executor: refreshExecutor,
                         },
-                        payload,
+                        job,
                     ),
                 );
                 jobWorker = new JobWorkerService({

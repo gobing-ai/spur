@@ -183,8 +183,11 @@ export type {
 } from './services/history-refresh-service';
 export {
     enqueueHistoryRefresh,
+    HISTORY_REFRESH_CONTEXT_ENV,
     HISTORY_REFRESH_JOB,
     handleHistoryRefreshJob,
+    parseHistoryRefreshContext,
+    validateHistoryRefreshPayload,
 } from './services/history-refresh-service';
 export type {
     AnalyzeOptions,

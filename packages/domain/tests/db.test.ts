@@ -1,3 +1,4 @@
+import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -730,4 +731,70 @@ describe('findPendingQueueJob / updatePendingQueueJob', () => {
             db.close();
         }
     });
+});
+
+describe('SQLite contention: WAL + busy_timeout bounded (task 0717 R5)', () => {
+    test('cross-connection writer conflict fails bounded (~5s) with a visible SQLITE_BUSY, then recovers', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0717-r5-'));
+        const url = join(dir, 'spur.db');
+        const a = await createMigratedDb({ url });
+        try {
+            // WAL is a file-level property of the shared DB (adapter default pragma); the
+            // adapter maps pragma result rows to {}, so read it through raw bun:sqlite.
+            // The 5s busy timeout is proven behaviorally by the bounded wait below.
+            const raw = new Database(url);
+            try {
+                expect(raw.prepare('PRAGMA journal_mode').get()).toEqual({ journal_mode: 'wal' });
+            } finally {
+                raw.close();
+            }
+
+            // The isolated child owns the write lock (its own connection/process)…
+            await a.exec('BEGIN IMMEDIATE');
+            await a.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, next_retry_at)
+                 VALUES ('holder', 'x', '{}', 'pending', 0, 0, 1, 1, NULL)`,
+            );
+
+            const b = await createMigratedDb({ url });
+            try {
+                const t0 = performance.now();
+                let busy = '';
+                try {
+                    await b.exec('BEGIN IMMEDIATE');
+                } catch (e) {
+                    busy = String((e as Error).message ?? e);
+                }
+                const elapsedMs = performance.now() - t0;
+                // Visible: the conflict surfaces as SQLITE_BUSY — no silent hang or skip.
+                expect(busy.toLowerCase()).toContain('locked');
+                // Bounded: ~the 5s busy timeout — retried, not instant-fail, not unbounded.
+                expect(elapsedMs).toBeGreaterThanOrEqual(4500);
+                expect(elapsedMs).toBeLessThan(15000);
+                // bun:sqlite busy-waits synchronously on the calling thread, so loop
+                // responsiveness under contention is a cross-process property (the child
+                // process absorbs the wait) — covered by the R1 held-open-child test in
+                // packages/app/tests/services/history-refresh-service.test.ts.
+            } finally {
+                b.close();
+            }
+
+            await a.exec('COMMIT');
+            // After the holder commits, a fresh writer proceeds without error.
+            const c = await createMigratedDb({ url });
+            try {
+                await c.run(
+                    `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, next_retry_at)
+                     VALUES ('after', 'x', '{}', 'pending', 0, 0, 2, 2, NULL)`,
+                );
+                const rows = await a.queryAll<{ id: string }>("SELECT id FROM queue_jobs WHERE type = 'x' ORDER BY id");
+                expect(rows.map((r) => r.id)).toEqual(['after', 'holder']);
+            } finally {
+                c.close();
+            }
+        } finally {
+            a.close();
+            rmSync(dir, { recursive: true, force: true });
+        }
+    }, 20_000); // default 5s test timeout < the 5s busy wait under contention
 });

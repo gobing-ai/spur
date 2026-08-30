@@ -1,9 +1,10 @@
-import type { AgentConfig, SpurConfig } from '@gobing-ai/spur-config';
+import type { SpurConfig } from '@gobing-ai/spur-config';
 import { type HistoryRefreshTriggerConfig, resolveHistoryRefreshTrigger } from '@gobing-ai/spur-config';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import { enqueueCoalesced } from '@gobing-ai/spur-domain';
-import { type DailyResult, HistoryService, resolveArtifactPath } from './history-service';
-import type { SystemEventBus } from './system-event-tap';
+import type { Job } from '@gobing-ai/ts-infra';
+import type { ProcessExecutor } from '@gobing-ai/ts-runtime';
+import { splitLaunchCommand } from '../workflow/split-launch-command';
 
 /**
  * Completion-triggered history refresh (task 0549).
@@ -13,8 +14,9 @@ import type { SystemEventBus } from './system-event-tap';
  * runs the refresh inline — it puts ONE coalesced job on the feature-A2 embedded job
  * queue and returns (R1). Bursts inside the debounce window join the pending job instead
  * of adding a second (R2), the trigger is opt-in config with observable firing (R3), the
- * debounce default follows task 0548's measured figures (R4), and the job body reuses
- * `HistoryService.daily`'s import-all fan-out with per-source isolation (R5).
+ * debounce default follows task 0548's measured figures (R4), and since task 0717 the job
+ * body runs `spur history daily` in an isolated child process (import fan-out + analyze +
+ * artifact write) instead of executing `HistoryService.daily` in the server process.
  */
 
 /** Built-in queue job kind for the coalesced completion-triggered history refresh. */
@@ -86,6 +88,66 @@ function safeJsonParse(raw: string): Partial<HistoryRefreshPayload> | null {
     }
 }
 
+/** Env var carrying the validated refresh payload across the child-process boundary (task 0717). */
+export const HISTORY_REFRESH_CONTEXT_ENV = 'SPUR_HISTORY_REFRESH_CONTEXT';
+
+/** Bound on accepted child output; a child that exceeds it fails the attempt instead of growing memory. */
+const HISTORY_REFRESH_MAX_OUTPUT = 1_000_000;
+
+/**
+ * Strict validation of the refresh payload at the queue/child boundary. Unlike the
+ * enqueue-side `parsePayload` (which silently defaults for payload joins), a drifted
+ * or malformed payload must fail the queue attempt loudly instead of refreshing with
+ * fabricated trigger/window metadata.
+ */
+export function validateHistoryRefreshPayload(raw: unknown): HistoryRefreshPayload {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        throw new Error('history refresh payload must be a JSON object');
+    }
+    const candidate = raw as Record<string, unknown>;
+    const { trigger, triggerId, windowStart, windowEnd, importMode } = candidate;
+    if (trigger !== 'task-done' && trigger !== 'pipeline-run' && trigger !== 'manual' && trigger !== 'schedule') {
+        throw new Error(`history refresh payload has invalid trigger: ${JSON.stringify(trigger)}`);
+    }
+    if (triggerId !== null && typeof triggerId !== 'string') {
+        throw new Error(`history refresh payload has invalid triggerId: ${JSON.stringify(triggerId)}`);
+    }
+    if (typeof windowStart !== 'number' || !Number.isFinite(windowStart)) {
+        throw new Error('history refresh payload windowStart must be a finite number');
+    }
+    if (typeof windowEnd !== 'number' || !Number.isFinite(windowEnd)) {
+        throw new Error('history refresh payload windowEnd must be a finite number');
+    }
+    if (importMode !== undefined && importMode !== 'full' && importMode !== 'incremental') {
+        throw new Error(`history refresh payload has invalid importMode: ${JSON.stringify(importMode)}`);
+    }
+    return {
+        trigger,
+        triggerId,
+        windowStart,
+        windowEnd,
+        ...(importMode !== undefined ? { importMode } : {}),
+    };
+}
+
+/**
+ * Parse the internal refresh context handed to a child `history daily` process.
+ * Returns null when absent/empty so the interactive CLI path is unchanged; throws on
+ * malformed JSON or shape so the child fails BEFORE any import runs (0717 plan step 1).
+ */
+export function parseHistoryRefreshContext(raw: string | undefined): HistoryRefreshPayload | null {
+    if (raw === undefined || raw === '') return null;
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(raw);
+    } catch (e) {
+        throw new Error(
+            `${HISTORY_REFRESH_CONTEXT_ENV} is not valid JSON: ${e instanceof Error ? e.message : String(e)}`,
+        );
+    }
+    return validateHistoryRefreshPayload(parsed);
+}
+
 /**
  * The trigger itself (R1/R2/R3): check the opt-in config, then enqueue ONE coalesced
  * job through the embedded queue and return — never run the refresh here. This is two
@@ -151,131 +213,57 @@ export async function enqueueHistoryRefresh(
 
 /** Dependencies for {@link handleHistoryRefreshJob}. */
 export interface HistoryRefreshJobDeps {
-    getDb(): Promise<DbAdapter>;
-    /** Project root for the artifact write (passed through to `daily`). */
+    /** Project root the child `spur history daily` runs in (DB + artifact live here). */
     cwd: string;
-    /**
-     * Validated `agent` config block (feature J8 R2): threaded into the constructed
-     * HistoryService so the refresh-written artifact embeds the same executor
-     * `ladderSnapshot` the interactive `spur history daily` path writes. Absent,
-     * the ladder degrades to `[]` — same contract as `HistoryServiceContext`.
-     */
-    agentConfig?: AgentConfig;
-    /** When present, the refresh outcome is emitted as observable `history.*` events (R3). */
-    bus?: SystemEventBus;
-    /** Test seam — defaults to the real HistoryService. */
-    service?: Pick<HistoryService, 'daily'>;
+    /** PATH-independent Spur invocation; the CLI `serve` bootstrap passes `resolveSpurBin()`. */
+    invocation: string;
+    /** Process seam — the real server wires `NodeProcessExecutor`. */
+    executor: ProcessExecutor;
 }
 
 /**
- * Queue-job body (R5): run `HistoryService.daily` — the same import-all fan-out with
- * per-source isolation, analyze, and artifact write the nightly loop uses. One source
- * failing produces a failed coverage entry and a non-zero fan-out exit code; the other
- * sources still import and the failure is reported per source (never an abort).
+ * Queue-job body (task 0717): run the refresh as an isolated child process —
+ * `<invocation> history daily --json --json-envelope` in the project root — and only
+ * await its exit, so a long import never blocks the server event loop (R1) and the
+ * entrypoint is PATH-independent (R2). Only `job.payload` crosses the boundary: it is
+ * validated, serialized into `SPUR_HISTORY_REFRESH_CONTEXT`, and the child owns every
+ * `history.*` business event — the parent emits nothing here.
  *
- * Failure policy: a degraded fan-out (per-source failures) emits `history.daily.failed`
- * and does NOT rethrow — the refresh is idempotent (checkpoint resume) and the next
- * completion re-triggers it. An exception from `daily` itself emits and rethrows so the
- * queue records the job failed.
+ * Failure policy (R4): spawn failure, non-zero exit, and unparseable output are all
+ * queue-attempt failures — this throws so the queue's `failOrRetry` records the
+ * retry/failure state and emits `queue.job.*` truthfully.
  */
-export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, payload: unknown): Promise<void> {
-    const job = parsePayload(payload);
-    const svc =
-        deps.service ??
-        new HistoryService({
-            getDb: deps.getDb,
-            ...(deps.agentConfig !== undefined ? { agentConfig: deps.agentConfig } : {}),
-        });
-    const startMs = Date.now();
-    let result: DailyResult;
-    try {
-        result = await svc.daily({ cwd: deps.cwd, importMode: job.importMode ?? 'incremental' });
-    } catch (e) {
-        await emitDailyFailed(deps, job, Date.now() - startMs, e instanceof Error ? e.message : String(e));
-        throw e;
-    }
-    const durationMs = Date.now() - startMs;
-    const entries = result.fanOut.entries;
-    const sources = entries.length;
-    const okSources = entries.filter((e) => e.status === 'ok').length;
-    const failedSources = entries.filter((e) => e.status === 'failed').length;
-    const files = entries.reduce((sum, e) => sum + e.files, 0);
-    const messages = entries.reduce((sum, e) => sum + e.messages, 0);
-    const artifactPath = artifactPathFor(deps.cwd);
-    if (deps.bus === undefined) return;
-    if (result.fanOut.exitCode === 0) {
-        await deps.bus.emit('history.import.completed', {
-            source: 'history',
-            renderer: 'history-import',
-            sources,
-            okSources,
-            failedSources,
-            files,
-            messages,
-            durationMs,
-            artifactPath,
-            trigger: job.trigger,
-            windowStart: job.windowStart,
-            windowEnd: job.windowEnd,
-            // Task 0550 R3/R4: honest coverage — which sources were refreshed, which were
-            // skipped as unsupported, and the data window covered.
-            coverage: result.coverage,
-            severity: 'info',
-        });
-        await deps.bus.emit('history.analyze.completed', {
-            source: 'history',
-            renderer: 'history-analyze',
-            artifactPath,
-            totals: result.artifact.totals,
-            trigger: job.trigger,
-            severity: 'info',
-        });
-    } else {
-        const problems = entries.filter((e) => e.status === 'failed' || e.status === 'degraded');
-        await emitDailyFailed(
-            deps,
-            job,
-            durationMs,
-            problems.length > 0
-                ? problems.map((e) => `${e.source}: ${e.status}`).join('; ')
-                : 'refresh fan-out reported non-zero exit with no failing or degraded source',
-            {
-                sources,
-                okSources,
-                failedSources,
-                artifactPath,
-            },
-        );
-    }
-}
-
-async function emitDailyFailed(
-    deps: HistoryRefreshJobDeps,
-    job: HistoryRefreshPayload,
-    durationMs: number,
-    detail: string,
-    extra: { sources?: number; okSources?: number; failedSources?: number; artifactPath?: string } = {},
-): Promise<void> {
-    if (deps.bus === undefined) return;
-    await deps.bus.emit('history.daily.failed', {
-        source: 'history',
-        renderer: 'history-daily',
-        detail,
-        durationMs,
-        trigger: job.trigger,
-        windowStart: job.windowStart,
-        windowEnd: job.windowEnd,
-        severity: 'error',
-        ...extra,
+export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, job: Job<unknown>): Promise<void> {
+    // Strict payload validation at the boundary: envelope/payload drift must fail the
+    // attempt, not silently refresh with defaulted trigger/window fields. The queue
+    // registry hands Job<unknown>; this validation is the payload type gate.
+    const payload = validateHistoryRefreshPayload(job.payload);
+    const split = splitLaunchCommand(deps.invocation, 'history refresh "invocation"');
+    if ('error' in split) throw new Error(split.error);
+    const result = await deps.executor.run({
+        command: split.command,
+        args: [...split.leadingArgs, 'history', 'daily', '--json', '--json-envelope'],
+        cwd: deps.cwd,
+        env: { [HISTORY_REFRESH_CONTEXT_ENV]: JSON.stringify(payload) },
+        maxOutput: HISTORY_REFRESH_MAX_OUTPUT,
     });
-}
-
-/** Best-effort artifact pointer resolution — an unreadable pointer must not drop the event. */
-function artifactPathFor(cwd: string): string | undefined {
+    // Bounded child stderr detail for queue events: last 400 chars.
+    const stderrDetail =
+        result.stderr === '' ? '' : `: ${result.stderr.length > 400 ? `…${result.stderr.slice(-400)}` : result.stderr}`;
+    if (result.exitCode === null) {
+        throw new Error(`history refresh child failed to spawn${stderrDetail}`);
+    }
+    if (result.exitCode !== 0) {
+        throw new Error(`history daily exited ${result.exitCode}${stderrDetail}`);
+    }
+    let parsed: { ok?: unknown; data?: unknown };
     try {
-        return resolveArtifactPath(undefined, cwd).path;
-    } catch {
-        return undefined;
+        parsed = JSON.parse(result.stdout) as { ok?: unknown; data?: unknown };
+    } catch (e) {
+        throw new Error(`history daily emitted invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    if (parsed.ok !== true || typeof parsed.data !== 'object' || parsed.data === null) {
+        throw new Error('history daily emitted an unexpected JSON shape (expected {ok:true,data})');
     }
 }
 

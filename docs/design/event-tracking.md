@@ -74,9 +74,9 @@ Scores are family-uniform **by construction** — the defect from §2.1 means pr
 | 30 | `team.member.assigned` | `team-service.ts:521` | ~ | ~ | P | ~ | – | ~ |
 | 31 | `team.member.started` | `team-service.ts:959` / `supervisor-service.ts:253` | ~ | ~ | P | ~ | – | ~ |
 | 32 | `team.member.stopped` | `team-service.ts:969` / `supervisor-service.ts:273` | ~ | ~ | P | ~ | – | ~ |
-| 33 | `history.import.completed` | `history-refresh-service.ts:174` | – | ~ | P | ~ | ~ | P |
-| 34 | `history.analyze.completed` | `history-refresh-service.ts:192` | – | ~ | P | ~ | ~ | P |
-| 35 | `history.daily.failed` | `history-refresh-service.ts:227` | – | ~ | P | ~ | P | P |
+| 33 | `history.import.completed` | `apps/cli/src/commands/history.ts:364` | – | ~ | P | ~ | ~ | P |
+| 34 | `history.analyze.completed` | `apps/cli/src/commands/history.ts:378` | – | ~ | P | ~ | ~ | P |
+| 35 | `history.daily.failed` | `apps/cli/src/commands/history.ts:336` / `:390` | – | ~ | P | ~ | P | P |
 | 36 | `history.refresh.enqueued` | `apps/cli/src/history-refresh.ts:47` | – | ~ | P | ~ | P | ~ |
 | 37 | `rule.run.start` | `rule-service.ts:523` | ~ | ~ | P | ~ | – | ~ |
 | 38 | `rule.eval.start` | `rule-service.ts:532` | ~ | ~ | P | ~ | – | ~ |
@@ -292,9 +292,9 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `team.member.assigned` | team/member/type/task, `outcome` | `[team] {teamId} · {memberId} assigned` | `outcome` |
 | `team.member.started` | team/member/type, `outcome` | `[team] {teamId} · {memberId} started` | `outcome` |
 | `team.member.stopped` | team/member/type, `outcome` | `[team] {teamId} · {memberId} stopped` | `outcome` |
-| `history.import.completed` | source(s), files/messages, duration, exit code, artifact | `[history] import · {source|sources}` | `exitCode` |
-| `history.analyze.completed` | source(s), duration, exit code, artifact | `[history] analyze · {source|sources}` | `exitCode` |
-| `history.daily.failed` | source(s), `detail`, `reason`, `exitCode` | `[history] daily failed` | `reason` / `exitCode` |
+| `history.import.completed` | source(s), files/messages, duration, exit code, artifact, `coverage`; + `trigger`/window when a refresh context is present | `[history] import · {source|sources}` | `exitCode` |
+| `history.analyze.completed` | source(s), duration, exit code, artifact; + `trigger`/window when a refresh context is present | `[history] analyze · {source|sources}` | `exitCode` |
+| `history.daily.failed` | source(s), `detail`, `reason`, `exitCode`; + `trigger`/window when a refresh context is present | `[history] daily failed` | `reason` / `exitCode` |
 | `history.refresh.enqueued` | `trigger`/`triggerId`, `jobId`, window, `coalesced`, `outcome` | `[history] refresh · {windowStart} -> {windowEnd}` | `outcome` when coalesced/already-running |
 | `rule.run.start` | `runId`, rule count, evaluator | `[rule] run {runId} started` | — |
 | `rule.eval.start` | `runId`, `ruleId`, evaluator, index/total | `[rule] {ruleId} evaluating` | — |

@@ -1,13 +1,19 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { SpurConfig } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
+import type { Job } from '@gobing-ai/ts-infra';
+import { NodeProcessExecutor, type ProcessExecutor, type ProcessResult } from '@gobing-ai/ts-runtime';
 import {
     enqueueHistoryRefresh,
+    HISTORY_REFRESH_CONTEXT_ENV,
     HISTORY_REFRESH_JOB,
+    type HistoryRefreshEnqueueResult,
     handleHistoryRefreshJob,
+    parseHistoryRefreshContext,
 } from '../../src/services/history-refresh-service';
-import type { DailyOptions, DailyResult, HistoryService } from '../../src/services/history-service';
-import type { SystemEventBus } from '../../src/services/system-event-tap';
 
 /** Config fixture — only `history.refresh` matters to the trigger. */
 function config(onCompletion: boolean, debounceMs = 60_000, scheduleMinutes: number | null = null): SpurConfig {
@@ -36,16 +42,51 @@ async function refreshRows(db: DbAdapter): Promise<QueueRow[]> {
     );
 }
 
-/** Capturing fake for the SystemEventBus seam. */
-type Emitted = { name: string; payload: Record<string, unknown> };
-function fakeBus(): { bus: SystemEventBus; emitted: Emitted[] } {
-    const emitted: Emitted[] = [];
-    const bus = {
-        emit: async (name: string, payload: Record<string, unknown>) => {
-            emitted.push({ name, payload });
+/** Full queue job wrapping a payload — the handler's input shape. */
+function jobOf(payload: unknown): Job<unknown> {
+    return {
+        id: 'job-1',
+        type: HISTORY_REFRESH_JOB,
+        payload,
+        status: 'processing',
+        attempts: 1,
+        maxRetries: 3,
+        createdAt: 1,
+        updatedAt: 1,
+        nextRetryAt: null,
+        lastError: null,
+        processingAt: 1,
+    };
+}
+
+/** Process options the fake executor recorded. */
+interface RecordedRun {
+    command: string;
+    args: string[];
+    cwd?: string;
+    env?: Record<string, string>;
+    maxOutput?: number;
+}
+
+/** Capturing fake at the ProcessExecutor seam; `result` is merged over a successful default. */
+function fakeExecutor(result: Partial<ProcessResult> | Error): { executor: ProcessExecutor; runs: RecordedRun[] } {
+    const runs: RecordedRun[] = [];
+    const executor = {
+        run: async (options: RecordedRun) => {
+            runs.push(options);
+            if (result instanceof Error) throw result;
+            return {
+                command: options.command,
+                args: options.args ?? [],
+                exitCode: 0,
+                stdout: '',
+                stderr: '',
+                durationMs: 1,
+                ...result,
+            };
         },
-    } as unknown as SystemEventBus;
-    return { bus, emitted };
+    } as unknown as ProcessExecutor;
+    return { executor, runs };
 }
 
 describe('enqueueHistoryRefresh (task 0549 R1–R4)', () => {
@@ -86,7 +127,7 @@ describe('enqueueHistoryRefresh (task 0549 R1–R4)', () => {
         try {
             const t0 = 1_000_000;
             const times = [t0, t0 + 10_000, t0 + 20_000, t0 + 30_000, t0 + 40_000];
-            let last: Awaited<ReturnType<typeof enqueueHistoryRefresh>> | undefined;
+            let last: HistoryRefreshEnqueueResult | undefined;
             for (const t of times) {
                 last = await enqueueHistoryRefresh(db, {
                     config: config(true, 600_000),
@@ -211,87 +252,142 @@ describe('enqueueHistoryRefresh single-flight producers (task 0716)', () => {
     });
 });
 
-describe('handleHistoryRefreshJob (task 0549 R3/R5)', () => {
-    function dailyResult(exitCode: 0 | 1 | 2, statuses: Array<'ok' | 'failed'>): DailyResult {
-        return {
-            fanOut: {
-                entries: statuses.map((status, i) => ({
-                    source: `src-${i}`,
-                    status,
-                    files: status === 'ok' ? 3 : 0,
-                    messages: status === 'ok' ? 30 : 0,
-                })),
-                exitCode,
-                warnings: [],
-            },
-            artifact: { totals: { messages: 30, sessions: 3 } } as unknown as DailyResult['artifact'],
-            pruned: [],
-        } as unknown as DailyResult;
-    }
-
-    /** HistoryService stub via the handler's `service` test seam. */
-    function stubService(result: DailyResult | Error): {
-        service: Pick<HistoryService, 'daily'>;
-        state: { calls: number; options: DailyOptions[] };
-    } {
-        const state: { calls: number; options: DailyOptions[] } = { calls: 0, options: [] };
-        const service = {
-            daily: async (options: DailyOptions) => {
-                state.calls += 1;
-                state.options.push(options);
-                if (result instanceof Error) throw result;
-                return result;
-            },
-        };
-        return { service, state };
-    }
-
-    const payload = { trigger: 'task-done' as const, triggerId: '0549', windowStart: 1, windowEnd: 2 };
-
-    test('success reuses daily and emits import/analyze completed with the coalesced window', async () => {
-        const { service, state } = stubService(dailyResult(0, ['ok', 'ok']));
-        const { bus, emitted } = fakeBus();
-        const getDb = async () => createMigratedDb({ url: ':memory:' });
-        await handleHistoryRefreshJob({ getDb, cwd: '/tmp', bus, service }, payload);
-        expect(state.calls).toBe(1); // R5: reuses svc.daily, per-source fan-out underneath
-        const names = emitted.map((e) => e.name);
-        expect(names).toContain('history.import.completed');
-        expect(names).toContain('history.analyze.completed');
-        const importEvent = emitted.find((e) => e.name === 'history.import.completed');
-        expect(importEvent?.payload).toMatchObject({ sources: 2, okSources: 2, failedSources: 0, files: 6 });
-        expect(importEvent?.payload).toMatchObject({ trigger: 'task-done', windowStart: 1, windowEnd: 2 });
-        expect(state.options).toEqual([{ cwd: '/tmp', importMode: 'incremental' }]);
+describe('parseHistoryRefreshContext (task 0717 plan step 1)', () => {
+    test('absent or empty env leaves interactive daily unchanged (null)', () => {
+        expect(parseHistoryRefreshContext(undefined)).toBeNull();
+        expect(parseHistoryRefreshContext('')).toBeNull();
     });
 
-    test('manual refresh forwards the requested full import mode', async () => {
-        const { service, state } = stubService(dailyResult(0, ['ok']));
-        const { bus } = fakeBus();
-        const getDb = async () => createMigratedDb({ url: ':memory:' });
+    test('valid context round-trips', () => {
+        expect(
+            parseHistoryRefreshContext(
+                JSON.stringify({
+                    trigger: 'manual',
+                    triggerId: null,
+                    windowStart: 5,
+                    windowEnd: 6,
+                    importMode: 'full',
+                }),
+            ),
+        ).toEqual({ trigger: 'manual', triggerId: null, windowStart: 5, windowEnd: 6, importMode: 'full' });
+    });
 
+    test('malformed JSON fails before any import runs', () => {
+        expect(() => parseHistoryRefreshContext('{nope')).toThrow('SPUR_HISTORY_REFRESH_CONTEXT is not valid JSON');
+    });
+
+    test('wrong shape fails loudly (bad trigger / non-object / bad window)', () => {
+        expect(() => parseHistoryRefreshContext(JSON.stringify({ trigger: 'nope' }))).toThrow('invalid trigger');
+        expect(() => parseHistoryRefreshContext(JSON.stringify([1]))).toThrow('must be a JSON object');
+        expect(() =>
+            parseHistoryRefreshContext(
+                JSON.stringify({ trigger: 'manual', triggerId: null, windowStart: 'x', windowEnd: 1 }),
+            ),
+        ).toThrow('windowStart');
+    });
+});
+
+describe('handleHistoryRefreshJob (task 0717: isolated child process)', () => {
+    const validPayload = { trigger: 'task-done', triggerId: '0549', windowStart: 1, windowEnd: 2 };
+
+    test('R2/R3: splits the invocation, runs history daily --json --json-envelope in cwd, passes payload as child context', async () => {
+        const { executor, runs } = fakeExecutor({
+            stdout: JSON.stringify({ ok: true, data: { fanOut: { exitCode: 0 } } }),
+        });
         await handleHistoryRefreshJob(
-            { getDb, cwd: '/tmp', bus, service },
-            { trigger: 'manual', triggerId: null, windowStart: 1, windowEnd: 1, importMode: 'full' },
+            { cwd: '/proj', invocation: 'bun run /x/spur.ts', executor },
+            jobOf({ ...validPayload, importMode: 'full' }),
         );
-
-        expect(state.options).toEqual([{ cwd: '/tmp', importMode: 'full' }]);
+        expect(runs).toHaveLength(1);
+        const run = runs[0] as RecordedRun;
+        expect(run.command).toBe('bun');
+        expect(run.args).toEqual(['run', '/x/spur.ts', 'history', 'daily', '--json', '--json-envelope']);
+        expect(run.cwd).toBe('/proj');
+        expect(run.maxOutput).toBe(1_000_000); // output bounded before queue completion
+        expect(JSON.parse(run.env?.[HISTORY_REFRESH_CONTEXT_ENV] ?? 'null')).toEqual({
+            trigger: 'task-done',
+            triggerId: '0549',
+            windowStart: 1,
+            windowEnd: 2,
+            importMode: 'full',
+        });
     });
 
-    test('degraded fan-out emits history.daily.failed and does NOT rethrow (per-source isolation, R5)', async () => {
-        const { service, state } = stubService(dailyResult(2, ['ok', 'failed']));
-        const { bus, emitted } = fakeBus();
-        const getDb = async () => createMigratedDb({ url: ':memory:' });
-        await expect(handleHistoryRefreshJob({ getDb, cwd: '/tmp', bus, service }, payload)).resolves.toBeUndefined();
-        expect(state.calls).toBe(1);
-        const failed = emitted.find((e) => e.name === 'history.daily.failed');
-        expect(failed?.payload).toMatchObject({ failedSources: 1, okSources: 1, severity: 'error' });
-        expect(String(failed?.payload.detail)).toContain('src-1: failed');
+    test('R3: queue-envelope drift (whole job as payload) fails the attempt instead of silently defaulting', async () => {
+        const { executor, runs } = fakeExecutor({});
+        const envelope = jobOf(validPayload);
+        await expect(
+            handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor }, jobOf(envelope)),
+        ).rejects.toThrow('history refresh payload has invalid trigger');
+        expect(runs).toHaveLength(0); // nothing spawned
     });
 
-    test('daily throwing emits and rethrows so the queue records the failure', async () => {
-        const { service } = stubService(new Error('db gone'));
-        const { bus, emitted } = fakeBus();
-        const getDb = async () => createMigratedDb({ url: ':memory:' });
-        await expect(handleHistoryRefreshJob({ getDb, cwd: '/tmp', bus, service }, payload)).rejects.toThrow('db gone');
-        expect(emitted.map((e) => e.name)).toEqual(['history.daily.failed']);
+    test('R2: an unusable invocation rejects before spawning', async () => {
+        const { executor, runs } = fakeExecutor({});
+        await expect(
+            handleHistoryRefreshJob({ cwd: '/p', invocation: '  ', executor }, jobOf(validPayload)),
+        ).rejects.toThrow('invocation');
+        expect(runs).toHaveLength(0);
+    });
+
+    test('R4: spawn failure (exitCode null) rejects so the queue records a failed attempt', async () => {
+        const { executor } = fakeExecutor({ exitCode: null, stderr: 'spawn ENOENT' });
+        await expect(
+            handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor }, jobOf(validPayload)),
+        ).rejects.toThrow('history refresh child failed to spawn: spawn ENOENT');
+    });
+
+    test('R4: non-zero exit rejects with a bounded stderr tail', async () => {
+        const { executor } = fakeExecutor({ exitCode: 2, stderr: 'e'.repeat(500) });
+        let message = '';
+        try {
+            await handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor }, jobOf(validPayload));
+        } catch (e) {
+            message = (e as Error).message;
+        }
+        expect(message.startsWith('history daily exited 2: ')).toBe(true);
+        // 1 ellipsis + at most 400 tail chars after the prefix: bounded detail for queue events.
+        expect(message.length).toBeLessThanOrEqual('history daily exited 2: '.length + 401);
+    });
+
+    test('R4: unparseable child stdout rejects', async () => {
+        const { executor } = fakeExecutor({ exitCode: 0, stdout: '<html>proxy error</html>' });
+        await expect(
+            handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor }, jobOf(validPayload)),
+        ).rejects.toThrow('history daily emitted invalid JSON');
+    });
+
+    test('R4: child JSON without {ok:true,data} rejects', async () => {
+        const { executor } = fakeExecutor({ exitCode: 0, stdout: JSON.stringify({ ok: false }) });
+        await expect(
+            handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor }, jobOf(validPayload)),
+        ).rejects.toThrow('unexpected JSON shape');
+    });
+
+    test('R1: a held-open child leaves the server event loop responsive', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0717-'));
+        try {
+            const script = join(dir, 'slow-child.js');
+            await Bun.write(script, 'await Bun.sleep(400);\nconsole.log(JSON.stringify({ ok: true, data: {} }));\n');
+            const executor = new NodeProcessExecutor();
+            const pending = handleHistoryRefreshJob(
+                { cwd: dir, invocation: `${process.execPath} ${script}`, executor },
+                jobOf(validPayload),
+            );
+            // Deliberate real-clock exception: asserting the shared event loop stays responsive
+            // while the child runs requires the actual clock; fake timers would prove nothing.
+            // The child sleeps ~400ms; while it runs, timed probes must tick on schedule.
+            const probes: number[] = [];
+            for (let i = 0; i < 5; i++) {
+                const t0 = performance.now();
+                await Bun.sleep(10);
+                probes.push(performance.now() - t0);
+            }
+            await expect(pending).resolves.toBeUndefined();
+            // If the handler had blocked the loop, 10ms sleeps would overshoot badly.
+            expect(Math.max(...probes)).toBeLessThan(150);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 });

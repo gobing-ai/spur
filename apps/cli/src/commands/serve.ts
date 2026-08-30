@@ -4,6 +4,7 @@ import { buildConfigFromEnv, DEFAULT_DATABASE_URL } from '@gobing-ai/spur-config
 import { startServer } from '@gobing-ai/spur-server';
 import type { CliContext } from '../context';
 import { toEnvelopeJson, writeJsonError } from '../output';
+import { resolveSpurBin } from '../workflow/resolve-spur-bin';
 import { SHARED_OPTIONS } from './shared-options';
 
 /** Resolve the database URL used by `spur serve`, matching normal CLI DB defaults. */
@@ -56,6 +57,8 @@ export function registerServeCommand(program: Command, context: CliContext, opti
                     dbUrl,
                     openBrowser: options.open ?? true,
                     webDistPath: config.server.webDistPath,
+                    // PATH-independent child invocation for queued history refreshes (task 0717).
+                    spurInvocation: resolveSpurBin(),
                 });
             } catch (err) {
                 writeJsonError(context.output, options, err instanceof Error ? err.message : String(err));

@@ -3,7 +3,10 @@ import type { Command } from '@commander-js/extra-typings';
 import {
     type DailyResult,
     type FanOutResult,
+    HISTORY_REFRESH_CONTEXT_ENV,
+    type HistoryRefreshPayload,
     HistoryService,
+    parseHistoryRefreshContext,
     resolveArtifactPath,
     runHistoryReport,
     type SystemEventBus,
@@ -277,6 +280,26 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
             const svc = makeService();
             const sourceTimeout = Number.parseInt(options.sourceTimeout ?? '600000', 10) || 600_000;
 
+            // Task 0717: queued child refresh context. Parsed BEFORE the bus/ledger so a
+            // malformed context fails the child before any import or event emission;
+            // absent env keeps interactive `history daily` unchanged.
+            let refresh: HistoryRefreshPayload | null;
+            try {
+                refresh = parseHistoryRefreshContext(process.env[HISTORY_REFRESH_CONTEXT_ENV]);
+            } catch (e) {
+                const detail = e instanceof Error ? e.message : String(e);
+                context.output.write(
+                    options.json
+                        ? toEnvelopeJson(
+                              { error: detail },
+                              { enveloped: options.jsonEnvelope, error: { code: 'INTERNAL_ERROR', message: detail } },
+                          )
+                        : `history daily failed: ${detail}`,
+                );
+                context.setExitCode(1);
+                return;
+            }
+
             // System-event bus + ledger (task 0471 R2): per-invocation, flushed in finally.
             // SAFETY: SystemEventBus is structurally the same ts-infra EventBus (see workflow.ts:248).
             const bus = new EventBus() as unknown as SystemEventBus;
@@ -294,11 +317,18 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                     cwd: context.cwd,
                     root: options.root || undefined,
                     mode: options.mode,
+                    ...(refresh?.importMode !== undefined ? { importMode: refresh.importMode } : {}),
                 });
             } catch (e) {
                 failure = { exitCode: 1, detail: e instanceof Error ? e.message : String(e) };
             }
             const durationMs = Date.now() - startMs;
+            // Child-owned event enrichment (0717): trigger/window ride every history.*
+            // event the child emits; interactive runs (refresh === null) stay unchanged.
+            const refreshMeta =
+                refresh === null
+                    ? {}
+                    : { trigger: refresh.trigger, windowStart: refresh.windowStart, windowEnd: refresh.windowEnd };
 
             try {
                 if (failure !== null) {
@@ -309,6 +339,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                         detail: failure.detail,
                         exitCode: failure.exitCode,
                         durationMs,
+                        ...refreshMeta,
                         severity: 'error',
                     });
                     context.setExitCode(1);
@@ -340,6 +371,8 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                             messages,
                             durationMs,
                             artifactPath,
+                            ...refreshMeta,
+                            ...(refresh !== null ? { coverage: result.coverage } : {}),
                             severity: 'info',
                         });
                         await bus.emit('history.analyze.completed', {
@@ -347,6 +380,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                             renderer: 'history-analyze',
                             artifactPath,
                             totals: result.artifact.totals,
+                            ...refreshMeta,
                             severity: 'info',
                         });
                     } else {
@@ -372,6 +406,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                                     : 'daily fan-out reported non-zero exit with no failing or degraded source',
                             durationMs,
                             artifactPath,
+                            ...refreshMeta,
                             severity: 'error',
                         });
                     }
