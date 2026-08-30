@@ -4,7 +4,7 @@ name: "Run queued history refreshes in an isolated child process"
 status: done
 template: feature-impl
 created_at: 2026-08-29T23:11:49.416Z
-updated_at: "2026-08-30T04:39:34.095Z"
+updated_at: "2026-08-30T23:46:23.830Z"
 feature_id: E31
 priority: P1
 tags: ["history", "reliability", "process"]
@@ -112,7 +112,7 @@ Post-verification lock regression:
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/history-refresh-service.ts:238-254` awaits `ProcessExecutor` instead of running history work in-process; `packages/app/tests/services/history-refresh-service.test.ts:394-420` keeps real-clock probes responsive while the child remains active; `apps/server/src/context.ts:104-107,615-627` leases the live queue row for two hours and `apps/server/tests/context.test.ts:337-360` proves it is not reclaimed at 30 seconds. |
+| R1 | MET | `packages/app/src/services/history-refresh-service.ts:238-254` awaits `ProcessExecutor` instead of running history work in-process; `packages/app/tests/services/history-refresh-service.test.ts:388-412` keeps real-clock probes responsive while the child remains active; `apps/server/src/context.ts:104-107,615-627` leases the live queue row for two hours and `apps/server/tests/context.test.ts:337-360` proves it is not reclaimed at 30 seconds. |
 | R2 | MET | `packages/app/src/services/history-refresh-service.ts:243-254` splits the trusted invocation and runs `history daily --json --json-envelope`; `apps/cli/src/commands/serve.ts:61` and `apps/server/src/index.ts:19-43` provide PATH-independent invocations for both launchers. |
 | R3 | MET | `apps/cli/src/commands/history.ts:283-336` parses the child context, applies `importMode`, and builds trigger/window/mode event metadata; `packages/app/src/services/event-names.ts:861-921` retains it through metadata projection; `apps/cli/tests/commands/history.test.ts:472-523` proves the real CLI consumer and persisted events end to end. |
 | R4 | MET | `packages/app/src/services/history-refresh-service.ts:255-282` rejects abnormal termination, non-zero exit, invalid JSON, and wrong shape with bounded detail; `packages/app/tests/services/history-refresh-service.test.ts:333-392` exercises every failure class. |
@@ -120,7 +120,7 @@ Post-verification lock regression:
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R1 — A running refresh does not block Board requests | MET | test | `packages/app/tests/services/history-refresh-service.test.ts:394-420` proves event-loop responsiveness; `apps/server/tests/context.test.ts:337-360` prevents duplicate live children across consumers; comprehensive gate passed 6780 tests. |
+| Scenario: R1 — A running refresh does not block Board requests | MET | test | `packages/app/tests/services/history-refresh-service.test.ts:388-412` proves event-loop responsiveness; `apps/server/tests/context.test.ts:337-360` prevents duplicate live children across consumers; comprehensive gate passed 6780 tests. |
 | Scenario: R2 — The queue worker reuses the existing daily command in a child process | MET | test | `packages/app/tests/services/history-refresh-service.test.ts:297-319` asserts command, args, cwd, output bound, payload context, and `DATABASE_URL`; `apps/server/tests/index.test.ts:41-48` proves source and compiled standalone paths. |
 | Scenario: R3 — Refresh intent survives the queue envelope | MET | test | `apps/cli/tests/commands/history.test.ts:472-523` proves `full` reaches `HistoryService.daily` and trigger/window/mode/coverage survive ledger persistence; `packages/app/tests/services/event-names.test.ts:552-562` covers success and failure projections. |
 | Scenario: R4 — Child-process failure fails the queue job visibly | MET | test | `packages/app/tests/services/history-refresh-service.test.ts:333-392` covers envelope drift, unusable invocation, abnormal termination, structured non-zero exit, invalid JSON, and wrong shape. |
@@ -135,7 +135,7 @@ Post-verification lock regression:
 
 | Requirement | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `packages/app/tests/services/history-refresh-service.test.ts:394-420` holds a real child open while timed probes prove the server event loop remains responsive; `apps/server/tests/context.test.ts:337-360` proves another server cannot reclaim the live row at the upstream 30-second boundary. |
+| R1 | MET | `packages/app/tests/services/history-refresh-service.test.ts:388-412` holds a real child open while timed probes prove the server event loop remains responsive; `apps/server/tests/context.test.ts:337-360` proves another server cannot reclaim the live row at the upstream 30-second boundary. |
 | R2 | MET | `packages/app/src/services/history-refresh-service.ts:238-254` launches `history daily --json --json-envelope` through `ProcessExecutor`; `apps/server/src/index.ts:19-43` and `apps/cli/src/commands/serve.ts:61` provide PATH-independent invocations for both server launchers. |
 | R3 | MET | `packages/app/src/services/history-refresh-service.ts:238-252` validates `job.payload` and propagates context plus `DATABASE_URL`; `apps/cli/src/commands/history.ts:283-380` consumes the context, selects import mode, and stamps child-owned events; `apps/cli/tests/commands/history.test.ts:472-523` proves the child contract. |
 | R4 | MET | `packages/app/src/services/history-refresh-service.ts:255-282` turns abnormal termination, non-zero exit, invalid JSON, and wrong shape into bounded failures while retaining structured child errors; `packages/app/tests/services/history-refresh-service.test.ts:333-392` covers each outcome. |
