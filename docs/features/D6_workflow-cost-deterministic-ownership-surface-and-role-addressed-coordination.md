@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D6"
 name: "Workflow cost, deterministic ownership surface, and role-addressed coordination"
-status: done
+status: active
 priority: P2
 tags: []
 created_at: "2026-08-20T00:08:14.252Z"
-updated_at: "2026-08-20T21:55:08.156Z"
+updated_at: "2026-08-30T19:42:38.148Z"
 ---
 
 # D6: Workflow cost, deterministic ownership surface, and role-addressed coordination
@@ -87,6 +87,7 @@ Feature: Workflow cost, deterministic ownership surface, and role-addressed coor
 | 0607 | Measure and reduce pipeline model-query cost and wall-clock | done |
 | 0608 | Decide and land the ownership surface for compound pipeline shell | done |
 | 0609 | Resolve role-addressed coordination for agent wait and message | done |
+| 0723 | Upgrade task-pipeline precheck for deterministic low-latency execution | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -95,3 +96,4 @@ Feature: Workflow cost, deterministic ownership surface, and role-addressed coor
 - 2026-08-20T02:09:16.114Z backlog → active (system)
 - 2026-08-20T21:53:35.698Z active → verifying (system)
 - 2026-08-20T21:55:08.156Z verifying → done (system)
+- 2026-08-30T19:42:38.148Z done → active (system)
