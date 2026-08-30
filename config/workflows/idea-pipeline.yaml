@@ -139,7 +139,7 @@ states:
       - kind: agent.run
         options:
           agent: ${vars.planningAgent}
-          input: "Create a feature for the idea: ${vars.idea}. Read .spur/run/${vars.__runId}-idea-eval-report.md if present for the enhanced idea and scores. Use 'spur feature create \"<name>\" --json' to create it. Write the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt. If an existing feature is appropriate, use its id instead. Also write two body-only intent artifacts: .spur/run/${vars.__runId}-idea-goal.md with concise Goal intent only (a short statement of what the feature achieves; never task breakdowns, checklists, or how-to steps), and .spur/run/${vars.__runId}-idea-scope.md with explicit in-scope and out-of-scope boundary bullets."
+          input: 'Create a feature for the idea: ${vars.idea}. Read .spur/run/${vars.__runId}-idea-eval-report.md if present for the enhanced idea and scores. Use ''spur feature create "<name>" --json'' to create it. Write the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt. If an existing feature is appropriate, use its id instead. Also write two body-only intent artifacts: .spur/run/${vars.__runId}-idea-goal.md with concise Goal intent only (a short statement of what the feature achieves; never task breakdowns, checklists, or how-to steps), and .spur/run/${vars.__runId}-idea-scope.md with explicit in-scope and out-of-scope boundary bullets.'
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
           expectFile: .spur/run/${vars.__runId}-idea-feature-id.txt
@@ -176,7 +176,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-ac-retry-count; rm -f .spur/run/$__runId-idea-ac-content.md .spur/run/$__runId-idea-ac-done.txt'
+          command: "mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-ac-retry-count; rm -f .spur/run/$__runId-idea-ac-content.md .spur/run/$__runId-idea-ac-done.txt"
       - kind: agent.run
         options:
           agent: ${vars.planningAgent}
@@ -242,7 +242,7 @@ states:
       - kind: agent.run
         options:
           agent: ${vars.planningAgent}
-          input: "Run sp:sys-architecture for feature ${vars.featureId}. Read the brainstorm artifact, feature AC, and .spur/run/${vars.__runId}-idea-design-review.md. Produce ADR entries, architecture updates, and design satellites (docs/design/<slug>.md) following the constitution edit rules. Do not write task or feature corpus files directly. Design-review contract (.spur/run/${vars.__runId}-idea-design-review.md, fixed headings `## Proposed design`, `## Operator feedback`, `## Reconciliation`): on the first pass write the proposed design summary under `## Proposed design` and leave `## Operator feedback` empty; on retry with operator feedback present, revise the design/ADR artifacts, document the changes under `## Reconciliation`, and when the feedback invalidates an Acceptance Criteria scenario write the revised AC section body to a file and persist it via `$spurBin feature update \"$featureId\" --section \"Acceptance Criteria\" --from-file <file>` — never edit feature corpus files directly."
+          input: 'Run sp:sys-architecture for feature ${vars.featureId}. Read the brainstorm artifact, feature AC, and .spur/run/${vars.__runId}-idea-design-review.md. Produce ADR entries, architecture updates, and design satellites (docs/design/<slug>.md) following the constitution edit rules. Do not write task or feature corpus files directly. Design-review contract (.spur/run/${vars.__runId}-idea-design-review.md, fixed headings `## Proposed design`, `## Operator feedback`, `## Reconciliation`): on the first pass write the proposed design summary under `## Proposed design` and leave `## Operator feedback` empty; on retry with operator feedback present, revise the design/ADR artifacts, document the changes under `## Reconciliation`, and when the feedback invalidates an Acceptance Criteria scenario write the revised AC section body to a file and persist it via `$spurBin feature update "$featureId" --section "Acceptance Criteria" --from-file <file>` — never edit feature corpus files directly.'
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
           expectFile: .spur/run/${vars.__runId}-idea-design-review.md
@@ -277,7 +277,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-design-reject-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-design-reject-count'
+          command: "mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-design-reject-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-design-reject-count"
       - kind: hitl.confirm
         options:
           prompt: "Review the system design for feature ${vars.featureId}. Approve to proceed to decomposition? To reject, first record your feedback in .spur/run/${vars.__runId}-idea-design-review.md under the `## Operator feedback` heading, then answer no."
@@ -294,7 +294,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-decompose-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-decompose-retry-count; rm -f .spur/run/$__runId-idea-task-batch.json .spur/run/$__runId-idea-task-order.json .spur/run/$__runId-idea-batch-create.done .spur/run/$__runId-idea-batch-create.failed .spur/run/$__runId-idea-batch-create-result.json .spur/run/$__runId-idea-handoff.md'
+          command: "mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-decompose-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-decompose-retry-count; rm -f .spur/run/$__runId-idea-task-batch.json .spur/run/$__runId-idea-task-order.json .spur/run/$__runId-idea-batch-create.done .spur/run/$__runId-idea-batch-create.failed .spur/run/$__runId-idea-batch-create-result.json .spur/run/$__runId-idea-handoff.md"
       - kind: agent.run
         options:
           agent: ${vars.planningAgent}
@@ -721,7 +721,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test -f .spur/run/$__runId-idea-batch-create.done'
+        command: "test -f .spur/run/$__runId-idea-batch-create.done"
   - from: batch-create-run
     to: decompose
     description: "Batch-create failed — revise decomposition (retry cap: 3)."

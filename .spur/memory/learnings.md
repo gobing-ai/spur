@@ -935,6 +935,7 @@ But there might be a case for an ADR amendment. Let me look at the §3 of 03_ARC
 Actually let me also check if docs/03_ARCHITECTURE.md has any stale references to checkLineAnchors or anchor subject matching.]<]minimax[>[<tool_call>
 ]<]minimax[>[<invoke name="read">]<]minimax[>[<path>/Users/robin/xprojects/spur-new/docs/03_ARCHITECTURE.md]<]minimax[>[</path>]<]minimax[>[<offset>570]<]minimax[>[</offset>]<]minimax[>[<limit>80]<]minimax[>[</limit>]<]minimax[>[</invoke>
 ]<]minimax[>[</tool_call>
+
 ## 2026-08-29
 
 ### 0716 — Database single-flight for history refresh producers
@@ -947,7 +948,7 @@ Actually let me also check if docs/03_ARCHITECTURE.md has any stale references t
 
 ### 0717 — Isolated child-process execution for queued refreshes
 
-- Parent→child env-contract design: SPUR_HISTORY_REFRESH_CONTEXT carries the serialized, validated payload; parseHistoryRefreshContext returns null when the env is absent (interactive history daily unchanged) and throws on malformed JSON/shape → CLI exits 1 BEFORE EventBus/ledger/import creation, so a bad contract can never emit partial history.* rows. The child owns all history.* emission; the parent server emits none (no duplicate events).
+- Parent→child env-contract design: SPUR_HISTORY_REFRESH_CONTEXT carries the serialized, validated payload; parseHistoryRefreshContext returns null when the env is absent (interactive history daily unchanged) and throws on malformed JSON/shape → CLI exits 1 BEFORE EventBus/ledger/import creation, so a bad contract can never emit partial history.*rows. The child owns all history.* emission; the parent server emits none (no duplicate events).
 - Strict payload gate: the queue handler unwraps ONLY job.payload via validateHistoryRefreshPayload; a whole queue envelope arriving as payload fails the attempt — kills the envelope-drift bug class. Validation runs before any spawn.
 - DI seam for spawnability: HistoryRefreshJobDeps {cwd, invocation, executor} — the child opens its own DB/agentConfig from cwd (shared WAL DB + 5s busy timeout preserved, contention behaviorally tested); executor injection keeps ProcessExecutor mockable.
 - PATH-independent re-invocation: resolveSpurBin() returns "<execPath> <mainModule>" at serve bootstrap and flows into startServer as optional spurInvocation (omission degrades to a run-time split failure, keeping existing callsites compiling); splitLaunchCommand splits argv only — no shell string evaluation (accepted ceiling: a space inside a single token's path; argv-only is the injection-safety win).
@@ -961,6 +962,7 @@ Actually let me also check if docs/03_ARCHITECTURE.md has any stale references t
 Done. Summary:
 
 **Doc-evolve wrapup (task 0720) — drift audit + repair**
+
 - Ran a §7 drift audit scoped to 0720's change (a plugin skill-reference + contract-test change; no public CLI surface). Only one verifiable factual drift in the scoped set: `execution-batch.md` line count in `docs/design/dev-spine-cost-and-drift.md` (claimed 799, actually 956).
 - **Repaired:** `docs/design/dev-spine-cost-and-drift.md:66,69` — refreshed the spine-routing counts (execution-batch 799→956, execution-workflow 361→368, inline-pipeline-driver 130→172, subtotal ~1,645→~1,851) plus a dated correction note flagging the rest as a 2026-08-15 snapshot.
 - **Zero drift:** `docs/00_ADR.md` (no decision reversed — R2d no-replay is consistent with ADR-026/048, no public API change), `docs/03_ARCHITECTURE.md` (0720 touches no described mechanism; corpus-check claims reflect the untouched command), `docs/04_DESIGN.md` (no new surface; §7.8 pointer to execution-batch.md still accurate), and `run-record-contract.md` (0720's new artifact family postdates the 0598 analysis; no contradiction — noted, not edited).
