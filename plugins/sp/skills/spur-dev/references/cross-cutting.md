@@ -139,7 +139,8 @@ resolved in this order; first match wins:
 2. **`agent.default`** from `.spur/config.yaml` (project layer, then `~/.config/spur/config.yaml`) —
    `spur workflow run` injects it as the `agent` var when `vars.agent` was not set by the caller.
 3. **YAML literal `agent:` in the pipeline file** — the last-resort fallback declared in the
-   workflow YAML (e.g. `agent: "omp"` in `task-pipeline.yaml`). This fires only when no
+   workflow YAML. Every shipped pipeline declares `agent: "auto"`, so this rung resolves through
+   the role/tier ladder instead of pinning an executor name; it fires only when no
    `agent.default` is configured anywhere.
 
 `--agent auto` tier-resolves an executor (stage `model_policy` → `agent.default` → tier priority)

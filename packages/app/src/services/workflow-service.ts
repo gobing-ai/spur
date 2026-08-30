@@ -652,12 +652,14 @@ export class WorkflowAppService {
         // Survives pause/resume via the effective-vars snapshot (R1–R3). Inert for
         // workflows that don't reference ${vars.__runId}.
         //
-        // `agent` is injected on the same seam: every pipeline YAML declares a literal
-        // `agent: "omp"` vars default, which bypassed `.spur/config.yaml` `agent.default`
-        // entirely - config only ever reached an `agent.run` step when a caller passed the
-        // literal `auto`, which the pipelines never do. That made the config knob dead for
-        // pipelines: an operator whose default executor was failing had no supported way to
-        // redirect them. Caller-supplied vars still win, so an explicit `--agent`/`--vars`
+        // `agent` is injected on the same seam: pipeline YAML used to declare a named
+        // executor literal (`agent: "omp"`) as its vars default, which bypassed
+        // `.spur/config.yaml` `agent.default` entirely - config only ever reached an
+        // `agent.run` step when a caller passed the literal `auto`. That made the config
+        // knob dead for pipelines: an operator whose default executor was failing had no
+        // supported way to redirect them. The shipped pipelines now declare `auto`, so both
+        // rungs agree; this injection remains the seam that carries a configured default
+        // into runs. Caller-supplied vars still win, so an explicit `--agent`/`--vars`
         // choice overrides config, and config in turn overrides the YAML literal.
         // (0485 R2) `implementAgent` is injected on the same seam so `agent.default` also
         // governs the implement hop; a stale default warns instead of failing dispatch.
@@ -1711,7 +1713,7 @@ export function resolveWorkflowFile(cwd: string, file: string): ResolveWorkflowF
  * Resolve the `agent` / `implementAgent` run vars from `.spur/config.yaml`
  * `agent.default`, so the configured default executor reaches a workflow's
  * `agent.run` steps — including the implement hop, which previously read only the
- * pipeline's literal `implementAgent: "omp"` (task 0485 R2).
+ * pipeline's literal `implementAgent` (task 0485 R2).
  *
  * Returns an empty object — leaving the YAML default in force — when the caller
  * already chose both agents, when no `agent.default` is configured, or when config

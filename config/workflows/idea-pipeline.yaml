@@ -65,7 +65,7 @@ vars:
   spurBin: "spur"
   # R8 (0366): injected by WorkflowAppService.run(); stamps discovery artifact provenance.
   __runId: ""
-  agent: "omp"
+  agent: "auto"
   planningAgent: ""
   stepTimeoutMs: "1800000"
 

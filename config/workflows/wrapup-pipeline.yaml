@@ -49,7 +49,7 @@ vars:
   profile: "standard"
   merge: "false"
   spurBin: "spur"
-  agent: "omp"
+  agent: "auto"
   stepTimeoutMs: "1800000"
   # Corpus-aware quality gate for the feature-transition hop (R1, task 0625).
   # The per-task gate (`spur-check`) deliberately excludes corpus-check — the only

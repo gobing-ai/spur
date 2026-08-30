@@ -27,7 +27,7 @@ vars:
   wbs: "0000"
   profile: "standard"
   spurBin: "spur"
-  agent: "omp"
+  agent: "auto"
   stepTimeoutMs: "1800000"
   approval: "required"
   resolutionMode: "research"

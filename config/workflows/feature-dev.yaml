@@ -44,7 +44,7 @@ failureStates:
   - failed
 vars:
   featureId: ""
-  agent: "omp"
+  agent: "auto"
   profile: "standard"
   spurBin: "spur"
   stepTimeoutMs: "1800000"

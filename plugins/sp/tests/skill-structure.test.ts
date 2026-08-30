@@ -606,7 +606,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // agent-dispatch var contract for its agent.run steps.
         const idea = readFileSync(join(WORKFLOWS_DIR, 'idea-pipeline.yaml'), 'utf8');
         // stepTimeoutMs aligned with task-pipeline headroom (1800000), not the old 600s default.
-        for (const line of ['  agent: "omp"', '  spurBin: "spur"', '  stepTimeoutMs: "1800000"']) {
+        for (const line of ['  agent: "auto"', '  spurBin: "spur"', '  stepTimeoutMs: "1800000"']) {
             expect(idea).toContain(line);
         }
         const varsAgent = `$${'{vars.agent}'}`;

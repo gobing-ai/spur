@@ -30,7 +30,7 @@ vars:
   wbs: "0000"
   profile: "standard"
   spurBin: "spur"
-  agent: "omp"
+  agent: "auto"
   stepTimeoutMs: "1800000"
   # Proof-state bracket (task 0704, mirroring task-pipeline 0612/0703). `proofDigest` is the
   # canonical capture at verify entry; `proofDigestNow` is the live re-capture compared against

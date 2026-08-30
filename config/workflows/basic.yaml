@@ -24,7 +24,7 @@ failureStates:
 vars:
   # `task` is reserved by the engine runtime — use taskLabel for the free-form label.
   taskLabel: "task"
-  agent: "omp"
+  agent: "auto"
   stepTimeoutMs: "1800000"
   # Override per project: `--vars '{"qualityGateCmd":"bun run lint && bun run test"}'`
   qualityGateCmd: "bun run check"
