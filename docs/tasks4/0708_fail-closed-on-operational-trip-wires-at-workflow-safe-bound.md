@@ -4,7 +4,7 @@ name: "Fail closed on operational trip wires at workflow safe boundaries"
 status: done
 template: issue
 created_at: 2026-08-28T23:03:05.669Z
-updated_at: "2026-08-30T04:44:53.147Z"
+updated_at: "2026-08-30T17:13:52.831Z"
 priority: P1
 tags: ["harness", "workflow", "tripwire", "reliability"]
 dependencies: ["0703", "0706", "0707"]
@@ -263,13 +263,17 @@ Each entry cites the first changed line per file (`file:line`).
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | tripwire.ts:26-32 closed 5-policy catalog (retry-exhausted, hard-budget, capability-denied, proof-invalidated, output-drop); versioned TRIPWIRE_CATALOG :53-96; pin test tripwire.test.ts:12 |
-| R2 | MET | evaluation only at existing safe boundaries: agent-run.ts:460-543 post-dispatch, proof-fingerprint.ts:80-115; no subprocess inspection; signals read normalized outcomes only |
+| R2 | MET | evaluation only at existing safe boundaries: agent-run.ts:460-543 post-dispatch, packages/app/src/workflow/actions/proof-fingerprint.ts:80-115; no subprocess inspection; signals read normalized outcomes only |
 | R3 | MET | fail policies return ok:false via existing failure semantics (agent-run.ts:527-543); steering timeout fails closed when retries exhausted (steering.ts:237-248); unknown-id fails closed (tripwire.ts:141-151, test :52); steering.test.ts:156 |
 | R4 | MET | WorkflowTripwireFiredEvent observability.ts:156-184 with policy id/version, run/action/task correlation, threshold, observed, evidenceRefs, nextDecision; emitted agent-run.ts:525 + proof-fingerprint.ts:111; bounded run-log line (sink onTripwire), test workflow-run-log-sink.test.ts:221 |
 | R5 | MET | signals read only existing owners: 0707 budget verdict, steering settle reason, 0706 CAPABILITY_BLOCK_PREFIX, 0612/0711 proof digest pair, relay droppedChunks; no new thresholds (tripwire.ts header) |
 | R6 | MET | evaluateTripWires tripwire.ts:130-158 pure deterministic first-match over frozen closed catalog; no model/DSL/config; tests tripwire.test.ts:40,61 |
 | R7 | MET | exact nextDecision per policy in catalog; error embeds reason + next decision (agent-run.ts:541); partial-work artifact preserved (agent-run.ts:531-534); tests agent-run.test.ts:2567, tripwire.test.ts:70 |
 | R8 | MET | two-sided checks: catalog pin tripwire.test.ts:12, unknown-id fail-closed :52, capability seam guard capability-attestation.test.ts:180-190 + prefix pin tripwire.test.ts:66; stale mappings fail via unknown-policy evaluationError |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R6 — Known invariant stops the run | MET | test | Tripwire, agent-run, steering, and workflow-run-log tests prove a known invariant fails at the next safe boundary and dispatches no subsequent action; all passed in the 6,953-test full gate. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->

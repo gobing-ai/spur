@@ -4,7 +4,7 @@ name: "Govern checkpoint and indexed-context freshness and retention"
 status: done
 template: issue
 created_at: 2026-08-28T23:03:05.726Z
-updated_at: "2026-08-30T00:15:57.753Z"
+updated_at: "2026-08-30T17:13:53.561Z"
 priority: P2
 tags: ["harness", "memory", "checkpoint", "retention"]
 feature_id: A6
@@ -127,6 +127,10 @@ Host-fallback reconciliation after the implement child timed out mid-verificatio
 | R7 | MET | `grep -n logRetentionDays packages/config/src/index.ts` → L735 `default(30)`; workflow-service `cleanCheckpoints` doc L853 "same `workflow.logRetentionDays` knob", default 30; live CLI output `"checkpoints": { "retentionDays": 30, ... }`. No new config. |
 | R8 | MET | Live: `bun apps/cli/src/index.ts workflow clean --dry-run --json` → `{ "checkpoints": { "retentionDays": 30, "dryRun": true, "reclaimed": [], "skipped": [6 × malformed], "failures": [] } }`; tests: "dry-run lists candidates without deleting (R7)", "re-running an exhausted cleanup is a no-op (R8 idempotence)". |
 | R9 | MET | Suite names: confinement ("entries resolving outside the sessions dir"), active refs ("checkpoints referencing an active run are kept"), boundary ("boundary age is kept: strictly past the retention cutoff", "falls back to file mtime when updated_at is absent"), malformed (cleanup + routing + contract), commit drift (routing-checkpoint "commit drift"), regeneration (context-hooks producer-moment refresh). Totals: 16+9+8+43 = **76 targeted tests, 0 fail**. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R9 — Fresh checkpoint resumes | MET | test | Checkpoint-contract, routing-checkpoint, cleanup, and context-hook tests prove only schema-valid source-current state resumes and only expired unreferenced regenerable state is deleted; all passed in the 6,953-test full gate. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->

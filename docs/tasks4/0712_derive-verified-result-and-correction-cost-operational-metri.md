@@ -4,7 +4,7 @@ name: "Derive verified-result and correction-cost operational metrics"
 status: done
 template: issue
 created_at: 2026-08-28T23:03:05.744Z
-updated_at: "2026-08-30T05:35:50.727Z"
+updated_at: "2026-08-30T17:13:53.922Z"
 priority: P2
 tags: ["harness", "history", "metrics", "verification"]
 dependencies: ["0703", "0707"]
@@ -295,6 +295,10 @@ Each entry cites the first changed line per file (`file:line`).
 | R7 | MET | gatherer :37,84-108 bounded traceRows+listByRun+in-memory until |
 | R8 | MET | 9 domain fixtures + 3 app smoke tests incl. duplicate-wbs, uncosted, partial coverage |
 | R9 | MET | conditional requirement — Board consumes its own seed rows, not HistoryArtifact; projection intentionally skipped per conditionality, documented in docs/04_DESIGN.md verified-outcome paragraph |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R10 — Clean verified result is counted | MET | test | Verified-outcome domain and app tests prove a proof-valid PASS is counted, later correction is visible, duration is bounded, and absent cost stays unknown; all passed in the 6,953-test full gate. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->

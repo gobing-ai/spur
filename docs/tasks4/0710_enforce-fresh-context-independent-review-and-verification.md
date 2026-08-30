@@ -4,7 +4,7 @@ name: "Enforce fresh-context independent review and verification"
 status: done
 template: issue
 created_at: 2026-08-28T23:03:05.708Z
-updated_at: "2026-08-30T03:22:04.149Z"
+updated_at: "2026-08-30T17:13:27.710Z"
 priority: P1
 tags: ["harness", "agent", "review", "verification"]
 dependencies: ["0706"]
@@ -239,6 +239,10 @@ Each entry cites the first changed line per file (`file:line`).
 | R6 | MET | Review and verify are separate `agent.run` executions with per-node fresh dirs (`fresh-review` vs `fresh-verify`, `packages/app/src/workflow/actions/agent-run.ts:206-214`), no session id, and fresh actions publish no session vars (`:609-618`) — neither can inherit the other's session nor leak into a later implement/test-fix resume. Covered by R1 test (`packages/app/tests/workflow/actions/agent-run.test.ts:2448`) and live pipeline declarations (R2) |
 | R7 | MET | Review/verify resolve through the existing `AgentService.resolve({role})` registry path (`packages/app/src/workflow/actions/agent-run.ts:302-303`) with the pre-existing `role: reviewer` vocabulary (`task-pipeline.yaml:499,550`); no new agent framework or role names introduced (0710 diff touches only session/policy seams inside the existing runner + one pure module) |
 | R8 | MET | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:121-148` — live-YAML test fails if review/verify lose `freshSession`, regain an executor pin, or drop role/compareExecutorWith/priority; composition baseline regenerated to the live definitions (`config/workflow-composition-baseline.json` task-pipeline digest `sha256:fd3a33934587a223950d869c6940a8ae219c72c6c911f37f073758f9e9555f50` = regen output; composition-baseline test green in gate). Enforcement location (live-YAML proof-chain test, baseline records kind/invocation only) documented in `docs/04_DESIGN.md:2278-2296` and the task Review section |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R8 — Reviewer starts without implementation context | MET | test | Review-independence, agent-run, and task-pipeline proof-chain tests prove review starts fresh and material-risk work requires a distinct eligible executor; all passed in the 6,953-test full gate. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->

@@ -4,7 +4,7 @@ name: "Render canonical escalation packets from existing run evidence"
 status: done
 template: issue
 created_at: 2026-08-28T23:03:05.689Z
-updated_at: "2026-08-30T06:24:24.217Z"
+updated_at: "2026-08-30T17:13:53.198Z"
 priority: P1
 tags: ["harness", "workflow", "escalation", "observability"]
 dependencies: ["0708"]
@@ -309,6 +309,10 @@ Each entry cites the first changed line per file (`file:line`).
 | R6 | MET | bounded workflow.escalation.created; catalog+presenters+§11 matrix rows; two-sided gate green |
 | R7 | MET | projection_failed bounded diagnostic, never throws; run log untouched; advisory CLI construction |
 | R8 | MET | shared bus, artifacts table only, no new CLI noun; RUN_LOG_EVENT_NAMES excludes escalation |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R7 — Trip wire creates one actionable packet | MET | test | Escalation packet, sink, renderer, and CLI tests prove one bounded packet references existing evidence and carries the unresolved operator decision; all passed in the 6,953-test full gate. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->

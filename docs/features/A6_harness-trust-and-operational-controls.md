@@ -122,8 +122,7 @@ Feature: Harness trust and operational controls
 | 0710 | Enforce fresh-context independent review and verification | done |
 | 0711 | Govern checkpoint and indexed-context freshness and retention | done |
 | 0712 | Derive verified-result and correction-cost operational metrics | done |
-| 0720 | Fix E31 integration friction: orphaned serve daemons defeat worktree removal; corpus gate runs full test suite; R2d replay discards verdicts | testing |
-
+| 0720 | Fix E31 integration friction: orphaned serve daemons defeat worktree removal; corpus gate runs full test suite; R2d replay discards verdicts | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

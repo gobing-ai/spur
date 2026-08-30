@@ -4,7 +4,7 @@ name: "Replace docs-pipeline synthetic PASS with measured verification"
 status: done
 template: issue
 created_at: 2026-08-28T23:03:05.597Z
-updated_at: "2026-08-30T00:59:54.783Z"
+updated_at: "2026-08-30T17:12:22.660Z"
 priority: P0
 tags: ["harness", "verdict-integrity", "workflow", "documentation"]
 dependencies: ["0703"]
@@ -175,14 +175,18 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET |  |
-| R2 | MET |  |
-| R3 | MET |  |
-| R4 | MET |  |
-| R5 | MET |  |
-| R6 | MET |  |
-| R7 | MET |  |
-| R8 | MET |  |
+| R1 | MET | `packages/app/tests/workflow/docs-pipeline-measured-verdict.test.ts:85` proves no state manufactures a verdict. |
+| R2 | MET | `packages/app/tests/workflow/docs-pipeline-measured-verdict.test.ts:98` proves read-only verification writes the answer and derives the standard verdict. |
+| R3 | MET | `config/workflows/docs-pipeline.yaml:170` invokes `task verdict`; the measured-verdict test pins the structural check plus semantic verdict path. |
+| R4 | MET | `packages/app/tests/workflow/docs-pipeline-measured-verdict.test.ts:109` proves canonical and live proof fingerprints bracket verification. |
+| R5 | MET | `packages/app/tests/workflow/docs-pipeline-measured-verdict.test.ts:145` and its guard matrix prove non-PASS, malformed, missing, and mismatched evidence fail closed. |
+| R6 | MET | `packages/app/tests/workflow/docs-pipeline-measured-verdict.test.ts:149` proves HITL rejection remains an additive failure gate. |
+| R7 | MET | `config/workflows/docs-pipeline.yaml:170-181` derives and registers the standard verdict artifact with its proof digest. |
+| R8 | MET | `packages/app/tests/workflow/docs-pipeline-measured-verdict.test.ts` pins the negative cases; the 2026-08-30 full gate ran 6,953 tests with 0 failures. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R2 — Satisfied docs task completes | MET | test | The measured-verdict suite covers read-only verification, standard verdict derivation, proof matching, and successful completion; it passed in the 6,953-test full gate. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->
