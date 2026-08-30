@@ -23,3 +23,4 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 - `2026-08-15-agent-inline-G5-dogfood.md`
 - `2026-08-19-sp-dev-runall-feature-I6-dogfood.md`
 - `2026-08-28-sp-dev-verifyall-F95-dogfood.md`
+- `2026-08-29-sp-dev-runall-feature-A6-dogfood.md`

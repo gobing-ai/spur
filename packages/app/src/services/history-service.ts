@@ -71,8 +71,10 @@ import {
     runJsonlImport,
     runOpenCodeImport,
 } from '@gobing-ai/ts-llm-jsonl-importer';
+import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { getExecutorTier } from './agent-service';
 import { refreshHistoryRollups } from './history-analysis-service';
+import { deriveVerifiedOutcome } from './verified-outcome';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -222,6 +224,14 @@ export interface HistoryServiceContext {
     historyHome?: string;
     /** Working dir whose `.spur/run/<run-id>/agent-sessions/` augment import discovery (0624 R5). */
     cwd?: string;
+    /**
+     * Task-corpus locator for the verified-outcome fold (0712). When present,
+     * `analyze` embeds the additive `verifiedOutcome` block; absent, the block
+     * is omitted (consumers treat absence as unknown).
+     */
+    taskLocator?: { findByWbs(wbs: string): Promise<{ filePath: string } | null> };
+    /** Filesystem for verdict/task-file reads feeding the verified-outcome fold (0712). */
+    fs?: FileSystem;
 }
 
 // ---------------------------------------------------------------------------
@@ -568,6 +578,20 @@ export class HistoryService {
         };
 
         await refreshHistoryRollups(db);
+
+        // Verified-outcome fold (0712) — additive; absent without a task locator or
+        // on derivation failure (consumers treat absence as unknown, never fabricate).
+        if (this.ctx.taskLocator !== undefined && this.ctx.fs !== undefined) {
+            try {
+                const verifiedOutcome = await deriveVerifiedOutcome(
+                    { db, cwd: opts.cwd ?? process.cwd(), locator: this.ctx.taskLocator, fs: this.ctx.fs },
+                    { since: selector.since ?? null, until: selector.until ?? null },
+                );
+                if (verifiedOutcome !== null) artifact.verifiedOutcome = verifiedOutcome;
+            } catch {
+                // Best-effort: the projection must never fail the analyze batch.
+            }
+        }
 
         if (opts.out !== undefined || opts.cwd !== undefined) {
             writeArtifact(artifact, { out: opts.out, cwd: opts.cwd ?? process.cwd() });

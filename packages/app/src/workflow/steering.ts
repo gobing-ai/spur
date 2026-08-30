@@ -63,6 +63,8 @@ export interface SteeringSnapshot {
 export interface SteeringDecision {
     readonly operation: SteeringOperation;
     readonly note?: string;
+    /** Populated when a trip-wire condition forced a fail-closed default (0708 R3). */
+    readonly reason?: string;
 }
 
 interface ActiveAction {
@@ -234,13 +236,23 @@ export class WorkflowSteeringController {
     }
 
     private acceptDefault(active: ActiveAction, resolve: (decision: SteeringDecision) => void): void {
+        // 0708 R3: a fired trip wire never times out to continue. When the retry
+        // policy is exhausted on a failed attempt, the timeout default is abort
+        // (the existing fail path) — an unattended run remains failed with the
+        // attempt's evidence rather than continuing by timeout default.
+        const retryExhausted =
+            !active.lastOk && active.policy.retry !== undefined && active.attempts >= active.policy.retry.maxAttempts;
+        const operation: SteeringOperation = retryExhausted ? 'abort' : 'continue';
+        const reason = retryExhausted
+            ? 'fail-closed: retry-exhausted trip wire (timeout did not default to continue)'
+            : undefined;
         const command: SteeringCommand = {
             commandId: crypto.randomUUID(),
             runId: active.runId,
             actionId: active.actionId,
             expectedState: active.state,
             expectedVersion: active.version,
-            operation: 'continue',
+            operation,
             actor: 'system-timeout',
             deadlineAt: new Date().toISOString(),
         };
@@ -254,11 +266,11 @@ export class WorkflowSteeringController {
             accepted: true,
             state: active.state,
             version: active.version,
-            reason: 'boundary timeout defaulted to continue',
+            reason: reason ?? 'boundary timeout defaulted to continue',
             at: new Date().toISOString(),
         };
         this.onAck?.(ack);
-        resolve({ operation: 'continue' });
+        resolve({ operation, ...(reason !== undefined ? { reason } : {}) });
     }
 
     private accept(command: SteeringCommand, active: ActiveAction, note?: string): SteeringAck {

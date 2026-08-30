@@ -8,6 +8,7 @@ import {
     configuredSecretValues,
     createWorkflowEventIdentity,
     decorateWorkflowEvent,
+    EscalationPacketSink,
     renderActionHeartbeat,
     renderRunPlan,
     renderStepLine,
@@ -44,6 +45,7 @@ import { attachSystemEventLedger } from '../system-event-ledger';
 import { renderWorkflowMermaid } from '../workflow/mermaid-render';
 import { resolveSpurBin } from '../workflow/resolve-spur-bin';
 import { SHARED_OPTIONS } from './shared-options';
+import { makeTaskLocator } from './task';
 
 /** POSIX single-quote for `sh -c` argv embedding. */
 function shQuote(value: string): string {
@@ -141,6 +143,34 @@ export async function waitForRunRegistration(
             }
             await sleep(pollMs);
         }
+    }
+}
+
+/**
+ * Build the escalation packet sink (task 0709) for a workflow run bus.
+ * Advisory: construction failures return `undefined` — an escalation outage
+ * must never abort the run itself.
+ */
+async function makeEscalationPacketSink(
+    bus: WorkflowObservabilityBus,
+    context: CliContext,
+): Promise<EscalationPacketSink | undefined> {
+    try {
+        let locator: Awaited<ReturnType<typeof makeTaskLocator>> | undefined;
+        try {
+            locator = await makeTaskLocator(context);
+        } catch {
+            locator = undefined;
+        }
+        return new EscalationPacketSink({
+            bus,
+            cwd: context.cwd,
+            fs: context.fs,
+            db: await context.getDb(),
+            ...(locator !== undefined ? { locator } : {}),
+        });
+    } catch {
+        return undefined;
     }
 }
 
@@ -520,6 +550,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                           ...(planPreview !== undefined ? { planPreview } : {}),
                           ...resolveOutputLogConfig(context.spurConfig ?? null),
                       });
+            // Escalation packets (task 0709): project the canonical packet on
+            // trip wires and terminal failures. Advisory — construction never
+            // aborts the run, and projection failure cannot erase the failure.
+            const escalationSink = await makeEscalationPacketSink(bus, context);
             if (humanProgress) {
                 context.output.write(`Run: ${runId}`);
                 if (planPreview !== undefined) context.output.write(planPreview);
@@ -635,6 +669,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 heartbeats.clear();
                 await traceWriter?.flush();
                 runLog?.close();
+                await escalationSink?.flush();
                 await ledger.flush();
                 ledger.unsubscribe();
                 steeringInput?.close();
@@ -688,6 +723,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             // SAFETY: the same EventBus instance is bridged as the system-event ledger (structurally identical
             // nominal types; ADR-044 event bridge).
             const ledger = await attachSystemEventLedger(bus as unknown as SystemEventBus, context);
+            // Escalation packets (task 0709): resumed runs project the same
+            // canonical packet on terminal failure; idempotent per run.
+            const escalationSink = await makeEscalationPacketSink(bus, context);
             const svc = makeSvc(json, bus);
             try {
                 let targetId = runId;
@@ -737,6 +775,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
             } finally {
+                await escalationSink?.flush();
                 await ledger.flush();
                 ledger.unsubscribe();
             }
@@ -775,11 +814,13 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             const result = logsOnly ? undefined : await svc.clean(minutes, dryRun);
             const retentionDays = resolveWorkflowLogRetentionDays(context.spurConfig ?? null);
             const logResult = await svc.cleanRunLogs(retentionDays, dryRun);
+            const checkpointResult = logsOnly ? undefined : await svc.cleanCheckpoints(retentionDays, dryRun);
             if (options.json) {
                 context.output.write(
-                    toEnvelopeJson(logsOnly ? logResult : { ...result, logs: logResult }, {
-                        enveloped: options.jsonEnvelope,
-                    }),
+                    toEnvelopeJson(
+                        logsOnly ? logResult : { ...result, logs: logResult, checkpoints: checkpointResult },
+                        { enveloped: options.jsonEnvelope },
+                    ),
                 );
             } else {
                 if (result !== undefined) {
@@ -806,6 +847,23 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 }
                 for (const failure of logResult.failures) {
                     context.output.error(`Failed to remove run log ${failure.path}: ${failure.error}`);
+                }
+                if (checkpointResult !== undefined) {
+                    const cpVerb = dryRun ? 'Would reclaim' : 'Reclaimed';
+                    if (checkpointResult.reclaimed.length === 0) {
+                        context.output.write(`No expired terminal checkpoints older than ${retentionDays}d.`);
+                    } else {
+                        context.output.write(
+                            `${cpVerb} ${checkpointResult.reclaimed.length} expired terminal checkpoint(s) (>${retentionDays}d):\n` +
+                                checkpointResult.reclaimed.map((c) => `  ${c.name} (age ${c.age})`).join('\n'),
+                        );
+                    }
+                    for (const skip of checkpointResult.skipped) {
+                        context.output.write(`  kept ${skip.name}: ${skip.reason}`);
+                    }
+                    for (const failure of checkpointResult.failures) {
+                        context.output.error(`Failed to remove checkpoint ${failure.path}: ${failure.error}`);
+                    }
                 }
             }
         });

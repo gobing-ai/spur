@@ -206,11 +206,105 @@ export interface AgentRoleOverride {
  * `tier` (0343): declare `cheap | standard | capable-1 | capable-2 | capable-3`.
  * Never invent capable-2/3 via inference — only declare those explicitly.
  */
+// ---- Executor capability attestation (task 0706) ----
+
+/**
+ * Closed capability axes (0706 R1): what the native platform enforces around a
+ * dispatched child process. Deliberately independent of the model `tier` —
+ * tier is a cost/quality signal and must never imply a permission (0706 Q&A).
+ */
+export const EXECUTION_CAPABILITY_AXES = [
+    'fsRead',
+    'fsWrite',
+    'networkEgress',
+    'processSpawn',
+    'externalMutationApproval',
+] as const;
+
+/** A closed capability axis id. */
+export type ExecutionCapabilityAxis = (typeof EXECUTION_CAPABILITY_AXES)[number];
+
+/**
+ * Observed enforcement state of one axis (0706 R2). The ordering that matters
+ * is monotonic satisfaction: `enforced` satisfies any requirement, `available`
+ * satisfies availability-only requirements, `unavailable`/`unknown` satisfy
+ * nothing. Missing data resolves to `unknown` — never a permissive default.
+ */
+export const EXECUTION_CAPABILITY_STATES = ['enforced', 'available', 'unavailable', 'unknown'] as const;
+
+/** An observed enforcement state. */
+export type ExecutionCapabilityState = (typeof EXECUTION_CAPABILITY_STATES)[number];
+
+/** Who asserted a capability fact (0706 R2/R7). `unattested` = no data. */
+export const EXECUTION_CAPABILITY_PROVENANCES = ['native-known', 'operator-configured', 'unattested'] as const;
+
+/** A capability provenance id. */
+export type ExecutionCapabilityProvenance = (typeof EXECUTION_CAPABILITY_PROVENANCES)[number];
+
+/** One axis attestation: state plus the provenance that asserts it. */
+export const ExecutionCapabilityAttestationSchema = z.object({
+    state: z.enum(EXECUTION_CAPABILITY_STATES),
+    provenance: z.enum(EXECUTION_CAPABILITY_PROVENANCES),
+});
+
+/** One axis attestation. */
+export type ExecutionCapabilityAttestation = z.infer<typeof ExecutionCapabilityAttestationSchema>;
+
+/**
+ * Executor-side attestation block (0706 R1/R3): closed, versioned vocabulary.
+ * Partial axis maps are valid — any axis absent here resolves to `unknown`
+ * at comparison time (0706 R2).
+ */
+export const ExecutionCapabilitiesSchema = z.object({
+    version: z.literal(1),
+    // .partial(): Zod v4 record-with-enum-keys is exhaustive by default; the
+    // contract here is explicitly partial — undeclared axes resolve to `unknown`
+    // at comparison time (0706 R2).
+    axes: z.partialRecord(z.enum(EXECUTION_CAPABILITY_AXES), ExecutionCapabilityAttestationSchema),
+});
+
+/** Executor-side attestation block. */
+export type ExecutionCapabilities = z.infer<typeof ExecutionCapabilitiesSchema>;
+
+/**
+ * Stage-side minimum requirement per axis (0706 R4): the least state that
+ * satisfies the stage. `enforced` demands the control be enforced; `available`
+ * demands at least availability. `unknown` can never satisfy either.
+ */
+export const EXECUTION_CAPABILITY_REQUIREMENTS = ['available', 'enforced'] as const;
+
+/** A stage-side capability requirement level. */
+export type ExecutionCapabilityRequirement = (typeof EXECUTION_CAPABILITY_REQUIREMENTS)[number];
+
+/** `agent.run` `requiresCapabilities` option shape (0706 R4) — axis → minimum state. Partial: an action declares only the axes it requires. */
+export const RequiresCapabilitiesSchema = z.partialRecord(
+    z.enum(EXECUTION_CAPABILITY_AXES),
+    z.enum(EXECUTION_CAPABILITY_REQUIREMENTS),
+);
+
+/** `agent.run` `requiresCapabilities` option. */
+export type RequiresCapabilities = z.infer<typeof RequiresCapabilitiesSchema>;
+
+/**
+ * Schema for a single named executor profile under `agent.executors`.
+ *
+ * An executor pairs a canonical coding-agent (`agent`) with an optional opaque
+ * `model` override. `name` is the selector key referenced from `agent.default`
+ * and stage-registry model_policy (`default-by-phase` removed in task 0452).
+ * `agent`/`model` are validated as non-empty strings here; canonicalization and
+ * usability checks happen at resolution time.
+ *
+ * `tier` (0343): declare `cheap | standard | capable-1 | capable-2 | capable-3`.
+ * Never invent capable-2/3 via inference — only declare those explicitly.
+ * `executionCapabilities` (0706) is orthogonal to `tier`: it attests what the
+ * native platform enforces, not model quality.
+ */
 export const AgentExecutorConfigSchema = z.object({
     name: z.string().min(1),
     agent: z.string().min(1),
     model: z.string().min(1).optional(),
     tier: executorCapabilityTierSchema.optional(),
+    executionCapabilities: ExecutionCapabilitiesSchema.optional(),
 });
 
 /** A single executor profile entry. */

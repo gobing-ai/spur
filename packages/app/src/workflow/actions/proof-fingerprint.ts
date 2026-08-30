@@ -1,6 +1,8 @@
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import type { FileSystem, ProcessExecutor } from '@gobing-ai/ts-runtime';
+import type { WorkflowObservabilityBus, WorkflowTripwireFiredEvent } from '../observability';
 import { computeProofInputFingerprint } from '../proof-input-fingerprint';
+import { evaluateTripWires } from '../tripwire';
 
 const KIND = 'proof.fingerprint';
 const VAR_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -42,6 +44,11 @@ export class ProofFingerprintActionRunner implements ActionRunner {
     constructor(
         private readonly fileSystem: FileSystem,
         private readonly processExecutor?: ProcessExecutor,
+        // 0708 R4: when composed with the observability bus, a fingerprint
+        // mismatch emits the canonical `workflow.tripwire.fired` event
+        // (policy proof-invalidated) at this proof safe boundary before the
+        // existing failure semantics run.
+        private readonly observabilityBus?: WorkflowObservabilityBus,
     ) {}
 
     async execute(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
@@ -71,6 +78,38 @@ export class ProofFingerprintActionRunner implements ActionRunner {
 
         const expected = typeof options.expect === 'string' ? options.expect.trim() : '';
         if (expected !== '' && expected !== digest) {
+            // 0708 R2/R4: proof-state invalidation is a closed-catalog trip
+            // wire — emit the bounded canonical event, then fail through the
+            // existing action-failure semantics (the mismatch return below).
+            const taskWbs = String(context.vars.wbs ?? '');
+            const tripwire = evaluateTripWires([
+                {
+                    policy: 'proof-invalidated',
+                    observed: `proof inputs changed after the verdict was established: expected ${expected}, got ${digest}`,
+                    threshold: `expected ${expected}`,
+                    evidenceRef: `proof.fingerprint var=${varName}`,
+                },
+            ]);
+            if (tripwire.fired && this.observabilityBus !== undefined) {
+                const tripwireEvent: WorkflowTripwireFiredEvent = {
+                    schemaVersion: 1,
+                    eventId: crypto.randomUUID(),
+                    runId: context.runId,
+                    at: new Date().toISOString(),
+                    severity: 'warning',
+                    node: context.stateOrNodeId,
+                    kind: KIND,
+                    policy: { id: tripwire.policy?.id ?? 'unknown', version: tripwire.policy?.version ?? 0 },
+                    response: tripwire.policy?.response ?? 'fail',
+                    observed: tripwire.observed ?? '',
+                    ...(tripwire.threshold !== undefined ? { threshold: tripwire.threshold } : {}),
+                    actionId: context.actionId ?? `${context.runId}:${context.stateOrNodeId}`,
+                    ...(taskWbs !== '' ? { task: taskWbs } : {}),
+                    evidenceRefs: tripwire.evidenceRef !== undefined ? [tripwire.evidenceRef] : [],
+                    nextDecision: tripwire.policy?.nextDecision ?? 'operator review required',
+                };
+                void this.observabilityBus.emit('workflow.tripwire.fired', tripwireEvent);
+            }
             return {
                 ok: false,
                 error:

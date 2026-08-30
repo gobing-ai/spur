@@ -1,6 +1,7 @@
 import { HISTORY_ARTIFACT_SCHEMA_VERSION, type HistoryArtifact } from './artifact';
 import { formatSummary } from './costs';
 import type { AnalyticsSummary } from './types';
+import type { VerifiedOutcomeStat } from './verified-outcome';
 
 /**
  * An artifact whose `schemaVersion` the renderer does not understand. Carries the
@@ -185,8 +186,42 @@ export function renderReport(artifact: HistoryArtifact): string {
     lines.push(...renderBySession(artifact));
     lines.push('');
     lines.push(...renderCoverage(artifact));
+    if (artifact.verifiedOutcome) lines.push('', ...renderVerifiedOutcome(artifact.verifiedOutcome));
 
     return lines.join('\n');
+}
+
+/**
+ * Render the verified-outcome section (0712). Unmeasured values render `n/a`,
+ * never `0` (R5); rates are percentages; coverage is always shown when the
+ * measured-cost metric is present so absence cannot masquerade as zero (R4).
+ */
+export function renderVerifiedOutcome(stat: VerifiedOutcomeStat): string[] {
+    const pct = (v: number | null): string => (v === null ? 'n/a' : `${(v * 100).toFixed(1)}%`);
+    const lines: string[] = [];
+    lines.push('Verified outcome');
+    lines.push(`  denominator (tasks with pipeline run-links): ${stat.taskDenominator}`);
+    lines.push(
+        `  verified results: ${stat.verifiedResults} (${pct(stat.verifiedRate)}) · ` +
+            `without correction: ${stat.verifiedWithoutCorrection} (${pct(stat.verifiedWithoutCorrectionRate)})`,
+    );
+    lines.push(
+        `  corrections: ${stat.correctionCount} (${pct(stat.correctionRate)}) · ` +
+            `retry-exhausted runs: ${stat.retryExhaustedCount}`,
+    );
+    lines.push(
+        `  time to verified: ${stat.timeToVerified.count} measured · ` +
+            `mean ${stat.timeToVerified.meanMs === null ? 'n/a' : `${Math.round(stat.timeToVerified.meanMs)}ms`} · ` +
+            `max ${stat.timeToVerified.maxMs === null ? 'n/a' : `${Math.round(stat.timeToVerified.maxMs)}ms`}`,
+    );
+    lines.push(
+        `  measured tokens per verified result: ` +
+            `${stat.measuredTokensPerVerifiedResult === null ? 'n/a' : Math.round(stat.measuredTokensPerVerifiedResult)} ` +
+            `(coverage ${stat.costCoverage.covered}/${stat.costCoverage.total})`,
+    );
+    const exclusions = Object.entries(stat.excludedReasons).filter(([, n]) => n > 0);
+    lines.push(`  excluded: ${exclusions.length === 0 ? 'none' : exclusions.map(([k, n]) => `${k}=${n}`).join(', ')}`);
+    return lines;
 }
 
 /**

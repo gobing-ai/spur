@@ -95,3 +95,13 @@ Verdict `PASS` sourced from the task's pipeline verdict artifact (`# Testing →
 {"wbs":"0716","feature_id":"E31","status":"done","verdict":"PASS","timestamp":"2026-08-30T01:30:46Z"}
 {"wbs":"0717","feature_id":"E31","status":"done","verdict":"PASS","timestamp":"2026-08-30T01:30:46Z"}
 {"wbs":"0720","feature_id":"A6","status":"done","verdict":"PASS","timestamp":"2026-08-30T03:30:33Z"}
+{"wbs":"0703","feature_id":"A6","status":"done","verdict":"PASS","timestamp":"2026-08-30T06:25:06Z"}
+{"wbs":"0705","feature_id":"A6","status":"done","verdict":"PASS","timestamp":"2026-08-30T06:25:06Z"}
+{"wbs":"0706","feature_id":"A6","status":"done","verdict":"PASS","timestamp":"2026-08-30T06:25:06Z"}
+{"wbs":"0711","feature_id":"A6","status":"done","verdict":"PASS","timestamp":"2026-08-30T06:25:07Z"}
+{"wbs":"0704","feature_id":"A6","status":"done","verdict":"PASS","timestamp":"2026-08-30T06:25:07Z"}
+{"wbs":"0707","feature_id":"A6","status":"done","verdict":"PASS","timestamp":"2026-08-30T06:25:07Z"}
+{"wbs":"0710","feature_id":"A6","status":"done","verdict":"PASS","timestamp":"2026-08-30T06:25:07Z"}
+{"wbs":"0708","feature_id":"A6","status":"done","verdict":"PASS","timestamp":"2026-08-30T06:25:08Z"}
+{"wbs":"0712","feature_id":"A6","status":"done","verdict":"PASS","timestamp":"2026-08-30T06:25:08Z"}
+{"wbs":"0709","feature_id":"A6","status":"done","verdict":"PASS","timestamp":"2026-08-30T06:25:08Z"}

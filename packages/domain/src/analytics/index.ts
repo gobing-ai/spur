@@ -168,6 +168,14 @@ export {
 } from './run-cost';
 export type { AnalyticsSummary, ClaudeUsagePayload, CostRecord, ModelPricing, TokenTotals } from './types';
 export {
+    type CostCoverageStat,
+    deriveVerifiedOutcomeStat,
+    type TimeToVerifiedStat,
+    VERIFIED_OUTCOME_SCHEMA_VERSION,
+    type VerifiedOutcomeStat,
+    type VerifiedOutcomeTaskInput,
+} from './verified-outcome';
+export {
     applyWatermarkToWhere,
     buildWatermarkFilter,
     dataWindow,

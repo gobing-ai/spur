@@ -325,3 +325,58 @@ describe('workflow identity (R3)', () => {
         expect(decorateWorkflowEvent(identity, 'workflow.x', undefined)).toBeUndefined();
     });
 });
+
+describe('ObservableWorkflowAdapter usage propagation (task 0707 P1)', () => {
+    test('measured usage nested under result data reaches workflow.action.finished', async () => {
+        const { adapter } = stubAdapter();
+        const bus = new EventBus<WorkflowObservabilityEventMap>();
+        const finished: Array<{ usage?: unknown }> = [];
+        bus.on('workflow.action.finished', (e) =>
+            finished.push({ usage: (e.result as { usage?: unknown } | undefined)?.usage }),
+        );
+
+        const dec = new ObservableWorkflowAdapter(adapter, bus);
+        await dec.createRun(record);
+        const id = await dec.saveActionStart('run-1', 'implement', 'agent.run', { input: 'hi' });
+        await dec.saveActionFinalize(id, 'done', 42, true, 'agent.run', {
+            ok: true,
+            data: {
+                usage: {
+                    availability: 'measured',
+                    totalTokens: 150,
+                    inputTokens: 100,
+                    outputTokens: 50,
+                    source: 'test',
+                },
+            },
+        });
+
+        expect(finished[0]?.usage).toMatchObject({
+            availability: 'measured',
+            totalTokens: 150,
+            source: 'test',
+        });
+    });
+
+    test('envelope-level usage stays supported; missing usage degrades to honest unavailable', async () => {
+        const { adapter } = stubAdapter();
+        const bus = new EventBus<WorkflowObservabilityEventMap>();
+        const finished: Array<{ usage?: unknown }> = [];
+        bus.on('workflow.action.finished', (e) =>
+            finished.push({ usage: (e.result as { usage?: unknown } | undefined)?.usage }),
+        );
+
+        const dec = new ObservableWorkflowAdapter(adapter, bus);
+        await dec.createRun(record);
+        const id = await dec.saveActionStart('run-1', 'shell', 'shell', {});
+        await dec.saveActionFinalize(id, 'done', 10, true, 'shell', {
+            ok: true,
+            usage: { availability: 'measured', totalTokens: 7 },
+        });
+        const id2 = await dec.saveActionStart('run-1', 'shell2', 'shell', {});
+        await dec.saveActionFinalize(id2, 'done', 10, true, 'shell', { ok: true });
+
+        expect(finished[0]?.usage).toMatchObject({ availability: 'measured', totalTokens: 7 });
+        expect(finished[1]?.usage).toMatchObject({ availability: 'unavailable' });
+    });
+});

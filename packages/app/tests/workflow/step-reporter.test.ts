@@ -42,7 +42,7 @@ describe('renderStepLine', () => {
                 outcome: 'done',
                 exitCode: 0,
                 durationMs: 1000,
-                usage: 'unavailable',
+                usage: { availability: 'unavailable', unavailabilityReason: 'test' },
             }),
         ).toContain('agent done (1s) · exit 0');
     });
@@ -69,7 +69,7 @@ describe('renderStepLine', () => {
             status: 'done',
             durationMs: 4200,
             ok: true,
-            result: { usage: 'unavailable' },
+            result: { usage: { availability: 'unavailable' } },
         };
         // 0538 R2: the declared step role renders on the composed action line.
         expect(renderStepLine(started)).toBe(
@@ -185,7 +185,7 @@ describe('renderStepLine', () => {
                 outcome: 'done',
                 exitCode: 0,
                 durationMs: 1000,
-                usage: 'unavailable',
+                usage: { availability: 'unavailable', unavailabilityReason: 'test' },
             }),
         ).toContain('agent done (1s) · exit 0');
         expect(
@@ -195,7 +195,7 @@ describe('renderStepLine', () => {
                 outcome: 'failed',
                 exitCode: 1,
                 durationMs: 1000,
-                usage: 'unavailable',
+                usage: { availability: 'unavailable', unavailabilityReason: 'test' },
             }),
         ).toContain('agent failed (1s) · exit 1');
     });
@@ -209,11 +209,14 @@ describe('renderStepLine', () => {
             status: 'done',
             durationMs: 10,
             ok: true,
-            result: { usage: 'unavailable' },
+            result: { usage: { availability: 'unavailable' } },
         };
         expect(renderStepLine(finished)).toBe('[run r1] ✓ note/note (0s)');
-        const withUsage: StepEvent = { ...finished, result: { usage: '12k tokens' } };
-        expect(renderStepLine(withUsage)).toBe('[run r1] ✓ note/note (0s) · usage 12k tokens');
+        const withUsage: StepEvent = {
+            ...finished,
+            result: { usage: { availability: 'measured', totalTokens: 12000 } },
+        };
+        expect(renderStepLine(withUsage)).toBe('[run r1] ✓ note/note (0s) · usage 12000 tok');
     });
 
     test('R7: transitions render in standard invocation mode', () => {
@@ -274,7 +277,7 @@ describe('renderStepLine', () => {
             status: 'failed',
             durationMs: 1000,
             ok: false,
-            result: { error: 'command not found: spurr', usage: 'unavailable' },
+            result: { error: 'command not found: spurr', usage: { availability: 'unavailable' } },
         };
         expect(renderStepLine(event)).toContain('✗ verify/shell (1s) · command not found: spurr');
     });

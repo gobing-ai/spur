@@ -618,7 +618,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(idea).toContain('kind: doctor.probe');
         expect(idea).toContain('resolvedAgentVar: planningAgent');
         expect(idea).toContain(`agent: \${vars.planningAgent}`);
-        expect(idea).toContain('spur feature create \\"<name>\\" --json');
+        expect(idea).toContain('spur feature create "<name>" --json');
         // Soft precheck + expectFile reliability contract (fleet reliability pass).
         // 0425 R4: non-entity-scoped artifacts are ${vars.__runId}-prefixed.
         expect(idea).toContain('idea-precheck-doctor.status');

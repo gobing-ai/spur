@@ -37,7 +37,7 @@ describe('AgentExecutionLifecycle', () => {
         expect(JSON.stringify(events)).not.toContain('known-secret');
         const output = events.find((event) => event.kind === 'output');
         expect(output?.kind === 'output' ? output.chunk.length : 0).toBeLessThanOrEqual(4097);
-        expect(events.at(-1)).toMatchObject({ outcome: 'done', usage: 'unavailable' });
+        expect(events.at(-1)).toMatchObject({ outcome: 'done', usage: { availability: 'unavailable' } });
     });
 
     test('bounds the pending queue and reports dropped chunks without blocking the producer', () => {

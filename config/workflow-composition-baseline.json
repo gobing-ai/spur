@@ -15,10 +15,10 @@
             "boundary": "docs-evolution",
             "disposition": "keep",
             "callers": ["sp:spur-dev", "/sp:dev-run"],
-            "terminalStates": ["done", "failed", "cancelled"],
             "artifacts": ["docs-precheck", "docs-verdict"],
             "failurePolicy": "fail-closed",
-            "modelQueries": ["draft"],
+            "terminalStates": ["done", "failed", "cancelled"],
+            "modelQueries": ["draft", "verify"],
             "actions": {
                 "precheck:onEnter:0": {
                     "kind": "command.gate",
@@ -66,34 +66,63 @@
                 },
                 "done:onEnter:0": {
                     "kind": "shell",
-                    "invocation": "mkdir -p .spur/run && printf '%s\\n' \"{\\\"wbs\\\":\\\"$wbs\\\",\\\"verdict\\\":\\\"PASS\\\",\\\"source\\\":\\\"docs-pipeline\\\",\\\"requirements\\\":[{\\\"id\\\":\\\"docs-deliverable\\\",\\\"status\\\":\\\"MET\\\",\\\"evidence\\\":\\\"docs-pipeline record step\\\"}],\\\"acceptanceCriteria\\\":[],\\\"checks\\\":[{\\\"name\\\":\\\"docs-only\\\",\\\"status\\\":\\\"pass\\\",\\\"evidence\\\":\\\"docs-pipeline\\\"}]}\" > \".spur/run/$wbs-verdict.json\"\n",
+                    "invocation": "$spurBin task update $wbs done --no-lifecycle",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
                 "done:onEnter:1": {
+                    "kind": "note",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "verify:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": "$spurBin task path $wbs --json 2>/dev/null | jq -r \".path // .filePath // empty\" > \".spur/run/$wbs-docs-taskpath.txt\" || true; exit 0",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "verify:onEnter:1": {
+                    "kind": "file.read.into-var"
+                },
+                "verify:onEnter:2": {
+                    "kind": "proof.fingerprint",
+                    "invocation": "/sp:dev-verify ${vars.wbs} --auto --fix none --focus all"
+                },
+                "verify:onEnter:3": {
+                    "kind": "agent.run",
+                    "invocation": "/sp:dev-verify ${vars.wbs} --auto --fix none --focus all",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "verify:onEnter:4": {
+                    "kind": "shell",
+                    "invocation": "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "verify:onEnter:5": {
+                    "kind": "shell",
+                    "invocation": "V=\".spur/run/$wbs-verdict.json\"; if [ -f \"$V\" ] && [ -n \"$proofDigest\" ]; then\n  jq --arg d \"$proofDigest\" '. + {proof: {digest: $d, capturePoint: \"docs-verify-entry\"}}' \"$V\" > \"$V.tmp\" && mv \"$V.tmp\" \"$V\";\nfi; exit 0",
+                    "stateEffect": "write",
+                    "evidenceEffect": "none"
+                },
+                "verify:onEnter:6": {
                     "kind": "run.artifact",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
-                "done:onEnter:2": {
-                    "kind": "shell",
-                    "invocation": "$spurBin task update $wbs done --no-lifecycle",
-                    "stateEffect": "write",
-                    "evidenceEffect": "none"
-                },
-                "done:onEnter:3": {
-                    "kind": "note",
-                    "stateEffect": "read",
-                    "evidenceEffect": "none"
+                "verify:onEnter:7": {
+                    "kind": "proof.fingerprint",
+                    "invocation": "/sp:dev-verify ${vars.wbs} --auto --fix none --focus all"
                 }
-            }
+            },
+            "digest": "sha256:2794f4f926ecfcd69c0265214f9fcd69ab84cdd3ed53409a8af77a700fd635cc"
         },
         "idea-pipeline": {
             "definition": "config/workflows/idea-pipeline.yaml",
             "boundary": "idea-decomposition",
             "disposition": "keep",
             "callers": ["sp:spur-dev", "/sp:dev-idea"],
-            "terminalStates": ["handoff", "cancelled", "failed"],
             "artifacts": [
                 "idea-eval-report",
                 "idea-needs-design",
@@ -103,6 +132,7 @@
                 "idea-handoff"
             ],
             "failurePolicy": "fail-closed",
+            "terminalStates": ["handoff", "cancelled", "failed"],
             "modelQueries": ["discovery", "feature-create", "ac-generate", "system-design", "decompose"],
             "actions": {
                 "start:onEnter:0": {
@@ -263,16 +293,17 @@
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 }
-            }
+            },
+            "digest": "sha256:acc878217ffc7e31d31600b59d5b240588a079638d2eb0caff8c7a78524220b9"
         },
         "task-pipeline": {
             "definition": "config/workflows/task-pipeline.yaml",
             "boundary": "task-execution",
             "disposition": "canonical",
             "callers": ["sp:spur-dev", "sp:super-planner"],
-            "terminalStates": ["done", "failed", "cancelled"],
             "artifacts": ["verify-answer", "verify-verdict", "testing-section", "review-section"],
             "failurePolicy": "fail-closed",
+            "terminalStates": ["done", "failed", "cancelled"],
             "modelQueries": ["implement", "test-fix", "review", "verify"],
             "actions": {
                 "precheck:onEnter:0": {
@@ -327,14 +358,33 @@
                 },
                 "test:onEnter:0": {
                     "kind": "shell",
-                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$wbs-test-gate.status\" && LOG_FILE=\".spur/run/$wbs-test-gate.log\" && ATTEMPT_FILE=\".spur/run/$wbs-test-fix-attempt\" && echo 0 > \"$ATTEMPT_FILE\" && : > \"$LOG_FILE\" && gate_attempt=1; while [ \"$gate_attempt\" -le 5 ]; do\n  ATTEMPT_LOG=\"$LOG_FILE.attempt-$gate_attempt\";\n  sh -c \"$qualityGateCmd\" > \"$ATTEMPT_LOG\" 2>&1; gate_rc=$?;\n  gate_locked=0;\n  grep -q 'SQLiteError: database is locked' \"$ATTEMPT_LOG\" && gate_locked=1;\n  cat \"$ATTEMPT_LOG\" >> \"$LOG_FILE\";\n  rm -f \"$ATTEMPT_LOG\";\n  if [ \"$gate_rc\" -eq 0 ] || [ \"$gate_locked\" -ne 1 ] || [ \"$gate_attempt\" -ge 5 ]; then break; fi;\n  printf 'quality gate: database is locked; retrying (%s/5) in 10s\\n' \"$gate_attempt\" | tee -a \"$LOG_FILE\";\n  sleep 10;\n  gate_attempt=$((gate_attempt + 1));\ndone && cat \"$LOG_FILE\" && FINDINGS_FILE=\".spur/run/$wbs-test-gate.findings\" && set +e; grep -oE '[A-Za-z0-9_./-]+\\.[A-Za-z]+:[0-9]+' \"$LOG_FILE\" | sort -u | head -20 | tr '\\n' ' ' > \"$FINDINGS_FILE\"; set -e && if [ \"$gate_rc\" -eq 0 ]; then\n  printf 'PASS\\n' > \"$STATUS_FILE\";\nelse\n  printf 'FAIL\\n' > \"$STATUS_FILE\";\nfi && exit 0",
+                    "invocation": "$spurBin task path $wbs --json 2>/dev/null | jq -r \".path // .filePath // empty\" > \".spur/run/$wbs-taskpath.txt\" || true; sed -n \"s/^priority:[[:space:]]*//p\" \"$(cat \".spur/run/$wbs-taskpath.txt\" 2>/dev/null)\" 2>/dev/null | head -1 | tr -d \"[:space:]\" | tr \"[:lower:]\" \"[:upper:]\" > \".spur/run/$wbs-priority.txt\"; exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "write",
                     "disposition": "POLICY"
                 },
+                "test:onEnter:1": {
+                    "kind": "file.read.into-var",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "test:onEnter:2": {
+                    "kind": "file.read.into-var",
+                    "stateEffect": "read",
+                    "evidenceEffect": "none"
+                },
+                "test:onEnter:3": {
+                    "kind": "proof.fingerprint",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
+                },
+                "test:onEnter:4": {
+                    "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$wbs-test-gate.status\" && LOG_FILE=\".spur/run/$wbs-test-gate.log\" && ATTEMPT_FILE=\".spur/run/$wbs-test-fix-attempt\" && echo 0 > \"$ATTEMPT_FILE\" && : > \"$LOG_FILE\" && gate_attempt=1; while [ \"$gate_attempt\" -le 5 ]; do\n  ATTEMPT_LOG=\"$LOG_FILE.attempt-$gate_attempt\";\n  sh -c \"$qualityGateCmd\" > \"$ATTEMPT_LOG\" 2>&1; gate_rc=$?;\n  gate_locked=0;\n  grep -q 'SQLiteError: database is locked' \"$ATTEMPT_LOG\" && gate_locked=1;\n  cat \"$ATTEMPT_LOG\" >> \"$LOG_FILE\";\n  rm -f \"$ATTEMPT_LOG\";\n  if [ \"$gate_rc\" -eq 0 ] || [ \"$gate_locked\" -ne 1 ] || [ \"$gate_attempt\" -ge 5 ]; then break; fi;\n  printf 'quality gate: database is locked; retrying (%s/5) in 10s\\n' \"$gate_attempt\" | tee -a \"$LOG_FILE\";\n  sleep 10;\n  gate_attempt=$((gate_attempt + 1));\ndone && cat \"$LOG_FILE\" && FINDINGS_FILE=\".spur/run/$wbs-test-gate.findings\" && set +e; grep -oE '[A-Za-z0-9_./-]+\\.[A-Za-z]+:[0-9]+' \"$LOG_FILE\" | sort -u | head -20 | tr '\\n' ' ' > \"$FINDINGS_FILE\"; set -e && if [ \"$gate_rc\" -eq 0 ]; then\n  printf 'PASS\\n' > \"$STATUS_FILE\";\nelse\n  printf 'FAIL\\n' > \"$STATUS_FILE\";\nfi && printf 'proof-digest: %s\\n' \"$proofDigest\" >> \"$LOG_FILE\" && exit 0"
+                },
                 "test-fix:onEnter:0": {
                     "kind": "shell",
-                    "invocation": "mkdir -p .spur/run && ATTEMPT_FILE=\".spur/run/$wbs-test-fix-attempt\" && n=$(cat \"$ATTEMPT_FILE\" 2>/dev/null || echo 0) && printf '%s\\n' \"$((n + 1))\" > \"$ATTEMPT_FILE\"",
+                    "invocation": "mkdir -p .spur/run && ATTEMPT_FILE=\".spur/run/$wbs-test-fix-attempt\" && n=$(cat \"$ATTEMPT_FILE\" 2>/dev/null || echo 0) && printf '%s\\n' \"$((n + 1))\" > \"$ATTEMPT_FILE\" && if [ -f \".spur/run/$wbs-verdict.json\" ]; then\n  { echo '--- verify verdict (remediation input, task 0703 R4) ---';\n    cat \".spur/run/$wbs-verdict.json\";\n  } >> \".spur/run/$wbs-test-gate.log\";\nfi; exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 },
@@ -350,11 +400,16 @@
                     "evidenceEffect": "none"
                 },
                 "test-recheck:onEnter:0": {
-                    "kind": "shell",
-                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$wbs-test-gate.status\" && LOG_FILE=\".spur/run/$wbs-test-gate.log\" && FINDINGS_FILE=\".spur/run/$wbs-test-gate.findings\" && : > \"$LOG_FILE\" && probe_rc=0; if [ -n \"$gateProbeCmd\" ]; then\n  sh -c \"$gateProbeCmd\" > \"$LOG_FILE.probe\" 2>&1; probe_rc=$?;\n  cat \"$LOG_FILE.probe\" >> \"$LOG_FILE\";\n  rm -f \"$LOG_FILE.probe\";\nfi; if [ \"$probe_rc\" -ne 0 ]; then\n  gate_rc=$probe_rc;\nelse\n  gate_attempt=1;\n  while [ \"$gate_attempt\" -le 5 ]; do\n    ATTEMPT_LOG=\"$LOG_FILE.attempt-$gate_attempt\";\n    sh -c \"$qualityGateCmd\" > \"$ATTEMPT_LOG\" 2>&1; gate_rc=$?;\n    gate_locked=0;\n    grep -q 'SQLiteError: database is locked' \"$ATTEMPT_LOG\" && gate_locked=1;\n    cat \"$ATTEMPT_LOG\" >> \"$LOG_FILE\";\n    rm -f \"$ATTEMPT_LOG\";\n    if [ \"$gate_rc\" -eq 0 ] || [ \"$gate_locked\" -ne 1 ] || [ \"$gate_attempt\" -ge 5 ]; then break; fi;\n    printf 'quality gate: database is locked; retrying (%s/5) in 10s\\n' \"$gate_attempt\" | tee -a \"$LOG_FILE\";\n    sleep 10;\n    gate_attempt=$((gate_attempt + 1));\n  done;\nfi && cat \"$LOG_FILE\" && set +e; grep -oE '[A-Za-z0-9_./-]+\\.[A-Za-z]+:[0-9]+' \"$LOG_FILE\" | sort -u | head -20 | tr '\\n' ' ' > \"$FINDINGS_FILE\"; set -e && if [ \"$gate_rc\" -eq 0 ]; then\n  printf 'PASS\\n' > \"$STATUS_FILE\";\nelse\n  printf 'FAIL\\n' > \"$STATUS_FILE\";\nfi && exit 0",
+                    "kind": "proof.fingerprint",
                     "stateEffect": "write",
                     "evidenceEffect": "write",
                     "disposition": "POLICY"
+                },
+                "test-recheck:onEnter:1": {
+                    "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$wbs-test-gate.status\" && LOG_FILE=\".spur/run/$wbs-test-gate.log\" && FINDINGS_FILE=\".spur/run/$wbs-test-gate.findings\" && : > \"$LOG_FILE\" && probe_rc=0; if [ -n \"$gateProbeCmd\" ]; then\n  sh -c \"$gateProbeCmd\" > \"$LOG_FILE.probe\" 2>&1; probe_rc=$?;\n  cat \"$LOG_FILE.probe\" >> \"$LOG_FILE\";\n  rm -f \"$LOG_FILE.probe\";\nfi; if [ \"$probe_rc\" -ne 0 ]; then\n  gate_rc=$probe_rc;\nelse\n  gate_attempt=1;\n  while [ \"$gate_attempt\" -le 5 ]; do\n    ATTEMPT_LOG=\"$LOG_FILE.attempt-$gate_attempt\";\n    sh -c \"$qualityGateCmd\" > \"$ATTEMPT_LOG\" 2>&1; gate_rc=$?;\n    gate_locked=0;\n    grep -q 'SQLiteError: database is locked' \"$ATTEMPT_LOG\" && gate_locked=1;\n    cat \"$ATTEMPT_LOG\" >> \"$LOG_FILE\";\n    rm -f \"$ATTEMPT_LOG\";\n    if [ \"$gate_rc\" -eq 0 ] || [ \"$gate_locked\" -ne 1 ] || [ \"$gate_attempt\" -ge 5 ]; then break; fi;\n    printf 'quality gate: database is locked; retrying (%s/5) in 10s\\n' \"$gate_attempt\" | tee -a \"$LOG_FILE\";\n    sleep 10;\n    gate_attempt=$((gate_attempt + 1));\n  done;\nfi && cat \"$LOG_FILE\" && set +e; grep -oE '[A-Za-z0-9_./-]+\\.[A-Za-z]+:[0-9]+' \"$LOG_FILE\" | sort -u | head -20 | tr '\\n' ' ' > \"$FINDINGS_FILE\"; set -e && if [ \"$gate_rc\" -eq 0 ]; then\n  printf 'PASS\\n' > \"$STATUS_FILE\";\nelse\n  printf 'FAIL\\n' > \"$STATUS_FILE\";\nfi && printf 'proof-digest: %s\\n' \"$proofDigest\" >> \"$LOG_FILE\" && exit 0",
+                    "stateEffect": "write",
+                    "evidenceEffect": "write"
                 },
                 "review:onEnter:0": {
                     "kind": "agent.run",
@@ -368,38 +423,27 @@
                     "evidenceEffect": "none"
                 },
                 "verify:onEnter:0": {
-                    "kind": "agent.run",
-                    "invocation": "/sp:dev-verify ${vars.wbs} --auto --fix all --focus all",
+                    "kind": "proof.fingerprint",
                     "stateEffect": "may-write",
                     "evidenceEffect": "write"
                 },
                 "verify:onEnter:1": {
-                    "kind": "shell",
-                    "invocation": "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt",
+                    "kind": "agent.run",
+                    "invocation": "/sp:dev-verify ${vars.wbs} --auto --fix none --focus all",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
                 "verify:onEnter:2": {
                     "kind": "shell",
-                    "invocation": "$spurBin task path $wbs --json 2>/dev/null | jq -r \".path // empty\" > \".spur/run/$wbs-taskpath.txt\" || true; exit 0",
+                    "invocation": "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt",
                     "stateEffect": "read",
                     "evidenceEffect": "write"
                 },
                 "verify:onEnter:3": {
-                    "kind": "file.read.into-var",
-                    "stateEffect": "read",
-                    "evidenceEffect": "none"
-                },
-                "verify:onEnter:4": {
-                    "kind": "proof.fingerprint",
-                    "stateEffect": "read",
-                    "evidenceEffect": "none"
-                },
-                "verify:onEnter:5": {
                     "kind": "shell",
-                    "invocation": "V=\".spur/run/$wbs-verdict.json\"; if [ -f \"$V\" ] && [ -n \"$proofDigest\" ]; then jq --arg d \"$proofDigest\" \".checks += [{\\\"name\\\":\\\"proof-input-digest\\\",\\\"status\\\":\\\"pass\\\",\\\"evidence\\\":\\$d}]\" \"$V\" > \"$V.tmp\" && mv \"$V.tmp\" \"$V\"; fi; exit 0",
+                    "invocation": "V=\".spur/run/$wbs-verdict.json\"; if [ -f \"$V\" ] && [ -n \"$proofDigest\" ]; then\n  jq --arg d \"$proofDigest\" --arg g \"$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)\"\n  '. + {proof: {digest: $d, capturePoint: \"quality-gate-entry\", stages: {\n    qualityGate: {status: $g, digest: $d},\n    review: {status: \"completed\", digest: $d},\n    verification: {status: .verdict, digest: $d}}}}\n    | .checks += [{name: \"proof-input-digest\", status: \"pass\", evidence: $d}]'\n  \"$V\" > \"$V.tmp\" && mv \"$V.tmp\" \"$V\";\nfi; exit 0",
                     "stateEffect": "read",
-                    "evidenceEffect": "write"
+                    "evidenceEffect": "none"
                 },
                 "record:onEnter:0": {
                     "kind": "proof.fingerprint",
@@ -439,20 +483,21 @@
                 },
                 "done:onEnter:3": {
                     "kind": "shell",
-                    "invocation": "mkdir -p .spur/memory/sessions && echo \"checkpoint: task-pipeline done wbs=$wbs ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > .spur/memory/sessions/$wbs-checkpoint.md",
+                    "invocation": "mkdir -p .spur/memory/sessions; CP_TS=\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"; CP_COMMIT=\"$(git rev-parse HEAD 2>/dev/null || echo unknown)\"; CP_DIGEST=\"$(cut -d= -f2 .spur/run/$wbs-proofdigest.txt 2>/dev/null || echo '')\"; CP_RUN=\"$SPUR_RUN_ID\"; [ -z \"$CP_RUN\" ] && CP_RUN=\"$RUN_ID\"; printf '%s\\n' '---' 'schema_version: 1' \"session_id: $(date -u +%Y-%m-%d)-$wbs\" 'workflow: task-pipeline' \"run_id: $CP_RUN\" \"task_wbs: $wbs\" 'feature_id: \"\"' 'phase: done' 'status: done' 'last_gate: record' \"source_commit: $CP_COMMIT\" \"digest: $CP_DIGEST\" \"generated_at: $CP_TS\" \"updated_at: $CP_TS\" \"next_action: none - task $wbs complete (terminal; advisory only)\" 'artifacts:' '  - .spur/run/$wbs-verdict.json' '  - .spur/run/$wbs-test-gate.log' '---' '' '## Session Notes' '' \"Terminal checkpoint for task $wbs (task-pipeline done).\" 'Advisory only; the task file is authoritative.' > .spur/memory/sessions/$wbs-checkpoint.md; exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 }
-            }
+            },
+            "digest": "sha256:fd3a33934587a223950d869c6940a8ae219c72c6c911f37f073758f9e9555f50"
         },
         "wrapup-pipeline": {
             "definition": "config/workflows/wrapup-pipeline.yaml",
             "boundary": "task-wrapup",
             "disposition": "keep",
             "callers": ["sp:spur-dev", "/sp:dev-wrap", "/sp:dev-wrapall"],
-            "terminalStates": ["done", "skipped"],
             "artifacts": ["wrapup-learnings", "wrapup-metrics"],
             "failurePolicy": "fail-closed",
+            "terminalStates": ["done", "skipped"],
             "modelQueries": ["doc-sync"],
             "actions": {
                 "start:onEnter:0": {
@@ -508,14 +553,14 @@
                     "stateEffect": "write",
                     "evidenceEffect": "write"
                 }
-            }
+            },
+            "digest": "sha256:390621dd339709682065e8954f2d1b49a195111c8372ec83e094fe7e2e35927f"
         },
         "pr-review": {
             "definition": "config/workflows/pr-review.yaml",
             "boundary": "pr-review",
             "disposition": "keep",
             "callers": ["sp:spur-dev", "/sp:dev-pr-review"],
-            "terminalStates": ["done", "pending", "failed"],
             "artifacts": [
                 "pr-context",
                 "pr-hygiene",
@@ -527,6 +572,7 @@
                 "pr-status"
             ],
             "failurePolicy": "fail-closed",
+            "terminalStates": ["done", "pending", "failed"],
             "modelQueries": [],
             "actions": {
                 "preflight:onEnter:0": {
@@ -582,16 +628,17 @@
                     "evidenceEffect": "write",
                     "disposition": "EXT"
                 }
-            }
+            },
+            "digest": "sha256:eb3f51877647f25907ed6b660b79e4d22b3c7462ceccacc4fc251eb31bac06f0"
         },
         "basic": {
             "definition": "config/workflows/basic.yaml",
             "boundary": "generic-execution",
             "disposition": "keep",
-            "artifacts": ["fix-attempt-counter", "gate-status"],
             "callers": ["spur workflow run"],
-            "terminalStates": ["done", "failed"],
+            "artifacts": ["fix-attempt-counter", "gate-status"],
             "failurePolicy": "fail-closed",
+            "terminalStates": ["done", "failed"],
             "modelQueries": ["fix"],
             "actions": {
                 "implement:onEnter:0": {
@@ -626,16 +673,17 @@
                     "stateEffect": "read",
                     "evidenceEffect": "none"
                 }
-            }
+            },
+            "digest": "sha256:fb8ab828b9527f225368d20b08e3fc7ca4b92e6e22642a57868da193d5ebef2c"
         },
         "feature-dev": {
             "definition": "config/workflows/feature-dev.yaml",
             "boundary": "feature-umbrella",
             "disposition": "keep",
-            "artifacts": ["feature-checkpoint"],
             "callers": ["/sp:dev-runall --feature"],
-            "terminalStates": ["done", "failed"],
+            "artifacts": ["feature-checkpoint"],
             "failurePolicy": "fail-closed",
+            "terminalStates": ["done", "failed"],
             "modelQueries": ["brainstorm", "plan", "execute-tasks-auto", "execute-tasks"],
             "actions": {
                 "precheck:onEnter:0": {
@@ -691,16 +739,17 @@
                     "evidenceEffect": "write",
                     "disposition": "GLUE"
                 }
-            }
+            },
+            "digest": "sha256:e1fa6b86cb7bcad0f927cf73336996ee8ce0088b6685cebba8c8849e26029529"
         },
         "wayfinder-resolution": {
             "definition": "config/workflows/wayfinder-resolution.yaml",
             "boundary": "wayfinder-resolution",
             "disposition": "keep",
-            "artifacts": ["wayfinder-report", "resolution-status"],
             "callers": ["spur workflow run"],
-            "terminalStates": ["done", "failed", "cancelled"],
+            "artifacts": ["wayfinder-report", "resolution-status"],
             "failurePolicy": "fail-closed",
+            "terminalStates": ["done", "failed", "cancelled"],
             "modelQueries": ["investigate", "verify"],
             "actions": {
                 "precheck:onEnter:0": {
@@ -779,7 +828,8 @@
                     "stateEffect": "read",
                     "evidenceEffect": "none"
                 }
-            }
+            },
+            "digest": "sha256:ef75f70a09b67ea5905ac68aba7c3eec2b805530312ca3173fa4b8ee7275059e"
         }
     }
 }

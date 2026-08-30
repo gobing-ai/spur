@@ -142,6 +142,20 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
      * with the ISO cutoff would compare incompatible types. "Started long ago and still
      * running" is the sound, type-safe staleness signal.
      */
+    /**
+     * Every non-terminal run, regardless of age (task 0711 R5). Checkpoint
+     * reclamation keeps any checkpoint whose `run_id` appears here — a run may
+     * legitimately outlive typical staleness windows.
+     */
+    listActiveRuns(): Promise<Array<{ id: string; status: string; started_at: string }>> {
+        return this.adapter.queryAll(
+            `SELECT id, status, started_at
+             FROM runs
+             WHERE status IN ('running', 'pending')
+             ORDER BY started_at ASC`,
+        );
+    }
+
     listStaleRuns(cutoffIso: string): Promise<Array<{ id: string; status: string; started_at: string }>> {
         return this.adapter.queryAll(
             `SELECT id, status, started_at

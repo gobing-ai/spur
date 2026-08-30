@@ -375,6 +375,11 @@ with raw file writes.
 5. Surfaces that are decided-but-unbuilt are flagged as planned with their ADR pointer, and
    marked "do not invoke as if they exist".
 6. Re-synced whenever this file changes the map or process (§4.4).
+7. Deterministic size ceiling: repo-root `AGENTS.md` and `config/templates/AGENTS.md` stay at or
+   below **20480 UTF-8 bytes** (20 KiB), enforced by
+   `apps/cli/tests/agents-md-portable-alignment.test.ts` (task 0705). This byte gate guards the
+   platform load limit and is separate from rule 4's approximate instruction budget. Over
+   ceiling: cut or move content per rules 2–3, or compact via `sp:doc-evolve`.
 
 ### 6.8 This file (`99`)
 

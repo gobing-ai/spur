@@ -61,10 +61,10 @@ Tools are bound by **role**; roles are permanent, bindings evolve. This table is
 project-variable section besides Lessons — update the binding when the toolchain migrates.
 
 | Role | Current binding | Notes |
-|------|-----------------|-------|
-| Spec lifecycle — tasks | _(project tool — e.g. `spur task` or a task CLI)_ | Task files are tool-owned; edit through the tool, never the Write tool |
-| Spec lifecycle — features | _(project tool — e.g. `spur feature` or a feature CLI)_ | Same tool-owned rule |
-| Delivery harness | _(project harness — e.g. `spur`)_ | Quality gates are self-hosted through it where possible |
+| ------ | ----------------- | ------- |
+| Spec lifecycle — tasks | *(project tool — e.g. `spur task` or a task CLI)* | Task files are tool-owned; edit through the tool, never the Write tool |
+| Spec lifecycle — features | *(project tool — e.g. `spur feature` or a feature CLI)* | Same tool-owned rule |
+| Delivery harness | *(project harness — e.g. `spur`)* | Quality gates are self-hosted through it where possible |
 | Agent-facing wrappers | per-project plugin dir (e.g. `plugins/sp/`) | **Fat Skills, thin others:** skills are the SSOT for agent-facing behavior and may be arbitrarily rich; slash commands and subagents are thin wrappers of skills (every agent supports skills; command/subagent support varies) |
 
 ## 4. Common file layout
@@ -75,7 +75,7 @@ Each project's `AGENTS.md` embeds an instantiated copy of this table (§4.4). A 
 **one** doc; other docs link to it, never restate it.
 
 | Doc | Owns the question | Authority | Read / edit when |
-|-----|-------------------|-----------|------------------|
+| ----- | ------------------- | ----------- | ------------------ |
 | `docs/00_ADR.md` | **WHY** — which cross-cutting decision was made, and the one-line reason | **Authoritative** (wins all content) | Read before any structural change; add a dated entry before diverging from a decision |
 | `docs/01_PRD.md` | **WHAT** — product vision, users, scope (in / out / deferred) | **Authoritative on scope** | Read before adding a command/feature; edit when scope changes |
 | `docs/02_ROADMAP.md` | **WHEN** — phases, current vs deferred, sequencing | Derived | Read to place work in a phase; edit when phase status changes |
@@ -97,7 +97,7 @@ Each project's `AGENTS.md` embeds an instantiated copy of this table (§4.4). A 
 ### 4.2 Working layers (outside the authority chain)
 
 | Location | Purpose | Rules |
-|----------|---------|-------|
+| ---------- | --------- | ------- |
 | `docs/plans/YYYY-MM-DD-<topic>.md` | Dated working documents: research, triage, design discussions, decision records-in-progress | They **record**, they do not **govern**. Once concluded, immutable except dated correction sections. Decisions they reach must be promoted into `00`–`05` to take effect |
 | `docs/tasks/` | Task files | Tool-owned (§3). Never edited with raw file writes |
 | other `docs/` folders | Optional scratch (analysis, refactor notes, ...) | Nothing in the authority chain may depend on them |
@@ -190,7 +190,7 @@ it. Each trigger below has a stable ID (referenced by doc frontmatter `sync:` li
 names the docs that must be touched **in the same commit / same change**:
 
 | ID | When this happens | Touch (same change) |
-|----|-------------------|---------------------|
+| ---- | ------------------- | --------------------- |
 | T1 | New cross-cutting decision, or reversal of one | `00` **first** (dated entry), then `03` mechanism, `01` if scope shifts |
 | T2 | A code change would contradict an existing ADR | **Stop.** Add the superseding/amending ADR entry first — never silently diverge |
 | T3 | Command, flag, config key, env var, schema, or DTO added/changed | `04` + the `AGENTS.md` surface block |
@@ -361,6 +361,11 @@ with raw file writes.
 5. Surfaces that are decided-but-unbuilt are flagged as planned with their ADR pointer, and
    marked "do not invoke as if they exist".
 6. Re-synced whenever this file changes the map or process (§4.4).
+7. Deterministic size ceiling: repo-root `AGENTS.md` and `config/templates/AGENTS.md` stay at or
+   below **20480 UTF-8 bytes** (20 KiB), enforced by
+   `apps/cli/tests/agents-md-portable-alignment.test.ts` (task 0705). This byte gate guards the
+   platform load limit and is separate from rule 4's approximate instruction budget. Over
+   ceiling: cut or move content per rules 2–3, or compact via `sp:doc-evolve`.
 
 ### 6.8 This file (`99`)
 
@@ -420,35 +425,35 @@ if it recurs, a new rule in §6.
 
 ### Lessons for `docs/00_ADR.md`
 
-_(empty — add lessons as the project evolves)_
+*(empty — add lessons as the project evolves)*
 
 ### Lessons for `docs/01_PRD.md`
 
-_(empty — add lessons as the project evolves)_
+*(empty — add lessons as the project evolves)*
 
 ### Lessons for `docs/02_ROADMAP.md`
 
-_(empty — add lessons as the project evolves)_
+*(empty — add lessons as the project evolves)*
 
 ### Lessons for `docs/03_ARCHITECTURE.md`
 
-_(empty — add lessons as the project evolves)_
+*(empty — add lessons as the project evolves)*
 
 ### Lessons for `docs/04_DESIGN.md`
 
-_(empty — add lessons as the project evolves)_
+*(empty — add lessons as the project evolves)*
 
 ### Lessons for `docs/05_FEATURES.md`
 
-_(empty — add lessons as the project evolves)_
+*(empty — add lessons as the project evolves)*
 
 ### Lessons for `AGENTS.md`
 
-_(empty — add lessons as the project evolves)_
+*(empty — add lessons as the project evolves)*
 
 ### Lessons for this file (`99`)
 
-_(empty — add lessons as the project evolves)_
+*(empty — add lessons as the project evolves)*
 
 ## 9. Bootstrapping a new project
 

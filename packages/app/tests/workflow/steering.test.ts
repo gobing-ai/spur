@@ -152,6 +152,42 @@ describe('WorkflowSteeringController', () => {
             reason: 'boundary timeout defaulted to continue',
         });
     });
+
+    test('boundary timeout fails closed once the retry policy is exhausted (0708 R3)', async () => {
+        const acks: Array<{ actor: string; operation: string; reason?: string }> = [];
+        const controller = new WorkflowSteeringController((ack) =>
+            acks.push({
+                actor: ack.actor,
+                operation: ack.operation,
+                ...(ack.reason !== undefined ? { reason: ack.reason } : {}),
+            }),
+        );
+        controller.begin('run-6', 'action-6', {
+            boundary: true,
+            timeoutMs: 5,
+            retry: { idempotent: true, maxAttempts: 2 },
+        });
+
+        // Exhaust the retry budget: attempt 1 fails, operator retries (attempt 2),
+        // attempt 2 fails, further retries are rejected as exhausted.
+        const first = controller.boundary(false);
+        expect(controller.submit(command(controller, 'retry'))).toMatchObject({ accepted: true });
+        await expect(first).resolves.toEqual({ operation: 'retry' });
+        controller.nextAttempt();
+        const second = controller.boundary(false);
+        expect(controller.submit(command(controller, 'retry'))).toMatchObject({
+            accepted: false,
+            reason: 'retry limit reached',
+        });
+
+        // With no operator present, the timeout default must NOT be continue:
+        // the boundary settles abort with the fail-closed trip-wire reason.
+        await expect(second).resolves.toMatchObject({
+            operation: 'abort',
+            reason: expect.stringContaining('retry-exhausted'),
+        });
+        expect(acks).toContainEqual(expect.objectContaining({ actor: 'system-timeout', operation: 'abort' }));
+    });
 });
 
 describe('parseSteeringPolicy', () => {

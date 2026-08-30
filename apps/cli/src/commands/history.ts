@@ -8,8 +8,10 @@ import {
     HistoryService,
     parseHistoryRefreshContext,
     resolveArtifactPath,
+    resolvePlanningFolders,
     runHistoryReport,
     type SystemEventBus,
+    TaskLocator,
 } from '@gobing-ai/spur-app';
 import { formatSummary, stalenessBanner } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
@@ -51,7 +53,27 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
     const noun = program.command('history').summary('import and analyze coding-agent history');
     // One construction site for the service context (J8 R2): `agentConfig` feeds the
     // analyze artifact's executor ladderSnapshot; the import path never reads it.
-    const makeService = () => new HistoryService({ getDb: () => context.getDb(), agentConfig: context.agentConfig });
+    // `taskLocator` feeds the verified-outcome fold (0712) — absent when folder
+    // resolution fails, so analyze degrades to omitting the additive block.
+    const makeService = async () => {
+        let taskLocator: { findByWbs(wbs: string): Promise<{ filePath: string } | null> } | undefined;
+        try {
+            const { foldersConfig } = await resolvePlanningFolders(context.fs);
+            taskLocator = TaskLocator.forDirs(context.fs, [
+                context.fs.resolve(foldersConfig.active_folder),
+                ...Object.keys(foldersConfig.folders ?? {}).map((f) => context.fs.resolve(f)),
+            ]);
+        } catch {
+            taskLocator = undefined;
+        }
+        return new HistoryService({
+            getDb: () => context.getDb(),
+            agentConfig: context.agentConfig,
+            ...(taskLocator ? { taskLocator } : {}),
+            fs: context.fs,
+            cwd: context.cwd,
+        });
+    };
     noun.command('import')
         .description(
             'Import agent conversation JSONL. `--source all` fans out across all sources with ' +
@@ -138,7 +160,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                 return;
             }
 
-            const svc = makeService();
+            const svc = await makeService();
 
             const fanOut = await svc.importAll({
                 sources: source === 'all' ? undefined : [source],
@@ -174,7 +196,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.jsonArtifact)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
-            const svc = makeService();
+            const svc = await makeService();
             const source = options.source ?? 'all';
             const selector = {
                 since: options.since || null,
@@ -277,7 +299,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .option('--mode <name>', 'Render the artifact as a .md sidecar in this mode after analyze (e.g. forensics)')
         .action(async (options) => {
-            const svc = makeService();
+            const svc = await makeService();
             const sourceTimeout = Number.parseInt(options.sourceTimeout ?? '600000', 10) || 600_000;
 
             // Task 0717: queued child refresh context. Parsed BEFORE the bus/ledger so a

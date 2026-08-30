@@ -7,7 +7,7 @@
 ## Target workflow inventory
 
 | Workflow | Lifecycle boundary | Disposition |
-|---|---|---|
+| --- | --- | --- |
 | `task-pipeline.yaml` | one task from precheck through recorded completion | canonical; absorb only a proof-preserving pipeline2 delta |
 | ~~`task-pipeline2.yaml`~~ | *(deleted 2026-08-20)* | **removed under ADR-076** — unreferenced duplicate declaring a 5th model query against the canonical pipeline's 4; deleted rather than promoted |
 | `planning-pipeline.yaml` | feature planning front half | absorb into the canonical idea/dev-plan path, then delete after caller parity |
@@ -22,7 +22,7 @@ workflow definitions remain regression fixtures or examples unless a later ADR c
 ### Migration status (task 0604)
 
 | Wave | Scope | Status |
-|---|---|---|
+| --- | --- | --- |
 | D5-I | wrap-up metrics off the model hop | landed |
 | D5-J | docs precheck onto soft `command.gate` | landed |
 | D5-K | planning callers absorbed into idea/dev-plan | landed; `planning-pipeline.yaml` retained until ADR-072 is accepted |
@@ -113,7 +113,7 @@ The key is derived after extensions resolve and is independent of a persisted at
 action declares two independent effects:
 
 | Field | Value | Contract |
-|---|---|---|
+| --- | --- | --- |
 | `stateEffect` | `read` | cannot modify repository files or normative task/feature inputs |
 | `stateEffect` | `write` | expected to modify repository files or normative task/feature inputs |
 | `stateEffect` | `may-write` | may modify repository files or normative task/feature inputs |
@@ -167,7 +167,7 @@ Contract:
   from source, so a single-token rule made every real gate in the shipped pipelines
   inexpressible. Splitting is safe precisely because no shell is involved: each token becomes one
   literal argv entry. An `executable` containing shell metacharacters
-  (`; & | < > $ ` ( ) { } [ ] ! * ? ~ # " '` or a newline) is rejected before execution — that is
+  (`; & | < > $` ( ) { } [ ] ! * ? ~ # " '` or a newline) is rejected before execution — that is
   the ban this action kind actually enforces.
 - The runner maps directly to `ProcessExecutor.run({ command: executable, args })`; it never calls
   `/bin/sh -c` and does not accept a `command` option.
@@ -236,10 +236,14 @@ bounded `--fix all` remediation hop, then returns to the structured quality gate
 `--fix none` verification on a newly captured digest. Completion re-captures the digest before
 record/done; a mismatch fails closed.
 
-The current task pipeline cannot claim this proof state because its verification action uses
-`--fix all`. The former pipeline2 also ran an editing-capable residual sweep after the verdict and
-was deleted under ADR-076. Task 0703 must make the canonical graph observe-only before ADR-071 can
-move from accepted design to built.
+The task pipeline implements this proof state as of task 0703 (ADR-071 built half): verification
+runs `--fix none` with a live digest compare at verify entry, remediation loops once through the
+bounded `verify → test-fix` edge (budget shared with the quality gate), `test-recheck` re-captures
+the digest, and the verdict artifact's proof block names one digest across quality, review, and
+verification. The `verify → record` and `record → done` guards fail closed on missing, malformed,
+or mismatched proof evidence. The docs pipeline still runs `--fix all` with a synthetic PASS and
+cannot claim the proof state until task 0704 lands; the composition baseline pins the task
+pipeline's `--fix none` invocation so a regression fails deterministically (R7).
 
 ## Run-definition binding
 
@@ -255,7 +259,7 @@ Detailed metadata and projection shapes are in
 ## Exit and promotion gates
 
 | Boundary | Required exit evidence |
-|---|---|
+| --- | --- |
 | task execution | quality, review, and `--fix none` verify PASS on one current digest; task structural gate PASS |
 | docs evolution | doc-evolve contract verification plus repository doc checks |
 | wrap-up | required run artifacts recorded and lifecycle checks PASS |

@@ -1,5 +1,6 @@
 import type { AgentRunCorrelation } from '@gobing-ai/ts-ai-runner';
 import type { ProcessOutputChunk } from '@gobing-ai/ts-runtime';
+import { type NormalizedAgentUsage, unavailableAgentUsage } from '../services/agent-usage';
 
 const MAX_CHUNK_CHARS = 4096;
 const MAX_PENDING_CHUNKS = 64;
@@ -18,6 +19,15 @@ export interface AgentExecutionBase {
     readonly pid?: number;
     /** Producer-owned observability severity. */
     readonly severity?: 'info' | 'warning' | 'error';
+}
+
+/** Bounded capability attestation evidence entry (task 0706 R7). Mirrors the shared compare module's evaluation entry. */
+export interface CapabilityEvidenceEntry {
+    axis: string;
+    required?: 'available' | 'enforced';
+    state: 'enforced' | 'available' | 'unavailable' | 'unknown';
+    provenance: 'native-known' | 'operator-configured' | 'unattested';
+    satisfied: boolean;
 }
 
 /**
@@ -39,6 +49,13 @@ export interface AgentRoutingAttribution {
     /** Resolved model override (0679 R7). Absent when the executor pins no model —
      * recorded absent rather than a placeholder. */
     model?: string;
+    /**
+     * Capability attestation evidence for this dispatch (task 0706 R7): the
+     * stage's declared requirements evaluated against the resolved executor's
+     * attestation, closed-axis ordered. Bounded identifiers/states only.
+     * Present only when the stage declared `requiresCapabilities`.
+     */
+    capabilities?: readonly CapabilityEvidenceEntry[];
 }
 
 /** Emitted after agent/model/invocation resolution and before process dispatch. */
@@ -79,7 +96,12 @@ export interface AgentExecutionFinishedEvent extends AgentExecutionBase {
     readonly exitCode: number | null;
     readonly durationMs: number;
     readonly signal?: string;
-    readonly usage: 'unavailable';
+    /**
+     * Normalized usage (task 0707 R3): `unavailable` stays `unavailable` — the
+     * dispatch lifecycle has no structured usage source today, so the producer
+     * emits the honest unavailable shape and never a zero.
+     */
+    readonly usage: NormalizedAgentUsage;
     readonly reason?: string;
 }
 
@@ -128,6 +150,8 @@ interface LifecycleFinish {
     durationMs: number;
     signal?: string;
     reason?: string;
+    /** Structured usage when the dispatch layer measured one (0707 R3); else unavailable. */
+    usage?: NormalizedAgentUsage;
 }
 
 /**
@@ -229,7 +253,7 @@ export class AgentExecutionLifecycle {
             exitCode: detail.exitCode,
             durationMs: detail.durationMs,
             ...(detail.signal !== undefined ? { signal: detail.signal } : {}),
-            usage: 'unavailable',
+            usage: detail.usage ?? unavailableAgentUsage(),
             ...(detail.reason !== undefined ? { reason: redactAndBound(detail.reason, this.secrets, 512) } : {}),
         });
     }

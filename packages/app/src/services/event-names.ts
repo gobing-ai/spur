@@ -320,6 +320,8 @@ const BASE_CATALOG = [
     baseEvent('workflow.run.done', 'workflow', 'workflow-run'),
     baseEvent('workflow.run.failed', 'workflow', 'workflow-run'),
     baseEvent('workflow.run.finalized', 'workflow', 'workflow-run'),
+    baseEvent('workflow.escalation.created', 'workflow', 'workflow-run', 'redacted'),
+    baseEvent('workflow.escalation.projection_failed', 'workflow', 'workflow-run', 'metadata-only'),
     baseEvent('workflow.run.paused', 'workflow', 'workflow-run'),
     baseEvent('workflow.run.resumed', 'workflow', 'workflow-run'),
     baseEvent('workflow.run.reseeded', 'workflow', 'workflow-run'),
@@ -1079,6 +1081,31 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             return name !== '' ? `[workflow] ${name} finalized` : '[workflow] finalized';
         },
         outcome: derivedFrom('status'),
+    },
+    'workflow.escalation.created': {
+        description: 'A canonical escalation packet was projected from existing run evidence.',
+        fields: [
+            field('runId', 'Run'),
+            field('workflowName', 'Workflow'),
+            field('fingerprint', 'Fingerprint'),
+            field('artifactPath', 'Artifact'),
+            field('decision', 'Decision'),
+        ],
+        summary: (input) => {
+            const name = humanWorkflowTitle(input);
+            const decision =
+                typeof at(input.data, 'decision') === 'string' ? ` — ${String(at(input.data, 'decision'))}` : '';
+            return name !== ''
+                ? `[workflow] escalation packet created (${name}${decision})`
+                : `[workflow] escalation packet created${decision}`;
+        },
+        outcome: derivedFrom('decision'),
+    },
+    'workflow.escalation.projection_failed': {
+        description: 'Escalation packet projection failed; the original failure is preserved untouched.',
+        fields: [field('runId', 'Run'), field('workflowName', 'Workflow'), field('error', 'Error')],
+        summary: () => '[workflow] escalation packet projection failed',
+        outcome: derivedFrom('error'),
     },
     'workflow.run.paused': {
         description: 'A workflow run paused at a step, naming the step when available.',

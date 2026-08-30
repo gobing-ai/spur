@@ -612,28 +612,47 @@ CLI-gated corpus artifact. The `wrapup-pipeline.yaml` `learning-capture` step wr
 ## Session Checkpoint Convention
 
 Long-running pipelines write resumable checkpoints to `.spur/memory/sessions/` so an interrupted
-run can be resumed. The convention is documented here; the actual checkpoint write/read actions
-in pipeline YAMLs are added in Phase 4 (task 0171).
+run can be resumed. The canonical frontmatter schema below is parsed by
+`packages/app/src/workflow/checkpoint-contract.ts` (task 0711): a checkpoint that does not match
+it is ignored by routing/cleanup (safe fallthrough) and never reclaimed.
 
-**Format:** Markdown file with YAML frontmatter:
+**Format:** Markdown file with YAML frontmatter (canonical field set, task 0711):
 
 ```yaml
 ---
+schema_version: 1
 session_id: "2026-07-01-0167"
 workflow: "task-pipeline"
 run_id: "wf_..."
 task_wbs: "0167"
 feature_id: "I"
 phase: "verify"
+status: "running"
 last_gate: "review-approved"
-timestamp: "2026-07-01T18:30:00Z"
+source_commit: "<full 40-hex HEAD at write time>"
+digest: "sha256:..."
+generated_at: "2026-07-01T18:30:00Z"
+updated_at: "2026-07-01T18:30:00Z"
 next_action: "run verification"
+artifacts:
+  - .spur/run/0167-verdict.json
 ---
 
 ## Session Notes
 
 <free-form markdown: what was done, what's pending, any blockers>
 ```
+
+Field semantics (enforced by `parseCheckpointMetadata` / `checkpointStaleness`):
+
+- `schema_version` must be `1`; any other value → ignored.
+- `status` is one of `running|pending|approved|done|failed|cancelled|skipped`. A terminal status
+  (`done|failed|cancelled|skipped`) marks the checkpoint terminal — never resumed, only cleaned
+  up once retention expires.
+- `source_commit` pins repository HEAD at write time; drift staleness is reported, not hidden.
+- `artifacts` lists referenced run files; a missing artifact makes the checkpoint stale.
+- Writers: write after every HITL gate decision, phase transition, and terminal state; overwrite
+  the same file on resume (`session_id` = `<date>-<wbs-or-feature>`).
 
 **Write checkpoints after:**
 
@@ -653,6 +672,10 @@ next_action: "run verification"
 - **Not CLI-gated.** Checkpoint files are written directly by the pipeline's checkpoint action
   (a `shell` step that writes to `.spur/memory/sessions/<session-id>.md`). They do not go through
   `spur task update`.
+- **Canonical schema.** The frontmatter above is the contract (task 0711 R1). Non-canonical or
+  malformed checkpoints are ignored by the router and kept (never silently deleted) by cleanup.
+- **Retention.** Terminal checkpoints older than `workflowLogRetentionDays` with no active run are
+  reclaimed by `spur workflow clean` (task 0711 R5–R8); non-terminal checkpoints are always kept.
 - **Not a validated corpus.** Checkpoints are working memory. They are overwritten when a session
   resumes and re-checkpoints. They are NOT authoritative task state — the task file is.
 - **One file per session.** The `session_id` is `<date>-<wbs-or-feature>`. A resumed session

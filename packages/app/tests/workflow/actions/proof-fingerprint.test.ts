@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { ActionResult, ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { ProofFingerprintActionRunner } from '../../../src/workflow/actions/proof-fingerprint';
+import type { WorkflowObservabilityBus, WorkflowTripwireFiredEvent } from '../../../src/workflow/observability';
 
 const fs = createNodeFileSystem();
 const runner = new ProofFingerprintActionRunner(fs);
@@ -53,6 +54,34 @@ describe('proof.fingerprint action', () => {
         expect(result.error).toContain('proof inputs changed after the verdict was established');
         expect(result.error).toContain('a'.repeat(64)); // the expected value
         expect(matchedFlag(result)).toBeFalse();
+    });
+
+    // 0708 R4: proof-state invalidation emits the canonical bounded trip-wire
+    // event at the proof boundary, correlated to the run/node/task.
+    test('emits workflow.tripwire.fired (proof-invalidated) on expect mismatch', async () => {
+        const emissions: Array<{ name: string; event: unknown }> = [];
+        const bus = {
+            emit(name: string, event: unknown) {
+                emissions.push({ name, event });
+            },
+        } as unknown as WorkflowObservabilityBus;
+        const wired = new ProofFingerprintActionRunner(fs, undefined, bus);
+
+        const result = await wired.execute({ var: 'd', expect: `sha256:${'b'.repeat(64)}` }, ctx);
+        expect(result.ok).toBeFalse();
+        expect(emissions).toHaveLength(1);
+        expect(emissions[0]?.name).toBe('workflow.tripwire.fired');
+        const event = emissions[0]?.event as WorkflowTripwireFiredEvent;
+        expect(event.policy.id).toBe('proof-invalidated');
+        expect(event.response).toBe('fail');
+        expect(event.node).toBe(ctx.stateOrNodeId);
+        expect(event.observed).toContain('proof inputs changed');
+        expect(event.nextDecision.length).toBeGreaterThan(0);
+
+        // Healthy matched path must stay silent.
+        const good = await wired.execute({ var: 'd' }, ctx);
+        expect(good.ok).toBeTrue();
+        expect(emissions).toHaveLength(1);
     });
 
     test('passes when expect matches the current digest', async () => {

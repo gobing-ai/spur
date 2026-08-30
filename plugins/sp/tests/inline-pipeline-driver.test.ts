@@ -227,7 +227,12 @@ describe('0503 interactive inline pipeline driver smoke', () => {
         const result = runInlineSmoke({ verdict: 'FAIL' });
 
         expect(result.terminal).toBe('failed');
-        expect(result.hostStages).toEqual(['implement', 'review', 'verify']);
+        // 0703 R4: a non-PASS verify verdict routes through the bounded verify→test-fix
+        // edge. In this sandbox the recheck probe (`bun run lint`) is red, so each
+        // test-fix hop re-enters a probe-skipped recheck (0587 R3) that fails again until
+        // attempts exhaust `qualityGateMaxFixAttempts` — the catch-all then terminates at
+        // `failed` without reaching `record`.
+        expect(result.hostStages).toEqual(['implement', 'review', 'verify', 'test-fix', 'test-fix']);
         expect(result.log).not.toContain('Pipeline complete');
     });
 

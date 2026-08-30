@@ -10,12 +10,13 @@
 #     /sp:dev-run --mode implement + sp:code-implementation, not YAML prose)
 #   - requireDiff fails silent no-op drafts
 #   - HITL answer routing is exhaustive (yes/no/cancel)
-#   - record → done is fail-closed on `spur task check`
+#   - verify measures the deliverable read-only (answer file + `spur task verdict` + proof
+#     digest bracket) — record → done is fail-closed on measured PASS, never on a stub
 
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: docs-pipeline
-description: "Docs-only execution pipeline (precheck -> draft -> docs-review -> record -> done)"
+description: "Docs-only execution pipeline (precheck -> draft -> docs-review -> record -> verify -> done)"
 iterationBound: 12
 initialState: precheck
 terminalStates:
@@ -31,6 +32,14 @@ vars:
   spurBin: "spur"
   agent: "omp"
   stepTimeoutMs: "1800000"
+  # Proof-state bracket (task 0704, mirroring task-pipeline 0612/0703). `proofDigest` is the
+  # canonical capture at verify entry; `proofDigestNow` is the live re-capture compared against
+  # it by the `verify → done` guard so verifier-time mutation fails closed (R4/R5).
+  proofDigest: ""
+  proofDigestNow: ""
+  # `taskSpecPath` carries the task file path because `docs/tasks*` is excluded from the digest's
+  # git-tree half (task 0704 R4); resolved per-run by the verify state's taskpath shell step.
+  taskSpecPath: ""
   __hitlAnswer: ""
 
 states:
@@ -110,27 +119,78 @@ states:
           command: "$spurBin task record $wbs --solution-from-diff --transition testing"
 
   - id: done
-    description: Terminal — docs deliverable reviewed and recorded.
+    description: Terminal — docs deliverable measured, reviewed, and recorded.
     onEnter:
-      # Done gate requires a PASS verdict artifact (no silent no-artifact allow).
-      # Docs-only pipelines do not run /sp:dev-verify; write a docs-only PASS stub
-      # then transition. Override path remains: --force-done --reason.
-      - kind: shell
-        options:
-          command: >
-            mkdir -p .spur/run &&
-            printf '%s\n' "{\"wbs\":\"$wbs\",\"verdict\":\"PASS\",\"source\":\"docs-pipeline\",\"requirements\":[{\"id\":\"docs-deliverable\",\"status\":\"MET\",\"evidence\":\"docs-pipeline record step\"}],\"acceptanceCriteria\":[],\"checks\":[{\"name\":\"docs-only\",\"status\":\"pass\",\"evidence\":\"docs-pipeline\"}]}"
-            > ".spur/run/$wbs-verdict.json"
-      - kind: run.artifact
-        options:
-          path: .spur/run/${vars.wbs}-verdict.json
-          artifactKind: verify-verdict
+      # R1 (0704): no synthetic verdict writer. The verdict artifact is produced by measured
+      # verification in `verify` and registered there; done only performs the guarded
+      # transition. Override path remains: --force-done --reason.
       - kind: shell
         options:
           command: "$spurBin task update $wbs done --no-lifecycle"
       - kind: note
         options:
           message: "Docs pipeline complete for task ${vars.wbs}."
+  - id: verify
+    description: >
+      Read-only measured verification (task 0704, R2/R4/R7): dispatch /sp:dev-verify --fix none
+      with an answer file, derive the ONE standard verdict via `spur task verdict`, register the
+      standard verify-verdict artifact, and bracket the verifier with proof-input digest capture/compare so any
+      task-spec or document mutation during certification fails closed (R4). No docs assurance
+      subclass — PASS semantics are identical to task-pipeline (R7).
+    onEnter:
+      # R4 (0703 R6 precedent): resolve the task-spec path BEFORE capture. `docs/tasks*` is
+      # excluded from the digest's git-tree half, so the spec is folded in via `taskFile`.
+      - kind: shell
+        options:
+          command: '$spurBin task path $wbs --json 2>/dev/null | jq -r ".path // .filePath // empty" > ".spur/run/$wbs-docs-taskpath.txt" || true; exit 0'
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.wbs}-docs-taskpath.txt
+          var: taskSpecPath
+      # R4: canonical capture BEFORE the verifier runs. Same fingerprint input as the
+      # re-capture below so the bracket compares like for like.
+      - kind: proof.fingerprint
+        options:
+          var: proofDigest
+          taskFile: ${vars.taskSpecPath}
+          input: /sp:dev-verify ${vars.wbs} --auto --fix none --focus all
+          timeoutMs: ${vars.stepTimeoutMs}
+      - kind: agent.run
+        options:
+          agent: ${vars.agent}
+          # Observe-only (ADR-071 precedent): the verifier certifies, it never repairs.
+          # 0710 R2: verify runs in a fresh session — never inherits the implement hop's session.
+          freshSession: true
+          input: /sp:dev-verify ${vars.wbs} --auto --fix none --focus all
+          role: reviewer
+          timeoutMs: ${vars.stepTimeoutMs}
+          answerFile: .spur/run/${vars.wbs}-verify-answer.txt
+      - kind: shell
+        options:
+          command: "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt"
+      # R7: stamp the proof block into the standard verdict artifact, then register it.
+      # Soft action + hard guard: a missing/malformed stamp fails the `verify -> done`
+      # guard below, not this step.
+      - kind: shell
+        options:
+          command: >-
+            V=".spur/run/$wbs-verdict.json";
+            if [ -f "$V" ] && [ -n "$proofDigest" ]; then
+              jq --arg d "$proofDigest" '. + {proof: {digest: $d, capturePoint: "docs-verify-entry"}}' "$V" > "$V.tmp" && mv "$V.tmp" "$V";
+            fi;
+            exit 0
+      - kind: run.artifact
+        options:
+          path: .spur/run/${vars.wbs}-verdict.json
+          artifactKind: verify-verdict
+      # R4: re-capture AFTER the verifier. No `expect` here — an action-level abort would
+      # bypass the `failed` state; the `verify -> done` guard compares instead (R5).
+      - kind: proof.fingerprint
+        options:
+          var: proofDigestNow
+          taskFile: ${vars.taskSpecPath}
+          input: /sp:dev-verify ${vars.wbs} --auto --fix none --focus all
+          timeoutMs: ${vars.stepTimeoutMs}
 
   - id: failed
     description: Terminal — docs pipeline failed or was rejected.
@@ -188,16 +248,32 @@ transitions:
         command: 'test "$__hitlAnswer" = cancel'
 
   - from: record
+    to: verify
+    description: Recorded — measure the deliverable (R2). Structural task-check gates remain
+      at precheck, record (wip→testing), and done (verdict-artifact guard, R3).
+    guard:
+      kind: always
+
+  - from: verify
     to: done
-    description: Task check passed — certify done.
+    description: Measured PASS with the proof bracket intact (R4/R5).
     guard:
       kind: shell
       options:
-        command: "$spurBin task check $wbs"
-  - from: record
+        # Hardened (0703 P2 carry): every operand is required non-empty (`test -n`) so a
+        # missing file or empty var fails closed instead of empty-equals-empty passing.
+        command: >-
+          test -n "$proofDigest" &&
+          test -n "$proofDigestNow" &&
+          test "$proofDigestNow" = "$proofDigest" &&
+          test -f ".spur/run/$wbs-verdict.json" &&
+          test -n "$(jq -r '.verdict // empty' .spur/run/$wbs-verdict.json 2>/dev/null)" &&
+          test "$(jq -r '.verdict // empty' .spur/run/$wbs-verdict.json 2>/dev/null)" = PASS &&
+          test -n "$(jq -r '.proof.digest // empty' .spur/run/$wbs-verdict.json 2>/dev/null)" &&
+          test "$(jq -r '.proof.digest // empty' .spur/run/$wbs-verdict.json 2>/dev/null)" = "$proofDigest"
+  - from: verify
     to: failed
-    description: Task check failed — block before done.
+    description: Non-PASS verdict, missing/malformed answer, or digest mismatch (R5) — the run
+      reaches failed and no PASS artifact is certified.
     guard:
-      kind: shell
-      options:
-        command: '! $spurBin task check $wbs'
+      kind: always

@@ -3,6 +3,7 @@ import type { ReconcileSummary } from '@gobing-ai/ts-llm-jsonl-importer';
 import type { DerivedVariables } from './derived';
 import type { PairingStat } from './pairings';
 import type { TokenTotals } from './types';
+import type { VerifiedOutcomeStat } from './verified-outcome';
 import type { SessionState } from './watermark';
 
 /**
@@ -238,6 +239,12 @@ export interface HistoryArtifact {
     topStepsByDuration?: StepStat[];
     /** Cache re-send waste aggregate + bounded ranking - additive (0581 R3). */
     cacheWaste?: CacheWasteStat;
+    /**
+     * Verified-result and correction-cost operational metrics (0712) — additive,
+     * absent on pre-0712 artifacts and whenever the project has no pipeline
+     * run-links, so consumers treat absence as unknown (never fabricate).
+     */
+    verifiedOutcome?: VerifiedOutcomeStat;
     /** Per-source per-step section support, derived from data - additive (0581 R5). */
     stepSupport?: StepSupportEntry[];
     /**

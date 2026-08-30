@@ -244,3 +244,46 @@ describe('staleness banner (R7)', () => {
         expect(banner).toContain('days');
     });
 });
+
+describe('renderReport verifiedOutcome section (0712)', () => {
+    test('renders counts, rates, and n/a for unmeasured values (R5)', () => {
+        const a = artifact({
+            verifiedOutcome: {
+                schemaVersion: 1,
+                window: { since: null, until: null },
+                taskDenominator: 4,
+                verifiedResults: 2,
+                verifiedRate: 0.5,
+                verifiedWithoutCorrection: 1,
+                verifiedWithoutCorrectionRate: 0.25,
+                correctionCount: 1,
+                correctionRate: 0.25,
+                timeToVerified: { count: 1, meanMs: 60000, maxMs: 60000 },
+                retryExhaustedCount: 1,
+                measuredTokensPerVerifiedResult: null,
+                costCoverage: { covered: 0, total: 2 },
+                excludedReasons: {
+                    notDone: 0,
+                    forcedDone: 1,
+                    missingVerdict: 1,
+                    syntheticVerdict: 0,
+                    verdictNotPass: 0,
+                    proofAbsent: 0,
+                    certifyingRunFailed: 0,
+                },
+            },
+        });
+        const report = renderReport(a);
+        expect(report).toContain('Verified outcome');
+        expect(report).toContain('denominator (tasks with pipeline run-links): 4');
+        expect(report).toContain('verified results: 2 (50.0%)');
+        expect(report).toContain('corrections: 1 (25.0%)');
+        expect(report).toContain('forcedDone=1, missingVerdict=1');
+        expect(report).toContain('n/a (coverage 0/2)'); // null metric, explicit coverage — never 0
+    });
+
+    test('section absent when the block is absent (pre-0712 artifacts)', () => {
+        const report = renderReport(artifact());
+        expect(report).not.toContain('Verified outcome');
+    });
+});

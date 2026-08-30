@@ -1582,7 +1582,7 @@ function loadTemplateBodies(projectRoot: string, variant: string): Partial<Recor
  * child rollup) resolve related tasks through it, so a corpus spanning several
  * folders no longer reports cross-folder dependencies as missing.
  */
-async function makeTaskLocator(context: CliContext): Promise<TaskLocator> {
+export async function makeTaskLocator(context: CliContext): Promise<TaskLocator> {
     const { foldersConfig } = await resolvePlanningFolders(context.fs);
     return new TaskLocator({
         fs: context.fs,

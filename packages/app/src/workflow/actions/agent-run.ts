@@ -5,10 +5,24 @@ import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { type AgentExecutionObserver, redactAndBound } from '../../observability/agent-execution';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../services/agent-service';
+import {
+    evaluateAgentBudget,
+    type NormalizedAgentUsage,
+    parseAgentBudget,
+    unavailableAgentUsage,
+} from '../../services/agent-usage';
+import { parseRequiresCapabilities } from '../../services/capability-attestation';
 import { permissionFailureEvidence } from '../../services/failure-classification';
+import type { AgentRoutingIdentity } from '../../services/review-independence';
+import {
+    checkExecutorIndependence,
+    parseAgentRoutingIdentity,
+    requiresDistinctExecutor,
+} from '../../services/review-independence';
 import { TaskLocator } from '../../services/task-locator';
-import type { WorkflowObservabilityBus } from '../observability';
+import type { WorkflowAgentBudgetEvent, WorkflowObservabilityBus, WorkflowTripwireFiredEvent } from '../observability';
 import { parseSteeringPolicy, type WorkflowSteeringController } from '../steering';
+import { CAPABILITY_BLOCK_PREFIX, evaluateTripWires, type TripWireSignal } from '../tripwire';
 
 /** Bound the stdout/stderr tail captured into the partial-work artifact (R2b). */
 const PARTIAL_ARTIFACT_TAIL_CHARS = 4000;
@@ -78,6 +92,18 @@ export interface AgentRunAgentConfig {
  *   `AgentRunOptions.timeout` to `ProcessExecutor.run`, which kills the child
  *   on elapse. On timeout, the agent step exits non-zero → `ok:false` → pipeline
  *   routes to `failed`. Absent by default (no timeout).
+ * - `requiresCapabilities` (object, optional; task 0706 R4): declared minimum
+ *   enforcement per closed capability axis (`fsRead | fsWrite | networkEgress |
+ *   processSpawn | externalMutationApproval` → `available | enforced`). Compared
+ *   against the resolved executor's attestation BEFORE spawn; unknown/unavailable
+ *   fails closed (0706 R5). Actions without it dispatch unchanged.
+ * - `maxTokens` / `maxCostUsd` (number, optional; task 0707 R4): hard post-dispatch
+ *   budgets over total measured tokens / reported cost USD. Evaluated once when the
+ *   dispatch returns (safe boundary — wall-clock stays the only mid-run control);
+ *   exceeded budgets fail the step and emit a bounded `workflow.agent.budget` event;
+ *   a cap that cannot be evaluated because usage is unavailable fails closed as
+ *   `budget-unverifiable`. Actions without either option dispatch unchanged.
+ *   `timeoutMs` remains the only duration control.
  *
  * On any failed run (non-zero/null exit, signal, or dispatch error), a
  * partial-work handoff artifact is written to
@@ -144,11 +170,22 @@ export class AgentRunActionRunner implements ActionRunner {
             this.agentConfig.sessionAffinity === false;
         const affinityOn = !affinityDisabled;
 
+        // 0710 R1: `freshSession: true` bypasses the inherited workflow session —
+        // the action never reads __agentSessionDir / __agentSessionId / the latch,
+        // and never publishes affinity vars back. Review/verify stages declare it
+        // so they certify a state with no implementation-session contamination.
+        const freshSession = options.freshSession === true;
+        // 0710 R4/R5: declarative risk-policy inputs. `priority` comes from the
+        // task frontmatter via a pipeline var; `compareExecutorWith` names the
+        // node whose routing evidence the distinctness check compares against.
+        const priority = asOptionalString(options.priority);
+        const compareExecutorWith = asOptionalString(options.compareExecutorWith) ?? 'implement';
+
         const agentLabel = dispatchAgent ?? '<default>';
         const targetAgentDir = dispatchAgent ?? this.agentConfig.default ?? 'omp';
-        const prevAgent = asOptionalString(context.vars.__agentSessionAgent);
+        const prevAgent = freshSession ? undefined : asOptionalString(context.vars.__agentSessionAgent);
 
-        let sessionDir = asOptionalString(context.vars.__agentSessionDir);
+        let sessionDir = freshSession ? undefined : asOptionalString(context.vars.__agentSessionDir);
         if (affinityOn) {
             if (!sessionDir || (prevAgent && prevAgent !== targetAgentDir)) {
                 sessionDir = join(cwd, '.spur', 'run', context.runId, 'agent-sessions', targetAgentDir);
@@ -161,12 +198,26 @@ export class AgentRunActionRunner implements ActionRunner {
                 sessionDir = join(cwd, '.spur', 'run', context.runId, 'agent-sessions', targetAgentDir);
             }
         }
-        const storedSessionId = asOptionalString(context.vars.__agentSessionId);
+        if (freshSession) {
+            // Per-node fresh dir: never the inherited path, never resumed (no
+            // sessionId flag below), so no implementation session can be attached.
+            sessionDir = join(
+                cwd,
+                '.spur',
+                'run',
+                context.runId,
+                'agent-sessions',
+                targetAgentDir,
+                `fresh-${context.stateOrNodeId}`,
+            );
+        }
+        const storedSessionId = freshSession ? undefined : asOptionalString(context.vars.__agentSessionId);
 
         // Session latch (Q8): auto-determine continue from vars.__agentSession
         // unless the step author set `continue` explicitly.
         let continueFlag = asOptionalBoolean(options.continue);
-        const latch = context.vars.__agentSession;
+        // Fresh actions skip the latch entirely: no inherited resume, ever.
+        const latch = freshSession ? undefined : context.vars.__agentSession;
         // Track whether the latch (not an explicit step flag) set continue so
         // the dispatch loop can fall back to a fresh dispatch if the agent's
         // resume mode rejects a new prompt (task 0406 — codex incompatibility).
@@ -231,6 +282,52 @@ export class AgentRunActionRunner implements ActionRunner {
         const requireDiff = asOptionalBoolean(options.requireDiff);
         const capture = asOptionalBoolean(options.capture) || answerFile !== undefined;
 
+        // Capability requirements (0706 R4/R8): validate the closed vocabulary at
+        // the action boundary — an invalid shape fails the step before any dispatch.
+        // Valid shapes serialize into flags for the service-side pre-spawn gate.
+        const requiresCapabilities = parseRequiresCapabilities(options.requiresCapabilities);
+        if (!requiresCapabilities.ok) {
+            return { ok: false, error: `agent.run: ${requiresCapabilities.error}` };
+        }
+
+        // 0710 R4/R5: executor-distinctness policy — evaluated AFTER the reviewer
+        // routing is resolved and BEFORE any dispatch. P0/P1 tasks require a
+        // different executor spec than the implementation stage; every violation
+        // and every unknown fails closed with the configuration remedy.
+        const requireDistinct = requiresDistinctExecutor(priority);
+        if (requireDistinct) {
+            const prior = parseAgentRoutingIdentity(context.vars[`__agentRouting_${compareExecutorWith}`]);
+            let current: AgentRoutingIdentity | undefined;
+            try {
+                const resolveFlags: Record<string, string> = { role: role as string };
+                if (dispatchAgent !== undefined) resolveFlags.agent = dispatchAgent;
+                if (model !== undefined) resolveFlags.model = model;
+                const resolved = await this.agentService.resolve(resolveFlags);
+                current = resolved.ok ? { agent: resolved.executor ?? resolved.agent } : undefined;
+            } catch {
+                current = undefined;
+            }
+            const verdict = checkExecutorIndependence({
+                priority: priority as string,
+                requireDistinct,
+                prior,
+                current,
+                priorVar: `__agentRouting_${compareExecutorWith}`,
+            });
+            if (!verdict.ok) {
+                return { ok: false, error: verdict.reason };
+            }
+        }
+
+        // Hard token/cost budgets (0707 R4): validated at the trust boundary.
+        const budget = parseAgentBudget(options);
+        if (budget.error !== undefined) {
+            return { ok: false, error: budget.error };
+        }
+        if (Object.keys(requiresCapabilities.requires).length > 0) {
+            flags.requiresCapabilities = JSON.stringify(requiresCapabilities.requires);
+        }
+
         // 0689: an expectFile/answerFile prompt that names a RELATIVE path lets a
         // headless executor with a scratch-rooted file tool (antigravity-cli)
         // satisfy the write somewhere the post-exit check never looks. Append the
@@ -256,12 +353,18 @@ export class AgentRunActionRunner implements ActionRunner {
             this.observabilityBus === undefined
                 ? undefined
                 : (event) => {
+                      if (event.kind === 'dropped') droppedChunks += event.chunks;
                       void this.observabilityBus?.emit('workflow.agent', event);
                   };
         const actionId = context.actionId ?? `${context.runId}:${context.stateOrNodeId}`;
         const steeringPolicy = parseSteeringPolicy(options);
         let resumeRetried = false;
         let steeringNote: string | undefined;
+        // 0708 R3: reason captured when the steering boundary's timeout default
+        // resolved fail-closed (retry-exhausted) instead of continue.
+        let steeringFailClosed: string | undefined;
+        // 0708 R1: bounded-relay drop telemetry observed during the dispatch.
+        let droppedChunks = 0;
         let traced: AgentRunTracedResult;
         const diffBaseline =
             requireDiff === true ? await createGitWorkingTreeSnapshot(cwd, this.agentConfig.excludeGlobs) : undefined;
@@ -288,6 +391,9 @@ export class AgentRunActionRunner implements ActionRunner {
                     });
                     if (this.steeringController === undefined) break;
                     const decision = await this.steeringController.boundary(traced.exitCode === 0);
+                    if (decision.reason?.includes('retry-exhausted')) {
+                        steeringFailClosed = decision.reason;
+                    }
                     if (decision.operation === 'retry') {
                         steeringSignal = this.steeringController.nextAttempt();
                         continue;
@@ -317,6 +423,124 @@ export class AgentRunActionRunner implements ActionRunner {
             const { exitCode, stdout: answer } = traced;
             const ok = exitCode === 0;
             const invocation = traced.invocation;
+
+            // 0707 R3/R5/R6: normalized usage + hard-budget evaluation at the
+            // post-dispatch safe boundary. Wall-clock (timeoutMs) stays the only
+            // mid-run control; token/cost caps are enforced after the dispatch
+            // returns. Only actions that DECLARE a budget can fail here — legacy
+            // actions keep today's semantics and report usage honestly.
+            const usage: NormalizedAgentUsage =
+                traced.usage ?? unavailableAgentUsage('dispatch result carried no usage');
+            let budgetFailure: string | undefined;
+            if (ok && budget.budget !== undefined) {
+                const evaluation = evaluateAgentBudget(usage, budget.budget);
+                if (evaluation.verdict !== 'within') {
+                    budgetFailure =
+                        evaluation.verdict === 'over'
+                            ? `agent.run '${context.stateOrNodeId}' (${agentLabel}) exceeded its declared hard budget: ${evaluation.violations.join('; ')}`
+                            : `agent.run '${context.stateOrNodeId}' (${agentLabel}) budget-unverifiable (fail-closed): ${evaluation.reason}`;
+                    const budgetEvent: WorkflowAgentBudgetEvent = {
+                        schemaVersion: 1,
+                        eventId: crypto.randomUUID(),
+                        runId: context.runId,
+                        at: new Date().toISOString(),
+                        severity: 'warning',
+                        node: context.stateOrNodeId,
+                        kind: KIND,
+                        agent: agentLabel,
+                        verdict: evaluation.verdict,
+                        budget: { ...budget.budget },
+                        violations: evaluation.verdict === 'over' ? evaluation.violations : [evaluation.reason],
+                    };
+                    void this.observabilityBus?.emit('workflow.agent.budget', budgetEvent);
+                }
+            }
+            // 0708 R1/R2/R5: closed-catalog trip-wire evaluation at the
+            // post-dispatch safe boundary — runs on EVERY dispatch outcome.
+            // Signals read ONLY already-normalized outcomes — the budget
+            // verdict, the steering settle reason, the attestation denial
+            // marker, the bounded relay's drop telemetry — no duplicated
+            // state (R5). A fired wire emits the canonical bounded event
+            // (R4); fail policies return through the existing action-failure
+            // shape so the state machine follows its declared route (R3),
+            // preserving the partial-work artifact and naming the exact
+            // next decision (R7).
+            const tripSignals: TripWireSignal[] = [];
+            if (budgetFailure !== undefined) {
+                tripSignals.push({
+                    policy: 'hard-budget',
+                    observed: budgetFailure,
+                    ...(budget.budget !== undefined ? { threshold: JSON.stringify(budget.budget) } : {}),
+                    evidenceRef: 'workflow.agent.budget',
+                });
+            }
+            if (steeringFailClosed !== undefined) {
+                tripSignals.push({
+                    policy: 'retry-exhausted',
+                    observed: steeringFailClosed,
+                    threshold: 'steering retry maxAttempts',
+                    evidenceRef: 'workflow.steering',
+                });
+            }
+            const capabilityDenied =
+                traced.exitCode === 2 &&
+                traced.message !== undefined &&
+                traced.message.startsWith(CAPABILITY_BLOCK_PREFIX);
+            if (capabilityDenied) {
+                tripSignals.push({
+                    policy: 'capability-denied',
+                    observed: traced.message ?? 'capability attestation denied dispatch',
+                    threshold: 'requiresCapabilities',
+                });
+            }
+            if (droppedChunks > 0) {
+                tripSignals.push({
+                    policy: 'output-drop',
+                    observed: `${droppedChunks} output chunk(s) dropped by the bounded relay`,
+                    evidenceRef: 'workflow.agent dropped telemetry',
+                });
+            }
+            const tripwire = evaluateTripWires(tripSignals);
+            if (tripwire.fired) {
+                const tripwireEvent: WorkflowTripwireFiredEvent = {
+                    schemaVersion: 1,
+                    eventId: crypto.randomUUID(),
+                    runId: context.runId,
+                    at: new Date().toISOString(),
+                    severity: 'warning',
+                    node: context.stateOrNodeId,
+                    kind: KIND,
+                    policy: {
+                        id: tripwire.policy?.id ?? 'unknown',
+                        version: tripwire.policy?.version ?? 0,
+                    },
+                    response: tripwire.policy?.response ?? 'fail',
+                    observed: tripwire.observed ?? '',
+                    ...(tripwire.threshold !== undefined ? { threshold: tripwire.threshold } : {}),
+                    actionId,
+                    ...(String(context.vars.wbs ?? '') !== '' ? { task: String(context.vars.wbs) } : {}),
+                    evidenceRefs: tripwire.evidenceRef !== undefined ? [tripwire.evidenceRef] : [],
+                    nextDecision: tripwire.policy?.nextDecision ?? 'operator review of the failed boundary is required',
+                };
+                void this.observabilityBus?.emit('workflow.tripwire.fired', tripwireEvent);
+                const stop = tripwire.policy === undefined || tripwire.policy.response === 'fail';
+                // capability-denied keeps the richer pre-dispatch failure
+                // handling below (permission hints, exit-code mapping) — its
+                // dispatch never started, so there is no partial work to
+                // preserve and the existing path already fails closed.
+                if (stop && !capabilityDenied) {
+                    if (traced.exitCode !== 2) {
+                        // Preserve partial work for operator inspection (R7);
+                        // validation failures (exit 2) never reached a subprocess.
+                        await writePartialWorkArtifact(context, agentLabel, model, traced, cwd, sessionDir);
+                    }
+                    return {
+                        ok: false,
+                        data: buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
+                        error: `${tripwire.reason}. Next decision required: ${tripwire.policy?.nextDecision ?? 'operator review required'}`,
+                    };
+                }
+            }
 
             if (capture && answerFile !== undefined) {
                 const target = isAbsolute(answerFile) ? answerFile : join(cwd, answerFile);
@@ -351,6 +575,7 @@ export class AgentRunActionRunner implements ActionRunner {
                                 4096,
                             ),
                             invocation,
+                            usage,
                             traced.stdout,
                             traced.stderr ?? undefined,
                             this.agentConfig.secretValues,
@@ -379,7 +604,7 @@ export class AgentRunActionRunner implements ActionRunner {
                 if (changed.length === 0) {
                     return {
                         ok: false,
-                        data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
+                        data: buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
                         error: `agent.run '${stepLabel}' (${agentLabel}) exited 0 but produced zero non-corpus file changes — empty implement (no-op). The implement agent must change at least one file outside the configured task/feature folders; fix the implement input and re-run the pipeline.`,
                     };
                 }
@@ -395,7 +620,7 @@ export class AgentRunActionRunner implements ActionRunner {
                 if (rogue.length > 0) {
                     return {
                         ok: false,
-                        data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
+                        data: buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
                         error: `agent.run '${stepLabel}' (${agentLabel}) changed files outside task ${wbs}'s declared surfaces: ${rogue.join(', ')}. Implement only the target WBS; revert the out-of-scope changes (or name those paths in the task body). Set the run var implementScopeGuard: "off" to bypass.`,
                     };
                 }
@@ -486,6 +711,7 @@ export class AgentRunActionRunner implements ActionRunner {
                     capture,
                     answer,
                     invocation,
+                    usage,
                     // 0485 R6: carry stream tails on failure records only.
                     ok ? undefined : traced.stdout,
                     ok ? undefined : (traced.stderr ?? undefined),
@@ -496,14 +722,28 @@ export class AgentRunActionRunner implements ActionRunner {
                 // steps auto-continue (Q8). When we fell back to a fresh dispatch because
                 // the agent's resume mode rejected continue (task 0406), write 'no-resume'
                 // so subsequent steps skip the latch and avoid repeating the wasted dispatch.
+                // 0710: fresh-session actions publish ONLY routing evidence — never their
+                // own session identity — so a review/verify hop cannot leak its session into
+                // a subsequent implement/test-fix resume.
                 setVars: ok
                     ? {
-                          __agentSession: resumeRetried ? 'no-resume' : 'open',
-                          ...(affinityOn && resolvedSessionDir ? { __agentSessionDir: resolvedSessionDir } : {}),
-                          ...(affinityOn && (discoveredSessionId || storedSessionId)
-                              ? { __agentSessionId: discoveredSessionId || storedSessionId }
-                              : {}),
-                          ...(affinityOn ? { __agentSessionAgent: resolvedAgent } : {}),
+                          ...(freshSession
+                              ? {}
+                              : {
+                                    __agentSession: resumeRetried ? ('no-resume' as const) : ('open' as const),
+                                    ...(affinityOn && resolvedSessionDir
+                                        ? { __agentSessionDir: resolvedSessionDir }
+                                        : {}),
+                                    ...(affinityOn && (discoveredSessionId || storedSessionId)
+                                        ? { __agentSessionId: discoveredSessionId || storedSessionId }
+                                        : {}),
+                                    ...(affinityOn ? { __agentSessionAgent: resolvedAgent } : {}),
+                                }),
+                          // 0710 R3: bounded routing evidence for later independence checks.
+                          [`__agentRouting_${context.stateOrNodeId}`]: JSON.stringify({
+                              agent: resolvedAgent,
+                              ...(model !== undefined ? { model } : {}),
+                          }),
                           ...(steeringNote !== undefined ? { __steeringNote: steeringNote } : {}),
                       }
                     : undefined,
@@ -555,11 +795,12 @@ function buildResultData(
     capture: boolean,
     answer: string,
     invocation: AgentRunInvocation | undefined,
+    usage: NormalizedAgentUsage,
     stdout?: string,
     stderr?: string,
     secretValues: readonly string[] = [],
 ): Record<string, unknown> {
-    const data: Record<string, unknown> = { exitCode, agent: agentLabel };
+    const data: Record<string, unknown> = { exitCode, agent: agentLabel, usage };
     if (capture) {
         // On success, `answer` is the explicit capture contract. On failure it
         // becomes persisted diagnostic output, so apply the same redaction and

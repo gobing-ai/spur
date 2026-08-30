@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Enforce a byte budget for always-loaded harness guides"
-status: todo
+status: done
 template: issue
 created_at: 2026-08-28T23:03:05.616Z
-updated_at: "2026-08-28T23:13:40.306Z"
+updated_at: "2026-08-29T21:12:29.155Z"
 priority: P1
 tags: ["harness", "guide", "sensor", "documentation"]
 feature_id: A6
@@ -32,15 +32,15 @@ putting the duplicate catalog back into the always-loaded guide.
 
 ### Requirements
 
-- [ ] R1. Enforce a 20 KiB UTF-8 byte ceiling for repository-root `AGENTS.md` and `config/templates/AGENTS.md`.
-- [ ] R2. Measure bytes with an encoding-correct primitive such as `Buffer.byteLength(text, 'utf8')`, not JavaScript character count, line count, token estimation, or an instruction parser.
-- [ ] R3. A failure message must name the file, actual byte count, configured limit, and the one-hop remediation owner.
-- [ ] R4. Reuse the existing `agents-md-portable-alignment` test/fixture surface so `bun run spur-check` enforces the budget; do not add a standalone CLI verb or package script.
-- [ ] R5. Keep the portable required-heading/routing/anchor assertions unchanged and green.
-- [ ] R6. Add one focused regression test proving multibyte UTF-8 content is measured correctly and an over-budget guide fails.
-- [ ] R7. Document the deterministic byte ceiling separately from the constitution's approximate instruction-budget guidance.
-- [ ] R8. Reconcile `cli-surface-parity.test.ts` with the compact guide contract: `AGENTS.md` must retain the `## Spur CLI surface` heading and one-hop `sp:spur-cli` ownership pointer, while noun/verb parity is validated from the canonical facade reference rather than a duplicated AGENTS noun table.
-- [ ] R9. The complete plugin/CLI test suite must pass after the reconciliation; deleting parity coverage or reintroducing a full noun catalog in `AGENTS.md` is not acceptable.
+- [x] R1. Enforce a 20 KiB UTF-8 byte ceiling for repository-root `AGENTS.md` and `config/templates/AGENTS.md`.
+- [x] R2. Measure bytes with an encoding-correct primitive such as `Buffer.byteLength(text, 'utf8')`, not JavaScript character count, line count, token estimation, or an instruction parser.
+- [x] R3. A failure message must name the file, actual byte count, configured limit, and the one-hop remediation owner.
+- [x] R4. Reuse the existing `agents-md-portable-alignment` test/fixture surface so `bun run spur-check` enforces the budget; do not add a standalone CLI verb or package script.
+- [x] R5. Keep the portable required-heading/routing/anchor assertions unchanged and green.
+- [x] R6. Add one focused regression test proving multibyte UTF-8 content is measured correctly and an over-budget guide fails.
+- [x] R7. Document the deterministic byte ceiling separately from the constitution's approximate instruction-budget guidance.
+- [x] R8. Reconcile `cli-surface-parity.test.ts` with the compact guide contract: `AGENTS.md` must retain the `## Spur CLI surface` heading and one-hop `sp:spur-cli` ownership pointer, while noun/verb parity is validated from the canonical facade reference rather than a duplicated AGENTS noun table.
+- [x] R9. The complete plugin/CLI test suite must pass after the reconciliation; deleting parity coverage or reintroducing a full noun catalog in `AGENTS.md` is not acceptable.
 
 Non-goals: semantic quality scoring, tokenization by provider/model, automatic guide rewriting, or a new configuration
 key for a value that does not currently vary.
@@ -133,15 +133,47 @@ tests in the same file already compare the canonical facade noun inventory to li
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- Byte budget: `apps/cli/tests/fixtures/agents-md-portable-contract.ts:49` — `PORTABLE_AGENTS_BYTE_BUDGET = 20 * 1024`, pure `agentsGuideUtf8Bytes` (Buffer.byteLength utf8, R2) and `assertAgentsGuideByteBudget` throwing file/bytes/limit/`sp:doc-evolve` owner (R3); applied to root + template in `apps/cli/tests/agents-md-portable-alignment.test.ts:139` (R1), with multibyte (10k chars = 30k bytes), over-budget and boundary regressions at `apps/cli/tests/agents-md-portable-alignment.test.ts:144-163` (R6).
+- Compact-guide reconciliation: root `AGENTS.md` noun catalog + parity-authority sentence removed (F95 restoration reverted to the `2f4e729ff` compact contract; 13,660 → 12,556 bytes, heading + one-hop pointer retained at `AGENTS.md:195`); `plugins/sp/tests/cli-surface-parity.test.ts:423` R4 block replaced with the ownership assertion (heading exists, `sp:spur-cli` pointer, no noun-catalog table under the heading); facade-vs-live noun/verb parity tests untouched (R8/R9); stale `tierCNouns` dropped.
+- Docs: `docs/99_PROJECT_CONSTITUTION.md:378` §6.7 rule 7 (deterministic 20480-byte ceiling, separate from rule 4's approximate instruction budget) mirrored in `config/templates/docs/99_PROJECT_CONSTITUTION.md` (R7); `docs/design/plugin-surface-parity.md:21` S4 row now names the ownership contract.
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+| ------------- | -------- | ---------- |
+| R1 | MET | `apps/cli/tests/fixtures/agents-md-portable-contract.ts:49` (`PORTABLE_AGENTS_BYTE_BUDGET = 20 * 1024`), applied to root + template at `apps/cli/tests/agents-md-portable-alignment.test.ts:139`; live run: 8 pass / 0 fail |
+| R2 | MET | `apps/cli/tests/fixtures/agents-md-portable-contract.ts:52` (`agentsGuideUtf8Bytes` = `Buffer.byteLength(text, 'utf8')`); regression `apps/cli/tests/agents-md-portable-alignment.test.ts:144` proves 10k chars = 30000 bytes ≠ char count |
+| R3 | MET | `apps/cli/tests/fixtures/agents-md-portable-contract.ts:60` throw message names file, actual bytes, limit, and `sp:doc-evolve` remediation owner; over-budget test `apps/cli/tests/agents-md-portable-alignment.test.ts:152` asserts all four parts |
+| R4 | MET | Budget lives inside the existing `agents-md-portable-alignment` surface (fixture + test), no new CLI verb/script added (root help + package.json unchanged this run); `bun run spur-check` was green in the task's quality gate |
+| R5 | MET | All pre-existing heading/routing/anchor assertions retained and green — full alignment file 8 pass / 0 fail (incl. R5 test at `apps/cli/tests/agents-md-portable-alignment.test.ts:131`) |
+| R6 | MET | Focused regressions: multibyte 10k→30000-byte (`apps/cli/tests/agents-md-portable-alignment.test.ts:144`), over-budget 20481 fails (`:152`), boundary 20480 passes (`:159`) |
+| R7 | MET | `docs/99_PROJECT_CONSTITUTION.md:379` rule 7 pins the deterministic 20480-byte ceiling, separate from rule 4's approximate instruction budget; mirrored at `config/templates/docs/99_PROJECT_CONSTITUTION.md:365` |
+| R8 | MET | `plugins/sp/tests/cli-surface-parity.test.ts:423` new ownership assertion: heading exists, `sp:spur-cli` one-hop pointer, no duplicated noun catalog (`:435` negative regex); stale direct-table parser removed; `AGENTS.md:193` retains `## Spur CLI surface` + one-hop pointer, no noun table |
+| R9 | MET | Canonical facade-vs-live noun/verb parity tests untouched and green: `plugins/sp/tests/cli-surface-parity.test.ts` 21 pass / 0 fail this run; full `bun run test` + `spur-check` green in the task's post-fix quality gate |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+| --------------------- | -------- | --------------- | ---------- |
+| Scenario: R3 — Current guides retain headroom | MET | command | `wc -c`: AGENTS.md 12556 ≤ 20480; config/templates/AGENTS.md 10650 ≤ 20480; alignment test green this run (8 pass) |
+| Scenario: Oversized guide fails clearly | MET | test | `apps/cli/tests/agents-md-portable-alignment.test.ts:152` — 20481-byte input throws naming path/bytes/limit/owner |
+| Scenario: Multibyte text is measured as bytes | MET | test | `apps/cli/tests/agents-md-portable-alignment.test.ts:144` — 漢×10000 = 30000 UTF-8 bytes, ≠ 10000 chars |
+| Scenario: Compact CLI guidance keeps one parity authority | MET | test | `plugins/sp/tests/cli-surface-parity.test.ts:423-439` ownership assertion + facade-vs-live parity tests green (21 pass) this run |
+
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+| ---------- | ----------- | ---------- | ---------- |
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | proof-input-digest | — | sha256:14e4beebd83a92b5ebbb3683909ab8b61333ec1ea5ac28fbb03355d6f92b6eb0 |
 
 ### References
 
@@ -155,5 +187,10 @@ tests in the same file already compare the canonical facade noun inventory to li
 - `apps/cli/tests/fixtures/agents-md-portable-contract.ts`
 - `plugins/sp/tests/cli-surface-parity.test.ts:419` — stale direct-table assertion.
 - `plugins/sp/skills/spur-cli/SKILL.md` and noun references — canonical CLI facade inventory.
+
 ### History
+
 - 2026-08-28 — created from the approved harness comparison implementation lane; researched, decomposed, linked to A6, and passed the task-local readiness gate.
+- 2026-08-29T20:48:38.292Z todo → wip (system)
+- 2026-08-29T21:12:28.846Z wip → testing (system)
+- 2026-08-29T21:12:29.155Z testing → done (system)

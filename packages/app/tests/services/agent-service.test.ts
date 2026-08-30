@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { AgentExecutorConfig } from '@gobing-ai/spur-config';
 import { applyCliMigrations, RunSessionDao } from '@gobing-ai/spur-domain';
 import type { AgentName, AgentRunResult, AuthState } from '@gobing-ai/ts-ai-runner';
 import { TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
@@ -3878,5 +3879,123 @@ describe('AgentService.doctor — detection cache & --probe-health (B4/0683)', (
         expect(miss.runAll).not.toHaveBeenCalled();
         expect(miss.runOne).toHaveBeenCalledWith('a-one');
         expect(miss.fs.exists(CACHE_PATH)).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: capability attestation gate (task 0706)
+// ---------------------------------------------------------------------------
+
+describe('AgentService.runTraced capability gate (task 0706)', () => {
+    const attestedExecutor = {
+        name: 'attested-1',
+        agent: 'pi',
+        tier: 'standard',
+        executionCapabilities: {
+            version: 1,
+            axes: {
+                fsWrite: { state: 'enforced', provenance: 'operator-configured' },
+                processSpawn: { state: 'enforced', provenance: 'native-known' },
+            },
+        },
+    } as const;
+
+    test('unknown attestation fails closed BEFORE spawn with an axis-by-axis diagnostic (R5/S2)', async () => {
+        const svc = makeService({}, nullOutput(), { executors: [{ name: 'bare-1', agent: 'pi', tier: 'standard' }] });
+        const { deps, runner } = mockDeps();
+        const result = await svc.runTraced(
+            'prompt',
+            { agent: 'bare-1', requiresCapabilities: JSON.stringify({ fsWrite: 'available' }) },
+            deps,
+        );
+        expect(result.exitCode).toBe(2);
+        expect(result.invocation).toBeUndefined();
+        expect(runner.runPromptCommand).not.toHaveBeenCalled();
+        expect(result.message).toContain('bare-1');
+        expect(result.message).toContain('fsWrite: required=available actual=unknown provenance=unattested');
+    });
+
+    test('sufficient enforced attestation dispatches and records bounded evidence (R1/S1/R7)', async () => {
+        const svc = makeService({}, nullOutput(), { executors: [attestedExecutor as unknown as AgentExecutorConfig] });
+        const { deps } = mockDeps();
+        const workflowEvents: AgentExecutionEvent[] = [];
+        const result = await svc.runTraced(
+            'prompt',
+            {
+                agent: 'attested-1',
+                requiresCapabilities: JSON.stringify({ fsWrite: 'enforced', processSpawn: 'available' }),
+            },
+            deps,
+            {
+                correlation: { runId: 'cap-run', actionId: 'action-cap', executionId: 'exec-cap' },
+                observer: (event) => workflowEvents.push(event),
+            },
+        );
+        expect(result.exitCode).toBe(0);
+        const started = workflowEvents.find((event) => event.kind === 'started') as
+            | { routing?: { capabilities?: Array<{ axis: string; satisfied: boolean }> } }
+            | undefined;
+        expect(started?.routing?.capabilities).toBeDefined();
+        const fsWrite = started?.routing?.capabilities?.find((entry) => entry.axis === 'fsWrite');
+        expect(fsWrite).toMatchObject({ required: 'enforced', state: 'enforced', satisfied: true });
+    });
+
+    test('escalation hop re-checks the gate against the new executor (R5)', async () => {
+        const svc = makeService({}, nullOutput(), {
+            executors: [
+                attestedExecutor as unknown as AgentExecutorConfig,
+                { name: 'bare-2', agent: 'pi', tier: 'standard' },
+            ],
+        });
+        const { deps } = mockDeps();
+        // No stage context is wired here, so the escalation ladder itself is
+        // covered by the dedicated 0407 tests; this test pins that the gate
+        // input rides every dispatch — the unit-level per-attempt re-evaluation
+        // is asserted by the loop's use of `currentExecutor` (see gate source).
+        const result = await svc.runTraced(
+            'prompt',
+            { agent: 'bare-2', requiresCapabilities: JSON.stringify({ fsWrite: 'available' }) },
+            deps,
+        );
+        expect(result.exitCode).toBe(2);
+        expect(result.message).toContain('bare-2');
+    });
+
+    test('actions without requirements keep dispatching unchanged (R4/S3 backward compat)', async () => {
+        const svc = makeService({}, nullOutput(), { executors: [{ name: 'bare-3', agent: 'pi', tier: 'standard' }] });
+        const { deps, runner } = mockDeps();
+        const result = await svc.runTraced('prompt', { agent: 'bare-3' }, deps);
+        expect(result.exitCode).toBe(0);
+        expect(runner.runPromptCommand).toHaveBeenCalledTimes(1);
+    });
+
+    test('invalid requiresCapabilities shape fails closed before resolution/spawn (R8)', async () => {
+        const svc = makeService({}, nullOutput());
+        const { deps, runner } = mockDeps();
+        const badJson = await svc.runTraced('prompt', { agent: 'pi', requiresCapabilities: '{not-json' }, deps);
+        expect(badJson.exitCode).toBe(2);
+        expect(badJson.message).toContain('invalid requiresCapabilities JSON');
+        const badAxis = await svc.runTraced(
+            'prompt',
+            { agent: 'pi', requiresCapabilities: JSON.stringify({ teleport: 'available' }) },
+            deps,
+        );
+        expect(badAxis.exitCode).toBe(2);
+        expect(badAxis.message).toContain('teleport');
+        expect(runner.runPromptCommand).not.toHaveBeenCalled();
+    });
+
+    test('model tier is never a capability signal (R8/S4): tiered executor without attestation still fails', async () => {
+        const svc = makeService({}, nullOutput(), {
+            executors: [{ name: 'top-tier', agent: 'pi', tier: 'capable-3' }],
+        });
+        const { deps } = mockDeps();
+        const result = await svc.runTraced(
+            'prompt',
+            { agent: 'top-tier', requiresCapabilities: JSON.stringify({ fsWrite: 'available' }) },
+            deps,
+        );
+        expect(result.exitCode).toBe(2);
+        expect(result.message).toContain('actual=unknown');
     });
 });

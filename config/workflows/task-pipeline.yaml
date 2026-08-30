@@ -78,15 +78,25 @@ vars:
   # Answer captured by the approve gate's hitl.confirm (R1): "yes" | "no" | "cancel".
   # Empty by default; only meaningful once the approve state has been entered.
   __hitlAnswer: ""
-  # Proof-state bracket (task 0612, ADR-071). `proofDigest` is captured at verify-exit, once the
-  # verdict artifact exists; `proofDigestNow` is the re-capture compared against it immediately
-  # before `record`. A mismatch means a proof input changed after the verdict was established, so
-  # the run routes to `failed` instead of crossing the completion boundary. `taskSpecPath` carries
-  # the task file path because `docs/tasks*` is excluded from the digest's git-tree half — spec
-  # content is folded in explicitly or a task-file edit would go undetected.
+  # Proof-state bracket (task 0612, ADR-071; restructured by task 0703). `proofDigest` is the
+  # canonical capture taken at quality-gate ENTRY — immediately before the evidence-producing
+  # final chain (quality → review → verify) — and re-captured at `test-recheck` when bounded
+  # remediation mutated the tree, so every evidence stage names one fresh digest (R2/R4).
+  # `proofDigestNow` is the live re-capture compared against `proofDigest` at verify entry and
+  # immediately before `record`; a mismatch means a proof input changed after evidence was
+  # established, so the run routes to `failed` instead of crossing the completion boundary (R5).
+  # `taskSpecPath` carries the task file path because `docs/tasks*` is excluded from the digest's
+  # git-tree half — spec content is folded in explicitly or a task-file edit would go undetected.
+  # The fingerprint scopes task content to the proof-input sections only (Background, Requirements,
+  # Acceptance Criteria, Design, Plan), so record-time Solution/Testing/Review evidence writes do
+  # not retroactively invalidate the certified input set (R6).
   proofDigest: ""
   proofDigestNow: ""
   taskSpecPath: ""
+  # 0710 R4: task priority tier (P0..P4) extracted from the task frontmatter at the
+  # quality-gate stage. P0/P1 make the review/verify distinct-executor policy apply;
+  # unknown/empty priority means fresh-context-only (executor reuse allowed).
+  taskPriority: ""
   # Project quality gate for the `test` hop (probe + fixall + recheck). Override per project
   # with the same package-manager surface (this monorepo is Bun-only):
   # `--vars '{"qualityGateCmd":"bun run lint && bun run test"}'`. Soft probe, hard recheck,
@@ -243,7 +253,7 @@ states:
         options:
           agent: ${vars.implementAgent}
           # Pure slash command only (ADR-043). Anti-recursion / implement discipline
-          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
           role: coder
           # lives in /sp:dev-run --mode implement → sp:code-implementation, not YAML prose.
           input: /sp:dev-run --mode implement ${vars.wbs} --auto
@@ -253,6 +263,14 @@ states:
           # a silent no-op routes the run to `failed` here instead of drifting
           # into test/review and being caught a full pass later.
           requireDiff: true
+          # 0706 R6: this stage mutates the working tree unattended under the
+          # auto profile, so it declares minimum execution-capability
+          # requirements. Dispatch fails closed (before spawn) when the
+          # resolved executor's attestation cannot satisfy them — attest the
+          # executor in agent config.
+          requiresCapabilities:
+            fsWrite: available
+            processSpawn: available
       - kind: shell
         options:
           command: >-
@@ -296,11 +314,37 @@ states:
   #   test-recheck — soft recheck → review | test-fix | failed (never silent lifecycle abort)
   - id: test
     description: >
-      Soft quality-gate probe (single logical gate on the green path; bounded retries only
-      for SQLite lock contention). Runs
+      Proof-chain entry + soft quality-gate probe (single logical gate on the green path; bounded retries only
+      for SQLite lock contention). Capture of the canonical proof-input digest happens HERE — before any
+      evidence-producing final check (task 0703, ADR-071) — so the gate, review, and verification evidence
+      all name one digest. Then runs
       `${vars.qualityGateCmd}`, records PASS|FAIL under
       `.spur/run/<wbs>-test-gate.status`, resets the fix attempt counter, always exit 0.
     onEnter:
+      # R6/R2 (0703): resolve the task-spec path BEFORE the digest capture. `docs/tasks*` is excluded
+      # from the digest's git-tree half, so the spec is folded in explicitly via `taskSpecPath`.
+      - kind: shell
+        options:
+          # 0710 R4: resolve the spec path, then extract `priority:` from the TASK FILE itself (not the
+          # path listing); normalize to upper so requiresDistinctExecutor's exact 'P0'/'P1' match hits.
+          # Missing spec/line -> empty var -> back-compat (no distinctness requirement).
+          command: '$spurBin task path $wbs --json 2>/dev/null | jq -r ".path // .filePath // empty" > ".spur/run/$wbs-taskpath.txt" || true; sed -n "s/^priority:[[:space:]]*//p" "$(cat ".spur/run/$wbs-taskpath.txt" 2>/dev/null)" 2>/dev/null | head -1 | tr -d "[:space:]" | tr "[:lower:]" "[:upper:]" > ".spur/run/$wbs-priority.txt"; exit 0'
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.wbs}-taskpath.txt
+          var: taskSpecPath
+      # 0710 R4: carry the task's priority tier into the review/verify risk policy.
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.wbs}-priority.txt
+          var: taskPriority
+      # R2 (0703, ADR-071): THE canonical proof capture. Placement is load-bearing: immediately before
+      # the final evidence chain, after every implement mutation (including the post-implement format).
+      # Capture-only here; `record` compares. A remediation pass re-captures at `test-recheck` (R4).
+      - kind: proof.fingerprint
+        options:
+          var: proofDigest
+          taskFile: ${vars.taskSpecPath}
       - kind: shell
         options:
           command: >-
@@ -331,13 +375,17 @@ states:
             else
               printf 'FAIL\n' > "$STATUS_FILE";
             fi &&
+            printf 'proof-digest: %s\n' "$proofDigest" >> "$LOG_FILE" &&
             exit 0
 
   - id: test-fix
     description: >
-      Bounded auto-fix hop when the quality gate is red. Increments
-      `.spur/run/<wbs>-test-fix-attempt`, then pure slash (ADR-043)
-      `/sp:dev-fixall` against `${vars.qualityGateCmd}`.
+      Bounded auto-fix hop when the quality gate is red OR final verification returned a
+      repairable non-PASS (task 0703 R4: remediation never happens inside verify — it loops
+      through here, then re-enters quality → review → verify on a fresh digest). Increments
+      `.spur/run/<wbs>-test-fix-attempt` (the shared bound with the quality path), projects the
+      verify verdict into the gate log when one exists so the repair hop sees it, then pure
+      slash (ADR-043) `/sp:dev-fixall` against `${vars.qualityGateCmd}`.
     onEnter:
       - kind: shell
         options:
@@ -345,7 +393,13 @@ states:
             mkdir -p .spur/run &&
             ATTEMPT_FILE=".spur/run/$wbs-test-fix-attempt" &&
             n=$(cat "$ATTEMPT_FILE" 2>/dev/null || echo 0) &&
-            printf '%s\n' "$((n + 1))" > "$ATTEMPT_FILE"
+            printf '%s\n' "$((n + 1))" > "$ATTEMPT_FILE" &&
+            if [ -f ".spur/run/$wbs-verdict.json" ]; then
+              { echo '--- verify verdict (remediation input, task 0703 R4) ---';
+                cat ".spur/run/$wbs-verdict.json";
+              } >> ".spur/run/$wbs-test-gate.log";
+            fi;
+            exit 0
       # R3 (0482): project the extracted gate anchors into a var so the dispatch input
       # can NAME the failing file:line, not merely point at a log. A vars template cannot
       # run a shell, so the read is an action, not an inline `$(cat ...)` substitution.
@@ -357,11 +411,16 @@ states:
         options:
           agent: ${vars.agent}
           # R3 (0482): `--findings` names the failing anchors inline; `--gate-log` remains
-          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
           role: coder
           # the full-context escape hatch when the digest is not enough.
           input: /sp:dev-fixall "${vars.qualityGateCmd}" --gate-log .spur/run/${vars.wbs}-test-gate.log --findings "${vars.gateFindings}"
           timeoutMs: ${vars.stepTimeoutMs}
+          # 0706 R6: bounded remediation hop — unattended and tree-mutating,
+          # so it declares the same minimum requirements as `implement`.
+          requiresCapabilities:
+            fsWrite: available
+            processSpawn: available
 
   - id: test-recheck
     description: >
@@ -370,6 +429,13 @@ states:
       or the pipeline `failed` state (FAIL and attempts exhausted) — never a
       raw lifecycle abort that skips the terminal `failed` state.
     onEnter:
+      # R4 (0703, ADR-071): bounded remediation mutated the tree by design, so the fresh evidence
+      # chain (recheck gate → review → verify) must start from a NEWLY captured digest. Capture-only;
+      # the guards and `record` compare against this value.
+      - kind: proof.fingerprint
+        options:
+          var: proofDigest
+          taskFile: ${vars.taskSpecPath}
       # 0587 R3: probe-then-full recheck. A red gateProbeCmd records FAIL and skips the full
       # gate (the measured waste is re-running a 110–140s gate to learn the tree is still red);
       # a green probe (or empty gateProbeCmd) falls through to the full-gate loop unchanged.
@@ -413,6 +479,7 @@ states:
             else
               printf 'FAIL\n' > "$STATUS_FILE";
             fi &&
+            printf 'proof-digest: %s\n' "$proofDigest" >> "$LOG_FILE" &&
             exit 0
 
   - id: review
@@ -420,10 +487,19 @@ states:
     onEnter:
       - kind: agent.run
         options:
-          agent: ${vars.agent}
+          # 0710 R2: review always runs on a fresh session — no implementation-session
+          # inheritance, no latch resume; implementation context reaches the reviewer
+          # only via the persisted task spec, the recorded diff, and run artifacts.
+          # 0710 R4/R5: the agent pin is deliberately gone — role: reviewer routes
+          # through the executor registry, and the runner enforces (pre-dispatch,
+          # fail-closed) that a P0/P1 task's review resolves a DIFFERENT executor
+          # spec than the implement stage recorded in __agentRouting_implement.
           input: /sp:dev-review ${vars.wbs} --auto
-          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
           role: reviewer
+          freshSession: true
+          priority: ${vars.taskPriority}
+          compareExecutorWith: implement
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: approve
@@ -441,47 +517,64 @@ states:
 
   - id: verify
     description: >
-      Functional verification (BDD + traceability) via /sp:dev-verify. The agent's
+      Observe-only functional verification (BDD + traceability) via /sp:dev-verify --fix none
+      (task 0703 R1, ADR-071): the verifier certifies the state, it never repairs its own subject.
+      A live digest compare BEFORE the agent refuses to certify a state that drifted after the
+      quality/review evidence was produced (R2). The agent's
       captured answer is written to `.spur/run/<wbs>-verify-answer.txt` and MUST follow
       the answer-file schema contract (explicit `Verdict: PASS|PARTIAL|FAIL` line plus
       `| Req | Status | Evidence |` and `| AC | Status | Evidence Type | Evidence |` tables);
       a deterministic shell step then derives the verdict and writes the gate artifact
       `.spur/run/<wbs>-verdict.json` (so the completion gate reads a real verdict, not
-      agent discretion — R9). The verdict is PASS only if the agent both reported PASS
-      AND `spur task check` passes; otherwise FAIL.
+      agent discretion — R9) with a proof block naming the digest and the per-stage results (R3).
+      Repairable non-PASS routes once through the bounded remediation hop (verify → test-fix,
+      R4); the chain reruns on a fresh digest.
     onEnter:
+      # R2 (0703): midpoint bracket compare — refuse to spend verification on a state that no
+      # longer matches the digest the quality/review evidence names. Reuses `proofDigestNow`:
+      # set here and re-set by the final compare at `record` entry.
+      - kind: proof.fingerprint
+        options:
+          var: proofDigestNow
+          taskFile: ${vars.taskSpecPath}
+          expect: ${vars.proofDigest}
       - kind: agent.run
         options:
-          agent: ${vars.agent}
-          input: /sp:dev-verify ${vars.wbs} --auto --fix all --focus all
-          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          # 0710 R2: verify is a separate fresh-session execution — never the review
+          # session, never the implement session (R6).
+          # 0710 R4/R5: role-routed like review; P0/P1 demands a distinct executor.
+          # R1 (0703, ADR-071): `--fix none` — final verification is observe-only. Remediation
+          # belongs to the bounded test-fix hop, never to the certifying pass.
+          input: /sp:dev-verify ${vars.wbs} --auto --fix none --focus all
+          # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
           role: reviewer
+          freshSession: true
+          priority: ${vars.taskPriority}
+          compareExecutorWith: implement
           timeoutMs: ${vars.stepTimeoutMs}
           answerFile: .spur/run/${vars.wbs}-verify-answer.txt
       - kind: shell
         options:
           command: "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt"
-      # Proof-state capture (task 0612, ADR-071). Placement is load-bearing: AFTER the verdict
-      # artifact exists, never before `verify`. `/sp:dev-verify --fix all` writes to the tree by
-      # design when it repairs a row, so an earlier capture would fire on verify's own legitimate
-      # repairs instead of on a violation.
+      # R3 (0703): write the required proof block into the verdict artifact — the digest, the
+      # capture point, and the named per-stage results, each stage carrying the SAME digest
+      # value (prose asserting proof validity is insufficient). Also keeps the flat
+      # `proof-input-digest` check row for consumers that read `checks[]`. Soft action + hard
+      # guard: a missing/malformed stamp fails the `verify → record` guard below, not this step.
       - kind: shell
         options:
-          command: '$spurBin task path $wbs --json 2>/dev/null | jq -r ".path // empty" > ".spur/run/$wbs-taskpath.txt" || true; exit 0'
-      - kind: file.read.into-var
-        options:
-          path: .spur/run/${vars.wbs}-taskpath.txt
-          var: taskSpecPath
-      - kind: proof.fingerprint
-        options:
-          var: proofDigest
-          taskFile: ${vars.taskSpecPath}
-      # R3: the evidence must NAME the digest, not just assert proof validity in prose. Stamp it
-      # into the verdict artifact's checks[] so the document that aggregates quality, review, and
-      # verification results carries the value `record`'s compare then proves unchanged.
-      - kind: shell
-        options:
-          command: 'V=".spur/run/$wbs-verdict.json"; if [ -f "$V" ] && [ -n "$proofDigest" ]; then jq --arg d "$proofDigest" ".checks += [{\"name\":\"proof-input-digest\",\"status\":\"pass\",\"evidence\":\$d}]" "$V" > "$V.tmp" && mv "$V.tmp" "$V"; fi; exit 0'
+          command: >-
+            V=".spur/run/$wbs-verdict.json";
+            if [ -f "$V" ] && [ -n "$proofDigest" ]; then
+              jq --arg d "$proofDigest" --arg g "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)"
+              '. + {proof: {digest: $d, capturePoint: "quality-gate-entry", stages: {
+                qualityGate: {status: $g, digest: $d},
+                review: {status: "completed", digest: $d},
+                verification: {status: .verdict, digest: $d}}}}
+                | .checks += [{name: "proof-input-digest", status: "pass", evidence: $d}]'
+              "$V" > "$V.tmp" && mv "$V.tmp" "$V";
+            fi;
+            exit 0
 
   - id: record
     description: >
@@ -492,10 +585,15 @@ states:
       retry-suppression) if `feature_id` is present, or appends an orphan link proposal
       to the run report if absent (task 0328 / ADR-0322).
     onEnter:
-      # Proof-state compare (task 0612, ADR-071) — FIRST action in the state, so it runs before any
-      # record write. Re-captures the digest and asserts it equals the value taken at verify-exit.
-      # A mismatch means a proof input changed after the verdict was established; the default `fail`
-      # policy halts the sequence and routes the run to `failed` rather than crossing into `record`.
+      # Proof-state compare (task 0612, ADR-071; bracket closed against the pre-chain
+      # capture per task 0703) — FIRST action in the state, before any record write.
+      # Re-captures the digest and asserts it equals the value the evidence chain started
+      # from. A mismatch means a proof input changed after evidence was established; the
+      # default `fail` policy halts the sequence and routes the run to `failed` rather
+      # than crossing into `record`. Task-spec evidence writes (Testing/Review/Solution,
+      # R6) happen only in the actions AFTER this comparison, and the fingerprint scopes
+      # task content to the proof-input sections, so they cannot invalidate the certified
+      # input set.
       - kind: proof.fingerprint
         options:
           var: proofDigestNow
@@ -573,10 +671,17 @@ states:
       - kind: note
         options:
           message: "Pipeline complete for task ${vars.wbs} (done gate cleared)."
-      # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
+      # Checkpoint write: record session state for resume (0711 R1–R3) —
+      # canonical frontmatter contract; mirrors the Session Checkpoint
+      # Convention in plugins/sp/skills/spur-dev/references/cross-cutting.md.
+      # Advisory only: the task file and the persisted run row stay authoritative.
       - kind: shell
         options:
-          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: task-pipeline done wbs=$wbs ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/$wbs-checkpoint.md'
+          # Single logical line: the composition-baseline argument-split lint flags any
+          # command whose continuation lines look like argument lists (heredocs with
+          # `- item` entries trip it), so the checkpoint body is one printf with \n escapes.
+          command: >-
+            mkdir -p .spur/memory/sessions; CP_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; CP_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"; CP_DIGEST="$(cut -d= -f2 .spur/run/$wbs-proofdigest.txt 2>/dev/null || echo '')"; CP_RUN="$SPUR_RUN_ID"; [ -z "$CP_RUN" ] && CP_RUN="$RUN_ID"; printf '%s\n' '---' 'schema_version: 1' "session_id: $(date -u +%Y-%m-%d)-$wbs" 'workflow: task-pipeline' "run_id: $CP_RUN" "task_wbs: $wbs" 'feature_id: ""' 'phase: done' 'status: done' 'last_gate: record' "source_commit: $CP_COMMIT" "digest: $CP_DIGEST" "generated_at: $CP_TS" "updated_at: $CP_TS" "next_action: none - task $wbs complete (terminal; advisory only)" 'artifacts:' '  - .spur/run/$wbs-verdict.json' '  - .spur/run/$wbs-test-gate.log' '---' '' '## Session Notes' '' "Terminal checkpoint for task $wbs (task-pipeline done)." 'Advisory only; the task file is authoritative.' > .spur/memory/sessions/$wbs-checkpoint.md; exit 0
 
   - id: failed
     description: >
@@ -707,39 +812,62 @@ transitions:
         command: 'test "$__hitlAnswer" = cancel'
 
   # ── completion gate (the YAML-native replacement for rd3's default-on --postflight-verify) ──
-  # The verify step emits .spur/run/<wbs>-verdict.json. Only `verdict: PASS` clears
-  # the gate to `record`; any non-PASS (PARTIAL/FAIL), a missing file, or malformed
-  # JSON routes to `failed`. Declaration order: PASS guard tried FIRST.
+  # The verify step emits .spur/run/<wbs>-verdict.json with a required proof block (task 0703 R3/R5).
+  # Only `verdict: PASS` PLUS a proof block whose digest — top level and every named stage — equals
+  # the captured `proofDigest` clears the gate to `record`; any non-PASS, a missing file, malformed
+  # JSON, or missing/mismatched proof evidence does not. Declaration order: PASS+proof guard FIRST,
+  # then the bounded remediation route (R4), then the always catch-all so a PASS verdict with a
+  # missing/malformed proof block still terminates at `failed` instead of hanging the state.
   - from: verify
     to: record
-    description: Verification verdict is PASS — record results and proceed to done.
+    description: Verification verdict is PASS and its proof block names the captured digest on every stage — record results and proceed to done.
     guard:
       kind: shell
       options:
-        command: 'test "$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)" = PASS'
+        command: >-
+          V=".spur/run/$wbs-verdict.json";
+          test "$(jq -r .verdict "$V" 2>/dev/null)" = PASS &&
+          test "$(jq -r '.proof.digest // ""' "$V" 2>/dev/null)" = "$proofDigest" &&
+          test "$(jq -r '.proof.stages.qualityGate.digest // ""' "$V" 2>/dev/null)" = "$proofDigest" &&
+          test "$(jq -r '.proof.stages.review.digest // ""' "$V" 2>/dev/null)" = "$proofDigest" &&
+          test "$(jq -r '.proof.stages.verification.digest // ""' "$V" 2>/dev/null)" = "$proofDigest"
+  - from: verify
+    to: test-fix
+    description: >-
+      Verification returned a repairable non-PASS and the shared fix budget is not exhausted —
+      bounded remediation hop (task 0703 R4); the chain re-enters quality → review → verify on a
+      freshly captured digest. Never reached on PASS: remediation cannot follow certification.
+    guard:
+      kind: shell
+      options:
+        command: >-
+          V="$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)";
+          test -n "$V" && test "$V" != PASS &&
+          test "$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)" -lt "$qualityGateMaxFixAttempts"
   - from: verify
     to: failed
-    description: Verification verdict is not PASS (PARTIAL/FAIL/missing) — block before done.
+    description: >-
+      Non-PASS with the fix budget exhausted, or a PASS/missing/malformed verdict whose proof
+      block is absent or mismatched (task 0703 R5) — block before done; defense catch-all so the
+      state always has a viable outgoing edge.
     guard:
-      kind: shell
-      options:
-        command: 'test "$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)" != PASS'
-  # ── done gate: record → done/failed gated on `spur task check` (ADR-026 amendment 2026-06-23) ──
-  # The record step guarantees every done-required section ([Solution, Testing, Review])
-  # has real content (each owned by its pipeline step). This guard is defense-in-depth —
-  # it certifies the matrix before done; a genuinely non-compliant task routes to failed.
+      kind: always
+  # ── done gate: record → done/failed gated on `spur task check` (ADR-026 amendment 2026-06-23)
+  # PLUS the proof-block re-assertion (task 0703 R5): the verdict artifact must still be PASS and
+  # still name the captured digest — a forged or mutated completion artifact fails closed here.
   # Declaration order: pass guard first.
   - from: record
     to: done
-    description: Task check passed — certify done.
+    description: Task check passed and the verdict proof block still names the captured digest — certify done.
     guard:
       kind: shell
       options:
-        command: "$spurBin task check $wbs"
+        command: >-
+          $spurBin task check $wbs &&
+          test "$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)" = PASS &&
+          test "$(jq -r '.proof.digest // ""' .spur/run/$wbs-verdict.json 2>/dev/null)" = "$proofDigest"
   - from: record
     to: failed
-    description: Task check failed — block before done; investigate missing sections.
+    description: Task check failed or proof evidence missing/malformed/mismatched — block before done.
     guard:
-      kind: shell
-      options:
-        command: "! $spurBin task check $wbs"
+      kind: always

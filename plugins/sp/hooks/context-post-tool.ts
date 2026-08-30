@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * context-post-tool — PostToolUse hook for indexed-context
  * (matcher: Bash|Grep|Glob|Read|Write|Edit — task 0248).
@@ -19,8 +20,9 @@
  * `superskill hook run sp context-post-tool`.
  */
 
-import { appendFileSync, existsSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { execSync } from 'node:child_process';
+import { appendFileSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 
 /** Tools recorded by this hook (must match hooks.json PostToolUse matcher). */
 export const ALLOWED_TOOLS = new Set(['Bash', 'Grep', 'Glob', 'Read', 'Write', 'Edit']);
@@ -282,6 +284,15 @@ export function recordToolUseEvent(
     const session = sessionMeta.session ?? '';
     if (!session) return null;
 
+    // Freshness stamp (task 0711 R4): the indexed-context producer is the agent
+    // following the skill's update guidance; the observable producer moment in
+    // code is a Write/Edit landing on a `.spur/context/*.md` file. Each such
+    // write refreshes `.freshness.json` so staleness checks can compare the
+    // sidecar's source commit against HEAD until the next regeneration.
+    if ((toolName === 'Write' || toolName === 'Edit') && isContextIndexFile(contextDir, filePath)) {
+        stampContextFreshness(contextDir, currentHeadCommit(), now());
+    }
+
     const tokens = resolveTokenEstimate(toolName, payload.tool_input, payload.tool_response);
     const ts = now().toISOString();
     const type = mapToolType(toolName);
@@ -307,6 +318,94 @@ export function recordToolUseEvent(
     }
 
     return event;
+}
+
+// ─── Context freshness sidecar (task 0711 R4) ───────────────────────────
+
+export interface ContextFreshness {
+    schema_version: number;
+    source_commit: string;
+    generated_at: string;
+}
+
+export const CONTEXT_FRESHNESS_SCHEMA_VERSION = 1;
+
+/** True when `filePath` is a regenerated context index inside `contextDir` (not the sidecars). */
+export function isContextIndexFile(contextDir: string, filePath: string): boolean {
+    const resolvedDir = resolve(contextDir);
+    const resolvedFile = resolve(filePath);
+    if (!resolvedFile.startsWith(resolvedDir + sep)) return false;
+    const name = resolvedFile.slice(resolvedDir.length + 1);
+    return name.endsWith('.md');
+}
+
+/** Current HEAD, best-effort — null when git is unavailable or the dir is not a work tree. */
+export function currentHeadCommit(): string | null {
+    try {
+        const out = execSync('git rev-parse HEAD', { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
+        const commit = out.trim();
+        return commit.length > 0 ? commit : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Write/refresh `.spur/context/.freshness.json`. Best-effort: any I/O failure
+ * leaves the previous sidecar (or none) in place — the hook contract is
+ * fail-open, never blocking.
+ */
+export function stampContextFreshness(contextDir: string, sourceCommit: string | null, at: Date): void {
+    if (!sourceCommit) return;
+    const body: ContextFreshness = {
+        schema_version: CONTEXT_FRESHNESS_SCHEMA_VERSION,
+        source_commit: sourceCommit,
+        generated_at: at.toISOString(),
+    };
+    try {
+        writeFileSync(join(contextDir, '.freshness.json'), JSON.stringify(body));
+    } catch {
+        /* fail-open */
+    }
+}
+
+export interface ContextFreshnessCheck {
+    stale: boolean;
+    reason?: string;
+}
+
+/**
+ * Compare a freshness sidecar against the current HEAD (task 0711 R4). A
+ * missing/unparsable sidecar is stale (`never stamped`); a commit mismatch is
+ * stale until the producer regenerates the index.
+ */
+export function checkContextFreshness(raw: string | null, headCommit: string | null): ContextFreshnessCheck {
+    if (raw === null) return { stale: true, reason: 'never stamped' };
+    let body: ContextFreshness;
+    try {
+        body = JSON.parse(raw) as ContextFreshness;
+    } catch {
+        return { stale: true, reason: 'malformed sidecar' };
+    }
+    if (body.schema_version !== CONTEXT_FRESHNESS_SCHEMA_VERSION) {
+        return { stale: true, reason: `schema_version ${String(body.schema_version)}` };
+    }
+    if (typeof body.source_commit !== 'string' || body.source_commit === '') {
+        return { stale: true, reason: 'missing source_commit' };
+    }
+    if (headCommit !== null && body.source_commit !== headCommit) {
+        return { stale: true, reason: 'source commit changed since generation' };
+    }
+    return { stale: false };
+}
+
+/** Read the freshness sidecar, or null when absent/unreadable. */
+export function readContextFreshness(contextDir: string): string | null {
+    try {
+        return readFileSync(join(contextDir, '.freshness.json'), 'utf-8');
+    } catch {
+        return null;
+    }
 }
 
 // Entrypoint — thin wrapper; logic lives in {@link recordToolUseEvent} for unit coverage.

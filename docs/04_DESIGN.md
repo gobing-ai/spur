@@ -924,6 +924,26 @@ The coverage table adds `Last imported` / `Parse err` / `Validation err`, marks 
 warning instead of a code-only list. `narrowArtifact` re-slice (`report --top`) lowers
 `appliedTop` to `min(requested, existing)` and leaves the population counts untouched.
 
+**Verified-outcome projection (task 0712):** `HistoryArtifact.verifiedOutcome?`
+(`VerifiedOutcomeStat`, additive, no schema bump; absent on pre-0712 artifacts and whenever no
+task locator is configured — absence means unknown, never zero). The app derivation
+(`packages/app/src/services/verified-outcome.ts`) gathers per-task evidence — `task_run_links`
+⨝ `runs` (window-bounded population, hard row cap), the task-file corpus (frontmatter
+`status`/`done_forced`, `## History` transitions via the shared `parseHistoryLine`, the
+`## Testing` `Verdict:` line via the shared `parseVerdictLine`), and
+`.spur/run/<wbs>-verdict.json` — and the pure domain fold
+(`packages/domain/src/analytics/verified-outcome.ts`) applies the frozen R1/R2 definitions:
+verified = done ∧ PASS artifact verdict ∧ proof digest present ∧ certifying run completed;
+correction = verified task with a reopen transition or a superseding failed run. Rates null on
+a zero denominator; time-to-verified folds first-wip→done spans; measured cost per verified
+result uses exact run→session mappings only (estimated mappings and dollar figures unread, per
+run-cost R3) and is `null` plus an explicit `costCoverage {covered,total}` pair — absence is
+never coalesced to zero (R4). Exclusions land in `excludedReasons` by frozen reason. The
+default report mode renders a `Verified outcome` section with `n/a` for unmeasured values
+(R5); duplicate wbs rows dedupe (R8); `history analyze --json` carries the block unchanged.
+`HistoryServiceContext.taskLocator` (wired in `apps/cli/src/commands/history.ts` from
+`TaskLocator.forDirs`) gates derivation; derivation failure never fails the analyze batch.
+
 **Pairings renderer (task 0574, feature J8 R2/R3):** `renderPairings`
 (`packages/domain/src/analytics/render-pairings.ts`) — a pure `HistoryArtifact → string` mode
 consuming ONLY the additive `pairings` / `ladderSnapshot` fields (0573); never opens the
@@ -2155,14 +2175,21 @@ is the single canonical task pipeline. Two-layer plan rendering is the inline dr
 (`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:33-42`).
 
 **D5 transition (ADR-071/072/076).** The proof-state invariant (ADR-071) requires remediation to be
-separated from a digest-bound quality → review → `--fix none` proof chain. The `task-pipeline2.yaml`
+separated from a digest-bound quality → review → `--fix none` proof chain. The task pipeline half
+landed (task 0703, 2026-08-29): observe-only verify, entry-point capture, bounded remediation hop,
+proof-block evidence, and fail-closed completion guards. The docs pipeline remains open under task
+0704. The `task-pipeline2.yaml`
 candidate was retired without promotion (ADR-076, 2026-08-20) — the invariant it was meant to
 demonstrate stands on its own and governs any future candidate. Composition, action, gate, and artifact shapes are in
 [`workflow-composition-contract.md`](design/workflow-composition-contract.md).
 
 **Vars.** `wbs`, `profile`, `spurBin`, `agent`, `implementAgent`, `stepTimeoutMs`, `implementTimeoutMs`,
 `maxImplementReqs`, `maxImplementPlanItems`, `qualityGateCmd`, `qualityGateMaxFixAttempts`, `gateProbeCmd`,
-`formatCmd`, `implementScopeGuard`, `__hitlAnswer`. Three are command-shaped (the per-project override
+`formatCmd`, `implementScopeGuard`, `__hitlAnswer`, plus the proof-chain trio (task 0703):
+`taskSpecPath` (task file resolved at `test` entry — `docs/tasks*` is excluded from the digest's
+git-tree half), `proofDigest` (canonical capture at quality-gate entry, re-captured at
+`test-recheck`), and `proofDigestNow` (live re-capture compared at verify entry and before
+`record`). Three are command-shaped (the per-project override
 surface): `qualityGateCmd` (default `bun run format && bun run spur-check`) is single-sourced across the soft
 probe, the `/sp:dev-fixall` input and the recheck; `formatCmd` (default `bun run format`) is the
 post-implement auto-format; `gateProbeCmd` (default `bun run lint`) is the cheap red-detector run before
@@ -2203,12 +2230,21 @@ C3/C5). The gate run is tee'd to `.spur/run/${wbs}-test-gate.log`, and the `test
 captured finding's `file:line` anchor rather than re-deriving the failure (task 0482 R3);
 `review` → `/sp:dev-review` (→ `sp:super-reviewer` → `sp:code-verification` +
 `sp:functional-review` + `sp:code-improvement`; three dimensions — SECUA / functional /
-architecture, task 0227); `verify` → `/sp:dev-verify` (→ `sp:code-verification` verify mode).
+architecture, task 0227); `verify` → `/sp:dev-verify --fix none` (→ `sp:code-verification` verify
+mode) — observe-only per task 0703/ADR-071: a repairable non-PASS routes once through the bounded
+`verify → test-fix` edge (budget shared with the quality gate via
+`.spur/run/<wbs>-test-fix-attempt`), and `test-recheck` re-captures `proofDigest` so the re-entered
+quality → review → verify chain certifies a fresh state.
 
-**Completion gate (ADR-026):** the `verify` step emits `.spur/run/<wbs>-verdict.json`; the
-`verify → record` transition is a shell guard asserting `jq -r .verdict … = PASS`, with a sibling
-`verify → failed` on the negation — so a PARTIAL/FAIL/missing verdict blocks `done`. This is the
-spur-native replacement for rd3's default-on `--postflight-verify`.
+**Completion gate (ADR-026; proof block per task 0703/ADR-071):** the `verify` step emits
+`.spur/run/<wbs>-verdict.json` whose `checks[]` carries a `proof-input-digest` row and whose
+`proof` block names the digest (`capturePoint: quality-gate-entry`) with per-stage results for
+`qualityGate`, `review`, and `verification` — each carrying the same digest value. The
+`verify → record` transition is a shell guard asserting `.verdict = PASS` AND `.proof.digest` + all
+three stage digests equal `$proofDigest`, with a bounded `verify → test-fix` edge (repairable
+non-PASS, budget unexhausted) and an `always` sibling `verify → failed` — so a PARTIAL/FAIL,
+missing file, malformed JSON, or missing/mismatched proof evidence blocks `done` and always
+terminates. This is the spur-native replacement for rd3's default-on `--postflight-verify`.
 **Canonical verdict contract (task 0592, F92):** the verify artifact is validated and aggregated
 by one runtime contract — `packages/app/src/services/verify-verdict.ts` owns the Zod schema
 (`verifyVerdictSchema`), the parser (`parseVerifyVerdict` / `readVerifyVerdict`, distinguishing
@@ -2256,6 +2292,83 @@ and the step-reporter renders it on the action line (`role=<id>`). An `agent:` p
 routing permanently (0536 R2): the role declares the *reason*, so removing the pin later routes
 correctly instead of falling to the default role.
 
+**Capability attestation (ADR-101, task 0706).** A `agent.run` step may declare
+`requiresCapabilities` — a partial map over the closed axis vocabulary
+`fsRead|fsWrite|networkEgress|processSpawn|externalMutationApproval` to a minimum level
+`available|enforced` (`EXECUTION_CAPABILITY_*`, `packages/config/src/index.ts`). Executors attest
+`executionCapabilities` (`version: 1`, partial `axes` map, per-axis `state` + `provenance`
+`native-known|operator-configured|unattested`) in their agent-config entry. `AgentService`
+dispatch resolves the target executor and compares requirements against the attestation BEFORE
+spawning, re-checking on each escalation hop; a missing attestation, unknown axis state, or
+level below the requirement fails closed (exit 2) with an axis-by-axis diagnostic naming required
+vs. actual state and provenance. Missing data resolves to `unknown`, never permissive; tier is
+never a capability signal. Satisfied gates record a bounded, redacted per-axis evidence payload
+(axis/state/provenance only — no config blobs) on `routing.capabilities` in the run trace.
+`AgentRunActionRunner` re-validates the option shape at the action boundary. Shipped reference
+workflows attest the two unattended tree-mutating stages (`implement`, `test-fix` in
+`task-pipeline.yaml`); observe-only stages stay undeclared.
+
+**Usage propagation and hard budgets (task 0707, R1–R7).** Agent usage is a normalized optional
+contract (`NormalizedAgentUsage`, `packages/app/src/services/agent-usage.ts`): `availability:
+'measured'|'unavailable'` with typed token/cost fields only when actually reported — unavailable
+stays unavailable with a reason and is **never** coerced to zero. The contract reads ONLY typed
+structured fields off a runner result (R2); parsing stdout/stderr for accounting is rejected. The
+installed `@gobing-ai/ts-ai-runner` facade exposes no structured usage today, so dispatch results
+carry the honest `unavailable` shape (`AgentRunTracedResult.usage?`, `agent.execution.finished`, and
+the trace-safe `WorkflowActionUsageSummary` projection) until the owning runner package publishes
+typed fields — the seam normalizes them the day they appear. `agent.run` accepts optional
+`maxTokens` / `maxCostUsd` hard budgets (R4): validated at the action trust boundary (positive
+finite; string numbers accepted), evaluated once when the dispatch returns — wall-clock
+(`timeoutMs`) remains the only mid-run control. Over-budget steps fail with per-cap violations and
+emit a bounded `workflow.agent.budget` event (identifiers + scalars only; run-log records one line);
+a cap that cannot be evaluated because usage is unavailable fails closed as `budget-unverifiable`
+(R5) — never silently passed, never estimated from public price tables (R8). Actions that declare no
+budget dispatch unchanged; failed dispatches keep their existing diagnostics (R7).
+
+**Fail-closed operational trip wires (task 0708, R1–R8).** High-risk operational signals at
+workflow/action safe boundaries are evaluated against a **closed, deterministic catalog**
+(`packages/app/src/workflow/tripwire.ts`): `retry-exhausted`, `hard-budget`, `capability-denied`,
+`proof-invalidated`, `output-drop` — each versioned, with a fixed `response` (`fail` for all but
+`output-drop`, which records and continues) and an `nextDecision` recovery instruction (R1/R6). No
+model call, no DSL, no new thresholds (Q&A). The agent-run action evaluates the wires once per
+dispatch at the existing post-dispatch boundary, reading only already-normalized outcomes — the
+budget verdict, the steering settle reason, the capability-attestation denial marker
+(`CAPABILITY_BLOCK_PREFIX`), the bounded relay's drop counter — never duplicated state (R2/R5). A
+fired wire emits the canonical bounded `workflow.tripwire.fired` event on the workflow observability
+bus (policy id/version, run/action/task correlation, observed value, threshold, evidence refs,
+next decision; run-log records one line) (R4). Fail policies return through the existing
+action-failure semantics with the exact next decision in the error and the partial-work artifact
+preserved, so the engine stops subsequent actions and the state machine follows its declared route
+(R3/R7); `capability-denied` keeps the richer pre-dispatch failure path (no dispatch ever ran). The
+steering boundary's timeout default is fail-closed: once the retry policy is exhausted and the
+attempt failed, a steering timeout resolves `abort` with a `retry-exhausted` reason instead of
+continue (R3). `proof.fingerprint` participates when composed with the observability bus: an
+`expect` mismatch emits the `proof-invalidated` wire before failing through its existing mismatch
+semantics. Deterministic fail-closed evaluation means an unknown signal id fails the evaluation
+rather than silently passing, and drift between emitters and the catalog is caught by unit tests
+pinning the closed catalog and the event map (R8).
+
+**Fresh-context review independence (task 0710, R1–R8).** `agent.run` accepts `freshSession: true`
+(R1): the action bypasses every inherited session knob (`__agentSessionDir`, `__agentSessionId`, the
+`__agentSession` latch), dispatches into a per-node `fresh-<node>` session directory with no session
+id, and publishes **only** routing evidence on success — never its own session identity — so a
+review/verify hop cannot contaminate a later implement/test-fix resume. Every successful dispatch
+persists bounded routing evidence under the workflow var `__agentRouting_<node>` (R3):
+`{"agent": <resolved executor>, "model?"}` — identifiers only. The task pipeline's `review` and
+`verify` steps declare `freshSession: true` and route by `role: reviewer` alone (R2/R7): the
+implementation executor pin is gone, so review/verify resolve through the executor registry and the
+reviewer's context comes only from the persisted task spec, the recorded diff, and run artifacts.
+Risk policy (R4): a task's frontmatter priority (extracted to `taskPriority` at the quality-gate
+stage) decides whether the P0/P1 distinct-executor rule applies — review/verify must then resolve a
+DIFFERENT executor spec than `__agentRouting_implement` records; lower priorities (and unknown
+priority) require fresh context only, with executor reuse allowed. Distinctness is evaluated AFTER
+routing and BEFORE dispatch via the pure `review-independence` module (R5): missing implementation
+evidence, unresolvable reviewer routing, and equal executor names all fail closed with the exact
+configuration remedy (`roles.reviewer` tier override or an explicit pin) — never a silent dispatch.
+Composition (R8): the live pipeline itself is checked — a proof-chain test fails if review/verify
+re-pin an executor, lose `freshSession: true`, or drift from `compareExecutorWith: implement`, and
+the composition baseline digest regenerates with every pipeline change.
+
 **Run status (ADR-044):** terminal states partition into success and failure via an optional
 `failureStates` subset of `terminalStates` (declared per workflow; absent ⇒ today's behavior). Landing
 in a failure terminal finalizes the run as `status: "failed"` through `lifecycle.fail` — the persisted
@@ -2279,10 +2392,11 @@ The `record` step provides a **Solution safety-net**: if the implement step didn
 empty/whitespace, or placeholder sections — the single reusable mechanism behind all three
 writes.
 
-**Done gate:** the `record → done` transition runs a shell guard `spur task check <wbs>`
-with a `record → failed` sibling on negation — mirroring the `verify → record` verdict gate
-exactly. The guard passes because every required section was guaranteed upstream; a genuinely
-non-compliant task routes to `failed` instead of a silent bad `done`.
+**Done gate:** the `record → done` transition runs a shell guard `spur task check <wbs>` plus the
+proof-block re-assertion (`.verdict = PASS` and `.proof.digest = $proofDigest`, task 0703 R5) with
+an `always` `record → failed` sibling — mirroring the `verify → record` gate exactly. The guard
+passes because every required section was guaranteed upstream and the evidence still names the
+captured digest; a genuinely non-compliant task routes to `failed` instead of a silent bad `done`.
 
 **Planning pipeline** — `config/workflows/planning-pipeline.yaml` (task 0088; design §6). Front-half
 of the dev workflow: `phasing(HITL) → feature-id → design-gen → design-approval(HITL) → handoff`.

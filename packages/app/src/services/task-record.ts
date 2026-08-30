@@ -308,10 +308,12 @@ function parseTestingBody(body: string, wbs: string): ParseVerdictOutcome {
 
 /**
  * Read a canonical aggregate from a `Verdict:` line anywhere in the section.
+ * Shared with the verified-outcome derivation (0712), which reads the same
+ * canonical verdict contract from the raw corpus text.
  * Matches `- Verdict: PASS (from verdict artifact)` and bare `Verdict: PASS`.
  * Returns null when absent — parseable rows are never discarded for that.
  */
-function parseVerdictLine(lines: string[]): VerdictAggregate | null {
+export function parseVerdictLine(lines: string[]): VerdictAggregate | null {
     for (const line of lines) {
         // Line-anchored (optionally after `- ` bullet or `**` bold) so evidence text
         // containing a mid-line "Verdict:" token cannot be misread as the section verdict.

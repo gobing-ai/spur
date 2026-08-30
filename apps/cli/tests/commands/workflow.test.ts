@@ -820,6 +820,50 @@ failureStates:
         await rm(dir, { recursive: true, force: true });
     });
 
+    // 0709: a terminally failed run projects ONE canonical escalation packet
+    // from existing run evidence (run-log sink + system ledger unaffected).
+    test('run subcommand projects an escalation packet when the run fails terminally', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'failing.yaml');
+        await writeFile(
+            workflowFile,
+            [
+                'name: cli-esc-flow',
+                'kind: state-machine',
+                'initialState: start',
+                'states:',
+                '  - id: start',
+                '    onEnter:',
+                '      - kind: shell',
+                '        options:',
+                '          command: exit 1',
+                '  - id: done',
+                'transitions:',
+                '  - from: start',
+                '    to: done',
+                'terminalStates: [done]',
+            ].join('\n'),
+        );
+        const output = createCapturedOutput();
+
+        const exitCode = await main(['workflow', 'run', '--run-id', 'esc-1', workflowFile], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(1);
+        const packetPath = join(dir, '.spur', 'run', 'esc-1-escalation.json');
+        expect(await exists(packetPath)).toBe(true);
+        const packet = JSON.parse(await readFile(packetPath, 'utf8')) as Record<string, unknown>;
+        expect(packet.schemaVersion).toBe(1);
+        expect(packet.trigger).toBe('terminal-failure');
+        expect((packet.decision as Record<string, unknown>).kind).toBe('inspect_failure');
+        // The failing shell action stays visible in the run log; the packet is
+        // additional, not a replacement (R7).
+        await rm(dir, { recursive: true, force: true });
+    });
+
     test('run subcommand accepts a valid --vars override and completes', async () => {
         const dir = await createTempProject();
         const workflowFile = join(dir, 'workflow.yaml');

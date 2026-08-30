@@ -25,6 +25,12 @@ export {
     configuredSecretValues,
     redactAndBound,
 } from './observability/agent-execution';
+// Canonical escalation packet projection from run evidence (task 0709)
+export {
+    ESCALATION_PACKET_KIND,
+    EscalationPacketSink,
+    type EscalationPacketSinkOptions,
+} from './observability/escalation-packet-sink';
 // Consolidated all-in-one per-run workflow run log (feature D2 / task 0426)
 export {
     DEFAULT_RUN_LOG_MAX_BYTES,
@@ -529,6 +535,16 @@ export {
     type WorkflowCompositionBaseline,
     type WorkflowEntryBaseline,
 } from './workflow/composition-baseline';
+export {
+    buildEscalationPacket,
+    decisionKindForGate,
+    ESCALATION_PACKET_SCHEMA_VERSION,
+    type EscalationDecisionKind,
+    type EscalationPacket,
+    escalationFingerprint,
+    extractProofDigest,
+    renderEscalationMarkdown,
+} from './workflow/escalation-packet';
 export {
     type FinalizeIdeaHandoffOptions,
     type FinalizeIdeaHandoffResult,

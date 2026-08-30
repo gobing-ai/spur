@@ -63,7 +63,7 @@ function makeAgentFinishedEvent(): AgentExecutionEvent {
         outcome: 'done',
         exitCode: 0,
         durationMs: 9_000,
-        usage: 'unavailable',
+        usage: { availability: 'unavailable', unavailabilityReason: 'test' },
     };
 }
 
@@ -218,6 +218,36 @@ describe('WorkflowRunLogSink', () => {
         rmSync(dir, { recursive: true, force: true });
     });
 
+    test('R4 (0708) — one bounded line per trip-wire fired event', async () => {
+        const dir = tempDir();
+        const bus = makeBus();
+        const sink = new WorkflowRunLogSink({ bus, dir, runId: 'run-1' });
+        await bus.emit('workflow.tripwire.fired', {
+            schemaVersion: 1,
+            eventId: 'e-tw',
+            runId: 'run-1',
+            at: '2026-08-02T00:00:06.000Z',
+            severity: 'warning',
+            node: 'implement',
+            kind: 'agent.run',
+            policy: { id: 'hard-budget-exceeded', version: 1 },
+            response: 'fail',
+            observed: 'hard budget exceeded: tokens=999999',
+            threshold: 'maxTokens=1000',
+            actionId: 'run-1:s1',
+            task: '0708',
+            evidenceRefs: ['workflow.agent.budget'],
+            nextDecision: 'raise the declared budget or narrow the step',
+        });
+        sink.close();
+
+        const text = readFileSync(sink.filePath, 'utf8');
+        expect(text).toContain(
+            'tripwire hard-budget-exceeded (v1) fail node=implement: hard budget exceeded: tokens=999999 — next: raise the declared budget or narrow the step',
+        );
+        rmSync(dir, { recursive: true, force: true });
+    });
+
     test('R6 — the log never leaks prompt bodies or shell command text', async () => {
         const dir = tempDir();
         const bus = makeBus();
@@ -322,5 +352,34 @@ describe('WorkflowRunLogSink', () => {
         expect(DEFAULT_RUN_LOG_MAX_BYTES).toBeGreaterThan(0);
         expect(sink.isTruncated).toBe(false);
         sink.close();
+    });
+});
+
+describe('WorkflowRunLogSink budget events (task 0707)', () => {
+    test('appends one bounded line per workflow.agent.budget event', async () => {
+        const dir = tempDir();
+        const bus = makeBus();
+        const sink = new WorkflowRunLogSink({ bus, dir, runId: 'run-1' });
+        await bus.emit('workflow.run.started', { ...base(), workflowName: 'flow' });
+        await bus.emit('workflow.agent.budget', {
+            schemaVersion: 1,
+            eventId: 'e-budget',
+            runId: 'run-1',
+            at: '2026-08-02T00:00:05.000Z',
+            severity: 'warning',
+            node: 'implement',
+            kind: 'agent.run',
+            agent: 'claude',
+            verdict: 'over',
+            budget: { maxTokens: 100 },
+            violations: ['1800 exceed maxTokens 100'],
+        });
+        sink.close();
+
+        const text = readFileSync(sink.filePath, 'utf8');
+        expect(text).toContain(
+            '[2026-08-02T00:00:05.000Z] budget over node=implement agent=claude maxTokens=100: 1800 exceed maxTokens 100',
+        );
+        rmSync(dir, { recursive: true, force: true });
     });
 });

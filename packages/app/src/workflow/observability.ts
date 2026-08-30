@@ -52,6 +52,9 @@ export interface WorkflowActionMetadata {
     role?: string;
     invocation?: string;
     timeoutMs?: number;
+    /** Declared hard budgets (0707 R4) — identifiers only, never usage numbers. */
+    maxTokens?: number;
+    maxCostUsd?: number;
 }
 
 /** A run has been created and is about to execute its first state. */
@@ -106,8 +109,111 @@ export interface WorkflowActionFinishedEvent extends WorkflowEventBase {
     /** Action kind copied from the correlated start event. */
     kind: string;
     /** Trace-safe result summary; absent when the action returned no result. */
-    result?: { error?: string; usage: string };
+    result?: { error?: string; usage: WorkflowActionUsageSummary };
 }
+/** Bounded usage summary carried on action-finished events (0707 R3/R9). */
+export interface WorkflowActionUsageSummary {
+    availability: 'measured' | 'unavailable';
+    /** Sum of reported token counts, present only when tokens were measured. */
+    totalTokens?: number;
+    costUsd?: number;
+    source?: string;
+    /** Present only when unavailable. */
+    reason?: string;
+}
+
+/**
+ * Bounded hard-budget verdict for one `agent.run` step (0707 R6): identifiers
+ * and scalars only — no prompts, output, or raw provider payloads. Emitted
+ * directly by the action runner at the post-dispatch safe boundary (standalone
+ * event, ordered by `at`; sequence numbering belongs to the lifecycle stream).
+ */
+export interface WorkflowAgentBudgetEvent {
+    readonly schemaVersion: 1;
+    readonly eventId: string;
+    readonly runId: string;
+    readonly at: string;
+    readonly severity: 'warning';
+    /** The state (node) whose action breached/was unverifiable. */
+    readonly node: string;
+    /** The action kind (always `agent.run`). */
+    readonly kind: string;
+    /** Resolved executor label. */
+    readonly agent: string;
+    readonly verdict: 'over' | 'unverifiable';
+    /** The declared caps that were evaluated. */
+    readonly budget: { maxTokens?: number; maxCostUsd?: number };
+    /** Human-readable violations (over) or the fail-closed reason (unverifiable). */
+    readonly violations: readonly string[];
+}
+
+/**
+ * An escalation packet was projected and persisted from run evidence (0709 R6).
+ * Identifiers and the artifact reference only — the packet JSON stays on disk.
+ */
+export interface WorkflowEscalationCreatedEvent {
+    /** Envelope schema version. Increment only for a breaking payload change. */
+    readonly schemaVersion: 1;
+    readonly eventId: string;
+    readonly runId: string;
+    readonly workflowName?: string;
+    readonly at: string;
+    /** Stable failure fingerprint of the projected packet. */
+    readonly fingerprint: string;
+    /** Path of the canonical JSON packet artifact. */
+    readonly artifactPath: string;
+    /** The unresolved operator decision kind (closed vocabulary, 0709 R1). */
+    readonly decision: string;
+}
+
+/**
+ * Secondary diagnostic when escalation projection itself failed (0709 R7): the
+ * original trip wire / terminal failure is untouched; this only records that
+ * the packet could not be rendered.
+ */
+export interface WorkflowEscalationProjectionFailedEvent {
+    readonly schemaVersion: 1;
+    readonly eventId: string;
+    readonly runId: string;
+    readonly workflowName?: string;
+    readonly at: string;
+    /** Bounded error message. */
+    readonly error: string;
+}
+
+/**
+ * Canonical bounded trip-wire event (0708 R4): policy id/version, run/action/task
+ * correlation, threshold, observed value, and evidence refs — identifiers and
+ * scalars only, never raw output. Emitted at the existing workflow/action safe
+ * boundaries when a catalog condition fires.
+ */
+export interface WorkflowTripwireFiredEvent {
+    readonly schemaVersion: 1;
+    readonly eventId: string;
+    readonly runId: string;
+    readonly at: string;
+    readonly severity: 'warning';
+    /** The state (node) at whose safe boundary the wire fired. */
+    readonly node: string;
+    /** The action kind that observed the signal (e.g. `agent.run`, `proof.fingerprint`). */
+    readonly kind: string;
+    /** Fired policy from the closed catalog, with its per-policy version. */
+    readonly policy: { id: string; version: number };
+    /** What the workflow does: fail (stop dispatch) or continue (record only). */
+    readonly response: 'fail' | 'continue';
+    /** What was observed, bounded and redacted by the emitting boundary. */
+    readonly observed: string;
+    /** Threshold that was crossed, in the owning contract's terms. */
+    readonly threshold?: string;
+    /** Correlation ids: the action and, when known, the task wbs. */
+    readonly actionId: string;
+    readonly task?: string;
+    /** Where the evidence lives (artifact path, digest pair, trace ids, …). */
+    readonly evidenceRefs: readonly string[];
+    /** The exact next decision required from an operator (R7). */
+    readonly nextDecision: string;
+}
+
 /** One live stdout/stderr chunk emitted by a non-agent action (e.g. `shell`) during execution. */
 export interface WorkflowActionOutputEvent extends WorkflowEventBase {
     /** The action kind (e.g. `shell`). */
@@ -133,6 +239,14 @@ export type WorkflowObservabilityEventMap = {
     'workflow.action.finished': (event: WorkflowActionFinishedEvent) => void;
     /** Live stdout/stderr chunk from a non-agent action (e.g. `shell`) during execution. */
     'workflow.action.output': (event: WorkflowActionOutputEvent) => void;
+    /** Bounded hard-budget verdict emitted at the agent.run safe boundary (0707 R6). */
+    'workflow.agent.budget': (event: WorkflowAgentBudgetEvent) => void;
+    /** Canonical operational trip-wire event emitted at workflow safe boundaries (0708 R4). */
+    'workflow.tripwire.fired': (event: WorkflowTripwireFiredEvent) => void;
+    /** Canonical escalation packet projected from run evidence (0709 R6). */
+    'workflow.escalation.created': (event: WorkflowEscalationCreatedEvent) => void;
+    /** Escalation projection failed; original failure preserved (0709 R7). */
+    'workflow.escalation.projection_failed': (event: WorkflowEscalationProjectionFailedEvent) => void;
     /** Unified agent lifecycle emitted by both direct and workflow dispatch paths. */
     'workflow.agent': (event: AgentExecutionEvent) => void;
     'workflow.steering': (event: SteeringAck) => void;
@@ -218,6 +332,12 @@ export function projectActionMetadata(
     if (typeof options.timeoutMs === 'number' && Number.isFinite(options.timeoutMs)) {
         metadata.timeoutMs = Math.max(0, options.timeoutMs);
     }
+    if (typeof options.maxTokens === 'number' && Number.isFinite(options.maxTokens)) {
+        metadata.maxTokens = Math.max(0, options.maxTokens);
+    }
+    if (typeof options.maxCostUsd === 'number' && Number.isFinite(options.maxCostUsd)) {
+        metadata.maxCostUsd = Math.max(0, options.maxCostUsd);
+    }
     const input = typeof options.input === 'string' ? options.input.trim() : '';
     if (kind === 'agent.run' && input !== '') {
         const command = input.startsWith('/') ? input.split(/\s+/, 1)[0] : undefined;
@@ -238,9 +358,31 @@ function sanitizeCommand(cmd: string): string {
     return trimmed;
 }
 
-function projectResult(result: unknown): { error?: string; usage: string } | undefined {
+function projectUsage(raw: unknown): WorkflowActionUsageSummary {
+    if (typeof raw === 'object' && raw !== null) {
+        const obj = raw as Record<string, unknown>;
+        if (obj.availability === 'measured') {
+            return {
+                availability: 'measured',
+                ...(typeof obj.totalTokens === 'number' && Number.isFinite(obj.totalTokens)
+                    ? { totalTokens: obj.totalTokens }
+                    : {}),
+                ...(typeof obj.costUsd === 'number' && Number.isFinite(obj.costUsd) ? { costUsd: obj.costUsd } : {}),
+                ...(typeof obj.source === 'string' && obj.source !== '' ? { source: bounded(obj.source) } : {}),
+            };
+        }
+        const reason =
+            typeof obj.unavailabilityReason === 'string' && obj.unavailabilityReason !== ''
+                ? bounded(obj.unavailabilityReason)
+                : undefined;
+        return { availability: 'unavailable', ...(reason !== undefined ? { reason } : {}) };
+    }
+    return { availability: 'unavailable' };
+}
+
+function projectResult(result: unknown): { error?: string; usage: WorkflowActionUsageSummary } | undefined {
     if (result === undefined) return undefined;
-    if (typeof result !== 'object' || result === null) return { usage: 'unavailable' };
+    if (typeof result !== 'object' || result === null) return { usage: { availability: 'unavailable' } };
     const obj = result as Record<string, unknown>;
     const error = typeof obj.error === 'string' ? bounded(obj.error) : undefined;
     const stderr =
@@ -248,7 +390,12 @@ function projectResult(result: unknown): { error?: string; usage: string } | und
     const stdout =
         typeof obj.stdout === 'string' && obj.stdout.trim() !== '' ? bounded(obj.stdout.trim(), 120) : undefined;
     const detail = error ?? stderr ?? stdout;
-    return { ...(detail !== undefined ? { error: detail } : {}), usage: 'unavailable' };
+    return {
+        ...(detail !== undefined ? { error: detail } : {}),
+        // Producers nest usage under `data` (agent-run buildResultData); a direct
+        // `usage` on the envelope stays supported for non-agent actions.
+        usage: projectUsage((obj.data as Record<string, unknown> | undefined)?.usage ?? obj.usage),
+    };
 }
 
 /**

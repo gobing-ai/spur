@@ -1141,11 +1141,14 @@ verified(D) + confined evidence write tagged D      → verified(D)
 any state write|may-write or current digest != D    → invalidated
 ```
 
-The live `verify:onEnter:0` action is `/sp:dev-verify ... --fix all`; it is therefore
-`stateEffect: may-write`, not `read`, and cannot establish `verified`. The target flow moves all
-remediation before the proof chain, uses a read-only named project script for `command.gate`, and
-runs final verification with `--fix none`. A failed verification may enter one bounded remediation
-hop, but that hop returns to quality, review, and verification on a fresh digest.
+The task pipeline now implements this flow (task 0703): `verify.onEnter:0` is the midpoint
+`proof.fingerprint` compare (`expect: ${vars.proofDigest}`), the agent action is
+`/sp:dev-verify ... --fix none` (`stateEffect: read`), a repairable non-PASS routes once through
+the bounded `verify → test-fix` hop (budget shared with the quality gate), and `test-recheck`
+re-captures the digest so the re-entered chain certifies a fresh state. The verdict artifact
+carries a proof block naming one digest across quality, review, and verification; `verify → record`
+and `record → done` guards refuse missing, malformed, or mismatched proof evidence. The docs
+pipeline remains on `--fix all` with a synthetic PASS pending task 0704.
 
 Only `verified(D)` may cross the completion boundary, and the boundary re-captures D immediately
 before transition. This statically disqualified the former `task-pipeline2.yaml`: both its

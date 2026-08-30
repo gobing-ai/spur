@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Derive verified-result and correction-cost operational metrics"
-status: todo
+status: done
 template: issue
 created_at: 2026-08-28T23:03:05.744Z
-updated_at: "2026-08-28T23:09:19.640Z"
+updated_at: "2026-08-30T05:35:50.727Z"
 priority: P2
 tags: ["harness", "history", "metrics", "verification"]
 dependencies: ["0703", "0707"]
@@ -22,15 +22,15 @@ Existing task/run links, workflow records, verdict artifacts, history session li
 
 ### Requirements
 
-- [ ] R1. Define `verified result` as a task reaching done with a PASS verdict whose proof digest matches the final certified state; do not count force-done, missing verdict, synthetic verdict, PARTIAL, FAIL, or invalidated proof.
-- [ ] R2. Define a correction as a verified task that is reopened, receives a post-verdict proof-input mutation requiring a new verification, or is superseded by a failed/retry run before stable completion. Keep the definition deterministic and documented.
-- [ ] R3. Derive verified-result count/rate, verified-without-correction rate, correction count/rate, time to verified result, and retry-exhaustion count from existing task/run/workflow records.
-- [ ] R4. Derive cost per verified result only from attributable measured history/run cost; return null plus coverage when cost is unavailable or only partially joined. Never coalesce absence to zero.
-- [ ] R5. Include denominator, time window, source coverage, excluded-reason counts, and schema version so comparisons are auditable.
-- [ ] R6. Extend the existing `history analyze --json`/report projection rather than adding a new public command or analytics store.
-- [ ] R7. Queries must remain bounded by the requested window and use existing indexes/read models; no full raw-history scan on every Board request.
-- [ ] R8. Add fixture-backed negative cases for force-done, missing/mismatched proof, reopen/correction, unlinked cost, duplicate imports, and partial coverage.
-- [ ] R9. If the History Board exposes the projection, update contracts/server/web in one change and preserve nullable accounting semantics.
+- [x] R1. Define `verified result` as a task reaching done with a PASS verdict whose proof digest matches the final certified state; do not count force-done, missing verdict, synthetic verdict, PARTIAL, FAIL, or invalidated proof.
+- [x] R2. Define a correction as a verified task that is reopened, receives a post-verdict proof-input mutation requiring a new verification, or is superseded by a failed/retry run before stable completion. Keep the definition deterministic and documented.
+- [x] R3. Derive verified-result count/rate, verified-without-correction rate, correction count/rate, time to verified result, and retry-exhaustion count from existing task/run/workflow records.
+- [x] R4. Derive cost per verified result only from attributable measured history/run cost; return null plus coverage when cost is unavailable or only partially joined. Never coalesce absence to zero.
+- [x] R5. Include denominator, time window, source coverage, excluded-reason counts, and schema version so comparisons are auditable.
+- [x] R6. Extend the existing `history analyze --json`/report projection rather than adding a new public command or analytics store.
+- [x] R7. Queries must remain bounded by the requested window and use existing indexes/read models; no full raw-history scan on every Board request.
+- [x] R8. Add fixture-backed negative cases for force-done, missing/mismatched proof, reopen/correction, unlinked cost, duplicate imports, and partial coverage.
+- [x] R9. If the History Board exposes the projection, update contracts/server/web in one change and preserve nullable accounting semantics.
 
 Non-goals: ranking individual developers/agents, treating activity as quality, inventing unavailable cost, or adding an external metrics platform.
 
@@ -110,17 +110,200 @@ links, and cost analytics. The missing element is a deterministic outcome defini
 authorities.
 
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/history.ts:11` |
+| `apps/cli/src/commands/history.ts:160` |
+| `apps/cli/src/commands/history.ts:196` |
+| `apps/cli/src/commands/history.ts:299` |
+| `apps/cli/src/commands/history.ts:53` |
+| `apps/cli/src/commands/history.ts:8` |
+| `apps/cli/src/commands/workflow.ts:778` |
+| `apps/cli/src/commands/workflow.ts:781` |
+| `apps/cli/src/commands/workflow.ts:812` |
+| `apps/cli/tests/agents-md-portable-alignment.test.ts:11` |
+| `apps/cli/tests/agents-md-portable-alignment.test.ts:138` |
+| `apps/cli/tests/agents-md-portable-alignment.test.ts:14` |
+| `apps/cli/tests/fixtures/agents-md-portable-contract.ts:45` |
+| `apps/cli/tests/init-templates.test.ts:376` |
+| `packages/app/src/observability/agent-execution.ts:153` |
+| `packages/app/src/observability/agent-execution.ts:24` |
+| `packages/app/src/observability/agent-execution.ts:256` |
+| `packages/app/src/observability/agent-execution.ts:3` |
+| `packages/app/src/observability/agent-execution.ts:52` |
+| `packages/app/src/observability/agent-execution.ts:99` |
+| `packages/app/src/observability/workflow-run-log-sink.ts:178` |
+| `packages/app/src/observability/workflow-run-log-sink.ts:235` |
+| `packages/app/src/observability/workflow-run-log-sink.ts:4` |
+| `packages/app/src/observability/workflow-run-log-sink.ts:88` |
+| `packages/app/src/observability/workflow-run-log-sink.ts:9` |
+| `packages/app/src/services/agent-service.ts:1102` |
+| `packages/app/src/services/agent-service.ts:1393` |
+| `packages/app/src/services/agent-service.ts:265` |
+| `packages/app/src/services/agent-service.ts:49` |
+| `packages/app/src/services/agent-service.ts:53` |
+| `packages/app/src/services/agent-service.ts:812` |
+| `packages/app/src/services/agent-service.ts:984` |
+| `packages/app/src/services/agent-usage.ts:1` |
+| `packages/app/src/services/capability-attestation.ts:1` |
+| `packages/app/src/services/done-transition-guard.ts:16` |
+| `packages/app/src/services/history-service.ts:227` |
+| `packages/app/src/services/history-service.ts:582` |
+| `packages/app/src/services/history-service.ts:74` |
+| `packages/app/src/services/history-service.ts:77` |
+| `packages/app/src/services/review-independence.ts:1` |
+| `packages/app/src/services/task-record.ts:311` |
+| `packages/app/src/services/task-record.ts:316` |
+| `packages/app/src/services/verified-outcome.ts:1` |
+| `packages/app/src/services/workflow-service.ts:1` |
+| `packages/app/src/services/workflow-service.ts:297` |
+| `packages/app/src/services/workflow-service.ts:3` |
+| `packages/app/src/services/workflow-service.ts:47` |
+| `packages/app/src/services/workflow-service.ts:848` |
+| `packages/app/src/workflow/actions/agent-run.ts:16` |
+| `packages/app/src/workflow/actions/agent-run.ts:173` |
+| `packages/app/src/workflow/actions/agent-run.ts:186` |
+| `packages/app/src/workflow/actions/agent-run.ts:188` |
+| `packages/app/src/workflow/actions/agent-run.ts:201` |
+| `packages/app/src/workflow/actions/agent-run.ts:219` |
+| `packages/app/src/workflow/actions/agent-run.ts:23` |
+| `packages/app/src/workflow/actions/agent-run.ts:25` |
+| `packages/app/src/workflow/actions/agent-run.ts:285` |
+| `packages/app/src/workflow/actions/agent-run.ts:356` |
+| `packages/app/src/workflow/actions/agent-run.ts:363` |
+| `packages/app/src/workflow/actions/agent-run.ts:394` |
+| `packages/app/src/workflow/actions/agent-run.ts:427` |
+| `packages/app/src/workflow/actions/agent-run.ts:559` |
+| `packages/app/src/workflow/actions/agent-run.ts:584` |
+| `packages/app/src/workflow/actions/agent-run.ts:600` |
+| `packages/app/src/workflow/actions/agent-run.ts:683` |
+| `packages/app/src/workflow/actions/agent-run.ts:694` |
+| `packages/app/src/workflow/actions/agent-run.ts:699` |
+| `packages/app/src/workflow/actions/agent-run.ts:767` |
+| `packages/app/src/workflow/actions/agent-run.ts:772` |
+| `packages/app/src/workflow/actions/agent-run.ts:8` |
+| `packages/app/src/workflow/actions/agent-run.ts:95` |
+| `packages/app/src/workflow/actions/proof-fingerprint.ts:3` |
+| `packages/app/src/workflow/actions/proof-fingerprint.ts:47` |
+| `packages/app/src/workflow/actions/proof-fingerprint.ts:5` |
+| `packages/app/src/workflow/actions/proof-fingerprint.ts:81` |
+| `packages/app/src/workflow/builtins.ts:96` |
+| `packages/app/src/workflow/checkpoint-contract.ts:1` |
+| `packages/app/src/workflow/observability.ts:112` |
+| `packages/app/src/workflow/observability.ts:114` |
+| `packages/app/src/workflow/observability.ts:208` |
+| `packages/app/src/workflow/observability.ts:297` |
+| `packages/app/src/workflow/observability.ts:323` |
+| `packages/app/src/workflow/observability.ts:347` |
+| `packages/app/src/workflow/observability.ts:355` |
+| `packages/app/src/workflow/observability.ts:55` |
+| `packages/app/src/workflow/steering.ts:239` |
+| `packages/app/src/workflow/steering.ts:255` |
+| `packages/app/src/workflow/steering.ts:269` |
+| `packages/app/src/workflow/steering.ts:273` |
+| `packages/app/src/workflow/steering.ts:66` |
+| `packages/app/src/workflow/step-reporter.ts:103` |
+| `packages/app/src/workflow/step-reporter.ts:115` |
+| `packages/app/src/workflow/step-reporter.ts:18` |
+| `packages/app/src/workflow/step-reporter.ts:23` |
+| `packages/app/src/workflow/step-reporter.ts:274` |
+| `packages/app/src/workflow/tripwire.ts:1` |
+| `packages/app/tests/observability/agent-execution.test.ts:40` |
+| `packages/app/tests/observability/workflow-run-log-sink.test.ts:221` |
+| `packages/app/tests/observability/workflow-run-log-sink.test.ts:357` |
+| `packages/app/tests/observability/workflow-run-log-sink.test.ts:66` |
+| `packages/app/tests/services/agent-service.test.ts:3884` |
+| `packages/app/tests/services/agent-service.test.ts:5` |
+| `packages/app/tests/services/agent-usage.test.ts:1` |
+| `packages/app/tests/services/capability-attestation.test.ts:1` |
+| `packages/app/tests/services/checkpoint-cleanup.test.ts:1` |
+| `packages/app/tests/services/event-names.test.ts:306` |
+| `packages/app/tests/services/event-names.test.ts:323` |
+| `packages/app/tests/services/review-independence.test.ts:1` |
+| `packages/app/tests/services/verified-outcome.test.ts:1` |
+| `packages/app/tests/workflow/actions/agent-run.test.ts:1` |
+| `packages/app/tests/workflow/actions/agent-run.test.ts:1714` |
+| `packages/app/tests/workflow/actions/agent-run.test.ts:2290` |
+| `packages/app/tests/workflow/actions/proof-fingerprint.test.ts:59` |
+| `packages/app/tests/workflow/actions/proof-fingerprint.test.ts:8` |
+| `packages/app/tests/workflow/capability-requirements.test.ts:1` |
+| `packages/app/tests/workflow/checkpoint-contract.test.ts:1` |
+| `packages/app/tests/workflow/docs-pipeline-measured-verdict.test.ts:1` |
+| `packages/app/tests/workflow/observability.test.ts:328` |
+| `packages/app/tests/workflow/steering.test.ts:155` |
+| `packages/app/tests/workflow/step-reporter.test.ts:188` |
+| `packages/app/tests/workflow/step-reporter.test.ts:198` |
+| `packages/app/tests/workflow/step-reporter.test.ts:212` |
+| `packages/app/tests/workflow/step-reporter.test.ts:215` |
+| `packages/app/tests/workflow/step-reporter.test.ts:280` |
+| `packages/app/tests/workflow/step-reporter.test.ts:45` |
+| `packages/app/tests/workflow/step-reporter.test.ts:72` |
+| `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:1` |
+| `packages/app/tests/workflow/tripwire.test.ts:1` |
+| `packages/config/src/index.ts:209` |
+| `packages/config/src/index.ts:307` |
+| `packages/domain/src/analytics/artifact.ts:242` |
+| `packages/domain/src/analytics/artifact.ts:6` |
+| `packages/domain/src/analytics/index.ts:170` |
+| `packages/domain/src/analytics/render-report.ts:189` |
+| `packages/domain/src/analytics/render-report.ts:194` |
+| `packages/domain/src/analytics/render-report.ts:4` |
+| `packages/domain/src/analytics/verified-outcome.ts:1` |
+| `packages/domain/src/dao/run-dao.ts:145` |
+| `packages/domain/tests/analytics/render-report.test.ts:247` |
+| `packages/domain/tests/analytics/verified-outcome.test.ts:1` |
+| `plugins/sp/hooks/context-hooks.test.ts:630` |
+| `plugins/sp/hooks/context-post-tool.ts:2` |
+| `plugins/sp/hooks/context-post-tool.ts:23` |
+| `plugins/sp/hooks/context-post-tool.ts:287` |
+| `plugins/sp/hooks/context-post-tool.ts:323` |
+| `plugins/sp/hooks/context-session-start.ts:15` |
+| `plugins/sp/hooks/context-session-start.ts:166` |
+| `plugins/sp/hooks/context-session-start.ts:17` |
+| `plugins/sp/hooks/context-session-start.ts:19` |
+| `plugins/sp/hooks/context-session-start.ts:2` |
+| `plugins/sp/scripts/stage-registry-adapter.ts:1422` |
+| `plugins/sp/scripts/stage-registry-adapter.ts:1455` |
+| `plugins/sp/scripts/stage-registry-adapter.ts:1487` |
+| `plugins/sp/scripts/stage-registry-adapter.ts:1496` |
+| `plugins/sp/scripts/stage-registry-adapter.ts:207` |
+| `plugins/sp/scripts/stage-registry-adapter.ts:27` |
+| `plugins/sp/scripts/stage-registry-adapter.ts:999` |
+| `plugins/sp/tests/cli-surface-parity.test.ts:10` |
+| `plugins/sp/tests/cli-surface-parity.test.ts:239` |
+| `plugins/sp/tests/cli-surface-parity.test.ts:241` |
+| `plugins/sp/tests/cli-surface-parity.test.ts:423` |
+| `plugins/sp/tests/inline-pipeline-driver.test.ts:230` |
+| `plugins/sp/tests/routing-checkpoint.test.ts:1` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:208` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | verified-outcome.ts:145-171 exclusion ladder + certifying-run proxy ('done'\|\|'completed' per review P0 fix); domain test :44-66 |
+| R2 | MET | verified-outcome.ts:172 reopened\|supersedingFailedRun; test :69-77 |
+| R3 | MET | verified-outcome.ts:179-194 counts/rates/timeToVerified/retryExhausted |
+| R4 | MET | gatherer :199-210 measured-only + fold null + explicit costCoverage; tests :94-106 + app smoke |
+| R5 | MET | verified-outcome.ts:179-199 denominator/window/coverage/excludedReasons/schemaVersion=1 |
+| R6 | MET | artifact.ts:247 additive (no bump); history-service.ts:584-594; render-report.ts:189,199; history.ts:51-72 |
+| R7 | MET | gatherer :37,84-108 bounded traceRows+listByRun+in-memory until |
+| R8 | MET | 9 domain fixtures + 3 app smoke tests incl. duplicate-wbs, uncosted, partial coverage |
+| R9 | MET | conditional requirement — Board consumes its own seed rows, not HistoryArtifact; projection intentionally skipped per conditionality, documented in docs/04_DESIGN.md verified-outcome paragraph |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No P1–P3 findings; verify verdict PASS |
 ### References
 
 - `docs/report/2026-08-28-harness-engineering-playbook-vs-spur.md` — I8 and Wave 3.
@@ -135,3 +318,6 @@ authorities.
 - `config/pipeline-budgets.json`
 ### History
 - 2026-08-28 — created from the approved harness comparison implementation lane; researched, decomposed, linked to A6, and passed the task-local readiness gate.
+- 2026-08-30T04:45:05.585Z todo → wip (system)
+- 2026-08-30T05:35:43.055Z wip → testing (system)
+- 2026-08-30T05:35:50.727Z testing → done (system)

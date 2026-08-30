@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * context-session-start — SessionStart hook for indexed-context.
  *
@@ -11,10 +12,11 @@
  * Self-contained by design (task 0232/0246).
  */
 
+import { execSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-
 import { resolveAgentHint, resolveModelHint } from './agent-hint';
+import { checkContextFreshness } from './context-post-tool';
 
 export { resolveAgentHint, resolveModelHint } from './agent-hint';
 
@@ -160,6 +162,25 @@ export function recordSessionStart(
     const startEvent: Record<string, unknown> = { ts, session: sessionId, type: 'session_start' };
     if (agent) startEvent.agent = agent;
     if (model) startEvent.model = model;
+
+    // Freshness check (task 0711 R4): report whether the context indexes were
+    // regenerated at the current HEAD. Best-effort, fail-open — git failures
+    // yield head=null, which marks stale only via the sidecar's own defects.
+    let headCommit: string | null = null;
+    try {
+        const out = execSync('git rev-parse HEAD', { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
+        const trimmed = out.trim();
+        headCommit = trimmed.length > 0 ? trimmed : null;
+    } catch {
+        headCommit = null;
+    }
+    let freshnessRaw: string | null = null;
+    try {
+        freshnessRaw = readFileSync(join(dir, '.freshness.json'), 'utf-8');
+    } catch {
+        freshnessRaw = null;
+    }
+    startEvent.contextFreshness = checkContextFreshness(freshnessRaw, headCommit);
 
     const ledgerPath = join(dir, 'token-ledger.jsonl');
     try {

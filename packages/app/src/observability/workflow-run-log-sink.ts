@@ -1,10 +1,12 @@
 import { closeSync, mkdirSync, openSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
+    WorkflowAgentBudgetEvent,
     WorkflowObservabilityBus,
     WorkflowObservabilityEventMap,
     WorkflowRunFinalizedEvent,
     WorkflowRunStartedEvent,
+    WorkflowTripwireFiredEvent,
 } from '../workflow/observability';
 import { bounded } from '../workflow/observability';
 import type { SteeringAck } from '../workflow/steering';
@@ -53,7 +55,7 @@ export class WorkflowRunLogSink {
     private closed = false;
     private headerWritten = false;
     private readonly bus: WorkflowObservabilityBus;
-    private readonly handlers: WorkflowObservabilityEventMap;
+    private readonly handlers: Partial<WorkflowObservabilityEventMap>;
 
     constructor(
         options: {
@@ -83,6 +85,8 @@ export class WorkflowRunLogSink {
             'workflow.action.finished': (event) => this.onProgress(event),
             'workflow.action.output': (event) => this.onProgress(event),
             'workflow.agent': (event) => this.onAgent(event),
+            'workflow.agent.budget': (event) => this.onBudget(event),
+            'workflow.tripwire.fired': (event) => this.onTripwire(event),
             'workflow.steering': (event) => this.onSteering(event),
             'workflow.run.finalized': (event) => this.onRunFinalized(event),
         };
@@ -111,8 +115,10 @@ export class WorkflowRunLogSink {
 
     private register(attach: boolean): void {
         for (const name of RUN_LOG_EVENT_NAMES) {
-            if (attach) this.bus.on(name, this.handlers[name]);
-            else this.bus.off(name, this.handlers[name]);
+            const handler = this.handlers[name];
+            if (handler === undefined) continue;
+            if (attach) this.bus.on(name, handler);
+            else this.bus.off(name, handler);
         }
     }
 
@@ -171,6 +177,27 @@ export class WorkflowRunLogSink {
         }
     }
 
+    /** One bounded line per hard-budget verdict (0707 R6). */
+    private onBudget(event: WorkflowAgentBudgetEvent): void {
+        if (this.fd === undefined || this.closed) return;
+        const caps = [
+            event.budget.maxTokens !== undefined ? `maxTokens=${event.budget.maxTokens}` : undefined,
+            event.budget.maxCostUsd !== undefined ? `maxCostUsd=${event.budget.maxCostUsd}` : undefined,
+        ]
+            .filter((cap) => cap !== undefined)
+            .join(' ');
+        this.append(
+            `[${event.at}] budget ${event.verdict} node=${event.node} agent=${event.agent} ${caps}: ${event.violations.join('; ')}\n`,
+        );
+    }
+
+    private onTripwire(event: WorkflowTripwireFiredEvent): void {
+        if (this.fd === undefined || this.closed) return;
+        this.append(
+            `[${event.at}] tripwire ${event.policy.id} (v${event.policy.version}) ${event.response} node=${event.node}: ${event.observed} — next: ${event.nextDecision}\n`,
+        );
+    }
+
     private append(text: string): void {
         if (this.fd === undefined || this.closed || this.truncated) return;
         const textBytes = Buffer.byteLength(text);
@@ -207,6 +234,8 @@ const RUN_LOG_EVENT_NAMES: Array<keyof WorkflowObservabilityEventMap> = [
     'workflow.action.finished',
     'workflow.action.output',
     'workflow.agent',
+    'workflow.agent.budget',
+    'workflow.tripwire.fired',
     'workflow.steering',
     'workflow.run.finalized',
 ];

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -1718,7 +1718,7 @@ function finishedEvent(): AgentExecutionEvent {
         outcome: 'done',
         exitCode: 0,
         durationMs: 9_000,
-        usage: 'unavailable',
+        usage: { availability: 'unavailable', unavailabilityReason: 'test' },
     };
 }
 
@@ -2292,5 +2292,346 @@ describe('R5 — discoverSessionId prefers *.json (task 0451)', () => {
         expect(result.ok).toBe(true);
         // No json files → no session id discovered
         expect((result.setVars as Record<string, unknown>).__agentSessionId).toBeUndefined();
+    });
+});
+
+describe('AgentRunActionRunner requiresCapabilities validation (task 0706 R4/R8)', () => {
+    test('invalid requirement shape fails the step before any dispatch', async () => {
+        const runTraced = mock(() => Promise.resolve({ exitCode: 0, stdout: '' }));
+        const runner = new AgentRunActionRunner({ runTraced } as unknown as AgentService);
+        const result = await runner.execute(
+            {
+                input: '/sp:dev-run 0706 --auto',
+                role: 'coder',
+                agent: 'pi',
+                requiresCapabilities: { teleport: 'available' },
+            },
+            makeCtx(),
+        );
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('invalid requiresCapabilities');
+        expect(result.error).toContain('teleport');
+        expect(runTraced).not.toHaveBeenCalled();
+    });
+
+    test('valid requirements are serialized into dispatch flags; absent requirements send no flag', async () => {
+        const capturedFlags: Array<Record<string, string | boolean>> = [];
+        const runTraced = mock((_input: string, flags: Record<string, string | boolean>) => {
+            capturedFlags.push(flags);
+            return Promise.resolve({ exitCode: 0, stdout: '' });
+        });
+        const runner = new AgentRunActionRunner({ runTraced } as unknown as AgentService);
+        const withReqs = await runner.execute(
+            {
+                input: '/sp:dev-run 0706 --auto',
+                role: 'coder',
+                agent: 'pi',
+                requiresCapabilities: { fsWrite: 'available', processSpawn: 'available' },
+            },
+            makeCtx(),
+        );
+        expect(withReqs.ok).toBe(true);
+        expect(JSON.parse(String(capturedFlags[0]?.requiresCapabilities))).toEqual({
+            fsWrite: 'available',
+            processSpawn: 'available',
+        });
+        await runner.execute({ input: '/sp:dev-run 0706 --auto', role: 'coder', agent: 'pi' }, makeCtx());
+        expect(capturedFlags[1]?.requiresCapabilities).toBeUndefined();
+    });
+});
+
+describe('AgentRunActionRunner hard budgets (task 0707)', () => {
+    function recordingBudgetBus(): {
+        bus: WorkflowObservabilityBus;
+        events: import('../../../src/workflow/observability').WorkflowAgentBudgetEvent[];
+    } {
+        const bus = new EventBus<WorkflowObservabilityEventMap>();
+        const events: import('../../../src/workflow/observability').WorkflowAgentBudgetEvent[] = [];
+        bus.on('workflow.agent.budget', (event) => events.push(event));
+        return { bus, events };
+    }
+
+    test('R5: declared maxTokens with unavailable usage fails closed as budget-unverifiable and emits the bounded event', async () => {
+        const { bus, events } = recordingBudgetBus();
+        const runner = new AgentRunActionRunner(svcWithRunTraced({ exitCode: 0, stdout: 'work' }), bus);
+        const result = await runner.execute({ role: 'coder', input: 'hello', maxTokens: 1000 }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(String(result.error)).toContain('budget-unverifiable');
+        expect(result.data?.usage).toMatchObject({ availability: 'unavailable' });
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({
+            schemaVersion: 1,
+            runId: 'test-1',
+            node: 's1',
+            kind: 'agent.run',
+            verdict: 'unverifiable',
+            budget: { maxTokens: 1000 },
+            severity: 'warning',
+        });
+        expect(JSON.stringify(events[0])).not.toContain('hello');
+    });
+
+    test('R6: measured usage under the cap keeps ok:true and reports usage in data', async () => {
+        const { bus, events } = recordingBudgetBus();
+        const runner = new AgentRunActionRunner(
+            svcWithRunTraced({
+                exitCode: 0,
+                stdout: 'work',
+                usage: { availability: 'measured', inputTokens: 100, outputTokens: 50 },
+            }),
+            bus,
+        );
+        const result = await runner.execute({ role: 'coder', input: 'hello', maxTokens: 500 }, makeCtx());
+        expect(result.ok).toBe(true);
+        expect(result.data?.usage).toMatchObject({ availability: 'measured' });
+        expect(events).toHaveLength(0);
+    });
+
+    test('R6: measured usage over the cap fails with violations and emits the bounded event', async () => {
+        const { bus, events } = recordingBudgetBus();
+        const runner = new AgentRunActionRunner(
+            svcWithRunTraced({
+                exitCode: 0,
+                stdout: 'work',
+                usage: { availability: 'measured', inputTokens: 900, outputTokens: 900 },
+            }),
+            bus,
+        );
+        const result = await runner.execute({ role: 'coder', input: 'hello', maxTokens: 100 }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(String(result.error)).toContain('exceeded its declared hard budget');
+        expect(String(result.error)).toContain('1800 exceed maxTokens 100');
+        expect(events).toHaveLength(1);
+        expect(events[0]?.verdict).toBe('over');
+        expect(events[0]?.violations.join(' ')).toContain('1800 exceed maxTokens 100');
+    });
+
+    test('legacy actions without budget options dispatch unchanged and report honest unavailable usage', async () => {
+        const runner = new AgentRunActionRunner(
+            svcWithRunTraced({
+                exitCode: 0,
+                stdout: 'work',
+                usage: { availability: 'unavailable', unavailabilityReason: 'no structured usage' },
+            }),
+        );
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx());
+        expect(result.ok).toBe(true);
+        expect(result.data?.usage).toEqual({
+            availability: 'unavailable',
+            unavailabilityReason: 'no structured usage',
+        });
+    });
+
+    test('invalid budget options are rejected at the trust boundary before dispatch', async () => {
+        let dispatched = false;
+        const svc: AgentService = {
+            runTraced: async () => {
+                dispatched = true;
+                return { exitCode: 0, stdout: '' };
+            },
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        for (const bad of [{ maxTokens: 0 }, { maxTokens: -1 }, { maxCostUsd: 'abc' }]) {
+            const result = await runner.execute({ role: 'coder', input: 'hello', ...bad }, makeCtx());
+            expect(result.ok).toBe(false);
+            expect(String(result.error)).toMatch(/maxTokens|maxCostUsd/);
+        }
+        expect(dispatched).toBe(false);
+    });
+});
+
+describe('AgentRunActionRunner fresh-session independence (task 0710)', () => {
+    function affinityCtx(): ActionRunContext {
+        return makeCtx({
+            vars: {
+                __agentSession: 'open',
+                __agentSessionDir: '/tmp/inherited',
+                __agentSessionId: 'old-session',
+                __agentSessionAgent: 'claude',
+            },
+        });
+    }
+
+    test('R1: freshSession bypasses inherited session id/dir and the latch, publishing only routing evidence', async () => {
+        let seenFlags: Record<string, string | boolean> | undefined;
+        const svc = svcCapturingFlags(
+            (flags) => {
+                seenFlags = flags;
+            },
+            { invocation: invocation({ agent: 'claude', executor: 'claude' }) },
+        );
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ role: 'reviewer', input: 'review', freshSession: true }, affinityCtx());
+        expect(result.ok).toBe(true);
+        expect(seenFlags).toBeDefined();
+        expect(seenFlags?.sessionId).toBeUndefined();
+        expect(seenFlags?.continue).toBeUndefined();
+        expect(String(seenFlags?.sessionDir)).toContain('fresh-s1');
+        // R1: no affinity publication — the review session must not leak into a
+        // subsequent implement/test-fix resume.
+        expect(result.setVars?.__agentSession).toBeUndefined();
+        expect(result.setVars?.__agentSessionId).toBeUndefined();
+        expect(result.setVars?.__agentSessionDir).toBeUndefined();
+        // R3: routing evidence IS published.
+        expect(JSON.parse(String(result.setVars?.__agentRouting_s1))).toEqual({ agent: 'claude' });
+    });
+
+    test('non-fresh actions keep affinity behavior and also record routing evidence (R3)', async () => {
+        let seenFlags: Record<string, string | boolean> | undefined;
+        const svc = svcCapturingFlags(
+            (flags) => {
+                seenFlags = flags;
+            },
+            { invocation: invocation({ agent: 'claude', executor: 'claude' }) },
+        );
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ role: 'coder', agent: 'claude', input: 'implement' }, affinityCtx());
+        expect(result.ok).toBe(true);
+        expect(seenFlags?.sessionId).toBe('old-session');
+        expect(seenFlags?.sessionDir).toBe('/tmp/inherited');
+        expect(result.setVars?.__agentSession).toBe('open');
+        expect(JSON.parse(String(result.setVars?.__agentRouting_s1))).toEqual({ agent: 'claude' });
+    });
+
+    test('R4/R5: P1 review resolving the same executor as implementation fails closed before dispatch', async () => {
+        let dispatched = false;
+        const svc: AgentService = {
+            resolve: async () => ({ ok: true, agent: 'claude', executor: 'claude', source: 'role' }),
+            runTraced: async () => {
+                dispatched = true;
+                return { exitCode: 0, stdout: '' };
+            },
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { role: 'reviewer', input: 'review', priority: 'P1', compareExecutorWith: 'implement' },
+            makeCtx({ vars: { __agentRouting_implement: '{"agent":"claude"}' } }),
+        );
+        expect(result.ok).toBe(false);
+        expect(String(result.error)).toContain("different executor than implementation ('claude')");
+        expect(dispatched).toBe(false);
+    });
+
+    test('R4/R5: missing implementation routing evidence fails closed before dispatch', async () => {
+        let dispatched = false;
+        const svc: AgentService = {
+            resolve: async () => ({ ok: true, agent: 'pi', executor: 'pi', source: 'role' }),
+            runTraced: async () => {
+                dispatched = true;
+                return { exitCode: 0, stdout: '' };
+            },
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { role: 'reviewer', input: 'review', priority: 'P1' },
+            makeCtx({ vars: {} }),
+        );
+        expect(result.ok).toBe(false);
+        expect(String(result.error)).toContain('__agentRouting_implement');
+        expect(dispatched).toBe(false);
+    });
+
+    test('R4: a P1 review on a distinct executor dispatches normally', async () => {
+        const svc: AgentService = {
+            resolve: async () => ({ ok: true, agent: 'pi', executor: 'pi', source: 'role' }),
+            runTraced: async () => ({ exitCode: 0, stdout: 'reviewed', invocation: invocation({ executor: 'pi' }) }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { role: 'reviewer', input: 'review', priority: 'P1', compareExecutorWith: 'implement' },
+            makeCtx({ vars: { __agentRouting_implement: '{"agent":"claude"}' } }),
+        );
+        expect(result.ok).toBe(true);
+    });
+
+    test('backward compat: no priority means no distinctness gate and no resolve call', async () => {
+        let resolveCalls = 0;
+        const svc: AgentService = {
+            resolve: async () => {
+                resolveCalls += 1;
+                return { ok: true, agent: 'claude', executor: 'claude', source: 'default' };
+            },
+            runTraced: async () => ({ exitCode: 0, stdout: '' }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ role: 'reviewer', input: 'review' }, makeCtx({ vars: {} }));
+        expect(result.ok).toBe(true);
+        expect(resolveCalls).toBe(0);
+    });
+});
+
+describe('AgentRunActionRunner operational trip wires (task 0708)', () => {
+    function recordingTripBus(): {
+        bus: WorkflowObservabilityBus;
+        trips: import('../../../src/workflow/observability').WorkflowTripwireFiredEvent[];
+    } {
+        const bus = new EventBus<WorkflowObservabilityEventMap>();
+        const trips: import('../../../src/workflow/observability').WorkflowTripwireFiredEvent[] = [];
+        bus.on('workflow.tripwire.fired', (event) => trips.push(event));
+        return { bus, trips };
+    }
+
+    test('R3/R4/R7: hard-budget failure emits the canonical trip-wire event and stops with the next decision', async () => {
+        const { bus, trips } = recordingTripBus();
+        let dispatches = 0;
+        const svc: AgentService = {
+            runTraced: async () => {
+                dispatches += 1;
+                return {
+                    exitCode: 0,
+                    stdout: 'work',
+                    usage: { availability: 'measured', inputTokens: 900, outputTokens: 900 },
+                };
+            },
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc, bus);
+        const result = await runner.execute({ role: 'coder', input: 'hello', maxTokens: 100 }, makeCtx());
+        expect(result.ok).toBe(false);
+        // R7: the exact next decision required is named in the failure.
+        expect(String(result.error)).toContain('Next decision required');
+        // R2: exactly one dispatch ran — no subsequent action after the wire fired.
+        expect(dispatches).toBe(1);
+        // R4: canonical bounded event with policy, correlation, and next decision.
+        expect(trips).toHaveLength(1);
+        expect(trips[0]).toMatchObject({
+            schemaVersion: 1,
+            runId: 'test-1',
+            node: 's1',
+            kind: 'agent.run',
+            severity: 'warning',
+            policy: { id: 'hard-budget', version: 1 },
+            response: 'fail',
+        });
+        expect(trips[0]?.nextDecision).toContain('raise the declared budget');
+    });
+
+    test('output-drop telemetry fires the wire but the healthy result is unchanged (R1/R4)', async () => {
+        const { bus, trips } = recordingTripBus();
+        const svc: AgentService = {
+            runTraced: async (_input: unknown, _flags: unknown, _ctx: unknown, opts?: unknown) => {
+                const observer = (opts as { observer?: (event: { kind: string; chunks?: number }) => void } | undefined)
+                    ?.observer;
+                observer?.({ kind: 'dropped', chunks: 5 });
+                return { exitCode: 0, stdout: 'work' };
+            },
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc, bus);
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx());
+        // Bounded-relay drops degrade evidence; they must not flip a healthy result.
+        expect(result.ok).toBe(true);
+        expect(trips).toHaveLength(1);
+        expect(trips[0]).toMatchObject({
+            policy: { id: 'output-drop', version: 1 },
+            response: 'continue',
+        });
+        expect(trips[0]?.observed).toContain('5 output chunk(s)');
+    });
+
+    test('no trip-wire event on a healthy run', async () => {
+        const { bus, trips } = recordingTripBus();
+        const runner = new AgentRunActionRunner(svcWithRunTraced({ exitCode: 0, stdout: 'work' }), bus);
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx());
+        expect(result.ok).toBe(true);
+        expect(trips).toHaveLength(0);
     });
 });

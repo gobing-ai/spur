@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { AGENT_ROLE_NAMES, type SpurConfig } from '@gobing-ai/spur-config';
 import { bundledConfigRoot, resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
@@ -44,6 +44,11 @@ import { redactAndBound } from '../observability/agent-execution';
 import type { WorkflowRunLogConfig } from '../observability/workflow-run-log-sink';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { registerSpurBuiltins } from '../workflow/builtins';
+import {
+    type CheckpointMetadata,
+    isTerminalCheckpointStatus,
+    parseCheckpointMetadata,
+} from '../workflow/checkpoint-contract';
 import { computeDefinitionDigest, type WorkflowCompositionBaseline } from '../workflow/composition-baseline';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import type { WorkflowSteeringController } from '../workflow/steering';
@@ -286,6 +291,31 @@ export interface RunLogReclamationResult {
     /** The logs that were (or would be) removed. */
     reclaimed: ReclaimedRunLog[];
     /** Removal failures — best-effort: one file failing never aborts the rest. */
+    failures: Array<{ path: string; error: string }>;
+}
+
+/** An expired terminal checkpoint removed (or reportable) by checkpoint reclamation (task 0711 R5). */
+export interface ReclaimedCheckpoint {
+    /** File name under `.spur/memory/sessions/`. */
+    name: string;
+    /** Confined absolute path of the removed (or would-be-removed) checkpoint. */
+    path: string;
+    /** `updated_at` (fallback mtime) at scan time, ISO 8601. */
+    age: string;
+}
+
+/** A checkpoint that was scanned but deliberately kept, with the reason (task 0711 R5/R6). */
+export interface SkippedCheckpoint {
+    name: string;
+    reason: string;
+}
+
+/** Result of session-checkpoint reclamation (`.spur/memory/sessions/`, task 0711 R5–R8). */
+export interface CheckpointReclamationResult {
+    retentionDays: number;
+    dryRun: boolean;
+    reclaimed: ReclaimedCheckpoint[];
+    skipped: SkippedCheckpoint[];
     failures: Array<{ path: string; error: string }>;
 }
 
@@ -813,6 +843,109 @@ export class WorkflowAppService {
             }
         }
         return { retentionDays, dryRun, reclaimed, failures };
+    }
+
+    /**
+     * Reclaim expired terminal session checkpoints (`.spur/memory/sessions/`,
+     * task 0711 R5–R8). A checkpoint is reclaimed only when every guard holds:
+     * it parses as canonical metadata (0711 R1), its status is terminal, its
+     * `updated_at` (fallback mtime) is older than the retention threshold —
+     * the same `workflow.logRetentionDays` knob that governs run logs (0711
+     * R7) — its `run_id` references no active run, and its resolved path is
+     * confined to the sessions directory (0711 R5). Anything else is kept and
+     * reported with the reason: malformed files are never deleted because they
+     * cannot prove they are terminal checkpoints (0711 R6), and this scan
+     * never leaves `.spur/memory/sessions/`, so task/feature authority files
+     * and `.spur/context` learnings are unreachable by construction (0711 R6).
+     *
+     * Idempotent: a reclaimed file is gone, so the next run reports nothing.
+     *
+     * @param retentionDays Checkpoints older than this many days are reclaimed. Default 30.
+     * @param dryRun When true, report what would be removed without unlinking.
+     */
+    async cleanCheckpoints(retentionDays = 30, dryRun = false): Promise<CheckpointReclamationResult> {
+        const sessionsDir = join(this.ctx.cwd, '.spur', 'memory', 'sessions');
+        const fs = createNodeFileSystem();
+        let sessionsReal: string;
+        try {
+            sessionsReal = realpathSync(sessionsDir);
+        } catch {
+            sessionsReal = resolve(sessionsDir);
+        }
+        const cutoffMs = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+        const reclaimed: ReclaimedCheckpoint[] = [];
+        const skipped: SkippedCheckpoint[] = [];
+        const failures: CheckpointReclamationResult['failures'] = [];
+
+        let entries: string[];
+        try {
+            entries = (await fs.readDir(sessionsDir)).filter((name) => name.endsWith('.md'));
+        } catch {
+            // No sessions dir yet — nothing to reclaim.
+            return { retentionDays, dryRun, reclaimed, skipped, failures };
+        }
+
+        const activeRunIds = new Set((await new RunDao(await this.ctx.getDb()).listActiveRuns()).map((r) => r.id));
+
+        for (const name of entries) {
+            const path = join(sessionsDir, name);
+            // Confinement guard (0711 R5): the candidate must resolve back into the sessions dir.
+            // `realpath` (not `resolve`) — `resolve` never follows symlinks, so a link escaping
+            // the dir would pass a plain-normalize check and get deleted through the link.
+            let resolved: string;
+            try {
+                resolved = realpathSync(path);
+            } catch {
+                resolved = resolve(path);
+            }
+            if (!resolved.startsWith(sessionsReal + sep)) {
+                skipped.push({ name, reason: 'path-confinement: resolved outside .spur/memory/sessions' });
+                continue;
+            }
+            let meta: CheckpointMetadata | null = null;
+            let mtimeMs = 0;
+            try {
+                meta = parseCheckpointMetadata(await fs.readFile(path));
+                const stat = await fs.stat(path);
+                mtimeMs = stat?.mtimeMs ?? 0;
+            } catch (err) {
+                skipped.push({ name, reason: `unreadable: ${String(err)}` });
+                continue;
+            }
+            if (meta === null) {
+                skipped.push({ name, reason: 'malformed: not canonical checkpoint metadata (0711 R3/R6)' });
+                continue;
+            }
+            if (!isTerminalCheckpointStatus(meta.status)) {
+                skipped.push({ name, reason: `non-terminal: status=${meta.status || 'unset'}` });
+                continue;
+            }
+            if (meta.runId !== '' && activeRunIds.has(meta.runId)) {
+                skipped.push({ name, reason: `active-run reference: ${meta.runId}` });
+                continue;
+            }
+            const ageMs = Number.isFinite(Date.parse(meta.updatedAt)) ? Date.parse(meta.updatedAt) : mtimeMs;
+            if (ageMs >= cutoffMs) {
+                skipped.push({ name, reason: 'not expired: within retention window' });
+                continue;
+            }
+            const entry: ReclaimedCheckpoint = {
+                name,
+                path,
+                age: new Date(ageMs).toISOString(),
+            };
+            if (dryRun) {
+                reclaimed.push(entry);
+                continue;
+            }
+            try {
+                await fs.deleteFile(path);
+                reclaimed.push(entry);
+            } catch (err) {
+                failures.push({ path, error: String(err) });
+            }
+        }
+        return { retentionDays, dryRun, reclaimed, skipped, failures };
     }
 
     /**

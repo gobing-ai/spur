@@ -57,12 +57,6 @@
         },
         {
             "kind": "feature",
-            "id": "A31",
-            "code": "L4.orphan-scenarios",
-            "severity": "warning"
-        },
-        {
-            "kind": "feature",
             "id": "A4",
             "code": "L4.dogfood-missing",
             "severity": "warning"
@@ -71,12 +65,6 @@
             "kind": "feature",
             "id": "A5",
             "code": "L4.dogfood-missing",
-            "severity": "warning"
-        },
-        {
-            "kind": "feature",
-            "id": "A6",
-            "code": "L4.scenario-unverified",
             "severity": "warning"
         },
         {
@@ -1599,6 +1587,12 @@
         },
         {
             "kind": "task",
+            "id": "0689",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0690",
             "code": "L3.ac-empty",
             "severity": "error"
@@ -1653,50 +1647,8 @@
         },
         {
             "kind": "task",
-            "id": "0703",
-            "code": "L4.gate-language",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0704",
-            "code": "L4.prerequisite-not-done",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0706",
-            "code": "L4.gate-language",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0707",
-            "code": "L4.prerequisite-not-done",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0708",
-            "code": "L4.prerequisite-not-done",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0709",
-            "code": "L4.prerequisite-not-done",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0710",
-            "code": "L4.prerequisite-not-done",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0712",
-            "code": "L4.prerequisite-not-done",
+            "id": "0719",
+            "code": "L4.stale-line-anchor",
             "severity": "warning"
         }
     ]

@@ -13,8 +13,8 @@
  *     single choke point above both `--no-lifecycle` and the lifecycle adapter.
  *     R8: `--no-lifecycle` skips the FSM, not this gate.
  *   - Missing artifact is a **deny** (not a silent allow). Docs-only / emergency
- *     closes use `--force-done --reason` or write a PASS stub first
- *     (`docs-pipeline.yaml` does the latter).
+ *     closes use `--force-done --reason`. Docs pipelines certify via a measured
+ *     verdict artifact produced by a verify hop (docs-pipeline.yaml, task 0704).
  *   - R10 consistency: the aggregate `verdict` in the artifact is validated
  *     against the per-requirement / per-AC rows using the same aggregation rule
  *     as `deriveVerdict` (any UNMET → FAIL; any PARTIAL → PARTIAL). An

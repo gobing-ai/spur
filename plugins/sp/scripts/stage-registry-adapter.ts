@@ -24,7 +24,8 @@
  *   bun plugins/sp/scripts/stage-registry-adapter.ts --help
  */
 
-import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // ─── Inline type definitions (mirrors packages/domain/src/stage-registry/) ─
@@ -202,6 +203,107 @@ export interface TaskSignal {
     dependencies?: Array<{ wbs: string; status: TaskStatus }>;
     feature_id?: string | null;
     hasCheckpoint?: boolean;
+}
+
+/**
+ * Result of routing-checkpoint inspection (task 0711 R3).
+ *
+ * `usable` feeds `TaskSignal.hasCheckpoint`: only a checkpoint that parses as
+ * the canonical frontmatter contract, matches the task (owner identity), is
+ * non-terminal, and is not commit-drifted may route A4 (wip + checkpoint →
+ * continue). Anything else is reported with its reason and IGNORED — routing
+ * falls through to the non-checkpoint row (A5); it is never silently trusted.
+ *
+ * Lean inline mirror of `packages/app/src/workflow/checkpoint-contract.ts`
+ * (the plugin installs into foreign repos and cannot import workspace
+ * packages — same discipline as the domain-type mirrors above); the parity
+ * test pins the two together.
+ */
+export interface RoutingCheckpointInspection {
+    usable: boolean;
+    reason?: string;
+}
+
+export interface RoutingCheckpointOptions {
+    /** Current repository HEAD; when provided, a mismatched/absent `source_commit` is drift. */
+    headCommit?: string;
+    /** Existence probe for referenced artifacts; default `existsSync`. */
+    artifactExists?: (path: string) => boolean;
+}
+
+/**
+ * Inspect `.spur/memory/sessions/<wbs>-checkpoint.md` for resume routing
+ * (task 0711 R3). A missing file yields `{ usable: false, reason: 'absent' }`
+ * — the normal case, indistinguishable for routing from a rejected one.
+ */
+export function inspectRoutingCheckpoint(
+    sessionsDir: string,
+    wbs: string,
+    opts: RoutingCheckpointOptions = {},
+): RoutingCheckpointInspection {
+    let raw: string;
+    try {
+        raw = readFileSync(join(sessionsDir, `${wbs}-checkpoint.md`), 'utf-8');
+    } catch {
+        return { usable: false, reason: 'absent' };
+    }
+    if (!raw.startsWith('---')) return { usable: false, reason: 'malformed: missing frontmatter' };
+    const end = raw.indexOf('\n---', 3);
+    if (end < 0) return { usable: false, reason: 'malformed: unterminated frontmatter' };
+
+    const scalars = new Map<string, string>();
+    const artifacts: string[] = [];
+    let inArtifacts = false;
+    for (const rawLine of raw.slice(4, end).split('\n')) {
+        const line = rawLine.trim();
+        if (line.startsWith('- ')) {
+            if (inArtifacts) artifacts.push(line.slice(2).trim().replace(/^"|"$/g, ''));
+            continue;
+        }
+        inArtifacts = false;
+        const sep = line.indexOf(':');
+        if (sep <= 0) continue;
+        const key = line.slice(0, sep).trim();
+        const value = line
+            .slice(sep + 1)
+            .trim()
+            .replace(/^"|"$/g, '');
+        if (key === 'artifacts') {
+            inArtifacts = true;
+            if (value !== '') {
+                artifacts.push(
+                    ...value
+                        .split(',')
+                        .map((p) => p.trim().replace(/^"|"$/g, ''))
+                        .filter((p) => p !== ''),
+                );
+            }
+            continue;
+        }
+        scalars.set(key, value);
+    }
+
+    if (scalars.get('schema_version') !== '1') return { usable: false, reason: 'malformed: schema_version' };
+    if (scalars.get('task_wbs') !== wbs) {
+        return { usable: false, reason: `owner-mismatch: task_wbs=${scalars.get('task_wbs')} != ${wbs}` };
+    }
+    const status = scalars.get('status') ?? '';
+    if (['done', 'failed', 'cancelled', 'skipped'].includes(status)) {
+        return { usable: false, reason: `terminal: status=${status}` };
+    }
+    const head = opts.headCommit;
+    if (head !== undefined) {
+        const commit = scalars.get('source_commit') ?? '';
+        if (commit === '' || commit !== head) {
+            return { usable: false, reason: `commit-drift: checkpoint@${commit.slice(0, 12) || 'none'} != HEAD` };
+        }
+    }
+    const probe = opts.artifactExists ?? existsSync;
+    for (const artifact of artifacts) {
+        const p = artifact.trim().replace(/^"|"$/g, '');
+        if (p !== '' && !probe(p)) return { usable: false, reason: `missing-artifact: ${p}` };
+    }
+    return { usable: true };
 }
 export interface FeatureSignal {
     id: string;
@@ -894,6 +996,8 @@ const TABLE_C: TableCRow[] = [
     },
     {
         // C4 — rule findings: requires spur rule run
+        // SAFETY: sentinel, not a string — this row never dispatches; null is the
+        // intentional HITL-stop placeholder that formatStageResult renders as no-command.
         redirectDispatch: null as unknown as string, // HITL stop
         rowId: 'C4',
         probeRows: ['A3', 'A5', 'A6'],
@@ -1315,6 +1419,17 @@ export function formatStageResult(result: StageResolution): string[] {
     return lines;
 }
 
+/** Current repository HEAD, best-effort — null outside a work tree or without git. */
+function currentHeadCommit(): string | null {
+    try {
+        const out = execSync('git rev-parse HEAD', { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
+        const commit = out.trim();
+        return commit.length > 0 ? commit : null;
+    } catch {
+        return null;
+    }
+}
+
 export function runCli(argv: string[], opts?: { resolve?: (input: ResolutionInput) => StageResolution }): CliResult {
     const parsed = parseCliArgs(argv);
     const resolve = opts?.resolve ?? resolveStage;
@@ -1337,6 +1452,30 @@ export function runCli(argv: string[], opts?: { resolve?: (input: ResolutionInpu
         };
     }
 
+    // Routing checkpoint (0711 R3): a canonical checkpoint at
+    // .spur/memory/sessions/<wbs>-checkpoint.md that survives inspection (owner,
+    // non-terminal, at HEAD, artifacts present) enables the A4 resume row for wip
+    // tasks; anything else is REPORTED and ignored — routing falls through to the
+    // non-checkpoint row. Best-effort and fail-open: git/fs failures leave the
+    // checkpoint unconsidered.
+    let checkpointNote: string | undefined;
+    let hasCheckpoint: boolean | undefined;
+    if (parsed.wbs) {
+        try {
+            const inspection = inspectRoutingCheckpoint(
+                join(process.cwd(), '.spur', 'memory', 'sessions'),
+                parsed.wbs,
+                { headCommit: currentHeadCommit() ?? undefined },
+            );
+            hasCheckpoint = inspection.usable;
+            if (!inspection.usable && inspection.reason !== 'absent') {
+                checkpointNote = `note: routing checkpoint ignored — ${inspection.reason}`;
+            }
+        } catch {
+            hasCheckpoint = undefined;
+        }
+    }
+
     // Build resolution input from CLI args (note: no live corpus access in CLI mode)
     const input: ResolutionInput = {
         target: parsed.wbs ?? parsed.feature ?? '',
@@ -1345,13 +1484,16 @@ export function runCli(argv: string[], opts?: { resolve?: (input: ResolutionInpu
         once: parsed.once,
         auto: parsed.auto,
         fullMode: parsed.full,
-        task: parsed.wbs ? { wbs: parsed.wbs, status: parsed.taskStatus ?? 'unknown', dependencies: [] } : undefined,
+        task: parsed.wbs
+            ? { wbs: parsed.wbs, status: parsed.taskStatus ?? 'unknown', dependencies: [], hasCheckpoint }
+            : undefined,
         feature: parsed.feature ? { id: parsed.feature, status: 'active', tasks: [] } : undefined,
     };
 
     try {
         const result = resolve(input);
         const lines = formatStageResult(result);
+        if (checkpointNote) lines.push(checkpointNote);
         return { exitCode: result.reasonKind === 'dispatch' ? 0 : 2, stdout: `${lines.join('\n')}\n`, stderr: '' };
     } catch (e) {
         return { exitCode: 1, stdout: '', stderr: `error: ${(e as Error).message}` };

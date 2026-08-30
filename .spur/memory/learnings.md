@@ -1008,3 +1008,19 @@ Done. Summary:
 - **`kill` failures must not be ignored** and one unverified signal is not cleanup — the bounded TERM→KILL sequence with re-query is the minimum.
 - **Never repair timestamp churn with `git checkout`** — that fixes the symptom, not the no-replay contract.
 - **`+D` over-match is fail-safe** (errs toward removal success), but comment wording must not claim it is CWD-only.
+## 2026-08-29 — feature A6 batch (0703–0712, runall inline driver)
+
+### 0709 — escalation packets
+- Bun's `coverageThreshold` (root bunfig) is enforced **per file**: a new untested helper in `apps/cli/src/commands/workflow.ts` dropped funcs to 88.46% and failed the whole suite with rc=1 and "0 fail" — the only tell is the coverage table. When adding functions to big CLI command files, add/extend a CLI e2e test in the same change.
+- Swallow-style `.catch(() => undefined)` arrows count as uncovered functions; prefer a try/catch inside the helper returning `undefined` (zero extra funcs) over per-call-site arrows.
+- Redaction split: identifiers get length-only `boundId` (SECRET_PATTERN `sk-[a-z0-9_-]{8,` mangles ids like `task-pipeline` → `ta[REDACTED]`); operator free text gets `bounded()` (redact + truncate).
+- Async dedupe must reserve **synchronously before the first await** (tripwire + failed-finalize interleave otherwise); release the reservation on projection failure so a later trigger retries.
+- Event catalog is a two-sided doc gate: new `SYSTEM_EVENT_NAMES` entries need presenters AND §11 matrix rows in `docs/design/event-tracking.md`.
+- `diagnostic`-tier events are invisible under default CLI taps (system-event-tap skips them) — a "never silent" failure path needs tier `default` with `metadata-only` payload.
+
+### Batch driver mechanics
+- `git diff --` excludes untracked files — `git add -N` every batch-new source/test file before capturing implement diffs.
+- sqlite `artifacts.run_id` FK → insert the runs row before projecting artifacts; `db.queryAll` is async (always `await`).
+- Pipes eat exit codes under `sh -c`: capture with `>/tmp/f 2>&1; echo rc=$?`.
+- Per-task diffs in a one-branch batch are cumulative overlays (later tasks' diffs include earlier tasks' hunks in shared files) — reviewers must be told this up front to avoid false "commit per task" findings.
+- pi-lens "0 issue(s) must be fixed" banner with zero issues is benign; green CLI gates are authoritative.

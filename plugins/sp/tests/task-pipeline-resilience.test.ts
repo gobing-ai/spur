@@ -205,7 +205,9 @@ describe('0503 task-pipeline resilience', () => {
             'gate-fake',
             `n=$(cat "$COUNTER" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$COUNTER"; if [ "$n" -eq 1 ]; then echo 'SQLiteError: database is locked' >&2; exit 1; fi; echo PASS`,
         );
-        const command = commandFor('test').replace('sleep 10', 'sleep 0');
+        // 0703 R2: test.onEnter now resolves the task-spec path in a first shell before the
+        // canonical proof.fingerprint capture, so the gate shell moved to shell index 1.
+        const command = commandFor('test', 1).replace('sleep 10', 'sleep 0');
         const result = runShell(command, dir, {
             wbs: '0503',
             qualityGateCmd: gate,

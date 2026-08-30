@@ -18,7 +18,7 @@ ADR-053/054, amended 2026-08-11). Shapes only — rationale lives in `00 ADR-053
 | S1 | Facade noun routing + Tier C exclusions | `plugins/sp/skills/spur-cli/SKILL.md` | live CLI noun inventory + per-noun verbs |
 | S2 | Per-noun verb/flag inventories | `plugins/sp/skills/spur-cli/references/<noun>.md` (+ `references/<noun>/verbs.md` where present) | `<noun> --help` / `--json` (where supported) |
 | S3 | Spine step-routing table | `plugins/sp/skills/spur-dev/SKILL.md` § Step routing | CLI-routed rows' noun/verb existence |
-| S4 | AGENTS.md noun table | `AGENTS.md` § Spur CLI surface | live CLI noun set |
+| S4 | AGENTS.md compact-guide ownership | `AGENTS.md` § Spur CLI surface | heading + one-hop `sp:spur-cli` pointer; no duplicated noun catalog (task 0705 R8 — the facade reference is the sole noun/verb authority) |
 | S5 | README index | `plugins/sp/README.md` § Command index | shipped command/skill/agent surfaces |
 | S6 | Cross-links | plugin surfaces + AGENTS.md doc map | target file/section/command existence |
 

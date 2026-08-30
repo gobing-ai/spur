@@ -627,3 +627,105 @@ describe('resolveActiveSession — exact ancestor signal (task 0398 R3, ts-ai-ru
         expect(AGENT_RUN_ID_ENV).toBe('SPUR_RUN_ID');
     });
 });
+
+// ---------------------------------------------------------------------------
+// context-post-tool — freshness sidecar (task 0711 R4, in-process units)
+// ---------------------------------------------------------------------------
+
+describe('context freshness sidecar (task 0711 R4)', () => {
+    test('isContextIndexFile matches only .md files inside the context dir', async () => {
+        const { isContextIndexFile } = await import('./context-post-tool');
+        const dir = makeTempProject();
+        try {
+            const ctx = join(dir, '.spur', 'context');
+            expect(isContextIndexFile(ctx, join(ctx, 'anatomy.md'))).toBe(true);
+            expect(isContextIndexFile(ctx, join(ctx, '.freshness.json'))).toBe(false);
+            expect(isContextIndexFile(ctx, join(dir, 'outside.md'))).toBe(false);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('currentHeadCommit returns HEAD inside a repo and null outside one', async () => {
+        const { currentHeadCommit } = await import('./context-post-tool');
+        expect(currentHeadCommit()).toMatch(/^[0-9a-f]{40}$/);
+        const outside = mkdtempSync(join(tmpdir(), 'spur-nogit-'));
+        try {
+            const prev = process.cwd();
+            process.chdir(outside);
+            try {
+                expect(currentHeadCommit()).toBeNull();
+            } finally {
+                process.chdir(prev);
+            }
+        } finally {
+            rmSync(outside, { recursive: true, force: true });
+        }
+    });
+
+    test('stamp + read roundtrip; null commit writes nothing', async () => {
+        const { readContextFreshness, stampContextFreshness } = await import('./context-post-tool');
+        const dir = makeTempProject();
+        try {
+            const ctx = join(dir, '.spur', 'context');
+            stampContextFreshness(ctx, null, new Date(0));
+            expect(readContextFreshness(ctx)).toBeNull();
+            stampContextFreshness(ctx, 'c0ffee', new Date('2026-01-01T00:00:00.000Z'));
+            const raw = readContextFreshness(ctx);
+            expect(raw).not.toBeNull();
+            expect(JSON.parse(raw ?? '{}')).toEqual({
+                schema_version: 1,
+                source_commit: 'c0ffee',
+                generated_at: '2026-01-01T00:00:00.000Z',
+            });
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('checkContextFreshness classifies all staleness reasons', async () => {
+        const { CONTEXT_FRESHNESS_SCHEMA_VERSION, checkContextFreshness } = await import('./context-post-tool');
+        expect(checkContextFreshness(null, 'c0ffee')).toEqual({ stale: true, reason: 'never stamped' });
+        expect(checkContextFreshness('not json', 'c0ffee')).toEqual({ stale: true, reason: 'malformed sidecar' });
+        expect(
+            checkContextFreshness(JSON.stringify({ schema_version: 99, source_commit: 'c0ffee' }), 'c0ffee'),
+        ).toEqual({ stale: true, reason: `schema_version 99` });
+        expect(
+            checkContextFreshness(
+                JSON.stringify({ schema_version: CONTEXT_FRESHNESS_SCHEMA_VERSION, source_commit: '' }),
+                'c0ffee',
+            ),
+        ).toEqual({ stale: true, reason: 'missing source_commit' });
+        expect(
+            checkContextFreshness(
+                JSON.stringify({ schema_version: CONTEXT_FRESHNESS_SCHEMA_VERSION, source_commit: 'old' }),
+                'c0ffee',
+            ),
+        ).toEqual({ stale: true, reason: 'source commit changed since generation' });
+        expect(
+            checkContextFreshness(
+                JSON.stringify({ schema_version: CONTEXT_FRESHNESS_SCHEMA_VERSION, source_commit: 'c0ffee' }),
+                'c0ffee',
+            ),
+        ).toEqual({ stale: false });
+    });
+
+    test('a Write landing on a context index refreshes .freshness.json (producer moment)', async () => {
+        const { recordToolUseEvent } = await import('./context-post-tool');
+        const dir = makeTempProject();
+        try {
+            const ctx = join(dir, '.spur', 'context');
+            writeFileSync(join(ctx, '.session.json'), JSON.stringify({ session: 'session-x' }));
+            const event = recordToolUseEvent(ctx, {
+                tool_name: 'Write',
+                tool_input: { file_path: join(ctx, 'anatomy.md') },
+                tool_response: { content: 'index' },
+            });
+            expect(event).not.toBeNull();
+            const raw = readFileSync(join(ctx, '.freshness.json'), 'utf-8');
+            expect(JSON.parse(raw).source_commit).toMatch(/^[0-9a-f]{40}$/);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});

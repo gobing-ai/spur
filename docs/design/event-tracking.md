@@ -305,6 +305,8 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `workflow.run.done` | `runId`, `workflowName`, `finalState`, transitionsTaken | `[workflow] {workflowName} done` | `finalState` |
 | `workflow.run.failed` | `runId`, `workflowName`, `finalState`, `reason` | `[workflow] {workflowName} failed` | `reason` |
 | `workflow.run.finalized` | `runId`, `workflowName`, `status` | `[workflow] {workflowName} finalized` | `status` |
+| `workflow.escalation.created` | `runId`, `workflowName`, `fingerprint`, `artifactPath`, `decision` | `[workflow] escalation packet created ({workflowName} — {decision})` | `decision` |
+| `workflow.escalation.projection_failed` | `runId`, `workflowName`, `error` | `[workflow] escalation packet projection failed` | `error` |
 | `workflow.run.paused` | `runId`, `workflowName`, `node`, `nodeLabel`, transitionsTaken | `[workflow] {workflowName} · {nodeLabel} paused` | — |
 | `workflow.run.resumed` | `runId`, `workflowName`, `node`, `nodeLabel` | `[workflow] {workflowName} · {nodeLabel} resumed` | — |
 | `workflow.run.reseeded` | `runId`, `workflowName`, `fromState`, `toState` | `[workflow] {workflowName} : {fromState} -> {toState}` | `toState` |

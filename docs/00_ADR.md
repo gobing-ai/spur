@@ -1032,6 +1032,15 @@ synthetic PASS; neither may claim the final proof invariant until tasks 0703/070
 partial bracket detects only post-verdict mutation, not whether all evidence observed one state.
 **Detail:** `03 §20.3`; tasks 0703/0704.
 
+**Amendment (2026-08-29, task 0703).** Task pipeline half landed. `task-pipeline.yaml` now verifies
+with `--fix none` (observe-only; remediation routes once through the bounded `verify → test-fix`
+hop and re-enters quality → review → verify on a freshly captured digest), captures the canonical
+digest at quality-gate entry before any evidence stage, stamps one digest across quality/review/
+verification evidence in the verdict's proof block, and fails record/done closed on missing,
+malformed, or mismatched proof evidence. The docs pipeline (`--fix all` + synthetic PASS) remains
+open under task 0704. **Why.** Ordering, not new primitives: a verifier that repairs its own
+subject cannot certify an immutable state. **Detail:** `03 §20.3`; task 0704.
+
 ## ADR-072: One Canonical Pipeline per Lifecycle Boundary
 
 **Status:** Accepted · **Date:** 2026-08-19 · **Feature:** D5 · **Amends:** ADR-029
@@ -2010,3 +2019,22 @@ without adding another worker runtime or coordination plane.
 > `queue_jobs_history_refresh_active_unique`) and isolated child-process execution (task 0717, via
 > `SPUR_HISTORY_REFRESH_CONTEXT`) shipped; status moves from `Accepted (design)` to `Accepted`.
 > Mechanism: `03 §7`; shapes: `docs/design/history-refresh-process-isolation.md`.
+
+## ADR-102: Constrained Agent Stages Attest Executor Capabilities Before Spawn
+
+**Status:** Accepted (design) · **Date:** 2026-08-29
+
+**Decision.** Workflow `agent.run` stages may declare `requiresCapabilities` (closed axis vocabulary
+`fsRead|fsWrite|networkEgress|processSpawn|externalMutationApproval`; levels `available|enforced`),
+and executors attest `executionCapabilities` in agent config. Dispatch resolves the target executor
+and compares requirements against the attestation BEFORE spawning, re-checking on each escalation
+hop; an unsatisfied or unknown/unattested axis fails closed (exit 2) with an axis-by-axis
+diagnostic. Routing attribution records a bounded, redacted per-axis evidence payload.
+
+**Why.** Unattended high-risk stages (e.g. `implement`/`test-fix` under the auto profile) mutate the
+working tree and spawn processes; dispatching them to an executor whose sandboxing is unknown or
+too weak risks unbounded mutation. Tier alone is not a capability signal (R8). Missing data resolves
+to `unknown`, never permissive.
+
+**Detail:** task 0706; `04 Design §agent-capability-attestation`.
+

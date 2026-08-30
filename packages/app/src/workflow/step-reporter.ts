@@ -15,10 +15,12 @@
 
 import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import type { AgentExecutionEvent } from '../observability/agent-execution';
+import type { NormalizedAgentUsage } from '../services/agent-usage';
 import type {
     WorkflowActionFinishedEvent,
     WorkflowActionOutputEvent,
     WorkflowActionStartedEvent,
+    WorkflowActionUsageSummary,
     WorkflowPhaseEvent,
     WorkflowTransitionEvent,
 } from './observability';
@@ -98,7 +100,7 @@ export function renderStepLine(event: StepEvent, options: StepRenderOptions = {}
         const exitPart = event.exitCode !== null && event.exitCode !== undefined ? ` · exit ${event.exitCode}` : '';
         return detail === 'minimal'
             ? null
-            : `${pfx}${mark} agent ${event.outcome} (${formatDuration(event.durationMs)})${exitPart} · usage ${event.usage}${event.reason ? ` · ${event.reason}` : ''}${full}`;
+            : `${pfx}${mark} agent ${event.outcome} (${formatDuration(event.durationMs)})${exitPart} · ${formatUsage(event.usage)}${event.reason ? ` · ${event.reason}` : ''}${full}`;
     }
     if (isActionOutput(event)) {
         if (detail === 'minimal') return null;
@@ -110,10 +112,7 @@ export function renderStepLine(event: StepEvent, options: StepRenderOptions = {}
         const mark = event.ok ? '✓' : '✗';
         if (detail === 'minimal') return `  ${mark} ${event.status} (${formatDuration(event.durationMs)})`;
         const failure = event.result?.error === undefined ? '' : ` · ${event.result.error}`;
-        const usagePart =
-            event.result?.usage !== undefined && event.result.usage !== 'unavailable'
-                ? ` · usage ${event.result.usage}`
-                : '';
+        const usagePart = formatUsageSummary(event.result?.usage);
         const full = detail === 'full' ? ` · action=${event.actionId} · seq=${event.sequence}` : '';
         return `${pfx}${mark} ${event.node}/${event.kind} (${formatDuration(event.durationMs)})${usagePart}${failure}${full}`;
     }
@@ -271,4 +270,22 @@ function formatDuration(ms: number): string {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     return `${minutes}m ${seconds}s`;
+}
+
+/** 0707 R3: usage renders only what was measured — unavailable stays silent, never zero. */
+function formatUsage(usage: NormalizedAgentUsage): string {
+    if (usage.availability === 'unavailable') return 'usage unavailable';
+    const parts: string[] = [];
+    if (usage.inputTokens !== undefined) parts.push(`${usage.inputTokens} in`);
+    if (usage.outputTokens !== undefined) parts.push(`${usage.outputTokens} out`);
+    if (usage.costUsd !== undefined) parts.push(`$${usage.costUsd}`);
+    return parts.length > 0 ? `usage ${parts.join(', ')}` : 'usage measured';
+}
+
+function formatUsageSummary(usage: WorkflowActionUsageSummary | undefined): string {
+    if (usage === undefined || usage.availability === 'unavailable') return '';
+    const parts: string[] = [];
+    if (usage.totalTokens !== undefined) parts.push(`${usage.totalTokens} tok`);
+    if (usage.costUsd !== undefined) parts.push(`$${usage.costUsd}`);
+    return parts.length > 0 ? ` · usage ${parts.join(', ')}` : ' · usage measured';
 }

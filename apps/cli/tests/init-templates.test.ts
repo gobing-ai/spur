@@ -373,7 +373,8 @@ describe('init docs contract (task 0313)', () => {
         expect(constContent).toContain('§6');
         // §8 — Lessons (empty)
         expect(constContent).toContain('§8');
-        expect(constContent).toContain('_(empty — add lessons as the project evolves)_');
+        // Emphasis-flavor-agnostic (task 0705): formatters may rewrite _…_ as *…*.
+        expect(constContent).toContain('(empty — add lessons as the project evolves)');
     });
 
     test('scaffolded 04_DESIGN.md includes UI/UX boundary section', async () => {

@@ -8,7 +8,10 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+    agentsGuideUtf8Bytes,
+    assertAgentsGuideByteBudget,
     PORTABLE_AGENTS_ANCHORS,
+    PORTABLE_AGENTS_BYTE_BUDGET,
     PORTABLE_AGENTS_H2,
     PORTABLE_ROUTING_NEED_KEYS,
 } from './fixtures/agents-md-portable-contract';
@@ -131,5 +134,31 @@ describe('AGENTS portable harness sections stay aligned with init template', () 
         expect(root).toContain('CLI-gated corpus writes');
         // No full CLI flag dump: a crude guard — avoid multi-flag option lists like `--foo <x> [--bar]`
         expect(root).not.toMatch(/spur task\s+create\s+<title>\s+\[--feature/);
+    });
+
+    test('both files stay within the always-loaded UTF-8 byte budget (0705 R1)', () => {
+        assertAgentsGuideByteBudget(rootLabel, root);
+        assertAgentsGuideByteBudget(seedLabel, template);
+    });
+
+    test('budget measures UTF-8 bytes, not characters (0705 R2/R6)', () => {
+        // 10 000 characters but 30 000 UTF-8 bytes: a character-count metric would pass this.
+        const multibyte = '漢'.repeat(10_000);
+        expect(agentsGuideUtf8Bytes(multibyte)).toBe(30_000);
+        expect(agentsGuideUtf8Bytes(multibyte)).not.toBe(multibyte.length);
+        expect(() => assertAgentsGuideByteBudget('multibyte guide', multibyte)).toThrow(/30000 UTF-8 bytes > 20480/);
+    });
+
+    test('over-budget guide fails naming file, bytes, limit, and remediation owner (0705 R3/R6)', () => {
+        const over = 'a'.repeat(PORTABLE_AGENTS_BYTE_BUDGET + 1);
+        expect(() => assertAgentsGuideByteBudget('root AGENTS.md', over)).toThrow(
+            /root AGENTS\.md exceeds.*20481 UTF-8 bytes > 20480 byte limit\. Remediation owner: sp:doc-evolve/,
+        );
+    });
+
+    test('guide at exactly the budget boundary passes (0705 R6)', () => {
+        expect(() =>
+            assertAgentsGuideByteBudget('boundary guide', 'a'.repeat(PORTABLE_AGENTS_BYTE_BUDGET)),
+        ).not.toThrow();
     });
 });

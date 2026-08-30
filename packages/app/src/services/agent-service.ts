@@ -46,9 +46,18 @@ import {
     AgentExecutionLifecycle,
     type AgentExecutionOptions,
     type AgentRoutingAttribution,
+    type CapabilityEvidenceEntry,
     configuredSecretValues,
 } from '../observability/agent-execution';
 import { toEnvelopeJson } from '../output/envelope';
+import { type NormalizedAgentUsage, normalizeAgentUsage } from './agent-usage';
+import {
+    capabilityDiagnostic,
+    capabilityEvidence,
+    evaluateCapabilities,
+    parseRequiresCapabilities,
+    type RequiresCapabilities,
+} from './capability-attestation';
 import { bridgeEventBus, withInvokeRouting } from './event-bridge';
 import { classifyDispatch } from './failure-classification';
 import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
@@ -253,6 +262,13 @@ export interface AgentRunTracedResult {
     signal?: string;
     /** Validation/dispatch error message (exitCode 2). */
     message?: string;
+    /**
+     * Normalized usage measurement (task 0707 R3). Set only when a dispatch ran;
+     * absent for validation failures that never reached the subprocess. The
+     * runner currently exposes no typed usage, so successful dispatches carry
+     * the honest `unavailable` shape — never zero.
+     */
+    usage?: NormalizedAgentUsage;
 }
 
 /** Output sink injected into AgentService. */
@@ -793,6 +809,14 @@ export class AgentService {
             stderr: result.stderr,
             durationMs: result.durationMs,
             ...(result.signal !== undefined ? { signal: result.signal } : {}),
+            // R2 (0707): read ONLY the typed `usage` field off the runner result —
+            // human stdout/stderr is never parsed for accounting. The installed
+            // runner exposes no structured usage, so this normalizes to the
+            // honest `unavailable` shape until the facade supplies typed fields.
+            usage: normalizeAgentUsage(
+                (result as unknown as { usage?: unknown }).usage,
+                'runner result carries no structured usage',
+            ),
         };
     }
 
@@ -957,6 +981,29 @@ export class AgentService {
         const taskId = stringFlag(flags, 'task', '') || undefined;
         const sessionDir = stringFlag(flags, 'session-dir', '') || stringFlag(flags, 'sessionDir', '') || undefined;
         const sessionId = stringFlag(flags, 'session-id', '') || stringFlag(flags, 'sessionId', '') || undefined;
+        // Capability gate input (0706 R4): JSON-serialized axis → minimum-state
+        // requirements from the workflow action. Parsed+validated once here;
+        // invalid shapes fail closed (exit 2) before any resolution/spawn.
+        const requiresCapabilitiesRaw =
+            stringFlag(flags, 'requiresCapabilities', '') || stringFlag(flags, 'requires-capabilities', '');
+        let requiresCapabilities: Partial<RequiresCapabilities> | undefined;
+        if (requiresCapabilitiesRaw !== '') {
+            let parsedJson: unknown;
+            try {
+                parsedJson = JSON.parse(requiresCapabilitiesRaw);
+            } catch (error) {
+                return {
+                    ok: false,
+                    exitCode: 2,
+                    message: `agent.run: invalid requiresCapabilities JSON — ${error instanceof Error ? error.message : String(error)}`,
+                };
+            }
+            const parsed = parseRequiresCapabilities(parsedJson);
+            if (!parsed.ok) {
+                return { ok: false, exitCode: 2, message: `agent.run: ${parsed.error}` };
+            }
+            requiresCapabilities = parsed.requires;
+        }
 
         // Lifecycle + signal handlers set up ONCE, shared across all dispatches
         // (0407): a single AgentExecutionLifecycle spans the escalation chain,
@@ -1051,6 +1098,30 @@ export class AgentService {
             for (let attempt = 0; ; attempt++) {
                 const agent = currentAgent;
                 const model = explicitModel ?? currentModel;
+
+                // Capability gate (0706 R5): resolve-first, compare-before-spawn.
+                // Evaluated per attempt — the escalation ladder may land on a
+                // different executor whose attestation must satisfy the stage
+                // requirements too. Unknown/unavailable fails closed BEFORE any
+                // subprocess is created; no supervised override exists (0706 Q&A:
+                // omit rather than add a permissive flag without an approval event).
+                if (requiresCapabilities !== undefined && Object.keys(requiresCapabilities).length > 0) {
+                    const executorEntry = this.ctx.agentConfig?.executors?.find(
+                        (entry) => entry.name === (currentExecutor ?? ''),
+                    );
+                    const evaluation = evaluateCapabilities(requiresCapabilities, executorEntry);
+                    if (!evaluation.ok) {
+                        const selector = currentExecutor ?? currentAgent;
+                        const diagnostic = capabilityDiagnostic(selector, evaluation);
+                        this.ctx.output.error(diagnostic);
+                        return { ok: false, exitCode: 2, message: diagnostic };
+                    }
+                    // 0706 R7: bounded redacted attestation evidence rides the
+                    // routing attribution onto started/invoke events. The first
+                    // attempt stamps before lifecycle.start consumes `routing`.
+                    const evidence: CapabilityEvidenceEntry[] = capabilityEvidence(evaluation);
+                    routing = routing === undefined ? routing : { ...routing, capabilities: evidence };
+                }
 
                 // slash-command translation (recomputed each iteration — agent
                 // may change on escalation).
@@ -1319,6 +1390,10 @@ export class AgentService {
         lifecycle.finish({
             exitCode: result.exitCode,
             durationMs: result.durationMs,
+            usage: normalizeAgentUsage(
+                (result as unknown as { usage?: unknown }).usage,
+                'runner result carries no structured usage',
+            ),
             ...(result.signal !== undefined ? { signal: result.signal } : {}),
             ...(controller.signal.aborted && result.signal === undefined ? { reason: 'cancelled' } : {}),
         });

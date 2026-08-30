@@ -303,7 +303,7 @@ describe('normalizeSystemEventPayload (task 0367 R3/R4)', () => {
             kind: 'started',
             metadata: { correlationId: 'corr-1' },
             durationMs: 1500,
-            usage: 'unavailable',
+            usage: { availability: 'unavailable', unavailabilityReason: 'test' },
             outcome: 'success',
             reason: 'completed',
             body: 'agent output text',
@@ -320,7 +320,7 @@ describe('normalizeSystemEventPayload (task 0367 R3/R4)', () => {
         expect(result?.kind).toBe('started');
         expect(result?.metadata).toEqual({ correlationId: 'corr-1' });
         expect(result?.durationMs).toBe(1500);
-        expect(result?.usage).toBe('unavailable');
+        expect(result?.usage).toEqual({ availability: 'unavailable', unavailabilityReason: 'test' });
         expect(result?.outcome).toBe('success');
         expect(result?.reason).toBe('completed');
         // High-risk bodies are omitted rather than retained in the envelope.

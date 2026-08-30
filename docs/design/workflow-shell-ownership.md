@@ -141,13 +141,22 @@ program deliberately sequences two independently-owned capabilities.
 
 ### docs-pipeline.yaml
 
+Docs-only certification is **measured** since task 0704: the pipeline dispatches read-only
+`/sp:dev-verify ${wbs} --auto --fix none --focus all` with an answer file, derives the one
+standard verdict via `spur task verdict`, and brackets the verifier with a proof-input digest
+capture/re-capture whose comparison gates `verify → done`. The former synthetic PASS writer in
+`done` is gone — no state manufactures a verdict, and non-PASS/malformed/mismatched evidence
+routes to `failed`.
+
 | Program | Disposition | Reason |
 | --- | --- | --- |
 | `precheck:onEnter:2` | GLUE | combines two status files into one PASS/FAIL |
 | `draft:onEnter:1` | SIMPLE | single `task update wip --no-lifecycle` |
 | `record:onEnter:0` | SIMPLE | single `task record --solution-from-diff` |
-| `done:onEnter:0` | GLUE | writes a synthetic PASS verdict (docs pipeline has no verify hop; workflow-local) |
-| `done:onEnter:2` | SIMPLE | single `task update done --no-lifecycle` |
+| `verify:onEnter:0` | GLUE | task path extraction (feeds the proof capture; `docs/tasks*` excluded from the digest's git-tree half) |
+| `verify:onEnter:4` | SIMPLE | single `task verdict --from-answer` |
+| `verify:onEnter:5` | GLUE | proof-digest injection into verdict json (jq mutation; workflow-local proof wiring) |
+| `done:onEnter:0` | SIMPLE | single `task update done --no-lifecycle` |
 
 ### task-pipeline.yaml
 
