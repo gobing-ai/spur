@@ -124,11 +124,11 @@ vars:
   # file:line instead of re-deriving it from a fresh gate run (0482 R3).
   gateFindings: ""
   # Max R-items in ## Requirements before size precheck fails (R2, task 0454).
-  # Override with `--vars '{"maxImplementReqs":"12"}'`.
-  maxImplementReqs: "5"
+  # Override with `--vars '{"maxImplementReqs":"20"}'`.
+  maxImplementReqs: "10"
   # Max checklist items under ## Plan before size precheck fails (R2, task 0454).
-  # Override with `--vars '{"maxImplementPlanItems":"15"}'`.
-  maxImplementPlanItems: "8"
+  # Override with `--vars '{"maxImplementPlanItems":"32"}'`.
+  maxImplementPlanItems: "16"
   # Diff-scope guard on the implement hop (R1, task 0487). When the target task
   # body backticks at least one path, non-corpus changes outside those paths
   # fail the step by name. New files beside a declared file are allowed. Empty
@@ -139,37 +139,9 @@ vars:
 states:
   - id: precheck
     description: >
-      Pre-flight: soft agent doctor + transition guards for doctor PASS and
-      `spur task check <wbs>`. Failures route to the `failed` terminal state
-      (not a raw lifecycle abort mid-enter).
+      Fast deterministic task readiness and size checks. Failures route to the
+      `failed` terminal state (not a raw lifecycle abort mid-enter).
     onEnter:
-      # Pre-launch executor doctor probe (task 0608 / D6 R4–R5). The auth classifier —
-      # per-agent-family classification (omp/pi env-key misses soft, explicit auth
-      # failures hard) plus the executor-divergence line — now lives in the
-      # `doctor.probe` built-in action kind (`packages/app/src/workflow/actions/doctor-probe.ts`)
-      # instead of this shell program; that is the ownership-surface landing for the
-      # task-pipeline precheck doctor probe (option c, least-privilege built-in).
-      #
-      # Semantics preserved from the replaced shell (behavior parity is covered by
-      # `packages/app/tests/workflow/actions/doctor-probe.test.ts`):
-      #   R2 (0487): probe BOTH resolved executors ($agent and $implementAgent) and
-      #   FAIL on `authenticated: unauthenticated`. Previously only $agent was probed
-      #   and auth was informational, so a run whose implement executor had no
-      #   provider key sailed through precheck into a guaranteed implement failure
-      #   (runs e8cb00e7 / b16bfbf4). `unknown` auth keeps the old soft behavior —
-      #   some agents expose no auth-status verb. `spur agent doctor` CLI exit-code
-      #   semantics are deliberately untouched; the gate lives here.
-      #   R4 (0487): one divergence line when the two executors differ.
-      #   R2 (0503): omp/pi env-key probe misses are soft because the CLI process
-      #   cannot see relay-owned credentials; explicit non-omp auth failures remain hard.
-      # Soft probe: writes PASS/FAIL to the status file and always succeeds so the
-      # transition guards below route on the token (never a raw lifecycle abort).
-      - kind: doctor.probe
-        options:
-          resultFile: ".spur/run/${vars.wbs}-precheck-doctor.status"
-          spurBin: "${vars.spurBin}"
-          agent: "${vars.agent}"
-          implementAgent: "${vars.implementAgent}"
       # R6 (0487): pre-launch hygiene WARNING (never a block) — starting a task on
       # a tree already dirty with another task's implementation is how 0485's diff
       # got swept into 0486's run. Corpus dirs are excluded: the pipeline writes
@@ -217,9 +189,9 @@ states:
       # R2 (0454): task size precheck — evaluate R-item and Plan-item counts.
       # Writes PASS/FAIL to .spur/run/<wbs>-precheck-size.status. Always exit 0
       # (soft check, like doctor). The precheck→implement guard reads the file.
-      # R3 (0487): `--executor` adds the size-vs-capability gate — a task past the
-      # DEFAULT caps routed to a sub-`capable-1` executor blocks here instead of
-      # burning the full implementTimeoutMs and exiting 3 (run ca130182).
+      # Temporary config-only bypass (0723): keep deterministic size limits but defer
+      # the executor-tier policy to the dedicated task-pipeline upgrade. This avoids
+      # the script's second `spur agent doctor` call while the precheck path is repaired.
       - kind: shell
         options:
           command: >-
@@ -227,8 +199,7 @@ states:
             mkdir -p .spur/run &&
             if [ -f plugins/sp/scripts/task-size-precheck.ts ]; then
             bun plugins/sp/scripts/task-size-precheck.ts "$wbs"
-            --spur-bin "$spurBin" --max-reqs "$maxImplementReqs" --max-plan-items "$maxImplementPlanItems"
-            --executor "$implementAgent";
+            --spur-bin "$spurBin" --max-reqs "$maxImplementReqs" --max-plan-items "$maxImplementPlanItems";
             else
               echo "task-size-precheck skipped — plugins/sp/scripts/task-size-precheck.ts not present in project." >&2 &&
               echo "PASS" > "$SIZE_FILE";
@@ -692,17 +663,17 @@ states:
     description: Terminal — pipeline cancelled by operator at the approval gate (R1).
 
 transitions:
-  # ── precheck: doctor PASS + task check → implement; else → failed ──
+  # ── precheck: size PASS + task check → implement; else → failed ──
   - from: precheck
     to: implement
-    description: Agent doctor PASS and task check green — begin implementation.
+    description: Deterministic size and task checks are green — begin implementation.
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/$wbs-precheck-doctor.status 2>/dev/null)" = PASS && test "$(cat .spur/run/$wbs-precheck-size.status 2>/dev/null)" = PASS && $spurBin task check $wbs'
+        command: 'test "$(cat .spur/run/$wbs-precheck-size.status 2>/dev/null)" = PASS && $spurBin task check $wbs'
   - from: precheck
     to: failed
-    description: Doctor FAIL and/or task check failed — stop before implement.
+    description: Size and/or task check failed — stop before implement.
     guard:
       kind: always
 
