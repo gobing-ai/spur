@@ -2006,6 +2006,7 @@ without adding another worker runtime or coordination plane.
 
 **Detail:** `03 §7`; `docs/design/history-refresh-process-isolation.md`; feature E31.
 
-> **Amendment (2026-08-29).** Built: database single-flight (task 0716) and isolated child-process
-> execution (task 0717) shipped; status moves from `Accepted (design)` to `Accepted`. Mechanism:
-> `03 §7`; shapes: `docs/design/history-refresh-process-isolation.md`.
+> **Amendment (2026-08-29).** Built: database single-flight (task 0716, unique index
+> `queue_jobs_history_refresh_active_unique`) and isolated child-process execution (task 0717, via
+> `SPUR_HISTORY_REFRESH_CONTEXT`) shipped; status moves from `Accepted (design)` to `Accepted`.
+> Mechanism: `03 §7`; shapes: `docs/design/history-refresh-process-isolation.md`.

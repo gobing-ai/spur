@@ -971,7 +971,7 @@ export class MockHistoryBoardService implements HistoryBoardService {
     async triggerImport(mode: 'full' | 'incremental'): Promise<HistoryTriggerImportResponse['data']> {
         return {
             runId: `run-${Date.now().toString(16)}`,
-            status: 'completed',
+            status: 'queued',
             message: `Mock import completed in ${mode} mode: 9 sources checked, 0 new transcripts found.`,
         };
     }

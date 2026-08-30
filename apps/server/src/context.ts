@@ -22,8 +22,8 @@ import {
     configuredSecretValues,
     createPsProcessInspector,
     type EventEmitter,
+    enqueueHistoryRefresh,
     FeatureService as FeatureServiceImpl,
-    HISTORY_REFRESH_JOB,
     hitlConfirmDefault,
     LiveHistoryBoardService,
     systemEventProjectContext as makeSystemEventProjectContext,
@@ -418,20 +418,30 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 historyBoardSvc = new LiveHistoryBoardService({
                     getDb: this.getDb.bind(this),
                     triggerImport: async (mode) => {
-                        const queue = await this.jobQueue();
-                        const now = Date.now();
-                        const runId = await queue.enqueue(HISTORY_REFRESH_JOB, {
+                        const db = await this.getDb();
+                        // Single-flight writer (task 0716 R4): the board refresh rides
+                        // the same coalescing gate as every other producer; a pending
+                        // burst absorbs it and an in-flight import is reported instead
+                        // of silently stacking a second job behind it.
+                        const result = await enqueueHistoryRefresh(db, {
+                            config: options.spurConfig ?? null,
                             trigger: 'manual',
-                            triggerId: null,
-                            windowStart: now,
-                            windowEnd: now,
                             importMode: mode,
                         });
-                        return {
-                            runId,
-                            status: 'queued',
-                            message: `History ${mode} import and analysis queued.`,
-                        };
+                        // Manual is never config-gated; 'disabled' is unreachable unless
+                        // the config shape changes — fail loudly rather than lie.
+                        if (result.status === 'disabled') {
+                            throw new Error('History refresh is disabled by config; cannot trigger import');
+                        }
+                        const status = result.status === 'enqueued' ? 'queued' : result.status;
+                        let message = `History ${mode} import and analysis queued.`;
+                        if (status === 'coalesced') {
+                            message = `History ${mode} import coalesced into the pending refresh.`;
+                        }
+                        if (status === 'already-running') {
+                            message = 'A history import is already running; this request joined it.';
+                        }
+                        return { runId: result.jobId, status, message };
                     },
                 });
             }

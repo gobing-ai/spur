@@ -92,3 +92,5 @@ Verdict `PASS` sourced from the task's pipeline verdict artifact (`# Testing →
 {"ts":"2026-08-28T04:58:17Z","pipeline":"wrapup-pipeline","task":"0695","feature":"D7","status":"done"}
 {"ts":"2026-08-28T04:58:17Z","pipeline":"wrapup-pipeline","task":"0696","feature":"D7","status":"done"}
 {"wbs":"0714","feature_id":"F91","status":"done","verdict":"UNKNOWN","timestamp":"2026-08-29T16:35:36Z"}
+{"wbs":"0716","feature_id":"E31","status":"done","verdict":"PASS","timestamp":"2026-08-30T01:30:46Z"}
+{"wbs":"0717","feature_id":"E31","status":"done","verdict":"PASS","timestamp":"2026-08-30T01:30:46Z"}

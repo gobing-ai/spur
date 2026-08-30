@@ -280,6 +280,37 @@ describe('createServerContext', () => {
         expect(JSON.parse(row?.payload ?? '{}')).toMatchObject({ trigger: 'manual', importMode: 'full' });
     });
 
+    test('historyBoardService joins a pending refresh and reports an in-flight import (task 0716)', async () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, {
+            cwd: '/tmp/test-history-board',
+            fs: testFs,
+            dbUrl: ':memory:',
+            jobQueueEnabled: true,
+        });
+        const db = await ctx.getDb();
+        const now = Date.now();
+        await db.run(
+            `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, next_retry_at)
+             VALUES ('job-pending', 'history.refresh', '{"trigger":"task-done","triggerId":"0716","windowStart":${now - 1_000},"windowEnd":${now - 1_000}}', 'pending', 0, 3, ?, ?, ?)`,
+            now - 1_000,
+            now - 1_000,
+            now + 600_000,
+        );
+
+        // A pending refresh absorbs the board trigger instead of stacking a second job.
+        const joined = await ctx.historyBoardService().triggerImport('full');
+        expect(joined.status).toBe('coalesced');
+        expect((await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM queue_jobs'))?.n).toBe(1);
+
+        // Flip the row in-flight: the next trigger reports it rather than queueing behind it.
+        await db.run("UPDATE queue_jobs SET status = 'processing', next_retry_at = NULL WHERE id = 'job-pending'");
+        const running = await ctx.historyBoardService().triggerImport('incremental');
+        expect(running.status).toBe('already-running');
+        expect(running.runId).toBe('job-pending');
+        expect((await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM queue_jobs'))?.n).toBe(1);
+    });
+
     test('queueConsumer() throws when the job queue is disabled', async () => {
         const appRt = makeAppRt();
         const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });

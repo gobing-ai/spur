@@ -340,6 +340,7 @@ history system emits `history.*` events to the event ledger for observability.
 (`history.refresh.on_completion`, opt-in config, default off) enqueues one coalesced `history.refresh`
 job on the feature-A2 embedded job queue at task-done and pipeline-run completion — never inline on
 the firing operation. `enqueueCoalesced` (`packages/domain/src/db.ts`) makes the lookup-then-insert
+atomic under cross-process concurrency via a **partial unique index** on `queue_jobs`
 (`queue_jobs_history_refresh_active_unique`, scoped to `type='history.refresh' AND status IN
 ('pending','processing')` so other job types keep multiple pending rows); a burst inside
 `debounce_ms` joins the pending job (earliest `windowStart`, latest `windowEnd`) instead of

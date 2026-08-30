@@ -1,6 +1,6 @@
 # History Refresh Process Isolation and Single-Flight Execution
 
-**Status:** Accepted design; not yet built  
+**Status:** Accepted; built — 0716 single-flight, 0717 process isolation  
 **Date:** 2026-08-29  
 **Feature:** E31  
 **Decision:** ADR-101
@@ -53,7 +53,7 @@ to Hono/oRPC while the child is active.
 - The history job runner splits that trusted invocation with the existing `splitLaunchCommand()`
   helper and calls the existing `ProcessExecutor` seam with:
   - `cwd`: project root;
-  - args: `<leading args> history daily --json`;
+  - args: `<leading args> history daily --json --json-envelope`;
   - a bounded output buffer large enough for `DailyResult`;
   - `SPUR_HISTORY_REFRESH_CONTEXT`: serialized, validated `HistoryRefreshPayload` for this child
     invocation only.
@@ -110,6 +110,23 @@ retain their existing multiplicity.
    and rejects non-zero or malformed child results.
 5. Run server and child against one WAL database; verify lock waits are bounded by the existing
    5-second `busy_timeout` and failures remain visible without blocking the server event loop.
+
+## As-built (0716–0717)
+
+- Writer + index: `enqueueHistoryRefresh` (`packages/app/src/services/history-refresh-service.ts`) over
+  migration 0027's pending-or-processing unique index; Board returns `queued | coalesced | already-running`.
+- Handler: `handleHistoryRefreshJob({ cwd, invocation, executor }, job)` — input is the raw `Job` envelope;
+  `validateHistoryRefreshPayload(job.payload)` is the type gate (envelope-as-payload fails the attempt).
+- Child command: `splitLaunchCommand(invocation)` + `executor.run(... 'history', 'daily', '--json',
+  '--json-envelope')` in `cwd`, `maxOutput` 1 MB, env `SPUR_HISTORY_REFRESH_CONTEXT = JSON.stringify(payload)`.
+- `apps/cli serve` passes `spurInvocation: resolveSpurBin()` into `startServer`; a missing invocation
+  fails the attempt at run time (split error), never a shell string.
+- `history daily` parses the context env before creating the event bus/ledger (malformed context exits 1
+  before any import); when present it selects `importMode` and stamps `trigger`/window (+ `coverage`) onto
+  its existing `history.*` events. Absent env: interactive behavior unchanged.
+- Failures (spawn, non-zero exit, invalid JSON, wrong shape) throw bounded detail; queue retry/failure
+  state and `queue.job.*` events stay owned by the consumer. R1/R5 verified by the held-open-child and
+  WAL busy-timeout tests (see task 0717).
 
 ## Rejected alternatives
 

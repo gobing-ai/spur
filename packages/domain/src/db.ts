@@ -187,6 +187,12 @@ export interface CoalescedEnqueueSpec {
     payload: unknown;
     /** Debounce window in ms — the job becomes ready this long after the LAST join. */
     debounceMs: number;
+    /**
+     * User/scheduler-initiated request: a fresh job is ready immediately (due now)
+     * and joining a pending job can only SHORTEN its due time, never extend it.
+     * Default false — completion events debounce by `debounceMs` (window slides).
+     */
+    immediate?: boolean;
     /** Merge an incoming payload into a pending job's payload (coalescing). */
     mergePayload?: (existing: unknown, incoming: unknown) => unknown;
     /** Clock seam for deterministic tests (default `Date.now`). */
@@ -196,37 +202,48 @@ export interface CoalescedEnqueueSpec {
 /** Outcome of {@link enqueueCoalesced}. */
 export type CoalescedEnqueueResult =
     | { status: 'enqueued'; jobId: string; payload: unknown }
-    | { status: 'coalesced'; jobId: string; payload: unknown };
+    | { status: 'coalesced'; jobId: string; payload: unknown }
+    | { status: 'already-running'; jobId: string; payload: unknown };
 
 /**
- * Enqueue with debounce-style coalescing (task 0549 R2): if a **pending** job of the
- * same type exists, join it — the merged payload replaces the row's payload and
- * `next_retry_at` is pushed to `now + debounceMs` — so a burst of operations yields
- * exactly one job whose covered window spans all of them. Otherwise enqueue a fresh
- * job delayed by `debounceMs`. Jobs already claimed (`processing`) or finished are
- * invisible to the join: a completion after the job started running enqueues a new one.
+ * Enqueue with debounce-style coalescing (task 0549 R2, extended by 0716): if an
+ * **active** (pending or processing) job of the same type exists, the request
+ * never creates a second row — a pending job is JOINED (merged payload, due time
+ * pushed or shortened), a processing job yields `already-running` with its id — so
+ * a burst of producers yields exactly one active job per coalesced type (0716
+ * R3/R4). Only finished jobs are invisible: a completion arriving after the job
+ * finished enqueues a fresh one.
+ *
+ * Due time: non-immediate requests debounce — a fresh job becomes ready at
+ * `now + debounceMs` and every join slides the window out again (the covered
+ * window always ends one debounce after the LAST joined event). Immediate requests
+ * (manual refresh, schedule tick) are ready NOW, and joining a pending job can
+ * only SHORTEN its due time (`min(existing, now)`) — an immediate request never
+ * delays work an earlier request already scheduled.
  *
  * Atomicity (P2 review fix): the fresh-enqueue is an `INSERT … ON CONFLICT DO NOTHING`
- * against the `queue_jobs_history_refresh_pending_unique` partial unique index
- * (`migrations.ts`), which enforces at most one pending row per coalesced type at the
- * DB level — two completions from different processes (parallel agents in runall,
- * sharing `.spur/spur.db`) serialize on the index instead of both enqueuing. The
- * returned `payload` is the POST-merge payload (P3 review fix) so an enqueue-time
- * observable carries the merged burst window, not just the incoming completion.
+ * against the `queue_jobs_history_refresh_active_unique` partial unique index
+ * (`migrations.ts`, migration 0027), which enforces at most one ACTIVE row per
+ * coalesced type at the DB level — two producers from different processes
+ * (parallel agents in runall, sharing `.spur/spur.db`) serialize on the index
+ * instead of enqueuing duplicates. The returned `payload` is the POST-merge
+ * payload (P3 review fix) so an enqueue-time observable carries the merged burst
+ * window, not just the incoming completion.
  *
  * The ts-db `QueueJobDao` + the `queue_jobs` drizzle schema are imported lazily for the
  * same Workers-bundle reason as {@link createJobQueue}.
  */
 export async function enqueueCoalesced(db: DbAdapter, spec: CoalescedEnqueueSpec): Promise<CoalescedEnqueueResult> {
     const now = spec.now?.() ?? Date.now();
-    const nextRetryAt = now + spec.debounceMs;
+    const immediate = spec.immediate === true;
+    const freshDueAt = immediate ? now : now + spec.debounceMs;
 
     // Atomic fresh-enqueue (no merge semantics in SQL — the merge payload is computed
     // in JS below). `ON CONFLICT DO NOTHING` without a target resolves against every
-    // unique index; the scoped partial index only conflicts for pending rows of the
+    // unique index; the scoped partial index only conflicts for ACTIVE rows of the
     // coalesced type, so other job types are unaffected. The adapter's `queryFirst`
     // returns `null` (not just `undefined`) for no-row, so normalize with `?? undefined`.
-    const insertFresh = () =>
+    const insertFresh = (dueAt: number) =>
         db
             .queryFirst<{ id: string }>(
                 `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, next_retry_at)
@@ -238,45 +255,73 @@ export async function enqueueCoalesced(db: DbAdapter, spec: CoalescedEnqueueSpec
                 JSON.stringify(spec.payload),
                 now,
                 now,
-                nextRetryAt,
+                dueAt,
             )
             .then((row) => row ?? undefined);
 
-    // Bounded retry: each pass enqueues fresh, or coalesces into the pending row. The
-    // loop covers a worker claiming the pending job between our read and our guarded
-    // update — in that case a fresh insert (which now must win) retries.
+    const selectActive = (status: 'pending' | 'processing') =>
+        db
+            .queryFirst<{ id: string; payload: string; next_retry_at: number | null }>(
+                `SELECT id, payload, next_retry_at FROM queue_jobs WHERE type = ? AND status = ? ORDER BY created_at DESC, id ASC LIMIT 1`,
+                spec.type,
+                status,
+            )
+            .then((row) => row ?? undefined);
+
+    const parsePayload = (raw: string): unknown => {
+        try {
+            return JSON.parse(raw) as unknown;
+        } catch {
+            return raw;
+        }
+    };
+
+    // Bounded retry: each pass enqueues fresh, coalesces into the pending row, or
+    // reports the in-flight processing row. The loop covers a worker claiming the
+    // pending job between our read and our guarded update.
     for (let pass = 0; pass < 3; pass++) {
-        const inserted = await insertFresh();
+        const inserted = await insertFresh(freshDueAt);
         if (inserted !== undefined) return { status: 'enqueued', jobId: inserted.id, payload: spec.payload };
 
-        const pending = await db
-            .queryFirst<{ id: string; payload: string }>(
-                `SELECT id, payload FROM queue_jobs WHERE type = ? AND status = 'pending' ORDER BY created_at DESC, id ASC LIMIT 1`,
-                spec.type,
-            )
-            .then((row) => row ?? undefined);
-        if (pending === undefined) continue; // claimed between insert and read — retry
+        const pending = await selectActive('pending');
+        if (pending !== undefined) {
+            const merged = spec.mergePayload ? spec.mergePayload(pending.payload, spec.payload) : spec.payload;
+            // Immediate requests may only SHORTEN an earlier request's due time;
+            // debounced requests slide the window out to `now + debounceMs`.
+            const joinDueAt = immediate ? Math.min(pending.next_retry_at ?? now, now) : now + spec.debounceMs;
+            const updated = await db
+                .queryFirst<{ id: string }>(
+                    `UPDATE queue_jobs SET payload = ?, next_retry_at = ?, updated_at = ? WHERE id = ? AND status = 'pending' RETURNING id`,
+                    JSON.stringify(merged),
+                    joinDueAt,
+                    now,
+                    pending.id,
+                )
+                .then((row) => row ?? undefined);
+            if (updated !== undefined) return { status: 'coalesced', jobId: pending.id, payload: merged };
+            continue; // pending was claimed between read and update — retry
+        }
 
-        const merged = spec.mergePayload ? spec.mergePayload(pending.payload, spec.payload) : spec.payload;
-        const updated = await db
-            .queryFirst<{ id: string }>(
-                `UPDATE queue_jobs SET payload = ?, next_retry_at = ?, updated_at = ? WHERE id = ? AND status = 'pending' RETURNING id`,
-                JSON.stringify(merged),
-                nextRetryAt,
-                now,
-                pending.id,
-            )
-            .then((row) => row ?? undefined);
-        if (updated !== undefined) return { status: 'coalesced', jobId: pending.id, payload: merged };
-        // pending was claimed between read and update — retry with a fresh insert
+        // No pending row: the insert conflict came from a PROCESSING row (the
+        // active index) — report it instead of enqueuing a duplicate behind it.
+        const processing = await selectActive('processing');
+        if (processing !== undefined) {
+            return { status: 'already-running', jobId: processing.id, payload: parsePayload(processing.payload) };
+        }
+        // Pre-index DB with the row claimed+finished between passes — retry insert.
     }
 
-    // Unreachable in practice: a pending row would have to be claimed mid-merge on
-    // every pass. Guard loudly rather than loop forever (deterministic over hidden
-    // automation) — the queue may already hold a duplicate in a pre-index DB.
-    const fallback = await insertFresh();
+    // Deterministic exhaustion (unreachable behind the active index): prefer
+    // reporting the in-flight job; otherwise the final insert must succeed or the
+    // caller hears a loud error — a uniqueness conflict never escapes as a
+    // producer failure and never silently drops the request.
+    const processing = await selectActive('processing');
+    if (processing !== undefined) {
+        return { status: 'already-running', jobId: processing.id, payload: parsePayload(processing.payload) };
+    }
+    const fallback = await insertFresh(freshDueAt);
     if (fallback === undefined) {
-        throw new Error(`enqueueCoalesced: could not enqueue ${spec.type} after 3 attempts`);
+        throw new Error(`enqueueCoalesced: ${spec.type} stayed active past 3 attempts without a resolvable outcome`);
     }
     return { status: 'enqueued', jobId: fallback.id, payload: spec.payload };
 }

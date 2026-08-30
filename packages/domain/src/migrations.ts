@@ -66,14 +66,14 @@ CREATE TABLE IF NOT EXISTS queue_jobs (
 
 CREATE INDEX IF NOT EXISTS queue_jobs_ready_idx ON queue_jobs (status, next_retry_at, created_at);
 
--- At most one pending job per coalesced type (task 0549 R2): a partial unique
--- index scoped to history.refresh + status='pending' makes the coalescing
--- lookup-then-insert atomic under cross-process concurrency — a second process's
--- INSERT conflicts (ON CONFLICT DO NOTHING) instead of enqueuing a duplicate.
+-- At most one ACTIVE job per coalesced type (task 0716): a partial unique index
+-- scoped to history.refresh + status IN ('pending','processing') makes the
+-- coalescing lookup-then-insert atomic under cross-process concurrency — and
+-- blocks a duplicate enqueue while an older job is mid-flight (processing).
 -- Scoped to ONE type on purpose: the queue also holds task-action/feature-action
--- jobs that legitimately have multiple pending rows concurrently, so a global
--- (type, status='pending') unique index would break them.
-CREATE UNIQUE INDEX IF NOT EXISTS queue_jobs_history_refresh_pending_unique ON queue_jobs (type) WHERE type = 'history.refresh' AND status = 'pending';
+-- jobs that legitimately have multiple active rows concurrently, so a global
+-- (type, status) unique index would break them.
+CREATE UNIQUE INDEX IF NOT EXISTS queue_jobs_history_refresh_active_unique ON queue_jobs (type) WHERE type = 'history.refresh' AND status IN ('pending', 'processing');
 `;
 
 /**
@@ -664,6 +664,34 @@ CREATE INDEX IF NOT EXISTS idx_agent_instances_executor ON agent_instances (exec
 CREATE INDEX IF NOT EXISTS idx_agent_instances_team ON agent_instances (team_id);
 `;
 
+/**
+ * Migration 0027 (task 0716): retire duplicate active history.refresh rows, drop
+ * the pending-only unique index, and create the active (pending/processing) one.
+ * The survivor is the deterministically OLDEST active row (`created_at ASC, id ASC`);
+ * every other active row becomes terminal `failed` with an audit message in
+ * `last_error` — the same retirement shape the queue's own failure path uses, so
+ * the consumer never retries a retired row.
+ */
+export const HISTORY_REFRESH_ACTIVE_UNIQUE_SCHEMA_SQL = `
+UPDATE queue_jobs
+SET status = 'failed',
+    last_error = 'retired by migration 0027_spur_cli_history_refresh_active_unique: superseded duplicate active history refresh',
+    processing_at = NULL,
+    updated_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+WHERE type = 'history.refresh'
+  AND status IN ('pending', 'processing')
+  AND id NOT IN (
+      SELECT id FROM queue_jobs
+      WHERE type = 'history.refresh' AND status IN ('pending', 'processing')
+      ORDER BY created_at ASC, id ASC
+      LIMIT 1
+  );
+
+DROP INDEX IF EXISTS queue_jobs_history_refresh_pending_unique;
+
+CREATE UNIQUE INDEX IF NOT EXISTS queue_jobs_history_refresh_active_unique ON queue_jobs (type) WHERE type = 'history.refresh' AND status IN ('pending', 'processing');
+`;
+
 export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
     // Renamed from `0001_spur_team_inbox` so the filename carries the
@@ -751,6 +779,15 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         id: '0026_spur_cli_history_message_duration_source',
         sql: 'ALTER TABLE history_message ADD COLUMN duration_source TEXT',
         addColumnIfMissing: { table: 'history_message', column: 'duration_source' },
+    },
+    {
+        // 0716: single-flight for history.refresh — widen the pending-only partial
+        // unique index to ACTIVE (pending OR processing) rows. Duplicate active rows
+        // from the pre-index era are retired first (oldest active row survives; the
+        // rest become terminal `failed` with an auditable last_error) so CREATE
+        // UNIQUE INDEX cannot fail, then the pending-only index is dropped.
+        id: '0027_spur_cli_history_refresh_active_unique',
+        sql: HISTORY_REFRESH_ACTIVE_UNIQUE_SCHEMA_SQL,
     },
 ];
 
@@ -870,6 +907,15 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
         const runsStatusDoneSkip =
             migration.id === '0017_spur_cli_runs_status_completed_to_done' &&
             (!(await tableExists(adapter, 'runs')) || !(await columnExists(adapter, 'runs', 'status')));
+
+        // Migration 0027 retires duplicate ACTIVE history.refresh rows and swaps
+        // the pending-only unique index for the active one — DDL/DML against
+        // queue_jobs, which the loadSqlMigrations path (drizzle/, which excludes
+        // 0004) may never have created. Journal without executing when the table
+        // is absent; fresh DBs get the active index from QUEUE_JOBS_SCHEMA_SQL.
+        const queueJobsActiveIndexSkip =
+            migration.id === '0027_spur_cli_history_refresh_active_unique' &&
+            !(await tableExists(adapter, 'queue_jobs'));
         if (
             shouldApplySql &&
             !sequenceIndexSkip &&
@@ -879,7 +925,8 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !historyBoardQueryIndexesSkip &&
             !historyPerformanceIndexesSkip &&
             !callIdSkip &&
-            !tsNullableSkip
+            !tsNullableSkip &&
+            !queueJobsActiveIndexSkip
         ) {
             for (const statement of splitSqlStatements(migration.sql)) {
                 await adapter.exec(statement);
