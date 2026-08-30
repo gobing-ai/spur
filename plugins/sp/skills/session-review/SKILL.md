@@ -46,6 +46,9 @@ cross-agent windows, recurrence, trends, or quantitative performance forensics.
   name the confirmation needed.
 - State `not available` when compaction or missing output removed evidence. Never reconstruct it from
   memory or claim a verification that did not run.
+- Derive timing only from timestamps and tool-call records visible in the active session. Use
+  non-overlapping stages whose durations sum to elapsed time; render unavailable duration or call
+  counts as `n/a` instead of estimating them.
 
 ## Triage mode (`--triage`)
 
@@ -90,6 +93,19 @@ three buckets — never skip triage and start fixing from the raw findings list.
 ### Outcome
 
 State the overall result in one to three sentences, including partial or blocked scope.
+
+### Time breakdown
+
+Summarize elapsed time and, when supported by evidence, productive work, avoidable setup/recovery,
+and operator wait time. Then render non-overlapping stages:
+
+| Stage | Time | Tool calls | Assessment |
+| --- | ---: | ---: | --- |
+
+Format durations as `M:SS` below one hour and `H:MM:SS` at one hour or above (`1:44`, not `1m44s`;
+`0:33`, not `33s`). Include a `Total` row when elapsed time is available. Keep operator approval
+waits separate from execution bottlenecks. Use `n/a` for any value not supported by the active
+session evidence.
 
 ### Resolved issues
 

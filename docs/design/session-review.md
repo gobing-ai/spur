@@ -36,9 +36,12 @@ material claim; existing session results are reused before rerunning a command. 
 symptom, root cause, applied resolution, and verification evidence. Missing evidence renders `not
 available`; unsupported causality is a hypothesis with a confirmation path.
 
-The report has five sections in order: Outcome; Resolved issues; Open issues and risks; Process and
-environment improvements; Next actions. Improvements use the shared environment-improvement
-placement rule and remain proposals only.
+The report has six sections in order: Outcome; Time breakdown; Resolved issues; Open issues and
+risks; Process and environment improvements; Next actions. The time breakdown uses non-overlapping
+stages derived only from visible active-session timestamps and tool-call records. Durations render
+as `M:SS` below one hour and `H:MM:SS` at one hour or above; unavailable measurements render `n/a`.
+Operator waits remain separate from execution bottlenecks. Improvements use the shared
+environment-improvement placement rule and remain proposals only.
 
 ## Boundaries
 

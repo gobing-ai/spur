@@ -12,7 +12,8 @@ default it is report-only: current conversation plus read-only repository eviden
 the session context is preserved — no workflow launch, history import, task creation, or
 remediation. With `--triage`, it first triages the findings, then applies direct fixes (pure
 documentation work and one-to-two-line fixes) inline and files everything remaining as exactly one
-new task for further fixing.
+new task for further fixing. The result includes a non-overlapping time breakdown with durations in
+`M:SS` or `H:MM:SS` form and `n/a` for unavailable measurements.
 
 ## Argument Flags
 

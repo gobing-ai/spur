@@ -1060,6 +1060,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
 
         for (const heading of [
             '### Outcome',
+            '### Time breakdown',
             '### Resolved issues',
             '### Open issues and risks',
             '### Process and environment improvements',
@@ -1077,6 +1078,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             expect(skill).toContain(boundary);
         }
         expect(skill).toContain('../../references/environment-lens.md');
+        expect(skill).toContain('Format durations as `M:SS` below one hour and `H:MM:SS`');
+        expect(skill).toContain('Use `n/a` for any value not supported');
+        expect(command).toContain('non-overlapping time breakdown');
         expect(command).toContain('Skill(skill="sp:session-review", args="$ARGUMENTS")');
         expect(command).not.toContain('spur workflow run');
     });

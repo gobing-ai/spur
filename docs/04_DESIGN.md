@@ -953,10 +953,13 @@ without claiming a later import.
 **Active-session review (ADR-089):** `/sp:dev-review-session [<focus>]` invokes
 `sp:session-review` directly in the active host session. Focus changes ordering, not evidence
 collection. The current conversation is the primary evidence plane; read-only repository checks
-may confirm material claims. The compact report contains Outcome, Resolved issues, Open issues and
-risks, Process and environment improvements, and Next actions. It launches no workflow or agent,
-imports no history, performs no baseline/cache/publication step, and mutates nothing. Historical,
-cross-agent, recurrence, trend, and quantitative questions stay on `/sp:dev-find-issue`.
+may confirm material claims. The compact report contains Outcome, a non-overlapping Time breakdown,
+Resolved issues, Open issues and risks, Process and environment improvements, and Next actions.
+Timing comes only from visible session evidence, renders as `M:SS` or `H:MM:SS`, separates operator
+waits from execution bottlenecks, and uses `n/a` rather than estimates. It launches no workflow or
+agent, imports no history, performs no baseline/cache/publication step, and mutates nothing.
+Historical, cross-agent, recurrence, trend, and quantitative questions stay on
+`/sp:dev-find-issue`.
 
 **Artifact-digest ownership boundary (task 0669).** The semantic artifact digest and its ranked-
 versus-set canonicalization rules live in **`packages/domain/src/analytics/artifact-digest.ts`**,
