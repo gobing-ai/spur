@@ -4,7 +4,7 @@ name: "Add global --no-logo and guarantee banner-free JSON output"
 status: done
 template: feature-impl
 created_at: 2026-08-30T02:11:08.791Z
-updated_at: "2026-08-30T05:20:15.633Z"
+updated_at: "2026-08-30T05:31:48.139Z"
 feature_id: A31
 priority: P2
 ---
@@ -107,25 +107,28 @@ Decomposition quiz: auto-skipped by `--auto`; one cohesive task retained.
 - `docs/design/harness-surface-governance.md:101` — §4 consent-record row (2026-08-29, task 0719, feature A31) for the public `--no-logo` root option per ADR-051.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | `apps/cli/src/index.ts:145` root `program.option('--no-logo', ...)`; live probe: `--help` lists `--no-logo` exactly once; `bun apps/cli/src/index.ts --no-logo status` rc=0 and `bun apps/cli/src/index.ts help --no-logo` rc=0 (accepted before and after the command path); test `apps/cli/tests/commands/dispatch-inspect.test.ts:201` |
-| R2 | MET | `apps/cli/src/index.ts:199-201,206-207` — exact `--no-logo` in `shouldRenderBanner()` gates only the banner write; live probe: `status --no-logo` rc=0, first line `Project: ok` unchanged, banner lines=0 (base renders banner lines=1); test `apps/cli/tests/commands/dispatch-inspect.test.ts:216` subprocess |
-| R3 | MET | `apps/cli/src/index.ts:200` — exact `--json` auto-suppression preserved; live probe: `status --json` stdout first char `{`, banner lines=0; early config-failure envelope test `apps/cli/tests/commands/dispatch-inspect.test.ts:235`; `--json` before the verb is commander unknown-option rejection identical at base 4f6ee0c44 and changed tree (no regression, per-verb option placement) |
-| R4 | MET | `apps/cli/src/index.ts:207` — `bannerText()` referenced only inside `runCli()`; `main()` banner-free (grep + test `apps/cli/tests/commands/dispatch-inspect.test.ts:201` asserts `main(['help'])` output); live probe: default `status` renders banner exactly once (banner_lines=1, rc=0); `--quiet` still suppresses (banner_lines=0); test matrix `apps/cli/tests/commands/dispatch-inspect.test.ts:176` covers `--quiet`/`--silent` |
-| R5 | MET | Policy sole-owned at composition root `apps/cli/src/index.ts:199-201`; zero noun-module changes in diff; live near-miss probe `--no-logos` → banner still rendered (banner_lines=1, identical rc=1 at base); test near-miss matrix `apps/cli/tests/commands/dispatch-inspect.test.ts:176-198` (`--no-logos`, `--no_logo`, `--no-logo=1`, `--NO-LOGO`, `--jsonx`, `--quietly`, `--silent=1`); `docs/04_DESIGN.md` §1 startup-banner paragraph (v1.61.0); ADR-051 consent row `docs/design/harness-surface-governance.md` §4 (2026-08-29, task 0719) |
+|-------------|--------|----------|
+| R1 | MET | `apps/cli/src/index.ts:137-147` registers one root `--no-logo` option; `apps/cli/tests/commands/dispatch-inspect.test.ts:201-214` verifies one help occurrence and placement before/after the command path; fresh focused test passed. |
+| R2 | MET | `apps/cli/src/index.ts:199-209` gates only the startup banner on exact suppression tokens; `apps/cli/tests/commands/dispatch-inspect.test.ts:216-233` verifies unchanged command output/exit status with the logo absent; fresh `status --no-logo` exited 0 with normal status output. |
+| R3 | MET | `apps/cli/src/index.ts:199-207` suppresses the banner for exact `--json`; `apps/cli/tests/commands/dispatch-inspect.test.ts:235-260` verifies JSON-first stdout for healthy and early-config-failure paths; fresh `status --json` exited 0 with `{` as the first byte. |
+| R4 | MET | `apps/cli/src/index.ts:189-214` keeps banner emission exclusively in `runCli()` while `main()` remains decoration-free; `apps/cli/tests/commands/dispatch-inspect.test.ts:176-233` verifies default-on, exact `--quiet`/`--silent` suppression, one banner, and banner-free programmatic dispatch. |
+| R5 | MET | `apps/cli/src/index.ts:143-147,194-209` owns registration and exact-token policy at the composition root; `apps/cli/tests/commands/dispatch-inspect.test.ts:176-214` covers near misses and placement; `docs/04_DESIGN.md:87-95` and `docs/design/harness-surface-governance.md:95-101` document the public surface and consent. Re-audit artifacts: `.spur/run/0719-verify-answer.txt:1-38` and `.spur/run/0719-verdict.json:1-113`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: programmatic dispatch free of decoration | MET | test | `main(['--no-logo','help'])` / `main(['help','--no-logo'])` outputs banner-free — `apps/cli/tests/commands/dispatch-inspect.test.ts:212-213` |
-
+| R1 — The CLI exposes one global no-logo option | MET | test | `apps/cli/tests/commands/dispatch-inspect.test.ts:201-214`; fresh focused suite passed and source-local `--help` listed `--no-logo` once. |
+| R2 — Explicit no-logo suppresses startup decoration | MET | test | `apps/cli/tests/commands/dispatch-inspect.test.ts:216-233`; fresh source-local `status --no-logo` exited 0 with command output intact and no banner. |
+| R3 — JSON mode suppresses the startup logo automatically | MET | test | `apps/cli/tests/commands/dispatch-inspect.test.ts:235-260`; fresh source-local `status --json` exited 0 and emitted JSON-first stdout. |
+| R4 — Human mode retains the startup logo by default | MET | test | `apps/cli/tests/commands/dispatch-inspect.test.ts:216-233` verifies exactly one default banner and unchanged exit status. |
+| R5 — Banner policy has one composition-root owner | MET | test | `apps/cli/tests/commands/dispatch-inspect.test.ts:176-214` plus `apps/cli/src/index.ts:137-147,194-209`; no noun module owns logo policy. |
+| R6 — Programmatic dispatch remains free of startup decoration | MET | test | `apps/cli/tests/commands/dispatch-inspect.test.ts:201-214` invokes `main()` with `--no-logo` before and after the command path and observes no startup banner. |
+| R7 — Similar option names do not suppress the logo accidentally | MET | test | `apps/cli/tests/commands/dispatch-inspect.test.ts:176-198` covers eight exact near misses, all retaining banner eligibility. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 | Priority | Dimension | Location | Finding |
