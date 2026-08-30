@@ -16,7 +16,7 @@ Wraps the **sp:spur-dev** skill.
 | `"<description>"` | Feature description to plan. | required |
 | `--feature` `<id>` | Attach to an existing feature. | omitted |
 | `--parent` `<feature-id>` | Create under a parent feature. | omitted |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing planning. The planning pipeline's `agent.run` stages are headless — they always dispatch a subprocess. `inline` — also what omission resolves to since task 0687 — substitutes tier resolution there with one warning naming the resolved executor; `auto` (tier-resolves an executor); a name (pins that executor). | inline |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing planning. Omission and `inline` drive `idea-pipeline.yaml` in this session with zero external agent/workflow processes; `auto` tier-resolves an executor and a name pins one, both through the async workflow worker. | inline |
 | `--skip-design` | Omit the system-design hop. | off |
 | `--auto` | Skip objective HITL gates. | off |
 | `--approve-taste` | With --auto: skip design-approval pause. | off |
@@ -43,5 +43,7 @@ for taste gates). Alias: `--design-approved` (prefer `--approve-taste`).
 ## Implementation
 
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
+- Omitted/`inline`: drive `idea-pipeline.yaml` through the [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md). Do not launch `spur workflow run`, `spur agent run`, or a native subagent unless the operator explicitly requests delegation.
+- `auto`/name: launch `spur workflow run idea-pipeline.yaml --async`, observe with one `workflow trace --follow`, and only report cancellation as stopped when `workflow cancel --json` returns `killed: true`.
 - `Skill(skill="sp:spur-dev", args="plan $ARGUMENTS")`
 - Full Design package + batch `design` field contract: `plugins/sp/skills/spur-dev/references/dev-operations.md` § plan and `planning-workflow.md` Step 5.5.

@@ -96,9 +96,9 @@ surface is already resolved and name the trigger / `operator override`. A comman
 inside that subprocess boundary runs its backing skill in that process; it must not spawn another
 `spur agent run` for the same trigger. This prevents recursive dispatch.
 
-**Pipeline wrappers (`dev-run`, `dev-runall`)** — the orchestrator is a loop; its *stages* do the
+**Pipeline wrappers (`dev-run`, `dev-runall`, `dev-idea`, `dev-plan`)** — the orchestrator is a loop; its *stages* do the
 model-bearing work. Interactive omit/`inline` therefore uses the
-[inline pipeline driver](inline-pipeline-driver.md): it reads `task-pipeline.yaml`, executes each
+[inline pipeline driver](inline-pipeline-driver.md): it reads the selected pipeline YAML, executes each
 `agent.run` input through the backing skill in the host session, and preserves every shell action
 and guard. `auto` or a named executor is merged into per-task `vars.agent` and
 `vars.implementAgent`, and the workflow's `agent.run` steps run under that subprocess executor (see
@@ -122,9 +122,11 @@ leg for eligible stages. Operator
 confirmation actions, `pause: true`, and approve/taste/ask decisions stay host-owned. Each inline
 model stage appends `stage <id> executed inline in session <session-id>` to its run log; a
 subagent-dispatched stage appends `stage <id> executed via subagent <agent-id> (host session
-<session-id>)` instead. `dev-plan` remains a workflow subprocess, as do `dev-run`/`dev-runall` with
-`--agent auto` or a name, parallel batches, and every headless `spur workflow run` / `spur agent
-run`. `dev-run --mode implement` continues to run its single competency in-session under omitted
+<session-id>)` instead. `dev-idea` and `dev-plan` also drive `idea-pipeline.yaml` in the host session,
+with no native subagent unless the operator explicitly requests delegation. `--agent auto` or a
+name, parallel batches, and every headless `spur workflow run` / `spur agent run` use subprocesses;
+dev-command workflow subprocesses launch `--async` so cancellation owns a process group and only
+`killed: true` means a live run stopped. `dev-run --mode implement` continues to run its single competency in-session under omitted
 `--agent` or explicit `--agent inline` (identical values, 0687 R1).
 
 ### Executor precedence chain (R7)
@@ -143,7 +145,7 @@ resolved in this order; first match wins:
 `--agent auto` tier-resolves an executor (stage `model_policy` → `agent.default` → tier priority)
 **before** merging, so it enters the chain at step 1 already resolved to a concrete name.
 On a headless workflow surface, explicit `--agent inline` substitutes tier resolution with a warning
-(0687 R3) instead of rejecting — it resolves exactly like an omitted flag. Interactive task wrappers
+(0687 R3) instead of rejecting — it resolves exactly like an omitted flag. Interactive pipeline wrappers
 consume both inline resolutions identically (0508 eligibility as generalized by 0687 R2) before this
 chain and use the host driver. Omitting the flag on a headless surface forwards nothing, so the
 spawned step resolves to `agent.default` (step 2) or the YAML literal (step 3).
@@ -193,18 +195,17 @@ explicit process boundary and retain their existing resolution, output, timeout,
 contracts. The interactive task wrapper does not change the YAML or engine; it reads the YAML as
 SSOT and interprets the actions in-session before any workflow subprocess exists. It records inline
 provenance without fabricating an `AgentRunTracedResult`.
-`spur agent run` itself resolves omitted `--agent` to `agent.default`, rejects explicit `--agent
-inline` with the stable special error (a headless surface cannot host a session), and `--agent
-auto` tier-resolves — the unified `--agent` selector on the dev command surface does not change the
-CLI's resolution.
+`spur agent run` resolves omitted or explicit `inline` through tier substitution on its headless
+surface and emits one warning naming the concrete executor; `auto` tier-resolves without the inline
+warning. Interactive dev wrappers consume inline before this boundary, so they never spawn it.
 
 ### Inline trade-off
 
 Inline avoids process startup and preserves the host session's context and tools. Relative to
 subprocess dispatch it provides **no isolated workspace**, **no per-stage subprocess action
 record**, **no independent timeout or abort boundary**, and **no tier-selected executor**: the
-executor is the current coding agent. Interactive task pipelines retain a run log, run-link, and
-session provenance through the inline driver. If process isolation or an independently killable
+executor is the current coding agent. Interactive pipelines retain a run log and session provenance
+through the inline driver; task pipelines additionally record a task run-link. If process isolation or an independently killable
 stage is required, select the subprocess path (`--agent auto` or `--agent <name>`).
 
 ## Every write is CLI-gated

@@ -567,8 +567,9 @@ graph TB
 1. User types `/sp:dev-plan "add task body write API"`.
 2. **Command** (`dev-plan.md`) parses `$ARGUMENTS` and calls
    `Skill(skill="sp:spur-dev", args="plan $ARGUMENTS")`.
-3. **Skill** (`spur-dev/SKILL.md`) drives the planning half: intake → `spur feature create` → AC
-   generation → `spur feature check` gate → decomposition → `spur task batch-create`.
+3. **Skill** (`spur-dev/SKILL.md`) reads `idea-pipeline.yaml` and drives its states in the current
+   session by default: intake → `spur feature create` → AC generation → `spur feature check` gate →
+   decomposition → `spur task batch-create`. Explicit `--agent auto|<name>` uses the async worker.
 4. **CLI** validates each step before writing — feature IDs are race-safe, WBS allocation is atomic,
    `check` is the readiness matrix.
 5. Result: validated feature file + decomposed task batch in `docs/features/` and `docs/tasks/`.
@@ -577,10 +578,9 @@ graph TB
 
 1. User types `/sp:dev-run 0090`.
 2. **Command** delegates to `sp:spur-dev` skill (execution half).
-3. **Skill** reads the task, loads `task-pipeline.yaml`, and runs
-   `spur workflow run` with HITL surfacing.
-4. **CLI** executes the workflow engine (`@gobing-ai/ts-dual-workflow-engine`), pauses at HITL gates,
-   persists run state.
+3. **Skill** reads the task and `task-pipeline.yaml`, then drives its actions and guards in-session.
+4. **CLI** supplies deterministic actions and lifecycle gates; explicit executors use the async
+   workflow worker and persisted run state.
 5. Result: task driven through implement → check → fix → verify lifecycle.
 
 **Task-corpus write protection.**
@@ -606,7 +606,6 @@ pipeline owns one lifecycle phase:
 | `task-pipeline.yaml`        | Single-task execution             | `/sp:dev-run`                     |
 | `idea-pipeline.yaml`        | Idea/planning → feature + tasks   | `/sp:dev-idea`, `/sp:dev-plan`    |
 | `feature-dev.yaml`          | Feature umbrella execution        | `/sp:dev-runall --feature`        |
-| `idea-pipeline.yaml`        | Idea to feature + AC + task batch | `/sp:dev-idea`                    |
 | `wrapup-pipeline.yaml`      | Post-execution wrap-up            | `/sp:dev-wrap`, `/sp:dev-wrapall` |
 | `docs-pipeline.yaml`        | Docs-only task execution          | `/sp:dev-run --mode implement`    |
 | `wayfinder-resolution.yaml` | Wayfinder ticket resolution loop  | `spur workflow run` (free-form)   |

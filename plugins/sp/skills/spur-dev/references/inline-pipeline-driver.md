@@ -1,6 +1,6 @@
 ---
 name: inline-pipeline-driver
-description: "Interactive host-session interpreter for task-pipeline.yaml: execute the existing FSM without a workflow agent subprocess while preserving actions, guards, artifacts, and provenance."
+description: "Interactive host-session interpreter for Spur state-machine pipelines: execute the existing FSM without a workflow agent subprocess while preserving actions, guards, artifacts, and provenance."
 see_also:
   - spur-dev
   - execution-workflow
@@ -9,12 +9,13 @@ see_also:
 
 # Inline Pipeline Driver
 
-This driver is the interactive control-inversion path granted by ADR-047. It applies only when an
-interactive `/sp:dev-run --mode full` or sequential `/sp:dev-runall` invocation omits `--agent` (now
-the inline default, 0687 R1) or passes `--agent inline`. A named executor, `--agent auto`, parallel
-batch mode, `spur workflow run`, and `spur agent run` keep the existing subprocess path.
+This driver is the interactive control-inversion path granted by ADR-047. It applies when an
+interactive `/sp:dev-run --mode full`, sequential `/sp:dev-runall`, `/sp:dev-idea`, or
+`/sp:dev-plan` invocation omits `--agent` or passes `--agent inline`. A named executor,
+`--agent auto`, parallel batch mode, `spur workflow run`, and `spur agent run` keep the existing
+subprocess path.
 
-The project runtime definition — `task-pipeline.yaml`, resolved through the two-tier
+The selected project runtime definition — `task-pipeline.yaml` or `idea-pipeline.yaml`, resolved through the two-tier
 project→bundled model (task 0648/0650, never an unbundled runtime path) — remains the sole
 FSM definition. The driver MUST read that file
 at invocation time. It must not copy the state list, actions, guards, or transition order into a
@@ -22,9 +23,9 @@ command, skill, script, or second workflow.
 
 ## Run setup
 
-1. Resolve `<wbs>`, `--auto`, and any explicit `--vars`; read the YAML and overlay its `vars` defaults
-   with those invocation values. An explicit `vars.agent` / `vars.implementAgent` is an executor
-   selection and therefore chooses the subprocess workflow path.
+1. Resolve the command inputs, `--auto`, and any explicit `--vars`; read the selected YAML and overlay
+   its `vars` defaults with those invocation values. An explicit non-inline executor selection
+   chooses the subprocess workflow path.
 2. Allocate a collision-resistant inline run id (`uuidgen`, with a timestamp/pid fallback), create
    `.spur/run/`, and use `.spur/run/<run-id>.log` as the run log.
 3. Resolve the host session id from `.spur/context/.session.json`, accepting the normalized hook key
@@ -42,13 +43,14 @@ command, skill, script, or second workflow.
      never per action.
    - **Source of truth** = the CLI projection for layer 1; the YAML parsed in step 1 for layer 2.
      Never hand-copy or hand-derive the state list into the driver, a command, a skill, or a script.
-5. Record lifecycle provenance before entering the FSM:
+5. For task execution only, record lifecycle provenance before entering the FSM:
 
    ```bash
    spur task run-link <wbs> --source inline-full --run-id <run-id> --json
    ```
 
-   This is required for the normal `testing → done` provenance guard. It is not a guard bypass.
+   This is required for the normal `testing → done` provenance guard. Planning pipelines have no
+   task lifecycle link and skip this task-specific action.
 
 ## YAML interpreter
 
@@ -61,12 +63,15 @@ Action semantics come from the YAML and the workflow action contract:
 - `shell` — run the expanded command in the project working tree with resolved vars exported as
   environment variables. A non-zero result follows the action's existing failure policy.
 - `note` — append the expanded message to the inline run log.
+- `doctor.probe` — run the declared Spur doctor once, persist its status file, and apply any
+  `setVars` result (including a resolved executor) before the next action or state.
 - `file.read.into-var` — read the declared file into the declared run variable before subsequent
   actions/guards.
 - `hitl.confirm` — under `profile=auto`, follow the YAML's auto-skip transition. Otherwise pause,
   surface the prompt, and resume from the same state with the operator's answer.
-- `agent.run` — execute the action's slash command, native-subagent-first (task 0508). Do not call
-  `spur agent run` and do not re-enter `/sp:dev-run --mode full`. Preserve the YAML options: capture
+- `agent.run` — execute the action's input in the host session. Task execution may use the native
+  subagent eligibility below; idea/plan never dispatch a native subagent unless the operator
+  explicitly requested delegation. Do not call `spur agent run` or re-enter a full pipeline. Preserve the YAML options: capture
   `answerFile`; assert `expectFile`; enforce `requireDiff` against a pre-action git snapshot,
   including the task-scope guard; honor declared error policy. `timeoutMs` is recorded as not
   applicable because the host session has no independent kill boundary.

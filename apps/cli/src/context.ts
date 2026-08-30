@@ -192,7 +192,7 @@ export function createCliContext(options: {
         setExitCode: options.setExitCode ?? noopSetExitCode,
         output: options.output,
         getDb,
-        ...(options.agentConfig !== undefined ? { agentConfig: options.agentConfig } : {}),
+        ...(agentConfig !== undefined ? { agentConfig } : {}),
         ...(options.spurConfig !== undefined ? { spurConfig: options.spurConfig } : {}),
         agentRoles,
         agentRolesSource,

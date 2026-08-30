@@ -241,9 +241,12 @@ model stages may use a native subagent with host-session fallback). `--agent aut
 when the selector is omitted/`auto`/a name; explicit `--agent inline` rides the same unified inline resolution (subagent-first, host fallback)
 The applied trigger is named. Inline has no isolated workspace, per-stage subprocess action record,
 independent timeout/abort boundary, or tier-selected executor. Interactive `dev-run --mode full`
-and sequential `dev-runall` are the ADR-047 control-inversion case: the wrapper reads
-`task-pipeline.yaml` as SSOT, interprets its actions/guards in-session, records a pipeline run link,
-and appends `stage <id> executed inline in session <session-id>` provenance. Direct
+and sequential `dev-runall` are ADR-047 control-inversion cases over `task-pipeline.yaml`;
+`dev-idea` and `dev-plan` use the same host driver over `idea-pipeline.yaml` but never dispatch a
+native subagent unless the operator asks. Task runs record a pipeline link; all inline runs append
+`stage <id> executed inline in session <session-id>` provenance. Explicit dev-command executors
+launch the workflow asynchronously so `workflow cancel` owns the worker process group; only a
+`killed: true` result certifies that a live process stopped. Direct
 `spur agent run`, headless `spur workflow run`, explicit executor selection, and parallel batches
 remain subprocess surfaces.
 Execute a prompt or slash command via a coding agent. `--agent` (default `auto`) takes a **role**

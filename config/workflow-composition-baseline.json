@@ -111,8 +111,13 @@
                     "evidenceEffect": "none"
                 },
                 "start:onEnter:1": {
+                    "kind": "doctor.probe",
+                    "stateEffect": "read",
+                    "evidenceEffect": "write"
+                },
+                "start:onEnter:2": {
                     "kind": "shell",
-                    "invocation": "mkdir -p .spur/run && DOCTOR_FILE=\".spur/run/$__runId-idea-precheck-doctor.status\" && set +e && $spurBin agent doctor $agent; doctor_rc=$?; set -e && if [ \"$doctor_rc\" -eq 0 ] && test -n \"$idea\"; then\n  printf 'PASS\\n' > \"$DOCTOR_FILE\";\nelse\n  printf 'FAIL\\n' > \"$DOCTOR_FILE\";\nfi && exit 0",
+                    "invocation": "test -n \"$idea\" || printf 'FAIL\\n' > \".spur/run/$__runId-idea-precheck-doctor.status\"",
                     "stateEffect": "read",
                     "evidenceEffect": "write",
                     "disposition": "GLUE"

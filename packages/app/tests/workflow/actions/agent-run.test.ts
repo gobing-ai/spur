@@ -585,12 +585,13 @@ describe('AgentRunActionRunner expectFile', () => {
 
     test('capture: exit-0 + expectFile absent → ok:false with clear error', async () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const secret = 'missing-artifact-secret';
         const svc = svcWithRunTraced({
             exitCode: 0,
-            stdout: 'all good',
+            stdout: `all good ${secret}`,
             invocation: invocation(),
         });
-        const runner = new AgentRunActionRunner(svc);
+        const runner = new AgentRunActionRunner(svc, undefined, undefined, { secretValues: [secret] });
         const result = await runner.execute(
             { role: 'coder', input: 'verify', capture: true, expectFile: 'nope.json', cwd: dir },
             makeCtx(),
@@ -601,8 +602,14 @@ describe('AgentRunActionRunner expectFile', () => {
         expect(result.data).toMatchObject({
             exitCode: 0,
             agent: '<default>',
-            answer: 'all good',
+            answer: 'all good [REDACTED]',
+            stdoutTail: 'all good [REDACTED]',
         });
+        const artifact = await Bun.file(join(dir, '.spur/run/test-1-s1-partial.md')).text();
+        expect(artifact).toContain('all good');
+        expect(artifact).toContain('[REDACTED]');
+        expect(artifact).not.toContain(secret);
+        expect(result.error).toContain('.spur/run/test-1-s1-partial.md');
     });
 
     test('expectFile resolves relative to cwd', async () => {

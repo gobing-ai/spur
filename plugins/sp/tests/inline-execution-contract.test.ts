@@ -36,23 +36,12 @@ const MODE_AWARE_COMMANDS = readdirSync(COMMANDS_DIR)
 // Commands that delegate model-bearing work via Skill() but are NOT mode-aware
 // (CLI-mechanical or workflow-backed). These must not grow Skill() delegation without
 // also applying the contract — guarded by the test below.
-const EXCLUDED_COMMANDS = [
-    'dev-changelog',
-    'dev-daily',
-    'dev-gitmsg',
-    'dev-fixall',
-    'dev-handover',
-    'dev-idea',
-] as const;
-
-// Workflow commands that have no interactive host-stage inversion. Task execution
-// wrappers are tested separately below because ADR-047 grants them the inline driver.
-const HEADLESS_ONLY_WORKFLOW_COMMANDS = ['dev-plan'] as const;
+const EXCLUDED_COMMANDS = ['dev-changelog', 'dev-daily', 'dev-gitmsg', 'dev-fixall', 'dev-handover'] as const;
 
 // 0676 R1/R2: engine-driven headless surfaces must not present `inline` as usable.
 // They either omit it from the advertised options (this set) or document the stable
 // rejection explicitly (dev-wrap/dev-wrapall shape, covered by their own docs).
-const HEADLESS_NO_INLINE_ADVERTISED = ['dev-find-issue', 'dev-idea'] as const;
+const HEADLESS_NO_INLINE_ADVERTISED = ['dev-find-issue'] as const;
 
 describe('task 0406 / H82 — unified --agent execution-surface contract', () => {
     test('the unified --agent selector governs the surface; inline is the default and resolves identically to omit', () => {
@@ -125,7 +114,7 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         }
     });
 
-    test('0676 R1/R2 — headless find-issue/idea never advertise inline as usable', () => {
+    test('0676 R1/R2 — headless-only commands never advertise inline as usable', () => {
         for (const command of HEADLESS_NO_INLINE_ADVERTISED) {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
             expect(raw, `${command}: must not advertise --agent <inline|auto|name>`).not.toContain(
@@ -137,18 +126,30 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         }
     });
 
-    test('0687 — headless workflow commands (dev-plan) resolve omission and explicit inline identically via tier substitution', () => {
-        for (const command of HEADLESS_ONLY_WORKFLOW_COMMANDS) {
+    test('0718 R1/R4 — idea and plan stay inline by default and use cancellable async workers when explicit', () => {
+        for (const command of ['dev-idea', 'dev-plan']) {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
-            expect(raw, `${command}: must be mode-aware to carry --agent`).toContain(
-                'cross-cutting.md#inline-default-execution-surface',
-            );
-            expect(raw, `${command}: must document the <inline|auto|name> selector`).toContain('<inline|auto|name>');
-            expect(raw, `${command}: must state the task 0687 unified resolution`).toContain('task 0687');
-            expect(raw, `${command}: must not advertise the retired headless rejection`).not.toContain(
-                'rejected with the stable special error',
-            );
+            expect(raw).toContain('[inline pipeline driver]');
+            expect(raw).toContain('zero external agent/workflow processes');
+            expect(raw).toContain('spur workflow run idea-pipeline.yaml --async');
+            expect(raw).toContain('workflow trace --follow');
+            expect(raw).toContain('killed: true');
         }
+    });
+
+    test('0718 regression baseline records the three failed external attempts before inline recovery', () => {
+        const attempts = JSON.parse(
+            readFileSync(join(import.meta.dir, 'fixtures', '0718-planning-attempts.json'), 'utf8'),
+        ) as Array<{ runId: string; workflowDurationMs: number; plannerStageDurationMs: number | null }>;
+
+        expect(attempts).toHaveLength(3);
+        expect(attempts.map((attempt) => attempt.runId)).toEqual([
+            '14facf0e-9864-4b3c-9bcb-d594640ee6e9',
+            '4e32f2dd-4a3c-47bd-be4c-461b7cc16b71',
+            'f8c8c663-6a51-434f-97e0-7c84639965c2',
+        ]);
+        expect(attempts.reduce((total, attempt) => total + attempt.workflowDurationMs, 0)).toBe(506_696);
+        expect(attempts.reduce((total, attempt) => total + (attempt.plannerStageDurationMs ?? 0), 0)).toBe(504_122);
     });
 
     test('0503 — interactive full task execution uses the YAML-backed host driver with provenance', () => {
@@ -165,7 +166,7 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         expect(driver).toContain('project→bundled model');
         expect(driver).toContain('spur task run-link <wbs> --source inline-full');
         expect(driver).toContain('stage <id> executed inline in session <session-id>');
-        expect(driver).toContain("execute the action's slash command, native-subagent-first");
+        expect(driver).toContain("execute the action's input in the host session");
         expect(driver).toContain('Transition guards are not advisory');
         expect(driver).toContain('Never silently fall back');
     });

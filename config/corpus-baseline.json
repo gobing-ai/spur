@@ -195,6 +195,12 @@
         },
         {
             "kind": "feature",
+            "id": "E31",
+            "code": "L4.scenario-unverified",
+            "severity": "warning"
+        },
+        {
+            "kind": "feature",
             "id": "E4",
             "code": "L2.missing-required-section",
             "severity": "warning"
@@ -1593,12 +1599,6 @@
         },
         {
             "kind": "task",
-            "id": "0689",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
             "id": "0690",
             "code": "L3.ac-empty",
             "severity": "error"
@@ -1696,6 +1696,12 @@
         {
             "kind": "task",
             "id": "0712",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0717",
             "code": "L4.prerequisite-not-done",
             "severity": "warning"
         }

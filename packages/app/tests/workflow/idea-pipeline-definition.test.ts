@@ -98,6 +98,26 @@ describe('idea-pipeline definition — pre-approval bypass ordering (R4/R5 of 03
  * The start-state archive-and-reset block that papered over the collision is gone.
  */
 describe('idea-pipeline definition — run-scoped artifacts (R4 of 0425)', () => {
+    test('precheck resolves one planner executor for doctor and every dispatch stage', () => {
+        const start = DEF.states.find((s) => s.id === 'start');
+        const probe = (start?.onEnter ?? []).find((action) => action.kind === 'doctor.probe');
+        const agentRuns = DEF.states
+            .flatMap((state) => state.onEnter ?? [])
+            .filter((action) => action.kind === 'agent.run');
+
+        expect(probe?.options).toMatchObject({
+            agent: `\${vars.agent}`,
+            role: 'planner',
+            resolvedAgentVar: 'planningAgent',
+        });
+        expect(agentRuns.length).toBeGreaterThan(0);
+        expect(
+            agentRuns.every(
+                (action) => (action.options as Record<string, unknown> | undefined)?.agent === `\${vars.planningAgent}`,
+            ),
+        ).toBe(true);
+    });
+
     test('start state no longer archives/resets shared idea-* paths', () => {
         const start = DEF.states.find((s) => s.id === 'start');
         const cmds = (start?.onEnter ?? []).filter((a) => a.kind === 'shell').map((a) => a.options?.command ?? '');

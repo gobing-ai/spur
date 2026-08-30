@@ -4,7 +4,7 @@ name: "antigravity-cli shim cannot satisfy expectFile stages: print mode auto-de
 status: done
 template: issue
 created_at: 2026-08-27T15:39:39.946Z
-updated_at: "2026-08-28T16:58:08.079Z"
+updated_at: "2026-08-30T00:16:37.891Z"
 feature_id: B
 ---
 
@@ -106,7 +106,7 @@ capability. See `spur agent doctor` caveat already noted in sp:dogfood-testing (
 - [x] `git status` intentional only in both repos
 ### Q&A
 **Q: What does “every executor” cover?** The active executor registry, not every dormant shim in
-`AGENT_SHIMS`. `spur agent doctor --json` reports eleven configured executors: seven Pi-backed, two
+`AGENT_SHIMS`. `spur agent doctor --json` reported eleven configured executors: seven Pi-backed, two
 Antigravity-backed, one Claude-backed, and one Grok-backed. Those four executable families are the
 R1 matrix. A future executor using another shim must gain and pass the same live write probe before
 being considered usable for `expectFile` work.
@@ -126,6 +126,14 @@ grant; `--add-dir` and the authoritative workspace keep its file tools rooted in
 
 **Q: Should this be configurable?** No. Each configured executor family has one verified headless
 policy. A knob would let production drift back into an unverified state.
+
+**Q: Was the complete four-family policy released in 0.4.46?** No. The 0689 Testing section
+incorrectly credited 0.4.46 with the Claude and Grok policies even though that release contained
+only the Antigravity portion. Task 0718 corrected the release boundary: ts-libs 0.4.47 (commits
+`55efcb8` and `e56afdf`) publishes the Claude `--permission-mode acceptEdits` and Grok
+`--allow Write --allow Edit` shims, and Spur now installs the lockstep 0.4.47 family. The earlier
+source-runner probes remain valid implementation evidence; 0.4.47 is the first published artifact
+that carries the complete policy.
 ### Design
 **Final amendment 2026-08-28 — configured-executor write policy.** Spur’s eleven configured
 executors resolve to four shim families. The shared contract is: a headless executor used by

@@ -66,6 +66,7 @@ vars:
   # R8 (0366): injected by WorkflowAppService.run(); stamps discovery artifact provenance.
   __runId: ""
   agent: "omp"
+  planningAgent: ""
   stepTimeoutMs: "1800000"
 
 states:
@@ -78,20 +79,17 @@ states:
       - kind: note
         options:
           message: "Idea pipeline start for idea: ${vars.idea}"
+      - kind: doctor.probe
+        options:
+          resultFile: ".spur/run/${vars.__runId}-idea-precheck-doctor.status"
+          spurBin: "${vars.spurBin}"
+          agent: "${vars.agent}"
+          role: planner
+          resolvedAgentVar: planningAgent
       - kind: shell
         options:
           command: >-
-            mkdir -p .spur/run &&
-            DOCTOR_FILE=".spur/run/$__runId-idea-precheck-doctor.status" &&
-            set +e &&
-            $spurBin agent doctor $agent; doctor_rc=$?;
-            set -e &&
-            if [ "$doctor_rc" -eq 0 ] && test -n "$idea"; then
-              printf 'PASS\n' > "$DOCTOR_FILE";
-            else
-              printf 'FAIL\n' > "$DOCTOR_FILE";
-            fi &&
-            exit 0
+            test -n "$idea" || printf 'FAIL\n' > ".spur/run/$__runId-idea-precheck-doctor.status"
 
   - id: discovery
     description: >
@@ -106,7 +104,7 @@ states:
     onEnter:
       - kind: agent.run
         options:
-          agent: ${vars.agent}
+          agent: ${vars.planningAgent}
           input: "Run sp:brainstorm for the idea: ${vars.idea}. The skill owns the approach-generation, design summary, and `needs_design` signal criteria; emit .spur/run/${vars.__runId}-idea-needs-design.json ({\"needs_design\": true|false}) and the design summary per the skill's `Design Approval Gate` and `The needs_design signal` sections. Also emit the idea-evaluation report to .spur/run/${vars.__runId}-idea-eval-report.md per plugins/sp/skills/spur-dev/references/idea-evaluation.md (urgency/necessity 0–5, premises, pros/cons, alternatives, enhanced idea, recommendation). At the END of the report, append a provenance footer block of the exact form: `---\\nrun_id: ${vars.__runId}\\ngenerated_at: <RFC3339 timestamp>\\n---` (omit the footer only if run_id is empty)."
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
@@ -140,7 +138,7 @@ states:
     onEnter:
       - kind: agent.run
         options:
-          agent: ${vars.agent}
+          agent: ${vars.planningAgent}
           input: "Create a feature for the idea: ${vars.idea}. Read .spur/run/${vars.__runId}-idea-eval-report.md if present for the enhanced idea and scores. Use 'spur feature create \"<name>\" --json' to create it. Write the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt. If an existing feature is appropriate, use its id instead. Also write two body-only intent artifacts: .spur/run/${vars.__runId}-idea-goal.md with concise Goal intent only (a short statement of what the feature achieves; never task breakdowns, checklists, or how-to steps), and .spur/run/${vars.__runId}-idea-scope.md with explicit in-scope and out-of-scope boundary bullets."
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
@@ -181,7 +179,7 @@ states:
           command: 'mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-ac-retry-count; rm -f .spur/run/$__runId-idea-ac-content.md .spur/run/$__runId-idea-ac-done.txt'
       - kind: agent.run
         options:
-          agent: ${vars.agent}
+          agent: ${vars.planningAgent}
           input: "Generate acceptance criteria for feature ${vars.featureId}. Read the feature file and author R-numbered BDD Gherkin scenarios per ac-style-guide.md. Output only the complete Acceptance Criteria section body, including the gherkin code fence, with no surrounding commentary and no section heading."
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
@@ -243,7 +241,7 @@ states:
             test -f "$REVIEW" || printf '## Proposed design\n\n## Operator feedback\n\n## Reconciliation\n' > "$REVIEW"
       - kind: agent.run
         options:
-          agent: ${vars.agent}
+          agent: ${vars.planningAgent}
           input: "Run sp:sys-architecture for feature ${vars.featureId}. Read the brainstorm artifact, feature AC, and .spur/run/${vars.__runId}-idea-design-review.md. Produce ADR entries, architecture updates, and design satellites (docs/design/<slug>.md) following the constitution edit rules. Do not write task or feature corpus files directly. Design-review contract (.spur/run/${vars.__runId}-idea-design-review.md, fixed headings `## Proposed design`, `## Operator feedback`, `## Reconciliation`): on the first pass write the proposed design summary under `## Proposed design` and leave `## Operator feedback` empty; on retry with operator feedback present, revise the design/ADR artifacts, document the changes under `## Reconciliation`, and when the feedback invalidates an Acceptance Criteria scenario write the revised AC section body to a file and persist it via `$spurBin feature update \"$featureId\" --section \"Acceptance Criteria\" --from-file <file>` — never edit feature corpus files directly."
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
@@ -299,7 +297,7 @@ states:
           command: 'mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-decompose-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-decompose-retry-count; rm -f .spur/run/$__runId-idea-task-batch.json .spur/run/$__runId-idea-task-order.json .spur/run/$__runId-idea-batch-create.done .spur/run/$__runId-idea-batch-create.failed .spur/run/$__runId-idea-batch-create-result.json .spur/run/$__runId-idea-handoff.md'
       - kind: agent.run
         options:
-          agent: ${vars.agent}
+          agent: ${vars.planningAgent}
           input: "Run sp:spec-decomposition for feature ${vars.featureId}. Read the brainstorm artifact, feature AC, and design doc. SIZING FIRST, before any JSON: apply the skill's `Default to NOT decomposing` rubric to the whole unit of work — if it scores 0-2 the correct output is a ONE-entry batch, not many. Scenario count is not task count: merge scenarios that one task delivers (same file surface, same subsystem, or unreadable apart in review), and list every scenario a task covers in its background. Merging never costs AC coverage — one task may carry several scenarios. Do not emit one entry per scenario or per requirement by reflex. Then produce a task-batch JSON array at .spur/run/${vars.__runId}-idea-task-batch.json, validated against apps/cli/schemas/task-batch.schema.json. Schema-permitted fields per entry: `name`, `background`, `requirements`, `feature_id`, `parent_wbs`, `priority`, `tags`, `template` — schema validation rejects anything else. Acceptance Criteria, Design, and Plan sections are filled in by the per-task refine step after batch-create, NOT at decompose time. Validate locally against the schema before emitting. Also emit the private task-order sidecar at .spur/run/${vars.__runId}-idea-task-order.json: a JSON array (one entry per batch item) of `{ name: <exact batch item name>, depends_on_names: [<batch item names>] }` declaring ordering/dependencies between the batch items; use `[]` when no ordering exists. Every `name` and every dependency must match exactly one batch item `name` — it is private workflow data, not part of task-batch.schema.json."
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner

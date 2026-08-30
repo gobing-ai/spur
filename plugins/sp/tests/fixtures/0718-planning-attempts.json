@@ -1,0 +1,20 @@
+[
+    {
+        "runId": "14facf0e-9864-4b3c-9bcb-d594640ee6e9",
+        "workflowDurationMs": 584,
+        "plannerStageDurationMs": null,
+        "outcome": "literal-inline-doctor"
+    },
+    {
+        "runId": "4e32f2dd-4a3c-47bd-be4c-461b7cc16b71",
+        "workflowDurationMs": 297328,
+        "plannerStageDurationMs": 295975,
+        "outcome": "missing-artifact"
+    },
+    {
+        "runId": "f8c8c663-6a51-434f-97e0-7c84639965c2",
+        "workflowDurationMs": 208784,
+        "plannerStageDurationMs": 208147,
+        "outcome": "manual-kill"
+    }
+]

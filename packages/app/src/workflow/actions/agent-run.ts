@@ -330,10 +330,32 @@ export class AgentRunActionRunner implements ActionRunner {
                 const target = isAbsolute(expectFile) ? expectFile : join(cwd, expectFile);
                 const fs = createNodeFileSystem(cwd);
                 if (!(await fs.exists(target))) {
+                    await writePartialWorkArtifact(
+                        context,
+                        agentLabel,
+                        model,
+                        traced,
+                        cwd,
+                        sessionDir,
+                        this.agentConfig.secretValues,
+                    );
+                    const partialWorkPath = `.spur/run/${context.runId}-${context.stateOrNodeId}-partial.md`;
                     return {
                         ok: false,
-                        data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
-                        error: `agent.run (${agentLabel}) exited 0 but expected file is absent: ${expectFile}`,
+                        data: buildResultData(
+                            exitCode,
+                            agentLabel,
+                            capture,
+                            tail(
+                                redactAndBound(answer, this.agentConfig.secretValues ?? [], Number.MAX_SAFE_INTEGER),
+                                4096,
+                            ),
+                            invocation,
+                            traced.stdout,
+                            traced.stderr ?? undefined,
+                            this.agentConfig.secretValues,
+                        ),
+                        error: `agent.run (${agentLabel}) exited 0 but expected file is absent: ${expectFile}; executor contract failure preserved at ${partialWorkPath}`,
                     };
                 }
             }
@@ -380,7 +402,15 @@ export class AgentRunActionRunner implements ActionRunner {
             }
 
             if (!ok) {
-                await writePartialWorkArtifact(context, agentLabel, model, traced, cwd, sessionDir);
+                await writePartialWorkArtifact(
+                    context,
+                    agentLabel,
+                    model,
+                    traced,
+                    cwd,
+                    sessionDir,
+                    this.agentConfig.secretValues,
+                );
             }
 
             // Actionable failure message (R4 / task 0295): identify the workflow
@@ -628,6 +658,7 @@ async function writePartialWorkArtifact(
     traced: AgentRunTracedResult,
     cwd: string,
     sessionDir: string | undefined,
+    secretValues: readonly string[] = [],
 ): Promise<void> {
     try {
         const signal = traced.signal;
@@ -638,11 +669,21 @@ async function writePartialWorkArtifact(
                   ? `dispatch error: ${traced.message}`
                   : `exited with code ${traced.exitCode}`;
         const diffStat = await gitDiffStat(cwd);
-        const stdoutTail = tail(traced.stdout, PARTIAL_ARTIFACT_TAIL_CHARS);
-        const stderrTail = tail(traced.stderr ?? '', PARTIAL_ARTIFACT_TAIL_CHARS);
+        const stdoutTail = tail(
+            redactAndBound(traced.stdout, secretValues, Number.MAX_SAFE_INTEGER),
+            PARTIAL_ARTIFACT_TAIL_CHARS,
+        );
+        const stderrTail = tail(
+            redactAndBound(traced.stderr ?? '', secretValues, Number.MAX_SAFE_INTEGER),
+            PARTIAL_ARTIFACT_TAIL_CHARS,
+        );
         const headerLine = model !== undefined ? `${agentLabel} (model: ${model})` : agentLabel;
         const inv = traced.invocation;
-        const argvLine = inv ? `${inv.command} ${inv.argv.join(' ')}` : '(invocation not captured)';
+        const argvLine = redactAndBound(
+            inv ? `${inv.command} ${inv.argv.join(' ')}` : '(invocation not captured)',
+            secretValues,
+            PARTIAL_ARTIFACT_TAIL_CHARS,
+        );
 
         // R4 (0482): resume-context block — the dead agent's transcript lives in
         // the session dir (plus the latched sidecar when affinity is on). Naming

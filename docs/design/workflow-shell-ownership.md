@@ -125,7 +125,7 @@ program deliberately sequences two independently-owned capabilities.
 
 | Program | Disposition | Reason |
 | --- | --- | --- |
-| `start:onEnter:1` | GLUE | single-agent `agent doctor` exit-code probe + `test -n "$idea"`; simpler than `doctor.probe` (no classification); consolidation candidate, not landed |
+| `start:onEnter:1` | **BUILTIN** | `doctor.probe` resolves reserved selectors through `planner`, records the elected executor, and reuses it for dispatch (0718) |
 | `feature-create:onEnter:2` | GLUE | `test -s` guard + `feature update --section Goal` |
 | `feature-create:onEnter:3` | GLUE | same for Scope |
 | `ac-generate:onEnter:0` | GLUE | retry counter + scratch cleanup |

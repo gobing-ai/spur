@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { AgentConfig } from '@gobing-ai/spur-config';
 import { createCliContext, resolveAgentRoles } from '../src/context';
 import type { CommandOutput } from '../src/output';
 
@@ -41,6 +42,18 @@ describe('context', () => {
         const internal = svc as unknown as { ctx: { events?: unknown; agentConfig?: unknown } };
         expect(internal.ctx.events).toBe(sentinel);
         expect(internal.ctx.agentConfig).toBe(agentConfig);
+    });
+
+    test('merged Spur config exposes executors to direct agent command validation (0718 R3)', () => {
+        const agentConfig = {
+            executors: [{ name: 'configured', agent: 'pi', tier: 'standard' }],
+        } as AgentConfig;
+        const ctx = createCliContext({
+            output: nullOutput(),
+            spurConfig: { agent: agentConfig } as never,
+        });
+
+        expect(ctx.agentConfig).toBe(agentConfig);
     });
 
     // ---- Layer-1 role resolution (task 0572): code defaults + agent.roles merge ----

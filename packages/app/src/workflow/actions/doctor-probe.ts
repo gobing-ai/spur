@@ -67,8 +67,14 @@ export class DoctorProbeActionRunner implements ActionRunner {
             };
         }
         const spurBin = stringOption(options, 'spurBin', 'spur');
-        const agent = stringOption(options, 'agent');
+        const requestedAgent = stringOption(options, 'agent');
+        const role = stringOption(options, 'role', '');
+        const agent = requestedAgent === 'inline' || requestedAgent === 'auto' ? role : requestedAgent;
+        if (agent === '') {
+            return { ok: false, error: 'doctor.probe: reserved agent selectors require a declared role' };
+        }
         const implementAgent = stringOption(options, 'implementAgent', agent);
+        const resolvedAgentVar = stringOption(options, 'resolvedAgentVar', '');
 
         const workdir = context.workdir ?? process.cwd();
         const allowedDir = resolve(workdir, '.spur', 'run');
@@ -110,6 +116,7 @@ export class DoctorProbeActionRunner implements ActionRunner {
 
         let status = 'PASS';
         const lines: string[] = [];
+        let electedAgent = '';
         // Divergence line: probing both executors is legitimate when only implementAgent is
         // pinned, but it must be visible in the log (task 0487 R4).
         const execs = implementAgent !== '' && implementAgent !== agent ? [agent, implementAgent] : [agent];
@@ -142,6 +149,7 @@ export class DoctorProbeActionRunner implements ActionRunner {
             }
 
             const { usable, resolvedAgent } = parseDoctorJson(res.stdout);
+            if (electedAgent === '') electedAgent = resolvedAgent || exe;
             // Show the resolved executor only when it differs from the selector (a
             // role was resolved); direct executors keep the terse original line.
             const resolvedSuffix = resolvedAgent !== '' && resolvedAgent !== exe ? ` (resolved ${resolvedAgent})` : '';
@@ -160,6 +168,10 @@ export class DoctorProbeActionRunner implements ActionRunner {
         await this.fileSystem.writeFile(normalized, `${status}\n`);
         // Soft probe: always succeed so transition guards can route the recorded FAIL to a
         // `failed` terminal state instead of a raw lifecycle abort mid-enter.
-        return { ok: true, data: { status, resultFile: normalized, output: lines } };
+        return {
+            ok: true,
+            data: { status, resultFile: normalized, output: lines },
+            setVars: resolvedAgentVar !== '' && electedAgent !== '' ? { [resolvedAgentVar]: electedAgent } : undefined,
+        };
     }
 }

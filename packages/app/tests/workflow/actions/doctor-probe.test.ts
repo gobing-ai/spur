@@ -108,6 +108,43 @@ describe('DoctorProbeActionRunner', () => {
         expect((res.data as { output: string[] }).output.join('\n')).not.toContain('(executors diverge)');
     });
 
+    test('resolves reserved headless selectors through the declared role once', async () => {
+        for (const requestedAgent of ['inline', 'auto']) {
+            const workdir = join(tmpdir(), `doctor-${crypto.randomUUID()}`);
+            const fs = createNodeFileSystem(workdir);
+            const { executor, calls } = stubExecutor(() => ({ stdout: okRow('claude') }));
+            const runner = new DoctorProbeActionRunner(executor, fs);
+            const res = await runner.execute(
+                {
+                    resultFile: '.spur/run/precheck-doctor.status',
+                    spurBin: 'spur',
+                    agent: requestedAgent,
+                    role: 'planner',
+                    resolvedAgentVar: 'planningAgent',
+                },
+                { runId: 'r1', stateOrNodeId: 'precheck', workdir, vars: {}, env: {} },
+            );
+
+            expect(res.ok).toBe(true);
+            expect(calls).toHaveLength(1);
+            expect(calls[0]?.args).toEqual(['agent', 'doctor', 'planner', '--json']);
+            expect(res.setVars).toEqual({ planningAgent: 'claude' });
+        }
+    });
+
+    test('reserved headless selectors fail before launch when no role is declared', async () => {
+        const { executor, calls } = stubExecutor(() => ({ stdout: okRow('claude') }));
+        const runner = new DoctorProbeActionRunner(executor);
+        const res = await runner.execute(
+            { resultFile: '.spur/run/precheck-doctor.status', agent: 'auto' },
+            { runId: 'r1', stateOrNodeId: 'precheck', workdir: process.cwd(), vars: {}, env: {} },
+        );
+
+        expect(res.ok).toBe(false);
+        expect(res.error).toContain('require a declared role');
+        expect(calls).toHaveLength(0);
+    });
+
     test('writes FAIL when the doctor process exits non-zero', async () => {
         const workdir = join(tmpdir(), `doctor-${crypto.randomUUID()}`);
         const fs = createNodeFileSystem(workdir);

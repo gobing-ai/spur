@@ -611,11 +611,13 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         }
         const varsAgent = `$${'{vars.agent}'}`;
         const varsStepTimeout = `$${'{vars.stepTimeoutMs}'}`;
-        expect(idea).toContain(`agent: ${varsAgent}`);
+        expect(idea).toContain(`agent: "${varsAgent}"`);
         expect(idea).toContain(`timeoutMs: ${varsStepTimeout}`);
         // spurBin is consumed as a shell var ($spurBin) in action commands, and the
         // feature-create agent input names the CLI verb directly (ADR-043 pure pointer).
-        expect(idea).toContain('$spurBin agent doctor $agent');
+        expect(idea).toContain('kind: doctor.probe');
+        expect(idea).toContain('resolvedAgentVar: planningAgent');
+        expect(idea).toContain(`agent: \${vars.planningAgent}`);
         expect(idea).toContain('spur feature create \\"<name>\\" --json');
         // Soft precheck + expectFile reliability contract (fleet reliability pass).
         // 0425 R4: non-entity-scoped artifacts are ${vars.__runId}-prefixed.
