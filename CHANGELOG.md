@@ -1,5 +1,52 @@
 # Changelog
 
+## [0.3.68] - 2026-08-30
+
+### Added
+
+- feat(harness): feature A6 trust and operational controls (tasks 0703-0712) (e587721be)
+- feat(session-review): add non-overlapping time breakdown to report (63514cce1)
+- feat(history): merge E31 batch sp/runall-e31-bf8c — single-flight enqueue + child-process refresh (0716, 0717) (2a9b83021)
+- feat(cli): add global --no-logo and guarantee banner-free machine output (03b1cd08e)
+- feat: run queued history refreshes in an isolated child process (68afe1844)
+- feat: enforce database single-flight for every history refresh producer (3de1c356d)
+
+### Fixed
+
+- fix(agent): consume artifact-write runner 0.4.48 (5c405c402)
+- fix(history): harden the isolated refresh child contract (d0e319638)
+- fix(server): lease queue rows for two hours so live refreshes are not reclaimed (f60799999)
+- fix(sp): bounded worktree holder cleanup and evidence persistence (0720) (17c03a50b)
+- fix(workflow): streamline inline planning (0718) (3639229ee)
+
+### Changed
+
+- docs(task): add new tasks (62fa4cbd2)
+- chore(workflow): update workflow (2db95799a)
+- docs(task): refine 0721 verdict evidence integrity (fbf28710a)
+- docs(e6): plan imported session task attribution (977b31cff)
+- docs(e6): track worktree history consolidation (c2edd1f80)
+- docs(a6): repair feature verification evidence (5967b65e7)
+- docs(task): refresh 0720 verification evidence (626711bce)
+- chore(workflow): update workflow (2cf939e35)
+- docs(task): update task status after verification (4a31039e5)
+- docs(tasks): update 0716/0717 records with as-built evidence and review outcomes (953e92a05)
+- chore(wrapup): task 0720 learnings and metrics (06b7cf369)
+- docs(features): close A31 after task 0719 verify PASS (1d3b8cfc6)
+- docs(features): refine task 0720 (86913fe9a)
+- docs(a31): plan task 0719 - global --no-logo and banner-free JSON output (4f6ee0c44)
+- docs(tasks): file 0720 — E31 integration friction (orphan daemons, corpus gate cost, R2d verdict disposition) (45771dee9)
+- docs(spur-dev): execution-batch — WT-4 orphan-daemon cleanup guard, R2d replay-order note (c25f0c141)
+- chore(corpus): baseline A31 orphan-scenarios (scenario-first feature, pre-existing on main) (f3fe4e724)
+- docs(features): add new feature A31 (abc668ca8)
+- docs: wrap E31 batch — learnings, metrics, feature transition to done (a01c3bb53)
+- docs(adr-101): mark history-refresh process isolation as built (2e1a850d7)
+- docs: add E31 history-refresh process-isolation planning package (8488e6935)
+
+### Other
+
+- Revert "docs(e6): track worktree history consolidation" (d4260292b)
+
 ## [0.3.67] - 2026-08-29
 
 ### Fixed
