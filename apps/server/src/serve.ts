@@ -496,6 +496,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                     handleHistoryRefreshJob(
                         {
                             cwd: ctx.cwd,
+                            ...(options.dbUrl !== undefined ? { databaseUrl: options.dbUrl } : {}),
                             // Omitted invocation fails loudly in splitLaunchCommand at run time.
                             invocation: options.spurInvocation ?? '',
                             executor: refreshExecutor,

@@ -870,6 +870,13 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             field('artifactPath', 'Artifact'),
             field('cwd', 'Project root'),
         ],
+        retain: [
+            field('trigger', 'Refresh trigger'),
+            field('windowStart', 'Refresh window start'),
+            field('windowEnd', 'Refresh window end'),
+            field('importMode', 'Import mode'),
+            field('coverage', 'Refresh coverage'),
+        ],
         summary: ({ data }) => {
             const source = s(data, 'source') ?? s(data, 'sources');
             return source !== undefined ? `[history] import · ${source}` : '[history] import completed';
@@ -885,6 +892,12 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             field('exitCode', 'Exit code'),
             field('artifactPath', 'Artifact'),
         ],
+        retain: [
+            field('trigger', 'Refresh trigger'),
+            field('windowStart', 'Refresh window start'),
+            field('windowEnd', 'Refresh window end'),
+            field('importMode', 'Import mode'),
+        ],
         summary: ({ data }) => {
             const source = s(data, 'source') ?? s(data, 'sources');
             return source !== undefined ? `[history] analyze · ${source}` : '[history] analyze completed';
@@ -899,6 +912,12 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             field('detail', 'Detail'),
             field('reason', 'Reason'),
             field('exitCode', 'Exit code'),
+        ],
+        retain: [
+            field('trigger', 'Refresh trigger'),
+            field('windowStart', 'Refresh window start'),
+            field('windowEnd', 'Refresh window end'),
+            field('importMode', 'Import mode'),
         ],
         summary: () => '[history] daily failed',
         outcome: {

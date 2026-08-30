@@ -276,10 +276,10 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `scheduler.job.executed` | `name`, `durationMs`, `error` | `[scheduler] {name}` | `error` when present; otherwise `completed` |
 | `message.sent` | `msgId`, `fromId`, `toId`, `threadId`, `createdAt` | `[message] {fromId} -> {toId}` | — |
 | `message.replied` | `msgId`, `fromId`, `toId`, `threadId`, `createdAt` | `[message] {fromId} replied in {threadId}` | — |
-| `process.spawned` | `label`, `pid`, `teamId`, `agentId` | `[process] {label|pid} spawned` | — |
-| `process.exited` | `label`, `pid`, `exitCode`, `signal`, `durationMs`, `reason`, `error` | `[process] {label|pid} exited` | `exitCode` / `signal` / `reason` |
-| `process.stopped` | `label`, `pid`, `signal`, `reason` | `[process] {label|pid} stopped` | `reason` |
-| `process.started` | `label`, `pid`, `timestamp` | `[process] {label|pid} started` | — |
+| `process.spawned` | `label`, `pid`, `teamId`, `agentId` | `[process] {label | pid} spawned` | — |
+| `process.exited` | `label`, `pid`, `exitCode`, `signal`, `durationMs`, `reason`, `error` | `[process] {label | pid} exited` | `exitCode` / `signal` / `reason` |
+| `process.stopped` | `label`, `pid`, `signal`, `reason` | `[process] {label | pid} stopped` | `reason` |
+| `process.started` | `label`, `pid`, `timestamp` | `[process] {label | pid} started` | — |
 | `agent.invoke.start` | agent/operation/label, routing, correlation | `[agent] {agent} · {operation}` | — |
 | `agent.invoke.exit` | agent/operation/label, routing, `exitCode`, `signal`, `durationMs` | `[agent] {agent} · {operation} exited` | `exitCode` / `signal` |
 | `agent.invoke.escalated` | from/to executor+tier, `trigger` | `[agent] {fromExecutor} -> {toExecutor}` | `toTier` / `trigger` |
@@ -292,9 +292,9 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `team.member.assigned` | team/member/type/task, `outcome` | `[team] {teamId} · {memberId} assigned` | `outcome` |
 | `team.member.started` | team/member/type, `outcome` | `[team] {teamId} · {memberId} started` | `outcome` |
 | `team.member.stopped` | team/member/type, `outcome` | `[team] {teamId} · {memberId} stopped` | `outcome` |
-| `history.import.completed` | source(s), files/messages, duration, exit code, artifact, `coverage`; + `trigger`/window when a refresh context is present | `[history] import · {source|sources}` | `exitCode` |
-| `history.analyze.completed` | source(s), duration, exit code, artifact; + `trigger`/window when a refresh context is present | `[history] analyze · {source|sources}` | `exitCode` |
-| `history.daily.failed` | source(s), `detail`, `reason`, `exitCode`; + `trigger`/window when a refresh context is present | `[history] daily failed` | `reason` / `exitCode` |
+| `history.import.completed` | source(s), files/messages, duration, exit code, artifact, `coverage`; + `trigger`/window/`importMode` when a refresh context is present | `[history] import · {source | sources}` | `exitCode` |
+| `history.analyze.completed` | source(s), duration, exit code, artifact; + `trigger`/window/`importMode` when a refresh context is present | `[history] analyze · {source | sources}` | `exitCode` |
+| `history.daily.failed` | source(s), `detail`, `reason`, `exitCode`; + `trigger`/window/`importMode` when a refresh context is present | `[history] daily failed` | `reason` / `exitCode` |
 | `history.refresh.enqueued` | `trigger`/`triggerId`, `jobId`, window, `coalesced`, `outcome` | `[history] refresh · {windowStart} -> {windowEnd}` | `outcome` when coalesced/already-running |
 | `rule.run.start` | `runId`, rule count, evaluator | `[rule] run {runId} started` | — |
 | `rule.eval.start` | `runId`, `ruleId`, evaluator, index/total | `[rule] {ruleId} evaluating` | — |
@@ -314,13 +314,13 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `workflow.transition` | `runId`, `workflowName`, `from`, `to`, `trigger` | `[workflow] {workflowName} : {from} -> {to}` | `to` |
 | `workflow.transition.requested` | `runId`, `workflowName`, `from`, `to`, `trigger` | `[workflow] {workflowName} requested {from} -> {to}` | — |
 | `workflow.transition.denied` | `runId`, `workflowName`, `from`, `to`, `reason` | `[workflow] {workflowName} denied {from} -> {to}` | `reason` |
-| `workflow.action.start` | `runId`, `workflowName`, node identity, `kind` | `[workflow] {workflowName} · {nodeLabel|kind} started` | — |
-| `workflow.action.started` | `runId`, `workflowName`, node identity, action id, `kind` | `[workflow] {workflowName} · {nodeLabel|kind} started` | — |
-| `workflow.action.done` | run/workflow/node/action identity, `kind`, duration, `ok` | `[workflow] {workflowName} · {nodeLabel|kind} done` | `ok` |
-| `workflow.action.finished` | run/workflow/node/action identity, `kind`, duration, `status`, `ok` | `[workflow] {workflowName} · {nodeLabel|kind} finished` | `status` / `ok` |
+| `workflow.action.start` | `runId`, `workflowName`, node identity, `kind` | `[workflow] {workflowName} · {nodeLabel | kind} started` | — |
+| `workflow.action.started` | `runId`, `workflowName`, node identity, action id, `kind` | `[workflow] {workflowName} · {nodeLabel | kind} started` | — |
+| `workflow.action.done` | run/workflow/node/action identity, `kind`, duration, `ok` | `[workflow] {workflowName} · {nodeLabel | kind} done` | `ok` |
+| `workflow.action.finished` | run/workflow/node/action identity, `kind`, duration, `status`, `ok` | `[workflow] {workflowName} · {nodeLabel | kind} finished` | `status` / `ok` |
 | `workflow.action.failed_continue` | run/workflow/node identity, transitionsTaken, `error` | `[workflow] {workflowName} · {nodeLabel} failed; continuing` | `error` |
 | `workflow.guard.evaluated` | `runId`, `workflowName`, `from`, `to`, `kind`, `passed` | `[workflow] {workflowName} guard {from} -> {to}` | `passed` |
-| `workflow.hitl.ask` | `runId`, `workflowName`, node identity, `kind` | `[workflow] {workflowName} · {nodeLabel|kind} awaiting input` | — |
+| `workflow.hitl.ask` | `runId`, `workflowName`, node identity, `kind` | `[workflow] {workflowName} · {nodeLabel | kind} awaiting input` | — |
 | `workflow.hitl.response` | `runId`, `workflowName`, node identity, `ok` | `[workflow] {workflowName} · {nodeLabel} input received` | `ok` |
 | `workflow.hitl.note` | `runId`, `workflowName`, node identity | `[workflow] {workflowName} · {nodeLabel} note` | — |
 | `workflow.custom` | `runId`, `workflowName`, custom `name` | `[workflow] {workflowName} · {name}` | — |

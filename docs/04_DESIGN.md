@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.61.0
+version: 1.62.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-29
@@ -1120,6 +1120,11 @@ elapsed time is unaffected. The refresh runs as queue job kind `history.refresh`
 registers a handler that runs `<invocation> history daily --json --json-envelope` via `ProcessExecutor`), so
 the same import-all fan-out with **per-source isolation** (R5: one source failing never aborts the others),
 analyze, and artifact write the nightly loop uses executes outside the server event loop.
+Both launchers provide a PATH-independent invocation: `spur serve` reuses its live CLI entry, while the
+standalone server resolves the source-local CLI or its sibling compiled `dist/cli/spur`. All coalesced
+refresh producers share `max_retries = 3`; this intentionally replaces the old scheduler-only value of 1.
+The server queue visibility timeout is two hours because `history daily` can spend ten minutes on each
+of six sequential sources before analysis; the generic 30-second default would duplicate a live child.
 
 **Failure policy.** A degraded fan-out (per-source failures) emits `history.daily.failed` and does
 **not** rethrow — the refresh is idempotent (checkpoint resume) and the next completion re-triggers
@@ -1129,8 +1134,10 @@ it. An exception from `daily` itself emits and rethrows so the queue records the
 `history.refresh.enqueued` (renderer `history-refresh`, `default` tier) carrying
 `trigger`/`jobId`/`windowStart`/`windowEnd`; the job body emits the existing
 `history.import.completed` / `history.analyze.completed` / `history.daily.failed` catalog events in the
-child, stamped with the coalesced `trigger`/window fields from `SPUR_HISTORY_REFRESH_CONTEXT` (+ `coverage`
-on import); the parent server emits no `history.*` events. Enqueue failures degrade to a stderr warning and never change
+child, stamped with the coalesced `trigger`/window and resolved `importMode` from
+`SPUR_HISTORY_REFRESH_CONTEXT` (+ `coverage` on import). The child inherits the server's resolved
+`DATABASE_URL`, so `spur serve --cwd` refreshes the same database; the parent emits no `history.*` events.
+Enqueue failures degrade to a stderr warning and never change
 the firing operation's exit code.
 
 #### `spur feature sync [id] [--all] [--dry-run] [--force] [--folder <path>] [--json]`

@@ -1,3 +1,4 @@
+import { basename, dirname, join } from 'node:path';
 import { buildConfigFromEnv } from '@gobing-ai/spur-config';
 import { startServer } from './serve';
 
@@ -15,6 +16,17 @@ export interface MainDeps {
     startServer: typeof startServer;
 }
 
+/** Resolve the companion CLI shipped beside the standalone server binary. */
+export function resolveStandaloneSpurInvocation(execPath: string, sourceDir = import.meta.dir): string {
+    const runtime = basename(execPath)
+        .toLowerCase()
+        .replace(/\.exe$/, '');
+    if (runtime === 'bun' || runtime === 'node') {
+        return `${execPath} ${join(sourceDir, '../../cli/src/index.ts')}`;
+    }
+    return join(dirname(execPath), '../cli', process.platform === 'win32' ? 'spur.exe' : 'spur');
+}
+
 /** Entry-point logic extracted for testability. Called by the import.meta.main block. */
 export async function main(
     env: Record<string, string | undefined> = process.env,
@@ -27,6 +39,7 @@ export async function main(
         openBrowser: false,
         dbUrl: config.database.url,
         webDistPath: config.server.webDistPath,
+        spurInvocation: resolveStandaloneSpurInvocation(process.execPath),
     });
 }
 

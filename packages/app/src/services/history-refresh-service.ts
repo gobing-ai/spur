@@ -215,6 +215,8 @@ export async function enqueueHistoryRefresh(
 export interface HistoryRefreshJobDeps {
     /** Project root the child `spur history daily` runs in (DB + artifact live here). */
     cwd: string;
+    /** Exact database URL used by the server; keeps `serve --cwd` children on the same database. */
+    databaseUrl?: string;
     /** PATH-independent Spur invocation; the CLI `serve` bootstrap passes `resolveSpurBin()`. */
     invocation: string;
     /** Process seam — the real server wires `NodeProcessExecutor`. */
@@ -244,17 +246,31 @@ export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, job: 
         command: split.command,
         args: [...split.leadingArgs, 'history', 'daily', '--json', '--json-envelope'],
         cwd: deps.cwd,
-        env: { [HISTORY_REFRESH_CONTEXT_ENV]: JSON.stringify(payload) },
+        env: {
+            [HISTORY_REFRESH_CONTEXT_ENV]: JSON.stringify(payload),
+            ...(deps.databaseUrl !== undefined ? { DATABASE_URL: deps.databaseUrl } : {}),
+        },
         maxOutput: HISTORY_REFRESH_MAX_OUTPUT,
     });
     // Bounded child stderr detail for queue events: last 400 chars.
     const stderrDetail =
         result.stderr === '' ? '' : `: ${result.stderr.length > 400 ? `…${result.stderr.slice(-400)}` : result.stderr}`;
     if (result.exitCode === null) {
-        throw new Error(`history refresh child failed to spawn${stderrDetail}`);
+        const signalDetail = result.signal === undefined ? '' : ` (${result.signal})`;
+        throw new Error(`history refresh child terminated before a normal exit${signalDetail}${stderrDetail}`);
     }
     if (result.exitCode !== 0) {
-        throw new Error(`history daily exited ${result.exitCode}${stderrDetail}`);
+        let stdoutDetail = '';
+        try {
+            const failure = JSON.parse(result.stdout) as { ok?: unknown; error?: { message?: unknown } };
+            const message = failure.ok === false ? failure.error?.message : undefined;
+            if (typeof message === 'string' && message !== '') {
+                stdoutDetail = `: ${message.length > 400 ? `…${message.slice(-400)}` : message}`;
+            }
+        } catch {
+            // Non-JSON stdout is not useful failure detail; bounded stderr remains the fallback.
+        }
+        throw new Error(`history daily exited ${result.exitCode}${stdoutDetail || stderrDetail}`);
     }
     let parsed: { ok?: unknown; data?: unknown };
     try {

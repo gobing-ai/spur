@@ -548,6 +548,18 @@ describe('normalizeSystemEventPayload — history.* (task 0471 R1/R2)', () => {
         expect(result?.detail).toBe('codex import timed out after 600000ms');
         expect(result?.message).toBeUndefined();
     });
+
+    test('queued refresh metadata survives every child-owned history outcome', () => {
+        for (const name of ['history.import.completed', 'history.analyze.completed', 'history.daily.failed']) {
+            const result = normalizeSystemEventPayload(requireEntry(name), {
+                trigger: 'manual',
+                windowStart: 10,
+                windowEnd: 20,
+                importMode: 'full',
+            });
+            expect(result).toMatchObject({ trigger: 'manual', windowStart: 10, windowEnd: 20, importMode: 'full' });
+        }
+    });
 });
 
 describe('SYSTEM_EVENT_PRESENTERS two-sided semantic gate (R1/R8/R10)', () => {

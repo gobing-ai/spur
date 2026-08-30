@@ -7,7 +7,7 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HistoryService } from '@gobing-ai/spur-app';
+import { HISTORY_REFRESH_CONTEXT_ENV, HistoryService } from '@gobing-ai/spur-app';
 import {
     type CoverageEntry,
     type DbAdapter,
@@ -467,6 +467,59 @@ describe('history command', () => {
         expect(parsed.fanOut.entries.length).toBeGreaterThan(0);
         expect(parsed.fanOut.exitCode).toBe(0);
         expect(parsed.artifact.totals.messages).toBe(0);
+    });
+
+    test('daily consumes the queued refresh context and stamps child-owned events', async () => {
+        const previous = process.env[HISTORY_REFRESH_CONTEXT_ENV];
+        const spy = spyOn(HistoryService.prototype, 'daily').mockResolvedValueOnce({
+            fanOut: { entries: [makeCoverageEntry()], warnings: [], exitCode: 0 },
+            artifact: makeArtifact(),
+            pruned: [],
+            coverage: { refreshed: ['claude'], skipped: [], window: { since: null, until: null } },
+            retained: { ruleEvalRuns: 0, queueJobs: 0, ledgerRows: 0, backupFiles: 0 },
+        });
+        const cwd = makeTmpCwd();
+        process.env[HISTORY_REFRESH_CONTEXT_ENV] = JSON.stringify({
+            trigger: 'manual',
+            triggerId: 'refresh-1',
+            windowStart: 10,
+            windowEnd: 20,
+            importMode: 'full',
+        });
+
+        try {
+            const { output } = capturingOutput();
+            const exitCode = await main(['history', 'daily', '--json'], { output, cwd });
+
+            expect(exitCode).toBe(0);
+            const dailyOptions = spy.mock.calls[0]?.[0];
+            if (!dailyOptions) throw new Error('HistoryService.daily was not called');
+            expect(dailyOptions.importMode).toBe('full');
+            const rows = await readSystemEvents(cwd);
+            for (const eventName of ['history.import.completed', 'history.analyze.completed']) {
+                const row = rows.find((candidate) => candidate.event_name === eventName);
+                expect(row).toBeDefined();
+                const payload = JSON.parse(row?.payload_json ?? '{}');
+                expect(payload.data).toMatchObject({
+                    trigger: 'manual',
+                    windowStart: 10,
+                    windowEnd: 20,
+                    importMode: 'full',
+                });
+                if (eventName === 'history.import.completed') {
+                    expect(payload.data.coverage).toEqual({
+                        refreshed: ['claude'],
+                        skipped: [],
+                        window: { since: null, until: null },
+                    });
+                }
+            }
+        } finally {
+            if (previous === undefined) delete process.env[HISTORY_REFRESH_CONTEXT_ENV];
+            else process.env[HISTORY_REFRESH_CONTEXT_ENV] = previous;
+            spy.mockRestore();
+            rmSync(cwd, { recursive: true, force: true });
+        }
     });
 
     test('analyze subcommand formatted text output (non-json)', async () => {

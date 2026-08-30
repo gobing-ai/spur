@@ -115,16 +115,23 @@ retain their existing multiplicity.
 
 - Writer + index: `enqueueHistoryRefresh` (`packages/app/src/services/history-refresh-service.ts`) over
   migration 0027's pending-or-processing unique index; Board returns `queued | coalesced | already-running`.
-- Handler: `handleHistoryRefreshJob({ cwd, invocation, executor }, job)` — input is the raw `Job` envelope;
+- Handler: `handleHistoryRefreshJob({ cwd, databaseUrl, invocation, executor }, job)` — input is the raw `Job` envelope;
   `validateHistoryRefreshPayload(job.payload)` is the type gate (envelope-as-payload fails the attempt).
 - Child command: `splitLaunchCommand(invocation)` + `executor.run(... 'history', 'daily', '--json',
-  '--json-envelope')` in `cwd`, `maxOutput` 1 MB, env `SPUR_HISTORY_REFRESH_CONTEXT = JSON.stringify(payload)`.
+  '--json-envelope')` in `cwd`, `maxOutput` 1 MB; env carries both
+  `SPUR_HISTORY_REFRESH_CONTEXT = JSON.stringify(payload)` and the server's resolved `DATABASE_URL`.
 - `apps/cli serve` passes `spurInvocation: resolveSpurBin()` into `startServer`; a missing invocation
-  fails the attempt at run time (split error), never a shell string.
+  fails the attempt at run time (split error), never a shell string. The standalone server entry resolves
+  the source-local CLI under Bun/Node and the sibling `dist/cli/spur` for the compiled binary.
+- Every fresh coalesced refresh row uses the queue schema's shared `max_retries = 3` policy, including
+  schedule ticks; unifying the producer changes the old scheduler-only value of 1 intentionally.
+- The server queue visibility timeout is two hours, covering six sequential ten-minute source bounds
+  plus analysis. The upstream 30-second default must not reset and reclaim a live refresh row.
 - `history daily` parses the context env before creating the event bus/ledger (malformed context exits 1
-  before any import); when present it selects `importMode` and stamps `trigger`/window (+ `coverage`) onto
-  its existing `history.*` events. Absent env: interactive behavior unchanged.
-- Failures (spawn, non-zero exit, invalid JSON, wrong shape) throw bounded detail; queue retry/failure
+  before any import); when present it selects and stamps the resolved `importMode` plus `trigger`/window
+  (`coverage` on import) onto its existing `history.*` events. Absent env: interactive behavior unchanged.
+- Failures (abnormal termination, non-zero exit, invalid JSON, wrong shape) throw bounded detail; a
+  non-zero JSON envelope contributes its child error message before stderr. Queue retry/failure
   state and `queue.job.*` events stay owned by the consumer. R1/R5 verified by the held-open-child and
   WAL busy-timeout tests (see task 0717).
 

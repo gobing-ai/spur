@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { buildConfigFromEnv } from '@gobing-ai/spur-config';
-import { type MainDeps, main } from '../src/index';
+import { type MainDeps, main, resolveStandaloneSpurInvocation } from '../src/index';
 import type { StartServerOptions } from '../src/serve';
 
 function makeDeps() {
@@ -35,6 +35,16 @@ describe('index main entry', () => {
         expect(captured()?.openBrowser).toBe(false);
         expect(captured()?.dbUrl).toBe(':memory:');
         expect(captured()?.webDistPath).toBeNull();
+        expect(captured()?.spurInvocation).toContain('apps/cli/src/index.ts');
+    });
+
+    test('standalone invocation resolves source and sibling compiled CLI paths', () => {
+        expect(resolveStandaloneSpurInvocation('/opt/bun', '/repo/apps/server/src')).toBe(
+            '/opt/bun /repo/apps/cli/src/index.ts',
+        );
+        expect(resolveStandaloneSpurInvocation('/repo/dist/server/spur-server')).toBe(
+            process.platform === 'win32' ? '/repo/dist/cli/spur.exe' : '/repo/dist/cli/spur',
+        );
     });
 
     test('main() uses schema defaults when env is empty', async () => {

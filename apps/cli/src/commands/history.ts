@@ -328,7 +328,12 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
             const refreshMeta =
                 refresh === null
                     ? {}
-                    : { trigger: refresh.trigger, windowStart: refresh.windowStart, windowEnd: refresh.windowEnd };
+                    : {
+                          trigger: refresh.trigger,
+                          windowStart: refresh.windowStart,
+                          windowEnd: refresh.windowEnd,
+                          importMode: refresh.importMode ?? 'incremental',
+                      };
 
             try {
                 if (failure !== null) {

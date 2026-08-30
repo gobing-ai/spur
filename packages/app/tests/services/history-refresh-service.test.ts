@@ -34,11 +34,12 @@ interface QueueRow {
     payload: string;
     status: string;
     next_retry_at: number | null;
+    max_retries: number;
 }
 
 async function refreshRows(db: DbAdapter): Promise<QueueRow[]> {
     return db.queryAll<QueueRow>(
-        `SELECT id, type, payload, status, next_retry_at FROM queue_jobs WHERE type = '${HISTORY_REFRESH_JOB}'`,
+        `SELECT id, type, payload, status, next_retry_at, max_retries FROM queue_jobs WHERE type = '${HISTORY_REFRESH_JOB}'`,
     );
 }
 
@@ -191,6 +192,7 @@ describe('enqueueHistoryRefresh single-flight producers (task 0716)', () => {
             const rows = await refreshRows(db);
             expect(rows.length).toBe(1);
             expect(rows[0]?.next_retry_at).toBe(t0); // scheduled ticks are also immediate
+            expect(rows[0]?.max_retries).toBe(3); // shared single-flight retry policy
         } finally {
             db.close();
         }
@@ -295,7 +297,7 @@ describe('handleHistoryRefreshJob (task 0717: isolated child process)', () => {
             stdout: JSON.stringify({ ok: true, data: { fanOut: { exitCode: 0 } } }),
         });
         await handleHistoryRefreshJob(
-            { cwd: '/proj', invocation: 'bun run /x/spur.ts', executor },
+            { cwd: '/proj', databaseUrl: '/proj/.spur/spur.db', invocation: 'bun run /x/spur.ts', executor },
             jobOf({ ...validPayload, importMode: 'full' }),
         );
         expect(runs).toHaveLength(1);
@@ -304,6 +306,7 @@ describe('handleHistoryRefreshJob (task 0717: isolated child process)', () => {
         expect(run.args).toEqual(['run', '/x/spur.ts', 'history', 'daily', '--json', '--json-envelope']);
         expect(run.cwd).toBe('/proj');
         expect(run.maxOutput).toBe(1_000_000); // output bounded before queue completion
+        expect(run.env?.DATABASE_URL).toBe('/proj/.spur/spur.db');
         expect(JSON.parse(run.env?.[HISTORY_REFRESH_CONTEXT_ENV] ?? 'null')).toEqual({
             trigger: 'task-done',
             triggerId: '0549',
@@ -330,11 +333,18 @@ describe('handleHistoryRefreshJob (task 0717: isolated child process)', () => {
         expect(runs).toHaveLength(0);
     });
 
-    test('R4: spawn failure (exitCode null) rejects so the queue records a failed attempt', async () => {
+    test('R4: missing normal exit rejects without misclassifying every termination as a spawn failure', async () => {
         const { executor } = fakeExecutor({ exitCode: null, stderr: 'spawn ENOENT' });
         await expect(
             handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor }, jobOf(validPayload)),
-        ).rejects.toThrow('history refresh child failed to spawn: spawn ENOENT');
+        ).rejects.toThrow('history refresh child terminated before a normal exit: spawn ENOENT');
+    });
+
+    test('R4: signaled/output-limited child reports termination, not spawn failure', async () => {
+        const { executor } = fakeExecutor({ exitCode: null, signal: 'SIGTERM' });
+        await expect(
+            handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor }, jobOf(validPayload)),
+        ).rejects.toThrow('history refresh child terminated before a normal exit (SIGTERM)');
     });
 
     test('R4: non-zero exit rejects with a bounded stderr tail', async () => {
@@ -347,6 +357,23 @@ describe('handleHistoryRefreshJob (task 0717: isolated child process)', () => {
         }
         expect(message.startsWith('history daily exited 2: ')).toBe(true);
         // 1 ellipsis + at most 400 tail chars after the prefix: bounded detail for queue events.
+        expect(message.length).toBeLessThanOrEqual('history daily exited 2: '.length + 401);
+    });
+
+    test('R4: non-zero JSON envelope reports the bounded child error before stderr', async () => {
+        const { executor } = fakeExecutor({
+            exitCode: 2,
+            stdout: JSON.stringify({ ok: false, error: { message: `prefix-${'x'.repeat(500)}` } }),
+            stderr: 'generic stderr',
+        });
+        let message = '';
+        try {
+            await handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor }, jobOf(validPayload));
+        } catch (e) {
+            message = (e as Error).message;
+        }
+        expect(message.startsWith('history daily exited 2: …')).toBe(true);
+        expect(message).not.toContain('generic stderr');
         expect(message.length).toBeLessThanOrEqual('history daily exited 2: '.length + 401);
     });
 
