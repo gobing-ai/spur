@@ -2196,55 +2196,55 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
         const sizeWarnings = (ws: string[] | undefined) =>
             (ws ?? []).filter((w) => w.includes('R-items') || w.includes('Plan items'));
 
-        test('a 6-R-item Requirements write warns without blocking', async () => {
-            const created = await svc.create({ title: 'Size warn six' });
-            const src = await writeSection('six', reqBody(6));
+        test('an 11-R-item Requirements write warns without blocking (0723 ceiling)', async () => {
+            const created = await svc.create({ title: 'Size warn eleven' });
+            const src = await writeSection('eleven', reqBody(11));
 
             const result = await svc.updateSection(created.ref.id, 'Requirements', src);
 
             expect(result.ref.id).toBe(created.ref.id);
-            expect(sizeWarnings(result.warnings).join('\n')).toContain('Task has 6 R-items (max 5)');
+            expect(sizeWarnings(result.warnings).join('\n')).toContain('Task has 11 R-items (max 10)');
             // Non-blocking: the write landed regardless of the warning.
             const fs = createNodeFileSystem(root());
-            expect(await fs.readFile(result.ref.filePath)).toContain('**R6.**');
+            expect(await fs.readFile(result.ref.filePath)).toContain('**R11.**');
         });
 
-        test('a conforming 5-R-item write stays silent', async () => {
-            const created = await svc.create({ title: 'Size clean five' });
-            const src = await writeSection('five', reqBody(5));
+        test('a conforming 10-R-item write stays silent (0723 ceiling)', async () => {
+            const created = await svc.create({ title: 'Size clean ten' });
+            const src = await writeSection('ten', reqBody(10));
 
             const result = await svc.updateSection(created.ref.id, 'Requirements', src);
 
             expect(sizeWarnings(result.warnings)).toHaveLength(0);
         });
 
-        test('a 9-item Plan write warns on plan items', async () => {
-            const created = await svc.create({ title: 'Size plan nine' });
+        test('a 17-item Plan write warns on plan items (0723 ceiling)', async () => {
+            const created = await svc.create({ title: 'Size plan seventeen' });
             const src = await writeSection(
-                'plan-nine',
-                Array.from({ length: 9 }, (_, i) => `- [ ] step ${i + 1}`).join('\n'),
+                'plan-seventeen',
+                Array.from({ length: 17 }, (_, i) => `- [ ] step ${i + 1}`).join('\n'),
             );
 
             const result = await svc.updateSection(created.ref.id, 'Plan', src);
 
-            expect(sizeWarnings(result.warnings).join('\n')).toContain('Task has 9 Plan items (max 8)');
+            expect(sizeWarnings(result.warnings).join('\n')).toContain('Task has 17 Plan items (max 16)');
         });
 
         test('a Plan write counts R-items from the whole post-write body', async () => {
             const created = await svc.create({ title: 'Size whole body' });
-            await svc.updateSection(created.ref.id, 'Requirements', await writeSection('whole-reqs', reqBody(6)));
+            await svc.updateSection(created.ref.id, 'Requirements', await writeSection('whole-reqs', reqBody(11)));
             const src = await writeSection('whole-plan', '- [ ] single step');
 
             const result = await svc.updateSection(created.ref.id, 'Plan', src);
 
             // The Plan section itself is small — the warning comes from the file's R-items.
-            expect(sizeWarnings(result.warnings).join('\n')).toContain('Task has 6 R-items (max 5)');
+            expect(sizeWarnings(result.warnings).join('\n')).toContain('Task has 11 R-items (max 10)');
             expect(sizeWarnings(result.warnings).join('\n')).not.toContain('Plan items (max');
         });
 
         test('non-trigger sections never run the evaluation', async () => {
             const created = await svc.create({ title: 'Size background only' });
-            const src = await writeSection('bg', reqBody(6));
+            const src = await writeSection('bg', reqBody(11));
 
             const result = await svc.updateSection(created.ref.id, 'Background', src);
 

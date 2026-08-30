@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
     countPlanItems,
     countRItems,
+    DEFAULT_TASK_SIZE_LIMITS,
     evaluateTaskSize,
     type TaskSizeLimits,
 } from '../../src/services/task-size-precheck';
@@ -36,6 +37,14 @@ const LARGE_TASK = `## Requirements
 - [ ] Step eight
 - [ ] Step nine
 - [ ] Step ten
+`;
+
+/** Over the doubled (0723) defaults: 11 R-items, 17 Plan items. */
+const OVER_DOUBLED_CEILING_TASK = `## Requirements
+${Array.from({ length: 11 }, (_, i) => `- [ ] **R${i + 1}.** Requirement ${i + 1}`).join('\n')}
+
+### Plan
+${Array.from({ length: 17 }, (_, i) => `- [ ] Plan step ${i + 1}`).join('\n')}
 `;
 
 const NO_REQS_TASK = `## Some section
@@ -149,12 +158,20 @@ describe('evaluateTaskSize', () => {
         expect(report.reasons).toEqual([]);
     });
 
-    test('large task fails with defaults', () => {
+    test('doubled default ceiling (0723): 6 R-items / 10 Plan items passes', () => {
         const report = evaluateTaskSize(LARGE_TASK);
-        expect(report.ok).toBe(false);
+        expect(report.ok).toBe(true);
         expect(report.reqCount).toBe(6);
-        expect(report.reasons.length).toBeGreaterThanOrEqual(1);
-        expect(report.reasons[0]).toContain('6 R-items');
+        expect(report.planItemCount).toBe(10);
+    });
+
+    test('defaults are the doubled ceiling (10 R-items / 16 Plan items) and fail closed above it', () => {
+        expect(DEFAULT_TASK_SIZE_LIMITS).toEqual({ maxReqs: 10, maxPlanItems: 16 });
+        const report = evaluateTaskSize(OVER_DOUBLED_CEILING_TASK);
+        expect(report.ok).toBe(false);
+        expect(report.reasons.length).toBe(2);
+        expect(report.reasons[0]).toContain('11 R-items (max 10)');
+        expect(report.reasons[1]).toContain('17 Plan items (max 16)');
     });
 
     test('large task passes with raised limits', () => {
@@ -183,37 +200,5 @@ describe('evaluateTaskSize', () => {
         const report = evaluateTaskSize(ACTUAL_0454_TASK, { maxReqs: 5, maxPlanItems: 8 });
         expect(report.reqCount).toBe(4);
         expect(report.ok).toBe(true);
-    });
-});
-
-describe('R3 (0487): size-vs-executor-capability gate', () => {
-    const RAISED: TaskSizeLimits = { maxReqs: 10, maxPlanItems: 12 };
-
-    test('a large task on a sub-capable executor blocks even with raised limits', () => {
-        const report = evaluateTaskSize(LARGE_TASK, RAISED, { name: 'omp-dsv4-flash-volc', tier: 'cheap' });
-        expect(report.ok).toBe(false);
-        expect(report.reasons[0]).toContain('requires a capable executor');
-        expect(report.reasons[0]).toContain('omp-dsv4-flash-volc');
-        expect(report.reasons[0]).toContain('tier cheap');
-    });
-
-    test('a large task on a capable executor passes', () => {
-        const report = evaluateTaskSize(LARGE_TASK, RAISED, { name: 'claude-opus', tier: 'capable-1' });
-        expect(report.ok).toBe(true);
-    });
-
-    test('an unknown tier is treated as standard and blocks', () => {
-        const report = evaluateTaskSize(LARGE_TASK, RAISED, { name: 'mystery', tier: undefined });
-        expect(report.ok).toBe(false);
-        expect(report.reasons[0]).toContain('tier standard');
-    });
-
-    test('a small task on a cheap executor is untouched by the gate', () => {
-        const report = evaluateTaskSize(SMALL_TASK, RAISED, { name: 'omp-flash', tier: 'cheap' });
-        expect(report.ok).toBe(true);
-    });
-
-    test('no executor supplied → size limits only (0454 behavior preserved)', () => {
-        expect(evaluateTaskSize(LARGE_TASK, RAISED).ok).toBe(true);
     });
 });

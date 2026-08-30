@@ -1,24 +1,23 @@
 #!/usr/bin/env bun
 /**
- * task-size-precheck — pipeline size precheck guard (R2, task 0454) plus the
- * size-vs-executor-capability gate (R3, task 0487).
+ * task-size-precheck — pipeline size precheck guard (R2, task 0454; count-only
+ * since task 0723).
  *
  * Shells `spur task show <wbs> --json`, evaluates R-item count and Plan
- * checklist count against limits, writes PASS/FAIL to status file. With
- * `--executor`, also shells `spur agent doctor <exec> --json` and blocks a large
- * task routed to a sub-`capable-1` executor.
+ * checklist count against limits, writes PASS/FAIL to status file. No executor
+ * or doctor involvement: executor liveness/routing/capabilities are attested
+ * fail-closed at the `agent.run` dispatch boundary, not predicted here.
  *
- * Always exits 0 (soft check, like doctor). The precheck→implement guard in
- * task-pipeline.yaml reads the status file.
+ * Always exits 0 (soft action). The precheck→implement guard in
+ * task-pipeline.yaml reads the status file; a missing or failing checker writes
+ * FAIL, so readiness fails closed.
  *
  * Ships with the plugin to arbitrary projects, so it stays node-builtin-only —
- * no workspace imports. The capability tier therefore comes from the CLI rather
- * than from `getExecutorTier` directly; `spur agent doctor --json` exposes it as
- * `capabilityTier` precisely so the inference regex is not duplicated here.
+ * no workspace imports.
  *
  * Usage:
  *   bun plugins/sp/scripts/task-size-precheck.ts <wbs> [--spur-bin <path>]
- *     [--max-reqs <n>] [--max-plan-items <n>] [--executor <name>]
+ *     [--max-reqs <n>] [--max-plan-items <n>]
  *
  * Env: SPUR_BIN, MAX_IMPLEMENT_REQS, MAX_IMPLEMENT_PLAN_ITEMS
  */
@@ -27,7 +26,6 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { STAGE_FLOOR_TIER, TIER_ORDER } from './stage-registry-adapter';
 
 // ─── Regex (sync with packages/app/src/services/task-size-precheck.ts) ───────
 
@@ -37,32 +35,11 @@ const R_ITEM_RE = /^\s*-\s*\[[ xX]\]\s*(\*\*)?R\d+\./m;
 /** Matches checklist items under the Plan section. */
 const CHECKLIST_ITEM_RE = /^\s*-\s*\[[ xX]\]/m;
 
-/**
- * Large-task thresholds for the capability gate (R3, task 0487) — the DEFAULT
- * caps, not the overridable `--max-*` limits. Raising the caps says "I accept a
- * big task"; it does not make a flash-tier model able to finish one inside
- * `implementTimeoutMs`.
- */
-const LARGE_TASK_REQS = 5;
-const LARGE_TASK_PLAN_ITEMS = 8;
-
-/**
- * Capability tiers strong enough for a large task (R3, task 0487). The floor is
- * the `review` stage's Layer-1 tier — `reviewer` per `references/roles.md`,
- * read via the stage-registry adapter (0538 R4: no tier literal here; roles.md
- * is the pointer). Tiers at or above the floor pass. An unreachable roles.md
- * degrades to the pre-reconcile band — fail-closed for a safety gate.
- */
-const CAPABLE_TIERS: ReadonlySet<string> = (() => {
-    const floor = STAGE_FLOOR_TIER.get('review') ?? 'capable-1';
-    return new Set(TIER_ORDER.slice(Math.max(0, TIER_ORDER.indexOf(floor))));
-})();
-
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 function usage(): never {
     console.error(
-        'Usage: bun plugins/sp/scripts/task-size-precheck.ts <wbs> [--spur-bin <path>] [--max-reqs <n>] [--max-plan-items <n>] [--executor <name>]',
+        'Usage: bun plugins/sp/scripts/task-size-precheck.ts <wbs> [--spur-bin <path>] [--max-reqs <n>] [--max-plan-items <n>]',
     );
     process.exit(1);
 }
@@ -87,13 +64,14 @@ function parseArgs(argv: string[]): {
     spurBin: string;
     maxReqs: number;
     maxPlanItems: number;
-    executor: string;
 } {
     let spurBin = defaultSpurBin();
     let wbs = '';
-    let maxReqs = Number(process.env.MAX_IMPLEMENT_REQS) || 5;
-    let maxPlanItems = Number(process.env.MAX_IMPLEMENT_PLAN_ITEMS) || 8;
-    let executor = '';
+    // Doubled deterministic ceiling (0723 operator decision): 10 R-items / 16
+    // Plan items — keep in sync with DEFAULT_TASK_SIZE_LIMITS in
+    // packages/app/src/services/task-size-precheck.ts (asserted by test).
+    let maxReqs = Number(process.env.MAX_IMPLEMENT_REQS) || 10;
+    let maxPlanItems = Number(process.env.MAX_IMPLEMENT_PLAN_ITEMS) || 16;
 
     let i = 0;
     while (i < argv.length) {
@@ -102,13 +80,10 @@ function parseArgs(argv: string[]): {
             spurBin = argv[i + 1] ?? defaultSpurBin();
             i += 2;
         } else if (arg === '--max-reqs') {
-            maxReqs = Number(argv[i + 1]) || 5;
+            maxReqs = Number(argv[i + 1]) || 10;
             i += 2;
         } else if (arg === '--max-plan-items') {
-            maxPlanItems = Number(argv[i + 1]) || 8;
-            i += 2;
-        } else if (arg === '--executor') {
-            executor = argv[i + 1] ?? '';
+            maxPlanItems = Number(argv[i + 1]) || 16;
             i += 2;
         } else if (!arg.startsWith('--')) {
             wbs = arg;
@@ -119,7 +94,7 @@ function parseArgs(argv: string[]): {
     }
 
     if (!wbs) usage();
-    return { wbs, spurBin, maxReqs, maxPlanItems, executor };
+    return { wbs, spurBin, maxReqs, maxPlanItems };
 }
 
 /**
@@ -135,29 +110,8 @@ function runSpur(spurBin: string, args: string[]): string {
     });
 }
 
-/**
- * Capability tier of `executor` per `spur agent doctor <exec> --json`.
- * Unknown executor, unreadable doctor output, or an undeclared-and-uninferrable
- * tier all read as `standard` — conservative: a false block is one flag away,
- * a false pass costs a 30-minute timed-out implement.
- */
-function resolveCapabilityTier(spurBin: string, executor: string): { tier: string; resolvedName: string } {
-    try {
-        const out = runSpur(spurBin, ['agent', 'doctor', executor, '--json']);
-        const row = JSON.parse(out)?.agents?.[0];
-        const tier = row?.capabilityTier;
-        // R1 (0622 F2/F4 residue): `doctor <role>` resolves the role to its cheapest
-        // eligible executor (`coder` → `omp`); surface the resolved executor name in
-        // the block message, not the role the caller passed in.
-        const resolvedName = typeof row?.agent === 'string' && row.agent.length > 0 ? row.agent : executor;
-        return { tier: typeof tier === 'string' && tier ? tier : 'standard', resolvedName };
-    } catch {
-        return { tier: 'standard', resolvedName: executor };
-    }
-}
-
 function main(): void {
-    const { wbs, spurBin, maxReqs, maxPlanItems, executor } = parseArgs(process.argv.slice(2));
+    const { wbs, spurBin, maxReqs, maxPlanItems } = parseArgs(process.argv.slice(2));
 
     // Fetch task content via spur
     let taskContent: string;
@@ -166,7 +120,7 @@ function main(): void {
         const task = JSON.parse(result);
         taskContent = task.content ?? task.body ?? '';
     } catch {
-        // If spur fails, write FAIL and exit 0 (soft, like doctor)
+        // If spur fails, write FAIL and exit 0 — the status file carries the verdict
         const statusDir = join(process.cwd(), '.spur', 'run');
         if (!existsSync(statusDir)) mkdirSync(statusDir, { recursive: true });
         writeFileSync(join(statusDir, `${wbs}-precheck-size.status`), 'FAIL\n');
@@ -187,18 +141,6 @@ function main(): void {
     const planItemCount = planBody.match(new RegExp(CHECKLIST_ITEM_RE.source, 'gm'))?.length ?? 0;
 
     const reasons: string[] = [];
-    // R3 (0487): a large task on a sub-capable executor blocks even when the caller
-    // raised the caps — the caps are an acceptance of size, not a capability grant.
-    if (executor && (reqCount > LARGE_TASK_REQS || planItemCount > LARGE_TASK_PLAN_ITEMS)) {
-        const { tier, resolvedName } = resolveCapabilityTier(spurBin, executor);
-        if (!CAPABLE_TIERS.has(tier)) {
-            reasons.push(
-                `Task size (${reqCount} R-items / ${planItemCount} Plan items) requires a capable executor, ` +
-                    `but ${resolvedName} is tier ${tier}. ` +
-                    `Pass \`--agent <capable>\` or \`--vars '{"implementAgent":"<capable>"}'\`, or split the task.`,
-            );
-        }
-    }
     if (reqCount > maxReqs) {
         reasons.push(
             `Task has ${reqCount} R-items (max ${maxReqs}). ` +

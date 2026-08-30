@@ -715,9 +715,8 @@ describe('probeJsonShapes — --json envelopes captured by execution', () => {
     });
 
     test('the fields the plugin scripts depend on are confirmed against the captured envelope', () => {
-        // task-size-precheck reads agents[0].capabilityTier; feature-sync-bounded reads a bare
-        // task-list array. Both are asserted in script code, so both are checked here.
-        expect(rows.find((r) => r.asserted.includes('capabilityTier'))?.status).toBe('ok');
+        // feature-sync-bounded reads a bare task-list array, asserted in script code.
+        // (task-size-precheck stopped reading doctor's capabilityTier in 0723 — count-only.)
         expect(rows.find((r) => r.asserted.includes('bare array'))?.status).toBe('ok');
         // Launching a real coding agent is not mechanically reachable — recorded, never passed.
         expect(rows.find((r) => r.asserted.includes('roleOrigin'))?.status).toBe('unverified');
@@ -735,8 +734,9 @@ describe('probeJsonShapes — --json envelopes captured by execution', () => {
     });
 
     test('a field that vanishes from the envelope is drift, and a failed probe is not a pass', () => {
-        // Same second probe run: capabilityTier is gone and task list exited non-zero.
-        expect(rows.find((r) => r.asserted.includes('capabilityTier'))?.status).toBe('mismatch');
+        // 0723: task-size-precheck stopped reading doctor's capabilityTier — the row is gone.
+        expect(rows.find((r) => r.asserted.includes('capabilityTier'))).toBeUndefined();
+        // Same second probe run: task list exited non-zero — a failed probe is not a pass.
         expect(rows.find((r) => r.asserted.includes('bare array'))?.status).toBe('mismatch');
     });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse } from 'yaml';
@@ -72,14 +72,101 @@ function runShell(command: string, cwd: string, env: Record<string, string>): { 
 }
 
 describe('0503 task-pipeline resilience', () => {
-    test('precheck remains deterministic and does not probe executor health (0723 bypass)', () => {
+    test('precheck remains deterministic, doctor-free, and count-only (0723)', () => {
         const precheck = PIPELINE.states.find((state) => state.id === 'precheck');
         const commands = precheck?.onEnter?.map((action) => action.options?.command ?? '') ?? [];
 
         expect(precheck?.onEnter?.some((action) => action.kind === 'doctor.probe')).toBe(false);
         expect(commands.join('\n')).not.toContain('agent doctor');
-        expect(commandFor('precheck', 2)).toContain('task-size-precheck.ts');
-        expect(commandFor('precheck', 2)).not.toContain('--executor');
+        const size = commandFor('precheck', 2);
+        expect(size).toContain('task-size-precheck.ts');
+        expect(size).not.toContain('--executor');
+        // Fail closed: the missing-checker fallback writes FAIL, never PASS.
+        expect(size).toContain('"FAIL"');
+        expect(size).not.toContain('skipped');
+        // Feature reactivation surfaces failure instead of swallowing it (no `|| true`).
+        expect(commandFor('precheck', 1)).not.toContain('|| true');
+    });
+
+    test('precheck size gate fails closed when the checker script is absent (0723 R2)', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0723-nosize-'));
+        try {
+            const command = commandFor('precheck', 2);
+            const result = runShell(command, dir, { wbs: '0723', spurBin: 'spur' });
+            expect(result.exitCode).toBe(0);
+            expect(readFileSync(join(dir, '.spur/run/0723-precheck-size.status'), 'utf8')).toBe('FAIL\n');
+            expect(result.output).toContain('failed closed');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('precheck size gate runs the checker exactly once and carries PASS through (0723 R2)', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0723-size-'));
+        try {
+            mkdirSync(join(dir, 'plugins', 'sp', 'scripts'), { recursive: true });
+            const counter = join(dir, 'size-counter');
+            writeFileSync(
+                join(dir, 'plugins', 'sp', 'scripts', 'task-size-precheck.ts'),
+                `#!/usr/bin/env bun
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+appendFileSync(process.argv[2] === "0723" ? "${counter}" : "/dev/null", "x\\n");
+mkdirSync(".spur/run", { recursive: true });
+writeFileSync(".spur/run/" + process.argv[2] + "-precheck-size.status", "PASS\\n");
+`,
+            );
+            const result = runShell(commandFor('precheck', 2), dir, { wbs: '0723', spurBin: 'spur' });
+            expect(result.exitCode).toBe(0);
+            expect(readFileSync(counter, 'utf8').split('\n').filter(Boolean).length).toBe(1);
+            expect(readFileSync(join(dir, '.spur/run/0723-precheck-size.status'), 'utf8')).toBe('PASS\n');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('auto feature reactivation: single-shot on success, blocking on real failure (0723 R3)', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0723-featsync-'));
+        try {
+            const calls = join(dir, 'sync-calls');
+            const spur = executable(
+                dir,
+                'spur-fake',
+                `case "$1:$2" in
+  task:show) printf '%s\n' '{"feature_id":"F9"}' ;;
+  feature:sync) echo x >> "${calls}"; exit "\${SYNC_RC:-0}" ;;
+  feature:update) echo y >> "${calls}"; exit "\${UPDATE_RC:-0}" ;;
+esac`,
+            );
+            const command = commandFor('precheck', 1);
+
+            // Green path: one sync call, exit 0.
+            const ok = runShell(command, dir, { profile: 'auto', wbs: '0723', spurBin: spur });
+            expect(ok.exitCode).toBe(0);
+            expect(readFileSync(calls, 'utf8').split('\n').filter(Boolean)).toEqual(['x']);
+
+            // Sync fails, update rescue succeeds: still exit 0 (one sync + one update).
+            const rescued = runShell(command, dir, {
+                profile: 'auto',
+                wbs: '0723',
+                spurBin: spur,
+                SYNC_RC: '1',
+            });
+            expect(rescued.exitCode).toBe(0);
+            expect(readFileSync(calls, 'utf8').split('\n').filter(Boolean)).toEqual(['x', 'x', 'y']);
+
+            // Both fail: the reactivation failure surfaces and blocks implementation.
+            const blocked = runShell(command, dir, {
+                profile: 'auto',
+                wbs: '0723',
+                spurBin: spur,
+                SYNC_RC: '1',
+                UPDATE_RC: '1',
+            });
+            expect(blocked.exitCode).not.toBe(0);
+            expect(blocked.output).toContain('feature reactivation');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     test('a transient transition error retries once and preserves the broken path in output', () => {

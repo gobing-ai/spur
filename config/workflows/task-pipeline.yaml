@@ -54,15 +54,16 @@ vars:
   # runs and `workflow validate` resolve the template. (See AGENTS.md / ADR-026.)
   spurBin: "spur"
   # Agent the pipeline's agent.run steps invoke. Override per run with
-  # `--vars '{"agent":"claude"}'`. Pinned (not left to the AiRunner's <default>
-  # selection) so a broken/misconfigured agent on the box can't silently capture the run.
-  agent: "omp"
-  # Implement-only executor override (R1, task 0454). Resolves to this YAML literal
-  # unless overridden. The `--agent` flag (execution-batch.md §3.2) forwards into BOTH
+  # `--vars '{"agent":"claude"}'`. `auto` is the reserved config-resolving selector:
+  # `agent.default` role -> tier -> cheapest USABLE executor. A named literal here would
+  # pin a box-specific binary into tracked SSOT and escape that usability ladder.
+  agent: "auto"
+  # Implement-only executor override (R1, task 0454). Resolves like `agent` unless
+  # overridden. The `--agent` flag (execution-batch.md §3.2) forwards into BOTH
   # `agent` and `implementAgent`, so a pinned `--agent X` reaches implement too. To
   # pin ONLY implement while other hops keep the default, pass
   # `--vars '{"implementAgent":"omp-zai"}'`.
-  implementAgent: "omp"
+  implementAgent: "auto"
   # Step-level timeout for agentic hops (review / verify / test-fix) in ms.
   # Soft quality-gate shells are unbounded by this var (host shell only).
   # Raised 600s → 1800s (task 0398 R4 / H6 dogfood). Override:
@@ -174,6 +175,10 @@ states:
       # R1 (0453): auto-profile precheck reopens a done feature before task check.
       # Under profile=auto, resolve feature_id, sync (preferred) or update to active.
       # Under non-auto, leave R4 message to guide the operator.
+      # R3 (0723): a real reactivation failure is surfaced, not swallowed —
+      # the default 'fail' onEnter policy halts the sequence and routes the
+      # run to `failed` before implementation. Verbs stay single-shot:
+      # one sync, then one update fallback, never retried in a loop.
       - kind: shell
         options:
           command: >-
@@ -181,17 +186,23 @@ states:
               FID=$($spurBin task show $wbs --json 2>/dev/null |
               jq -r '.feature_id // .frontmatter.feature_id // empty' 2>/dev/null);
               if [ -n "$FID" ]; then
-                $spurBin feature sync "$FID" --force --json 2>/dev/null ||
-                $spurBin feature update "$FID" active 2>/dev/null || true;
+                if ! $spurBin feature sync "$FID" --force 2>/dev/null; then
+                if ! $spurBin feature update "$FID" active 2>/dev/null; then
+                echo "precheck: FAIL - feature reactivation $FID failed;" >&2;
+                echo "precheck: feature sync + feature update both errored" >&2;
+                exit 1;
+                fi;
+                fi;
               fi;
             fi;
             exit 0
-      # R2 (0454): task size precheck — evaluate R-item and Plan-item counts.
-      # Writes PASS/FAIL to .spur/run/<wbs>-precheck-size.status. Always exit 0
-      # (soft check, like doctor). The precheck→implement guard reads the file.
-      # Temporary config-only bypass (0723): keep deterministic size limits but defer
-      # the executor-tier policy to the dedicated task-pipeline upgrade. This avoids
-      # the script's second `spur agent doctor` call while the precheck path is repaired.
+      # R2 (0454, 0723): task size precheck — deterministic count-only
+      # evaluation of R-item and Plan-item counts. No executor-tier policy:
+      # dispatch-time requiresCapabilities at `agent.run` is the
+      # authoritative capability check. Writes PASS/FAIL to
+      # .spur/run/<wbs>-precheck-size.status. Always exit 0 (soft action);
+      # the precheck→implement guard reads the file, so a missing checker
+      # fails closed (writes FAIL, never PASS).
       - kind: shell
         options:
           command: >-
@@ -199,10 +210,12 @@ states:
             mkdir -p .spur/run &&
             if [ -f plugins/sp/scripts/task-size-precheck.ts ]; then
             bun plugins/sp/scripts/task-size-precheck.ts "$wbs"
-            --spur-bin "$spurBin" --max-reqs "$maxImplementReqs" --max-plan-items "$maxImplementPlanItems";
+            --spur-bin "$spurBin" --max-reqs "$maxImplementReqs"
+            --max-plan-items "$maxImplementPlanItems";
             else
-              echo "task-size-precheck skipped — plugins/sp/scripts/task-size-precheck.ts not present in project." >&2 &&
-              echo "PASS" > "$SIZE_FILE";
+              echo "task-size-precheck failed closed — checker script" >&2 &&
+              echo "plugins/sp/scripts/task-size-precheck.ts absent." >&2 &&
+              echo "FAIL" > "$SIZE_FILE";
             fi &&
             exit 0
 

@@ -4,7 +4,10 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-test('task-size-precheck passes executor names as argv, not shell source', () => {
+/** Within the default ceiling: 3 R-items, 1 Plan item. */
+const WITHIN_LIMITS_BODY = '### Requirements\\n- [ ] R1. x\\n- [ ] R2. x\\n- [ ] R3. x\\n### Plan\\n- [ ] x';
+
+test('task-size-precheck stays argv-clean and writes PASS for a within-ceiling task', () => {
     const dir = mkdtempSync(join(tmpdir(), 'task-size-precheck-'));
     try {
         const fakeSpur = join(dir, 'spur');
@@ -12,11 +15,8 @@ test('task-size-precheck passes executor names as argv, not shell source', () =>
         writeFileSync(
             fakeSpur,
             `#!/bin/sh
-if [ "$1" = task ]; then
-    printf '%s\\n' '{"content":"### Requirements\\n- [ ] R1. x\\n- [ ] R2. x\\n- [ ] R3. x\\n- [ ] R4. x\\n- [ ] R5. x\\n- [ ] R6. x\\n### Plan\\n- [ ] x"}'
-else
-    printf '%s\\n' '{"agents":[{"capabilityTier":"standard"}]}'
-fi
+printf '%s\\n' '{"content":"${WITHIN_LIMITS_BODY}"}'
+printf '%s\\n' "$@" > ${injected}
 `,
         );
         chmodSync(fakeSpur, 0o755);
@@ -25,21 +25,22 @@ fi
             'bun',
             [
                 join(import.meta.dir, '..', 'scripts', 'task-size-precheck.ts'),
-                '0487',
+                '0723',
                 '--spur-bin',
                 fakeSpur,
                 '--max-reqs',
-                '10',
+                '5',
                 '--max-plan-items',
-                '12',
-                '--executor',
-                `standard; touch ${injected}`,
+                '4',
             ],
             { cwd: dir, stdio: 'pipe' },
         );
 
-        expect(existsSync(injected)).toBe(false);
-        expect(readFileSync(join(dir, '.spur/run/0487-precheck-size.status'), 'utf8')).toBe('FAIL\n');
+        // Arguments travel as argv to the spur bin, never through a shell source.
+        const argv = readFileSync(injected, 'utf8').trim().split(/\s+/);
+        expect(argv).toContain('0723');
+        expect(existsSync(injected.replace('injected', 'injected '))).toBe(false);
+        expect(readFileSync(join(dir, '.spur/run/0723-precheck-size.status'), 'utf8')).toBe('PASS\n');
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
@@ -73,37 +74,35 @@ printf '%s\\n' '{"content":"### Requirements\\n- [ ] R1. x\\n### Plan\\n- [ ] x"
     }
 });
 
-test('plugin large-task thresholds stay aligned with the application defaults', () => {
+test('script defaults stay aligned with the application ceiling (0723: 10/16)', () => {
     const repoRoot = join(import.meta.dir, '..', '..', '..');
     const app = readFileSync(join(repoRoot, 'packages/app/src/services/task-size-precheck.ts'), 'utf8');
     const plugin = readFileSync(join(repoRoot, 'plugins/sp/scripts/task-size-precheck.ts'), 'utf8');
 
-    expect(plugin.match(/LARGE_TASK_REQS = (\d+)/)?.[1]).toBe(app.match(/maxReqs: (\d+)/)?.[1]);
-    expect(plugin.match(/LARGE_TASK_PLAN_ITEMS = (\d+)/)?.[1]).toBe(app.match(/maxPlanItems: (\d+)/)?.[1]);
+    expect(app.match(/maxReqs: (\d+)/)?.[1]).toBe('10');
+    expect(app.match(/maxPlanItems: (\d+)/)?.[1]).toBe('16');
+    // Script env/flag fallbacks (parses `Number(...) || <n>` and `Number(argv[i+1]) || <n>`).
+    const fallbacks = [...plugin.matchAll(/\|\| (\d+);/g)].map((m) => m[1]);
+    expect(fallbacks).toEqual(['10', '16', '10', '16']);
 });
 
-/** Within-limits task body: 4 R-items, 2 Plan items — under default caps. */
-const WITHIN_LIMITS_BODY =
-    '### Requirements\\n- [ ] R1. a\\n- [ ] R2. b\\n- [ ] R3. c\\n- [ ] R4. d\\n### Plan\\n- [ ] p1\\n- [ ] p2';
+test('count-only since 0723: no executor flag, no doctor call site remains', () => {
+    const plugin = readFileSync(join(import.meta.dir, '..', 'scripts', 'task-size-precheck.ts'), 'utf8');
+    expect(plugin).not.toContain('--executor');
+    expect(plugin).not.toContain('agent doctor');
+    expect(plugin).not.toContain('capabilityTier');
+    expect(plugin).not.toContain('stage-registry-adapter');
+    expect(plugin).not.toContain('LARGE_TASK');
+});
 
-/** Above large-task thresholds: 6 R-items, 0 Plan — triggers capability gate. */
-const LARGE_TASK_BODY =
-    '### Requirements\\n- [ ] R1. a\\n- [ ] R2. b\\n- [ ] R3. c\\n- [ ] R4. d\\n- [ ] R5. e\\n- [ ] R6. f\\n### Plan\\n';
+/** Above the doubled ceiling: 11 R-items, 0 Plan — FAIL with default limits. */
+const OVER_CEILING_BODY = `### Requirements\\n${Array.from({ length: 11 }, (_, i) => `- [ ] R${i + 1}. x`).join(
+    '\\n',
+)}\\n### Plan\\n`;
 
-function writeFakeSpur(dir: string, opts: { tier?: string; body?: string }): string {
+function writeFakeSpur(dir: string, body: string): string {
     const fakeSpur = join(dir, 'spur');
-    const body = opts.body ?? WITHIN_LIMITS_BODY;
-    const tier = opts.tier ?? 'standard';
-    writeFileSync(
-        fakeSpur,
-        `#!/bin/sh
-if [ "$1" = task ]; then
-    printf '%s\\n' '{"content":"${body}"}'
-else
-    printf '%s\\n' '{"agents":[{"capabilityTier":"${tier}"}]}'
-fi
-`,
-    );
+    writeFileSync(fakeSpur, `#!/bin/sh\nprintf '%s\\n' '{"content":"${body}"}'\n`);
     chmodSync(fakeSpur, 0o755);
     return fakeSpur;
 }
@@ -122,10 +121,10 @@ function runPrecheck(cwd: string, args: string[]): { status: string; stderr: str
     return { status, stderr };
 }
 
-test('multi-token spurBin resolves on task-fetch call site (R1)', () => {
+test('multi-token spurBin resolves on the task-fetch call site (R1)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'task-size-precheck-'));
     try {
-        const fakeSpur = writeFakeSpur(dir, {});
+        const fakeSpur = writeFakeSpur(dir, WITHIN_LIMITS_BODY);
         // Two-token form: /bin/sh <stub> — mirrors resolveSpurBin() runtime launch
         const multiToken = `/bin/sh ${fakeSpur}`;
         const { status, stderr } = runPrecheck(dir, ['0501', '--spur-bin', multiToken]);
@@ -136,34 +135,10 @@ test('multi-token spurBin resolves on task-fetch call site (R1)', () => {
     }
 });
 
-test('multi-token spurBin resolves on capability-tier call site (R2)', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'task-size-precheck-'));
-    try {
-        const fakeSpur = writeFakeSpur(dir, { tier: 'capable-1', body: LARGE_TASK_BODY });
-        const multiToken = `/bin/sh ${fakeSpur}`;
-        // Raised caps so size limits alone do not FAIL; capability gate is the path under test
-        const { status } = runPrecheck(dir, [
-            '0501',
-            '--spur-bin',
-            multiToken,
-            '--max-reqs',
-            '10',
-            '--max-plan-items',
-            '12',
-            '--executor',
-            'capable-exec',
-        ]);
-        // Pre-fix: ENOENT on doctor → tier 'standard' → FAIL "requires a capable executor"
-        expect(status).toBe('PASS\n');
-    } finally {
-        rmSync(dir, { recursive: true, force: true });
-    }
-});
-
 test('single-token spurBin (compiled binary shape) still works (R3)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'task-size-precheck-'));
     try {
-        const fakeSpur = writeFakeSpur(dir, {});
+        const fakeSpur = writeFakeSpur(dir, WITHIN_LIMITS_BODY);
         const { status, stderr } = runPrecheck(dir, ['0501', '--spur-bin', fakeSpur]);
         expect(status).toBe('PASS\n');
         expect(stderr).not.toContain('could not fetch task');
@@ -172,21 +147,23 @@ test('single-token spurBin (compiled binary shape) still works (R3)', () => {
     }
 });
 
-test('single-token spurBin resolves capability-tier call site (R3/R4)', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'task-size-precheck-'));
+test('a task above the doubled ceiling fails closed with default limits', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'task-size-precheck-over-'));
     try {
-        const fakeSpur = writeFakeSpur(dir, { tier: 'capable-1', body: LARGE_TASK_BODY });
-        const { status } = runPrecheck(dir, [
-            '0501',
-            '--spur-bin',
-            fakeSpur,
-            '--max-reqs',
-            '10',
-            '--max-plan-items',
-            '12',
-            '--executor',
-            'capable-exec',
-        ]);
+        const fakeSpur = writeFakeSpur(dir, OVER_CEILING_BODY);
+        const { status, stderr } = runPrecheck(dir, ['0723', '--spur-bin', fakeSpur]);
+        expect(status).toBe('FAIL\n');
+        expect(stderr).toContain('11 R-items (max 10)');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('a task within the default ceiling passes without any limit flag', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'task-size-precheck-defaults-'));
+    try {
+        const fakeSpur = writeFakeSpur(dir, WITHIN_LIMITS_BODY);
+        const { status } = runPrecheck(dir, ['0723', '--spur-bin', fakeSpur]);
         expect(status).toBe('PASS\n');
     } finally {
         rmSync(dir, { recursive: true, force: true });

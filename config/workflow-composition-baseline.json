@@ -320,14 +320,14 @@
                 },
                 "precheck:onEnter:2": {
                     "kind": "shell",
-                    "invocation": "if [ \"$profile\" = auto ]; then\n  FID=$($spurBin task show $wbs --json 2>/dev/null |\n  jq -r '.feature_id // .frontmatter.feature_id // empty' 2>/dev/null);\n  if [ -n \"$FID\" ]; then\n    $spurBin feature sync \"$FID\" --force --json 2>/dev/null ||\n    $spurBin feature update \"$FID\" active 2>/dev/null || true;\n  fi;\nfi; exit 0",
+                    "invocation": "if [ \"$profile\" = auto ]; then\n  FID=$($spurBin task show $wbs --json 2>/dev/null |\n  jq -r '.feature_id // .frontmatter.feature_id // empty' 2>/dev/null);\n  if [ -n \"$FID\" ]; then\n    if ! $spurBin feature sync \"$FID\" --force 2>/dev/null; then\n    if ! $spurBin feature update \"$FID\" active 2>/dev/null; then\n    echo \"precheck: FAIL - feature reactivation $FID failed;\" >&2;\n    echo \"precheck: feature sync + feature update both errored\" >&2;\n    exit 1;\n    fi;\n    fi;\n  fi;\nfi; exit 0",
                     "stateEffect": "write",
                     "evidenceEffect": "none",
                     "disposition": "GLUE"
                 },
                 "precheck:onEnter:3": {
                     "kind": "shell",
-                    "invocation": "SIZE_FILE=\".spur/run/$wbs-precheck-size.status\" && mkdir -p .spur/run && if [ -f plugins/sp/scripts/task-size-precheck.ts ]; then bun plugins/sp/scripts/task-size-precheck.ts \"$wbs\" --spur-bin \"$spurBin\" --max-reqs \"$maxImplementReqs\" --max-plan-items \"$maxImplementPlanItems\"; else\n  echo \"task-size-precheck skipped — plugins/sp/scripts/task-size-precheck.ts not present in project.\" >&2 &&\n  echo \"PASS\" > \"$SIZE_FILE\";\nfi && exit 0",
+                    "invocation": "SIZE_FILE=\".spur/run/$wbs-precheck-size.status\" && mkdir -p .spur/run && if [ -f plugins/sp/scripts/task-size-precheck.ts ]; then bun plugins/sp/scripts/task-size-precheck.ts \"$wbs\" --spur-bin \"$spurBin\" --max-reqs \"$maxImplementReqs\" --max-plan-items \"$maxImplementPlanItems\"; else\n  echo \"task-size-precheck failed closed — checker script\" >&2 &&\n  echo \"plugins/sp/scripts/task-size-precheck.ts absent.\" >&2 &&\n  echo \"FAIL\" > \"$SIZE_FILE\";\nfi && exit 0",
                     "stateEffect": "read",
                     "evidenceEffect": "write",
                     "disposition": "EXT"

@@ -473,11 +473,7 @@ export function executeScripts(root: string = PLUGIN_ROOT): void {
         writeFileSync(
             fake,
             `#!/bin/sh
-if [ "$1" = task ] && [ "$2" = show ]; then
-    printf '%s' '{"content":"### Requirements\\n- [ ] R1. x\\n### Plan\\n- [ ] p1"}'
-else
-    printf '%s' '{"agents":[{"capabilityTier":"standard"}]}'
-fi
+printf '%s' '{"content":"### Requirements\\n- [ ] R1. x\\n### Plan\\n- [ ] p1"}'
 `,
         );
         chmodSync(fake, 0o755);
@@ -485,7 +481,7 @@ fi
         try {
             execFileSync(
                 process.execPath,
-                [join(root, 'scripts', 'task-size-precheck.ts'), '0487', '--spur-bin', fake, '--executor', 'standard'],
+                [join(root, 'scripts', 'task-size-precheck.ts'), '0487', '--spur-bin', fake],
                 { cwd: dir, encoding: 'utf8', timeout: 30_000, stdio: 'pipe' },
             );
             const content = readFileSync(statusPath, 'utf8');
@@ -687,15 +683,6 @@ export function probeJsonShapes(run: CliRunner = runCli): void {
             { file: 'plugins/sp/scripts/surface-drift-inventory.ts', line: 1 },
         );
     }
-    const doctor = jsonEnvelopeShapes['spur agent doctor omp'];
-    const capOk = (doctor?.keys ?? []).some((k) => k.endsWith('.capabilityTier'));
-    record(
-        'agent doctor <name> --json -> agents[0].capabilityTier (asserted by task-size-precheck.ts:130)',
-        'json-exec(field-presence)',
-        capOk ? 'ok' : 'mismatch',
-        capOk ? 'field present in live envelope' : 'field ABSENT from live envelope',
-        { file: 'plugins/sp/scripts/task-size-precheck.ts', line: 130 },
-    );
     // Curated prose flag-claims: assertions phrased as prose ("no explicit `--flag`") that the
     // generic backtick-span extractor cannot scope to a command. Extend this list when a prose
     // claim is found; each entry is verified against the live help capture.

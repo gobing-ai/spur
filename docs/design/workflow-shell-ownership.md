@@ -15,7 +15,7 @@ of five options under ADR-051:
 | --- | --- | --- |
 | (a) public `spur` verb | a new CLI noun/verb — needs recorded operator consent; noun-first rule | none (no public surface landed) |
 | (b) application service | monorepo-only capability in `packages/app` | idea handoff (monorepo half) |
-| (c) least-privilege built-in action kind | engine-run capability, portable wherever the `spur` CLI runs | **task-pipeline precheck doctor probe (landed)** |
+| (c) least-privilege built-in action kind | engine-run capability, portable wherever the `spur` CLI runs | idea-pipeline `start` doctor probe (landed; task-pipeline precheck went doctor-free in 0723 — the built-in stays for callers that elect executors at precheck) |
 | (d) workflow-relative external extension | portable standalone script under `plugins/sp/scripts/` invoked from YAML | size precheck, feature sync, pr-reviewing |
 | (e) deliberately-stays-shell | recorded exception with a reason | `qualityGateCmd` / per-project command strings; trivial glue |
 
@@ -65,17 +65,20 @@ project command `featureGateCmd`. Its row below is reclassified `EXT + POLICY`.
    workflow-relative external extension path (d) is the recorded future home once such a mechanism
    exists; until then the exception is deliberate and recorded, per R3/R4.
 
-2. **`task-pipeline` precheck doctor probe — option (c), landed this task as the `doctor.probe`
-   built-in action kind.** The ~40-line auth classifier (per-agent-family classification:
-   omp/pi env-key misses soft, explicit auth failures hard; executor-divergence line) is reusable
-   product semantics — the strongest candidate for the application layer. It landed as a
-   least-privilege built-in (option c) rather than a monorepo-only service (option b) because a
-   built-in runs in-process in the `spur` CLI and therefore resolves in **seeded projects** too
-   (portability rule below). The replaced shell was deleted from
-   `config/workflows/task-pipeline.yaml`; `config/workflow-composition-baseline.json` records the
-   new action facts in the same commit; unit + failure-path tests and the affected pipeline's own
-   tests prove behavior parity (see `packages/app/tests/workflow/actions/doctor-probe.test.ts` and
-   `plugins/sp/tests/task-pipeline-resilience.test.ts`).
+2. **`task-pipeline` precheck doctor probe — option (c), landed by 0608 as the `doctor.probe`
+   built-in action kind; removed from task-pipeline by 0723.** The ~40-line auth classifier
+   (per-agent-family classification: omp/pi env-key misses soft, explicit auth failures hard;
+   executor-divergence line) is reusable product semantics — the strongest candidate for the
+   application layer. It landed as a least-privilege built-in (option c) rather than a
+   monorepo-only service (option b) because a built-in runs in-process in the `spur` CLI and
+   therefore resolves in **seeded projects** too (portability rule below). Task 0723 then made
+   the task-pipeline precheck deterministic and doctor-free on every execution surface: the
+   probe could not prove authentication or quota, duplicated the size precheck's second
+   `spur agent doctor` call, and the authoritative liveness/capability checks already run
+   fail-closed at the `agent.run` dispatch boundary (0706). The `doctor.probe` built-in stays
+   registered for workflows that intentionally elect executors at precheck (idea-pipeline
+   `start:onEnter:1`); task-pipeline no longer declares it, and its composition baseline and
+   tests assert the doctor-free graph (see `plugins/sp/tests/task-pipeline-resilience.test.ts`).
 
 ## Consent posture (feature R4, task 0608 R2)
 
@@ -162,10 +165,9 @@ routes to `failed`.
 
 | Program | Disposition | Reason |
 | --- | --- | --- |
-| `precheck:onEnter:0` | **BUILTIN** | **the doctor probe — landed as `doctor.probe` this task (option c)**; reusable auth-classification semantics |
-| `precheck:onEnter:1` | GLUE | git-status hygiene WARNING/NOTE; advisory, no reusable semantics beyond `git status` |
-| `precheck:onEnter:3` | GLUE | auto-profile feature reopen (`feature sync` / `update`); workflow-policy orchestration around existing verbs |
-| `precheck:onEnter:4` | EXT | size precheck via `plugins/sp/scripts/task-size-precheck.ts` (option d) + shell fallback |
+| `precheck:onEnter:0` | GLUE | git-status hygiene WARNING/NOTE; advisory, no reusable semantics beyond `git status` |
+| `precheck:onEnter:2` | GLUE | auto-profile feature reopen (`feature sync`, one `feature update` fallback); single-shot; a real reactivation failure exits non-zero and blocks implementation (0723 R3) |
+| `precheck:onEnter:3` | EXT | count-only size precheck via `plugins/sp/scripts/task-size-precheck.ts` (option d); no `--executor`/doctor path since 0723; missing-checker fallback writes FAIL (fail closed) |
 | `implement:onEnter:1` | GLUE | `retry_transient` wrapper around `task update wip`; transient-retry idiom repeats in `record:onEnter:1` / `done:onEnter:0` — follow-up promotion candidate |
 | `implement:onEnter:2` | POLICY | `$formatCmd ; exit 0`; project-only formatter, best-effort |
 | `test:onEnter:0` | POLICY | **`qualityGateCmd` soft probe** — per-project command string via `sh -c` with db-lock retry + findings extraction |
