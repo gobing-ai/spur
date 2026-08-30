@@ -4,7 +4,7 @@ name: "Streamline inline planning and harden headless idea workflow recovery"
 status: done
 template: issue
 created_at: 2026-08-29T23:26:22.251Z
-updated_at: "2026-08-30T00:24:17.008Z"
+updated_at: "2026-08-30T05:22:48.786Z"
 priority: P1
 feature_id: B
 ---
@@ -153,12 +153,14 @@ The interactive planning wrappers now reuse the existing YAML-backed host driver
 headless path remains available, but it launches the async worker and resolves `inline`/`auto`
 through the planner role once before doctor and dispatch.
 
-The complete Claude/Grok write policy shipped in `@gobing-ai/ts-ai-runner@0.4.47`; Spur consumes the
-lockstep 0.4.47 family from its registry install, not a development link. Direct configured-name
-probes also exposed and fixed the CLI context seam that hid merged global executors from flag
-validation. Ten currently eligible configured executors wrote and read back distinct run-scoped
-artifacts. `pi-zai-nvidia` returned provider HTTP 410 before model execution and is therefore
-recorded as currently ineligible rather than silently retried.
+The complete current-executor write policy shipped in `@gobing-ai/ts-ai-runner@0.4.48`; Spur
+consumes the lockstep 0.4.48 family from its registry install, not a development link. Version
+0.4.47 carried Claude `--permission-mode acceptEdits`, but Claude Code 2.1.251 still denied the
+headless Write tool. Version 0.4.48 adds the narrow explicit `--allowedTools Write Edit` grant.
+Direct configured-name probes also exposed and fixed the CLI context seam that hid merged global
+executors from flag validation. Ten currently eligible configured executors wrote and read back
+distinct run-scoped artifacts. `pi-zai-nvidia` returned provider HTTP 410 before model execution
+and is therefore recorded as currently ineligible rather than silently retried.
 
 Missing expected artifacts now reuse the existing partial-work handoff path, preserve bounded
 stdout/stderr and the invocation, redact configured secrets, and return a contract-specific error.
@@ -177,7 +179,7 @@ stdout/stderr and the invocation, redact configured secrets, and return a contra
 Companion workflow baselines, command/skill documentation, product design documentation, and
 targeted regression tests were updated with the same contracts. The CLI composition root now
 exposes its already-derived merged agent configuration to command validation, and task 0689's Q&A
-now identifies 0.4.47 as the first complete four-family release.
+now identifies 0.4.48 as the first published release verified against the current Claude CLI.
 ### Testing
 **Pipeline verify results**
 
@@ -186,31 +188,31 @@ now identifies 0.4.47 as the first complete four-family release.
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | `cd plugins/sp && bun test tests/inline-execution-contract.test.ts --test-name-pattern '0718 R1/R4'` exited 0 and covers both idea/plan selectors. |
-| R2 | MET | `cd packages/app && bun test tests/workflow/actions/doctor-probe.test.ts tests/workflow/idea-pipeline-definition.test.ts` exited 0; both `inline` and `auto` resolve once to planner and all dispatch stages reuse the result. The session fixture records three attempts, 506696 ms workflow time, and 504122 ms planner-stage time. |
-| R3 | MET | `@gobing-ai/ts-ai-runner` resolved from the registry install at version 0.4.47; ten currently eligible configured executors passed distinct real write/readback probes under `.spur/run/`. `pi-zai-nvidia` returned provider HTTP 410 before execution and was classified ineligible without fallback. Task 0689 now records 0.4.47 as the first complete four-family release. |
+| R2 | MET | `cd packages/app && bun test tests/workflow/actions/doctor-probe.test.ts tests/workflow/idea-pipeline-definition.test.ts` exited 0 with 42 tests; both `inline` and `auto` resolve once to planner and all dispatch stages reuse the result. The session fixture records three attempts, 506696 ms workflow time, and 504122 ms planner-stage time. |
+| R3 | MET | @gobing-ai/ts-libs commits `9cfa1fb` and release `c3c3310` published the lockstep 0.4.48 family. Spur installed `@gobing-ai/ts-ai-runner@0.4.48` from npm under `node_modules/.bun`; its Claude shim carries `--permission-mode acceptEdits --allowedTools Write Edit`. Claude, Grok, MiniMax, four other Pi executors, and both Antigravity executors—10/10 currently eligible configured executors—wrote and read back distinct exact artifacts under `.spur/run/0718-0.4.48-*.txt`. `pi-zai-nvidia` is ineligible because its provider returns HTTP 410 before model execution. |
 | R4 | MET | `cd apps/cli && bun test tests/commands/workflow.test.ts --test-name-pattern 'async run self-records its worker pid; cancel SIGTERMs the whole process group'` exited 0 with the `killed: true` and worker/child liveness assertions. |
-| R5 | MET | `cd packages/app && bun test tests/workflow/actions/agent-run.test.ts` exited 0; the missing-`expectFile` regression asserts contract failure, bounded output, partial artifact creation, and configured-secret redaction. |
+| R5 | MET | `cd packages/app && bun test tests/workflow/actions/agent-run.test.ts` exited 0 with 115 tests; the missing-`expectFile` regression asserts contract failure, bounded output, one partial artifact, and configured-secret redaction. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | Scenario: R1 — default and explicit-inline planning remain in the host session | MET | test | Plugin contract test `0718 R1/R4 — idea and plan stay inline by default and use cancellable async workers when explicit` passed. |
 | Scenario: R2 — headless preflight resolves reserved selectors before doctor | MET | test | Doctor-probe reserved-selector test and idea-pipeline executor-reuse definition test passed. |
-| Scenario: R3 — installed executors satisfy required artifact writes | MET | command | Registry package version/readlink checks passed; ten eligible configured executor dispatches wrote and read back exact unique tokens, including Claude with the installed 0.4.47 shim. |
+| Scenario: R3 — installed executors satisfy required artifact writes | MET | command | Registry-installed `@gobing-ai/ts-ai-runner@0.4.48` resolves below `node_modules/.bun`, not a source link. Exact write/readback passed for `minimax`, `pi-dsv4-flash-volc`, `pi-zai-volc`, `pi-zai`, `pi-zai-cn`, `agy-gemini`, `pi-deepseek`, `agy-opus`, `grok`, and `claude`. NVIDIA returned provider HTTP 410 before dispatch and was not retried. |
 | Scenario: R4 — cancelling a dev-command workflow stops its process group | MET | test | The async-worker process-group cancellation regression passed with `killed: true` and no surviving worker/child. |
-| Scenario: R5 — missing artifacts preserve evidence and do not trigger blind fallback | MET | test | AgentRunActionRunner missing-artifact test passed; the post-dispatch branch returns immediately after one redacted partial-artifact write and contains no fallback call. |
+| Scenario: R5 — missing artifacts preserve evidence and do not trigger blind fallback | MET | test | AgentRunActionRunner missing-artifact tests passed; the post-dispatch branch returns immediately after one redacted partial-artifact write and contains no fallback call. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
 | P2 | Security | `packages/app/src/workflow/actions/agent-run.ts:672` | Review found raw stdout/stderr and argv in the reused partial-artifact helper; fixed by applying the existing configured-secret redactor before persistence, with regression coverage. |
-| P3 | Correctness / environment | `plugins/sp/tests/fixtures/0718-planning-attempts.json:3` | Ten configured executors passed installed-package write/readback probes. `pi-zai-nvidia` failed twice with provider HTTP 410 before model execution despite version-only doctor reporting usable; it is not currently eligible and no fallback was attempted. Operator-global model maintenance remains outside this repository change. |
+| P3 | Correctness / environment | `plugins/sp/tests/fixtures/0718-planning-attempts.json:3` | Ten configured executors passed installed-package write/readback probes. `pi-zai-nvidia` returned provider HTTP 410 before model execution despite version-only doctor reporting usable; it is not currently eligible and no fallback was attempted. Operator-global model maintenance remains outside this repository change. |
 | P4 | Reliability / environment | `apps/cli/src/context.ts:176` | One successful live probe reported a transient `system_events` SQLite lock while the board server was active. The artifact contract passed; the comprehensive gate did not reproduce the lock. |
 
 | Req | Status | Evidence |
 | --- | --- | --- |
 | R1 | MET | `plugins/sp/commands/dev-idea.md:23` and `plugins/sp/commands/dev-plan.md:19` define omitted/inline as current-session execution; the contract test at `plugins/sp/tests/inline-execution-contract.test.ts:129` covers both surfaces. |
 | R2 | MET | `packages/app/src/workflow/actions/doctor-probe.ts:70` resolves both reserved selectors through the declared role; `config/workflows/idea-pipeline.yaml:82` persists and reuses `planningAgent`; the real attempt fixture records 3 runs and 504122 ms of planner-stage time. |
-| R3 | MET | `package.json:97` pins installed 0.4.47; registry realpath resolves beneath `node_modules/.bun`; 10 eligible configured executors passed distinct live write/readback probes; `docs/tasks4/0689_antigravity-cli-shim-cannot-satisfy-expectfile-stages-print-.md:130` corrects the former 0.4.46 claim. |
+| R3 | MET | `package.json:97` pins installed 0.4.48; registry realpath resolves beneath `node_modules/.bun`; all 10 currently eligible configured executors passed distinct live write/readback probes; task 0689's Q&A and Testing sections correct the former 0.4.46/0.4.47 release claims. |
 | R4 | MET | `plugins/sp/commands/dev-idea.md:46` requires async execution and `killed: true`; the existing process-group regression passed in `apps/cli/tests/commands/workflow.test.ts`. |
 | R5 | MET | `packages/app/src/workflow/actions/agent-run.ts:328` fails the same action on a missing artifact and writes one redacted bounded partial artifact; no lower-tier invocation exists in that post-dispatch branch. |
 

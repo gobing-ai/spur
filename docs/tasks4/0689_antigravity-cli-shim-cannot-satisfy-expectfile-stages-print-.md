@@ -4,7 +4,7 @@ name: "antigravity-cli shim cannot satisfy expectFile stages: print mode auto-de
 status: done
 template: issue
 created_at: 2026-08-27T15:39:39.946Z
-updated_at: "2026-08-30T00:16:37.891Z"
+updated_at: "2026-08-30T05:22:49.259Z"
 feature_id: B
 ---
 
@@ -134,6 +134,39 @@ only the Antigravity portion. Task 0718 corrected the release boundary: ts-libs 
 `--allow Write --allow Edit` shims, and Spur now installs the lockstep 0.4.47 family. The earlier
 source-runner probes remain valid implementation evidence; 0.4.47 is the first published artifact
 that carries the complete policy.
+
+#### Q&A entry — 2026-08-30T05:14:40.109Z
+
+**Q: What does “every executor” cover?** The active executor registry, not every dormant shim in
+`AGENT_SHIMS`. `spur agent doctor --json` reported eleven configured executors: seven Pi-backed, two
+Antigravity-backed, one Claude-backed, and one Grok-backed. Those four executable families are the
+R1 matrix. A future executor using another shim must gain and pass the same live write probe before
+being considered usable for `expectFile` work.
+
+**Q: Why not rely on operator-local permission files?** They are machine-local and can mask a broken
+published shim. The configured executor matrix therefore carries its required noninteractive policy
+in argv; local allow rules remain optional operator conveniences.
+
+**Q: Why does Grok not use `acceptEdits` like Claude and Antigravity?** Grok 1.0.5 accepted that mode
+but twice exited 0 after narrating the write without invoking a tool. A broader `--always-approve`
+probe proved the permission diagnosis; the narrower repeated `--allow Write --allow Edit` rules then
+wrote and verified the artifact. Shell and other tools remain outside the grant.
+
+**Q: Why not pair Antigravity with `--sandbox`?** That flag restricts terminal execution and would
+break workflows that legitimately shell out. `--mode accept-edits` is the narrower verified write
+grant; `--add-dir` and the authoritative workspace keep its file tools rooted in the project.
+
+**Q: Should this be configurable?** No. Each configured executor family has one verified headless
+policy. A knob would let production drift back into an unverified state.
+
+**Q: Was the complete four-family policy released in 0.4.46 or 0.4.47?** No. The 0689 Testing
+section incorrectly credited 0.4.46 with the Claude and Grok policies even though that release
+contained only the Antigravity portion. Task 0718 first moved the intended Claude and Grok flags
+into 0.4.47, then its forced current-environment audit found Claude Code 2.1.251 still denied Write
+with `--permission-mode acceptEdits` alone. `@gobing-ai/ts-ai-runner@0.4.48` adds
+`--allowedTools Write Edit`; Spur installs the released lockstep 0.4.48 family, and all ten currently
+eligible configured executors passed distinct installed-package write/readback probes.
+`pi-zai-nvidia` is excluded because its provider returns HTTP 410 before model execution.
 ### Design
 **Final amendment 2026-08-28 — configured-executor write policy.** Spur’s eleven configured
 executors resolve to four shim families. The shared contract is: a headless executor used by
@@ -224,22 +257,22 @@ Release-note anchor: @gobing-ai/ts-libs `CHANGELOG.md` lines 11-17.
 ### Testing
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PASS (from verdict artifact; release evidence corrected by task 0718)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/tasks4/0689_antigravity-cli-shim-cannot-satisfy-expectfile-stages-print-.md:46-54` requires every configured executor to satisfy expectFile; the final Design/Solution records the active seven-Pi/two-Antigravity/one-Claude/one-Grok matrix. @gobing-ai/ts-ai-runner `packages/ai-runner/src/agents/shims.ts` lines 106-120, 214-240, and 312-330 implement the three approval-bearing families; fresh source-runner probes byte-checked all four families. |
-| R2 | MET | The argv matrix and runner precedence tests passed 75/75. Fresh real source-runner dispatches wrote and byte-checked Claude, Grok, Pi, and Antigravity artifacts; the published 0.4.46 expectFile workflow run a554ecf6-b3af-4b0e-abc3-5548d57960f7 also completed with agent.run ok=1 and exact B-OK-0689 output. |
+| R1 | MET | The final Design/Solution records the active seven-Pi/two-Antigravity/one-Claude/one-Grok matrix. @gobing-ai/ts-ai-runner implements the approval-bearing families; the 0.4.48 installed-package matrix byte-checked every currently eligible configured executor. |
+| R2 | MET | The argv matrix and runner precedence tests passed 75/75. Real dispatches wrote and byte-checked Claude, Grok, Pi, and Antigravity artifacts; task 0718 repeated this against the npm-installed 0.4.48 package for all ten currently eligible configured executors. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | Scenario 1 — every agy print-mode argv carries the permission affordance | MET | test | The source argv matrix produced the exact frozen arrays for fresh, sessionDir, sessionId+sessionDir, and continue paths; ts-libs full gate passed 2056 tests including the matrix. |
 | Scenario 2 — an expectFile stage driven by an agy executor now passes | MET | command | With write_file(**) absent from operator permissions, source-local workflow run a554ecf6-b3af-4b0e-abc3-5548d57960f7 reached done; action_runs records agy-opus, --mode accept-edits, --add-dir, exitCode 0, ok=1, and .spur/run/0689-verify-probe.txt contains exactly B-OK-0689 newline. |
-| Scenario 3 — the fix ships as a released dependency | MET | command | `package.json:31-39` and `:96-108` pin the lockstep 0.4.46 family; installed package version is 0.4.46 and realpath resolves under node_modules/.bun rather than ~/xprojects/ts-libs. @gobing-ai/ts-libs `CHANGELOG.md` lines 11-18 names the symptom and --mode accept-edits fix. |
-| Scenario 4 [docs-only] — the operator-local remedy is documented as not-the-fix | MET | static-ref | `plugins/sp/skills/dogfood-testing/SKILL.md:623-629` calls write_file(**) an operator-local unblock, says it masks regressions, and assigns the fix to the executor shim. |
+| Scenario 3 — the fix ships as a released dependency | MET | command | The original 0.4.46 claim covered only Antigravity and was insufficient for the full matrix; 0.4.47 still failed current Claude Write dispatch. @gobing-ai/ts-libs commits `9cfa1fb` and `c3c3310` published 0.4.48 with `--allowedTools Write Edit`; Spur installs the lockstep 0.4.48 family from npm and all ten currently eligible executors pass real write/readback. |
+| Scenario 4 [docs-only] — the operator-local remedy is documented as not-the-fix | MET | static-ref | `plugins/sp/skills/dogfood-testing/SKILL.md` calls write_file(**) an operator-local unblock, says it masks regressions, and assigns the fix to the executor shim. |
 | Checklist — ts-libs bun run check | MET | command | Fresh bun run spur-check: 2056 pass, 0 fail, all 50 rules, 99.37% functions and 99.26% lines; fresh full build passed all packages. |
-| Checklist — Spur full gate | MET | command | Fresh bun run autofix && bun run spur-check: 6658 pass, 0 fail, all 44 pre-check and 2 post-check rules passed; test-cf and build also exited 0. |
-| Checklist — intentional git status | MET | command | Both repositories contain only disclosed 0687/0689 work: Spur selector diagnostics and task records; ts-libs headless write policy, timeout/workspace corrections, tests, and changelog. Probe files are ignored under .spur/run. |
+| Checklist — Spur full gate | MET | command | Fresh task-0718 reverify: `bun run spur-check` passed 6780 tests with 0 failures, all 44 pre-check and 2 post-check rules; test-cf and build also exited 0. |
+| Checklist — intentional git status | MET | command | Upstream ts-libs release tree is clean; Spur changes are limited to the 0.4.48 dependency upgrade and CLI-owned task evidence reconciliation. Probe files are ignored under .spur/run. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 
