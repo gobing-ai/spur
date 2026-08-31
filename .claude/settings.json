@@ -11,13 +11,13 @@
     "filesystem": {
       "allowWrite": [
         ".git/hooks",
+        "config/",
         "~/xprojects/ts-libs",
         "~/.omp",
         "~/tools/dot_files/config/omp",
         "~/tools/dot_files/config/pi",
         "~/tools/dot_files/config/grok",
         "~/tools/dot_files/config/codex",
-        ".spur/workflows/",
         "~/.pi",
         "~/.grok",
         "~/.gemini",
