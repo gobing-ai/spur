@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.3.70] - 2026-08-31
+
+### Added
+
+- feat(history): guard unsafe pi imports, gate evidence channels and verify answers (e2142f7c9)
+- feat(history): mark feature E81 as done after verified batch run (ec7600194)
+- feat(history): add Tool Using tab sequence view and inspection drawer (0724, 0725) (2d0e1e235)
+- feat(history): plan Tool Using tab sequence view and decompose tasks 0724-0725 (881701155)
+- feat(history): add 1h/4h time range presets with 4h default (6cc2c9520)
+- feat(history): add 'spur history reset' to wipe history_* tables for re-import cycles (914f0e464)
+- feat(history): recover task attribution from imported agent sessions (0722, run 1 — verify FAIL) (fad7ef5b6)
+- feat(verdict): fail closed on hollow MET evidence in task-verdict derivation (0721) (054b038f0)
+
+### Fixed
+
+- fix(web): color history heatmap by sessions when source reports no tokens (26b39afc1)
+- fix(db): raise SQLite busy_timeout to 30s for daemon/CLI contention (70d629a3a)
+- fix(domain): take no write lock when cli migrations are already journaled (b4974c6a3)
+- fix(app): honor explicit check severity when rendering review P-levels (09e0bc06a)
+- fix(history): keep tool-sequence token shares exact and round at render only (e2f689b73)
+- fix(web): typecheck-safe holder for HistoryFilters range test state (49763ba74)
+- fix(history): source-local CLI spelling and full-mode reconcile in task attribution (50543ff00)
+- fix(history): first-party evidence rule for task attribution (0722, run 2) (7bba3c262)
+
+### Changed
+
+- chore(deps): bump @gobing-ai/ts-* to 0.4.49 (a11c400e5)
+- chore(project): adjust the sanbox permission (851909d40)
+- chore(corpus): regenerate the corpus baseline snapshot (9797ffeac)
+
+### Other
+
+- docs(task): add new tasks (9dbae0f69)
+- docs(task): refine 0726 to implement-ready and activate F91 (ef2b2b112)
+- docs(task): refresh 0722 attribution evidence against the current tree (dcfd2408b)
+- docs(tasks): capture 0722 session findings in 0726 and flip completed 0722 plan boxes (360a753a7)
+- docs(history): name index.ts prefilter arm; file 0726 from session review triage (e10678415)
+- docs(task): refresh 0721 verdict evidence and align guard docblock (c9d51aa38)
+- docs(history): record 0724/0725 verify PASS and mark Tool Using tab built (6595a7a37)
+- docs(task): record 0722 run-3 verify PASS and close (991 links, R1-R10 MET) (e242077f8)
+- docs(task): refresh 0723's Review after the scope split and 0.3.69 release (934cb61c9)
+
 ## [0.3.69] - 2026-08-30
 
 ### Added
