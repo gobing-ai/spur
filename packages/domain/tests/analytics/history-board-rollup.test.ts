@@ -894,7 +894,10 @@ describe('historyBoardSourcesFromRollup', () => {
     test('returns source cards, a bounded daily window, and database bytes', async () => {
         const db = await setup();
         await seedCorpusAndRefresh(db);
-        const { sources, daily, databaseBytes } = await historyBoardSourcesFromRollup(db, 90);
+        // Seed days are pinned at 2026-06-01; a 90-day now-anchored window scrolls past them as
+        // the calendar advances (this broke on 2026-08-31). Bounding itself is covered by the
+        // 0-day test below, so use a century-wide window to keep this test clock-independent.
+        const { sources, daily, databaseBytes } = await historyBoardSourcesFromRollup(db, 36500);
         expect(sources).toHaveLength(1);
         expect(sources[0]).toMatchObject({
             source: 'claude',
