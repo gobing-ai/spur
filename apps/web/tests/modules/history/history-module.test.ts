@@ -25,9 +25,9 @@ describe('History Board Web Module', () => {
         expect(historyModule.component).toBeDefined();
     });
 
-    test('HISTORY_TABS declares exactly the 5 append-only tabs', () => {
+    test('HISTORY_TABS declares exactly the 6 append-only tabs', () => {
         const tabIds = HISTORY_TABS.map((t: HistoryTab) => t.id);
-        expect(tabIds).toEqual(['summary', 'timeline', 'sessions', 'insights', 'sources']);
+        expect(tabIds).toEqual(['summary', 'timeline', 'tool-using', 'sessions', 'insights', 'sources']);
     });
 
     test('resolveAutoBucket maps time range to bucket granularity', () => {

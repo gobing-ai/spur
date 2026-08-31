@@ -47,6 +47,28 @@ describe('history handlers', () => {
         expect(result.data.scope.sessionId).toBeDefined();
     });
 
+    test('getToolSequence handler returns ok:true with tool sequence data', async () => {
+        const service = new MockHistoryBoardService();
+        const sessions = await service.getSessions({ page: 1, pageSize: 1 });
+        const item = sessions.items[0];
+        expect(item).toBeDefined();
+        const ctx = { historyBoardService: () => service } as unknown as ServerContext;
+        const handlers = createHistoryHandlers(ctx);
+        const handler = (
+            handlers.getToolSequence as unknown as { '~orpc': { handler: (arg: unknown) => Promise<unknown> } }
+        )['~orpc'].handler;
+        const result = (await handler({
+            input: { mode: 'session', source: item?.source ?? 'claude', sessionId: item?.id ?? 'sess-1' },
+        })) as {
+            ok: boolean;
+            data: { scope: { totalCalls: number }; items: unknown[] };
+        };
+
+        expect(result.ok).toBe(true);
+        expect(result.data.items).toBeDefined();
+        expect(result.data.scope.totalCalls).toBeGreaterThan(0);
+    });
+
     test('getSessions handler returns ok:true with session list', async () => {
         const ctx = makeCtx();
         const handlers = createHistoryHandlers(ctx);

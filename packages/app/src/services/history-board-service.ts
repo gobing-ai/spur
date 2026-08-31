@@ -17,6 +17,10 @@ import type {
     HistoryTimelineResponse,
     HistoryTimelineScope,
     HistoryTimeSeriesPoint,
+    HistoryToolCallItem,
+    HistoryToolCategory,
+    HistoryToolSequenceInput,
+    HistoryToolSequenceResponse,
     HistoryTopItem,
     HistoryTriggerImportResponse,
 } from '@gobing-ai/spur-contracts';
@@ -53,7 +57,9 @@ import {
     sessionTimeline,
     sourceSummary,
     type TimelineQueryResult,
+    type ToolSequenceFilters,
     toolRollup,
+    toolSequenceQuery,
     topCacheWasteSteps,
     topStepsByDuration,
     topStepsByTokens,
@@ -514,6 +520,19 @@ function projectSources(
 }
 
 /**
+ * Map a tool name to a standardized forensic tool category using substring precedence matching.
+ */
+export function toolCategory(toolName: string): HistoryToolCategory {
+    const lower = toolName.toLowerCase();
+    if (/mcp|task|agent|subagent|skill/.test(lower)) return 'mcp';
+    if (/grep|glob|search|find|webfetch|websearch/.test(lower)) return 'search';
+    if (/write|edit|patch|apply|notebook/.test(lower)) return 'write';
+    if (/read|cat|view|open/.test(lower)) return 'read';
+    if (/bash|shell|exec|run|command|terminal/.test(lower)) return 'bash';
+    return 'other';
+}
+
+/**
  * Live database-backed implementation of HistoryBoardService.
  */
 export class LiveHistoryBoardService implements HistoryBoardService {
@@ -885,6 +904,194 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             scope,
             truncated: queryResult.truncated,
             blocks: sortedBlocks,
+        };
+    }
+
+    /**
+     * Map a tool name to a standardized forensic tool category using substring precedence matching.
+     */
+    static toolCategory(toolName: string): HistoryToolCategory {
+        const lower = toolName.toLowerCase();
+        if (/mcp|task|agent|subagent|skill/.test(lower)) return 'mcp';
+        if (/grep|glob|search|find|webfetch|websearch/.test(lower)) return 'search';
+        if (/write|edit|patch|apply|notebook/.test(lower)) return 'write';
+        if (/read|cat|view|open/.test(lower)) return 'read';
+        if (/bash|shell|exec|run|command|terminal/.test(lower)) return 'bash';
+        return 'other';
+    }
+
+    async getToolSequence(input: HistoryToolSequenceInput): Promise<HistoryToolSequenceResponse['data']> {
+        const db = await this.resolveDb();
+        if (!db) {
+            return {
+                mode: input.mode,
+                scope: {
+                    sessionId: input.mode === 'session' ? input.sessionId : null,
+                    source: input.mode === 'session' ? input.source : null,
+                    model: null,
+                    start: null,
+                    end: null,
+                    totalCalls: 0,
+                    uniqueTools: 0,
+                    errorCount: 0,
+                    errorRate: 0,
+                    totalDurationMs: 0,
+                    meanDurationMs: 0,
+                    durationUnmeasured: 0,
+                    sessionCount: 0,
+                    tokens: {
+                        billedTokens: 0,
+                        cacheSavedTokens: 0,
+                        cacheReadTokens: 0,
+                        freshInputTokens: 0,
+                        outputTokens: 0,
+                    },
+                },
+                truncated: false,
+                items: [],
+            };
+        }
+
+        let scope:
+            | { mode: 'session'; source: string; sessionId: string }
+            | { mode: 'consolidated'; sel: ArtifactSelector };
+        if (input.mode === 'session') {
+            if (input.sessionId === '' || input.sessionId === 'unknown' || input.sessionId === 'session') {
+                throw new Error(`History session not found: ${input.sessionId || '(empty)'}`);
+            }
+            if (input.source === '' || input.source === 'unknown') {
+                throw new Error(`History source not found: ${input.source || '(empty)'}`);
+            }
+            scope = { mode: 'session', source: input.source, sessionId: input.sessionId };
+        } else {
+            const sel = toArtifactSelector(input.filter);
+            scope = { mode: 'consolidated', sel };
+        }
+
+        const filters: ToolSequenceFilters = {
+            toolNames: input.toolNames,
+            status: input.status,
+            search: input.search,
+        };
+
+        const queryResult = await toolSequenceQuery(db, scope, filters, 5000);
+        const rows = queryResult.rows;
+
+        let totalDurationMs = 0;
+        let measuredCount = 0;
+        let unmeasuredCount = 0;
+        let errorCount = 0;
+        const uniqueToolsSet = new Set<string>();
+        const sessionsSet = new Set<string>();
+        let freshTokensTotal = 0;
+        let cacheReadTokensTotal = 0;
+        let outputTokensTotal = 0;
+        let firstTs: string | null = null;
+        let lastTs: string | null = null;
+        let commonModel: string | null = null;
+        let modelMixed = false;
+
+        const items: HistoryToolCallItem[] = rows.map((row, index) => {
+            const category = toolCategory(row.toolName);
+            uniqueToolsSet.add(row.toolName);
+            sessionsSet.add(row.sessionId);
+
+            if (index === 0) {
+                firstTs = row.ts;
+                commonModel = row.model;
+            } else {
+                if (row.model !== commonModel) {
+                    modelMixed = true;
+                }
+            }
+            if (row.ts) {
+                lastTs = row.ts;
+            }
+
+            const isError = row.status === 'error';
+            if (isError) {
+                errorCount++;
+            }
+
+            let durationSource: HistoryToolCallItem['durationSource'] = 'unmeasured';
+            if (row.durationMs != null && row.durationMs > 0) {
+                durationSource = 'measured';
+                totalDurationMs += row.durationMs;
+                measuredCount++;
+            } else {
+                unmeasuredCount++;
+            }
+
+            // Token split across links
+            const linkCount = Math.max(row.links, 1);
+            const fresh = Math.round((row.inputTokens ?? 0) / linkCount);
+            const cacheRead = Math.round((row.cacheReadTokens ?? 0) / linkCount);
+            const output = Math.round((row.outputTokens ?? 0) / linkCount);
+            const billed = fresh + output;
+            const cacheSaved = cacheRead;
+
+            freshTokensTotal += fresh;
+            cacheReadTokensTotal += cacheRead;
+            outputTokensTotal += output;
+
+            return {
+                seq: index + 1,
+                toolSeq: row.toolSeq,
+                ts: row.ts,
+                toolName: row.toolName,
+                category,
+                status: row.status === 'ok' || row.status === 'error' ? row.status : 'unknown',
+                durationMs: durationSource === 'measured' ? row.durationMs : null,
+                durationSource,
+                resultBytes: row.resultBytes,
+                argsRaw: row.argsRaw,
+                argsDigest: row.argsDigest,
+                errorText: row.errorText,
+                callId: row.callId,
+                messageHash: row.messageHash,
+                sessionId: row.sessionId,
+                source: row.source,
+                model: row.model,
+                tokens: {
+                    billedTokens: billed,
+                    cacheSavedTokens: cacheSaved,
+                    cacheReadTokens: cacheRead,
+                    freshInputTokens: fresh,
+                    outputTokens: output,
+                },
+            };
+        });
+
+        const totalCalls = rows.length;
+        const errorRate = totalCalls > 0 ? Math.round((errorCount / totalCalls) * 1000) / 1000 : 0;
+        const meanDurationMs = measuredCount > 0 ? Math.round(totalDurationMs / measuredCount) : 0;
+
+        return {
+            mode: input.mode,
+            scope: {
+                sessionId: input.mode === 'session' ? input.sessionId : null,
+                source: input.mode === 'session' ? input.source : null,
+                model: modelMixed ? null : commonModel,
+                start: firstTs,
+                end: lastTs,
+                totalCalls,
+                uniqueTools: uniqueToolsSet.size,
+                errorCount,
+                errorRate,
+                totalDurationMs,
+                meanDurationMs,
+                durationUnmeasured: unmeasuredCount,
+                sessionCount: sessionsSet.size,
+                tokens: {
+                    billedTokens: freshTokensTotal + outputTokensTotal,
+                    cacheSavedTokens: cacheReadTokensTotal,
+                    cacheReadTokens: cacheReadTokensTotal,
+                    freshInputTokens: freshTokensTotal,
+                    outputTokens: outputTokensTotal,
+                },
+            },
+            truncated: queryResult.truncated,
+            items,
         };
     }
 

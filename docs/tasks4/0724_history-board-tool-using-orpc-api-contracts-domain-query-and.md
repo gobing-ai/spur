@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "History Board Tool Using: oRPC API contracts, domain query, and service implementation"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-08-31T11:53:19.122Z
-updated_at: "2026-08-31T11:59:14.321Z"
+updated_at: "2026-08-31T12:13:00.000Z"
 feature_id: E81
 priority: P2
 tags: ["history", "backend", "contracts", "domain"]
@@ -17,12 +17,12 @@ tags: ["history", "backend", "contracts", "domain"]
 Feature E81 adds a dedicated 'Tool Using' tab to the History board module. This task delivers the backend data plane: extending packages/contracts with getToolSequence schemas and oRPC contract, implementing domain SQL queries over history_tool_call JOIN history_message in packages/domain, implementing LiveHistoryBoardService and mock service methods in packages/app, and mounting oRPC route handlers in apps/server.
 
 ### Requirements
-- [ ] R1. Define `historyToolCategoryEnum`, `historyToolStatusFilterEnum`, `historyToolCallItemSchema`, `historyToolSequenceScopeSchema`, `historyToolSequenceInputSchema`, and `historyToolSequenceResponseSchema` in `packages/contracts/src/history.ts`, reusing the existing `historyFilterSchema`, `historyTokensSchema`, `historyDurationSourceEnum`, and `apiSuccessSchema` rather than redeclaring equivalents.
-- [ ] R2. Add a `getToolSequence` route to `historyContract` (`POST /history/tool-sequence`) whose output carries per-item token telemetry **derived by even split of the invoking message's tokens across its linked tool calls** — `history_tool_call` has no token columns, so no per-call token value may be invented, and the item shares must sum to the message totals without double-counting.
-- [ ] R3. Implement `toolSequenceQuery` in `packages/domain/src/analytics/forensic-query.ts` joining `history_tool_call` to `history_message` on `message_hash`, honouring the existing `request_id` message-dedup predicate, supporting session mode (`tc.source` + `tc.session_id`, index-covered) and consolidated mode (`ArtifactSelector` via `buildMessageWhere`), plus tool-name, status, and argument/error search filters, bounded by `LIMIT` with a `truncated` flag.
-- [ ] R4. Implement `getToolSequence` on the `HistoryBoardService` interface, `LiveHistoryBoardService`, and `MockHistoryBoardService` (`packages/app/src/services/history-board-{mock-,}service.ts`), with the raw-row → DTO projection (tool category derivation, token split, scope aggregation) living in the app layer, not in domain SQL and not in the web client.
-- [ ] R5. Mount the `getToolSequence` oRPC handler in `apps/server/src/modules/history/handlers.ts` following the existing `implement(contract)` delegation shape.
-- [ ] R6. Cover the new surface with tests: contract input/output schema validation, domain query filtering and boundedness against in-memory SQLite, token-split correctness (shares sum to message totals), NULL-duration handling (unmeasured is reported, never zero-filled or interpolated), and mock/live signature parity.
+- [x] R1. Define `historyToolCategoryEnum`, `historyToolStatusFilterEnum`, `historyToolCallItemSchema`, `historyToolSequenceScopeSchema`, `historyToolSequenceInputSchema`, and `historyToolSequenceResponseSchema` in `packages/contracts/src/history.ts`, reusing the existing `historyFilterSchema`, `historyTokensSchema`, `historyDurationSourceEnum`, and `apiSuccessSchema` rather than redeclaring equivalents.
+- [x] R2. Add a `getToolSequence` route to `historyContract` (`POST /history/tool-sequence`) whose output carries per-item token telemetry **derived by even split of the invoking message's tokens across its linked tool calls** — `history_tool_call` has no token columns, so no per-call token value may be invented, and the item shares must sum to the message totals without double-counting.
+- [x] R3. Implement `toolSequenceQuery` in `packages/domain/src/analytics/forensic-query.ts` joining `history_tool_call` to `history_message` on `message_hash`, honouring the existing `request_id` message-dedup predicate, supporting session mode (`tc.source` + `tc.session_id`, index-covered) and consolidated mode (`ArtifactSelector` via `buildMessageWhere`), plus tool-name, status, and argument/error search filters, bounded by `LIMIT` with a `truncated` flag.
+- [x] R4. Implement `getToolSequence` on the `HistoryBoardService` interface, `LiveHistoryBoardService`, and `MockHistoryBoardService` (`packages/app/src/services/history-board-{mock-,}service.ts`), with the raw-row → DTO projection (tool category derivation, token split, scope aggregation) living in the app layer, not in domain SQL and not in the web client.
+- [x] R5. Mount the `getToolSequence` oRPC handler in `apps/server/src/modules/history/handlers.ts` following the existing `implement(contract)` delegation shape.
+- [x] R6. Cover the new surface with tests: contract input/output schema validation, domain query filtering and boundedness against in-memory SQLite, token-split correctness (shares sum to message totals), NULL-duration handling (unmeasured is reported, never zero-filled or interpolated), and mock/live signature parity.
 ### Acceptance Criteria
 ```gherkin
 Feature: History Board Tool Using Tab: sequence visualization and investigation for history tool calls
@@ -333,15 +333,26 @@ It must not recompute categories, token shares, or scope aggregates client-side,
    hand-edit a baseline.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `packages/contracts/src/history.ts`: Defined `historyToolCategoryEnum`, `historyToolStatusFilterEnum`, `historyToolCallItemSchema`, `historyToolSequenceScopeSchema`, `historyToolSequenceInputSchema`, and `historyToolSequenceResponseSchema`. Mounted `getToolSequence` in `historyContract` as `POST /history/tool-sequence`.
+- `packages/domain/src/analytics/forensic-query.ts`: Added `ToolSequenceRow`, `ToolSequenceQueryResult`, `ToolSequenceFilters`, and `toolSequenceQuery` querying `history_tool_call` JOIN `history_message` with `request_id` dedup and selector-driven where builder.
+- `packages/domain/src/analytics/index.ts`: Re-exported `toolSequenceQuery` and its TypeScript types.
+- `packages/app/src/services/history-board-service.ts`: Added `toolCategory` helper (precedence-ordered substring classifier) and implemented `LiveHistoryBoardService.getToolSequence` computing exact token-split shares and aggregating scope metrics.
+- `packages/app/src/services/history-board-mock-service.ts`: Extended `HistoryBoardService` interface and implemented `MockHistoryBoardService.getToolSequence` with deterministic mock data generator and filtering.
+- `apps/server/src/modules/history/handlers.ts`: Mounted `getToolSequence` route handler delegating to `ctx.historyBoardService().getToolSequence(input)`.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `packages/contracts/tests/history-contract.test.ts`: Verified `contract.history.getToolSequence` mounting, session/consolidated input validation, enum bounds, and full envelope parsing.
+- `packages/domain/tests/analytics/forensic-query-history.test.ts`: Verified `toolSequenceQuery` in session mode, consolidated mode, filtering by toolName/status/search, request_id streaming dedup, limit boundedness and `truncated` flag.
+- `packages/app/tests/services/history-board-service.test.ts`: Verified `toolCategory` precedence (including MCP priority over verbs), token split equality across linked tools, NULL-duration unmeasured semantics, and empty DB handling.
+- `apps/server/tests/modules/history/handlers.test.ts`: Verified `getToolSequence` handler returns `ok: true` with valid envelope.
+- Full verification gate: `bun run spur-check` passed with 7029 pass, 0 fail, 0 rule violations.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+- P1–P4 Findings: None. Zero currency/cost fields exposed across contracts and services (R2 pure-token compliance).
+- Residual Risk: Low; query uses existing indexes on `(source, session_id)` and `(message_hash)`.
+- Final Disposition: Done; handoff ready for frontend task 0725.
 
 ### References
 - Parent feature: `docs/features/E81_history-board-tool-using-tab-sequence-visualization-and-investigation-for-history-tool-calls.md`

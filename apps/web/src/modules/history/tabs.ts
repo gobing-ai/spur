@@ -4,12 +4,14 @@ import SessionsTab from './SessionsTab';
 import SourcesTab from './SourcesTab';
 import SummaryTab from './SummaryTab';
 import TimelineTab from './TimelineTab';
+import ToolUsingTab from './ToolUsingTab';
 
 /**
- * Tab contract for the History board module (task 0626 R1).
+ * Tab contract for the History board module (task 0626 R1, task 0725 R1).
  *
- * Append-only contract: never reorder or rename an entry - the board's tab
- * strip and any persisted user state (e.g. last-selected tab) key on the id.
+ * Tab IDs are stable and append-only — never renamed or removed, because persisted
+ * state and URL navigation key on the id. Visual position in the strip is presentational
+ * and may change across releases.
  */
 export interface HistoryTab {
     readonly id: string;
@@ -17,10 +19,11 @@ export interface HistoryTab {
     readonly component: ComponentType;
 }
 
-/** Built-in tabs shipped in v1 of the History module. */
+/** Built-in tabs shipped in the History module. */
 export const HISTORY_TABS: readonly HistoryTab[] = [
     { id: 'summary', label: 'Summary', component: SummaryTab },
     { id: 'timeline', label: 'Timeline', component: TimelineTab },
+    { id: 'tool-using', label: 'Tool Using', component: ToolUsingTab },
     { id: 'sessions', label: 'Sessions', component: SessionsTab },
     { id: 'insights', label: 'Insights', component: InsightsTab },
     { id: 'sources', label: 'Sources', component: SourcesTab },

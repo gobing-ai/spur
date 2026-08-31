@@ -1474,3 +1474,128 @@ export async function historyKpiTrend(
         ...wm.params,
     );
 }
+
+/**
+ * Raw tool sequence query row joined from history_tool_call and history_message.
+ */
+export interface ToolSequenceRow {
+    toolSeq: number;
+    ts: string | null;
+    toolName: string;
+    status: string;
+    durationMs: number | null;
+    resultBytes: number | null;
+    argsRaw: string | null;
+    argsDigest: string | null;
+    errorText: string | null;
+    callId: string | null;
+    messageHash: string;
+    sessionId: string;
+    source: string;
+    model: string | null;
+    links: number;
+    inputTokens: number | null;
+    cacheReadTokens: number | null;
+    outputTokens: number | null;
+}
+
+/**
+ * Result of tool sequence query with truncation flag.
+ */
+export interface ToolSequenceQueryResult {
+    truncated: boolean;
+    rows: ToolSequenceRow[];
+}
+
+/**
+ * Filter options for tool sequence query.
+ */
+export interface ToolSequenceFilters {
+    toolNames?: string[];
+    status?: 'all' | 'ok' | 'error';
+    search?: string;
+}
+
+/**
+ * Ordered tool invocation sequence query joining history_tool_call and history_message.
+ */
+export async function toolSequenceQuery(
+    db: DbAdapter,
+    scope: { mode: 'session'; source: string; sessionId: string } | { mode: 'consolidated'; sel: ArtifactSelector },
+    filters: ToolSequenceFilters = {},
+    limit = 5000,
+): Promise<ToolSequenceQueryResult> {
+    const fetchLimit = limit + 1;
+    const params: unknown[] = [];
+    const clauses: string[] = [];
+
+    if (scope.mode === 'session') {
+        clauses.push('tc.source = ? AND tc.session_id = ?');
+        params.push(scope.source, scope.sessionId);
+    } else {
+        const { where, params: selParams } = buildMessageWhere(scope.sel, 'm');
+        if (where !== '') {
+            clauses.push(where.startsWith('WHERE ') ? where.slice(6) : where);
+            params.push(...selParams);
+        }
+    }
+
+    if (filters.toolNames && filters.toolNames.length > 0) {
+        const placeholders = filters.toolNames.map(() => '?').join(', ');
+        clauses.push(`tc.tool_name IN (${placeholders})`);
+        params.push(...filters.toolNames);
+    }
+
+    if (filters.status && filters.status !== 'all') {
+        clauses.push('tc.status = ?');
+        params.push(filters.status);
+    }
+
+    if (filters.search && filters.search.trim().length > 0) {
+        const searchPattern = `%${escapeLike(filters.search.trim())}%`;
+        clauses.push(
+            "(tc.args_raw LIKE ? ESCAPE '!' OR tc.error_text LIKE ? ESCAPE '!' OR tc.tool_name LIKE ? ESCAPE '!')",
+        );
+        params.push(searchPattern, searchPattern, searchPattern);
+    }
+
+    const whereCombined = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    const folded = withMessageDedup(whereCombined);
+
+    params.push(fetchLimit);
+
+    const rows = await db.queryAll<ToolSequenceRow>(
+        `SELECT tc.seq AS toolSeq,
+                COALESCE(tc.started_at, m.ts) AS ts,
+                tc.tool_name AS toolName,
+                tc.status AS status,
+                tc.duration_ms AS durationMs,
+                tc.result_bytes AS resultBytes,
+                tc.args_raw AS argsRaw,
+                tc.args_digest AS argsDigest,
+                tc.error_text AS errorText,
+                tc.call_id AS callId,
+                tc.message_hash AS messageHash,
+                tc.session_id AS sessionId,
+                tc.source AS source,
+                m.model AS model,
+                (SELECT COUNT(*) FROM history_tool_call l WHERE l.message_hash = m.record_hash) AS links,
+                m.input_tokens AS inputTokens,
+                m.cache_read_tokens AS cacheReadTokens,
+                m.output_tokens AS outputTokens
+         FROM history_tool_call tc
+         JOIN history_message m ON m.record_hash = tc.message_hash
+         ${folded}
+         ORDER BY COALESCE(tc.started_at, m.ts), tc.source, tc.session_id, tc.seq
+         LIMIT ?`,
+        ...params,
+    );
+
+    const truncated = rows.length > limit;
+    const finalRows = truncated ? rows.slice(0, limit) : rows;
+
+    return {
+        truncated,
+        rows: finalRows,
+    };
+}

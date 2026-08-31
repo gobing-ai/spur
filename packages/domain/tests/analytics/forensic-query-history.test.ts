@@ -8,6 +8,7 @@ import {
     historyKpiTrend,
     modelComparison,
     sessionTimeline,
+    toolSequenceQuery,
 } from '../../src/analytics/forensic-query';
 
 import { applyCliMigrations, CLI_SCHEMA_SQL, HISTORY_BOARD_QUERY_INDEXES_SCHEMA_SQL } from '../../src/migrations';
@@ -1028,5 +1029,128 @@ describe('forensic-query history live extensions (task 0628)', () => {
             taskWbs: null,
         });
         expect(resAll.events.length).toBeGreaterThanOrEqual(3);
+    });
+});
+
+describe('toolSequenceQuery', () => {
+    test('retrieves ordered tool calls for session and respects filters, dedup, and bounds', async () => {
+        const db = await setup();
+        // Insert message and tools
+        await insertMessage(db, {
+            record_hash: 'msg-tool-1',
+            session_id: 's-tool-seq',
+            seq: 1,
+            role: 'assistant',
+            record_type: 'assistant',
+            disposition: 'executed',
+            ts: '2026-08-31T01:00:00Z',
+            model: 'claude-opus-4.6',
+            input: 1000,
+            cache_read: 2000,
+            output: 500,
+            request_id: 'req-1',
+        });
+
+        // Insert duplicate message row with same request_id (streaming duplicate simulation)
+        await insertMessage(db, {
+            record_hash: 'msg-tool-1-dup',
+            session_id: 's-tool-seq',
+            seq: 2,
+            role: 'assistant',
+            record_type: 'assistant',
+            disposition: 'executed',
+            ts: '2026-08-31T01:00:05Z',
+            model: 'claude-opus-4.6',
+            input: 1000,
+            cache_read: 2000,
+            output: 500,
+            request_id: 'req-1',
+        });
+
+        await insertToolCall(db, {
+            record_hash: 'tc-1',
+            message_hash: 'msg-tool-1-dup',
+            session_id: 's-tool-seq',
+            seq: 1,
+            tool_name: 'Read',
+            args_digest: 'src/index.ts',
+            args_raw: '{"file":"src/index.ts"}',
+            status: 'ok',
+            duration_ms: 250,
+        });
+
+        await insertToolCall(db, {
+            record_hash: 'tc-2',
+            message_hash: 'msg-tool-1-dup',
+            session_id: 's-tool-seq',
+            seq: 2,
+            tool_name: 'Bash',
+            args_digest: 'bun test',
+            args_raw: '{"cmd":"bun test"}',
+            status: 'error',
+            duration_ms: null,
+        });
+
+        // 1. Session query
+        const sessionRes = await toolSequenceQuery(db, {
+            mode: 'session',
+            source: 'claude',
+            sessionId: 's-tool-seq',
+        });
+        expect(sessionRes.truncated).toBe(false);
+        expect(sessionRes.rows.length).toBe(2);
+        expect(sessionRes.rows[0]?.toolName).toBe('Read');
+        expect(sessionRes.rows[0]?.durationMs).toBe(250);
+        expect(sessionRes.rows[0]?.links).toBe(2);
+        expect(sessionRes.rows[1]?.toolName).toBe('Bash');
+        expect(sessionRes.rows[1]?.status).toBe('error');
+        expect(sessionRes.rows[1]?.durationMs).toBeNull();
+
+        // 2. Tool name filter
+        const toolNameRes = await toolSequenceQuery(
+            db,
+            { mode: 'session', source: 'claude', sessionId: 's-tool-seq' },
+            { toolNames: ['Read'] },
+        );
+        expect(toolNameRes.rows.length).toBe(1);
+        expect(toolNameRes.rows[0]?.toolName).toBe('Read');
+
+        // 3. Status filter
+        const errorRes = await toolSequenceQuery(
+            db,
+            { mode: 'session', source: 'claude', sessionId: 's-tool-seq' },
+            { status: 'error' },
+        );
+        expect(errorRes.rows.length).toBe(1);
+        expect(errorRes.rows[0]?.toolName).toBe('Bash');
+
+        // 4. Search filter (matching args_raw)
+        const searchRes = await toolSequenceQuery(
+            db,
+            { mode: 'session', source: 'claude', sessionId: 's-tool-seq' },
+            { search: 'bun test' },
+        );
+        expect(searchRes.rows.length).toBe(1);
+        expect(searchRes.rows[0]?.toolName).toBe('Bash');
+
+        // 5. Consolidated mode with limit & truncation
+        const boundRes = await toolSequenceQuery(
+            db,
+            {
+                mode: 'consolidated',
+                sel: {
+                    since: null,
+                    until: null,
+                    sources: null,
+                    sessionId: null,
+                    runId: null,
+                    taskWbs: null,
+                },
+            },
+            {},
+            1,
+        );
+        expect(boundRes.truncated).toBe(true);
+        expect(boundRes.rows.length).toBe(1);
     });
 });

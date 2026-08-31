@@ -13,19 +13,121 @@ import {
     historyTimelineInputSchema,
     historyTimelineResponseSchema,
     historyTokensSchema,
+    historyToolCategoryEnum,
+    historyToolSequenceInputSchema,
+    historyToolSequenceResponseSchema,
+    historyToolStatusFilterEnum,
     historyTriggerImportInputSchema,
     historyTriggerImportResponseSchema,
 } from '../src';
 
 describe('historyContract', () => {
-    test('historyContract is mounted under contract.history with all 6 procedures', () => {
+    test('historyContract is mounted under contract.history with all 7 procedures', () => {
         expect(contract.history).toBeDefined();
         expect(contract.history.getSummary).toBe(historyContract.getSummary);
         expect(contract.history.getTimeline).toBe(historyContract.getTimeline);
+        expect(contract.history.getToolSequence).toBe(historyContract.getToolSequence);
         expect(contract.history.getSessions).toBe(historyContract.getSessions);
         expect(contract.history.getInsights).toBe(historyContract.getInsights);
         expect(contract.history.getSources).toBe(historyContract.getSources);
         expect(contract.history.triggerImport).toBe(historyContract.triggerImport);
+    });
+
+    test('getToolSequence is POST and validates input and response schemas', () => {
+        const route = (historyContract.getToolSequence as unknown as Record<string, unknown>)['~orpc'] as {
+            route: { method: string; path: string };
+        };
+        expect(route.route).toMatchObject({ method: 'POST', path: '/history/tool-sequence' });
+
+        // Session mode input
+        const sessionInput = historyToolSequenceInputSchema.parse({
+            mode: 'session',
+            source: 'claude',
+            sessionId: 'sess-1',
+            toolNames: ['Read', 'Write'],
+        });
+        expect(sessionInput).toMatchObject({
+            mode: 'session',
+            source: 'claude',
+            sessionId: 'sess-1',
+            toolNames: ['Read', 'Write'],
+            status: 'all',
+        });
+
+        // Consolidated mode input
+        const consolidatedInput = historyToolSequenceInputSchema.parse({
+            mode: 'consolidated',
+            status: 'error',
+            search: 'error text',
+        });
+        expect(consolidatedInput).toMatchObject({
+            mode: 'consolidated',
+            status: 'error',
+            search: 'error text',
+        });
+
+        // Response envelope validation
+        const validResp = historyToolSequenceResponseSchema.parse({
+            ok: true,
+            data: {
+                mode: 'session',
+                scope: {
+                    sessionId: 'sess-1',
+                    source: 'claude',
+                    model: 'claude-opus-4.6',
+                    start: '2026-08-31T00:00:00.000Z',
+                    end: '2026-08-31T00:01:00.000Z',
+                    totalCalls: 1,
+                    uniqueTools: 1,
+                    errorCount: 0,
+                    errorRate: 0,
+                    totalDurationMs: 350,
+                    meanDurationMs: 350,
+                    durationUnmeasured: 0,
+                    sessionCount: 1,
+                    tokens: {
+                        billedTokens: 500,
+                        cacheSavedTokens: 400,
+                        cacheReadTokens: 400,
+                        freshInputTokens: 100,
+                        outputTokens: 400,
+                    },
+                },
+                truncated: false,
+                items: [
+                    {
+                        seq: 1,
+                        toolSeq: 1,
+                        ts: '2026-08-31T00:00:00.000Z',
+                        toolName: 'Read',
+                        category: 'read',
+                        status: 'ok',
+                        durationMs: 350,
+                        durationSource: 'measured',
+                        resultBytes: 2048,
+                        argsRaw: '{"file":"src/index.ts"}',
+                        argsDigest: 'src/index.ts',
+                        errorText: null,
+                        callId: 'call-1',
+                        messageHash: 'hash-1',
+                        sessionId: 'sess-1',
+                        source: 'claude',
+                        model: 'claude-opus-4.6',
+                        tokens: {
+                            billedTokens: 500,
+                            cacheSavedTokens: 400,
+                            cacheReadTokens: 400,
+                            freshInputTokens: 100,
+                            outputTokens: 400,
+                        },
+                    },
+                ],
+            },
+        });
+        expect(validResp.ok).toBe(true);
+        expect(validResp.data.items[0]?.category).toBe('read');
+        expect(historyToolCategoryEnum.options).toContain('read');
+        expect(historyToolStatusFilterEnum.options).toContain('ok');
     });
 
     test('timeline is POST and requires source-safe session or composable consolidated input', () => {

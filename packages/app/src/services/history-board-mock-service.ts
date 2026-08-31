@@ -8,6 +8,10 @@ import type {
     HistorySummaryResponse,
     HistoryTimelineInput,
     HistoryTimelineResponse,
+    HistoryToolCallItem,
+    HistoryToolCategory,
+    HistoryToolSequenceInput,
+    HistoryToolSequenceResponse,
     HistoryTriggerImportResponse,
 } from '@gobing-ai/spur-contracts';
 
@@ -17,6 +21,7 @@ import type {
 export interface HistoryBoardService {
     getSummary(filter?: HistoryFilter): Promise<HistorySummaryResponse['data']>;
     getTimeline(input: HistoryTimelineInput): Promise<HistoryTimelineResponse['data']>;
+    getToolSequence(input: HistoryToolSequenceInput): Promise<HistoryToolSequenceResponse['data']>;
     getSessions(input: HistorySessionsInput): Promise<HistorySessionsResponse['data']>;
     getInsights(filter?: HistoryFilter): Promise<HistoryInsightsResponse['data']>;
     getSources(): Promise<HistorySourcesResponse['data']>;
@@ -979,6 +984,152 @@ export class MockHistoryBoardService implements HistoryBoardService {
             runId: `run-${Date.now().toString(16)}`,
             status: 'queued',
             message: `Mock import completed in ${mode} mode: 9 sources checked, 0 new transcripts found.`,
+        };
+    }
+
+    async getToolSequence(input: HistoryToolSequenceInput): Promise<HistoryToolSequenceResponse['data']> {
+        const sessions =
+            input.mode === 'session'
+                ? this.sessions.filter((s) => s.id === input.sessionId)
+                : this.filterSessions(input.filter);
+
+        if (input.mode === 'session' && sessions.length === 0) {
+            throw new Error(`History session not found: ${input.sessionId}`);
+        }
+
+        const rawItems: HistoryToolCallItem[] = [];
+        let globalSeq = 1;
+
+        const defaultMockTools = [
+            { name: 'Glob', cat: 'search' as HistoryToolCategory, dur: 120, args: '{"pattern":"**/*.ts"}' },
+            { name: 'Read', cat: 'read' as HistoryToolCategory, dur: 450, args: '{"file":"src/index.ts"}' },
+            { name: 'Write', cat: 'write' as HistoryToolCategory, dur: 310, args: '{"file":"src/test.ts"}' },
+            { name: 'RunCommand', cat: 'bash' as HistoryToolCategory, dur: 1200, args: '{"cmd":"bun test"}' },
+            { name: 'mcp__context__search', cat: 'mcp' as HistoryToolCategory, dur: 280, args: '{"q":"history"}' },
+        ];
+
+        for (const session of sessions) {
+            let toolSeq = 1;
+            for (const [toolName, count] of Object.entries(session.toolMix)) {
+                for (let i = 0; i < count; i++) {
+                    const preset = defaultMockTools.find((t) => t.name === toolName) ?? {
+                        name: toolName,
+                        cat: 'other' as HistoryToolCategory,
+                        dur: 250,
+                        args: `{"action":"${toolName}"}`,
+                    };
+                    const isError = i === 0 && session.errors > 0;
+                    rawItems.push({
+                        seq: globalSeq++,
+                        toolSeq: toolSeq++,
+                        ts: new Date(session.start + toolSeq * 1000).toISOString(),
+                        toolName: preset.name,
+                        category: preset.cat,
+                        status: isError ? 'error' : 'ok',
+                        durationMs: preset.dur,
+                        durationSource: 'measured',
+                        resultBytes: 1024,
+                        argsRaw: preset.args,
+                        argsDigest: `args(${preset.name})`,
+                        errorText: isError ? `Tool execution failed: ${toolName} error` : null,
+                        callId: `call-${globalSeq}`,
+                        messageHash: `hash-${session.id}-${toolSeq}`,
+                        sessionId: session.id,
+                        source: session.source,
+                        model: session.model,
+                        tokens: {
+                            billedTokens: 500,
+                            cacheSavedTokens: 400,
+                            cacheReadTokens: 400,
+                            freshInputTokens: 100,
+                            outputTokens: 400,
+                        },
+                    });
+                }
+            }
+        }
+
+        // Filter
+        let filtered = rawItems;
+        if (input.toolNames && input.toolNames.length > 0) {
+            const set = new Set(input.toolNames);
+            filtered = filtered.filter((item) => set.has(item.toolName));
+        }
+        if (input.status && input.status !== 'all') {
+            filtered = filtered.filter((item) => item.status === input.status);
+        }
+        if (input.search && input.search.trim().length > 0) {
+            const q = input.search.trim().toLowerCase();
+            filtered = filtered.filter(
+                (item) =>
+                    item.toolName.toLowerCase().includes(q) ||
+                    (item.argsRaw?.toLowerCase().includes(q) ?? false) ||
+                    (item.errorText?.toLowerCase().includes(q) ?? false),
+            );
+        }
+
+        // Re-index sequence
+        const items = filtered.map((item, idx) => ({ ...item, seq: idx + 1 }));
+
+        let totalDurationMs = 0;
+        let measuredCount = 0;
+        let unmeasuredCount = 0;
+        let errorCount = 0;
+        const uniqueToolsSet = new Set<string>();
+        const sessionsSet = new Set<string>();
+        let billedTokensTotal = 0;
+        let cacheSavedTokensTotal = 0;
+        let cacheReadTokensTotal = 0;
+        let freshInputTokensTotal = 0;
+        let outputTokensTotal = 0;
+
+        for (const item of items) {
+            uniqueToolsSet.add(item.toolName);
+            sessionsSet.add(item.sessionId);
+            if (item.status === 'error') errorCount++;
+            if (item.durationMs != null && item.durationMs > 0) {
+                totalDurationMs += item.durationMs;
+                measuredCount++;
+            } else {
+                unmeasuredCount++;
+            }
+            billedTokensTotal += item.tokens.billedTokens;
+            cacheSavedTokensTotal += item.tokens.cacheSavedTokens;
+            cacheReadTokensTotal += item.tokens.cacheReadTokens;
+            freshInputTokensTotal += item.tokens.freshInputTokens;
+            outputTokensTotal += item.tokens.outputTokens;
+        }
+
+        const totalCalls = items.length;
+        const errorRate = totalCalls > 0 ? Math.round((errorCount / totalCalls) * 1000) / 1000 : 0;
+        const meanDurationMs = measuredCount > 0 ? Math.round(totalDurationMs / measuredCount) : 0;
+
+        return {
+            mode: input.mode,
+            scope: {
+                sessionId: input.mode === 'session' ? input.sessionId : null,
+                source: input.mode === 'session' ? input.source : null,
+                model: sessions.length === 1 ? (sessions[0]?.model ?? null) : null,
+                start: items.length > 0 ? (items[0]?.ts ?? null) : null,
+                end: items.length > 0 ? (items[items.length - 1]?.ts ?? null) : null,
+                totalCalls,
+                uniqueTools: uniqueToolsSet.size,
+                errorCount,
+                errorRate,
+                totalDurationMs,
+                meanDurationMs,
+                durationUnmeasured: unmeasuredCount,
+                sessionCount: sessionsSet.size,
+                tokens: {
+                    billedTokens: billedTokensTotal,
+                    cacheSavedTokens: cacheSavedTokensTotal,
+                    cacheReadTokens: cacheReadTokensTotal,
+                    freshInputTokens: freshInputTokensTotal,
+                    outputTokens: outputTokensTotal,
+                },
+            },
+            truncated: false,
+            items,
         };
     }
 }

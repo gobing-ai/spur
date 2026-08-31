@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { applyCliMigrations, CLI_SCHEMA_SQL } from '@gobing-ai/spur-domain';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import { refreshHistoryRollups } from '../../src/services/history-analysis-service';
-import { LiveHistoryBoardService } from '../../src/services/history-board-service';
+import { LiveHistoryBoardService, toolCategory } from '../../src/services/history-board-service';
 
 async function setupTestDb(): Promise<DbAdapter> {
     const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
@@ -410,6 +410,106 @@ describe('LiveHistoryBoardService', () => {
         for (const [tab, response] of Object.entries(responses)) {
             expect(forbiddenCurrencyKeys(response), `${tab} leaked currency keys`).toEqual([]);
         }
+    });
+
+    test('toolCategory matches precedence table correctly', () => {
+        expect(toolCategory('mcp__context__read_file')).toBe('mcp');
+        expect(toolCategory('mcp_search')).toBe('mcp');
+        expect(toolCategory('run_agent')).toBe('mcp');
+        expect(toolCategory('invoke_subagent')).toBe('mcp');
+        expect(toolCategory('sp_skill_run')).toBe('mcp');
+        expect(toolCategory('grep_search')).toBe('search');
+        expect(toolCategory('Glob')).toBe('search');
+        expect(toolCategory('WebSearch')).toBe('search');
+        expect(toolCategory('write_to_file')).toBe('write');
+        expect(toolCategory('edit_file')).toBe('write');
+        expect(toolCategory('apply_patch')).toBe('write');
+        expect(toolCategory('view_file')).toBe('read');
+        expect(toolCategory('read_url_content')).toBe('read');
+        expect(toolCategory('run_command')).toBe('bash');
+        expect(toolCategory('bash_exec')).toBe('bash');
+        expect(toolCategory('unknown_custom_tool')).toBe('other');
+    });
+
+    test('getToolSequence returns sequence and splits tokens evenly across linked tools', async () => {
+        const db = await setupTestDb();
+        const service = new LiveHistoryBoardService({ db });
+
+        // Seed single message with 2 linked tool calls
+        await db.run(
+            `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq, turn_index,
+                 role, record_type, disposition, ts, model, input_tokens, output_tokens, cache_read_tokens,
+                 provenance, duration_ms, imported_at)
+             VALUES ('msg-seq-1', 'claude', 'test.jsonl', 1, 'sess-seq-1', 1, 1,
+                     'assistant', 'message', 'ok', '2026-08-31T01:00:00Z', 'claude-opus-4.6',
+                     400, 100, 600, 'agent', 500, '2026-06-01T00:00:00Z')`,
+        );
+
+        await db.run(
+            `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line,
+                 session_id, seq, tool_name, args_digest, args_raw, status, duration_ms, imported_at)
+             VALUES ('tc-seq-1', 'msg-seq-1', 'claude', 'test.jsonl', 1, 'sess-seq-1', 1,
+                     'view_file', 'src/a.ts', '{"path":"src/a.ts"}', 'ok', 120, '2026-06-01T00:00:00Z')`,
+        );
+
+        await db.run(
+            `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line,
+                 session_id, seq, tool_name, args_digest, args_raw, status, duration_ms, error_text, imported_at)
+             VALUES ('tc-seq-2', 'msg-seq-1', 'claude', 'test.jsonl', 2, 'sess-seq-1', 2,
+                     'run_command', 'bun test', '{"cmd":"bun test"}', 'error', null, 'Failed test', '2026-06-01T00:00:00Z')`,
+        );
+
+        const res = await service.getToolSequence({
+            mode: 'session',
+            source: 'claude',
+            sessionId: 'sess-seq-1',
+        });
+
+        expect(res.mode).toBe('session');
+        expect(res.truncated).toBe(false);
+        expect(res.items.length).toBe(2);
+
+        // Check tool 1
+        const item1 = res.items[0];
+        expect(item1).toBeDefined();
+        expect(item1?.toolName).toBe('view_file');
+        expect(item1?.category).toBe('read');
+        expect(item1?.status).toBe('ok');
+        expect(item1?.durationMs).toBe(120);
+        expect(item1?.durationSource).toBe('measured');
+        // Tokens: 400 / 2 = 200 fresh, 600 / 2 = 300 cache, 100 / 2 = 50 out => billed = 250
+        expect(item1?.tokens.freshInputTokens).toBe(200);
+        expect(item1?.tokens.cacheReadTokens).toBe(300);
+        expect(item1?.tokens.outputTokens).toBe(50);
+        expect(item1?.tokens.billedTokens).toBe(250);
+
+        // Check tool 2
+        const item2 = res.items[1];
+        expect(item2).toBeDefined();
+        expect(item2?.toolName).toBe('run_command');
+        expect(item2?.category).toBe('bash');
+        expect(item2?.status).toBe('error');
+        expect(item2?.durationMs).toBeNull();
+        expect(item2?.durationSource).toBe('unmeasured');
+        expect(item2?.errorText).toBe('Failed test');
+
+        // Check scope metrics
+        expect(res.scope.totalCalls).toBe(2);
+        expect(res.scope.uniqueTools).toBe(2);
+        expect(res.scope.errorCount).toBe(1);
+        expect(res.scope.errorRate).toBe(0.5);
+        expect(res.scope.totalDurationMs).toBe(120);
+        expect(res.scope.meanDurationMs).toBe(120);
+        expect(res.scope.durationUnmeasured).toBe(1);
+        expect(res.scope.tokens.billedTokens).toBe(500); // Sum of shares equals original message total!
+        expect(res.scope.tokens.cacheReadTokens).toBe(600);
+    });
+
+    test('getToolSequence handles empty db cleanly', async () => {
+        const service = new LiveHistoryBoardService({});
+        const res = await service.getToolSequence({ mode: 'consolidated' });
+        expect(res.items).toEqual([]);
+        expect(res.scope.totalCalls).toBe(0);
     });
 });
 

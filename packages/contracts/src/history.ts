@@ -303,6 +303,92 @@ export const historySessionsInputSchema = z.object({
 /** Inferred type for HistorySessionsInput. */
 export type HistorySessionsInput = z.input<typeof historySessionsInputSchema>;
 
+// ─── Tool Using Tab DTOs ─────────────────────────────────────────────────────
+
+/** Supported tool category classification enum. */
+export const historyToolCategoryEnum = z.enum(['read', 'write', 'bash', 'search', 'mcp', 'other']);
+/** Inferred type for HistoryToolCategory. */
+export type HistoryToolCategory = z.infer<typeof historyToolCategoryEnum>;
+
+/** Tool status filter options enum. */
+export const historyToolStatusFilterEnum = z.enum(['all', 'ok', 'error']);
+/** Inferred type for HistoryToolStatusFilter. */
+export type HistoryToolStatusFilter = z.infer<typeof historyToolStatusFilterEnum>;
+
+/** Tool call sequence item schema. */
+export const historyToolCallItemSchema = z.object({
+    seq: z.number(),
+    toolSeq: z.number(),
+    ts: z.string().nullable(),
+    toolName: z.string(),
+    category: historyToolCategoryEnum,
+    status: z.enum(['ok', 'error', 'unknown']),
+    durationMs: z.number().nullable(),
+    durationSource: historyDurationSourceEnum,
+    resultBytes: z.number().nullable(),
+    argsRaw: z.string().nullable(),
+    argsDigest: z.string().nullable(),
+    errorText: z.string().nullable(),
+    callId: z.string().nullable(),
+    messageHash: z.string(),
+    sessionId: z.string(),
+    source: z.string(),
+    model: z.string().nullable(),
+    tokens: historyTokensSchema,
+});
+/** Inferred type for HistoryToolCallItem. */
+export type HistoryToolCallItem = z.infer<typeof historyToolCallItemSchema>;
+
+/** Tool sequence scope statistics summary schema. */
+export const historyToolSequenceScopeSchema = z.object({
+    sessionId: z.string().nullable(),
+    source: z.string().nullable(),
+    model: z.string().nullable(),
+    start: z.string().nullable(),
+    end: z.string().nullable(),
+    totalCalls: z.number(),
+    uniqueTools: z.number(),
+    errorCount: z.number(),
+    errorRate: z.number(),
+    totalDurationMs: z.number(),
+    meanDurationMs: z.number(),
+    durationUnmeasured: z.number(),
+    sessionCount: z.number(),
+    tokens: historyTokensSchema,
+});
+/** Inferred type for HistoryToolSequenceScope. */
+export type HistoryToolSequenceScope = z.infer<typeof historyToolSequenceScopeSchema>;
+
+/** Input parameters schema for tool sequence query. */
+export const historyToolSequenceInputSchema = z.intersection(
+    z.discriminatedUnion('mode', [
+        z.object({ mode: z.literal('session'), source: z.string().min(1), sessionId: z.string().min(1) }),
+        z.object({ mode: z.literal('consolidated'), filter: historyFilterSchema.optional() }),
+    ]),
+    z.object({
+        toolNames: z.array(z.string()).optional(),
+        status: historyToolStatusFilterEnum.default('all'),
+        search: z.string().optional(),
+    }),
+);
+/** Inferred type for HistoryToolSequenceInput. */
+export type HistoryToolSequenceInput = z.input<typeof historyToolSequenceInputSchema>;
+
+/** Response data payload schema for tool sequence query. */
+export const historyToolSequenceResponseDataSchema = z.object({
+    mode: z.enum(['session', 'consolidated']),
+    scope: historyToolSequenceScopeSchema,
+    truncated: z.boolean(),
+    items: z.array(historyToolCallItemSchema),
+});
+/** Inferred type for HistoryToolSequenceResponseData. */
+export type HistoryToolSequenceResponseData = z.infer<typeof historyToolSequenceResponseDataSchema>;
+
+/** Tool sequence query API response envelope schema. */
+export const historyToolSequenceResponseSchema = apiSuccessSchema(historyToolSequenceResponseDataSchema);
+/** Inferred type for HistoryToolSequenceResponse. */
+export type HistoryToolSequenceResponse = z.infer<typeof historyToolSequenceResponseSchema>;
+
 // ─── Insights Tab DTOs ───────────────────────────────────────────────────────
 
 /** Loop detection finding item schema. */
@@ -491,6 +577,16 @@ export const historyContract = {
         })
         .input(historyTimelineInputSchema)
         .output(historyTimelineResponseSchema),
+
+    getToolSequence: oc
+        .route({
+            method: 'POST',
+            path: '/history/tool-sequence',
+            summary: 'Get ordered tool invocation sequence for a session or filtered scope',
+            tags: ['history'],
+        })
+        .input(historyToolSequenceInputSchema)
+        .output(historyToolSequenceResponseSchema),
 
     getSessions: oc
         .route({

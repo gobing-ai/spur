@@ -19,6 +19,11 @@ export function createHistoryHandlers(ctx: ServerContext) {
             return { ok: true as const, data };
         }),
 
+        getToolSequence: os.history.getToolSequence.handler(async ({ input }) => {
+            const data = await ctx.historyBoardService().getToolSequence(input);
+            return { ok: true as const, data };
+        }),
+
         getSessions: os.history.getSessions.handler(async ({ input }) => {
             const data = await ctx.historyBoardService().getSessions(input);
             return { ok: true as const, data };

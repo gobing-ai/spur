@@ -5,6 +5,8 @@ import type {
     HistorySourcesResponse,
     HistorySummaryResponse,
     HistoryTimelineResponse,
+    HistoryToolSequenceResponse,
+    HistoryToolStatusFilter,
 } from '@gobing-ai/spur-contracts';
 import type React from 'react';
 import { useEffect, useState } from 'react';
@@ -16,6 +18,7 @@ import SessionsTab from './SessionsTab';
 import SourcesTab from './SourcesTab';
 import SummaryTab from './SummaryTab';
 import TimelineTab from './TimelineTab';
+import ToolUsingTab from './ToolUsingTab';
 import { HISTORY_TABS } from './tabs';
 
 interface TimelineRosterEntry {
@@ -68,6 +71,13 @@ export const HistoryShell: React.FC = () => {
     const [selectedSession, setSelectedSession] = useState<SelectedSession | null>(null);
     const [timelineCorrelationScope, setTimelineCorrelationScope] = useState({ taskWbs: '', runId: '' });
 
+    // Tool Using tab state
+    const [toolMode, setToolMode] = useState<'session' | 'consolidated'>('session');
+    const [toolNameFilter, setToolNameFilter] = useState<string[]>([]);
+    const [toolStatusFilter, setToolStatusFilter] = useState<HistoryToolStatusFilter>('all');
+    const [toolSearch, setToolSearch] = useState<string>('');
+    const [toolSearchDebounced, setToolSearchDebounced] = useState<string>('');
+
     // Sessions tab query state
     const [sessionsPage, setSessionsPage] = useState<number>(1);
     const [sessionsSortBy, setSessionsSortBy] = useState<
@@ -78,11 +88,14 @@ export const HistoryShell: React.FC = () => {
     // Data states
     const [summaryData, setSummaryData] = useState<HistorySummaryResponse['data'] | undefined>(undefined);
     const [timelineData, setTimelineData] = useState<HistoryTimelineResponse['data'] | undefined>(undefined);
+    const [toolSequenceData, setToolSequenceData] = useState<HistoryToolSequenceResponse['data'] | undefined>(
+        undefined,
+    );
     const [sessionsData, setSessionsData] = useState<HistorySessionsResponse['data'] | undefined>(undefined);
     const [insightsData, setInsightsData] = useState<HistoryInsightsResponse['data'] | undefined>(undefined);
     const [sourcesData, setSourcesData] = useState<HistorySourcesResponse['data'] | undefined>(undefined);
 
-    // 100-row start-desc roster powering Timeline Previous/Next traversal.
+    // 100-row start-desc roster powering Timeline / Tool Using Previous/Next traversal.
     const [timelineRoster, setTimelineRoster] = useState<TimelineRosterEntry[]>([]);
     const [rosterLoading, setRosterLoading] = useState<boolean>(false);
 
@@ -97,6 +110,8 @@ export const HistoryShell: React.FC = () => {
     const [sessionsError, setSessionsError] = useState<string | null>(null);
     const [timelineLoading, setTimelineLoading] = useState<boolean>(false);
     const [timelineError, setTimelineError] = useState<string | null>(null);
+    const [toolSequenceLoading, setToolSequenceLoading] = useState<boolean>(false);
+    const [toolSequenceError, setToolSequenceError] = useState<string | null>(null);
 
     // Filter-coupled Summary + Insights load (badges/livechip stay available on every tab).
     useEffect(() => {
@@ -154,9 +169,9 @@ export const HistoryShell: React.FC = () => {
         };
     }, []);
 
-    // Timeline roster: single 100-row start-desc fetch per filter change, timeline tab only.
+    // Timeline & Tool Using roster: single 100-row start-desc fetch per filter change.
     useEffect(() => {
-        if (activeTab !== 'timeline') return;
+        if (activeTab !== 'timeline' && activeTab !== 'tool-using') return;
         let mounted = true;
         setRosterLoading(true);
         (async () => {
@@ -275,10 +290,87 @@ export const HistoryShell: React.FC = () => {
         };
     }, [activeTab, timelineMode, selectedSession, filter, rosterLoading, timelineRoster, timelineCorrelationScope]);
 
+    // 250ms search debounce for tool using tab.
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setToolSearchDebounced(toolSearch);
+        }, 250);
+        return () => clearTimeout(timer);
+    }, [toolSearch]);
+
+    // Tool sequence query follows mode, selected session, and active filters.
+    useEffect(() => {
+        if (activeTab !== 'tool-using') return;
+
+        if (toolMode === 'session') {
+            if (!selectedSession) {
+                const firstRoster = timelineRoster[0];
+                if (!rosterLoading && firstRoster) {
+                    setSelectedSession({ source: firstRoster.source, id: firstRoster.id });
+                }
+                return;
+            }
+        }
+
+        let mounted = true;
+        setToolSequenceLoading(true);
+        setToolSequenceError(null);
+        (async () => {
+            try {
+                const input =
+                    toolMode === 'session' && selectedSession
+                        ? {
+                              mode: 'session' as const,
+                              source: selectedSession.source,
+                              sessionId: selectedSession.id,
+                              toolNames: toolNameFilter.length > 0 ? toolNameFilter : undefined,
+                              status: toolStatusFilter,
+                              search: toolSearchDebounced || undefined,
+                          }
+                        : {
+                              mode: 'consolidated' as const,
+                              filter,
+                              toolNames: toolNameFilter.length > 0 ? toolNameFilter : undefined,
+                              status: toolStatusFilter,
+                              search: toolSearchDebounced || undefined,
+                          };
+                const res = await api.history.getToolSequence(input);
+                if (!mounted) return;
+                if (res?.data) {
+                    setToolSequenceData(res.data);
+                } else {
+                    setToolSequenceError('Failed to load tool sequence');
+                }
+            } catch (err) {
+                if (mounted) setToolSequenceError(errorMessage(err));
+            } finally {
+                if (mounted) setToolSequenceLoading(false);
+            }
+        })();
+        return () => {
+            mounted = false;
+        };
+    }, [
+        activeTab,
+        toolMode,
+        selectedSession,
+        filter,
+        toolNameFilter,
+        toolStatusFilter,
+        toolSearchDebounced,
+        rosterLoading,
+        timelineRoster,
+    ]);
+
     const selectTimelineSession = (source: string, id: string) => {
         setSelectedSession({ source, id });
         setTimelineMode('session');
         setActiveTab('timeline');
+    };
+
+    const selectToolSession = (source: string, id: string) => {
+        setSelectedSession({ source, id });
+        setToolMode('session');
     };
 
     const handleSelectSessionFromList = (sessionId: string, source?: string) => {
@@ -299,6 +391,11 @@ export const HistoryShell: React.FC = () => {
         : summaryLoading || summaryData === undefined
           ? '…'
           : String(summaryData.kpis.sessionsCount);
+    const toolUsingBadge = toolSequenceError
+        ? '—'
+        : toolSequenceLoading || toolSequenceData === undefined
+          ? '…'
+          : String(toolSequenceData.scope.totalCalls);
     const insightsBadge = insightsError
         ? '—'
         : insightsLoading || insightsData === undefined
@@ -312,6 +409,7 @@ export const HistoryShell: React.FC = () => {
     const badgeFor: Record<string, string | null> = {
         summary: null,
         timeline: null,
+        'tool-using': toolUsingBadge,
         sessions: sessionsBadge,
         insights: insightsBadge,
         sources: sourcesBadge,
@@ -454,6 +552,25 @@ export const HistoryShell: React.FC = () => {
                         consolidatedTaskWbs={timelineCorrelationScope.taskWbs}
                         consolidatedRunId={timelineCorrelationScope.runId}
                         onConsolidatedScopeSubmit={setTimelineCorrelationScope}
+                    />
+                )}
+                {activeTab === 'tool-using' && (
+                    <ToolUsingTab
+                        data={toolSequenceData}
+                        loading={toolSequenceLoading}
+                        error={toolSequenceError}
+                        mode={toolMode}
+                        onModeChange={setToolMode}
+                        sessionId={selectedSession?.id}
+                        sessionSource={selectedSession?.source}
+                        availableSessions={timelineRoster}
+                        onSelectSession={selectToolSession}
+                        toolNames={toolNameFilter}
+                        onToolNamesChange={setToolNameFilter}
+                        status={toolStatusFilter}
+                        onStatusChange={setToolStatusFilter}
+                        search={toolSearch}
+                        onSearchChange={setToolSearch}
                     />
                 )}
                 {activeTab === 'sessions' && (
