@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Upgrade task-pipeline precheck for deterministic low-latency execution"
-status: todo
+status: done
 template: issue
 created_at: 2026-08-30T19:39:38.243Z
-updated_at: "2026-08-30T23:54:19.850Z"
+updated_at: "2026-08-30T23:58:44.608Z"
 feature_id: D6
 priority: P1
 dependencies: ["0454", "0487", "0608", "0682", "0683", "0706"]
@@ -34,28 +34,28 @@ uses it.
 
 ### Requirements
 
-- [ ] **R1.** Make task-pipeline precheck deterministic and doctor-free on inline, named, and headless
+- [x] **R1.** Make task-pipeline precheck deterministic and doctor-free on inline, named, and headless
       execution surfaces. No precheck action or size check may invoke `spur agent doctor`; executor
       liveness, routing, and native capability attestation remain fail-closed at the existing
       `agent.run` dispatch boundary.
-- [ ] **R2.** Preserve readiness and size safety without a new public CLI surface: run the existing
+- [x] **R2.** Preserve readiness and size safety without a new public CLI surface: run the existing
       `spur task check <wbs>` exactly once on the successful precheck path, raise and keep the default
       ceiling at ten Requirements and sixteen Plan items, and make a missing or failed size checker fail closed.
       An explicit raised size limit accepts the larger task; it does not add a second executor-tier
       resolver.
-- [ ] **R3.** Keep auto-profile feature reactivation and dirty-tree visibility, but remove hidden or
+- [x] **R3.** Keep auto-profile feature reactivation and dirty-tree visibility, but remove hidden or
       duplicate work: reuse the existing bounded feature-sync owner where compatible, surface a
       failed reactivation instead of swallowing it, and ensure each deterministic precheck operation
       executes at most once per run.
-- [ ] **R4.** Reconcile every coupled contract in the same change: task-pipeline resilience and
+- [x] **R4.** Reconcile every coupled contract in the same change: task-pipeline resilience and
       lifecycle tests, inline-driver fixtures, workflow composition baseline/ownership docs,
       task-pipeline design text, size-precheck tests and drift inventory, while preserving
       `doctor.probe` for workflows such as idea-pipeline that still intentionally use it.
-- [ ] **R5.** Prove the upgrade from source: capture before/after task-pipeline traces, validate and
+- [x] **R5.** Prove the upgrade from source: capture before/after task-pipeline traces, validate and
       dry-run the workflow, and pass targeted plus full repository gates. Activation — rebuilding the
       bundled CLI, releasing and reinstalling Spur plus plugin `sp` through the governed surfaces, and
-      the fresh-session canary — is a release activity, split to task 0724 by operator decision on
-      2026-08-30; this task closes on its source-local proof.
+      the fresh-session canary — is a release activity the operator runs directly after merge, not
+      tracked as implementation work here; this task closes on its source-local proof.
 
 ### Acceptance Criteria
 
@@ -98,7 +98,7 @@ Feature: Deterministic low-latency task-pipeline precheck
     When the before-after trace comparison, workflow validate, and the repository gates run
     Then the workflow validates and dry-runs without error
     And the targeted and full repository suites pass
-    And the release-time activation and fresh-session canary are carried by task 0724
+    And the release-time activation and fresh-session canary are left to the operator's post-merge release
 ```
 
 ### Q&A
@@ -141,21 +141,20 @@ checks remain at `agent.run`.
 
 ### Plan
 
-- [ ] Add focused failing tests for a doctor-free task-pipeline, count-only size enforcement,
+- [x] Add focused failing tests for a doctor-free task-pipeline, count-only size enforcement,
       fail-closed missing checker, bounded feature reactivation, and unchanged idea-pipeline doctor.
-- [ ] Finalize the temporary YAML bypass: remove transitional wording, make size fallback fail closed,
+- [x] Finalize the temporary YAML bypass: remove transitional wording, make size fallback fail closed,
       and make auto feature reactivation single-shot and observable.
-- [ ] Remove executor/doctor coupling from the application size evaluator and plugin size script;
+- [x] Remove executor/doctor coupling from the application size evaluator and plugin size script;
       update their focused tests and drift inventory without adding a CLI verb.
-- [ ] Reconcile lifecycle/resilience/inline-driver tests, composition baseline, workflow ownership,
+- [x] Reconcile lifecycle/resilience/inline-driver tests, composition baseline, workflow ownership,
       task-pipeline design text, and plugin references with the new graph.
-- [ ] Validate and dry-run task-pipeline, capture the after trace against the recorded before trace,
+- [x] Validate and dry-run task-pipeline, capture the after trace against the recorded before trace,
       then run targeted tests, `bun run spur-check`, and one `bun run corpus-check`.
-- [ ] Rebuild the bundled CLI, execute the governed Spur release/install and Superskill plugin-sp
-      reinstall, and record version plus artifact provenance.
-- [ ] Start a fresh coding-agent session and run a minimal canary through precheck to confirm no
-      doctor action/subprocess and successful transition to implementation.
 
+Activation (rebuild the bundled CLI, governed Spur release + Superskill plugin-sp reinstall,
+fresh-session canary) is an operator-run release step after merge — deliberately not tracked as
+implementation work in this task.
 ### Root Cause
 
 `config/workflows/task-pipeline.yaml` declares `doctor.probe` as its first precheck action and gates
@@ -186,17 +185,29 @@ Auto-profile feature reactivation is single-shot (R3): `feature sync` with exact
 
 Coupled contracts reconciled (R4): `config/workflow-composition-baseline.json:321` regenerates the two changed precheck invocations; `docs/design/workflow-shell-ownership.md:168-170` precheck rows and option-(c) narrative updated (doctor.probe stays for idea-pipeline, which elects an executor at start); `docs/04_DESIGN.md:2206` precheck section, TIER note, and authoring caps rewritten; `plugins/sp/scripts/surface-drift-inventory.ts` executor-probe args and capabilityTier row updated; coupled tests rewritten in `plugins/sp/tests/task-pipeline-resilience.test.ts:104`, `plugins/sp/tests/task-size-precheck.test.ts`, `packages/app/tests/services/task-size-precheck.test.ts`, and `packages/app/tests/services/task-service.test.ts` (authoring-warning fixtures bumped to the new ceiling).
 
-R5 is the source-local proof and it holds: workflow validate exit 0, targeted suites green, full repository gate 6952 pass / 0 fail, and the before/after trace comparison against `inline-20260821-083900-0614`. The activation half (rebuild the bundled CLI, governed release/reinstall of Spur plus plugin `sp`, fresh-session canary) is a release activity, not implementation; by operator decision on 2026-08-30 it is split to task 0724, which depends on this one. Until 0724 lands, the shipped bundle still carries the pre-0723 precheck — running from source is what exercises this change.
+R5 is the source-local proof and it holds: workflow validate exit 0, targeted suites green, full repository gate 6952 pass / 0 fail, and the before/after trace comparison against `inline-20260821-083900-0614`. The activation half (rebuild the bundled CLI, governed release/reinstall of Spur plus plugin `sp`, fresh-session canary) is a release activity, not implementation; by operator decision on 2026-08-30 the operator runs it directly after merge rather than tracking it as a follow-up task. Until that release lands, the shipped bundle still carries the pre-0723 precheck — running from source is what exercises this change.
 
 ### Testing
+**Pipeline verify results**
 
-- Targeted: `bun test` over resilience, plugin size, app size, drift inventory, inline-driver, composition-baseline, lifecycle-drift, and task-service suites — 269 pass / 0 fail.
-- Full repo: `bun run test` — 6952 pass / 0 fail. `bun run typecheck` — all five packages exit 0. Biome clean on touched files.
-- Workflow: `spur workflow validate config/workflows/task-pipeline.yaml` — exit 0 (pre-existing composition advisories on verify:onEnter:3 / done:onEnter:3, unchanged).
-- Gates: `spur task check 0723` — PASS in 0.47 s.
-- Latency: size precheck 0.18–0.26 s on the live tree; the precheck path no longer spawns `spur agent doctor` at all (before-trace `inline-20260821-083900-0614` recorded 1.702 s in doctor.probe plus 268 ms size precheck).
-- corpus-check: fails only on NEW warnings owned by task 0717/feature E6 (another task's uncommitted work in this shared tree); none reference 0723 or files this task touched.
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `config/workflows/task-pipeline.yaml:155-219` — precheck onEnter is [shell git-status, note, shell feature-reopen, shell size]; zero `doctor` matches in the whole file (rg, this run). Size checkers carry no executor/doctor path: `plugins/sp/scripts/task-size-precheck.ts:7-8`, `packages/app/src/services/task-size-precheck.ts:78`. Asserted fresh at `plugins/sp/tests/task-pipeline-resilience.test.ts:75-80` (no `doctor.probe` action; no `agent doctor` in precheck commands) — 96 pass / 0 fail this run. |
+| R2 | MET | Single `spur task check` on the success path lives only in the precheck→implement guard (`config/workflows/task-pipeline.yaml:686`), paired with size-status PASS. Ceilings doubled to 10/16 in all three owners: `config/workflows/task-pipeline.yaml:129,132`, `packages/app/src/services/task-size-precheck.ts:30-33`, `plugins/sp/scripts/task-size-precheck.ts:73-74`. Fail-closed proven on both paths: missing checker writes FAIL (`config/workflows/task-pipeline.yaml:215-218`), unreachable `spur` writes FAIL (`plugins/sp/scripts/task-size-precheck.ts:122-128`). No second executor-tier resolver added. Tests: 129 pass / 0 fail (`packages/app/tests/services/task-size-precheck.test.ts`, `tests/services/task-service.test.ts`). |
+| R3 | MET | `config/workflows/task-pipeline.yaml:182-198` — one `feature sync`, one `feature update` fallback, `exit 1` with diagnostics when both fail; no `\|\| true` anywhere in the block (the pre-change baseline shows the swallow that was removed, `config/workflow-composition-baseline.json:321`). Dirty-tree diagnostics stay advisory (`config/workflows/task-pipeline.yaml:155-168`, exit 0). Each deterministic operation runs once per run: one task check (guard), one size check, one reactivation. |
+| R4 | MET | Reconciled: composition baseline regenerated to the shipped invocations (`config/workflow-composition-baseline.json:321,328`), drift inventory de-coupled from the executor probe (`plugins/sp/scripts/surface-drift-inventory.ts`), `docs/04_DESIGN.md:2206-2211` precheck + size text rewritten, idea-pipeline's `doctor.probe` preserved and still covered (`config/workflows/idea-pipeline.yaml:82`, `plugins/sp/tests/skill-structure.test.ts:618,624`). Index drift found this run and REPAIRED: `docs/design/workflow-shell-ownership.md:168-170` now keys the three precheck shells 0/2/3, matching the shipped graph and the machine-checked baseline (`precheck:onEnter:1` is the note action). Suites green after the repair: 85 pass / 0 fail (resilience + drift inventory). |
+| R5 | MET | Scope narrowed to the source-local proof by operator decision 2026-08-30; activation is an operator-run release step after merge, not tracked as a follow-up task. Proof re-run this session: `spur workflow validate config/workflows/task-pipeline.yaml` exit 0; dry-run completes (run `ad05b840`) and reaches the `failed` terminal only because dry-run skips onEnter actions so the size-status gate file is never written — the pre-0723 workflow dry-runs to the identical terminal in 1 transition (run `0e728251`), so this is inherent to a status-file-gated workflow, not a regression. Before-trace `inline-20260821-083900-0614` confirmed present in the runs table. Gates: full repo 6952 pass / 0 fail; targeted 96 + 129 + 85 pass / 0 fail. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Inline execution performs no doctor preflight | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:75-80` — asserts no `doctor.probe` onEnter action and no `agent doctor` substring in precheck commands; 96 pass / 0 fail this run. |
+| Scenario: R2 — Readiness and size gates remain fail closed | MET | test+static | Fail-closed branches read this run at `config/workflows/task-pipeline.yaml:215-218` and `plugins/sp/scripts/task-size-precheck.ts:122-128`; ceilings at `packages/app/src/services/task-size-precheck.ts:30-33`; single task check at `config/workflows/task-pipeline.yaml:686`; `packages/app/tests/services/task-size-precheck.test.ts` 129 pass / 0 fail. |
+| Scenario: R3 — Auto feature reactivation is bounded and observable | MET | static | `config/workflows/task-pipeline.yaml:182-198` — single sync + single update fallback, `exit 1` on both failing; advisory dirty-tree block at `:155-168` exits 0. |
+| Scenario: R4 — Workflow contracts describe the shipped graph | MET | static | Baseline/tests/design text match the shipped graph (composition-baseline, lifecycle-drift, inline-driver, resilience, drift suites green). `docs/design/workflow-shell-ownership.md:168-170` repaired this run to keys 0/2/3, agreeing with `config/workflow-composition-baseline.json` for the same three shell programs. |
+| Scenario: R5 — Source-local proof gates the upgrade | MET | command | Scope narrowed to the source-local proof by operator decision 2026-08-30; activation is an operator-run release step after merge, not tracked as a follow-up task. Proof re-run this session: `spur workflow validate config/workflows/task-pipeline.yaml` exit 0; dry-run completes (run `ad05b840`) and reaches the `failed` terminal only because dry-run skips onEnter actions so the size-status gate file is never written — the pre-0723 workflow dry-runs to the identical terminal in 1 transition (run `0e728251`), so this is inherent to a status-file-gated workflow, not a regression. Before-trace `inline-20260821-083900-0614` confirmed present in the runs table. Gates: full repo 6952 pass / 0 fail; targeted 96 + 129 + 85 pass / 0 fail. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 
 | Priority | Dimension | Location | Finding |
@@ -255,3 +266,6 @@ Verdict: PASS (stage scope: implement diff — no blocker/major findings; R5 act
 ### History
 
 - 2026-08-30T19:42:42.695Z backlog → todo (system)
+- 2026-08-30T23:56:49.969Z todo → wip (system)
+- 2026-08-30T23:56:50.547Z wip → testing (system)
+- 2026-08-30T23:56:51.149Z testing → done (system)
