@@ -4,7 +4,8 @@ feature_id: E8
 tasks: [0626, 0627, 0628, 0629, 0630, 0634, 0635, 0636, 0637, 0638]
 owns: SURFACE + mechanism for the History Board module (conversation analytics, timeline, insights, and agent sources)
 authority: derived (ADR wins on conflict)
-updated_at: 2026-08-23
+updated_at: 2026-08-31
+see_also: [design/history-board-tool-using-tab]
 ---
 
 # History Board module — Conversation Analytics & Agent Forensic Plane
@@ -40,15 +41,18 @@ The History module is auto-discovered via `apps/web/src/modules/history/index.ts
 
 ## 3. Tab Structure & Capabilities
 
-The module contains 5 tabs with append-only stable IDs:
+The module contains 6 tabs. Tab **ids** are stable — never renamed or removed, because persisted
+state keys on `id`; a tab's position in the strip is presentational and may change (amended by task
+0725 R1, which inserted `tool-using` between `timeline` and `sessions`).
 
 ```ts
 export const HISTORY_TABS = [
-  { id: 'summary',  label: 'Summary' },
-  { id: 'timeline', label: 'Timeline' },
-  { id: 'sessions', label: 'Sessions' },
-  { id: 'insights', label: 'Insights' },
-  { id: 'sources',  label: 'Sources' },
+  { id: 'summary',    label: 'Summary' },
+  { id: 'timeline',   label: 'Timeline' },
+  { id: 'tool-using', label: 'Tool Using' },
+  { id: 'sessions',   label: 'Sessions' },
+  { id: 'insights',   label: 'Insights' },
+  { id: 'sources',    label: 'Sources' },
 ] as const;
 ```
 
@@ -79,12 +83,26 @@ export const HISTORY_TABS = [
 - **Consolidated Multi-Agent Traces:** Renders chronological multi-agent blocks carrying correlation exactness badges (`Exact` emerald / `Estimated` amber) and session markers. Truncation banner renders if stream exceeds 5,000 newest events.
 - **Session Identity Extraction:** Canonical session IDs extracted from JSONL paths (`brain/<uuid>` for AGY, `rollout-*-<uuid>.jsonl` or `session_meta.payload.id` for Codex).
 
-### 3.3 Tab 3: Sessions
+### 3.3 Tab 3: Tool Using
+
+Feature **E81** (tasks 0724 / 0725). Detail: [`history-board-tool-using-tab.md`](history-board-tool-using-tab.md).
+
+- **Sequence stream:** chronological tool invocations for one session or a filtered cross-session
+  scope, each carrying step number, category badge, tool name, status, latency, and a token share.
+- **Inspection drawer:** pretty-printed `args_raw` with copy, plus `args_digest`, `error_text`,
+  `call_id`, `message_hash`, session, source, and model.
+- **Server-side filtering:** tool name, status (`all | ok | error`), and argument/error search are
+  request parameters, so the metrics strip always reflects the filtered subset.
+- **Token shares are unrounded** so a message's items sum to its totals; rounding happens at render.
+- Distinct from the **Observability** module's Tool Using tab (`04_DESIGN` §7.8b), which tails the
+  indexed-context JSONL ledger rather than the imported forensic corpus.
+
+### 3.4 Tab 4: Sessions
 
 - **Sortable DataTable:** Columns for Session ID, Agent, Model, Start Time, Duration, Messages, Tool Calls, Billed Tokens, Cache Read, Fresh Input, Top Tool, and State badge.
 - **Navigation:** Clicking any row immediately switches to the `Timeline` tab scoped to that session.
 
-### 3.4 Tab 4: Insights
+### 3.5 Tab 5: Insights
 
 - **Loop Detection:** Cards for repeated tool calls (same tool + args digest $\ge 3$ times), showing repeat count, sequence range, and wasted token estimate.
 - **Cache Efficiency:** Cache hit ratio trend line and top cache-wasting steps table.
@@ -92,7 +110,7 @@ export const HISTORY_TABS = [
 - **Top Time-Consuming Steps (`tbl-slowsteps`):** Ranked table of slowest execution steps with duration sparkbars, agent/model tags, and token telemetry.
 - **Model Comparison:** 4-axis radar/spider chart comparing models across Speed, Cache ratio, Reliability, and Output ratio, paired with a datatable twin.
 
-### 3.5 Tab 5: Sources
+### 3.6 Tab 6: Sources
 
 - **Overview Banner:** Total files, corpus size, date span, and total sessions.
 - **Manual Action:** Interactive `Import & Analyze` trigger button (`#btn-run-import`) with sync spinning state.
@@ -129,6 +147,7 @@ Endpoints:
 4. `history.getInsights(filter)` $\rightarrow$ Loop findings, cache waste, slow steps, model comparison.
 5. `history.getSources()` $\rightarrow$ Corpus summary, 9 agent sources, 90-day daily token matrices, directory registry.
 6. `history.triggerImport({ mode })` $\rightarrow$ Asynchronous import & analysis execution receipt.
+7. `POST history.getToolSequence({ mode: 'session', source, sessionId } | { mode: 'consolidated', filter? } & { toolNames?, status, search? })` $\rightarrow$ Ordered, bounded tool-invocation stream plus a scope aggregate; detail in [`history-board-tool-using-tab.md`](history-board-tool-using-tab.md) §2.2.
 
 `history.getSummary` additionally returns the following additive telemetry:
 
@@ -145,7 +164,7 @@ in `overview.corpusSizeBytes` and does not fabricate per-source raw-file sizes.
 
 ### 4.1 Live read path (`packages/domain` + `packages/app`)
 
-`LiveHistoryBoardService` implements the six-procedure seam. It maps the board filter to the existing
+`LiveHistoryBoardService` implements the seven-procedure seam. It maps the board filter to the existing
 `ArtifactSelector`, including `models`, `tools`, and `skills`; `apps/server` handlers only delegate.
 The raw-query migration is `0020_spur_cli_history_board_query_indexes`:
 
@@ -198,3 +217,5 @@ tasks and the doc agree:
 | **0636** | Timeline Tab Filter Defaults, 80% Alignment & Top-Layer Tooltips | `apps/web/src/modules/history/TimelineTab.tsx` | Default-checked filters, Hide other empty label, 80% width with right/left alignment, and z-50 unclipped tooltips |
 | **0637** | Timeline Tab Prompt Token Tooltip & Redundant Tag Removal | `apps/web/src/modules/history/TimelineTab.tsx` | UserTokenBadge token breakdown tooltip, eliminate redundant USER badge, and single-line prompt row |
 | **0638** | Honest & Consolidated History Timeline | contracts, domain analytics, app projection, observer, server, and Timeline UI | Discriminated POST seam; canonical AGY/Codex identity; authority-table correlation; measured/inferred/unmeasured duration; source-safe prompt telemetry; bounded scrubber and consolidated view |
+| **0724** | History Board Tool Using: oRPC API contracts, domain query, and service implementation (E81) | `packages/contracts/src/history.ts`, `packages/domain/src/analytics/forensic-query.ts`, `packages/app/src/services/history-board-{mock-,}service.ts`, `apps/server/src/modules/history/handlers.ts` | [`history-board-tool-using-tab.md`](history-board-tool-using-tab.md) §2.2–2.3 |
+| **0725** | History Board Tool Using: web tab UI, sequence stream, inspection drawer, and shell integration (E81) | `apps/web/src/modules/history/{tabs.ts,ToolUsingTab.tsx,HistoryShell.tsx}` | [`history-board-tool-using-tab.md`](history-board-tool-using-tab.md) §2.1, §2.4 |

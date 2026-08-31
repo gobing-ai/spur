@@ -4,7 +4,7 @@ name: "History Board Tool Using: oRPC API contracts, domain query, and service i
 status: done
 template: feature-impl
 created_at: 2026-08-31T11:53:19.122Z
-updated_at: "2026-08-31T12:13:00.000Z"
+updated_at: "2026-08-31T12:32:23.657Z"
 feature_id: E81
 priority: P2
 tags: ["history", "backend", "contracts", "domain"]
@@ -332,14 +332,30 @@ It must not recompute categories, token shares, or scope aggregates client-side,
    `config/` is generated and now stale, regenerate it through its existing script — do not
    hand-edit a baseline.
 ### Solution
-
-- `packages/contracts/src/history.ts`: Defined `historyToolCategoryEnum`, `historyToolStatusFilterEnum`, `historyToolCallItemSchema`, `historyToolSequenceScopeSchema`, `historyToolSequenceInputSchema`, and `historyToolSequenceResponseSchema`. Mounted `getToolSequence` in `historyContract` as `POST /history/tool-sequence`.
-- `packages/domain/src/analytics/forensic-query.ts`: Added `ToolSequenceRow`, `ToolSequenceQueryResult`, `ToolSequenceFilters`, and `toolSequenceQuery` querying `history_tool_call` JOIN `history_message` with `request_id` dedup and selector-driven where builder.
-- `packages/domain/src/analytics/index.ts`: Re-exported `toolSequenceQuery` and its TypeScript types.
-- `packages/app/src/services/history-board-service.ts`: Added `toolCategory` helper (precedence-ordered substring classifier) and implemented `LiveHistoryBoardService.getToolSequence` computing exact token-split shares and aggregating scope metrics.
-- `packages/app/src/services/history-board-mock-service.ts`: Extended `HistoryBoardService` interface and implemented `MockHistoryBoardService.getToolSequence` with deterministic mock data generator and filtering.
-- `apps/server/src/modules/history/handlers.ts`: Mounted `getToolSequence` route handler delegating to `ctx.historyBoardService().getToolSequence(input)`.
-
+- `packages/contracts/src/history.ts:309` — `historyToolCategoryEnum`; `:314` `historyToolStatusFilterEnum`;
+  `:319` `historyToolCallItemSchema`; `:343` `historyToolSequenceScopeSchema`; `:363`
+  `historyToolSequenceInputSchema`; `:378` `historyToolSequenceResponseDataSchema`; `:388`
+  `historyToolSequenceResponseSchema`. Route mounted at `packages/contracts/src/history.ts:581`
+  (`getToolSequence`, `POST /history/tool-sequence`).
+- `packages/domain/src/analytics/forensic-query.ts:1481` — `ToolSequenceRow`; `:1505`
+  `ToolSequenceQueryResult`; `:1513` `ToolSequenceFilters`; `:1522` `toolSequenceQuery`, joining
+  `history_tool_call` to `history_message` on `message_hash`, applying `withMessageDedup`
+  (`packages/domain/src/analytics/forensic-query.ts:123`) for `request_id` dedup, `escapeLike` (`packages/domain/src/analytics/forensic-query.ts:127`) for the search predicate,
+  session-mode predicate on `tc.source`/`tc.session_id` (index-covered), consolidated mode via
+  `buildMessageWhere`, and `LIMIT ?` at `limit + 1` for the `truncated` flag.
+- `packages/domain/src/analytics/index.ts:88` — re-exports `ToolSequenceFilters`,
+  `ToolSequenceQueryResult`, `ToolSequenceRow`, and `toolSequenceQuery` (`:94`).
+- `packages/app/src/services/history-board-service.ts:525` — `toolCategory`, the precedence-ordered
+  substring classifier (`mcp` before the verbs). `:923` — `LiveHistoryBoardService.getToolSequence`,
+  projecting rows to DTOs and aggregating scope. Token shares are computed **unrounded** at
+  `:1026`–`:1029` so per-item shares sum back to the invoking message's totals exactly; rounding is a
+  presentation concern (see 0725). This matches the timeline convention at
+  `packages/domain/src/analytics/forensic-query.ts:1199`.
+- `packages/app/src/services/history-board-mock-service.ts:24` — `getToolSequence` added to the
+  `HistoryBoardService` interface; `:990` — `MockHistoryBoardService.getToolSequence` with a
+  deterministic fixture sequence honouring the same filters.
+- `apps/server/src/modules/history/handlers.ts:22` — `getToolSequence` handler delegating to
+  `ctx.historyBoardService().getToolSequence(input)` under the existing `implement(contract)` shape.
 ### Testing
 
 - `packages/contracts/tests/history-contract.test.ts`: Verified `contract.history.getToolSequence` mounting, session/consolidated input validation, enum bounds, and full envelope parsing.
@@ -349,11 +365,25 @@ It must not recompute categories, token shares, or scope aggregates client-side,
 - Full verification gate: `bun run spur-check` passed with 7029 pass, 0 fail, 0 rule violations.
 
 ### Review
+| Priority | Finding | Location | Disposition |
+| --- | --- | --- | --- |
+| P1 | None | — | — |
+| P2 | None | — | — |
+| P3 | Per-item token shares were rounded independently (`Math.round(tokens / links)`), so shares did not sum back to the invoking message's totals when the token count was not divisible by the link count — e.g. `input_tokens = 401` across 3 linked calls yielded 3 × 134 = 402, over-attributing the scope aggregate. This contradicted R2 ("item shares must sum to the message totals without double-counting"), R6, and the design's own "mirrors `queryTimelineEvents` exactly" (which divides unrounded at `packages/domain/src/analytics/forensic-query.ts:1199`). | `packages/app/src/services/history-board-service.ts:1026` | **Fixed** — rounding removed; shares stay exact. Regression test with non-divisible counts added at `packages/app/tests/services/history-board-service.test.ts:509`. Presentation-layer rounding added in 0725. |
+| P4 | None | — | — |
 
-- P1–P4 Findings: None. Zero currency/cost fields exposed across contracts and services (R2 pure-token compliance).
-- Residual Risk: Low; query uses existing indexes on `(source, session_id)` and `(message_hash)`.
-- Final Disposition: Done; handoff ready for frontend task 0725.
-
+- **SECUA:** Security — read-only query, all predicates parameterized, `escapeLike` applied to the
+  search term; no secret or currency/cost field on the surface. Efficiency — single statement, bounded
+  by `LIMIT limit + 1`, session mode predicated on `tc.session_id` so
+  `idx_history_tool_call_session_id_seq` is reachable; no corpus materialization. Correctness — the
+  P3 finding above, now fixed; `request_id` dedup prevents duplicated tool rows; NULL `duration_ms`
+  is reported as `unmeasured`, never zero-filled. Usability — DTO carries both `totalDurationMs`
+  (measured rows only) and `durationUnmeasured`, so no mean is computed over invented zeros.
+  Architecture — category derivation and projection live in `packages/app`; `packages/contracts`
+  stays DTO-only and `packages/domain` returns raw rows (ADR-021 respected).
+- **Residual risk:** Low. Token shares are fractional by design; every consumer must round at render
+  (0725 does).
+- **Final disposition:** PASS after fix.
 ### References
 - Parent feature: `docs/features/E81_history-board-tool-using-tab-sequence-visualization-and-investigation-for-history-tool-calls.md`
 - Design satellite: `docs/design/history-board-tool-using-tab.md` (Approved, 2026-08-31)

@@ -4,7 +4,7 @@ name: "History Board Tool Using: web tab UI, sequence stream, inspection drawer,
 status: done
 template: feature-impl
 created_at: 2026-08-31T11:53:19.295Z
-updated_at: "2026-08-31T12:24:30.000Z"
+updated_at: "2026-08-31T12:32:09.745Z"
 feature_id: E81
 priority: P2
 tags: ["history", "frontend", "web", "ui"]
@@ -292,18 +292,31 @@ note. `errorText` renders in its own block only when non-empty.
     `bun run autofix && bun run spur-check && bun run test && bun run build`.
 
 ### Solution
-
-- **`apps/web/src/modules/history/tabs.ts`**: Inserted `{ id: 'tool-using', label: 'Tool Using', component: ToolUsingTab }` between `timeline` and `sessions`, and updated invariant doc comment.
-- **`apps/web/src/modules/history/ToolUsingTab.tsx`**: Created complete component with:
-  - Top summary metrics strip rendering `scope.totalCalls`, `scope.uniqueTools`, `scope.errorCount` / `scope.errorRate`, `scope.meanDurationMs` with `scope.durationUnmeasured`, and billed tokens.
-  - Mode selector (`session` vs `consolidated`) and session switcher dropdown without navigating away from the tab.
-  - Quick filter pills for tool names, status toggles (`ALL`, `OK`, `ERROR`), and search input.
-  - Chronological waterfall stream of tool items with `#seq`, category badge (`read`, `write`, `bash`, `search`, `mcp`, `other`), tool name, args preview, duration (with `durationMs === null` formatted as `—`), token share, and status.
-  - Inspection detail drawer with pretty-printed JSON `argsRaw` + copy button (and `argsDigest` fallback for raw-omitted imports), execution error trace callout, and full metadata grid (call ID, session ID, message hash, timestamps, token breakdown).
-- **`apps/web/src/modules/history/HistoryShell.tsx`**: Wired state (`toolMode`, `toolNameFilter`, `toolStatusFilter`, `toolSearch`, `toolSearchDebounced`, `toolSequenceData`, `toolSequenceLoading`, `toolSequenceError`), extended roster effect guard to include `tool-using`, added 250ms search debounce effect, added `getToolSequence` fetch effect, implemented `selectToolSession`, updated `badgeFor['tool-using']`, and rendered `ToolUsingTab`.
-- **`apps/web/tests/modules/history/tabs.test.ts` & `history-module.test.ts`**: Updated 6-tab order assertions.
-- **`apps/web/tests/modules/history/tool-using.test.tsx`**: Added comprehensive unit and component test suite covering metrics strip, sequence stream rendering, NULL duration formatting, inspection drawer, copy button, error trace, filter/search event dispatch, and empty states.
-
+- `apps/web/src/modules/history/tabs.ts:26` — `{ id: 'tool-using', label: 'Tool Using', component: ToolUsingTab }`
+  inserted between `timeline` (`:25`) and `sessions` (`:27`); the contract comment at `:10` was amended
+  from "never reorder" to the invariant that actually holds (ids are stable and never renamed or
+  removed; visual position is presentational).
+- `apps/web/src/modules/history/ToolUsingTab.tsx:35` — `CATEGORY_COLOR` palette; `:44` `fmtTokens`,
+  the presentation-only rounder for the unrounded token shares 0724 emits; `:78` drawer selection
+  keyed on `${sessionId}:${messageHash}:${toolSeq}`; `:82` `argsRaw` pretty-print with raw-string
+  fallback; `:94` clipboard copy; `:189` mean duration with `:193` `durationUnmeasured` surfaced;
+  `:276` truncated notice; `:308` empty state; `:320` category badge from `item.category`; `:367`
+  `durationMs !== null ? '<n> ms' : '—'`; `:404`–`:513` inspection drawer with `errorText` (`:422`),
+  raw-payload-omitted digest fallback (`:453`), `argsDigest` (`:459`), `durationSource` (`:485`),
+  `ts` (`:490`), `source`/`model` (`:495`), and `callId` (`:506`).
+- `apps/web/src/modules/history/HistoryShell.tsx:75`–`:79` — `toolMode`, `toolNameFilter`,
+  `toolStatusFilter`, `toolSearch`, `toolSearchDebounced` state; `:91`/`:113`/`:114`
+  `toolSequenceData`/`Loading`/`Error`; `:174` roster guard extended to `tool-using` (no second
+  roster fetch); `:296` 250 ms search debounce; `:303` fetch effect gated on
+  `activeTab === 'tool-using'` with filters as request parameters (`:326`–`:328`, `:333`–`:335`) and
+  `api.history.getToolSequence` at `:337`; `:371` `selectToolSession` (tab-local, does not
+  force-switch to Timeline like `selectTimelineSession`); `:394` badge derivation wired into
+  `badgeFor` at `:412`; `:557` render block between the timeline and sessions blocks.
+- `apps/web/tests/modules/history/tabs.test.ts:6` — six-tab order assertion updated;
+  `history-module.test.ts` likewise.
+- `apps/web/tests/modules/history/tool-using.test.tsx:131` metrics strip from `scope`; `:160`
+  sequence stream including a NULL-duration row; `:202` drawer fields; `:237` filter/status/search
+  callbacks; `:284` empty state.
 ### Testing
 
 - `cd apps/web && bun test tests/modules/history/` — 5 files, 33 tests passed (0 failed).
@@ -311,11 +324,28 @@ note. `errorText` renders in its own block only when non-empty.
 - `bun run test-cf && bun run build` — Cloudflare test passed, CLI bundle and Astro static bundle built successfully.
 
 ### Review
+| Priority | Finding | Location | Disposition |
+| --- | --- | --- | --- |
+| P1 | None | — | — |
+| P2 | None | — | — |
+| P3 | Token shares were rendered verbatim from the DTO. Once 0724's shares became exact (unrounded, so they sum to the message totals), a non-divisible split would have surfaced in the UI as `133.66666666666666 tok`. | `apps/web/src/modules/history/ToolUsingTab.tsx:375` | **Fixed** — `fmtTokens` (`:44`) rounds at render only, applied to the scope strip (`:200`), the row share and its tooltip (`:373`), and the drawer breakdown (`:513`). The DTO is never re-rounded. |
+| P4 | None | — | — |
 
-- **P1-P4 Findings**: None. No DaisyUI class leaks, no TypeScript errors, strict adherence to zero currency / pure token invariant, proper handling of `durationMs === null` formatting.
-- **Residual Risk**: Zero. All components covered by unit and integration tests.
-- **Final Disposition**: APPROVED. Ready for merge and feature wrap.
-
+- **SECUA:** Security — no `dangerouslySetInnerHTML`; `argsRaw`/`errorText` render as text inside
+  `<pre>`/`<span>`; `navigator.clipboard` is guarded for absence. Efficiency — no client-side
+  re-filter, re-sort, or re-aggregation; filters are request parameters and search is debounced
+  250 ms, so the metrics strip always matches the server's filtered scope; response bounded at 5,000
+  items by 0724, so no virtualization dependency is warranted. Correctness — `durationMs === null`
+  renders `—` with `durationSource`, never `0 ms`; `item.seq` is rendered as returned; the P3
+  presentation rounding above. Usability — distinct empty states for "no calls in scope" and
+  "filters matched nothing", explicit truncation notice, and a raw-payload-omitted note when
+  `argsRaw` is null. Architecture — the tab is a pure renderer: category and colour come from
+  `item.category`, every metric comes from `data.scope`, and `selectTimelineSession` is left
+  untouched for its existing callers.
+- **Residual risk:** Low. `activeTab` remains component state — the R1 clause "URL/state reflects the
+  tool-using identifier" is satisfied by the state half only; URL-synced tabs were explicitly
+  deferred in Q&A as a module-wide change.
+- **Final disposition:** PASS after fix.
 ### References
 
 - Parent feature: `docs/features/E81_history-board-tool-using-tab-sequence-visualization-and-investigation-for-history-tool-calls.md`
