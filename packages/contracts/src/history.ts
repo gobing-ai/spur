@@ -5,7 +5,7 @@ import { apiSuccessSchema } from './shared';
 // ─── Filter & Parameter Schemas ──────────────────────────────────────────────
 
 /** Supported date/time range presets for history filtering. */
-export const historyRangeEnum = z.enum(['24h', '7d', '30d', 'all', 'custom']);
+export const historyRangeEnum = z.enum(['1h', '4h', '24h', '7d', '30d', 'all', 'custom']);
 /** Inferred type for HistoryRange enum. */
 export type HistoryRange = z.infer<typeof historyRangeEnum>;
 
@@ -21,7 +21,7 @@ export type HistoryDimension = z.infer<typeof historyDimensionEnum>;
 
 /** Input filter schema for history queries. */
 export const historyFilterSchema = z.object({
-    range: historyRangeEnum.default('30d'),
+    range: historyRangeEnum.default('4h'),
     from: z.string().datetime().optional(),
     to: z.string().datetime().optional(),
     sources: z.array(z.string()).optional(),

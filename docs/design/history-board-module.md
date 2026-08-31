@@ -53,14 +53,16 @@ export const HISTORY_TABS = [
 ```
 
 ### 3.1 Tab 1: Summary
+
 - **KPI Metrics (4 Cards):** Total Billed Tokens, Cache-Saved Tokens (with % share), Sessions Count, Tool Calls Count (with error rate).
 - **Dual-Axis Time Series:**
   - **Left Y-Axis (Volume):** Stacked bar columns partitioned by active dimension (`By Model | By Source | By Tool | By Skill`).
   - **Right Y-Axis (Secondary):** Cyan neon line chart (`#22d3ee`) rendering Cache Hit Ratio (`0%–100%`).
-- **Dynamic Bucket Granularity:** `Auto | 5m | 10m | 30m | 1h | 4h | 1d`. Range defaults: `24h` $\rightarrow$ 10m, `7d` $\rightarrow$ 30m, `30d`/`All` $\rightarrow$ 1d.
+- **Dynamic Bucket Granularity:** `Auto | 5m | 10m | 30m | 1h | 4h | 1d`. Range defaults: `1h` $\rightarrow$ 5m, `4h`/`24h` $\rightarrow$ 10m, `7d` $\rightarrow$ 30m, `30d`/`All` $\rightarrow$ 1d.
 - **Breakdown Cards:** Top Models horizontal bars, Top Sources horizontal bars, Top Tools ranked table, Skills Used area chart, Cache Efficiency progress bar.
 
 ### 3.2 Tab 2: Timeline
+
 - **Modes:** Single Session view (with session selector and prev/next buttons) vs Consolidated Mode (multi-agent cross-session event stream scoped to a task, run, or active filter).
 - **Timeline Scrubber:** 96-bin interactive SVG activity histogram displaying event density across the time window with range slider controls.
 - **Header & Navigation (Conversation):** Single panel titled `Conversation` containing mode toggle (`Single Session | Consolidated`), global `Expand all` / `Collapse all` button (`aria-pressed`), filter checkboxes (`Hide assistant`, `Hide unknown`, `Hide other empty`), native session selector (`<first8…last4> · <source> · <UTC month/day time> · <formatted token load>`), and bounded Previous/Next buttons.
@@ -78,10 +80,12 @@ export const HISTORY_TABS = [
 - **Session Identity Extraction:** Canonical session IDs extracted from JSONL paths (`brain/<uuid>` for AGY, `rollout-*-<uuid>.jsonl` or `session_meta.payload.id` for Codex).
 
 ### 3.3 Tab 3: Sessions
+
 - **Sortable DataTable:** Columns for Session ID, Agent, Model, Start Time, Duration, Messages, Tool Calls, Billed Tokens, Cache Read, Fresh Input, Top Tool, and State badge.
 - **Navigation:** Clicking any row immediately switches to the `Timeline` tab scoped to that session.
 
 ### 3.4 Tab 4: Insights
+
 - **Loop Detection:** Cards for repeated tool calls (same tool + args digest $\ge 3$ times), showing repeat count, sequence range, and wasted token estimate.
 - **Cache Efficiency:** Cache hit ratio trend line and top cache-wasting steps table.
 - **Cost Hotspots:** Top 5 heaviest sessions (horizontal bars) and top 5 largest token steps.
@@ -89,6 +93,7 @@ export const HISTORY_TABS = [
 - **Model Comparison:** 4-axis radar/spider chart comparing models across Speed, Cache ratio, Reliability, and Output ratio, paired with a datatable twin.
 
 ### 3.5 Tab 5: Sources
+
 - **Overview Banner:** Total files, corpus size, date span, and total sessions.
 - **Manual Action:** Interactive `Import & Analyze` trigger button (`#btn-run-import`) with sync spinning state.
 - **9-Agent Activity Heatmaps:** Compact cards for Claude Code, Codex, Antigravity CLI, OMP, OpenClaw, Hermes, Grok Build, OpenCode, and Pi featuring 90-day daily token activity heatmaps and vector SVG brand icons.
@@ -104,7 +109,7 @@ All endpoints use strictly pure token accounting (zero currency/USD fields):
 
 ```ts
 export const historyFilterSchema = z.object({
-  range: z.enum(['24h', '7d', '30d', 'all', 'custom']).default('30d'),
+  range: z.enum(['1h', '4h', '24h', '7d', '30d', 'all', 'custom']).default('4h'),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
   sources: z.array(z.string()).optional(),
@@ -117,6 +122,7 @@ export const historyFilterSchema = z.object({
 ```
 
 Endpoints:
+
 1. `history.getSummary(filter)` $\rightarrow$ Summary KPIs, time buckets, breakdowns.
 2. `POST history.getTimeline({ mode: 'session', source, sessionId } | { mode: 'consolidated', filter, taskWbs?, runId? })` $\rightarrow$ Source-safe session or bounded newest-5,000 multi-agent blocks with nullable duration source, prompt attribution, and correlation exactness.
 3. `history.getSessions(filter, pagination, sort)` $\rightarrow$ Paginated, sortable session records.

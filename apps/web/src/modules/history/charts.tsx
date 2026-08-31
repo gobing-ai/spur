@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 // ─── Formatters & Pure Math Helpers ──────────────────────────────────────────
 
 export function resolveAutoBucket(range: string): '5m' | '10m' | '30m' | '1h' | '4h' | '1d' {
+    if (range === '1h') return '5m';
+    if (range === '4h') return '10m';
     if (range === '24h') return '10m';
     if (range === '7d') return '30m';
     return '1d';

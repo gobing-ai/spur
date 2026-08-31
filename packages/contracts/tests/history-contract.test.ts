@@ -51,10 +51,9 @@ describe('historyContract', () => {
 
     test('historyFilterSchema parses valid filters and assigns defaults', () => {
         const parsedDefault = historyFilterSchema.parse({});
-        expect(parsedDefault.range).toBe('30d');
+        expect(parsedDefault.range).toBe('4h');
         expect(parsedDefault.bucket).toBe('auto');
         expect(parsedDefault.dimension).toBe('model');
-
         const parsedFull = historyFilterSchema.parse({
             range: 'custom',
             from: '2026-08-01T00:00:00.000Z',

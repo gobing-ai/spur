@@ -121,7 +121,11 @@ function toArtifactSelector(filter?: HistoryFilter): ArtifactSelector {
 
     if (!since && filter.range && filter.range !== 'all' && filter.range !== 'custom') {
         const now = Date.now();
-        if (filter.range === '24h') {
+        if (filter.range === '1h') {
+            since = new Date(now - 1 * 60 * 60 * 1000).toISOString();
+        } else if (filter.range === '4h') {
+            since = new Date(now - 4 * 60 * 60 * 1000).toISOString();
+        } else if (filter.range === '24h') {
             since = new Date(now - 24 * 60 * 60 * 1000).toISOString();
         } else if (filter.range === '7d') {
             since = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -143,11 +147,12 @@ function toArtifactSelector(filter?: HistoryFilter): ArtifactSelector {
     };
 }
 
-function resolveBucket(bucket: string | undefined, range: HistoryRange = '30d'): DomainHistoryBucket {
+function resolveBucket(bucket: string | undefined, range: HistoryRange = '4h'): DomainHistoryBucket {
     if (bucket && bucket !== 'auto') {
         return bucket as DomainHistoryBucket;
     }
-    if (range === '24h') return '10m';
+    if (range === '1h') return '5m';
+    if (range === '4h' || range === '24h') return '10m';
     if (range === '7d') return '30m';
     return '1d';
 }
@@ -545,7 +550,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         }
 
         const sel = toArtifactSelector(filter);
-        const bucket = resolveBucket(filter?.bucket, filter?.range ?? '30d');
+        const bucket = resolveBucket(filter?.bucket, filter?.range ?? '4h');
         const dimension = filter?.dimension ?? 'model';
         const exactSummaryRollup = (sel.tools?.length ?? 0) === 0 && (sel.skills?.length ?? 0) === 0;
         if (exactSummaryRollup && (await historyBoardRollupsFresh(db))) {

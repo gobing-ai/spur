@@ -275,7 +275,11 @@ export class MockHistoryBoardService implements HistoryBoardService {
         let minTime = 0;
         let maxTime = Number.POSITIVE_INFINITY;
 
-        if (filter.range === '24h') {
+        if (filter.range === '1h') {
+            minTime = now - 1 * 3600 * 1000;
+        } else if (filter.range === '4h') {
+            minTime = now - 4 * 3600 * 1000;
+        } else if (filter.range === '24h') {
             minTime = now - 24 * 3600 * 1000;
         } else if (filter.range === '7d') {
             minTime = now - 7 * 86400 * 1000;
@@ -345,11 +349,13 @@ export class MockHistoryBoardService implements HistoryBoardService {
         // Build time series buckets
         const bucket =
             filter?.bucket === 'auto' || filter?.bucket === undefined
-                ? filter?.range === '24h'
-                    ? '10m'
-                    : filter?.range === '7d'
-                      ? '30m'
-                      : '1d'
+                ? filter?.range === '1h'
+                    ? '5m'
+                    : filter?.range === '4h' || filter?.range === '24h'
+                      ? '10m'
+                      : filter?.range === '7d'
+                        ? '30m'
+                        : '1d'
                 : filter.bucket;
         const bucketInterval = {
             '5m': 5 * 60_000,

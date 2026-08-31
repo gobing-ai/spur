@@ -44,6 +44,8 @@ const unionOptions = (
 };
 
 const rangeLabelFor = (filter: HistoryFilter): string => {
+    if (filter.range === '1h') return 'Last 1h';
+    if (filter.range === '4h') return 'Last 4h';
     if (filter.range === '24h') return 'Last 24h';
     if (filter.range === '7d') return 'Last 7d';
     if (filter.range === '30d') return 'Last 30d';
@@ -56,7 +58,7 @@ const errorMessage = (err: unknown): string => (err instanceof Error ? err.messa
 export const HistoryShell: React.FC = () => {
     const [activeTab, setActiveTab] = useState<string>('summary');
     const [filter, setFilter] = useState<HistoryFilter>({
-        range: '30d',
+        range: '4h',
         bucket: 'auto',
         dimension: 'model',
     });

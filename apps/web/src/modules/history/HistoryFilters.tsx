@@ -1,4 +1,4 @@
-import type { HistoryFilter } from '@gobing-ai/spur-contracts';
+import type { HistoryFilter, HistoryRange } from '@gobing-ai/spur-contracts';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { AgentIcon } from './AgentIcon';
@@ -179,7 +179,7 @@ export const HistoryFilters: React.FC<HistoryFiltersProps> = ({
 }) => {
     const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
-    const handleRangeChange = (range: '24h' | '7d' | '30d' | 'all' | 'custom') => {
+    const handleRangeChange = (range: HistoryRange) => {
         onChange({ ...filter, range });
     };
 
@@ -198,7 +198,7 @@ export const HistoryFilters: React.FC<HistoryFiltersProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-3">
                 {/* Time Range Presets */}
                 <div className="flex items-center gap-1.5 bg-base-300 p-1 rounded-lg">
-                    {(['24h', '7d', '30d', 'all'] as const).map((r) => (
+                    {(['1h', '4h', '24h', '7d', '30d', 'all'] as const).map((r) => (
                         <button
                             key={r}
                             type="button"
