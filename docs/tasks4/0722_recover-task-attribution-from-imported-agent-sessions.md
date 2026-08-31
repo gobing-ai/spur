@@ -4,7 +4,7 @@ name: "Recover task attribution from imported agent sessions"
 status: done
 template: issue
 created_at: 2026-08-30T18:44:01.803Z
-updated_at: "2026-08-31T12:48:51.311Z"
+updated_at: "2026-08-31T16:29:47.049Z"
 feature_id: E6
 dependencies: ["0557", "0558", "0638"]
 ---
@@ -175,15 +175,15 @@ repeat import writes no additional links.
 
 ### Plan
 
-- [ ] Add the direct task-session schema/DAO and idempotent confidence-aware write contract (R2).
-- [ ] Implement the pure allowlisted operational-evidence classifier with positive, multi-task,
+- [x] Add the direct task-session schema/DAO and idempotent confidence-aware write contract (R2).
+- [x] Implement the pure allowlisted operational-evidence classifier with positive, multi-task,
       plain-mention, pasted-specification, invalid-WBS, and ambiguity fixtures (R3).
-- [ ] Run the classifier from incremental/full/dry-run history import with bounded per-source
+- [x] Run the classifier from incremental/full/dry-run history import with bounded per-source
       counters and failure reporting (R1, R4, R6).
-- [ ] Extend shared task-selector SQL to union real-run and direct-session authorities while
+- [x] Extend shared task-selector SQL to union real-run and direct-session authorities while
       preserving task+run intersection and all other selector filters (R5).
-- [ ] Update history data-processing/selector docs and focused domain/app/CLI tests (R5–R6).
-- [ ] Perform the source-local A6 full-import repair twice, capture provenance/counts, verify
+- [x] Update history data-processing/selector docs and focused domain/app/CLI tests (R5–R6).
+- [x] Perform the source-local A6 full-import repair twice, capture provenance/counts, verify
       0703–0712 task-scoped sessions, then run all project and corpus gates (R7).
 
 ### Root Cause
