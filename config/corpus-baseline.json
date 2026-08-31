@@ -147,12 +147,6 @@
         },
         {
             "kind": "feature",
-            "id": "D6",
-            "code": "L4.dogfood-missing",
-            "severity": "warning"
-        },
-        {
-            "kind": "feature",
             "id": "D7",
             "code": "L4.dogfood-missing",
             "severity": "warning"
@@ -203,6 +197,12 @@
             "kind": "feature",
             "id": "E5",
             "code": "L4.dogfood-missing",
+            "severity": "warning"
+        },
+        {
+            "kind": "feature",
+            "id": "E6",
+            "code": "L4.scenario-unverified",
             "severity": "warning"
         },
         {
@@ -1587,12 +1587,6 @@
         },
         {
             "kind": "task",
-            "id": "0689",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
             "id": "0690",
             "code": "L3.ac-empty",
             "severity": "error"
@@ -1642,12 +1636,6 @@
         {
             "kind": "task",
             "id": "0698",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0719",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         }
