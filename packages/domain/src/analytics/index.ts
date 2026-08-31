@@ -118,6 +118,11 @@ export {
     historyBoardSummaryFromRollup,
     replaceHistoryBoardRollups,
 } from './history-board-rollup';
+export {
+    HISTORY_RESET_TABLES,
+    type HistoryResetResult,
+    resetHistoryTables,
+} from './history-reset';
 export { MODEL_PRICING, resolvePricing, UNKNOWN_MODEL_PRICING } from './models';
 export {
     ArtifactNarrowError,

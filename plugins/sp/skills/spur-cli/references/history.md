@@ -22,6 +22,7 @@ live in `packages/app/src/services/history-service.ts` (`FanOutResult`, `DailyRe
 | `analyze` | Aggregate imported rows and write a versioned forensic artifact | `--since <iso>` `--until <iso>` `--source <source>` `--session <id>` `--run <runId>` `--task <wbs>` `--top <n>` `--out <path>` `--json` |
 | `report [path]` | Purely render an existing artifact; default to `latest.json` | `--mode <name>` `--task <wbs>` `--top <n>` `--json` |
 | `daily` | Run import-all → analyze → artifact → 90-day report pruning once | `--since <iso>` `--until <iso>` `--root <path>` `--source-timeout <ms>` `--mode <name>` `--json` |
+| `reset` | Destructively wipe every `history_*` table for a clean re-import; refuses without `--yes` | `--yes` `--json` |
 
 Every JSON-capable verb also advertises `--json-envelope`; use the facade's machine-output contract.
 

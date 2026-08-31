@@ -36,6 +36,7 @@ import {
     type ForensicTotals,
     HISTORY_ARTIFACT_SCHEMA_VERSION,
     type HistoryArtifact,
+    type HistoryResetResult,
     type LadderEntry,
     listAttributionSessions,
     loops,
@@ -47,6 +48,7 @@ import {
     type RetentionResult,
     RunSessionDao,
     renderMarkdown,
+    resetHistoryTables,
     resolveReportMode,
     runRetention,
     type SessionState,
@@ -488,6 +490,15 @@ export class HistoryService {
      * artifact, and writes it (plus the bounded-errors sidecar) to disk. Returns the
      * artifact.
      */
+    /**
+     * Wipe every history_* table (import output + derived analytics) in one atomic batch.
+     * A full `spur history import` + `analyze` rebuilds everything afterwards.
+     */
+    async resetHistory(): Promise<HistoryResetResult> {
+        const db = await this.ctx.getDb();
+        return resetHistoryTables(db);
+    }
+
     async analyze(selector: ArtifactSelector, opts: AnalyzeOptions = {}): Promise<HistoryAnalyzeResult> {
         const top = opts.top ?? 20;
         const db = await this.ctx.getDb();

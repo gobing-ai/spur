@@ -847,6 +847,20 @@ three new forensic queries (`sessionSpans`, `sessionToolDurations`, `todoToolCal
 reading the 0012 `args_raw` column) alongside the existing SQL set; registry metrics never load the
 corpus into memory.
 
+#### `spur history reset --yes [--json]`
+
+Destructively wipe every `history_*` table in one atomic batch: normalized rows
+(`history_message` / `history_tool_call` / `history_run_session` / `history_task_session`), the ten
+importer-created `history_etl_*` tables, all derived analytics (`history_daily_stats`, the ten
+`history_board_*` rollups), and importer bookkeeping (`history_import_checkpoint` /
+`history_import_ledger`). Requires `--yes`; without it the command refuses with exit 1. Task corpus
+and run provenance (`task_run_links`) are untouched, so run-chain attribution re-resolves after a
+full re-import. Unlisted `history_*` tables are reported (never silently deleted) in the
+`unknown` result field. The canonical table list lives in
+`HISTORY_RESET_TABLES` (domain `history-reset.ts`) with a drift-guard test asserting it covers
+every migrated history table; a full `spur history import` + `analyze` rebuilds everything after a
+reset.
+
 #### `spur history report [path] [--mode <name>] [--task <wbs>] [--top <n>] [--json]`
 
 Pure renderer of a previously-generated analyze artifact — never opens the database. Reads the
