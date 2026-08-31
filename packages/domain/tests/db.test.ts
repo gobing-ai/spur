@@ -625,6 +625,34 @@ describe('migration 0027: history refresh active single-flight (task 0716)', () 
             db.close();
         }
     });
+
+    test('an already-migrated DB is a pure read — no write lock taken', async () => {
+        // Every CLI invocation calls applyCliMigrations, including read-only ones.
+        // The CREATE TABLE it used to run unconditionally is DDL, so a read-only
+        // `rule run` took a write lock and could lose to a long-lived `spur serve`
+        // with SQLITE_BUSY. On an up-to-date DB there must be no write at all.
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const writes: string[] = [];
+            const exec = db.exec.bind(db);
+            const run = db.run.bind(db);
+            db.exec = ((sql: string, ...rest: unknown[]) => {
+                writes.push(sql);
+                return exec(sql, ...(rest as []));
+            }) as typeof db.exec;
+            db.run = ((sql: string, ...rest: unknown[]) => {
+                writes.push(sql);
+                return run(sql, ...(rest as []));
+            }) as typeof db.run;
+
+            const applied = await applyCliMigrations(db);
+
+            expect(applied).toBe(0);
+            expect(writes).toEqual([]);
+        } finally {
+            db.close();
+        }
+    });
 });
 describe('findPendingQueueJob / updatePendingQueueJob', () => {
     test('findPendingQueueJob returns undefined when no pending row exists', async () => {

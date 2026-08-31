@@ -833,8 +833,32 @@ export const CLI_MIGRATIONS: CliMigration[] = [
 /** Filename marker for regenerated CLI-owned migrations. */
 export const CLI_MIGRATION_FILE_MARKER = '_spur_cli_';
 
+/**
+ * True when the journal table exists and already lists every migration id — i.e.
+ * {@link applyCliMigrations} has nothing to write. Pure reads, so it never takes a
+ * write lock on the shared project DB.
+ */
+async function allMigrationsJournaled(adapter: DbAdapter, migrations: CliMigration[]): Promise<boolean> {
+    if (migrations.length === 0) return true;
+    if (!(await tableExists(adapter, '__spur_cli_migrations'))) return false;
+    const placeholders = migrations.map(() => '?').join(', ');
+    const row = await adapter.queryFirst<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM "__spur_cli_migrations" WHERE id IN (${placeholders})`,
+        ...migrations.map((m) => m.id),
+    );
+    return (row?.n ?? 0) === migrations.length;
+}
+
 /** Apply CLI-owned migrations with an isolated journal table. */
 export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MIGRATIONS): Promise<number> {
+    // Read-only fast path. EVERY CLI invocation calls this, including read-only ones
+    // like `rule run`, and the CREATE TABLE below is DDL — it takes a write lock on the
+    // shared project DB even when there is nothing to migrate. Against a large
+    // `.spur/spur.db` held open by a long-lived `spur serve`, that turned routine
+    // read-only commands into SQLITE_BUSY failures. When the journal already lists
+    // every migration there is no work to do, so answer from a read and take no lock.
+    if (await allMigrationsJournaled(adapter, migrations)) return 0;
+
     await adapter.exec(
         'CREATE TABLE IF NOT EXISTS "__spur_cli_migrations" (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)',
     );
