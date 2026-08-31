@@ -584,32 +584,45 @@ export const RadarChart: React.FC<{
 
 const HEAT_LEVEL_OPACITY = [0, 0.3, 0.5, 0.75, 1] as const;
 
-const heatLevel = (tokens: number, max: number): 0 | 1 | 2 | 3 | 4 => {
-    if (tokens <= 0 || max <= 0) return 0;
-    const q = tokens / max;
-    if (q <= 0.25) return 1;
-    if (q <= 0.5) return 2;
-    if (q <= 0.75) return 3;
-    return 4;
-};
-
 interface HeatDay {
     date: string;
     tokens: number;
     sessions: number;
 }
 
+/**
+ * Heat intensity per day. Sources that report no token telemetry at all (e.g. Antigravity CLI
+ * transcripts carry no usage fields) would otherwise render as an all-gray grid; fall back to
+ * session counts so real activity still shows, while keeping reported token counts honest.
+ */
+const maxDailyValue = (days: readonly HeatDay[], metric: 'tokens' | 'sessions'): number =>
+    days.reduce((max, day) => Math.max(max, day[metric]), 0);
+
+const heatLevel = (value: number, max: number): 0 | 1 | 2 | 3 | 4 => {
+    if (value <= 0 || max <= 0) return 0;
+    const q = value / max;
+    if (q <= 0.25) return 1;
+    if (q <= 0.5) return 2;
+    if (q <= 0.75) return 3;
+    return 4;
+};
+
 export const HeatmapGrid: React.FC<{
     days: Array<{ date: string; tokens: number; sessions: number }>;
     color?: string;
     maxDailyTokens?: number;
-}> = ({ days, color = '#3987e5', maxDailyTokens = 1 }) => {
+}> = ({ days, color = '#3987e5', maxDailyTokens }) => {
     const [hoveredCell, setHoveredCell] = useState<{
         date: string;
         tokens: number;
         sessions: number;
         colIdx: number;
     } | null>(null);
+
+    // Prefer token telemetry; fall back to session counts when the source reports none.
+    const tokenMax = maxDailyTokens ?? maxDailyValue(days, 'tokens');
+    const useSessions = tokenMax <= 0 && maxDailyValue(days, 'sessions') > 0;
+    const activeMax = useSessions ? maxDailyValue(days, 'sessions') : tokenMax;
 
     // The prototype contract is exactly 90 sequential days: 13 columns, seven rows.
     const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
@@ -688,7 +701,7 @@ export const HeatmapGrid: React.FC<{
                                 </div>
                                 <div className="flex flex-col gap-[3px]">
                                     {week.map((cell) => {
-                                        const lvl = heatLevel(cell.tokens, maxDailyTokens);
+                                        const lvl = heatLevel(useSessions ? cell.sessions : cell.tokens, activeMax);
                                         return (
                                             <button
                                                 type="button"
