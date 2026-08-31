@@ -292,13 +292,13 @@ describe('History Board components', () => {
     });
 
     test('Range presets include 1h/4h and emit the selected range', () => {
-        let next: { range?: string } | null = null;
-        const view = render(<HistoryFilters filter={{ range: '4h' }} onChange={(f) => (next = f)} />);
+        const next: { range?: string } = {};
+        const view = render(<HistoryFilters filter={{ range: '4h' }} onChange={(f) => (next.range = f.range)} />);
 
         const preset4h = view.getByRole('button', { name: '4H' });
         expect(preset4h.getAttribute('aria-pressed') ?? preset4h.className).toContain('bg-primary');
         fireEvent.click(view.getByRole('button', { name: '1H' }));
-        expect(next?.range).toBe('1h');
+        expect(next.range).toBe('1h');
     });
 
     test('Summary dimension controls request a server-backed restack', () => {
