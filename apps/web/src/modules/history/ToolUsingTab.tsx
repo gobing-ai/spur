@@ -41,6 +41,12 @@ export const CATEGORY_COLOR: Record<HistoryToolCategory, string> = {
     other: '#64748b',
 };
 
+/**
+ * Token shares arrive unrounded so they sum back to their message totals exactly (0724 R2).
+ * Rounding is presentation-only — never fold it back into the DTO.
+ */
+const fmtTokens = (value: number): string => Math.round(value).toLocaleString();
+
 export const ToolUsingTab: React.FC<ToolUsingTabProps> = ({
     data,
     loading = false,
@@ -197,7 +203,7 @@ export const ToolUsingTab: React.FC<ToolUsingTabProps> = ({
                         <div>
                             <span className="text-base-content/50">Tokens: </span>
                             <span className="font-bold text-base-content" data-testid="tool-scope-tokens">
-                                {scope?.tokens.billedTokens.toLocaleString() ?? 0}
+                                {scope ? fmtTokens(scope.tokens.billedTokens) : 0}
                             </span>
                         </div>
                     </div>
@@ -370,9 +376,9 @@ export const ToolUsingTab: React.FC<ToolUsingTabProps> = ({
                                     {/* Token share */}
                                     <span
                                         className="text-base-content/50 text-[11px]"
-                                        title={`Tokens: ${item.tokens.freshInputTokens} fresh input, ${item.tokens.cacheReadTokens} cache read, ${item.tokens.outputTokens} output`}
+                                        title={`Tokens: ${fmtTokens(item.tokens.freshInputTokens)} fresh input, ${fmtTokens(item.tokens.cacheReadTokens)} cache read, ${fmtTokens(item.tokens.outputTokens)} output`}
                                     >
-                                        {item.tokens.billedTokens} tok
+                                        {fmtTokens(item.tokens.billedTokens)} tok
                                     </span>
 
                                     {/* Status Pill */}
@@ -510,9 +516,10 @@ export const ToolUsingTab: React.FC<ToolUsingTabProps> = ({
                             <div className="col-span-2 pt-1 border-t border-base-content/10">
                                 <span className="text-base-content/50 block text-[10px]">TOKEN LOAD (SHARE)</span>
                                 <span className="text-[11px]">
-                                    Billed: {selectedItem.tokens.billedTokens} (Fresh:{' '}
-                                    {selectedItem.tokens.freshInputTokens}, Cache Read:{' '}
-                                    {selectedItem.tokens.cacheReadTokens}, Output: {selectedItem.tokens.outputTokens})
+                                    Billed: {fmtTokens(selectedItem.tokens.billedTokens)} (Fresh:{' '}
+                                    {fmtTokens(selectedItem.tokens.freshInputTokens)}, Cache Read:{' '}
+                                    {fmtTokens(selectedItem.tokens.cacheReadTokens)}, Output:{' '}
+                                    {fmtTokens(selectedItem.tokens.outputTokens)})
                                 </span>
                             </div>
                         </div>

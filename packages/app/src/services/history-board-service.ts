@@ -1022,11 +1022,13 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                 unmeasuredCount++;
             }
 
-            // Token split across links
+            // Token split across links. Shares stay unrounded so they sum back to the
+            // message totals exactly (0724 R2/R6); this matches the timeline convention in
+            // `packages/domain/src/analytics/forensic-query.ts:1199`.
             const linkCount = Math.max(row.links, 1);
-            const fresh = Math.round((row.inputTokens ?? 0) / linkCount);
-            const cacheRead = Math.round((row.cacheReadTokens ?? 0) / linkCount);
-            const output = Math.round((row.outputTokens ?? 0) / linkCount);
+            const fresh = (row.inputTokens ?? 0) / linkCount;
+            const cacheRead = (row.cacheReadTokens ?? 0) / linkCount;
+            const output = (row.outputTokens ?? 0) / linkCount;
             const billed = fresh + output;
             const cacheSaved = cacheRead;
 

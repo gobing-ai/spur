@@ -505,6 +505,46 @@ describe('LiveHistoryBoardService', () => {
         expect(res.scope.tokens.cacheReadTokens).toBe(600);
     });
 
+    test('getToolSequence token shares sum to message totals when not evenly divisible', async () => {
+        const db = await setupTestDb();
+        const service = new LiveHistoryBoardService({ db });
+
+        // 401 / 3 and 101 / 3 do not divide evenly — rounding each share independently
+        // would over- or under-attribute the message totals in the scope aggregate.
+        await db.run(
+            `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq, turn_index,
+                 role, record_type, disposition, ts, model, input_tokens, output_tokens, cache_read_tokens,
+                 provenance, duration_ms, imported_at)
+             VALUES ('msg-odd-1', 'claude', 'odd.jsonl', 1, 'sess-odd-1', 1, 1,
+                     'assistant', 'message', 'ok', '2026-08-31T02:00:00Z', 'claude-opus-4.6',
+                     401, 101, 205, 'agent', 500, '2026-06-01T00:00:00Z')`,
+        );
+        for (const [i, hash] of ['tc-odd-1', 'tc-odd-2', 'tc-odd-3'].entries()) {
+            await db.run(
+                `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line,
+                     session_id, seq, tool_name, args_digest, args_raw, status, duration_ms, imported_at)
+                 VALUES (?, 'msg-odd-1', 'claude', 'odd.jsonl', ?, 'sess-odd-1', ?,
+                         'view_file', 'src/a.ts', '{"path":"src/a.ts"}', 'ok', 10, '2026-06-01T00:00:00Z')`,
+                hash,
+                i + 1,
+                i + 1,
+            );
+        }
+
+        const res = await service.getToolSequence({ mode: 'session', source: 'claude', sessionId: 'sess-odd-1' });
+
+        expect(res.items.length).toBe(3);
+        const sum = (pick: (t: (typeof res.items)[number]['tokens']) => number) =>
+            res.items.reduce((acc, item) => acc + pick(item.tokens), 0);
+        expect(sum((t) => t.freshInputTokens)).toBeCloseTo(401, 6);
+        expect(sum((t) => t.outputTokens)).toBeCloseTo(101, 6);
+        expect(sum((t) => t.cacheReadTokens)).toBeCloseTo(205, 6);
+        expect(res.scope.tokens.freshInputTokens).toBeCloseTo(401, 6);
+        expect(res.scope.tokens.outputTokens).toBeCloseTo(101, 6);
+        expect(res.scope.tokens.cacheReadTokens).toBeCloseTo(205, 6);
+        expect(res.scope.tokens.billedTokens).toBeCloseTo(502, 6);
+    });
+
     test('getToolSequence handles empty db cleanly', async () => {
         const service = new LiveHistoryBoardService({});
         const res = await service.getToolSequence({ mode: 'consolidated' });
