@@ -493,6 +493,11 @@ function formatFanOutResult(r: FanOutResult): string {
             `  ${e.source}: ${e.status} (files=${e.files} scanned, new-messages=${e.messages}, tool-calls=${e.toolCalls})`,
         );
     }
+    const a = r.attribution;
+    lines.push(
+        `attribution: sessions=${a.sessionsEvaluated} links-created=${a.linksCreated} ` +
+            `links-present=${a.linksAlreadyPresent} skipped=${a.skippedEvidence} ambiguous=${a.ambiguousEvidence}`,
+    );
     if (r.warnings.length > 0) {
         lines.push('warnings:');
         for (const w of r.warnings) {
@@ -517,6 +522,11 @@ function formatDailyResult(r: DailyResult): string {
             lines.push(`  [${w.code}] ${w.source ?? '-'}: ${w.detail}`);
         }
     }
+    const a = r.fanOut.attribution;
+    lines.push(
+        `attribution: sessions=${a.sessionsEvaluated} links-created=${a.linksCreated} ` +
+            `links-present=${a.linksAlreadyPresent} skipped=${a.skippedEvidence} ambiguous=${a.ambiguousEvidence}`,
+    );
     lines.push(`artifact totals: messages=${r.artifact.totals.messages} toolCalls=${r.artifact.totals.toolCalls}`);
     lines.push(
         `coverage: refreshed=[${r.coverage.refreshed.join(', ')}] skipped=[${r.coverage.skipped.join(', ')}] ` +

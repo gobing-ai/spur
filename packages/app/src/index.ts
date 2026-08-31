@@ -393,6 +393,8 @@ export {
     type SystemEventCorrelation,
     type SystemEventTap,
 } from './services/system-event-tap';
+export type { AttributeSessionsInput } from './services/task-attribution';
+export { attributeSessions } from './services/task-attribution';
 export type { CheckFindings, CheckResult as TaskCheckResult, SectionMatrix } from './services/task-check';
 export {
     extractReviewSectionBody,

@@ -17,6 +17,7 @@ import type { DbAdapter } from '@gobing-ai/spur-domain';
 import {
     type ArtifactSelector,
     type ArtifactWarning,
+    type AttributionScope,
     assertArtifactVersion,
     buildWatermarkFilter,
     bySession,
@@ -31,10 +32,12 @@ import {
     deriveAssistantDurations,
     derivedWarnings,
     drift,
+    emptyAttributionSummary,
     type ForensicTotals,
     HISTORY_ARTIFACT_SCHEMA_VERSION,
     type HistoryArtifact,
     type LadderEntry,
+    listAttributionSessions,
     loops,
     type MessageRollupRow,
     materializeWatermarkExclude,
@@ -55,6 +58,7 @@ import {
     sessionWatermarks,
     sourceSummary,
     stepSupport,
+    type TaskAttributionSummary,
     type ToolRollupRow,
     todoToolCalls,
     toolRollup,
@@ -74,14 +78,24 @@ import {
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { getExecutorTier } from './agent-service';
 import { refreshHistoryRollups } from './history-analysis-service';
+import { attributeSessions } from './task-attribution';
 import { deriveVerifiedOutcome } from './verified-outcome';
 
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
 
-/** Result of a history import operation. */
-export type HistoryImportResult = ImportResult;
+/**
+ * Result of a history import operation — the importer result extended additively
+ * with the bounded task-attribution outcome (task 0722 R6). `attribution` is null
+ * when the pass was skipped (no task locator in the service context); it is
+ * present (with preview counts) in dry-run mode too. `attributionError` is set
+ * only when the attribution pass failed — reported per source, never a failed import.
+ */
+export type HistoryImportResult = ImportResult & {
+    attribution?: TaskAttributionSummary | null;
+    attributionError?: string;
+};
 
 /** Result of a history analyze operation — the versioned JSON artifact (0464 R2). */
 export type HistoryAnalyzeResult = HistoryArtifact;
@@ -118,6 +132,11 @@ export interface AnalyzeOptions {
 export interface FanOutResult {
     /** One {@link CoverageEntry} per attempted source, in `SOURCES` order. */
     entries: CoverageEntry[];
+    /**
+     * Aggregate task↔session attribution counters across the fan-out (task 0722 R6).
+     * Zeros when no source produced evidence; dry-run previews what would be created.
+     */
+    attribution: TaskAttributionSummary;
     /** `0` all ok/empty, `1` all failed, `2` mixed. */
     exitCode: 0 | 1 | 2;
     /** Per-source warnings: failed sources carry `source-failed`; was-non-empty carry `source-was-nonempty`. */
@@ -352,6 +371,7 @@ export class HistoryService {
         const parsedSource = parseSource(source);
         const mode = parseMode(opts.mode ?? (opts.file !== undefined ? 'force-file' : 'incremental'));
         const dryRun = opts.dryRun ?? false;
+        const startedAt = new Date().toISOString();
         const db = await this.ctx.getDb();
         const dao = new RunSessionDao(db);
         const discovery =
@@ -407,7 +427,58 @@ export class HistoryService {
             // this pass could not reach.
             await deriveAssistantDurations(db);
         }
-        return result;
+
+        // Task↔session attribution (task 0722 R4): runs after the source import
+        // succeeded, in write and dry-run mode alike. Full mode (and dry-run
+        // preview) evaluates every discovered session of the source — so an
+        // ordinary source-local full re-import repairs already-consolidated
+        // history; incremental evaluates only the sessions this import touched.
+        // A failure here degrades the source's report (attributionError) and
+        // never fails the import itself.
+        const attribution = await this.attributeSource({
+            source: parsedSource,
+            mode: mode === 'full' || dryRun ? 'all' : 'changed',
+            changedSince: startedAt,
+            dryRun,
+        });
+        return {
+            ...result,
+            attribution: attribution.summary,
+            ...(attribution.error !== null ? { attributionError: attribution.error } : {}),
+        };
+    }
+
+    /**
+     * Attribute the imported sessions of one source to task WBS values (task 0722).
+     * Pure classifier + idempotent DAO writes; requires a task locator for candidate
+     * validation — without one the pass is skipped (`attribution: null`), never guessed.
+     */
+    private async attributeSource(input: {
+        source: LlmJsonlSource;
+        mode: AttributionScope;
+        changedSince: string;
+        dryRun: boolean;
+    }): Promise<{ summary: TaskAttributionSummary | null; error: string | null }> {
+        const locator = this.ctx.taskLocator;
+        if (locator === undefined) return { summary: null, error: null };
+        try {
+            const db = await this.ctx.getDb();
+            const sessionIds = await listAttributionSessions(db, input.source, {
+                scope: input.mode === 'all' ? 'all' : 'changed',
+                changedSince: input.changedSince,
+            });
+            const summary = await attributeSessions({
+                db,
+                source: input.source,
+                sessionIds,
+                isKnownWbs: async (wbs) => (await locator.findByWbs(wbs)) !== null,
+                resolvedAt: new Date().toISOString(),
+                dryRun: input.dryRun,
+            });
+            return { summary, error: null };
+        } catch (e) {
+            return { summary: null, error: (e as Error).message };
+        }
     }
 
     /**
@@ -613,6 +684,7 @@ export class HistoryService {
 
         const entries: CoverageEntry[] = [];
         const warnings: ArtifactWarning[] = [];
+        const attribution = emptyAttributionSummary();
         // F9: stamp the run start so per-source tool-call counts reflect only rows this
         // run imported (existing rows from prior runs never inflate the count). Dry-run
         // writes nothing, so its counts stay legitimately 0.
@@ -620,7 +692,7 @@ export class HistoryService {
 
         for (const source of sources) {
             // eslint-disable-next-line no-await-in-loop -- fan-out is deliberately sequential (R7, task 0470 Design)
-            const { coverageEntry, sourceWarnings } = await this.importOneIsolated(
+            const { coverageEntry, sourceWarnings, sourceAttribution } = await this.importOneIsolated(
                 source,
                 opts,
                 timeoutMs,
@@ -628,9 +700,16 @@ export class HistoryService {
             );
             entries.push(coverageEntry);
             warnings.push(...sourceWarnings);
+            if (sourceAttribution !== null) {
+                attribution.sessionsEvaluated += sourceAttribution.sessionsEvaluated;
+                attribution.linksCreated += sourceAttribution.linksCreated;
+                attribution.linksAlreadyPresent += sourceAttribution.linksAlreadyPresent;
+                attribution.skippedEvidence += sourceAttribution.skippedEvidence;
+                attribution.ambiguousEvidence += sourceAttribution.ambiguousEvidence;
+            }
         }
 
-        return { entries, exitCode: computeExitCode(entries), warnings };
+        return { entries, exitCode: computeExitCode(entries), warnings, attribution };
     }
 
     /**
@@ -698,7 +777,11 @@ export class HistoryService {
         opts: ImportAllOptions,
         timeoutMs: number,
         runStartedAt: string,
-    ): Promise<{ coverageEntry: CoverageEntry; sourceWarnings: ArtifactWarning[] }> {
+    ): Promise<{
+        coverageEntry: CoverageEntry;
+        sourceWarnings: ArtifactWarning[];
+        sourceAttribution: TaskAttributionSummary | null;
+    }> {
         const db = await this.ctx.getDb();
         const sourceWarnings: ArtifactWarning[] = [];
 
@@ -762,6 +845,16 @@ export class HistoryService {
                 });
             }
 
+            // R6 (task 0722): a failed attribution pass degrades this source's report —
+            // the import itself still succeeded and must not read as clean silence.
+            if (result.attributionError != null) {
+                sourceWarnings.push({
+                    code: 'attribution-failed',
+                    source,
+                    detail: `task attribution failed: ${result.attributionError}`,
+                });
+            }
+
             // F9: real count of tool calls this run imported for this source — rows with
             // imported_at >= run start. Replaces the hardcoded 0 that made standalone
             // `history import` look tool-less. Dry-run writes nothing, so it stays 0.
@@ -784,7 +877,7 @@ export class HistoryService {
                 ...(result.reconciliation ? { reconciliation: result.reconciliation } : {}),
             };
 
-            return { coverageEntry, sourceWarnings };
+            return { coverageEntry, sourceWarnings, sourceAttribution: result.attribution ?? null };
         } catch (e) {
             const detail = (e as Error).message;
             sourceWarnings.push({ code: 'source-failed', source, detail });
@@ -803,6 +896,7 @@ export class HistoryService {
                     validationErrorSamples: [],
                 },
                 sourceWarnings,
+                sourceAttribution: null,
             };
         }
     }

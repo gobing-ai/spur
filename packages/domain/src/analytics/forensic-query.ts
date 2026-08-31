@@ -202,16 +202,30 @@ export function buildMessageWhereClauses(
         );
         params.push(sel.runId);
     } else if (sel.taskWbs != null) {
+        // Task 0722 R5: task-only selection matches the union of the established
+        // run chain (task_run_links → history_run_session) and the direct
+        // import-recovered task↔session authority. Task+run keeps intersection
+        // semantics through the real run chain above; unresolved/ambiguous
+        // mappings never match (`session_id IS NOT NULL`, and direct rows exist
+        // only for locator-validated evidence).
         clauses.push(
-            `EXISTS (
-                SELECT 1 FROM task_run_links trl_scope
-                JOIN history_run_session hrs_scope ON hrs_scope.run_id = trl_scope.run_id
-                WHERE trl_scope.wbs = ? AND hrs_scope.session_id IS NOT NULL
-                  AND hrs_scope.source = ${alias}.source
-                  AND hrs_scope.session_id = ${alias}.session_id
+            `(
+                EXISTS (
+                    SELECT 1 FROM task_run_links trl_scope
+                    JOIN history_run_session hrs_scope ON hrs_scope.run_id = trl_scope.run_id
+                    WHERE trl_scope.wbs = ? AND hrs_scope.session_id IS NOT NULL
+                      AND hrs_scope.source = ${alias}.source
+                      AND hrs_scope.session_id = ${alias}.session_id
+                )
+                OR EXISTS (
+                    SELECT 1 FROM history_task_session hts_scope
+                    WHERE hts_scope.wbs = ?
+                      AND hts_scope.source = ${alias}.source
+                      AND hts_scope.session_id = ${alias}.session_id
+                )
             )`,
         );
-        params.push(sel.taskWbs);
+        params.push(sel.taskWbs, sel.taskWbs);
     }
     return { clauses, params };
 }

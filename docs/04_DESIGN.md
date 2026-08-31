@@ -800,8 +800,10 @@ converted sources (claude, codex, pi, omp, grok, agy) plus the generic ETL sourc
 
 Six composable `AND` selectors, each resolving against an indexed column: `--since`/`--until`
 (`history_message.ts`), `--source <s>` / `all` (`source`; `all` = no source predicate), `--session`,
-`--run`, `--task` (`run_id`/`task_wbs` via the `0009_spur_cli_history_message_run_idx`
-`(provenance, run_id)` index), and `--top <n>` (default 20; bounds `bySession`/`byTool` only — never
+`--run`, `--task` (task-only selection resolves through the mapping authorities — the
+`task_run_links` → `history_run_session` run chain plus the direct `history_task_session`
+attribution recovered at import (task 0722) — never through `run_id`/`task_wbs` message columns,
+which are reserved for boundary promotion; task+run selection intersects through the run chain), and `--top <n>` (default 20; bounds `bySession`/`byTool` only — never
 `totals`/`bySource`/`byModel`/`daily`).
 
 Artifact: `.spur/reports/history/<YYYY-MM-DD>/analyze-<selectorDigest>.json` where `selectorDigest` is
@@ -1574,6 +1576,7 @@ standard scripts as `node "$(superskill script path sp <rel>.mjs)"`. Repo-only s
 | `coordination_runs`                                        | ts-db (`CoordinationRunDao`) | Occupant pin + path-only artifact refs for spec-addressed runs (ADR-057 wave 1). PK `run_id`; indexed `(spec_id, generation DESC)`. Added by migration `0010_spur_cli_coordination_runs`. Never stores stdout/stderr bodies. |
 | `agent_instances` (reserved draft)                         | CLI                       | Future DB home for materialized instances (ADR-086): `spec_id` PK; `team_id`, `member_key`, `executor`, nullable `role`, `workspace`, `status` (`stopped\|running\|exited\|errored`), nullable `pid`/pin fields, JSON `tags`/`config`, integer timestamps; indexes on role, executor, and team. Draft id `0026_spur_cli_agent_instances` is intentionally absent from `CLI_MIGRATIONS`. |
 | `history_run_session`                                      | CLI (`RunSessionDao`)        | Run→session mapping (feature E6): `run_id` → `(source, session_id)` with `exactness` (`exact` \| `unresolved` \| `estimated`) and `mechanism` (`observed` \| `supplied` \| `inferred`). `RunSessionObserver` writes boundary observations; import may promote an unresolved row to exact when a session is observed inside that run's `.spur/run/<runId>/agent-sessions/` directory (task 0624). `RetroCorrelator` writes estimated/inferred rows and never shadows exact. Indexed on `run_id` and `(source, session_id)`. |
+| `history_task_session`                                     | CLI (`TaskSessionDao`)       | Task↔session attribution (feature E6, task 0722): evidence-backed `(wbs, source, session_id)` triples recovered during history import. One row per task per session; `exactness` is `estimated` on the import path (allowlisted operational syntax — task-scoped `/sp:dev-*` slash invocations, structured `spur task <verb> <wbs>` operations — validated through the task locator) and distinguishable from invoke-boundary `exact` mappings; `evidence_kind`/`evidence_ref` carry a bounded audit locator (`user-command`\|`cli-tool`, `<file basename>#<line>`), never transcript content. The primary key makes re-imports idempotent and enforces exact-over-estimated precedence. Indexed on `(source, session_id)`. |
 | `rule_runs`, `rule_eval_runs`                              | ts-rule-engine (≥0.3.15)  | Persisted rule-run history powering `spur rule trace`; added by migration `0002_spur_cli_rule_history`. `applied_fix_count` is re-stamped by Spur after `applyFixes`.           |
 
 ### 3.2 SourceDefinition (history import)

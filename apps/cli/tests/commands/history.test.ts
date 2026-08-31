@@ -472,7 +472,18 @@ describe('history command', () => {
     test('daily consumes the queued refresh context and stamps child-owned events', async () => {
         const previous = process.env[HISTORY_REFRESH_CONTEXT_ENV];
         const spy = spyOn(HistoryService.prototype, 'daily').mockResolvedValueOnce({
-            fanOut: { entries: [makeCoverageEntry()], warnings: [], exitCode: 0 },
+            fanOut: {
+                entries: [makeCoverageEntry()],
+                warnings: [],
+                exitCode: 0,
+                attribution: {
+                    sessionsEvaluated: 0,
+                    linksCreated: 0,
+                    linksAlreadyPresent: 0,
+                    skippedEvidence: 0,
+                    ambiguousEvidence: 0,
+                },
+            },
             artifact: makeArtifact(),
             pruned: [],
             coverage: { refreshed: ['claude'], skipped: [], window: { since: null, until: null } },
@@ -539,6 +550,13 @@ describe('history command', () => {
             entries: [makeCoverageEntry({ source: 'claude' })],
             warnings: [{ code: 'WARN_TEST', source: 'claude', detail: 'test warning detail' }],
             exitCode: 0,
+            attribution: {
+                sessionsEvaluated: 0,
+                linksCreated: 0,
+                linksAlreadyPresent: 0,
+                skippedEvidence: 0,
+                ambiguousEvidence: 0,
+            },
         });
 
         try {
@@ -609,6 +627,13 @@ describe('history command', () => {
                 ],
                 warnings: [{ code: 'IMP_ERR', source: 'codex', detail: 'failed to parse file' }],
                 exitCode: 1,
+                attribution: {
+                    sessionsEvaluated: 0,
+                    linksCreated: 0,
+                    linksAlreadyPresent: 0,
+                    skippedEvidence: 0,
+                    ambiguousEvidence: 0,
+                },
             },
             artifact: makeArtifact(),
             pruned: [],
@@ -647,6 +672,13 @@ describe('history command', () => {
                 entries: [makeCoverageEntry({ source: 'claude' })],
                 warnings: [],
                 exitCode: 1,
+                attribution: {
+                    sessionsEvaluated: 0,
+                    linksCreated: 0,
+                    linksAlreadyPresent: 0,
+                    skippedEvidence: 0,
+                    ambiguousEvidence: 0,
+                },
             },
             artifact: makeArtifact(),
             pruned: [],

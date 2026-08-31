@@ -166,6 +166,19 @@ export {
     attributeActionCost,
     foldTotals,
 } from './run-cost';
+export {
+    ATTRIBUTION_EVIDENCE_LIMIT,
+    ATTRIBUTION_SESSION_LIMIT,
+    type AttributionCandidate,
+    type AttributionDecision,
+    type AttributionEvidence,
+    type AttributionScope,
+    classifyTaskAttribution,
+    emptyAttributionSummary,
+    listAttributionSessions,
+    loadAttributionEvidence,
+    type TaskAttributionSummary,
+} from './task-attribution';
 export type { AnalyticsSummary, ClaudeUsagePayload, CostRecord, ModelPricing, TokenTotals } from './types';
 export {
     type CostCoverageStat,

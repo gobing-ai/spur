@@ -60,6 +60,13 @@ async function setup(): Promise<DbAdapter> {
     await adapter.exec(`CREATE TABLE task_run_links (
         id TEXT PRIMARY KEY, wbs TEXT NOT NULL, run_id TEXT NOT NULL, kind TEXT NOT NULL, created_at TEXT NOT NULL
     )`);
+    // Direct task↔session authority (0028_spur_cli_history_task_session, task 0722).
+    await adapter.exec(`CREATE TABLE history_task_session (
+        wbs TEXT NOT NULL, source TEXT NOT NULL, session_id TEXT NOT NULL,
+        exactness TEXT NOT NULL, mechanism TEXT NOT NULL, evidence_kind TEXT NOT NULL,
+        evidence_ref TEXT, resolved_at TEXT NOT NULL,
+        PRIMARY KEY (wbs, source, session_id)
+    )`);
     return adapter;
 }
 
@@ -526,6 +533,17 @@ describe('forensic queries', () => {
         expect(byTask.reduce((sum, row) => sum + row.messages, 0)).toBe(4);
         const wrongPair = await messageRollup(db, { ...ALL, runId: 'run-1', taskWbs: '9999' });
         expect(wrongPair).toEqual([]);
+        // Task 0722 R5: a task with NO run chain still matches through the direct
+        // authority for exactly the mapped (source, session) pairs.
+        await db.run(
+            `INSERT INTO history_task_session (wbs, source, session_id, exactness, mechanism, evidence_kind, evidence_ref, resolved_at)
+             VALUES ('0722', 'claude', 'sess-1', 'estimated', 'slash-command', 'user-command', 'a.jsonl#1', '2026-06-01T00:00:00Z')`,
+        );
+        const viaDirect = await messageRollup(db, { ...ALL, taskWbs: '0722' });
+        expect(viaDirect.reduce((sum, row) => sum + row.messages, 0)).toBe(4); // sess-1 only
+        // Other sessions of the same source stay outside the direct mapping.
+        const scoped = await messageRollup(db, { ...ALL, taskWbs: '0722', sessionId: 'sess-2' });
+        expect(scoped).toEqual([]);
         db.close();
     });
 
@@ -550,6 +568,40 @@ describe('forensic queries', () => {
         expect(where).not.toContain('m.task_wbs');
         expect(where).toContain('AND');
         expect(params).toHaveLength(7);
+    });
+
+    test('task-only selector unions the run chain with the direct authority (0722 R5)', () => {
+        const { where, params } = buildMessageWhere({
+            since: null,
+            until: null,
+            sources: null,
+            sessionId: null,
+            runId: null,
+            taskWbs: '0722',
+        });
+        expect(where).toContain('history_run_session hrs_scope');
+        expect(where).toContain('task_run_links trl_scope');
+        expect(where).toContain('history_task_session hts_scope');
+        expect(where).toContain('hts_scope.source = m.source');
+        expect(where).toContain('hts_scope.session_id = m.session_id');
+        // The WBS parameter is pushed once per authority branch.
+        expect(params).toEqual(['0722', '0722']);
+    });
+
+    test('task+run selector keeps intersection semantics through the run chain only (0722 R5)', () => {
+        const { where } = buildMessageWhere({
+            since: null,
+            until: null,
+            sources: null,
+            sessionId: null,
+            runId: 'run-1',
+            taskWbs: '0722',
+        });
+        // The direct-authority branch belongs to the task-only path; the
+        // task+run intersection must not be widened by it.
+        expect(where).not.toContain('history_task_session');
+        expect(where).toContain('trl_scope.wbs = ?');
+        expect(where).toContain('hrs_scope.session_id IS NOT NULL');
     });
 });
 

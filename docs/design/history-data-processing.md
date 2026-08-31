@@ -43,6 +43,7 @@ graph TD
 ```
 
 ### Core Invariants
+
 1. **Dual-Tier Storage Architecture:** Raw forensic logs (`history_message`, `history_tool_call`) are append-only during incremental imports, but a full-mode import runs reconciliation that **deletes stale rows** no longer present in the source files — raw history is curated, not immutable. Materialized read models (`history_board_*`) are derived projections fully deleted and regenerated during `spur history analyze`.
 2. **Sub-50ms Serving SLA:** Web UI endpoints (`getSummary`, `getInsights`, `getSessions`, `getSources`, `getTimeline`) must execute in under 50ms against multi-gigabyte databases by querying materialized tables.
 3. **Accounting Boundary:** Forensic storage and analyze artifacts retain currency (`history_message.cost_usd`, `costUsd` in analyzer rows). The **History Board transport DTOs** are pure-token (`freshInputTokens`, `cacheReadTokens`, `outputTokens`, `billedTokens`) and carry no currency, pricing, or dollar conversion. "Pure token" applies to the Board surface only.
@@ -107,6 +108,34 @@ sequenceDiagram
 
 ---
 
+### 2.3 Task Attribution from Imported Sessions (task 0722)
+
+History that predates the invoke boundary (or arrives through agents that never invoke Spur)
+carries no `task_wbs`/`run_id`, so `history analyze --task <wbs>` returns nothing for it. Import
+therefore recovers a **direct task↔session authority** alongside the run-chain mapping:
+
+- **Session selection** — bounded and scope-honest: full imports (and dry-run previews) evaluate
+  every discovered session of the source; incremental imports evaluate only sessions the import
+  itself touched (`imported_at >= import start`). Never unbounded (`ATTRIBUTION_SESSION_LIMIT`).
+- **Evidence prefilter** — per session, at most `ATTRIBUTION_EVIDENCE_LIMIT` normalized rows are
+  fetched, allowlist-prefiltered (`content_text LIKE '%/sp%' OR '%spur task%'` for user rows,
+  `args_raw LIKE '%spur task%'` for tool calls). The corpus is never materialized.
+- **Pure classifier** (`classifyTaskAttribution`) — deterministic, allowlisted syntax only:
+  task-scoped `/sp:dev-*` slash invocations (line-anchored) and structured
+  `spur task <verb> <wbs>` operations (including inside tool args). Dates, versions, and paths are
+  excluded by the operand shape; plain four-digit prose and pasted specifications are **skipped,
+  never linked**; records where the extractors disagree are **ambiguous, never linked**.
+- **Validation + writes** — every candidate WBS must resolve through the task locator
+  (`TaskService.findByWbs`) before persistence; links land in `history_task_session`
+  (migration `0028`) with `exactness='estimated'`, idempotent under the
+  `(wbs, source, session_id)` primary key, exact-over-estimated precedence enforced by
+  `TaskSessionDao`. Evidence is a bounded locator (`<file basename>#<line>`), never transcript
+  content. Attribution failure degrades the source report (`attributionError` +
+  `attribution-failed` warning) — it never fails the import.
+- **Read path** — `history analyze --task <wbs>` unions the run-chain branch
+  (`task_run_links` → `history_run_session`) with `history_task_session`; task+run selection keeps
+  intersection semantics through the run chain only.
+
 ## 3. Materialization Plane (`spur history analyze`)
 
 The single refresh choke point is `refreshHistoryRollups(db)` (`packages/app/src/services/history-analysis-service.ts`), invoked at the end of `HistoryService.analyze()` — which `spur history analyze` and the `spur history daily` pipeline both route through. It is a no-op when `historyBoardRollupsFresh(db)` reports the stored version current; otherwise it fully deletes and rebuilds every `history_board_*` / `history_daily_stats` table via `replaceHistoryBoardRollups`.
@@ -154,6 +183,7 @@ graph LR
 ### 3.2 Freshness Detection Protocol
 
 Freshness is computed without querying table contents via `historyBoardHistoryVersion(db)`:
+
 ```ts
 const checkpoint = await db.queryFirst(
     `SELECT COUNT(*) AS files, COALESCE(SUM(last_imported_line), 0) AS lines, MAX(updated_at) AS updatedAt
@@ -161,6 +191,7 @@ const checkpoint = await db.queryFirst(
 );
 const version = `v2:checkpoint:${checkpoint.updatedAt}:${checkpoint.files}:${checkpoint.lines}`;
 ```
+
 If `history_board_rollup_meta.history_version === version`, the rollups are guaranteed 100% fresh, allowing `LiveHistoryBoardService` to bypass all raw scans.
 
 ### 3.3 Forensic Query Contract (Q1–Q10)
@@ -178,7 +209,7 @@ consolidates compatible aggregates while retaining each question's semantics:
 | Q6 | Tool error concentration | `byTool`; `history_board_tool_stats` |
 | Q7 | Turn shape by `disposition` / `record_type` | Raw forensic contract; materialization excludes `meta` rows when deriving session state |
 | Q8 | Source/model/day token and spend rollups | `messageRollup` / `toolRollup`; `history_daily_stats` and the 5-minute tables |
-| Q9 | Exact Spur run/task attribution | `buildMessageWhereClauses` applies `provenance = 'spur-run'` with `run_id` / `task_wbs` |
+| Q9 | Exact Spur run/task attribution | `buildMessageWhereClauses` applies `provenance = 'spur-run'` with `run_id` / `task_wbs`; task-only selection additionally unions the `history_task_session` authority recovered at import (task 0722) |
 | Q10 | Unknown-disposition drift | `drift`, grouped by source and `record_type` |
 
 ---
@@ -261,6 +292,7 @@ CREATE INDEX IF NOT EXISTS idx_history_board_ranked_steps_filter ON history_boar
 There is no `history_tool_call (message_hash)` or `(tool_name)` index in the current tree; tool-call joins ride the primary-key/rowid paths plus the session-leading index above.
 
 ### 5.2 Storage Maintenance & Retention
+
 - **Retention Job (`runRetention`):** Automatically cleans up stale evaluation logs and import ledger checkpoints older than 90 days during `spur history daily`.
 - **Database Backup:** Periodic snapshot backups in `.spur/backups/` maintain point-in-time recovery.
 - **Vacuum Strategy:** Incremental SQLite auto-vacuum keeps file fragmentation low.

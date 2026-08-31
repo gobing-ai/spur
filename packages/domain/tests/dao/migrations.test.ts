@@ -118,8 +118,8 @@ describe('db migrations', () => {
             );
         });
 
-        test('has foundation through History Board indexes, rollups, checkpoint identity, and the history-refresh single-flight index', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(28);
+        test('has foundation through History Board indexes, rollups, checkpoint identity, the history-refresh single-flight index, and the 0722 task↔session attribution table', () => {
+            expect(CLI_MIGRATIONS).toHaveLength(29);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -151,6 +151,9 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[26]?.id).toBe('0026_spur_cli_history_message_duration_source');
             // 0716: single-flight for history.refresh — ACTIVE (pending OR processing) unique index.
             expect(CLI_MIGRATIONS[27]?.id).toBe('0027_spur_cli_history_refresh_active_unique');
+
+            // 0722 (feature E6): direct task↔session attribution authority.
+            expect(CLI_MIGRATIONS[28]?.id).toBe('0028_spur_cli_history_task_session');
         });
 
         test('run-pid migration adds a pid column to runs', () => {
@@ -224,9 +227,10 @@ describe('db migrations', () => {
             // 0024/0025 checkpoint identity are guarded: the stub never creates
             // history_import_checkpoint, so they skip without error (0678).
             // 0027's active-unique swap applies: the stub's queue_jobs (from 0004)
-            // exists, so the table guard passes.
+            // exists, so the table guard passes. 0028 history_task_session applies
+            // (standalone DDL, 0722).
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(24);
+            expect(applied).toBe(25);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -267,8 +271,9 @@ describe('db migrations', () => {
             // is already nullable) + 0018 request_id + 0019 etl drop + 0020 indexes
             // + 0021 rollups + 0022 performance indexes + 0023 request_id index
             // + 0675/0678 guarded checkpoint identity columns (0024, 0025)
-            // + 0026 duration-source column + 0027 active-unique swap.
-            expect(applied).toBe(27);
+            // + 0026 duration-source column + 0027 active-unique swap
+            // + 0028 history_task_session (0722).
+            expect(applied).toBe(28);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -462,8 +467,9 @@ describe('db migrations', () => {
             // + 0020 History Board indexes + 0021 rollups + 0022 performance
             // indexes + 0023 request_id index + 0024/0025 checkpoint identity
             // + 0026 duration-source column + 0027 active-unique swap (skipped:
-            // this pre-provisioned journal never creates queue_jobs).
-            expect(await applyCliMigrations(adapter)).toBe(19);
+            // this pre-provisioned journal never creates queue_jobs)
+            // + 0028 history_task_session (standalone DDL, applies).
+            expect(await applyCliMigrations(adapter)).toBe(20);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );
@@ -520,10 +526,10 @@ describe('db migrations', () => {
             adapter.close();
         });
 
-        test('upgraded DB journaled through 0021 receives 0022-0027 and converges with a fresh DB', async () => {
+        test('upgraded DB journaled through 0021 receives 0022-0028 and converges with a fresh DB', async () => {
             const upgraded = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(upgraded, CLI_MIGRATIONS.slice(0, 22));
-            expect(await applyCliMigrations(upgraded)).toBe(6);
+            expect(await applyCliMigrations(upgraded)).toBe(7);
 
             const fresh = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(fresh);
@@ -749,6 +755,14 @@ describe('db migrations', () => {
             const seqIdx = migrations.find((m) => m.id === '0011_spur_cli_system_events_sequence_idx');
             expect(seqIdx).toBeDefined();
             expect(seqIdx?.sql).toContain('idx_system_events_sequence');
+        });
+
+        test('repo drizzle folder includes the 0028 history_task_session migration (0722 folder-load)', async () => {
+            const migrations = await loadSqlMigrations(join(import.meta.dir, '../../../../drizzle'));
+            const taskSession = migrations.find((m) => m.id === '0028_spur_cli_history_task_session');
+            expect(taskSession).toBeDefined();
+            expect(taskSession?.sql).toContain('history_task_session');
+            expect(taskSession?.sql).toContain('PRIMARY KEY (wbs, source, session_id)');
         });
     });
 });

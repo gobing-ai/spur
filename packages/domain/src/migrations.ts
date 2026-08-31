@@ -156,7 +156,36 @@ CREATE INDEX IF NOT EXISTS idx_history_run_session_run ON history_run_session (r
 CREATE INDEX IF NOT EXISTS idx_history_run_session_source_session ON history_run_session (source, session_id);
 `;
 
+/**
+ * DDL for the `history_task_session` table (task 0722, feature E6): the direct
+ * many-to-many task↔session authority recovered during history import. One row per
+ * evidence-backed `(wbs, source, session_id)` triple — a session that operated on
+ * several tasks gets one row each. Rows are attribution metadata only: the bounded
+ * evidence locator (kind + file basename#line) is stored, never transcript content.
+ * Import writes `exactness='estimated'` (`mechanism='slash-command' | 'spur-cli'`)
+ * because even deterministic syntax is retrospective evidence; the write path
+ * enforces idempotency via the primary key and never downgrades an `exact` row.
+ * Indexed on `(source, session_id)` for the selector and session-side lookups; WBS
+ * lookup uses the primary-key prefix.
+ */
+export const HISTORY_TASK_SESSION_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS history_task_session (
+    wbs TEXT NOT NULL,
+    source TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    exactness TEXT NOT NULL,
+    mechanism TEXT NOT NULL,
+    evidence_kind TEXT NOT NULL,
+    evidence_ref TEXT,
+    resolved_at TEXT NOT NULL,
+    PRIMARY KEY (wbs, source, session_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_history_task_session_source_session ON history_task_session (source, session_id);
+`;
+
 /** SQL that creates the Spur CLI-owned domain tables plus package-owned tables. */
+
 export const CLI_SCHEMA_SQL = `
 ${DOMAIN_SCHEMA_SQL}
 
@@ -177,6 +206,8 @@ ${SYSTEM_EVENTS_SCHEMA_SQL}
 ${COORDINATION_RUNS_SCHEMA_SQL}
 
 ${HISTORY_RUN_SESSION_SCHEMA_SQL}
+
+${HISTORY_TASK_SESSION_SCHEMA_SQL}
 `;
 
 /**
@@ -635,6 +666,7 @@ CREATE INDEX IF NOT EXISTS idx_history_message_provenance_run ON history_message
  * `0020` adds measured History Board raw-query indexes (task 0628 R3).
  * `0021` adds measured History Board aggregate read models (task 0629 R2).
  * `0022` adds E9 History data-plane performance indexes (task 0631).
+ * `0028` adds the `history_task_session` direct task↔session attribution table (task 0722, feature E6).
  * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
  * safe regardless of the database's age.
  */
@@ -788,6 +820,13 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         // UNIQUE INDEX cannot fail, then the pending-only index is dropped.
         id: '0027_spur_cli_history_refresh_active_unique',
         sql: HISTORY_REFRESH_ACTIVE_UNIQUE_SCHEMA_SQL,
+    },
+    {
+        // 0722 (feature E6): direct task↔session attribution authority. Standalone
+        // `CREATE TABLE IF NOT EXISTS` DDL — no guarded-column shape, so it applies
+        // on any database unconditionally.
+        id: '0028_spur_cli_history_task_session',
+        sql: HISTORY_TASK_SESSION_SCHEMA_SQL,
     },
 ];
 

@@ -6,6 +6,7 @@ import {
     type ArtifactSelector,
     createMigratedDb,
     type DbAdapter,
+    emptyAttributionSummary,
     type HistoryArtifact,
     historyBoardHistoryVersion,
     historyBoardRollupsFresh,
@@ -1146,6 +1147,7 @@ describe('HistoryService', () => {
                 ],
                 exitCode: 2,
                 warnings: [{ code: 'source-failed', source: 'claude', detail: 'forced' }],
+                attribution: emptyAttributionSummary(),
             });
             const svc = new HistoryService(ctx);
             try {
