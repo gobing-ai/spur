@@ -201,12 +201,6 @@
         },
         {
             "kind": "feature",
-            "id": "E6",
-            "code": "L4.scenario-unverified",
-            "severity": "warning"
-        },
-        {
-            "kind": "feature",
             "id": "E7",
             "code": "L4.orphan-scenarios",
             "severity": "warning"

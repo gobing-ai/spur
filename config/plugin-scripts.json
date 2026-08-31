@@ -54,7 +54,15 @@
             "contract": "repo-only"
         },
         {
+            "rel": "task-evidence-precheck.ts",
+            "contract": "repo-only"
+        },
+        {
             "rel": "task-size-precheck.ts",
+            "contract": "repo-only"
+        },
+        {
+            "rel": "verify-answer-lint.ts",
             "contract": "repo-only"
         },
         {

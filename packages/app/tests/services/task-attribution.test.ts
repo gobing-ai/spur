@@ -3,7 +3,11 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMigratedDb, type DbAdapter, TaskSessionDao } from '@gobing-ai/spur-domain';
-import { HistoryService, type HistoryServiceContext } from '../../src/services/history-service';
+import {
+    HistoryService,
+    type HistoryServiceContext,
+    MIN_SAFE_PI_BASH_IMPORTER_VERSION,
+} from '../../src/services/history-service';
 import { attributeSessions } from '../../src/services/task-attribution';
 
 function makeLocator(known: readonly string[], fail = false) {
@@ -194,6 +198,7 @@ describe('HistoryService attribution wiring (task 0722 R6)', () => {
     test('import returns zeroed attribution when no evidence exists', async () => {
         const ctx: HistoryServiceContext = {
             getDb: makeDb,
+            importerVersion: MIN_SAFE_PI_BASH_IMPORTER_VERSION,
             taskLocator: makeLocator([]),
             historyHome: mkdtempSync(join(tmpdir(), 'spur-attr-home-')),
         };
@@ -213,6 +218,7 @@ describe('HistoryService attribution wiring (task 0722 R6)', () => {
         await seedMessage(db, { hash: 'm1', sessionId: 's1', text: '/sp:dev-run --mode implement 0703 --auto' });
         const ctx: HistoryServiceContext = {
             getDb: async () => db,
+            importerVersion: MIN_SAFE_PI_BASH_IMPORTER_VERSION,
             taskLocator: makeLocator(['0703']),
             historyHome: mkdtempSync(join(tmpdir(), 'spur-attr-home-')),
         };
@@ -229,7 +235,7 @@ describe('HistoryService attribution wiring (task 0722 R6)', () => {
     });
 
     test('import without a task locator skips attribution (attribution: null)', async () => {
-        const svc = new HistoryService({ getDb: makeDb });
+        const svc = new HistoryService({ getDb: makeDb, importerVersion: MIN_SAFE_PI_BASH_IMPORTER_VERSION });
         const result = await svc.import('pi', { mode: 'full', root: mkdtempSync(join(tmpdir(), 'spur-attr-empty-')) });
         expect(result.attribution).toBeNull();
     });
@@ -239,6 +245,7 @@ describe('HistoryService attribution wiring (task 0722 R6)', () => {
         await seedMessage(db, { hash: 'm1', sessionId: 's1', text: '/sp:dev-run 0703' });
         const ctx: HistoryServiceContext = {
             getDb: async () => db,
+            importerVersion: MIN_SAFE_PI_BASH_IMPORTER_VERSION,
             taskLocator: makeLocator(['0703'], true),
             historyHome: mkdtempSync(join(tmpdir(), 'spur-attr-home-')),
         };

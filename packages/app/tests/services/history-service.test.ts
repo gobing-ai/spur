@@ -12,7 +12,15 @@ import {
     historyBoardRollupsFresh,
     RunSessionDao,
 } from '@gobing-ai/spur-domain';
-import { HistoryService, type HistoryServiceContext, writeArtifact } from '../../src/services/history-service';
+import {
+    assertPiImporterSafe,
+    HistoryService,
+    type HistoryServiceContext,
+    MIN_SAFE_PI_BASH_IMPORTER_VERSION,
+    parseImporterVersion,
+    UnsafeHistoryImporterError,
+    writeArtifact,
+} from '../../src/services/history-service';
 
 /** An empty directory so incremental scans find no real on-disk history (hermetic). */
 function emptyRoot(): string {
@@ -684,6 +692,112 @@ describe('HistoryService', () => {
             const { sidecarPath } = writeArtifact(makeArtifact(['only-one']), { out, cwd });
             expect(existsSync(sidecarPath)).toBe(false);
             rmSync(cwd, { recursive: true, force: true });
+        });
+    });
+
+    describe('pi importer provenance guard (0726 R1)', () => {
+        /** makeCtx with an open counter so tests can prove the DB was never touched. */
+        function makeGuardCtx(importerVersion: string) {
+            const ctx = makeCtx();
+            let dbOpens = 0;
+            const svc = new HistoryService({
+                getDb: async () => {
+                    dbOpens++;
+                    return ctx.getDb();
+                },
+                importerVersion,
+            });
+            return { svc, dbOpens: () => dbOpens };
+        }
+
+        async function importError(promise: Promise<unknown>): Promise<UnsafeHistoryImporterError> {
+            let caught: unknown;
+            try {
+                await promise;
+            } catch (e) {
+                caught = e;
+            }
+            expect(caught).toBeInstanceOf(UnsafeHistoryImporterError);
+            return caught as UnsafeHistoryImporterError;
+        }
+
+        test('parseImporterVersion accepts exact triples and rejects unknown/malformed/prerelease', () => {
+            expect(parseImporterVersion('0.4.48')).toEqual([0, 4, 48]);
+            expect(parseImporterVersion('1.0.0')).toEqual([1, 0, 0]);
+            expect(parseImporterVersion('unknown')).toBeNull();
+            expect(parseImporterVersion('')).toBeNull();
+            expect(parseImporterVersion(undefined)).toBeNull();
+            expect(parseImporterVersion('1.2')).toBeNull();
+            expect(parseImporterVersion('0.4.49-beta.1')).toBeNull();
+            expect(parseImporterVersion(' 0.4.49 ')).toEqual([0, 4, 49]);
+        });
+
+        test('assertPiImporterSafe gates only non-dry-run full imports containing pi', () => {
+            const base = { importerVersion: '0.4.48', mode: 'full', dryRun: false };
+            // pi + full + real run on the destructive version → throws.
+            expect(() => assertPiImporterSafe({ ...base, sources: ['pi'] })).toThrow(UnsafeHistoryImporterError);
+            // Dry-run is always safe (no persistence).
+            expect(() => assertPiImporterSafe({ ...base, dryRun: true, sources: ['pi'] })).not.toThrow();
+            // Incremental/force-file modes are append-scoped, not reconciliation.
+            expect(() => assertPiImporterSafe({ ...base, mode: 'incremental', sources: ['pi'] })).not.toThrow();
+            expect(() => assertPiImporterSafe({ ...base, mode: 'force-file', sources: ['pi'] })).not.toThrow();
+            // Non-pi sources are out of the guard's scope.
+            expect(() => assertPiImporterSafe({ ...base, sources: ['claude'] })).not.toThrow();
+            expect(() => assertPiImporterSafe({ ...base, sources: ['pi', 'claude'] })).toThrow(
+                UnsafeHistoryImporterError,
+            );
+            // Boundary: exactly the minimum is safe, one patch below is not.
+            expect(() =>
+                assertPiImporterSafe({ ...base, importerVersion: MIN_SAFE_PI_BASH_IMPORTER_VERSION, sources: ['pi'] }),
+            ).not.toThrow();
+            expect(() => assertPiImporterSafe({ ...base, importerVersion: '0.4.49-beta.1', sources: ['pi'] })).toThrow(
+                UnsafeHistoryImporterError,
+            );
+        });
+
+        test('import rejects a full pi import on 0.4.48 before any database access', async () => {
+            const { svc, dbOpens } = makeGuardCtx('0.4.48');
+            const err = await importError(svc.import('pi', { mode: 'full', root: emptyRoot() }));
+            expect(err.code).toBe('unsafe-history-importer');
+            expect(err.installedVersion).toBe('0.4.48');
+            expect(err.minSafeVersion).toBe('0.4.49');
+            expect(err.message).toContain('96762d5');
+            expect(err.message).toContain('--dry-run');
+            expect(dbOpens()).toBe(0);
+        });
+
+        test('import rejects unknown, malformed, and prerelease versions (fail closed)', async () => {
+            for (const version of ['unknown', '1.2', '0.4.49-rc.1', '']) {
+                const { svc, dbOpens } = makeGuardCtx(version);
+                await importError(svc.import('pi', { mode: 'full', root: emptyRoot() }));
+                expect(dbOpens()).toBe(0);
+            }
+        });
+
+        test('import lets a safe importer run a full pi scan (hermetic empty root)', async () => {
+            const { svc, dbOpens } = makeGuardCtx('0.4.49');
+            const result = await svc.import('pi', { mode: 'full', root: emptyRoot() });
+            expect(result.source).toBe('pi');
+            expect(result.mode).toBe('full');
+            expect(dbOpens()).toBeGreaterThan(0);
+        });
+
+        test('importAll rejects before any source fan-out when pi is included and version is unsafe', async () => {
+            const { svc, dbOpens } = makeGuardCtx('0.4.48');
+            // Default source list includes pi; a full non-dry-run fan-out must not start.
+            const err = await importError(svc.importAll({ mode: 'full' }));
+            expect(err.code).toBe('unsafe-history-importer');
+            expect(dbOpens()).toBe(0);
+        });
+
+        test('importAll dry-run and non-full modes skip the guard entirely', async () => {
+            const dryRun = makeGuardCtx('0.4.48');
+            const result = await dryRun.svc.importAll({ mode: 'full', dryRun: true, root: emptyRoot() });
+            expect(result.entries.length).toBeGreaterThan(0);
+
+            const incremental = makeGuardCtx('0.4.48');
+            const incrementalResult = await incremental.svc.importAll({ mode: 'incremental', root: emptyRoot() });
+            expect(incrementalResult.entries.length).toBeGreaterThan(0);
         });
     });
 

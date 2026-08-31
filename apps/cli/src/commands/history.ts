@@ -12,6 +12,7 @@ import {
     runHistoryReport,
     type SystemEventBus,
     TaskLocator,
+    UnsafeHistoryImporterError,
 } from '@gobing-ai/spur-app';
 import { formatSummary, stalenessBanner } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
@@ -66,10 +67,14 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         } catch {
             taskLocator = undefined;
         }
+        // 0726 R1: resolve importer provenance before service construction so the
+        // full-pi-import guard sees the real installed version, not 'unknown'.
+        const provenance = await resolveImportProvenance(context.fs);
         return new HistoryService({
             getDb: () => context.getDb(),
             agentConfig: context.agentConfig,
             ...(taskLocator ? { taskLocator } : {}),
+            importerVersion: provenance.importer,
             fs: context.fs,
             cwd: context.cwd,
         });
@@ -162,14 +167,45 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
 
             const svc = await makeService();
 
-            const fanOut = await svc.importAll({
-                sources: source === 'all' ? undefined : [source],
-                file: options.file || undefined,
-                root: options.root || undefined,
-                mode: mode,
-                dryRun: options.dryRun === true,
-                sourceTimeout,
-            });
+            let fanOut: FanOutResult;
+            try {
+                fanOut = await svc.importAll({
+                    sources: source === 'all' ? undefined : [source],
+                    file: options.file || undefined,
+                    root: options.root || undefined,
+                    mode: mode,
+                    dryRun: options.dryRun === true,
+                    sourceTimeout,
+                });
+            } catch (e) {
+                // 0726 R1: the provenance guard rejects full pi imports on a known-destructive
+                // importer before any DB access. Name the code, both versions, and the remedy.
+                if (e instanceof UnsafeHistoryImporterError) {
+                    const msg = `spur history import: ${e.code}: ${e.message}`;
+                    context.output.write(
+                        options.json
+                            ? toEnvelopeJson(
+                                  { status: 'error', message: msg },
+                                  {
+                                      enveloped: options.jsonEnvelope,
+                                      error: {
+                                          code: 'INTERNAL_ERROR',
+                                          message: msg,
+                                          details: {
+                                              cliCode: e.code,
+                                              installedVersion: e.installedVersion,
+                                              minSafeVersion: e.minSafeVersion,
+                                          },
+                                      },
+                                  },
+                              )
+                            : msg,
+                    );
+                    context.setExitCode(1);
+                    return;
+                }
+                throw e;
+            }
 
             // R4 (task 0504): record which binary and importer version actually ran. Printed
             // before the fan-out result in text mode; embedded in the JSON payload for --json.

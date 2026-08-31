@@ -247,9 +247,10 @@ completion gate (`PARTIAL`/`FAIL` route the pipeline to `failed`).
 ### Step 10 — Emit the verdict artifact (the only verify output)
 
 Assemble the evidence and **emit the canonical verdict artifact** — verification writes no task
-section (F92 0593 R1). Under the pipeline, the output is captured as
-`.spur/run/<wbs>-verify-answer.txt`; a deterministic shell step derives
-`.spur/run/<wbs>-verdict.json`, and the `record` step transcribes `## Testing` from it.
+section (F92 0593 R1). Under the pipeline **you** write
+`.spur/run/<wbs>-verify-answer.txt` (0726 R3: host `expectFile`, never captured/overwritten); a
+deterministic shell step lints it and derives `.spur/run/<wbs>-verdict.json`, and `record`
+transcribes `## Testing` from it.
 
 **Standalone** (`/sp:dev-verify` outside the pipeline), write the artifact yourself, then invoke
 the deterministic Testing writer `spur task record` (section authorship never happens here):
@@ -306,14 +307,14 @@ The per-requirement traceability table MUST use `| Req | Status | Evidence |` (e
 The parser is tolerant of these variants (defense-in-depth), but the authoring contract is
 canonical.
 
-**Under the pipeline** (`task-pipeline.yaml`), `agent.run answerFile` captures this whole output to
-`.spur/run/<wbs>-verify-answer.txt`. A deterministic shell step then derives
-`.spur/run/<wbs>-verdict.json` from it plus an independent `spur task check` (R9; the agent
-reporting PASS in prose is necessary but not sufficient — the artifact is never left to the agent's
-discretion). Section transcription follows the Step 10 contract (record → `## Testing`; bare-only
-Review fallback; verify never writes sections).
+Under the pipeline, the verifier owns the answer file `.spur/run/<wbs>-verify-answer.txt` (0726
+R3): `Verdict: PARTIAL` first, append one row at a time, replace the verdict line only when all
+rows are certified — interruptions leave lintable partial rows; retries fill only missing IDs.
+Host: `expectFile` → `verify-answer-lint.ts` → verdict + `spur task check` (R9). Vocabularies,
+rejection classes, and the AC identity rule: `references/verdict-schema.md`. Sections follow the
+Step 10 contract.
 
-**Standalone** (`/sp:dev-verify` outside the pipeline — no answer-file capture exists), write the
+**Standalone** (outside the pipeline — no host lint/derive step), write the answer file and
 artifact yourself; shape and field-by-field contract in
 [references/verdict-schema.md](references/verdict-schema.md):
 

@@ -226,8 +226,103 @@ export interface DailyResult {
     reportPath?: string;
 }
 
+/**
+ * First `@gobing-ai/ts-llm-jsonl-importer` release that retains `history_tool_call.args_raw`
+ * on pi imports (ts-libs commit 96762d5). Every full pi import below this version silently
+ * reduces todo-tool calls to their first line, destroying bash-command evidence (0726 R1).
+ */
+export const MIN_SAFE_PI_BASH_IMPORTER_VERSION = '0.4.49';
+
+/**
+ * Parses a strict `MAJOR.MINOR.PATCH` triple.
+ *
+ * Returns `null` for unknown, malformed, and prerelease versions — every non-triple is
+ * unsafe by definition, because prerelease builds of the fixed commit cannot be trusted
+ * as a floor without a published release boundary (0726 R1).
+ */
+export function parseImporterVersion(version: string | undefined): [number, number, number] | null {
+    if (version === undefined) {
+        return null;
+    }
+    const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
+    if (match === null) {
+        return null;
+    }
+    return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+/** Numeric lexicographic comparison of parsed semver triples. */
+function compareVersionTriples(a: [number, number, number], b: [number, number, number]): number {
+    for (let i = 0; i < 3; i++) {
+        const ai = a[i] as number;
+        const bi = b[i] as number;
+        if (ai !== bi) {
+            return ai < bi ? -1 : 1;
+        }
+    }
+    return 0;
+}
+
+/**
+ * Thrown before any database access when a full pi history import would run a
+ * known-destructive importer (0726 R1). Carries the structured `unsafe-history-importer`
+ * error code for CLI output.
+ */
+export class UnsafeHistoryImporterError extends Error {
+    readonly code = 'unsafe-history-importer' as const;
+
+    constructor(
+        message: string,
+        readonly installedVersion: string,
+        readonly minSafeVersion: string = MIN_SAFE_PI_BASH_IMPORTER_VERSION,
+    ) {
+        super(message);
+        this.name = 'UnsafeHistoryImporterError';
+    }
+}
+
+/**
+ * Shared provenance assertion for pi bash-command preservation (0726 R1).
+ *
+ * Rejects non-dry-run **full** imports that include the `pi` source unless the injected
+ * `importerVersion` parses as a semver triple at or above
+ * {@link MIN_SAFE_PI_BASH_IMPORTER_VERSION}. Unknown, malformed, and prerelease versions
+ * are unsafe. Callers must invoke this before the first `getDb()` so a rejected import
+ * never opens the database.
+ */
+export function assertPiImporterSafe(input: {
+    importerVersion: string | undefined;
+    mode: string;
+    dryRun: boolean;
+    sources: readonly string[];
+}): void {
+    if (input.dryRun || input.mode !== 'full' || !input.sources.includes('pi')) {
+        return;
+    }
+    const minSafe = parseImporterVersion(MIN_SAFE_PI_BASH_IMPORTER_VERSION);
+    const installed = parseImporterVersion(input.importerVersion);
+    if (minSafe !== null && installed !== null && compareVersionTriples(installed, minSafe) >= 0) {
+        return;
+    }
+    throw new UnsafeHistoryImporterError(
+        `refusing full pi history import — installed @gobing-ai/ts-llm-jsonl-importer version ` +
+            `${input.importerVersion ?? 'unknown'} destroys history_tool_call.args_raw on pi imports ` +
+            `(todo-tool arguments collapse to their first line; bash commands are lost). ` +
+            `Minimum safe version: ${MIN_SAFE_PI_BASH_IMPORTER_VERSION}. ` +
+            `Remedy: upgrade or relink @gobing-ai/ts-libs to a release containing ts-libs commit 96762d5, ` +
+            `or preview the import with --dry-run.`,
+        input.importerVersion ?? 'unknown',
+    );
+}
+
 /** Context injected into HistoryService. */
 export interface HistoryServiceContext {
+    /**
+     * Resolved `@gobing-ai/ts-llm-jsonl-importer` version provenance (0726 R1). The CLI
+     * resolves this before service construction; unknown/malformed versions fail the
+     * full-pi-import guard closed.
+     */
+    importerVersion?: string;
     getDb(): Promise<DbAdapter>;
     /** Override OpenCode's SQLite path for hermetic composition/tests. */
     openCodeSourceDatabase?: string;
@@ -373,6 +468,9 @@ export class HistoryService {
         const parsedSource = parseSource(source);
         const mode = parseMode(opts.mode ?? (opts.file !== undefined ? 'force-file' : 'incremental'));
         const dryRun = opts.dryRun ?? false;
+        // Provenance guard precedes the first getDb() so a rejected full pi import never
+        // opens the database or imports a destructive importer run (0726 R1).
+        assertPiImporterSafe({ importerVersion: this.ctx.importerVersion, mode, dryRun, sources: [parsedSource] });
         const startedAt = new Date().toISOString();
         const db = await this.ctx.getDb();
         const dao = new RunSessionDao(db);
@@ -694,6 +792,14 @@ export class HistoryService {
      */
     async importAll(opts: ImportAllOptions = {}): Promise<FanOutResult> {
         const sources = (opts.sources ?? SOURCES).map((s) => parseSource(s));
+        // Same provenance guard as import(), hoisted above the fan-out so a rejected full
+        // pi source short-circuits before any per-source database work (0726 R1).
+        assertPiImporterSafe({
+            importerVersion: this.ctx.importerVersion,
+            mode: opts.mode ?? (opts.file !== undefined && opts.file.length > 0 ? 'force-file' : 'incremental'),
+            dryRun: opts.dryRun === true,
+            sources,
+        });
         const timeoutMs = opts.sourceTimeout ?? DEFAULT_SOURCE_TIMEOUT_MS;
 
         const entries: CoverageEntry[] = [];

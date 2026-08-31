@@ -106,6 +106,16 @@ For answer files, emit a matching parseable table:
 | Scenario: CLI emits JSON | MET | test | `apps/cli/tests/foo.test.ts:42` |
 ```
 
+**Authoring contract under the pipeline (0726 R3).** The verifier owns the answer file: write
+`Verdict: PARTIAL` first, append one complete row at a time, and replace the first verdict line only
+after every row is certified. `verify-answer-lint.ts` gates the file before `spur task verdict
+--from-answer` and rejects, with row-level diagnostics: missing/duplicate/unknown requirement IDs,
+AC ids that do not exactly match a task AC checklist label (or its leading token, e.g. `AC1`) or a
+linked feature scenario title, invalid status (`MET | PARTIAL | UNMET` for requirements;
+`N/A` additionally allowed for AC), invalid evidence type (`test | command | static-ref |
+manual-review | llm-judge | n/a`, or a `+` compound), and empty evidence. Interrupted runs keep the
+rows that pass the lint and complete only the missing IDs on retry.
+
 ## Checks evidence
 
 Wave C verification can emit the following additive `checks[]` rows:

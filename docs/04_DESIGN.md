@@ -683,6 +683,20 @@ before the fan-out result; `--json` embeds the same `provenance` field (`{ binar
 the payload. Real-data history validation must run a source-local binary — never a bare global
 `spur` — and record the header before each dry-run/write.
 
+**Importer provenance guard (task 0726 R1):** importer releases below `0.4.49` (before ts-libs
+commit 96762d5) silently collapse `history_tool_call.args_raw` on pi imports to the todo-tool
+argument's first line, destroying bash-command evidence. `HistoryService` therefore asserts
+provenance (0726 R1) before any database access on **non-dry-run full imports that include the
+`pi` source**: the CLI resolves the installed importer version via `resolveImportProvenance` and
+passes it into `HistoryServiceContext.importerVersion` at construction; `assertPiImporterSafe`
+(in `history-service.ts`, shared by `import` and `importAll`) rejects versions that fail a strict
+`MAJOR.MINOR.PATCH` parse — unknown, malformed, and prerelease values are unsafe by definition —
+or that compare below `MIN_SAFE_PI_BASH_IMPORTER_VERSION` (`0.4.49`). Rejection throws
+`UnsafeHistoryImporterError` (`code: 'unsafe-history-importer'`, carrying installed and minimum
+safe versions plus the upgrade/relink remedy naming commit 96762d5) before the database opens or
+the importer runs; the CLI renders it as a structured `--json` error (`details.cliCode`) with
+exit 1. Dry-run previews and append-scoped modes (`incremental`, `force-file`) are unaffected.
+
 **Fan-out (task 0470):** `--source all` iterates every known source in `SOURCES` order, each in its
 own `try` with its own transaction — a throwing or timing-out source is caught, recorded
 `status: 'failed'` with its error, and the loop continues; one source can never abort another. A
@@ -2248,6 +2262,18 @@ explicit size override, not a capability grant. precheck→implement requires
 the guard). Auto-profile feature reactivation is single-shot (`feature sync`, one
 `feature update` fallback); a real reactivation failure surfaces and blocks implementation,
 while dirty-tree diagnostics stay advisory.
+**Evidence-channel precheck (0726 R2):** alongside the size check,
+`plugins/sp/scripts/task-evidence-precheck.ts` makes a task's declared live-data evidence
+calls deterministic. It parses the task content for `evidence-channel:` declarations; only the
+exact channel `history_tool_call.args_raw[pi]` is allowlisted — any other token is an unknown
+declaration and writes FAIL. With the exact declaration present, one fixed query
+(`SELECT COUNT(*) AS n FROM history_tool_call WHERE args_raw IS NOT NULL AND source = 'pi'`)
+runs on `.spur/spur.db` via bun:sqlite; a missing database, a missing table, or a zero count
+also writes FAIL (fail closed). A task without any `evidence-channel:` declaration passes
+without opening SQLite. The script always exits 0; the precheck→implement guard requires
+`.spur/run/<wbs>-precheck-evidence.status=PASS` in addition to the size status, so a task that
+declares live pi bash-command evidence must import real history (safe importer, non-dry-run)
+before implementation begins.
 **Diff-scope guard (task 0487 R1):** the implement step's `requireDiff` also rejects changes outside
 the exact files and explicit directory/glob prefixes backticked in the target task's body, naming
 the rogue files; new files beside an exact declared file are allowed, and a task body naming no
@@ -2403,6 +2429,33 @@ configuration remedy (`roles.reviewer` tier override or an explicit pin) — nev
 Composition (R8): the live pipeline itself is checked — a proof-chain test fails if review/verify
 re-pin an executor, lose `freshSession: true`, or drift from `compareExecutorWith: implement`, and
 the composition baseline digest regenerates with every pipeline change.
+
+**Verifier-owned verify answer file (task 0726, R3).** The verify step's `agent.run` declares
+`expectFile` instead of `answerFile`: the verifier writes `.spur/run/<wbs>-verify-answer.txt` itself
+(append-progress authoring — `Verdict: PARTIAL` first, one complete requirement/AC row at a time,
+first verdict line replaced only after all rows are certified), and the host checks post-exit
+existence without capturing or overwriting, so an interrupted verify leaves lintable partial rows
+instead of losing the capture. A hard `verify-answer-lint.ts` gate runs after the agent exits and
+before `spur task verdict --from-answer`, rejecting with row-level diagnostics: missing, duplicate,
+or unknown requirement IDs (vs the task's bold `R#` items), AC IDs that do not exactly match a task
+AC checklist label (or its leading token) or a linked feature scenario title, status/evidence-type
+values the verdict parser would drop, and empty evidence. The lint's normalization mirrors
+`packages/app/src/services/task-verdict.ts` exactly (compound evidence types included), so the lint
+is a strict pre-filter of the verdict parser, never an independent dialect. On retry the verifier
+keeps rows that pass the lint and verifies only the missing IDs.
+
+**Task evidence precheck + verify answer lint (tasks 0726, R2/R3):** `precheck` gains a
+fail-closed `task-evidence-precheck` step (same contract as the size precheck: PASS/FAIL to
+`.spur/run/<wbs>-precheck-evidence.status`, always exit 0; a missing checker fails closed) and the
+precheck→implement guard requires BOTH status files PASS. On the verify stage, the verifier OWNS
+the answer file — `agent.run expectFile` (engine checks existence; the verifier authors it and
+appends progress) — and a deterministic hard-gate lint step
+(`plugins/sp/scripts/verify-answer-lint.ts`) runs between capture and
+`spur task verdict --from-answer`: bounded row findings (max 10), non-zero exit writes nothing,
+enforcing verdict-line shape, requirement row completeness/uniqueness/identity, status/evidence
+validity, and AC-label identity against the task checklist (AC completeness stays a verifier
+judgement, not a lint class). A lint failure halts the stage before the verdict step can misread a
+malformed answer.
 
 **Run status (ADR-044):** terminal states partition into success and failure via an optional
 `failureStates` subset of `terminalStates` (declared per workflow; absent ⇒ today's behavior). Landing

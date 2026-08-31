@@ -5,6 +5,25 @@ the `indexed-context` skill.
 
 ---
 
+## bug-756: lefthook pre-commit `format` fixer + failed unstaged-patch restore silently reverts unstaged worktree edits to HEAD (data loss of uncommitted user work).
+
+- **Date:** 2026-08-31T11:25:00-07:00
+- **File:** `.git/info/lefthook-unstaged.patch` (deleted by the hook); worktree-wide
+- **Root cause:** lefthook hid unstaged edits in a patch, ran `biome --write` on staged files (auto-fixing them), then failed to reapply the patch and deleted it — reverting every unstaged ` M` file to HEAD. Recovery only possible because oh-pi's per-turn stash snapshots held the last-good state (turn-84); no reflog/stash-list trace otherwise.
+- **Fix (recovery):** restored 13 files from dangling snapshot via worktree-only `git restore --source=refs/recovery/last-good-turn-84 --worktree -- <files>`; index untouched. Prevention: never commit while unrelated unstaged edits exist; snapshot the worktree (`git stash create` or equivalent) before any lefthook-triggering op.
+- **Tags:** lefthook, pre-commit, data-loss, recovery, dangling-commits
+- **Occurrences:** 1
+
+## bug-755: `self serve` daemon daily pipeline import fan-out contended with CLI writes on `.spur/spur.db`; multi-second write transactions outlasted the 5s SQLite busy_timeout and surfaced `SQLITE_BUSY` failures.
+
+- **Date:** 2026-08-31T11:09:00-07:00
+- **File:** `packages/domain/src/db.ts`, `packages/domain/tests/db.test.ts`
+- **Root cause:** `createMigratedDb`/`createMigratedDbViaRuntime` set `PRAGMA busy_timeout = 5000`; upstream `@gobing-ai/ts-db` defaults omit busy_timeout. Run 1 committed all rows but reported failure; checkpoint resume healed it.
+- **Fix:** exported `SQLITE_BUSY_TIMEOUT_MS = 30_000` applied in both factories (via `exec` — typed pragmas option only covers journalMode/synchronous/foreignKeys). Tests: per-connection pragma readback on both factories + cross-process `BEGIN IMMEDIATE` holder (stdout readiness signal, 6s hold); parent INSERT waits ≥4s and <30s, both rows commit. Docs: `docs/03_ARCHITECTURE.md`, `docs/help/how_to_use_spur_for_daily_software_development.md`.
+- **Tags:** sqlite, busy-timeout, wal, daemon, dogfood, bug-245-lineage
+- **Occurrences:** 1
+
+
 ## bug-754: git commit fails at the lefthook pre-commit `format` step (`bun run format` = `biome check . --write`) with "operation not permitted", dying in 0.00s before biome even starts — even though the staged file set is 100% clean (verified via a scoped `bunx biome check --write <staged-files>` returning "No fixes applied" with zero errors).
 
 - **Date:** 2026-07-03T06:50:00Z

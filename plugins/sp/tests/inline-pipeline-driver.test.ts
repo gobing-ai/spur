@@ -8,6 +8,7 @@ interface ActionOptions {
     command?: string;
     input?: string;
     answerFile?: string;
+    expectFile?: string;
     path?: string;
     var?: string;
     message?: string;
@@ -146,8 +147,11 @@ function runInlineSmoke(options: { verdict?: 'PASS' | 'FAIL'; failCheckAt?: numb
                 hostStages.push(state.id);
                 if (action.options?.requireDiff === true)
                     writeFileSync(join(cwd, 'implementation.diff'), 'fixture diff\n');
-                if (action.options?.answerFile !== undefined) {
-                    const answerPath = join(cwd, expand(action.options.answerFile, vars));
+                // 0726 R3: verify switched from host-captured answerFile to verifier-owned
+                // expectFile — the harness still materializes the file either way.
+                const answerSpec = action.options?.answerFile ?? action.options?.expectFile;
+                if (answerSpec !== undefined) {
+                    const answerPath = join(cwd, expand(answerSpec, vars));
                     mkdirSync(dirname(answerPath), { recursive: true });
                     writeFileSync(answerPath, `Verdict: ${options.verdict ?? 'PASS'}\n`);
                 }
@@ -180,6 +184,16 @@ function runInlineSmoke(options: { verdict?: 'PASS' | 'FAIL'; failCheckAt?: numb
                 let command = expand(action.options?.command ?? '', vars);
                 if (command.includes('task-size-precheck.ts')) {
                     command = 'mkdir -p .spur/run && printf "PASS\\n" > ".spur/run/$wbs-precheck-size.status"';
+                }
+                // 0726 R2: evidence precheck ships with the plugin; the smoke simulates its
+                // PASS outcome exactly like the size precheck above.
+                if (command.includes('task-evidence-precheck.ts')) {
+                    command = 'mkdir -p .spur/run && printf "PASS\\n" > ".spur/run/$wbs-precheck-evidence.status"';
+                }
+                // 0726 R3: lint semantics live in verify-answer-lint.test.ts; the smoke keeps
+                // only the file-must-exist coupling of the gate step.
+                if (command.includes('verify-answer-lint.ts')) {
+                    command = 'test -f ".spur/run/$wbs-verify-answer.txt"';
                 }
                 command = command.replaceAll('sleep 2', 'sleep 0').replaceAll('sleep 10', 'sleep 0');
                 expect(runShell(command, cwd, env), `${state.id}: ${command}`).toBe(0);

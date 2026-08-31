@@ -72,6 +72,16 @@ Entered before `task-pipeline.yaml` `precheck` state runs `spur task check <wbs>
 - [ ] The `## Plan` section is an ordered checklist (not prose).
 - [ ] The `## Design` section, if present, does not contradict the parent feature's design.
 - [ ] No `TODO`, `TBD`, or `???` placeholders in Requirements, AC, Design, or Plan.
+- [ ] The evidence-channel precheck (0726 R2) status file is consulted by the
+      pipeline guard: `plugins/sp/scripts/task-evidence-precheck.ts` parses the task
+      content for an exact `evidence-channel: history_tool_call.args_raw[pi]`
+      declaration and, when present, counts live pi rows with `args_raw` on
+      `.spur/spur.db` via bun:sqlite. Tasks without a declaration pass without opening
+      SQLite; unknown declarations, a missing database/table, and a zero count write
+      FAIL. Both precheck guard conjuncts (`precheck-size.status` and
+      `precheck-evidence.status`) must read PASS — tasks declaring a live-data
+      evidence channel must import real history (safe importer, non-dry-run) before
+      implementation begins.
 
 ## review gate
 
@@ -90,6 +100,12 @@ Entered before `task-pipeline.yaml` `review` state dispatches `sp:code-verificat
 
 Entered before `task-pipeline.yaml` `verify` state produces a task verdict.
 
+- [ ] The verify answer file (`.spur/run/<wbs>-verify-answer.txt`) is lint-clean before
+      verdict derivation: `plugins/sp/scripts/verify-answer-lint.ts <wbs>` (0726 R3)
+      rejects missing/duplicate/unknown R IDs, AC identities that are not an exact task
+      checklist label or linked-feature scenario title, invalid status/evidence-type
+      values, and empty evidence on any row. A lint failure fails the verify
+      step (fail-closed) before `spur task verdict` runs.
 - [ ] `spur task check <wbs> --strict-core --json` returns PASS.
 - [ ] Every AC scenario has a corresponding verify command that exited 0.
 - [ ] The `## Solution` section is filled (not the placeholder comment).

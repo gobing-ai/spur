@@ -218,6 +218,25 @@ states:
               echo "FAIL" > "$SIZE_FILE";
             fi &&
             exit 0
+      # 0726 R2: task evidence precheck — deterministic live-data
+      # evidence-channel proof before implement dispatch. Writes PASS/FAIL to
+      # .spur/run/<wbs>-precheck-evidence.status. Always exit 0 (soft action);
+      # the precheck→implement guard reads the file, so a missing checker
+      # fails closed (writes FAIL, never PASS).
+      - kind: shell
+        options:
+          command: >-
+            EVID_FILE=".spur/run/$wbs-precheck-evidence.status" &&
+            mkdir -p .spur/run &&
+            if [ -f plugins/sp/scripts/task-evidence-precheck.ts ]; then
+            bun plugins/sp/scripts/task-evidence-precheck.ts "$wbs"
+            --spur-bin "$spurBin";
+            else
+              echo "task-evidence-precheck failed closed —" >&2 &&
+              echo "plugins/sp/scripts/task-evidence-precheck.ts absent." >&2 &&
+              echo "FAIL" > "$EVID_FILE";
+            fi &&
+            exit 0
 
   - id: implement
     description: >
@@ -536,7 +555,17 @@ states:
           priority: ${vars.taskPriority}
           compareExecutorWith: implement
           timeoutMs: ${vars.stepTimeoutMs}
-          answerFile: .spur/run/${vars.wbs}-verify-answer.txt
+          expectFile: .spur/run/${vars.wbs}-verify-answer.txt
+      # 0726 R3: hard lint gate over the verifier-owned answer — shape and
+      # evidence-row identity, before the verdict derivation reads it.
+      # Hard action: a malformed answer halts the sequence here instead of
+      # poisoning the verdict parse downstream.
+      - kind: shell
+        options:
+          command: >-
+            bun plugins/sp/scripts/verify-answer-lint.ts "$wbs"
+            --answer ".spur/run/$wbs-verify-answer.txt"
+            --spur-bin "$spurBin"
       - kind: shell
         options:
           command: "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt"
@@ -679,11 +708,11 @@ transitions:
   # ── precheck: size PASS + task check → implement; else → failed ──
   - from: precheck
     to: implement
-    description: Deterministic size and task checks are green — begin implementation.
+    description: Deterministic size, evidence, and task checks are green — begin implementation.
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/$wbs-precheck-size.status 2>/dev/null)" = PASS && $spurBin task check $wbs'
+        command: 'test "$(cat .spur/run/$wbs-precheck-size.status 2>/dev/null)" = PASS && test "$(cat .spur/run/$wbs-precheck-evidence.status 2>/dev/null)" = PASS && $spurBin task check $wbs'
   - from: precheck
     to: failed
     description: Size and/or task check failed — stop before implement.

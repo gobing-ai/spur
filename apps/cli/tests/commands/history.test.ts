@@ -5,9 +5,15 @@
 
 import { describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HISTORY_REFRESH_CONTEXT_ENV, HistoryService } from '@gobing-ai/spur-app';
+import {
+    HISTORY_REFRESH_CONTEXT_ENV,
+    HistoryService,
+    MIN_SAFE_PI_BASH_IMPORTER_VERSION,
+    parseImporterVersion,
+} from '@gobing-ai/spur-app';
 import {
     type CoverageEntry,
     type DbAdapter,
@@ -395,6 +401,98 @@ describe('history command', () => {
 
         expect(exitCode).toBe(0);
         expect(lines.join('')).toContain('history import (fan-out)');
+    });
+
+    describe('pi importer provenance guard (0726 R1)', () => {
+        // The host-resolved importer version decides the branch: the guard fires only when
+        // the workspace imports a version below the safe floor. Reading it here keeps the
+        // test honest across future ts-libs upgrades (service-level version injection
+        // lives in packages/app/tests/services/history-service.test.ts).
+        const require = createRequire(import.meta.url);
+        let hostVersion = 'unknown';
+        try {
+            hostVersion = (require('@gobing-ai/ts-llm-jsonl-importer/package.json') as { version: string }).version;
+        } catch {
+            // unresolved package — treated as unknown, which the guard rejects
+        }
+        const hostSafe = (() => {
+            const installed = parseImporterVersion(hostVersion);
+            const minSafe = parseImporterVersion(MIN_SAFE_PI_BASH_IMPORTER_VERSION);
+            if (installed === null || minSafe === null) return false;
+            return (
+                installed[0] > minSafe[0] ||
+                (installed[0] === minSafe[0] &&
+                    (installed[1] > minSafe[1] || (installed[1] === minSafe[1] && installed[2] >= minSafe[2])))
+            );
+        })();
+
+        test('full pi import is refused below the safe importer floor with remedy (text)', async () => {
+            const cwd = makeTmpCwd();
+            const emptyRoot = join(cwd, 'empty-history');
+            mkdirSync(emptyRoot, { recursive: true });
+            const { output, lines } = capturingOutput();
+
+            const exitCode = await main(
+                ['history', 'import', '--source', 'pi', '--root', emptyRoot, '--mode', 'full'],
+                {
+                    output,
+                    cwd,
+                    dbUrl: ':memory:',
+                },
+            );
+
+            if (hostSafe) {
+                // Workspace imported a safe importer — the guard must not fire.
+                expect(exitCode).toBe(0);
+                expect(lines.join('')).toContain('history import (fan-out)');
+                return;
+            }
+            expect(exitCode).toBe(1);
+            const joined = lines.join('');
+            expect(joined).toContain('unsafe-history-importer');
+            expect(joined).toContain(hostVersion);
+            expect(joined).toContain(MIN_SAFE_PI_BASH_IMPORTER_VERSION);
+            expect(joined).toContain('96762d5');
+            expect(joined).toContain('--dry-run');
+        });
+
+        test('full pi import refusal carries structured details under --json --json-envelope (0726 R1)', async () => {
+            if (hostSafe) return; // refusal polarity already proven by the text test above
+            const cwd = makeTmpCwd();
+            const emptyRoot = join(cwd, 'empty-history');
+            mkdirSync(emptyRoot, { recursive: true });
+            const { output, lines } = capturingOutput();
+
+            const exitCode = await main(
+                [
+                    'history',
+                    'import',
+                    '--source',
+                    'pi',
+                    '--root',
+                    emptyRoot,
+                    '--mode',
+                    'full',
+                    '--json',
+                    '--json-envelope',
+                ],
+                { output, cwd, dbUrl: ':memory:' },
+            );
+
+            expect(exitCode).toBe(1);
+            const parsed = JSON.parse(lines.join('')) as {
+                ok: boolean;
+                error?: {
+                    code: string;
+                    details?: { cliCode?: string; installedVersion?: string; minSafeVersion?: string };
+                };
+            };
+            expect(parsed.ok).toBe(false);
+            expect(parsed.error?.code).toBe('INTERNAL_ERROR');
+            expect(parsed.error?.details?.cliCode).toBe('unsafe-history-importer');
+            expect(parsed.error?.details?.installedVersion).toBe(hostVersion);
+            expect(parsed.error?.details?.minSafeVersion).toBe(MIN_SAFE_PI_BASH_IMPORTER_VERSION);
+        });
     });
 
     test('import --source missing is rejected with the source allowlist', async () => {

@@ -210,12 +210,16 @@ export type {
     RunHistoryReportResult,
 } from './services/history-service';
 export {
+    assertPiImporterSafe,
     computeExitCode,
     formatIssue,
     HistoryService,
+    MIN_SAFE_PI_BASH_IMPORTER_VERSION,
+    parseImporterVersion,
     pruneReports,
     resolveArtifactPath,
     runHistoryReport,
+    UnsafeHistoryImporterError,
 } from './services/history-service';
 export type { JobWorkerConsumer, JobWorkerServiceOptions } from './services/job-worker-service';
 export { JobHandlerRegistry, JobWorkerService } from './services/job-worker-service';
