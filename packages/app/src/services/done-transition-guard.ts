@@ -135,10 +135,14 @@ export async function readVerdictArtifact(
 // ─── Aggregation (R10) ─────────────────────────────────────────────────
 
 /**
- * Recompute the aggregate verdict from the per-requirement and per-AC rows.
- * Mirrors the rule in `deriveVerdict` (task-verdict.ts:52-69):
+ * Recompute the aggregate verdict from the per-requirement and per-AC rows by
+ * delegating to `aggregateVerifyVerdict` — the one shared policy `deriveVerdict`
+ * also uses, so the guard cannot drift from derivation. Summary of that policy:
  *   - any UNMET (req or AC) → FAIL
- *   - else any PARTIAL (req or AC) → PARTIAL
+ *   - else a non-pass blocker check → FAIL
+ *   - else a non-pass major check → PARTIAL
+ *   - else any PARTIAL (req or AC), or a MET row with hollow evidence (0721) → PARTIAL
+ *   - else a failed independent task-check → PARTIAL
  *   - else PASS
  *
  * An artifact with zero rows is ambiguous — `deriveVerdict` returns UNKNOWN

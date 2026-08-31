@@ -4,7 +4,7 @@ name: "Fail closed on hollow MET verdict evidence in task-verdict derivation"
 status: done
 template: issue
 created_at: 2026-08-30T18:21:54.351Z
-updated_at: "2026-08-31T02:03:41.446Z"
+updated_at: "2026-08-31T15:47:21.212Z"
 feature_id: F91
 priority: P1
 ac_numbering: task-local
@@ -171,27 +171,24 @@ Behavior retained (R4): populated MET rows still PASS; empty evidence stays lega
 Verification: `packages/app` suite 2354 pass / 0 fail (`bun test tests`); CLI task-verb suite 172 pass (`bun test apps/cli/tests/commands/task.test.ts`); typechecks `@gobing-ai/spur-app` and `@gobing-ai/spur` exit 0; `bun run corpus-check` — 0 new errors, the one new warning was this Solution's own anchor, fixed by citing `aggregateVerifyVerdict` directly.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | `isHollowMet` (`packages/app/src/services/verify-verdict.ts:253-255`) classifies MET with absent/empty/whitespace-only/non-string evidence as hollow; folded into the PARTIAL branch after FAIL/blocker precedence, before the final PASS (`verify-verdict.ts:310-311`, ordering comment `:282-291`). Missing/empty/whitespace/non-string cases pinned (`packages/app/tests/services/verify-verdict.test.ts:262-306`); blocker-over-hollow → FAIL precedence pinned (`:310-323`). Live probe this session: `spur task verdict --from-answer` with ` |
-| R2 | MET | Three-cell AC data rows retained with `evidence: ''` once the table is open (`packages/app/src/services/task-verdict.ts:226-241`, `acShaped` guard skips foreign heading-less tables exactly as before); one bounded `hollow-met-evidence` check with explicit `major` severity names every hollow req/AC id (`task-verdict.ts:379-393`); `deriveVerdict` aggregates via the shared policy (`task-verdict.ts:58-64`); done-guard recomputation agrees — hollow stored PASS denied with `self-inconsistent` (`done-transition-guard.test.ts:546-584`). Live probe this session: 4-col AC row with empty evidence cell → row retained (`C1 MET ''`), verdict PARTIAL, exit 1, diagnostic names C1. |
-| R3 | MET | All five authoritative consumers route through `aggregateVerifyVerdict`: answer derivation (`task-verdict.ts:58`), done guard (`done-transition-guard.ts:167`), record rendering (`task-record.ts:298`), corpus sweep (`corpus-sweep.ts:74`), feature-check tracked-Testing fallback (`feature-check.ts:689`) — grep-verified this session; single `isHollowMet` definition, zero consumer edits, no parallel parser or finding code. `VerdictCheck.severity` added (`task-record.ts:62-65`); hollow tracked rows parse and recompute PARTIAL (`task-record.test.ts:1259-1293`); CLI hollow row → PARTIAL + exit 1 (`apps/cli/tests/commands/task.test.ts:2208-2221`). |
-| R4 | MET | Populated MET PASS control (`verify-verdict.test.ts:330-335`; CLI test 8002 → verdict PASS); empty evidence legal for UNMET (→ FAIL), PARTIAL, and N/A (`verify-verdict.test.ts:315-328`); zero coverage rows → UNKNOWN (`:337-339`; also observed live — AC-only answer stays UNKNOWN per pre-existing zero-requirement semantics); scenario-to-feature matching untouched at feature completion; `docs/04_DESIGN.md:1898` documents the hollow rule in the same change (git diff confirms). |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/verify-verdict.ts:253-255` — `isHollowMet` classifies a MET row whose evidence is absent/empty/whitespace-only/non-string as hollow; folded into the PARTIAL branch at `packages/app/src/services/verify-verdict.ts:309-312`, after UNMET→FAIL (`:291`) and blocker→FAIL (`:303`), before the final PASS (`:316`). Ordering docblock `packages/app/src/services/verify-verdict.ts:264-273` step 5. Pinned: absent/empty/whitespace/non-string cases `packages/app/tests/services/verify-verdict.test.ts:262-306`; blocker-over-hollow → FAIL `packages/app/tests/services/verify-verdict.test.ts:308-323`. Live probe this run: hollow answer → `Verdict: PARTIAL`, exit 1. |
+| R2 | MET | Three-cell AC data rows retained with `evidence: ''` once the table is open — `packages/app/src/services/task-verdict.ts:220-236` (`acShaped` guard at `:228-234` keeps a foreign heading-less 3-col table skipped). One bounded `hollow-met-evidence` check with explicit `major` severity naming every hollow req/AC id at `packages/app/src/services/task-verdict.ts:378-392`. `deriveVerdict` aggregates through the shared policy at `packages/app/src/services/task-verdict.ts:58-66` with `checks: []`, so the diagnostic is advisory and the rule authoritative; recomputation from the persisted artifact (which carries the major check) yields the same PARTIAL. Pinned `packages/app/tests/services/task-verdict.test.ts:562-616`. Live probe: 4-col AC row with empty final cell → row retained as `C1 MET ''`, verdict PARTIAL, diagnostic names R1 and C1. |
+| R3 | MET | All five authoritative consumers route through the one `aggregateVerifyVerdict` and pass full rows including `evidence` — answer derivation `packages/app/src/services/task-verdict.ts:58`, done guard `packages/app/src/services/done-transition-guard.ts:167` (artifact rows verbatim, `:148-172`), record rendering `packages/app/src/services/task-record.ts:298`, corpus sweep `packages/app/src/services/corpus-sweep.ts:74`, feature-check tracked-Testing fallback `packages/app/src/services/feature-check.ts:689`. Grep-verified this run: single `isHollowMet` definition, zero consumer edits, no parallel parser or finding code. `VerdictCheck.severity` added at `packages/app/src/services/task-record.ts:62-69`. Pinned: persisted artifact `packages/app/tests/services/done-transition-guard.test.ts:546-584`; tracked Testing `packages/app/tests/services/task-record.test.ts:1259-1293`; CLI hollow row → PARTIAL + exit 1 `apps/cli/tests/commands/task.test.ts:2210-2221`. |
+| R4 | MET | Populated MET → PASS control `packages/app/tests/services/verify-verdict.test.ts:330-335`; empty evidence stays legal for UNMET (→FAIL) `:315-319`, and for PARTIAL / N-A `:322-328`; zero coverage rows → UNKNOWN `:337-339`; foreign 3-col table still skipped `packages/app/tests/services/task-verdict.test.ts:645-666`. Scenario-to-feature matching untouched at feature completion (no edit in commit `054b038f0`). Documented in the same change: `docs/04_DESIGN.md:1927` carries the hollow rule in the `spur task verdict` row. Live probe this run: populated answer → `Verdict: PASS`, exit 0. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
-| AC1 — Hollow MET requirement cannot pass (PARTIAL + diagnostic) | MET | test | Unit pins `verify-verdict.test.ts:262-323`; live CLI probe → `Verdict: PARTIAL`, exit 1, `hollow-met-evidence` (severity major) names R1 |
-| AC2 — Hollow MET AC row preserved, cannot pass, diagnostic | MET | test | `task-verdict.test.ts:562-616` (severity major, names row, whitespace-only); live probe → row retained as `C1 MET ''`, verdict PARTIAL, diagnostic names C1 |
-| AC3 — Persisted/tracked hollow evidence rejected consistently | MET | test | `done-transition-guard.test.ts:546-584` (computeAggregate stored PASS → PARTIAL; gate denies self-inconsistent); `task-record.test.ts:1259-1293` (parseTesting hollow recompute); green in fresh suite run |
-| AC4 — Legitimate outcomes unchanged (PASS/FAIL/PARTIAL/N-A/UNKNOWN) | MET | test | Populated-PASS, UNMET→FAIL, N/A-PASS, zero-row-UNKNOWN controls all pinned and green in fresh `bun test tests` (2354 pass / 0 fail) |
-
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Hollow MET requirement cannot pass | MET | command | Live probe this run: hollow answer file through `bun run apps/cli/src/index.ts task verdict --from-answer --json` → `verdict: PARTIAL`, exit 1, check `hollow-met-evidence` severity `major` naming `R1, C1`. Unit pins `packages/app/tests/services/verify-verdict.test.ts:262-323`. |
+| Scenario: R2 — Hollow MET acceptance criterion is preserved and cannot pass | MET | command | Same live probe: AC row `C1` retained in the artifact as `{"id":"C1","status":"MET","evidenceType":"test","evidence":""}` (not dropped), aggregate PARTIAL, diagnostic names C1. Unit pins `packages/app/tests/services/task-verdict.test.ts:562-616`. |
+| Scenario: R3 — Persisted hollow evidence is rejected consistently | MET | test | `packages/app/tests/services/done-transition-guard.test.ts:546-584` — stored PASS with hollow/legacy-shape rows recomputes PARTIAL and the gate denies `self-inconsistent`; `packages/app/tests/services/task-record.test.ts:1259-1293` — tracked `## Testing` hollow rows recompute PARTIAL. Fresh run this session: 224 pass / 0 fail across the five service suites. |
+| Scenario: R4 — Legitimate outcomes are unchanged | MET | command | Live probe: populated answer → `Verdict: PASS`, exit 0. Controls green in the fresh run — PASS `packages/app/tests/services/verify-verdict.test.ts:330-335`, FAIL `:315-319`, PARTIAL / N-A `:322-328`, UNKNOWN `:337-339`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 | Priority | Dimension | Location | Finding |
