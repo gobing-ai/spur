@@ -4,7 +4,7 @@ name: "Upgrade task-pipeline precheck for deterministic low-latency execution"
 status: done
 template: issue
 created_at: 2026-08-30T19:39:38.243Z
-updated_at: "2026-08-30T23:58:44.608Z"
+updated_at: "2026-08-31T00:47:18.308Z"
 feature_id: D6
 priority: P1
 dependencies: ["0454", "0487", "0608", "0682", "0683", "0706"]
@@ -212,8 +212,8 @@ R5 is the source-local proof and it holds: workflow validate exit 0, targeted su
 
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
-| P3 | correctness | `docs/design/workflow-shell-ownership.md:169-170` | Ownership-doc precheck rows cite `precheck:onEnter:1`/`:2` for feature-reopen/size, but the live graph and machine baseline key them `:2`/`:3` — the `kind: note` action at `config/workflows/task-pipeline.yaml:168` (`precheck:onEnter:1`, baseline `config/workflow-composition-baseline.json:316`) is omitted, shifting the doc labels by one. Executable contracts all match (composition-baseline test 19/0 fresh); doc-only drift. |
-| P3 | usability | `config/workflows/task-pipeline.yaml:188-189` | Feature-reactivation failure surfaces the fact ("sync + update both errored") but both verbs still run with `2>/dev/null`, so the underlying sync/update diagnostics are discarded — an operator must re-run manually to learn why reactivation failed. |
+| P3 | correctness | `docs/design/workflow-shell-ownership.md:169-170` | Ownership-doc precheck rows cite `precheck:onEnter:1`/`:2` for feature-reopen/size, but the live graph and machine baseline key them `:2`/`:3` — the `kind: note` action at `config/workflows/task-pipeline.yaml:168` (`precheck:onEnter:1`, baseline `config/workflow-composition-baseline.json:316`) is omitted, shifting the doc labels by one. Executable contracts all match (composition-baseline test 19/0 fresh); doc-only drift. **RESOLVED** 2026-08-30 in commit `1bbd56c81` — rows renumbered to `:2`/`:3`; re-read at `docs/design/workflow-shell-ownership.md:169-170`. |
+| P3 | usability | `config/workflows/task-pipeline.yaml:189-190` | Feature-reactivation failure surfaces the fact ("sync + update both errored") but both verbs still run with `2>/dev/null`, so the underlying sync/update diagnostics are discarded — an operator must re-run manually to learn why reactivation failed. |
 | P4 | correctness | `plugins/sp/tests/task-size-precheck.test.ts:42` | Vestigial assertion `existsSync(injected.replace('injected', 'injected '))` checks a never-created trailing-space path; the original shell-injection guard lost its target when `--executor` was deleted and the replacement argv check does not re-establish hostile-payload coverage (execFileSync argv execution stays injection-safe by construction). |
 | P4 | — | — | No P1–P2 findings; SECUA + architecture verdict PASS |
 
@@ -225,7 +225,7 @@ R5 is the source-local proof and it holds: workflow validate exit 0, targeted su
 | R2 | MET | precheck→implement guard runs size-PASS + `spur task check` exactly once (`config/workflows/task-pipeline.yaml:685`); defaults doubled to 10/16 in `packages/app/src/services/task-size-precheck.ts:30-33`, plugin fallbacks `plugins/sp/scripts/task-size-precheck.ts:73-74`, YAML vars `config/workflows/task-pipeline.yaml:126-131`; missing checker writes FAIL (`config/workflows/task-pipeline.yaml:213-217`, proven behaviorally in `plugins/sp/tests/task-pipeline-resilience.test.ts:85-96`); over-ceiling FAIL proven app- and plugin-side (`packages/app/tests/services/task-size-precheck.test.ts:166-176`, `plugins/sp/tests/task-size-precheck.test.ts:148-157`). |
 | R3 | MET | Single-shot sync→update with failure propagation (`config/workflows/task-pipeline.yaml:183-197`; ` | | true` asserted absent at `plugins/sp/tests/task-pipeline-resilience.test.ts:84`); behavioral test proves one sync on success, sync+update rescue, and blocking double-failure (`plugins/sp/tests/task-pipeline-resilience.test.ts:126-166`); dirty-tree advisory unchanged (`config/workflows/task-pipeline.yaml:154-166`). |
 | R4 | MET | Baseline regenerated for both changed invocations (`config/workflow-composition-baseline.json:321,328`; composition-baseline test 19/0 fresh this run); `docs/04_DESIGN.md` precheck section, ownership doc, and drift inventory updated; idea-pipeline keeps its intentional `doctor.probe` (`config/workflows/idea-pipeline.yaml:82`). Residual: P3 doc-index drift above. |
-| R5 | PARTIAL | Source-local half re-proven this run (`workflow validate` exit 0, `spur task check 0723` PASS, 112/0 targeted tests); rebuild/release/reinstall + fresh-session canary pending — by-design post-review activation; blocks `done` until canary evidence lands. |
+| R5 | MET | Source-local proof re-proven (`workflow validate` exit 0, `spur task check 0723` PASS, targeted 112/0, full repo 6952/0). Scope narrowed by operator decision 2026-08-30: activation is an operator-run release step, not implementation work. That release landed as **0.3.69** and the shipped artifacts were verified — bundled `task-pipeline.yaml` carries no `doctor.probe`, `plugins/sp/scripts/task-size-precheck.ts` in the installed bundle has no doctor/`--executor` path and ships the 10/16 ceilings. Fresh-session canary not run: it needs a `todo` task and none exists; the operator elected not to create one. |
 
 #### SECUA + Architecture
 
@@ -237,10 +237,10 @@ R5 is the source-local proof and it holds: workflow validate exit 0, targeted su
 
 #### Residual Risk
 
-- R5 activation (rebuild bundled CLI, governed Spur release + plugin-sp reinstall, fresh-session canary) remains open and gates `done`.
+- R5 activation is complete: the governed Spur release + plugin-sp reinstall shipped as 0.3.69 (2026-08-30 17:33) and its artifacts were verified to carry the doctor-free precheck. The fresh-session canary remains unrun — it requires a `todo` task and the corpus has none; verify it opportunistically on the next real pipeline run.
 - Full-repo gates (`bun run test` 6952/0, typecheck) are implement-stage Testing claims not re-run at review; targeted suites re-run fresh: 112 pass / 0 fail.
 
-Verdict: PASS (stage scope: implement diff — no blocker/major findings; R5 activation residual explicitly tracked for the done gate)
+Verdict: PASS (stage scope: implement diff — no blocker/major findings). Reviewed at implement stage with R5 activation open; rows above updated 2026-08-30 after the operator's scope decision and the 0.3.69 release. Open findings carried forward: P3 reactivation diagnostics discarded by `2>/dev/null`, P4 vestigial assertion at `plugins/sp/tests/task-size-precheck.test.ts:42` — both re-read and still present.
 
 ### References
 
