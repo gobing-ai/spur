@@ -16,6 +16,7 @@ import { BunSyncProcessExecutor, type FileSystem } from '@gobing-ai/ts-runtime';
 import {
     aggregateVerifyVerdict,
     type VerifyVerdict as CanonicalVerifyVerdict,
+    type CheckSeverity,
     type ParseVerdictOutcome,
     parseVerifyVerdict,
     ROW_STATUSES,
@@ -63,6 +64,8 @@ export interface VerdictCheck {
     name: string;
     status: string;
     evidence: string;
+    /** Explicit blocking weight (0721): `major` on the hollow-evidence diagnostic. Legacy rows omit it. */
+    severity?: CheckSeverity;
 }
 
 /** Options for TaskService.record(). */

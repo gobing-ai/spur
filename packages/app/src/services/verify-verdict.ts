@@ -217,8 +217,8 @@ export async function readVerifyVerdict(
 // ─── Aggregation (R2 — one shared policy) ──────────────────────────────
 
 export interface AggregateVerdictInput {
-    requirements?: Array<{ status?: unknown }>;
-    acceptanceCriteria?: Array<{ status?: unknown }>;
+    requirements?: Array<{ id?: unknown; status?: unknown; evidence?: unknown }>;
+    acceptanceCriteria?: Array<{ id?: unknown; status?: unknown; evidence?: unknown }>;
     checks?: Array<{ name?: unknown; check?: unknown; id?: unknown; status?: unknown; severity?: unknown }>;
     /** Independent `spur task check` outcome. When false, the aggregate cannot be PASS. */
     taskCheckPassed?: boolean;
@@ -244,6 +244,17 @@ function isTaskCheckRow(row: { name?: unknown; check?: unknown; id?: unknown }):
 const NORM = (s: unknown): string => String(s ?? '').toUpperCase();
 
 /**
+ * A MET coverage row whose evidence is absent, empty, whitespace-only, or not a
+ * string cannot support PASS (0721 R1): the status claims success, but nothing
+ * records it. Hollow MET aggregates as PARTIAL — after FAIL/blocker precedence,
+ * before the final PASS. Populated MET rows are unaffected, and empty evidence
+ * stays legal for UNMET/PARTIAL/N/A rows.
+ */
+function isHollowMet(row: { status?: unknown; evidence?: unknown }): boolean {
+    return NORM(row.status) === 'MET' && !(typeof row.evidence === 'string' && row.evidence.trim() !== '');
+}
+
+/**
  * Aggregate the verdict from its rows + checks. This is the ONE aggregation function
  * every consumer uses: answer derivation, persisted-artifact consistency (done guard),
  * task/feature validation, record rendering, and done enforcement.
@@ -253,7 +264,7 @@ const NORM = (s: unknown): string => String(s ?? '').toUpperCase();
  *   2. any UNMET req/AC                        → FAIL
  *   3. non-pass blocker (or legacy no-severity `fail`) check → FAIL
  *   4. non-pass major (or legacy no-severity `warn`) check  → PARTIAL
- *   5. any PARTIAL req/AC (and no blocker/major yet)        → PARTIAL
+ *   5. any PARTIAL req/AC, or MET row with hollow evidence → PARTIAL (0721)
  *   6. task-check failed                        → PARTIAL
  *   7. otherwise                                → PASS
  */
@@ -295,7 +306,10 @@ export function aggregateVerifyVerdict(input: AggregateVerdictInput): VerdictAgg
     }
     if (majorBlocked) return 'PARTIAL';
 
-    if (reqs.some((r) => NORM(r.status) === 'PARTIAL') || acs.some((a) => NORM(a.status) === 'PARTIAL'))
+    if (
+        reqs.some((r) => NORM(r.status) === 'PARTIAL' || isHollowMet(r)) ||
+        acs.some((a) => NORM(a.status) === 'PARTIAL' || isHollowMet(a))
+    )
         return 'PARTIAL';
 
     if (input.taskCheckPassed === false) return 'PARTIAL';

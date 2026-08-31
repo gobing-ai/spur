@@ -1354,7 +1354,7 @@ describe('FeatureCheckService', () => {
             JSON.stringify({
                 verdict: 'PASS',
                 requirements: [],
-                acceptanceCriteria: [{ id: 'AC-1', status: 'MET' }],
+                acceptanceCriteria: [{ id: 'AC-1', status: 'MET', evidence: 'tests/x.test.ts:1' }],
             }),
         );
 
@@ -2087,8 +2087,8 @@ describe('FeatureCheckService', () => {
         taskStatus: string;
         verdict?: {
             verdict: string;
-            requirements?: Array<{ id: string; status: string }>;
-            acceptanceCriteria?: Array<{ id: string; status: string }>;
+            requirements?: Array<{ id: string; status: string; evidence?: string }>;
+            acceptanceCriteria?: Array<{ id: string; status: string; evidence?: string }>;
         };
         scenarioTitle?: string;
         /** Optional `## Testing` section body written into the task (F93 fallback). */
@@ -2166,7 +2166,7 @@ describe('FeatureCheckService', () => {
     test('0340 R2: linked-and-verified scenario (done + PASS + MET) produces no unverified finding', async () => {
         const { result, cleanup } = await setupScenarioSatisfaction({
             taskStatus: 'done',
-            verdict: { verdict: 'PASS', requirements: [{ id: 'AC-1', status: 'MET' }] },
+            verdict: { verdict: 'PASS', requirements: [{ id: 'AC-1', status: 'MET', evidence: 'tests/x.test.ts:1' }] },
         });
         const unverified = result.findings.filter((f) => f.code === 'L4.scenario-unverified');
         expect(unverified).toHaveLength(0);
@@ -2188,7 +2188,7 @@ describe('FeatureCheckService', () => {
     ])('0398 R7: verdict row id "%s" verifies the untagged scenario "alpha"', async (rowId) => {
         const { result, cleanup } = await setupScenarioSatisfaction({
             taskStatus: 'done',
-            verdict: { verdict: 'PASS', requirements: [{ id: rowId, status: 'MET' }] },
+            verdict: { verdict: 'PASS', requirements: [{ id: rowId, status: 'MET', evidence: 'tests/x.test.ts:1' }] },
         });
         expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
         cleanup();
@@ -2198,7 +2198,10 @@ describe('FeatureCheckService', () => {
         // Guard against the fix over-matching: stripping tags must not make everything match.
         const { result, cleanup } = await setupScenarioSatisfaction({
             taskStatus: 'done',
-            verdict: { verdict: 'PASS', requirements: [{ id: '[doc-only] beta', status: 'MET' }] },
+            verdict: {
+                verdict: 'PASS',
+                requirements: [{ id: '[doc-only] beta', status: 'MET', evidence: 'tests/x.test.ts:1' }],
+            },
         });
         expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified').length).toBeGreaterThan(0);
         cleanup();
@@ -2214,7 +2217,9 @@ describe('FeatureCheckService', () => {
             taskStatus: 'done',
             verdict: {
                 verdict: 'PASS',
-                requirements: [{ id: 'Scenario: alpha (Given x / When y / Then z)', status: 'MET' }],
+                requirements: [
+                    { id: 'Scenario: alpha (Given x / When y / Then z)', status: 'MET', evidence: 'tests/x.test.ts:1' },
+                ],
             },
         });
         expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
@@ -2226,7 +2231,13 @@ describe('FeatureCheckService', () => {
             taskStatus: 'done',
             verdict: {
                 verdict: 'PASS',
-                requirements: [{ id: '[doc-only] alpha (Given x (nested) / When y\n  / Then z)', status: 'MET' }],
+                requirements: [
+                    {
+                        id: '[doc-only] alpha (Given x (nested) / When y\n  / Then z)',
+                        status: 'MET',
+                        evidence: 'tests/x.test.ts:1',
+                    },
+                ],
             },
         });
         expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
@@ -2239,7 +2250,7 @@ describe('FeatureCheckService', () => {
             scenarioTitle: 'alpha handles (nested) cases',
             verdict: {
                 verdict: 'PASS',
-                requirements: [{ id: 'alpha handles (nested) cases', status: 'MET' }],
+                requirements: [{ id: 'alpha handles (nested) cases', status: 'MET', evidence: 'tests/x.test.ts:1' }],
             },
         });
         expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
@@ -2251,7 +2262,9 @@ describe('FeatureCheckService', () => {
             taskStatus: 'done',
             verdict: {
                 verdict: 'PASS',
-                requirements: [{ id: 'Scenario: beta (Given x / When y / Then z)', status: 'MET' }],
+                requirements: [
+                    { id: 'Scenario: beta (Given x / When y / Then z)', status: 'MET', evidence: 'tests/x.test.ts:1' },
+                ],
             },
         });
         expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
@@ -2273,6 +2286,7 @@ describe('FeatureCheckService', () => {
                     {
                         id: `Scenario: ${r4} (Given history rows imported before correlation existed / When retroactive correlation runs over a bounded window / Then matched rows carry a run id marked estimated)`,
                         status: 'MET',
+                        evidence: 'tests/x.test.ts:1',
                     },
                 ],
             },
@@ -2318,7 +2332,7 @@ describe('FeatureCheckService', () => {
     test('0340 R2: done task with FAIL verdict is unverified even if a row says MET', async () => {
         const { result, cleanup } = await setupScenarioSatisfaction({
             taskStatus: 'done',
-            verdict: { verdict: 'FAIL', requirements: [{ id: 'AC-1', status: 'MET' }] },
+            verdict: { verdict: 'FAIL', requirements: [{ id: 'AC-1', status: 'MET', evidence: 'tests/x.test.ts:1' }] },
         });
         const unverified = result.findings.filter((f) => f.code === 'L4.scenario-unverified');
         expect(unverified).toHaveLength(1);
@@ -2331,7 +2345,7 @@ describe('FeatureCheckService', () => {
             scenarioTitle: 'Hierarchical ID allocation',
             verdict: {
                 verdict: 'PASS',
-                requirements: [{ id: 'Hierarchical ID allocation', status: 'MET' }],
+                requirements: [{ id: 'Hierarchical ID allocation', status: 'MET', evidence: 'tests/x.test.ts:1' }],
             },
         });
         const unverified = result.findings.filter((f) => f.code === 'L4.scenario-unverified');
@@ -2551,7 +2565,10 @@ describe('FeatureCheckService', () => {
         );
         writeFileSync(
             join(runDir, '0001-verdict.json'),
-            JSON.stringify({ verdict: 'PASS', requirements: [{ id: 'AC-1', status: 'MET' }] }),
+            JSON.stringify({
+                verdict: 'PASS',
+                requirements: [{ id: 'AC-1', status: 'MET', evidence: 'tests/x.test.ts:1' }],
+            }),
         );
         const svc = new FeatureCheckService(createNodeFileSystem());
         const result = await svc.check(join(featuresDir, 'A_orphan.md'), 'A', {
@@ -2685,7 +2702,7 @@ describe('FeatureCheckService', () => {
                 verdict: {
                     verdict: 'PASS',
                     requirements: [
-                        { id: 'alpha', status: 'MET' },
+                        { id: 'alpha', status: 'MET', evidence: 'tests/x.test.ts:1' },
                         { id: 'R2', status: 'UNMET' },
                     ],
                 },
@@ -2837,7 +2854,7 @@ describe('FeatureCheckService', () => {
             taskStatus: 'done',
             rawArtifact: JSON.stringify({
                 verdict: 'PASS',
-                requirements: [{ scenario: 'alpha', status: 'MET' }],
+                requirements: [{ scenario: 'alpha', status: 'MET', evidence: 'tests/x.test.ts:1' }],
             }),
         });
         expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
@@ -2850,7 +2867,7 @@ describe('FeatureCheckService', () => {
             taskStatus: 'done',
             rawArtifact: JSON.stringify({
                 verdict: 'PASS',
-                requirements: [{ scenario: 'AC-1', status: 'MET' }],
+                requirements: [{ scenario: 'AC-1', status: 'MET', evidence: 'tests/x.test.ts:1' }],
             }),
         });
         expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
@@ -2863,7 +2880,7 @@ describe('FeatureCheckService', () => {
             taskStatus: 'done',
             rawArtifact: JSON.stringify({
                 verdict: 'PASS',
-                requirements: [{ id: 'AC-1', scenario: 'AC-1', status: 'MET' }],
+                requirements: [{ id: 'AC-1', scenario: 'AC-1', status: 'MET', evidence: 'tests/x.test.ts:1' }],
             }),
         });
         expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
@@ -2876,7 +2893,7 @@ describe('FeatureCheckService', () => {
             taskStatus: 'done',
             rawArtifact: JSON.stringify({
                 verdict: 'PASS',
-                requirements: [{ id: 'alpha', scenario: 'beta', status: 'MET' }],
+                requirements: [{ id: 'alpha', scenario: 'beta', status: 'MET', evidence: 'tests/x.test.ts:1' }],
             }),
         });
         // Conflict row was rejected → scenario has no MET match → unverified.
@@ -2898,7 +2915,7 @@ describe('FeatureCheckService', () => {
             taskStatus: 'done',
             rawArtifact: JSON.stringify({
                 verdict: 'PASS',
-                requirements: [{ id: 'alpha', scenario: 7, status: 'MET' }],
+                requirements: [{ id: 'alpha', scenario: 7, status: 'MET', evidence: 'tests/x.test.ts:1' }],
             }),
         });
         expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
@@ -2914,8 +2931,8 @@ describe('FeatureCheckService', () => {
             rawArtifact: JSON.stringify({
                 verdict: 'PASS',
                 requirements: [
-                    { id: 'gamma', status: 'MET' }, // valid but unmatched
-                    { id: 'AC-1', status: 'MET' }, // valid, verifies scenario
+                    { id: 'gamma', status: 'MET', evidence: 'tests/x.test.ts:1' }, // valid but unmatched
+                    { id: 'AC-1', status: 'MET', evidence: 'tests/x.test.ts:1' }, // valid, verifies scenario
                     { id: 'orphan-no-status' }, // rejected: no status
                 ],
             }),
@@ -2935,7 +2952,7 @@ describe('FeatureCheckService', () => {
             taskStatus: 'done',
             rawArtifact: JSON.stringify({
                 verdict: 'PASS',
-                requirements: [{ unknown: 'alpha', status: 'MET' }],
+                requirements: [{ unknown: 'alpha', status: 'MET', evidence: 'tests/x.test.ts:1' }],
             }),
         });
         // No valid row → scenario unverified.
@@ -2952,7 +2969,7 @@ describe('FeatureCheckService', () => {
             taskStatus: 'done',
             rawArtifact: JSON.stringify({
                 verdict: 'PASS',
-                requirements: ['not-an-object', { id: 'AC-1', status: 'MET' }],
+                requirements: ['not-an-object', { id: 'AC-1', status: 'MET', evidence: 'tests/x.test.ts:1' }],
             }),
         });
         // Valid AC-1 row still verifies the scenario despite the sibling junk row.
@@ -3031,7 +3048,7 @@ describe('FeatureCheckService', () => {
             taskStatus: 'done',
             rawArtifact: JSON.stringify({
                 verdict: 'PASS',
-                requirements: [{ id: 'does-not-match', status: 'MET' }],
+                requirements: [{ id: 'does-not-match', status: 'MET', evidence: 'tests/x.test.ts:1' }],
             }),
         });
         expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
@@ -3057,7 +3074,7 @@ describe('FeatureCheckService', () => {
             rawArtifact: JSON.stringify({
                 verdict: 'PASS',
                 requirements: [],
-                acceptanceCriteria: [{ id: 'alpha', scenario: 'beta', status: 'MET' }],
+                acceptanceCriteria: [{ id: 'alpha', scenario: 'beta', status: 'MET', evidence: 'tests/x.test.ts:1' }],
             }),
         });
         const unverified = result.findings.filter((f) => f.code === 'L4.scenario-unverified');
@@ -3074,7 +3091,7 @@ describe('FeatureCheckService', () => {
             rawArtifact: JSON.stringify({
                 verdict: 'PASS',
                 requirements: [],
-                acceptanceCriteria: [{ scenario: 'AC-1', status: 'MET' }],
+                acceptanceCriteria: [{ scenario: 'AC-1', status: 'MET', evidence: 'tests/x.test.ts:1' }],
             }),
         });
         expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
@@ -3087,7 +3104,7 @@ describe('FeatureCheckService', () => {
             taskStatus: 'done',
             rawArtifact: JSON.stringify({
                 verdict: 'PASS',
-                requirements: [{ id: 'AC-1', status: 'MET' }],
+                requirements: [{ id: 'AC-1', status: 'MET', evidence: 'tests/x.test.ts:1' }],
             }),
         });
         expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
@@ -3101,9 +3118,9 @@ describe('FeatureCheckService', () => {
             rawArtifact: JSON.stringify({
                 verdict: 'PASS',
                 requirements: [
-                    { id: 'a', scenario: 'b', status: 'MET' }, // conflict
+                    { id: 'a', scenario: 'b', status: 'MET', evidence: 'tests/x.test.ts:1' }, // conflict
                     { id: 'c' }, // missing status
-                    { status: 'MET' }, // missing id/scenario
+                    { status: 'MET', evidence: 'tests/x.test.ts:1' }, // missing id/scenario
                     'junk', // non-object
                 ],
             }),
@@ -3203,7 +3220,7 @@ describe('R6 — multi-folder feature check (task 0451)', () => {
             join(runDir, '0001-verdict.json'),
             JSON.stringify({
                 verdict: 'PASS',
-                requirements: [{ id: 'Scenario: alpha', status: 'MET' }],
+                requirements: [{ id: 'Scenario: alpha', status: 'MET', evidence: 'tests/x.test.ts:1' }],
                 acceptanceCriteria: [],
             }),
         );

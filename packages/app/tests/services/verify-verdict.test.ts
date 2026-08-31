@@ -111,8 +111,12 @@ describe('parseVerifyVerdict (R1 — one canonical parser)', () => {
 // ─── R2: one aggregation policy ────────────────────────────────────────
 
 describe('aggregateVerifyVerdict (R2 — one shared policy)', () => {
-    const req = (...statuses: string[]) => statuses.map((s, i) => ({ id: `R${i + 1}`, status: s }));
-    const ac = (...statuses: string[]) => statuses.map((s, i) => ({ id: `AC-${i + 1}`, status: s }));
+    // 0721: rows carry populated evidence by default — an evidence-less MET row is
+    // now hollow and cannot reach PASS. Hollow shapes get their own block below.
+    const req = (...statuses: string[]) =>
+        statuses.map((s, i) => ({ id: `R${i + 1}`, status: s, evidence: `src/f${i + 1}.ts:1 implementation` }));
+    const ac = (...statuses: string[]) =>
+        statuses.map((s, i) => ({ id: `AC-${i + 1}`, status: s, evidence: 'test: a.test.ts:1' }));
 
     test('no rows → UNKNOWN', () => {
         expect(aggregateVerifyVerdict({ requirements: [], acceptanceCriteria: [] })).toBe('UNKNOWN');
@@ -250,5 +254,85 @@ describe('aggregateVerifyVerdict (R2 — one shared policy)', () => {
     // ── stored/computed disagreement (the softening R10 guard) ──
     test('stored PASS with an UNMET row recomputes FAIL (softening denied)', () => {
         expect(aggregateVerifyVerdict({ requirements: req('MET', 'UNMET') })).toBe('FAIL');
+    });
+});
+
+// ─── 0721 R1: hollow MET evidence cannot pass ──────────────────────────
+
+describe('aggregateVerifyVerdict — hollow MET evidence (0721 R1)', () => {
+    test('MET requirement with absent evidence → PARTIAL, never PASS', () => {
+        expect(aggregateVerifyVerdict({ requirements: [{ id: 'R1', status: 'MET' }], taskCheckPassed: true })).toBe(
+            'PARTIAL',
+        );
+    });
+
+    test('MET requirement with empty evidence → PARTIAL', () => {
+        expect(
+            aggregateVerifyVerdict({
+                requirements: [{ id: 'R1', status: 'MET', evidence: '' }],
+                taskCheckPassed: true,
+            }),
+        ).toBe('PARTIAL');
+    });
+
+    test('MET requirement with whitespace-only evidence → PARTIAL', () => {
+        expect(
+            aggregateVerifyVerdict({
+                requirements: [{ id: 'R1', status: 'MET', evidence: '   \n\t ' }],
+                taskCheckPassed: true,
+            }),
+        ).toBe('PARTIAL');
+    });
+
+    test('MET row with non-string evidence is hollow', () => {
+        expect(
+            aggregateVerifyVerdict({
+                requirements: [{ id: 'R1', status: 'MET', evidence: 42 as unknown as string }],
+                taskCheckPassed: true,
+            }),
+        ).toBe('PARTIAL');
+    });
+
+    test('hollow MET AC row → PARTIAL; populated sibling MET stays eligible', () => {
+        expect(
+            aggregateVerifyVerdict({
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'src/x.ts:1' }],
+                acceptanceCriteria: [{ id: 'AC-1', status: 'MET', evidence: '' }],
+                taskCheckPassed: true,
+            }),
+        ).toBe('PARTIAL');
+    });
+
+    test('UNMET with empty evidence → FAIL (FAIL precedence unchanged)', () => {
+        expect(aggregateVerifyVerdict({ requirements: [{ id: 'R1', status: 'UNMET', evidence: '' }] })).toBe('FAIL');
+    });
+
+    test('hollow MET plus non-pass blocker → FAIL (blocker precedence over hollow)', () => {
+        expect(
+            aggregateVerifyVerdict({
+                requirements: [{ id: 'R1', status: 'MET', evidence: '' }],
+                checks: [{ name: 'SECU', status: 'fail', severity: 'blocker' }],
+            }),
+        ).toBe('FAIL');
+    });
+
+    test('empty evidence stays legal for PARTIAL and N/A rows', () => {
+        expect(aggregateVerifyVerdict({ requirements: [{ id: 'R1', status: 'N/A', evidence: '' }] })).toBe('PASS');
+        expect(aggregateVerifyVerdict({ requirements: [{ id: 'R1', status: 'PARTIAL', evidence: '' }] })).toBe(
+            'PARTIAL',
+        );
+    });
+
+    test('populated MET rows still PASS (control)', () => {
+        expect(
+            aggregateVerifyVerdict({
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'src/x.ts:1' }],
+                taskCheckPassed: true,
+            }),
+        ).toBe('PASS');
+    });
+
+    test('zero coverage rows → UNKNOWN unchanged (control)', () => {
+        expect(aggregateVerifyVerdict({ requirements: [], acceptanceCriteria: [] })).toBe('UNKNOWN');
     });
 });

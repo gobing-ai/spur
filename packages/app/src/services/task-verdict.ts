@@ -45,7 +45,7 @@ export function deriveVerdict(answerText: AnswerText, taskCheckPassed: boolean):
     const requirements = extractRequirements(answerText);
     const parsedAc = extractAcceptanceCriteria(answerText);
     const acceptanceCriteria = applyAcceptanceCriteriaEvidenceRule(parsedAc.rows);
-    const checks = extractChecks(answerText, taskCheckPassed, acceptanceCriteria, parsedAc.dropped);
+    const checks = extractChecks(answerText, taskCheckPassed, requirements, acceptanceCriteria, parsedAc.dropped);
 
     // If we couldn't parse any requirements, the answer is unparseable.
     if (requirements.length === 0) {
@@ -217,16 +217,22 @@ function extractAcceptanceCriteria(text: string): { rows: VerdictAcceptanceCrite
 
         if (/^[-:]+$/.test(cells[0] ?? '')) continue;
 
-        if (inTable && cells.length >= 4) {
+        if (inTable && cells.length >= 3) {
             const id = cells[0] ?? '';
             const statusRaw = cells[1] ?? '';
             const evidenceTypeRaw = cells[2] ?? '';
             const status = normalizeAcceptanceCriteriaStatus(statusRaw);
             const evidenceType = normalizeEvidenceType(evidenceTypeRaw);
+            // 0721 R2: a four-column row whose final evidence cell is empty splits
+            // to three cells — retain it with `evidence: ''` instead of dropping it.
+            // Three-cell rows are only treated as AC-shaped when their status cell
+            // normalizes, so a foreign heading-less three-column table following the
+            // AC table is skipped exactly as before.
+            const acShaped = cells.length >= 4 || (id.length > 0 && status !== null);
             const evidence = cells[3] ?? '';
-            if (status !== null && evidenceType !== null && id.length > 0) {
+            if (acShaped && status !== null && evidenceType !== null && id.length > 0) {
                 rows.push({ id, status, evidenceType, evidence });
-            } else if (id.length > 0) {
+            } else if (acShaped && id.length > 0) {
                 // Task 0398 R6: never discard a row in silence. A dropped row used to look
                 // identical to "no AC table", which is what cost three regeneration cycles.
                 dropped.push(
@@ -319,6 +325,7 @@ function requiresExecutableEvidence(id: string): boolean {
 function extractChecks(
     _text: string,
     taskCheckPassed: boolean,
+    requirements: VerdictRequirement[],
     acceptanceCriteria: VerdictAcceptanceCriteria[],
     droppedAcRows: string[] = [],
 ): VerdictCheck[] {
@@ -363,6 +370,24 @@ function extractChecks(
                 `${droppedAcRows.join('; ')}. Accepted evidence types: test, command, static-ref (aliases: ` +
                 'static, doc, docs, documentation), manual-review, llm-judge, n/a. Accepted statuses: ' +
                 'MET, PARTIAL, UNMET, N/A.',
+        });
+    }
+
+    // 0721 R2: one bounded diagnostic naming every hollow MET row. The aggregate
+    // rule (hollow MET → PARTIAL in aggregateVerifyVerdict) stays authoritative —
+    // re-reading the emitted artifact reproduces the same PARTIAL without this row.
+    const hollowMet = [
+        ...requirements.filter((r) => r.status === 'MET' && r.evidence.trim() === '').map((r) => r.id),
+        ...acceptanceCriteria.filter((r) => r.status === 'MET' && r.evidence.trim() === '').map((r) => r.id),
+    ];
+    if (hollowMet.length > 0) {
+        checks.push({
+            name: 'hollow-met-evidence',
+            status: 'fail',
+            severity: 'major',
+            evidence:
+                `${hollowMet.length} MET row(s) carry no recorded evidence and cannot support PASS: ` +
+                `${hollowMet.join(', ')}. Re-run verify with populated evidence per row.`,
         });
     }
 

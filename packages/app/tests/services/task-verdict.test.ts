@@ -556,3 +556,111 @@ describe('answer parser fixes (0590)', () => {
         expect(dropped?.evidence).not.toContain('Dimension');
     });
 });
+
+// ─── 0721: hollow MET evidence cannot pass ─────────────────────────────
+
+describe('hollow MET evidence (0721)', () => {
+    test('requirement row with empty evidence cell is retained and derives PARTIAL with a diagnostic', () => {
+        const answer = [
+            '| Req | Status | Evidence |',
+            '|-----|--------|----------|',
+            '| R1 | MET |  |',
+            '| R2 | MET | `src/bar.ts:20` |',
+        ].join('\n');
+        const result = deriveVerdict(answer, true);
+        expect(result.verdict).toBe('PARTIAL');
+        expect(result.requirements).toHaveLength(2);
+        expect(result.requirements[0]).toEqual({ id: 'R1', status: 'MET', evidence: '' });
+        const hollow = result.checks.find((c) => c.name === 'hollow-met-evidence');
+        expect(hollow).toBeDefined();
+        expect(hollow?.severity).toBe('major');
+        expect(hollow?.evidence).toContain('R1');
+        expect(hollow?.evidence).not.toContain('R2');
+    });
+
+    test('requirement row with no trailing evidence cell derives PARTIAL too', () => {
+        const answer = ['| Req | Status | Evidence |', '|-----|--------|----------|', '| R1 | MET |'].join('\n');
+        const result = deriveVerdict(answer, true);
+        expect(result.verdict).toBe('PARTIAL');
+        expect(result.requirements[0]?.evidence).toBe('');
+        expect(result.checks.find((c) => c.name === 'hollow-met-evidence')).toBeDefined();
+    });
+
+    test('whitespace-only evidence is hollow', () => {
+        const answer = ['| Req | Status | Evidence |', '|-----|--------|----------|', '| R1 | MET |    |'].join('\n');
+        const result = deriveVerdict(answer, true);
+        expect(result.verdict).toBe('PARTIAL');
+        expect(result.requirements[0]?.evidence).toBe('');
+    });
+
+    test('AC row reduced to three cells by an empty evidence cell is preserved and cannot pass', () => {
+        const answer = [
+            '| Req | Status | Evidence |',
+            '|-----|--------|----------|',
+            '| R1 | MET | `src/foo.ts:10` |',
+            '',
+            '| AC | Status | Evidence Type | Evidence |',
+            '|----|--------|---------------|----------|',
+            '| Scenario: CLI emits JSON | MET | test |  |',
+        ].join('\n');
+        const result = deriveVerdict(answer, true);
+        expect(result.verdict).toBe('PARTIAL');
+        expect(result.acceptanceCriteria).toHaveLength(1);
+        expect(result.acceptanceCriteria?.[0]).toEqual({
+            id: 'Scenario: CLI emits JSON',
+            status: 'MET',
+            evidenceType: 'test',
+            evidence: '',
+        });
+        const hollow = result.checks.find((c) => c.name === 'hollow-met-evidence');
+        expect(hollow).toBeDefined();
+        expect(hollow?.evidence).toContain('Scenario: CLI emits JSON');
+    });
+
+    test('populated rows derive PASS with no hollow diagnostic (control)', () => {
+        const result = deriveVerdict(MET_ANSWER, true);
+        expect(result.verdict).toBe('PASS');
+        expect(result.checks.find((c) => c.name === 'hollow-met-evidence')).toBeUndefined();
+    });
+
+    test('non-MET rows keep empty evidence legal (controls)', () => {
+        const unmet = ['| Req | Status | Evidence |', '|-----|--------|----------|', '| R1 | UNMET |  |'].join('\n');
+        expect(deriveVerdict(unmet, true).verdict).toBe('FAIL');
+
+        // The AC parser (unlike the requirement parser) accepts N/A rows; an N/A row
+        // with an empty evidence cell stays non-blocking.
+        const na = [
+            '| Req | Status | Evidence |',
+            '|-----|--------|----------|',
+            '| R1 | MET | `src/foo.ts:10` |',
+            '',
+            '| AC | Status | Evidence Type | Evidence |',
+            '|----|--------|---------------|----------|',
+            '| AC1 | N/A | n/a |  |',
+        ].join('\n');
+        const naResult = deriveVerdict(na, true);
+        expect(naResult.verdict).toBe('PASS');
+        expect(naResult.acceptanceCriteria?.[0]?.status).toBe('N/A');
+        expect(naResult.checks.find((c) => c.name === 'hollow-met-evidence')).toBeUndefined();
+    });
+
+    test('a foreign three-column table after the AC table is still skipped, not misparsed', () => {
+        const answer = [
+            '| Req | Status | Evidence |',
+            '|-----|--------|----------|',
+            '| R1 | MET | `src/foo.ts:10` |',
+            '',
+            '| AC | Status | Evidence Type | Evidence |',
+            '|----|--------|---------------|----------|',
+            '| AC1 | MET | test | `a.test.ts:1` |',
+            '',
+            '| Check | Status | Evidence |',
+            '|-------|--------|----------|',
+            '| lint | pass | biome clean |',
+        ].join('\n');
+        const result = deriveVerdict(answer, true);
+        expect(result.acceptanceCriteria).toHaveLength(1);
+        expect(result.checks.find((c) => c.name === 'ac-row-dropped')).toBeUndefined();
+        expect(result.verdict).toBe('PASS');
+    });
+});

@@ -7,14 +7,22 @@ import { type BufferTarget, createBufferTarget, setDefaultOutputTargets } from '
 import { classifyFallback, printSweepResult, runCorpusSweep, type SweepBucket } from '../../src/services/corpus-sweep';
 import type { ParseVerdictOutcome, VerdictRowStatus } from '../../src/services/verify-verdict';
 
-function valid(rows: Array<{ id: string; status: VerdictRowStatus }>, verdict: string): ParseVerdictOutcome {
+function valid(
+    rows: Array<{ id: string; status: VerdictRowStatus; evidence?: string }>,
+    verdict: string,
+): ParseVerdictOutcome {
     return {
         kind: 'valid',
         wbs: '0001',
         verdict: {
             wbs: '0001',
             verdict: verdict as 'PASS' | 'PARTIAL' | 'FAIL' | 'UNKNOWN',
-            requirements: rows.map((r) => ({ id: r.id, status: r.status, evidenceType: '', evidence: '' })),
+            requirements: rows.map((r) => ({
+                id: r.id,
+                status: r.status,
+                evidenceType: '',
+                evidence: r.evidence ?? '',
+            })),
             acceptanceCriteria: [],
             checks: [],
         },
@@ -33,8 +41,8 @@ describe('classifyFallback — task-level durable-evidence buckets (0673 R1)', (
         expectBucket(
             valid(
                 [
-                    { id: 'R1', status: 'MET' },
-                    { id: 'R2', status: 'MET' },
+                    { id: 'R1', status: 'MET', evidence: 'tests/x.test.ts:1' },
+                    { id: 'R2', status: 'MET', evidence: 'tests/x.test.ts:1' },
                 ],
                 'PASS',
             ),

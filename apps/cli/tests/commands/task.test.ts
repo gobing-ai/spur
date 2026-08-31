@@ -2199,12 +2199,24 @@ Only this section exists.
 
     test('verdict (human output) prints a verdict summary line', async () => {
         const answerPath = join(cwd, '8002-verify-answer.txt');
-        await Bun.write(answerPath, '| Req | Status |\n|-----|--------|\n| R1 | MET |\n');
+        await Bun.write(answerPath, '| Req | Status | Evidence |\n|-----|--------|----------|\n| R1 | MET | done |\n');
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'verdict', '8002', '--from-answer', answerPath], { cwd, output });
         verdictArtifacts.push(join(process.cwd(), '.spur', 'run', '8002-verdict.json'));
         expect(exitCode).toBe(0);
         expect(lastMessage(output)).toContain('Verdict: PASS');
+    });
+
+    test('verdict fails closed on a hollow MET row (0721): PARTIAL + exit 1', async () => {
+        // An evidence-less requirement table parses but records nothing — the
+        // aggregate must be PARTIAL (exit 1), never PASS.
+        const answerPath = join(cwd, '8002b-verify-answer.txt');
+        await Bun.write(answerPath, '| Req | Status | Evidence |\n|-----|--------|----------|\n| R1 | MET |  |\n');
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verdict', '8002b', '--from-answer', answerPath], { cwd, output });
+        verdictArtifacts.push(join(process.cwd(), '.spur', 'run', '8002b-verdict.json'));
+        expect(exitCode).toBe(1);
+        expect(lastMessage(output)).toContain('Verdict: PARTIAL');
     });
 
     test('verdict downgrades behavior-bearing AC without executable evidence', async () => {

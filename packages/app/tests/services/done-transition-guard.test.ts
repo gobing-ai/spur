@@ -542,3 +542,43 @@ describe('R10 — agrees with deriveVerdict on every shape', () => {
         }
     });
 });
+
+// ─── 0721: hollow persisted evidence is rejected consistently ──────────
+
+describe('0721 — hollow MET evidence in a persisted artifact', () => {
+    const TASK_PATH = 'docs/tasks2/0299_some-task.md';
+
+    function hollowArtifact(verdict: VerdictArtifact['verdict']): VerdictArtifact {
+        return {
+            wbs: '0299',
+            verdict,
+            requirements: [
+                { id: 'R1', status: 'MET', evidence: '' },
+                { id: 'R2', status: 'MET' }, // evidence key absent — legacy shape
+            ],
+            acceptanceCriteria: [{ id: 'Scenario: alpha', status: 'MET', evidenceType: 'test' }],
+            source: 'spur task verdict',
+        };
+    }
+
+    test('computeAggregate recomputes stored PASS with hollow rows to PARTIAL', () => {
+        expect(computeAggregate(hollowArtifact('PASS'))).toBe('PARTIAL');
+    });
+
+    test('the done gate denies a hollow stored PASS and names the inconsistency', () => {
+        const outcome = evaluateDoneTransition({
+            wbs: '0299',
+            taskFilePath: TASK_PATH,
+            currentStatus: 'testing',
+            targetStatus: 'done',
+            forced: false,
+            artifact: hollowArtifact('PASS'),
+        });
+        expect(outcome.kind).toBe('deny');
+        if (outcome.kind === 'deny') {
+            expect(outcome.verdict).toBe('PARTIAL');
+            expect(outcome.message).toContain('PARTIAL');
+            expect(outcome.message).toContain('self-inconsistent');
+        }
+    });
+});

@@ -27,7 +27,7 @@ import {
     renderTesting,
 } from '../../src/services/task-record';
 import { sectionIsBare, TaskService } from '../../src/services/task-service';
-import type { VerifyVerdict } from '../../src/services/verify-verdict';
+import { aggregateVerifyVerdict, type VerifyVerdict } from '../../src/services/verify-verdict';
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -1253,5 +1253,41 @@ describe('flipVerifiedCheckboxes — AC ids and bold emphasis (0700 R1)', () => 
         );
         expect(out).toContain('- [x] **R2.**');
         expect(out).toContain('- [ ] **R1.**');
+    });
+});
+
+// ─── 0721 R3: hollow tracked-Testing evidence recomputes to PARTIAL ────
+
+describe('parseTesting — hollow MET rows (0721)', () => {
+    const hollowSection = [
+        '| Requirement | Status | Evidence |',
+        '|-------------|--------|----------|',
+        '| R1 | MET |  |',
+        '',
+        '| Acceptance Criteria | Status | Evidence Type | Evidence |',
+        '|---------------------|--------|---------------|----------|',
+        '| Scenario: fallback works | MET | test |  |',
+    ].join('\n');
+
+    test('rows with empty evidence cells parse, and the recomputed aggregate is PARTIAL', () => {
+        const out = parseTesting(hollowSection, '0100');
+        expect(out.kind).toBe('valid');
+        if (out.kind === 'valid') {
+            expect(out.verdict.verdict).toBe('PARTIAL');
+            expect(out.verdict.requirements[0]).toEqual({ id: 'R1', status: 'MET', evidenceType: '', evidence: '' });
+            expect(out.verdict.acceptanceCriteria?.[0]?.evidence).toBe('');
+        }
+    });
+
+    test('a stale tracked `Verdict: PASS` line still recomputes to PARTIAL for consumers', () => {
+        // parseTesting keeps a present Verdict: line as stored truth, but the
+        // feature-completion fallback (feature-check) and the corpus sweep
+        // recompute the canonical aggregate over the parsed rows — that recompute
+        // must be PARTIAL, never PASS, for hollow MET rows.
+        const out = parseTesting(`- Verdict: PASS (from verdict artifact)\n\n${hollowSection}`, '0100');
+        expect(out.kind).toBe('valid');
+        if (out.kind === 'valid') {
+            expect(aggregateVerifyVerdict(out.verdict)).toBe('PARTIAL');
+        }
     });
 });

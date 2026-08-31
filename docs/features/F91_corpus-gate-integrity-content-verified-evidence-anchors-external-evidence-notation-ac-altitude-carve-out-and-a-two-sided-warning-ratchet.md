@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F91"
 name: "Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-17T22:15:08.187Z"
-updated_at: "2026-08-29T06:17:19.126Z"
+updated_at: "2026-08-31T02:07:20.914Z"
 ---
 
 # F91: Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet
@@ -101,7 +101,7 @@ Feature: Corpus gate integrity
 | 0625 | Close the 2026-08-21 dogfood residue: lifecycle projections and gates that report a state the tree contradicts | done |
 | 0688 | Right-size the post-implementation task gate: drop no-signal citation checks, keep real drift detection | done |
 | 0714 | Post-F95 corpus drift reconciliation: re-point shifted anchors, fix matcher false positives, baseline verdict-rows findings | done |
-| 0721 | Fail closed on hollow MET verdict evidence in task-verdict derivation | todo |
+| 0721 | Fail closed on hollow MET verdict evidence in task-verdict derivation | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -155,3 +155,4 @@ carve-out is later judged insufficient.
 - 2026-08-27T19:00:52.678Z active → verifying (system)
 - 2026-08-27T19:00:53.092Z verifying → done (system)
 - 2026-08-29T06:17:19.126Z done → active (system)
+- 2026-08-31T02:07:20.914Z active → verifying (system)
