@@ -119,7 +119,8 @@ therefore recovers a **direct task↔session authority** alongside the run-chain
   itself touched (`imported_at >= import start`). Never unbounded (`ATTRIBUTION_SESSION_LIMIT`).
 - **Evidence prefilter** — per session, at most `ATTRIBUTION_EVIDENCE_LIMIT` normalized rows are
   fetched, allowlist-prefiltered (`content_text LIKE '%/sp%' OR '%spur task%'` for user rows,
-  `args_raw LIKE '%spur task%'` for tool calls). The corpus is never materialized.
+  `args_raw LIKE '%spur task%' OR args_raw LIKE '%index.ts task%'` for tool calls — the second arm
+covers the source-local `bun run apps/cli/src/index.ts task …` spelling). The corpus is never materialized.
 - **Pure classifier** (`classifyTaskAttribution`) — deterministic, first-party allowlisted syntax
   only, one extractor per evidence kind (the **echo rule**, run-2 remediation R9): a user row links
   only through a line-anchored task-scoped `/sp:dev-*` slash invocation; the structured
