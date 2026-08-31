@@ -462,6 +462,14 @@ export function isRecordAuthoredReview(body: string | null): boolean {
     return LEGACY_RECORD_REVIEW_RE.test(trimmed);
 }
 
+/** Explicit check severity → rendered P-level (0721): blocker/major must stay distinguishable. */
+const SEVERITY_PRIORITY: Record<string, string | undefined> = {
+    blocker: 'P1',
+    major: 'P2',
+    minor: 'P3',
+    advisory: 'P4',
+};
+
 /**
  * Render the `## Review` section body from a verdict.
  *
@@ -486,9 +494,12 @@ export function renderReview(v: VerifyVerdict): string {
     } else {
         for (const check of v.checks) {
             const finding = escapeTablePipe(check.evidence.replace(/\n/g, ' '));
-            // Map check status to P1–P4 severity so the L3 regex /P[1-4]/ matches.
-            // If status is already P1–P4, use it directly; otherwise map pass/fail.
-            const priority = /^P[1-4]$/.test(check.status) ? check.status : check.status === 'fail' ? 'P1' : 'P4';
+            // Map to P1–P4 so the L3 regex /P[1-4]/ matches. An explicit `severity`
+            // (0721) wins — dropping it would collapse major/blocker into the same P1.
+            // Otherwise: an already-P1–P4 status passes through, then legacy pass/fail.
+            const priority =
+                SEVERITY_PRIORITY[check.severity ?? ''] ??
+                (/^P[1-4]$/.test(check.status) ? check.status : check.status === 'fail' ? 'P1' : 'P4');
             lines.push(`| ${priority} | ${check.name} | — | ${finding} |`);
         }
     }

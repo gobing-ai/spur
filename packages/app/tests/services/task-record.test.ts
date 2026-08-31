@@ -578,6 +578,22 @@ describe('renderReview', () => {
         expect(out).toContain('| P4 | spur task check | — | task check passed |');
         expect(out).toContain('| P1 | coverage gate | — | coverage below threshold |');
     });
+
+    test('an explicit severity wins over the status mapping (0721)', () => {
+        // Without this, `hollow-met-evidence` (major, status fail) rendered as P1 —
+        // indistinguishable from a blocker in the table an operator actually reads.
+        const v = makeVerdict({
+            checks: [
+                { name: 'hollow-met-evidence', status: 'fail', severity: 'major', evidence: 'R1 has no evidence' },
+                { name: 'SECU', status: 'fail', severity: 'blocker', evidence: 'auth bypass' },
+                { name: 'nit', status: 'fail', severity: 'advisory', evidence: 'naming' },
+            ],
+        });
+        const out = renderReview(v);
+        expect(out).toContain('| P2 | hollow-met-evidence | — | R1 has no evidence |');
+        expect(out).toContain('| P1 | SECU | — | auth bypass |');
+        expect(out).toContain('| P4 | nit | — | naming |');
+    });
 });
 
 describe('renderSolutionFromDiff', () => {
