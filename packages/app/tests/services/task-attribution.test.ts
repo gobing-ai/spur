@@ -49,6 +49,62 @@ async function seedMessage(
 }
 
 describe('attributeSessions (task 0722 R3/R4 composition)', () => {
+    test('reconcile drops stale source links before re-deriving from current evidence (R4)', async () => {
+        const db = await makeDb();
+        // Current evidence: session s1 legitimately links 0703 via slash syntax.
+        await seedMessage(db, { hash: 'm1', sessionId: 's1', text: '/sp:dev-run 0703 --auto' });
+        // Stale link: s2's evidence no longer resolves (no rows), yet a link from a
+        // previous pass survives — exactly the accumulation reconcile must erase.
+        await db.run(
+            `INSERT INTO history_task_session (wbs, source, session_id, exactness, mechanism,
+                 evidence_kind, evidence_ref, resolved_at)
+             VALUES ('0704', 'pi', 's2', 'estimated', 'spur-cli', 'cli-tool', 'old.jsonl#7',
+                 '2026-08-29T00:00:00.000Z')`,
+        );
+        const summary = await attributeSessions({
+            db,
+            source: 'pi',
+            sessionIds: ['s1', 's2'],
+            isKnownWbs: makeLocator(['0703']).isKnownWbs,
+            resolvedAt: '2026-08-30T12:00:00.000Z',
+            reconcile: true,
+        });
+        expect(summary.linksCreated).toBe(1);
+        const dao = new TaskSessionDao(db);
+        expect(await dao.hasLink('0704', 'pi', 's2')).toBe(false);
+        expect(await dao.hasLink('0703', 'pi', 's1')).toBe(true);
+    });
+
+    test('dryRun never reconciles: preview persists nothing and deletes nothing (R4)', async () => {
+        const db = await makeDb();
+        await seedMessage(db, { hash: 'm1', sessionId: 's1', text: '/sp:dev-run 0703 --auto' });
+        await db.run(
+            `INSERT INTO history_task_session (wbs, source, session_id, exactness, mechanism,
+                 evidence_kind, evidence_ref, resolved_at)
+             VALUES ('0704', 'pi', 's2', 'estimated', 'spur-cli', 'cli-tool', 'old.jsonl#7',
+                 '2026-08-29T00:00:00.000Z')`,
+        );
+        const summary = await attributeSessions({
+            db,
+            source: 'pi',
+            sessionIds: ['s1'],
+            isKnownWbs: makeLocator(['0703']).isKnownWbs,
+            resolvedAt: '2026-08-30T12:00:00.000Z',
+            dryRun: true,
+            reconcile: true,
+        });
+        expect(summary).toEqual({
+            sessionsEvaluated: 1,
+            linksCreated: 1,
+            linksAlreadyPresent: 0,
+            skippedEvidence: 0,
+            ambiguousEvidence: 0,
+        });
+        const dao = new TaskSessionDao(db);
+        expect(await dao.hasLink('0704', 'pi', 's2')).toBe(true);
+        expect(await dao.hasLink('0703', 'pi', 's1')).toBe(false);
+    });
+
     test('classifies seeded evidence, validates candidates through the locator, and writes links', async () => {
         const db = await makeDb();
         await seedMessage(db, { hash: 'm1', sessionId: 's1', text: '/sp:dev-run --mode implement 0703 --auto' });

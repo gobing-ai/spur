@@ -149,4 +149,9 @@ export class TaskSessionDao {
     async deleteAll(): Promise<void> {
         await this.db.run('DELETE FROM history_task_session');
     }
+
+    /** Delete one source's rows — the reconcile step of a full-mode attribution pass (R4). */
+    async deleteBySource(source: string): Promise<void> {
+        await this.db.run('DELETE FROM history_task_session WHERE source = ?', [source]);
+    }
 }

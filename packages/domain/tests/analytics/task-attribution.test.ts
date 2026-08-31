@@ -63,6 +63,29 @@ describe('classifyTaskAttribution (task 0722 R3)', () => {
         expect(decision.candidates[0]).toMatchObject({ wbs: '0638', mechanism: 'spur-cli', evidenceKind: 'cli-tool' });
     });
 
+    test('a source-local `apps/cli/src/index.ts task <verb> <wbs>` operation is a spur-cli candidate', () => {
+        const decision = classifyTaskAttribution([tool('bun run apps/cli/src/index.ts task show 0712 --json')]);
+        expect(decision.candidates).toHaveLength(1);
+        expect(decision.candidates[0]).toMatchObject({ wbs: '0712', mechanism: 'spur-cli', evidenceKind: 'cli-tool' });
+    });
+
+    test('source-local spelling guards: wrong package, wrong noun, and extension boundaries never match', () => {
+        // Only the CLI module path is a task CLI entrypoint; other workspaces are not.
+        expect(classifyTaskAttribution([tool('bun run apps/web/src/index.ts task show 0712')]).candidates).toEqual([]);
+        // The noun must be `task` — `feature` is a different corpus surface.
+        expect(classifyTaskAttribution([tool('bun run apps/cli/src/index.ts feature show 0712')]).candidates).toEqual(
+            [],
+        );
+        // `.tsx` must not satisfy the `.ts` alternation.
+        expect(classifyTaskAttribution([tool('bun run apps/cli/src/index.tsx task show 0712')]).candidates).toEqual([]);
+    });
+
+    test('a user row quoting the source-local spelling still never links (echo rule, R9)', () => {
+        const decision = classifyTaskAttribution([user('it ran: bun run apps/cli/src/index.ts task show 0712')]);
+        expect(decision.candidates).toEqual([]);
+        expect(decision.skipped).toBe(1);
+    });
+
     test('plain four-digit prose in a user message is skipped, never a link (R9)', () => {
         const decision = classifyTaskAttribution([user('task 0703 should have been finished last sprint')]);
         expect(decision.candidates).toEqual([]);

@@ -20,6 +20,13 @@ export interface AttributeSessionsInput {
     resolvedAt: string;
     /** Preview without writes (R4): counts what would be created/present, persists nothing. */
     dryRun?: boolean;
+    /**
+     * Full-mode reconcile (R4): delete this source's existing links before
+     * re-deriving, so the table is a converged projection of current evidence
+     * instead of an append-only log that preserves stale rows across re-imports.
+     * Never combined with dryRun — a preview never writes or deletes.
+     */
+    reconcile?: boolean;
 }
 
 /**
@@ -34,6 +41,9 @@ export async function attributeSessions(input: AttributeSessionsInput): Promise<
     const dao = new TaskSessionDao(input.db);
     const summary = emptyAttributionSummary();
     const known = new Map<string, boolean>();
+    if (input.reconcile === true && input.dryRun !== true) {
+        await dao.deleteBySource(input.source);
+    }
     for (const sessionId of input.sessionIds) {
         summary.sessionsEvaluated += 1;
         const evidence = await loadAttributionEvidence(input.db, input.source, sessionId);

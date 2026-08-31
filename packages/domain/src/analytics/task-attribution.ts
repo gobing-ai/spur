@@ -57,15 +57,18 @@ export interface AttributionDecision {
 const SLASH_COMMAND_RE = /^[\s>]*\/sp[:_-]dev\S*/;
 
 /**
- * A structured `spur task <verb> <wbs>` operation (R3), evaluated ONLY in
+ * A structured `task <verb> <wbs>` CLI operation (R3), evaluated ONLY in
  * tool-call arguments: a tool call whose arguments run the CLI is a first-party
- * operation regardless of wrapper spelling (`bun run spur task …`, `npx spur
- * task …`). The same text in a user-kind row is always secondhand — the
+ * operation regardless of wrapper spelling. Two verified entrypoints exist:
+ * the installed binary (`spur task …`, incl. `bun run spur task …` / `npx spur
+ * task …`) and the source-local module (`bun run apps/cli/src/index.ts task …`,
+ * the spelling monorepo development mandates over a possibly stale global).
+ * The same text in a user-kind row is always secondhand — the
  * operator's terminal never reaches a transcript, and in-transcript `spur task`
  * strings are quotations (dispatch prompts, tool-output echoes, pasted prose)
  * that must never link (R9; the cd09d701#222 grep-output false-positive class).
  */
-const SPUR_TASK_RE = /(?:^|[\s;&|(])spur\s+task\s+\S+\s+(\d{4})(?![\w.\-/:%])/g;
+const SPUR_TASK_RE = /(?:^|[\s;&|(])(?:spur|apps\/cli\/src\/index\.ts)\s+task\s+\S+\s+(\d{4})(?![\w.\-/:%])/g;
 
 /**
  * A WBS operand: exactly four digits, not glued to path/version/punctuation
@@ -135,7 +138,7 @@ export function classifyTaskAttribution(records: readonly AttributionEvidence[])
         }
         // Tool-call args: the agent's own CLI operation — first-party operational
         // evidence (R3). Matched anywhere in the args: wrapper spelling varies
-        // (`bun run spur task …`, `npx spur task …`).
+        // (`bun run spur task …`, `npx spur task …`, `bun run apps/cli/src/index.ts task …`).
         for (const wbs of spurTaskWbsSet(record.text)) {
             decision.candidates.push({
                 wbs,
@@ -233,7 +236,8 @@ export async function loadAttributionEvidence(
             `SELECT record_hash AS recordHash, source_file AS sourceFile, source_line AS sourceLine,
                     args_raw AS text
              FROM history_tool_call
-             WHERE source = ? AND session_id = ? AND args_raw LIKE '%spur task%'
+             WHERE source = ? AND session_id = ?
+               AND (args_raw LIKE '%spur task%' OR args_raw LIKE '%index.ts task%')
              LIMIT ?`,
             source,
             sessionId,

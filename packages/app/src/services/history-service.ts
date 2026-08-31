@@ -476,6 +476,9 @@ export class HistoryService {
                 isKnownWbs: async (wbs) => (await locator.findByWbs(wbs)) !== null,
                 resolvedAt: new Date().toISOString(),
                 dryRun: input.dryRun,
+                // R4 reconcile: a full-mode write pass re-derives the source's links
+                // from current evidence, dropping stale rows a prior pass wrote.
+                reconcile: input.mode === 'all' && !input.dryRun,
             });
             return { summary, error: null };
         } catch (e) {
