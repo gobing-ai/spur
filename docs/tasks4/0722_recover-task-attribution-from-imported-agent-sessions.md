@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Recover task attribution from imported agent sessions"
-status: wip
+status: done
 template: issue
 created_at: 2026-08-30T18:44:01.803Z
-updated_at: "2026-08-31T04:47:50.484Z"
+updated_at: "2026-08-31T12:48:51.311Z"
 feature_id: E6
 dependencies: ["0557", "0558", "0638"]
 ---
@@ -27,35 +27,35 @@ transcripts without depending on a worktree database that may already have been 
 
 ### Requirements
 
-- [ ] **R1 — Preserve importer ownership and discovery.** Keep the existing source registry and
+- [x] **R1 — Preserve importer ownership and discovery.** Keep the existing source registry and
       user-home JSONL roots authoritative. Do not enumerate Git worktrees, read sibling
       `.spur/spur.db` files, copy run stores, or add another transcript parser in Spur. Explicit
       `--file`/`--root` behavior remains caller-directed.
-- [ ] **R2 — Add a direct many-to-many task↔session authority.** Persist evidence-backed links from
+- [x] **R2 — Add a direct many-to-many task↔session authority.** Persist evidence-backed links from
       `(source, session_id)` to every operated task WBS, including multiple tasks per session. Do not
       synthesize workflow run IDs and do not promote the single-valued `history_message.task_wbs`
       column into an authority. Links are idempotent and retain confidence/mechanism plus a bounded
       evidence locator for audit.
-- [ ] **R3 — Attribute only operational evidence.** Accept deterministic signals such as an explicit
+- [x] **R3 — Attribute only operational evidence.** Accept deterministic signals such as an explicit
       task-scoped `/sp:dev-*` invocation, a structured `spur task <verb> <wbs>` operation, canonical
       task-file/checkpoint ownership metadata, or equivalent source-native structured metadata.
       Validate every candidate through the task locator. Plain four-digit prose, feature rosters,
       pasted specifications, requirements, and conflicting candidates never create a link.
       Transcript-derived links are labeled inferred/estimated, never exact.
-- [ ] **R4 — Integrate attribution into existing import modes.** Incremental import attributes the
+- [x] **R4 — Integrate attribution into existing import modes.** Incremental import attributes the
       sessions it imports or updates; full import re-evaluates the discovered source sessions so an
       ordinary source-local full re-import repairs already-consolidated history. Dry-run uses the
       same classifier and previews counts without writes. A second identical run creates zero
       duplicate links.
-- [ ] **R5 — Make task-scoped analysis use both authorities.** `--task` matches sessions linked by
+- [x] **R5 — Make task-scoped analysis use both authorities.** `--task` matches sessions linked by
       either the existing `task_run_links → history_run_session` chain or the new direct
       task↔session relation. Other selectors still compose with `AND`; a simultaneous `--run` and
       `--task` must not widen either scope. Unresolved/ambiguous links never match.
-- [ ] **R6 — Report and document attribution honestly.** History-import JSON/text results expose
+- [x] **R6 — Report and document attribution honestly.** History-import JSON/text results expose
       sessions evaluated, links created/already present, and skipped/ambiguous evidence counts,
       without persisting transcript content again. Update the history data-processing and selector
       authority contracts; add no new public noun or verb.
-- [ ] **R7 — Repair and prove the A6 case.** With source-local CLI/importer provenance recorded, run
+- [x] **R7 — Repair and prove the A6 case.** With source-local CLI/importer provenance recorded, run
       the appropriate full dry-run and write import over the A6 sources. Tasks 0703–0712 must each
       return at least one evidence-backed session through task-scoped analysis; a second import is
       idempotent. Focused DAO/classifier/service/query/CLI tests and all project gates pass.
@@ -226,13 +226,13 @@ Direct task↔session attribution recovered at import (feature E6, R1–R9). Add
 
 **App — composition + import wiring**
 
-- `packages/app/src/services/task-attribution.ts:33` — `attributeSessions({db, source, sessionIds, isKnownWbs, resolvedAt, dryRun}) → TaskAttributionSummary`: locator-validates every candidate (R3), previews via `hasLink` when `dryRun` (R4), counts idempotent writes as `linksAlreadyPresent`.
+- `packages/app/src/services/task-attribution.ts:39` — `attributeSessions({db, source, sessionIds, isKnownWbs, resolvedAt, dryRun, reconcile?}) → TaskAttributionSummary`: locator-validates every candidate (R3), previews via `hasLink` when `dryRun` (R4), counts idempotent writes as `linksAlreadyPresent`.
 - `packages/app/src/services/history-service.ts:438` / `:456` — attribution runs after the source import succeeds, in write and dry-run mode; `full`/dry-run scope `all` (source-local full re-import repairs consolidated history), incremental scope `changed` (`imported_at >= import start`); no task locator in context → `attribution: null` (skip, never guess); failure → `attributionError` + `attribution-failed` warning (history-service.ts:850), never a failed import. `HistoryImportResult` extended additively (`attribution?`, `attributionError?`) so existing call sites are unaffected; `FanOutResult.attribution` always present (summed across sources).
 - `packages/app/src/index.ts` — re-exports `attributeSessions` / `AttributeSessionsInput`.
 
 **CLI**
 
-- `apps/cli/src/commands/history.ts:498` / `:527` — one `attribution: sessions=… links-created=… links-present=… skipped=… ambiguous=…` line in fan-out and daily text output; JSON output inherits the fields via the existing result spread.
+- `apps/cli/src/commands/history.ts:549` / `:578` — one `attribution: sessions=… links-created=… links-present=… skipped=… ambiguous=…` line in fan-out and daily text output; JSON output inherits the fields via the existing result spread.
 
 **Docs**
 
@@ -282,53 +282,68 @@ verify certified as the genuine recovery channel (they must survive for R8).
 - `packages/app`: 46 pass (attribution composition + HistoryService wiring incl. `attribution-failed` degradation, 8 new).
 - `apps/cli`: 35 pass (history command incl. updated `FanOutResult` mocks).
 - `bun run typecheck`: all workspaces exit 0.
-- A6 full-import repair intentionally NOT run — the verify stage owns it.
+- A6 full-import repair run 3 (2026-08-31, fixed-engine re-import): pi dry-run `linksCreated=0` over 1621 sessions; full-mode write reconcile re-derived 526 pi links (echo class structurally eliminated); 0703–0712 all non-empty — see Testing (run-3 verdict).
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+| ------------- | -------- | ---------- |
+| R1 | MET | Attribution path imports no fs/worktree modules (grep for `node:fs\|readdir\|worktree` over packages/domain/src/analytics/task-attribution.ts, packages/domain/src/dao/task-session-dao.ts, packages/app/src/services/task-attribution.ts → 0 hits). Reads only the normalized contract tables: `loadAttributionEvidence` (packages/domain/src/analytics/task-attribution.ts:213-263) queries `history_message` + `history_tool_call` only. No new noun/verb: `history import --help` shows the pre-existing surface (pi\|...\|all, --file, --root, --mode, --dry-run) unchanged. |
+| R2 | MET | `HISTORY_TASK_SESSION_SCHEMA_SQL` packages/domain/src/migrations.ts:171-186 — PK `(wbs, source, session_id)` + `idx_history_task_session_source_session`; migration `0028_spur_cli_history_task_session` (migrations.ts:828) and byte-identical folder-load copy drizzle/0028_spur_cli_history_task_session.sql. Live DB: `SELECT COUNT(*) FROM history_task_session` → 991; PK-duplicate check `GROUP BY wbs,source,session_id HAVING COUNT(*)>1` → 0; 991 `estimated` / 0 `exact`; 0 null and 0 >200-char `evidence_ref`; many-to-many proven — one pi session links 10 distinct WBS (query `GROUP BY session_id ORDER BY COUNT(DISTINCT wbs) DESC` → 10). No synthesized run ids, no `history_message.task_wbs` promotion. |
+| R3 | MET | Pure classifier `classifyTaskAttribution` (packages/domain/src/analytics/task-attribution.ts:109-152): one extractor per evidence kind (echo rule) — line-anchored `/sp[:_-]dev` slash in user rows (:66), `SPUR_TASK_RE` tool-args-only incl. the source-local entrypoint `(?:spur\|apps/cli/src/index.ts)\s+task` (:70); operand shape excludes dates/versions/paths. App layer locator-validates every candidate (`attributeSessions`, packages/app/src/services/task-attribution.ts:60-69 — invalid WBS → `skippedEvidence`, never a link). Domain suite: 20 pass / 0 fail incl. plain-mention, grep-echo, dispatch-prompt, frontmatter, and source-local-guard (wrong package / wrong noun / `.tsx`) negative fixtures. DB integrity: zero echo-class rows — `GROUP BY mechanism, evidence_kind` → only `slash-command\|user-command` (336) and `spur-cli\|cli-tool` (655); `spur-cli\|user-command` does not exist. |
+| R4 | MET | Wiring: attribution runs after import success in write and dry-run (packages/app/src/services/history-service.ts:438-446); scope `all` for full/dry-run, `changed` for incremental (:440); full-mode write reconcile gated `input.mode === 'all' && !input.dryRun` (:479) → `dao.deleteBySource` (packages/domain/src/dao/task-session-dao.ts:152-156); dry-run previews via `hasLink` and never writes/deletes (packages/app/src/services/task-attribution.ts:44-46, 74-80). App suite 10 pass / 0 fail incl. "reconcile drops stale source links" and "dryRun never reconciles". Live: `bun run apps/cli/src/index.ts history import --source pi --mode full --dry-run --json` → attribution `{"sessionsEvaluated":1621,"linksCreated":0,"linksAlreadyPresent":3287,"skippedEvidence":15674,"ambiguousEvidence":0}`; all 526 pi rows share one `resolved_at` (2026-08-31T12:01:34.607Z) = the last full write pass re-derived the whole source; post-dry-run recount still 991 (preview wrote nothing). |
+| R5 | MET | Task-only selector unions both authorities (packages/domain/src/analytics/forensic-query.ts:243-260): `EXISTS(task_run_links→history_run_session) OR EXISTS(history_task_session)`; task+run keeps intersection semantics through the run chain only (:214-225); other selectors still AND-compose. Live: `history analyze --task <wbs> --json` for each of 0703–0712 returned sessions (bySession rows 20/10/19/16/7/6/3/5/11/3, top-20 cap; sources=pi) — direct-authority rows match through the unioned branch. |
+| R6 | MET | One `attribution: sessions=… links-created=… links-present=… skipped=… ambiguous=…` line in fan-out and daily text output (apps/cli/src/commands/history.ts:549-551, :578); JSON inherits `attribution`/`attributionError` via the additive result spread (history-service.ts:447-449) — no transcript content persisted (evidence_ref is `<basename>#<line>` only; 0 null refs, 0 over 200 chars). Contracts updated: docs/04_DESIGN.md:804 (two selector authorities), :1593 (schema row: echo rule, estimated exactness, bounded locator, idempotent PK); docs/design/history-data-processing.md §2.3:111-160 (scope honesty, prefilter bounds, echo rule, locator validation, read-path union). Minor residual: docs do not yet name the run-3 tool-prefilter arm `args_raw LIKE '%index.ts task%'` (task-attribution.ts:238-240) — contract-level statements remain accurate. |
+| R7 | MET | Per-target live counts (query on .spur/spur.db): 0703=26, 0704=10, 0705=19, 0706=16, 0707=7, 0708=6, 0709=3, 0710=5, 0711=11, 0712=3 — every task ≥1 evidence-backed session. Evidence chains re-verified by joining `evidence_ref` basename#line back to `history_tool_call` rows: args read like `bun run apps/cli/src/index.ts task show 0703 --json` / `task list --feature A6 --json` (source-local spelling the run-3 classifier now matches). Idempotency: dry-run full pass over 1621 pi sessions → linksCreated=0; 0 PK duplicates; 991 rows stable across the dry run. Gates: focused domain classifier 20 pass/0 fail; app attribution+wire 10 pass/0 fail; root gate `bun run test` → 7034 pass / 0 fail (376 files); `bun run typecheck` → all 4 workspaces exit 0. Out-of-scope residue: the project post-check security rule is red on packages/app/tests/services/history-board-service.test.ts:72 — an UNCOMMITTED file from the concurrent 0724/0725 writer (git status modified; commit history 2d0e1e235, no 0722 commit touches it; the flagged line is a parameterized test INSERT `VALUES (?,?,…)` with bound args). Owned by 0724/0725, not a 0722 defect; observe-only verifier did not edit it. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+| --------------------- | -------- | --------------- | ---------- |
+| R8 — imported sessions recover attribution from operational evidence; multi-task sessions queryable through either task | MET | command | pi session 2026-08-29T17-07-14-219Z_01a04e7d-5eab-726d-aa03-1c02a5c3dbe5 links 10 distinct WBS (query `GROUP BY session_id`); `history analyze --task 0712 --json` (and 0703–0711) returns that session through the unioned task-only selector (forensic-query.ts:243-260) without any synthesized run (`exactness` stays `estimated`, 991/991 rows). |
+| R9 — ambiguous/echo references never become links; counts reported | MET | test | Zero echo-class rows in DB: `GROUP BY mechanism, evidence_kind` → only `spur-cli\|cli-tool` (655) and `slash-command\|user-command` (336); `spur-cli\|user-command` absent. Live dry-run reports `skippedEvidence=15674`, `ambiguousEvidence=0` (documented always-0 contract). Negative fixtures pinned in packages/domain/tests/analytics/task-attribution.test.ts (grep echo, dispatch-prompt quote, prose, source-local user-row quote → candidates [], skipped counted). |
+| R10 — full re-import repairs existing attribution idempotently, no worktree/sibling DB | MET | command | `history import --source pi --mode full --dry-run` over 1621 sessions → linksCreated=0 (table already a converged projection); write path reconciles by delete+re-derive (`deleteBySource`, task-session-dao.ts:152-156; gated `mode==='all' && !dryRun`, history-service.ts:479) — all 526 pi rows share a single `resolved_at`; 0 PK duplicates; attribution path touches no filesystem (grep: 0 fs/worktree hits). |
+
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-## Review Report — 0722 (run-2 remediation delta)
+## Review Report — 0722 (run 3)
 
-**Scope:** working-tree delta vs base fad7ef5b6 — 5 files: `packages/domain/src/analytics/task-attribution.ts` + its test, `docs/04_DESIGN.md`, `docs/design/history-data-processing.md`, this WBS. Run 1's 20-file implementation remains PASS; only the delta is re-reviewed.
-**Dimensions:** functional, security, efficiency, correctness, usability, architecture (delta-focused)
+**Scope:** run-3 delta vs run-2 base — commit 50543ff0 (classifier source-local entrypoint spelling + full-mode reconcile; 6 files, +107/−6: `packages/domain/src/analytics/task-attribution.ts` + test, `packages/domain/src/dao/task-session-dao.ts`, `packages/app/src/services/task-attribution.ts`, `packages/app/src/services/history-service.ts`, CLI history tests) plus 49763ba74 (web test TS narrowing fix, unrelated to 0722 substance), on top of 914f0e464/7bba3c262. Run-1 implementation and run-2 echo remediation stand.
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
 **Verdict:** PASS
-**Evidence chain:** proof digest sha256:87c68b70035ef3e19c035a482c518e52ddfb03b592467b2bf80091386a04b6f8 (remediation provenance); fresh this turn — domain 1115 pass / app 2362 pass / cli 920 pass, focused classifier suite 17 pass (0 fail), `bun run typecheck` all workspaces exit 0. Importer gap statically corroborated against installed `@gobing-ai/ts-llm-jsonl-importer@0.4.48` (`dist/mappers.js:116` — `maybeArgsRaw` returns `undefined` for every non-todo-allowlist tool).
 
-#### Findings (ranked)
+#### Findings (P1–P4)
 
 | # | Severity | Dimension | Finding | Location |
-| --- | ---------- | ----------- | --------- | ---------- |
-| 1 | advisory (positive) | correctness | Echo class is structurally eliminated, not just behaviorally patched: the false-link shape from run 1 (`mechanism='spur-cli'` + `evidence_kind='user-command'`) is now unrepresentable — the user branch can only emit `slash-command`/`user-command`, the tool branch only `spur-cli`/`cli-tool`. All five cd09d701-class fixtures (grep echo, dispatch-prompt quotes, frontmatter, prose, slash+nearby-quote) are pinned as never-link or slash-only-link. | `packages/domain/src/analytics/task-attribution.ts:109-152`, `packages/domain/tests/analytics/task-attribution.test.ts:90-152` |
-| 2 | advisory | correctness (doc precision) | Quoted `spur task` text in a record that ALSO carries a slash link is silently ignored, not counted skipped — `skipped` only increments in the slash-less branch. WBS/docs wording ("counted skipped") slightly overstates; actual behavior is deliberate and pinned by test (slash record with nearby quote → `skipped 0`). | `packages/domain/src/analytics/task-attribution.ts:118-127` vs WBS "Remediation run 2" echo-rule bullet |
-| 3 | advisory | correctness (residual) | The certified slash channel still trusts line-anchored `/sp[:_-]dev` text in user-kind rows, and pi flattens `toolResult` content into user rows — a tool-output echo quoting a slash invocation at line start would still link. Accepted deliberately: verify certified the dispatch-prompt line-2 slash as the genuine R8 recovery channel, and relay-vs-echo is undecidable at this layer. | `packages/domain/src/analytics/task-attribution.ts:66`, `:117-120` |
-| 4 | carry-over | correctness/usability | Run-1 minors persist untouched by this delta (CLI `attribution:` line rendering unasserted; incremental `changed`-scope service test implicit; incremental dry-run previews scope `all`). Not re-litigated per assignment scope. | `apps/cli/src/commands/history.ts:498`, `packages/app/src/services/history-service.ts:440` |
+| --- | -------- | ----------- | --------- | ---------- |
+| 1 | P4 | correctness | Verify answer-file AC rows used non-enum evidence types (`query + command`, `query + test`); the deterministic gate dropped 2 AC rows on first parse. Normalized to enum values (`command`, `test`) — evidence text unchanged; gate then PASS with zero dropped rows. | `.spur/run/0722-verify-answer.txt` |
+| 2 | P3 | reliability (upstream) | Importer `record_hash` differs across engine versions for identical lines, so each full import under a different engine rewrites ~73k rows (ledger reports them new; upsert replaces content). Bounded by last-writer-wins and converges once the fixed engine is the only importer (ts-libs release pending). | ts-libs `packages/llm-jsonl-importer` (backlog) |
+| 3 | P3 | process | Full-mode import with the PUBLISHED importer build overwrites retained bash `args_raw` with NULL via message-hash upsert — occurred and was repaired this turn (fixed-engine symlink + pi re-import). Standing rule until release: run imports only against the fixed engine. | `docs/design/history-data-processing.md` §2.3 |
+| 4 | P4 | doc precision | Docs do not yet name the run-3 tool-prefilter arm `args_raw LIKE '%index.ts task%'`; contract-level statements remain accurate. | `docs/design/history-data-processing.md` §2.3 |
+| 5 | P4 (out of scope) | security | Project post-check security rule red on an UNCOMMITTED file from the concurrent 0724/0725 writer (parameterized test INSERT with bound args — likely scanner heuristic false-positive). Not a 0722 file; not edited per one-writer discipline. | `packages/app/tests/services/history-board-service.test.ts:72` |
 
-No blocker or major findings.
+No P1/P2 findings. Carried-over run-2 advisory minors (CLI `attribution:` line rendering unasserted; incremental `changed`-scope service test implicit) remain untouched by this delta.
 
-#### Functional Traceability (delta-scoped)
+#### Functional Traceability (run-3 delta)
 
 | Req | Status | Evidence |
 | ----- | -------- | ---------- |
-| R3 (echo remediation, run-2 R9) | MET | One extractor per evidence kind (`task-attribution.ts:109`): user rows link only via line-anchored slash; `spur task` syntax only via tool `args_raw`; quoted user-row text never links. 5 echo-class tests + 1 deliberate-R8 test, 17/17 pass. |
-| R6 (docs honesty) | MET | `docs/04_DESIGN.md` schema row rewritten to the echo rule + new §3.2 `fieldTransforms` limits paragraph; `docs/design/history-data-processing.md` §2.3 rewritten (echo rule + "Bash-evidence channel — upstream gap" paragraph naming importer 0.4.48, `maybeArgsRaw`, `piSplit`, and the typed-insert throw). `ambiguous` kept for the R6 contract, documented always-0. |
-| R7 (bash channel) | NOT MET by design — upstream dependency | Genuine pi bash `spur task` ops persist `args_raw=NULL` (importer 0.4.48 `maybeArgsRaw` todo-allowlist — corroborated in `dist/mappers.js:116`; `args_digest` only survives split). Caller-side transform cannot fix (docs record the live repro). Recorded, not worked around. R7 non-PASS on 0707–0712 is a documented upstream dependency owned by the verify stage — NOT a review blocker for this delta. |
-| R1/R2/R4/R5 | MET (unchanged) | Delta touches none of these paths; run-1 PASS evidence stands. |
+| R4 (reconcile) | MET | Full-mode write deletes then re-derives per source: `deleteBySource` (`packages/domain/src/dao/task-session-dao.ts:152`), gated `input.mode === 'all' && !input.dryRun` (`packages/app/src/services/history-service.ts:479`); app tests pin "reconcile drops stale source links" and "dryRun never reconciles". Live: all 526 pi rows share one `resolved_at`; zero echo-class rows remain. |
+| R3/R7 (source-local spelling) | MET | `SPUR_TASK_RE`/prefilter accept `apps/cli/src/index.ts task` alongside `spur task`; live pi tool-call args (`bun run apps/cli/src/index.ts task show 0712 --json` class) now link. 0707=7, 0708=6, 0709=3, 0710=5, 0711=11, 0712=3. |
 
-#### SECUA (delta scan)
+#### SECUA (run-3 delta)
 
-- **Security:** no new SQL, no I/O in the classifier (still pure); no injection surface; no transcript content persisted.
-- **Correctness:** regex hygiene — `SPUR_TASK_RE` (g) only via `matchAll`, `WBS_RE` (g) only via `match`, `SLASH_COMMAND_RE` non-global via `.test` — no `lastIndex` state bugs; deterministic; `ambiguous` collapse documented and contract-stable.
-- **Efficiency:** bounds unchanged (`ATTRIBUTION_SESSION_LIMIT`/`EVIDENCE_LIMIT`); the user-row LIKE prefilter's `'%spur task%'` arm now only feeds skip counting — benign over-fetch.
-- **Usability:** R6 counters unchanged; skip counting still honest for slash-less echo records.
+- **Security:** reconcile delete is source-scoped, transactional, gated to full-mode non-dry-run; no user input in SQL; classifier unchanged and pure.
+- **Correctness:** dry-run and write share classifier decisions — dry-run never deletes (pinned by test); regex hygiene unchanged (`matchAll` for global patterns).
+- **Efficiency:** prefilter bounds unchanged; reconcile is one indexed delete per source before bounded re-derive.
 
 #### Architecture
 
-The fix is structural: splitting extraction by evidence kind removes the ambiguity channel entirely instead of adjudicating conflicts — the run-1 false-positive class cannot be re-created by any input. Recording the importer gap in Solution + two design docs (with the live repro) rather than hacking a transform is the right call; the extension point provably cannot carry the fix.
-
-**Next:** hand to verify stage for R7 execution (A6 dry-run + write import, idempotency, 0703–0712 assertion); the 0707–0712 bash-channel non-PASS is expected and upstream-owned. Optionally tighten finding 2's doc wording in a fast-follow.
+Reconcile makes `history_task_session` a converged projection of the current classifier instead of an append-only log — the run-2 "stale rows persist with no retraction path" finding is structurally closed. The upstream importer gap (bash args retention) was fixed in ts-libs (commit 96762d5) and consumed via symlinked workspace dependency; documented in the two design docs.
 
 ### References
 
@@ -347,3 +362,5 @@ The fix is structural: splitting extraction by evidence kind removes the ambigui
 ### History
 
 - 2026-08-31T02:48:31.754Z todo → wip (system)
+- 2026-08-31T12:48:08.967Z wip → testing (system)
+- 2026-08-31T12:48:51.311Z testing → done (system)
