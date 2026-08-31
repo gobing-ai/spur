@@ -4,7 +4,7 @@ name: "Harden history import provenance and pipeline verify loop (0722 session r
 status: backlog
 template: meta
 created_at: 2026-08-31T15:58:12.645Z
-updated_at: "2026-08-31T16:40:39.585Z"
+updated_at: "2026-08-31T17:05:42.221Z"
 feature_id: F91
 ac_altitude: task-local
 ---
@@ -12,46 +12,156 @@ ac_altitude: task-local
 ## 0726. Harden history import provenance and pipeline verify loop (0722 session review)
 
 ### Background
+Task 0722 eventually passed, but three avoidable feedback-loop failures consumed three runs and roughly ten hours:
+the published importer destroyed the `history_tool_call.args_raw` evidence channel on a full pi import, the pipeline
+did not prove that live-data premise before implementation, and a 30-minute verify timeout discarded nearly complete
+work before a mechanical verdict parse retry.
 
-From the 0722 session review (--triage, 2026-08-31). Task 0722 took 3 runs and ~10h of execution because three failure classes each cost a full loop: (1) run-1/2 verified against a DB whose evidence channel (`history_tool_call.args_raw` for pi bash rows) did not exist in the published importer — discoverable in minutes with a precheck probe, cost ~2:23 in reruns; (2) a full-mode import with the broken published engine (BASH_TOOL_ALLOWLIST build, ts-libs 0.4.48) NULLed 73k args and required a ~2:57 detect→repair→re-verify cycle; (3) the async verifier hit the 30m timeout at ~90% and had to be resumed to emit one file, plus the verdict gate dropped 2 AC rows on non-enum evidence labels (mechanical retry).
+Current-tree verification on 2026-08-31 corrected the original capture:
 
-Post-review re-audit (2026-08-31 09:27–09:29, corpus-check + targeted probes) settled the remaining open items:
+- Spur and the npm registry both resolve `@gobing-ai/ts-llm-jsonl-importer` 0.4.48. That build retains todo-tool
+  arguments only. Upstream commit `96762d5` adds pi/claude/opencode bash-command retention but is not in a published
+  release. A full pi import with 0.4.48 can upsert the same messages with `args_raw = NULL`; task 0722 observed 73k
+  affected tool arguments and repaired them from the fixed upstream tree.
+- `packages/app/src/services/task-verdict.ts` already accepts compound evidence labels such as `test + command` and
+  emits an `ac-row-dropped` failure for unknown labels. The old compound-label incident is evidence for a pre-write
+  lint, not a missing parser feature.
+- `packages/app/src/workflow/actions/agent-run.ts` writes `answerFile` only after a successful agent exit. A timeout
+  therefore leaves no resumable verify answer even though live output was produced.
+- During this refinement, task 0722 was re-verified concurrently. Its Acceptance Criteria rows now use the exact E6
+  scenario titles, and `spur feature check E6 --json` is clean. This proves the existing matcher is sufficient; 0726
+  must prevent malformed future verifier output, not widen feature matching or rewrite certified evidence.
 
-- FIXED inline this review: run-3 review P4 doc gap (history-data-processing.md now names the `%index.ts task%` prefilter arm); 0722 Plan checklist boxes flipped (all six items done across runs 1–3); 0726 feature-linked to E6 and requirements checkbox-formatted.
-- VERIFIED NOT A REPO DEFECT: the 4 recurring blocking LSP findings on `apps/cli/tests/commands/history.test.ts` L151/152/168/169 (`resetHistory`/`cleared` "not assignable"). `bunx tsc --noEmit` (apps/cli) exits 0; full suite 7034 pass. The LSP serves a stale union predating `914f0e464`, and its suggested fix ("remove unnecessary await" on type errors) is incoherent. Environmental (pi-lens/LSP cache), out of scope here.
-- NOT RE-EMITTED: the post-check security flag on `packages/app/tests/services/history-board-service.test.ts:72` — flagged line is a parameterized test INSERT with bound args (fixture SQL, no secret); scanner did not re-fire post-commit. Owned by the 0724/0725 writers.
-- EXTERNAL, NOT FIXED HERE (dependency for R1's clean solve): ts-libs importer fixes unreleased — `96762d5` (bash args retention) and the `record_hash` engine-version instability (~73k rewritten rows per full import under a changed engine). Standing rule until release: no `history import` against the published engine.
-- ADJACENT, OUT OF SCOPE (listed so nothing is lost): feature F91 dogfood artifact missing (corpus-check `L4.dogfood-missing`) — belongs to F91's owner, not this task.
+Scope is the smallest set of guards that shortens the same future loop: fail closed before destructive import, prove
+declared live-data channels in pipeline precheck, preserve and lint verifier progress, then reconcile the corpus
+baseline once no other writer owns task/verdict state. Task 0726 remains linked to F91 because the remaining corpus
+work is gate integrity; E6 is only the regression fixture.
 
 ### Requirements
+- [ ] **R1. Importer provenance guard.** Before opening the project DB, reject every non-dry-run `full` import whose
+  selected sources include `pi` when the resolved `@gobing-ai/ts-llm-jsonl-importer` version is unknown or lower than
+  `0.4.49`. Reuse the existing `resolveImportProvenance` result, surface error code `unsafe-history-importer` with the
+  installed version, minimum safe version, destructive `args_raw` reason, and upgrade/relink remedy, and leave the DB
+  accessor uncalled. Dry-run and non-pi imports remain available. The guard is hard-fail in this task; there is no
+  warn-only rollout for a path already proven to destroy retained evidence.
+- [ ] **R2. Deterministic evidence-channel precheck.** Recognize the exact repeatable task-AC declaration
+  `evidence-channel: history_tool_call.args_raw[pi]`. Before implementation, a plugin script must run the fixed query
+  `SELECT COUNT(*) FROM history_tool_call WHERE args_raw IS NOT NULL AND source = 'pi'`; a missing DB/table or zero
+  count writes FAIL and prints the declaration plus query, while no declaration writes PASS. The pipeline guard must
+  require both the existing size status and this evidence status. Do not accept embedded SQL or add a generic probe
+  registry in this slice.
+- [ ] **R3. Resumable, linted verify answer.** `/sp:dev-verify` must create
+  `.spur/run/<wbs>-verify-answer.txt` itself and append one complete requirement/AC row after it is certified. A retry
+  reads valid existing rows and verifies only missing IDs. The workflow must use `expectFile` so `agent.run` does not
+  overwrite progress after exit. Before `spur task verdict --from-answer`, a deterministic plugin lint must reject
+  missing, duplicate, or unknown R IDs; AC IDs that do not exactly match the task's checklist label or scenario title;
+  invalid status/evidence-type values; and empty evidence. Preserve the existing compound evidence normalization and
+  final verdict derivation.
+- [ ] **R4. Corpus reconciliation at commit prep.** After R1-R3 and owned docs land, confirm
+  `spur feature check E6 --json` remains clean and the pre-implementation 0722 verdict hash is unchanged, then run
+  `bun run corpus-check`, repair only 0726-owned findings, and regenerate `config/corpus-baseline.json` with
+  `bun run scripts/commands/regen-corpus-baseline.ts` only from a tree with no other writer's task/verdict changes.
+  Record the remaining accepted-Open set in the resulting diff/commit and run the full project gates once.
 
-- [ ] R1 — Importer provenance guard. `history import` (packages/app/src/services/history-service.ts, import path) must refuse a full-mode import before any row is written when the installed `@gobing-ai/ts-llm-jsonl-importer` build is known data-destructive. Detection options (either suffices; prefer version predicate first): (a) importer version < the release containing 96762d5 (bash-args retention) when full mode + pi source is requested; (b) feature-marker probe of the installed engine (the 0.4.48 build's `maybeArgsRaw` keeps args only for the todo allowlist — detect by absence of the bash-args retention behavior marker). Behavior: exit with a named provenance error (engine version, reason, remedy: upgrade ts-libs / repoint the workspace symlink), zero DB mutations. Rollout: ship warn-only first (log + JSON `provenanceWarning` field), flip to refuse in the next minor. Note the upsert danger explicitly: full mode upserts by message hash, so re-import with a degraded engine does not add rows — it NULLs existing `args_raw` (observed: links 408→115, 73k args NULLed, repaired 2026-08-30 → 2026-08-31 via symlink + pi re-import; backup `.spur/spur.db.bak-20260830-2333`).
-- [ ] R2 — Data-channel precheck probe. The task pipeline precheck stage (config/workflows/task-pipeline.yaml precheck, and/or `sp:dev-refine`) must, for tasks whose ACs depend on live imported data, sample the named channel and fail loudly before wip. Concrete probe used by 0722's R7: `SELECT COUNT(*) FROM history_tool_call WHERE args_raw IS NOT NULL AND source = 'pi'` — 0 means the AC cannot be evidenced and the task must scope the upstream fix first or re-stage the AC. Mechanics: AC text declares channels via a small convention (e.g. `evidence-channel: history_tool_call.args_raw[pi]` line in the task AC block) so the probe is deterministic, not model-judged; probe result is printed in precheck output.
-- [ ] R3 — Verifier incremental output + answer-file lint. The verify stage (sp-dev-verify skill + pipeline verify step) must (a) write the answer file incrementally per certified requirement/AC row (append-safe format, e.g. one `## <row-id>` block per write) so a timeout resumes from partial output instead of restarting (observed: 30m timeout at ~90%, resume cost a full second pass, net ~0:30 overhead); and (b) schema-lint the answer file before the final write — evidence type must be one of the gate's enum values (observed failure: `query + command` / `query + test` dropped 2 AC rows at `spur task verdict --from-answer`), row ids must match the task's R/AC ids, and each row non-empty. Lint errors are row-level and mechanical (no model re-judgment needed).
-- [ ] R4 — E6 verdict-evidence/scenario alignment. corpus-check flags `feature E6: L4.verdict-rows-match-no-scenario` because 0722's certified verdict evidence (`.spur/run/0722-verdict.json`) keys 10 rows by task-requirement id (R1–R7) while E6's scenarios are R8–R10; the matcher wants scenario-title or AC-N alias keys. Recorded decision (2026-08-31): NEVER rewrite certified verdict evidence to satisfy the matcher. Fix direction: extend the L4 matcher (corpus-check implementation) to accept task-requirement-keyed rows when the task file's AC block declares the feature-scenario coverage (0722's AC section states "Covers feature E6 scenarios R8–R10"), or update `sp-dev-verify` to emit scenario-alias keys for feature-linked tasks going forward. Do not regenerate 0722-verdict.json.
-- [ ] R5 — Corpus-baseline acceptance ownership. After R1–R4 land, run `bun run corpus-check`, fix owned findings, then accept the remaining accepted-Open set by regenerating the snapshot (`bun run scripts/commands/regen-corpus-baseline.ts`) as commit-prep — a shared-state mutation that must not run while another writer has corpus edits in flight (current dirty: packages/domain/src/migrations.ts, packages/domain/tests/db.test.ts from the 0724/0725 session).
+**Out of scope:** publishing the upstream importer release; fixing importer `record_hash` stability; arbitrary SQL
+evidence declarations; a new public `spur` noun/verb/flag; changing the feature scenario matcher; rewriting certified
+0722 evidence; stale editor/LSP diagnostics; the unrelated history-board security heuristic; and F91's missing
+dogfood artifact.
 
 ### Acceptance Criteria
-
-- [ ] AC1 (R1): importing with a destructive-build engine exits non-zero with a named provenance error and the DB is unchanged (guard unit test + dry probe against the pinned 0.4.48 build).
-- [ ] AC2 (R2): precheck against a DB missing the AC's declared evidence channel fails before wip with the probe query named in the message.
-- [ ] AC3 (R3): a verify killed mid-run leaves a valid partial answer file that resumes without redoing certified rows; enum-invalid evidence labels are rejected with a row-level message before verdict derivation.
-- [ ] AC4 (R4): corpus-check no longer reports `E6 L4.verdict-rows-match-no-scenario` for task-requirement-keyed evidence, and `.spur/run/0722-verdict.json` is byte-identical before/after.
-- [ ] AC5 (R5): `bun run corpus-check` passes with the regenerated baseline, and the accepted-Open set is documented in the same commit.
+- [ ] AC1 (R1): with importer version `0.4.48` or `unknown`, a non-dry-run full pi/all import returns
+  `unsafe-history-importer` before `getDb`; version `0.4.49+`, dry-run, and full non-pi paths reach the existing import
+  flow. Unit tests assert the DB accessor and importer are untouched on rejection.
+- [ ] AC2 (R2): a task with `evidence-channel: history_tool_call.args_raw[pi]` gets PASS for a positive fixture count
+  and FAIL for zero/missing DB/table, with the fixed SQL printed; a task without the declaration passes without
+  opening SQLite. Pipeline contract tests prove evidence FAIL blocks `precheck -> implement`.
+- [ ] AC3 (R3): pre-seeding a partial answer with certified rows and rerunning verify preserves those rows and resumes
+  at the first missing ID. The lint rejects each invalid class with a row-level message before verdict derivation,
+  while a complete answer using exact AC titles and `test + command` passes and produces the existing normalized
+  verdict shape.
+- [ ] AC4 (R4): `spur feature check E6 --json` remains free of `L4.verdict-rows-match-no-scenario` and
+  `L4.scenario-unverified`; the 0722 verdict SHA-256 captured immediately before implementation is identical after
+  all gates; targeted workspace tests, `bun run spur-check`, and the single commit-prep `bun run corpus-check` pass;
+  and no unrelated working-tree file is staged or changed.
 
 ### Q&A
+<!-- CLOSED decisions from implement-ready refinement. No open questions remain. -->
 
-<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
-     condition. Not a parking lot for open questions — an unanswered question here means the task
-     is not ready to hand off. Keep empty if none. -->
+#### Q&A entry — 2026-08-31 implement-ready refinement
 
+- **Hard fail versus warning:** hard fail now. The 0.4.48 path has already caused evidence loss; a warning preserves the
+  unsafe default and contradicts AC1.
+- **Safe importer threshold:** `0.4.49` is the first permissible patch after the verified published 0.4.48. Unknown and
+  prerelease versions fail closed. The upstream fix itself remains owned by `gobing-ai/ts-libs` commit `96762d5`.
+- **Evidence declaration surface:** one allowlisted declaration only. Arbitrary task-authored SQL would turn corpus text
+  into executable input and is rejected.
+- **Verify transport:** the verifier owns the progress file and the workflow checks it with `expectFile`; retaining
+  `answerFile` would overwrite resumable content at successful exit.
+- **E6 alignment:** concurrent 0722 re-verification corrected the AC row identities and made E6 clean. No matcher change
+  is needed; exact AC identity is enforced at the verifier lint boundary instead.
+- **Compound evidence labels:** already fixed by task 0568; no parser expansion is part of 0726.
+- **Baseline timing:** refinement observed concurrent 0722 task/verdict writes plus unrelated domain changes. R4 must
+  capture the final pre-implementation verdict hash and wait for a clean single-writer boundary.
 ### Design
+**R1 — provenance guard**
 
-<!-- Approach and tradeoffs for process/docs/config changes. Keep this short. -->
+- Reuse `resolveImportProvenance` in `apps/cli/src/commands/history.ts`; resolve it before service construction and pass
+  `importerVersion` through `HistoryServiceContext`.
+- In `packages/app/src/services/history-service.ts`, add
+  `MIN_SAFE_PI_BASH_IMPORTER_VERSION = '0.4.49'`, a small numeric semver-triple comparison (no dependency), and
+  `UnsafeHistoryImporterError` with code `unsafe-history-importer`.
+- Call one shared assertion at the start of both direct `import` and fan-out `importAll`, before `getDb`. It applies
+  only to non-dry-run full imports containing pi. Unknown, malformed, and prerelease versions are unsafe.
+- Extend `packages/app/tests/services/history-service.test.ts` and `apps/cli/tests/commands/history.test.ts`; inject the
+  version in service fixtures rather than reading the host package.
+
+**R2 — evidence precheck**
+
+- Add `plugins/sp/scripts/task-evidence-precheck.ts`, patterned after `task-size-precheck.ts`: fetch the task via
+  `spur task show <wbs> --json`, parse repeated exact declarations, query `.spur/spur.db` with `bun:sqlite`, write
+  `.spur/run/<wbs>-precheck-evidence.status`, and always exit 0 so the status file is the fail-closed contract.
+- Support only `history_tool_call.args_raw[pi]` and its fixed parameterized query. An unknown declaration is FAIL.
+- Add the script action to `config/workflows/task-pipeline.yaml` precheck and require its PASS status in both outgoing
+  guards. Document the declaration in `plugins/sp/skills/spur-dev/references/gate-checklists.md` and the history
+  contract in `docs/04_DESIGN.md`. Tests live in `plugins/sp/tests/task-evidence-precheck.test.ts` and the existing
+  pipeline resilience/inline-driver suites.
+
+**R3 — verify progress and lint**
+
+- Update `plugins/sp/skills/code-verification/SKILL.md` and its verdict reference: initialize the canonical answer file
+  with `Verdict: PARTIAL`, append complete Markdown table rows in task order, and on resume retain only rows that pass
+  the same lint contract. Replace the first verdict line only after all rows are certified.
+- Add `plugins/sp/scripts/verify-answer-lint.ts`. It obtains the task through `spur task show`, compares R IDs and exact
+  AC checklist/scenario identities, reuses the documented status/evidence vocabulary, and exits non-zero with bounded
+  row diagnostics. It writes nothing.
+- In `config/workflows/task-pipeline.yaml`, replace verify's `answerFile` with `expectFile`, run the lint immediately
+  after the agent returns, then run the existing `spur task verdict`. Do not change `agent.run`, `feature-check.ts`, or
+  the public task-verdict surface.
+
+**R4 — handoff and anti-patterns**
+
+- Capture the current 0722 verdict SHA-256 at implementation start. Update owned design/skill surfaces, then use
+  `sp:doc-evolve` sync-check before final gates. Preserve the concurrent 0722 task/verdict work and unrelated dirty
+  domain files.
+- Do not add a generic evidence-probe framework, a second verdict format, a new dependency, a warning-only bypass, a
+  broader feature matcher, or a compatibility rewrite of historical verdict JSON.
 
 ### Plan
-
-<!-- Ordered checklist. Fill before moving to todo/wip. -->
+- [ ] 1. Capture the current 0722 verdict SHA-256. Add failing R1 service/CLI tests for unsafe, safe, dry-run, non-pi,
+  unknown-version, and pre-DB rejection paths; implement the shared guard by reusing `resolveImportProvenance`. (R1)
+- [ ] 2. Add `task-evidence-precheck.ts` and focused fixtures, then wire its status into both task-pipeline precheck
+  guards and update the evidence-channel contract docs. (R2)
+- [ ] 3. Add verifier partial-file/resume instructions and `verify-answer-lint.ts` tests for complete, partial,
+  duplicate, unknown, empty-evidence, bad-status, bad-evidence-type, inexact-AC, and compound-type answers. (R3)
+- [ ] 4. Switch the verify workflow action from `answerFile` to `expectFile`, insert lint before verdict derivation,
+  and update workflow/inline-driver contract tests. (R3)
+- [ ] 5. Update `docs/04_DESIGN.md` and plugin references, run `sp:doc-evolve` sync-check, then run focused tests from
+  inside `packages/app`, `apps/cli`, and `plugins/sp`. Confirm E6 stays clean and the captured hash is unchanged.
+  (R1-R4)
+- [ ] 6. Recheck `git status`; once the single-writer boundary is clean, run `bun run corpus-check`, repair only owned
+  findings, regenerate the corpus baseline once, and inspect the accepted-Open diff. (R4)
+- [ ] 7. Run `bun run autofix`, `bun run spur-check`, `bun run test`, `bun run test-cf`, `bun run build`, final
+  `spur task check 0726 --json`, and recheck the 0722 verdict hash. (R1-R4)
 
 ### Root Cause
 
@@ -70,11 +180,17 @@ Post-review re-audit (2026-08-31 09:27–09:29, corpus-check + targeted probes) 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
-
-- ts-libs fix `96762d5` (bash args retention) — release required to lift the standing no-import rule; `record_hash` engine-version instability is the same package's backlog (idempotency across engine versions).
-- Incident evidence: `.spur/spur.db.bak-20260830-2333` (pre-repair backup); 0722 run-1/2/3 records; `.spur/run/0722-verdict.json` (certified, immutable).
-- Guard site: `packages/app/src/services/history-service.ts` (import path); probe SQL in R2; verdict gate: `spur task verdict --from-answer` enum contract.
-- Baseline regen: `bun run scripts/commands/regen-corpus-baseline.ts`; corpus-check rules: `L4.verdict-rows-match-no-scenario`, `L4.dogfood-missing`.
-- Session review + cost breakdown: 0722 session review --triage (2026-08-31); task 0722 checkpoint `.spur/memory/sessions/0722-checkpoint.md`.
+- Task 0722 and feature E6: `spur task show 0722 --json`; `spur feature check E6 --json`.
+- Certified verdict authority: `.spur/run/0722-verdict.json`; capture its SHA-256 at implementation start and treat it
+  as immutable for the 0726 diff.
+- Importer provenance and import entry: `apps/cli/src/commands/history.ts`,
+  `packages/app/src/services/history-service.ts`.
+- Published importer observed 2026-08-31: npm `latest=0.4.48`; local lock/catalog 0.4.48. Upstream bash-retention fix:
+  `gobing-ai/ts-libs` commit `96762d5` (not published at refinement time).
+- Evidence precheck seams: `config/workflows/task-pipeline.yaml`, `plugins/sp/scripts/task-size-precheck.ts`,
+  `plugins/sp/skills/spur-dev/references/gate-checklists.md`.
+- Verify transport/parser: `packages/app/src/workflow/actions/agent-run.ts`,
+  `plugins/sp/skills/code-verification/SKILL.md`, `packages/app/src/services/task-verdict.ts`.
+- Baseline gate: `config/corpus-baseline.json`, `scripts/commands/regen-corpus-baseline.ts`.
 
 ### History

@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F91"
 name: "Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-08-17T22:15:08.187Z"
-updated_at: "2026-08-31T02:07:20.914Z"
+updated_at: "2026-08-31T17:06:03.698Z"
 ---
 
 # F91: Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet
@@ -156,3 +156,4 @@ carve-out is later judged insufficient.
 - 2026-08-27T19:00:53.092Z verifying → done (system)
 - 2026-08-29T06:17:19.126Z done → active (system)
 - 2026-08-31T02:07:20.914Z active → verifying (system)
+- 2026-08-31T17:06:03.698Z verifying → active (system)
