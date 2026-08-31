@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.69] - 2026-08-30
+
+### Added
+
+- feat(pipeline): make task-pipeline precheck deterministic and doctor-free (1bbd56c81)
+
+### Fixed
+
+- fix(workflow): default shipped pipelines to the auto agent selector (c66d04c17)
+- fix(history): stop parsing the refresh child's oversized JSON payload (18f91e546)
+
+### Changed
+
+- docs(task): close 0723 on its source-local proof (85b75cde6)
+- docs(task): repoint 0717 evidence anchors after its test file shrank (d1b76684a)
+
 ## [0.3.68] - 2026-08-30
 
 ### Added
