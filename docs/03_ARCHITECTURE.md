@@ -363,7 +363,8 @@ bounded failure detail and never parsed as a payload (the `--json` envelope embe
 artifact, which outgrew the handler's output bound on 2026-08-30 and failed healthy refreshes).
 Awaiting preserves queue completion/retry truth while the child process isolates
 synchronous filesystem and `bun:sqlite` work from the Hono/oRPC event loop. The child and server
-share the WAL database; the existing 5-second SQLite busy timeout bounds lock contention. Concrete
+share the WAL database; the 30-second SQLite busy timeout (`SQLITE_BUSY_TIMEOUT_MS`) bounds lock
+contention. Concrete
 payload, enqueue-result, process, and transport shapes live in
 `docs/design/history-refresh-process-isolation.md`.
 

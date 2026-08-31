@@ -873,7 +873,7 @@ features:
   adopting the A17 layout on an older corpus; it is not part of the daily loop.
 - **`spur feature migrate`** is reserved — a one-time feature-corpus normalization, not
   yet wired.
-- **Concurrent SQLite access:** Spur uses SQLite in WAL mode with a 5-second busy timeout.
+- **Concurrent SQLite access:** Spur uses SQLite in WAL mode with a 30-second busy timeout.
   Multiple spur processes can run concurrently against the same project DB, but heavy
   concurrent writes may still contend. For hermetic test runs, use `DATABASE_URL=:memory:`.
 - **Stale global install:** if a globally-installed `spur` (e.g. `~/node_modules/@gobing-ai/spur`)
