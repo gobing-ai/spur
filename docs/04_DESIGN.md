@@ -1576,7 +1576,7 @@ standard scripts as `node "$(superskill script path sp <rel>.mjs)"`. Repo-only s
 | `coordination_runs`                                        | ts-db (`CoordinationRunDao`) | Occupant pin + path-only artifact refs for spec-addressed runs (ADR-057 wave 1). PK `run_id`; indexed `(spec_id, generation DESC)`. Added by migration `0010_spur_cli_coordination_runs`. Never stores stdout/stderr bodies. |
 | `agent_instances` (reserved draft)                         | CLI                       | Future DB home for materialized instances (ADR-086): `spec_id` PK; `team_id`, `member_key`, `executor`, nullable `role`, `workspace`, `status` (`stopped\|running\|exited\|errored`), nullable `pid`/pin fields, JSON `tags`/`config`, integer timestamps; indexes on role, executor, and team. Draft id `0026_spur_cli_agent_instances` is intentionally absent from `CLI_MIGRATIONS`. |
 | `history_run_session`                                      | CLI (`RunSessionDao`)        | Run→session mapping (feature E6): `run_id` → `(source, session_id)` with `exactness` (`exact` \| `unresolved` \| `estimated`) and `mechanism` (`observed` \| `supplied` \| `inferred`). `RunSessionObserver` writes boundary observations; import may promote an unresolved row to exact when a session is observed inside that run's `.spur/run/<runId>/agent-sessions/` directory (task 0624). `RetroCorrelator` writes estimated/inferred rows and never shadows exact. Indexed on `run_id` and `(source, session_id)`. |
-| `history_task_session`                                     | CLI (`TaskSessionDao`)       | Task↔session attribution (feature E6, task 0722): evidence-backed `(wbs, source, session_id)` triples recovered during history import. One row per task per session; `exactness` is `estimated` on the import path (allowlisted operational syntax — task-scoped `/sp:dev-*` slash invocations, structured `spur task <verb> <wbs>` operations — validated through the task locator) and distinguishable from invoke-boundary `exact` mappings; `evidence_kind`/`evidence_ref` carry a bounded audit locator (`user-command`\|`cli-tool`, `<file basename>#<line>`), never transcript content. The primary key makes re-imports idempotent and enforces exact-over-estimated precedence. Indexed on `(source, session_id)`. |
+| `history_task_session`                                     | CLI (`TaskSessionDao`)       | Task↔session attribution (feature E6, task 0722): evidence-backed `(wbs, source, session_id)` triples recovered during history import. One row per task per session; `exactness` is `estimated` on the import path (first-party operational syntax only, echo rule per run-2 remediation R9 — task-scoped `/sp:dev-*` slash invocations in user rows, structured `spur task <verb> <wbs>` operations **only via tool-call args**; quoted command text in user rows, tool-output echoes, and prose never links and is counted skipped — validated through the task locator) and distinguishable from invoke-boundary `exact` mappings; `evidence_kind`/`evidence_ref` carry a bounded audit locator (`user-command`\|`cli-tool`, `<file basename>#<line>`), never transcript content. The primary key makes re-imports idempotent and enforces exact-over-estimated precedence. Indexed on `(source, session_id)`. |
 | `rule_runs`, `rule_eval_runs`                              | ts-rule-engine (≥0.3.15)  | Persisted rule-run history powering `spur rule trace`; added by migration `0002_spur_cli_rule_history`. `applied_fix_count` is re-stamped by Spur after `applyFixes`.           |
 
 ### 3.2 SourceDefinition (history import)
@@ -1584,6 +1584,17 @@ standard scripts as `node "$(superskill script path sp <rel>.mjs)"`. Repo-only s
 One config object per source: `source` discriminant, `displayName`, `filePatterns`, `defaultRoots`,
 `splitConfig` (one-to-one | one-to-many | custom), `fieldMap` (raw→canonical), optional
 `fieldTransforms`, and a Zod `schema` validating canonical fields. Adding a source = one variant.
+
+**`fieldTransforms` limits (task 0722 run-2 probe, importer 0.4.48).** Transforms are per-source,
+apply to **every** split record of that source, and receive only the mapper's split record — never
+the raw JSONL object, and no target-table identity. Consequence measured live: a derived
+`getSourceDefinition('pi')` definition adding an `args_raw` transform to recover pi bash tool-call
+commands (persisted `NULL` upstream — `maybeArgsRaw` keeps args only for the todo allowlist) fails
+twice over. The command is absent from the split record (`piSplit` discards non-todo
+`call.input`; only the one-way `args_digest` survives), and the transform's key presence on
+`history_message` split records makes the typed message insert throw (`Typed table
+"history_message" has unknown columns: args_raw`). Bash-args recovery is therefore an upstream
+mapper fix, not a caller-side transform.
 
 ### 3.3 Analytics records
 

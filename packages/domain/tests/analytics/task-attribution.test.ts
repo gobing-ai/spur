@@ -87,16 +87,71 @@ describe('classifyTaskAttribution (task 0722 R3)', () => {
         expect(decision.candidates).toEqual([]);
     });
 
-    test('conflicting extractor evidence in one record is ambiguous, never a link (R9)', () => {
+    test('a typed slash invocation is unaffected by a quoted spur task mention nearby (echo rule, R9)', () => {
+        // The quoted `spur task show 0704` is secondhand narration inside a user row —
+        // ignored. Only the first-party typed slash operand links.
         const decision = classifyTaskAttribution([user('/sp:dev-run 0703\nthen ran: spur task show 0704')]);
-        expect(decision.candidates).toEqual([]);
-        expect(decision.ambiguous).toBe(1);
+        expect(decision.candidates.map((c) => c.wbs)).toEqual(['0703']);
+        expect(decision.candidates[0]?.mechanism).toBe('slash-command');
+        expect(decision.skipped).toBe(0);
+        expect(decision.ambiguous).toBe(0);
     });
 
-    test('agreeing extractors in one record produce one candidate per WBS', () => {
-        const decision = classifyTaskAttribution([user('/sp:dev-run 0703\nthen ran: spur task show 0703')]);
-        expect(decision.candidates.map((c) => c.wbs)).toEqual(['0703']);
+    test('grep output quoting `spur task <verb> <wbs>` in a user row never links (cd09d701#222 class, R9)', () => {
+        const echo = [
+            '== spur task update 0708',
+            './--Users-robin-xprojects-spur-new--/2026-08-29T17-07-14-219Z_01a04e7d/forks/2026-08-30T06-22-21-946Z.jsonl',
+            './--Users-robin-xprojects-spur-new--/2026-08-29T17-07-14-219Z_01a04e7d/forks/2026-08-30T05-32-18-212Z.jsonl',
+        ].join('\n');
+        const decision = classifyTaskAttribution([user(echo, 222)]);
+        expect(decision.candidates).toEqual([]);
+        expect(decision.skipped).toBe(1);
         expect(decision.ambiguous).toBe(0);
+    });
+
+    test('a dispatch prompt quoting spur task command strings never links (R9)', () => {
+        const prompt = [
+            'stage implement for 0722',
+            'REMEDIATION SCOPE: run 1 landed the feature but verify FAILED',
+            'the bash channel: genuine `spur task update 0708` operations never reach the classifier.',
+            'record the engine gap in the task Solution + docs instead of hacking around it.',
+        ].join('\n');
+        const decision = classifyTaskAttribution([user(prompt, 2)]);
+        expect(decision.candidates).toEqual([]);
+        expect(decision.skipped).toBe(1);
+    });
+
+    test('a line-anchored slash invocation in a dispatch prompt still links (deliberate, R8)', () => {
+        // The driver relays the operator's slash invocation at line start of subagent
+        // dispatch prompts; the 0722 verify certified these rows as the genuine
+        // slash-command recovery channel for 0703-0706/0711. Quoted `spur task` strings
+        // in the same row are ignored; the slash operand links.
+        const prompt = '/sp:dev-run --mode implement 0703 --auto\nREMEDIATION SCOPE: run 1 landed.';
+        const decision = classifyTaskAttribution([user(prompt, 2)]);
+        expect(decision.candidates.map((c) => c.wbs)).toEqual(['0703']);
+        expect(decision.candidates[0]).toMatchObject({ mechanism: 'slash-command', evidenceKind: 'user-command' });
+    });
+
+    test('quoted prose analyzing the mechanism never links (R9)', () => {
+        const prose =
+            'Or the toolCall args path: Claude Code Bash tool calls `spur task update 0712 ...` ' +
+            'would land in args_raw and match SPUR_TASK_RE.';
+        const decision = classifyTaskAttribution([user(prose, 228)]);
+        expect(decision.candidates).toEqual([]);
+        expect(decision.skipped).toBe(1);
+    });
+
+    test('doc frontmatter quoting a command string in a user row never links (cd09d701#9 class, R9)', () => {
+        const frontmatter = [
+            '---',
+            'schema_version: 1',
+            'name: "Recover task attribution from imported agent sessions"',
+            'solution: implement `spur task update 0708` recovery channel',
+            '---',
+        ].join('\n');
+        const decision = classifyTaskAttribution([user(frontmatter, 9)]);
+        expect(decision.candidates).toEqual([]);
+        expect(decision.skipped).toBe(1);
     });
 
     test('a slash invocation without a WBS operand is not evidence at all', () => {

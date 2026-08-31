@@ -7,7 +7,12 @@ import type { TaskSessionEvidenceKind, TaskSessionMechanism } from '../dao/task-
 
 /** One normalized evidence record a session offers to the classifier. */
 export interface AttributionEvidence {
-    /** `'user-message'` → `content_text` of a user row; `'tool-call'` → `args_raw`. */
+    /**
+     * `'user-message'` → `content_text` of a user row; `'tool-call'` → `args_raw`.
+     * A user row is only first-party speech under the echo rule below: pi flattens
+     * `toolResult` records into user rows before persistence, so quoted command
+     * text can appear in user-kind rows and must never link (R9).
+     */
     kind: 'user-message' | 'tool-call';
     text: string;
     recordHash: string;
@@ -28,13 +33,19 @@ export interface AttributionCandidate {
 export interface AttributionDecision {
     candidates: AttributionCandidate[];
     /**
-     * Evidence records that referenced task-like tokens without allowlisted
-     * syntax (plain four-digit prose, pasted specifications). Counted for
-     * user-message records only — a tool call's args legitimately contain bare
-     * numbers (paths, ids) that mean nothing task-shaped.
+     * Evidence records that referenced task-like tokens without a first-party
+     * allowlisted match (plain four-digit prose, pasted specifications, and —
+     * since the echo rule — quoted `spur task` strings in user rows). Counted
+     * for user-message records only — a tool call's args legitimately contain
+     * bare numbers (paths, ids) that mean nothing task-shaped.
      */
     skipped: number;
-    /** Records whose allowlisted extractors disagreed — conflicting evidence never links (R9). */
+    /**
+     * Always 0 since the echo rule (R9): each evidence kind has exactly one
+     * first-party extractor (slash in user rows, spur-task in tool args), so two
+     * extractors can no longer disagree on one record. Kept as a counter for the
+     * R6 summary contract.
+     */
     ambiguous: number;
 }
 
@@ -46,9 +57,13 @@ export interface AttributionDecision {
 const SLASH_COMMAND_RE = /^[\s>]*\/sp[:_-]dev\S*/;
 
 /**
- * A structured `spur task <verb> <wbs>` operation (R3). Matched anywhere in the
- * record: a tool call whose arguments run the CLI is an operation regardless of
- * wrapper spelling (`bun run spur task …`, `npx spur task …`).
+ * A structured `spur task <verb> <wbs>` operation (R3), evaluated ONLY in
+ * tool-call arguments: a tool call whose arguments run the CLI is a first-party
+ * operation regardless of wrapper spelling (`bun run spur task …`, `npx spur
+ * task …`). The same text in a user-kind row is always secondhand — the
+ * operator's terminal never reaches a transcript, and in-transcript `spur task`
+ * strings are quotations (dispatch prompts, tool-output echoes, pasted prose)
+ * that must never link (R9; the cd09d701#222 grep-output false-positive class).
  */
 const SPUR_TASK_RE = /(?:^|[\s;&|(])spur\s+task\s+\S+\s+(\d{4})(?![\w.\-/:%])/g;
 
@@ -83,46 +98,49 @@ function spurTaskWbsSet(text: string): Set<string> {
  * Classify one session's normalized evidence into task-attribution candidates.
  *
  * Pure and deterministic (R3): the same records always yield the same decision, so
- * dry-run preview and write mode share identical decisions. Allowlisted syntaxes
- * only — a record with no allowlisted match is a skipped plain mention (never a
- * link), and a record where the two extractors disagree is ambiguous (never a
- * link). Candidate WBS values are shapes, not truths: the application layer
- * validates every candidate through the task locator before persisting (R3).
+ * dry-run preview and write mode share identical decisions. First-party allowlisted
+ * syntaxes only, one extractor per evidence kind (the echo rule, R9): a user row
+ * links only through a line-anchored slash invocation, tool-call args only through
+ * the `spur task` operation syntax. A record with no allowlisted match is a skipped
+ * plain mention (never a link). Candidate WBS values are shapes, not truths: the
+ * application layer validates every candidate through the task locator before
+ * persisting (R3).
  */
 export function classifyTaskAttribution(records: readonly AttributionEvidence[]): AttributionDecision {
     const decision: AttributionDecision = { candidates: [], skipped: 0, ambiguous: 0 };
     for (const record of records) {
-        const isUser = record.kind === 'user-message';
-        // Slash invocations: per-line anchor; a command line may carry one WBS operand.
-        let slash: Set<string> | null = null;
-        if (isUser) {
+        if (record.kind === 'user-message') {
+            // Echo rule (R9): a user row links only through the line-anchored slash
+            // syntax — the one first-party typed signal a transcript carries. Quoted
+            // `spur task` strings (dispatch prompts, tool-output echoes, prose) are
+            // secondhand and never link; they still count as skipped mentions.
+            const slash = new Set<string>();
             for (const line of record.text.split('\n')) {
                 if (!SLASH_COMMAND_RE.test(line)) continue;
-                const set = slashWbsSet(line);
-                if (slash === null) slash = set;
-                else for (const wbs of set) slash.add(wbs);
+                for (const wbs of slashWbsSet(line)) slash.add(wbs);
             }
-        }
-        const spur = spurTaskWbsSet(record.text);
-        if (slash === null && spur.size === 0) {
-            // No allowlisted syntax. Plain four-digit prose in a user message is a
-            // skipped mention (R9); a tool call without the syntax is just not evidence.
-            if (isUser && PLAIN_MENTION_RE.test(record.text)) decision.skipped += 1;
-            continue;
-        }
-        if (slash !== null && spur.size > 0) {
-            const conflicting = [...slash].some((w) => !spur.has(w)) || [...spur].some((w) => !slash.has(w));
-            if (conflicting) {
-                decision.ambiguous += 1;
+            if (slash.size === 0) {
+                if (PLAIN_MENTION_RE.test(record.text)) decision.skipped += 1;
                 continue;
             }
+            for (const wbs of slash) {
+                decision.candidates.push({
+                    wbs,
+                    mechanism: 'slash-command',
+                    evidenceKind: 'user-command',
+                    evidenceRef: evidenceRefOf(record),
+                });
+            }
+            continue;
         }
-        const merged = new Set([...(slash ?? []), ...spur]);
-        for (const wbs of merged) {
+        // Tool-call args: the agent's own CLI operation — first-party operational
+        // evidence (R3). Matched anywhere in the args: wrapper spelling varies
+        // (`bun run spur task …`, `npx spur task …`).
+        for (const wbs of spurTaskWbsSet(record.text)) {
             decision.candidates.push({
                 wbs,
-                mechanism: slash?.has(wbs) ? 'slash-command' : 'spur-cli',
-                evidenceKind: isUser ? 'user-command' : 'cli-tool',
+                mechanism: 'spur-cli',
+                evidenceKind: 'cli-tool',
                 evidenceRef: evidenceRefOf(record),
             });
         }

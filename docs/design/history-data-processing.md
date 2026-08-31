@@ -120,11 +120,28 @@ therefore recovers a **direct task↔session authority** alongside the run-chain
 - **Evidence prefilter** — per session, at most `ATTRIBUTION_EVIDENCE_LIMIT` normalized rows are
   fetched, allowlist-prefiltered (`content_text LIKE '%/sp%' OR '%spur task%'` for user rows,
   `args_raw LIKE '%spur task%'` for tool calls). The corpus is never materialized.
-- **Pure classifier** (`classifyTaskAttribution`) — deterministic, allowlisted syntax only:
-  task-scoped `/sp:dev-*` slash invocations (line-anchored) and structured
-  `spur task <verb> <wbs>` operations (including inside tool args). Dates, versions, and paths are
-  excluded by the operand shape; plain four-digit prose and pasted specifications are **skipped,
-  never linked**; records where the extractors disagree are **ambiguous, never linked**.
+- **Pure classifier** (`classifyTaskAttribution`) — deterministic, first-party allowlisted syntax
+  only, one extractor per evidence kind (the **echo rule**, run-2 remediation R9): a user row links
+  only through a line-anchored task-scoped `/sp:dev-*` slash invocation; the structured
+  `spur task <verb> <wbs>` operation syntax links **only through tool-call args**, where a genuinely
+  executed CLI operation lands. A user-kind row is first-party speech, but pi flattens `toolResult`
+  records into user rows before persistence, so quoted command strings (dispatch prompts,
+  tool-output echoes, pasted prose, doc frontmatter) appear there and must never link — they are
+  counted as **skipped** mentions instead (the cd09d701#222 grep-output class that linked before
+  the rule). Dates, versions, and paths are excluded by the operand shape.
+- **Bash-evidence channel — upstream gap (recorded, not worked around).** Genuine `spur task`
+  operations in pi sessions execute as bash `toolCall` blocks, but
+  `@gobing-ai/ts-llm-jsonl-importer@0.4.48` persists every pi bash call with `args_raw = NULL`
+  (`maybeArgsRaw` retains args only for the todo-tool allowlist), so the tool-args channel above
+  never sees those commands. The importer's declared extension point cannot fix this caller-side:
+  `fieldTransforms` are per-source and receive only the mapper's **split record** (never the raw
+  JSONL object), and `piSplit` drops `call.input` for non-allowlisted tools at split time — only a
+  one-way `args_digest` survives — while a source-level `args_raw` transform also fires on
+  `history_message` split records and its key presence makes the typed message insert throw
+  (`Typed table "history_message" has unknown columns: args_raw`; reproduced live against
+  0.4.48). The fix belongs upstream: persist pi tool-call args (or route the transform per target
+  table with the raw line in `TransformContext`); a full re-import then feeds the channel. Until
+  then, bash-driven batches recover attribution only through slash-command evidence.
 - **Validation + writes** — every candidate WBS must resolve through the task locator
   (`TaskService.findByWbs`) before persistence; links land in `history_task_session`
   (migration `0028`) with `exactness='estimated'`, idempotent under the
