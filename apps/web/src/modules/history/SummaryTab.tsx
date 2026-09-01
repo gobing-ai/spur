@@ -209,16 +209,16 @@ const SummaryDimensionBlock: React.FC<SummaryDimensionBlockProps> = memo(
                     ) : buckets.length > 0 && series.length > 0 ? (
                         <div className="flex flex-col items-center justify-center h-[220px] text-base-content/50 text-xs font-mono border border-dashed border-base-content/10 rounded-xl bg-base-100/30 text-center px-4 gap-1">
                             <span className="font-semibold text-base-content/70">
-                                No billed tokens recorded for {title.toLowerCase()} in this time range.
+                                No token or call activity recorded for {title.toLowerCase()} in this time range.
                             </span>
                             <span className="text-[11px] text-base-content/40">
-                                Tool activity is unmeasured or zero tokens. See call counts in Top Tools below, or
-                                switch to Table view.
+                                Activity is unmeasured or zero in this window. Adjust the time range filter or switch to
+                                Table view.
                             </span>
                         </div>
                     ) : (
                         <div className="flex flex-col items-center justify-center h-[220px] text-base-content/40 text-xs font-mono border border-dashed border-base-content/10 rounded-xl bg-base-100/30">
-                            <span>No {title.toLowerCase()} token activity recorded for this time range.</span>
+                            <span>No {title.toLowerCase()} activity recorded for this time range.</span>
                         </div>
                     )}
                 </div>
@@ -718,36 +718,79 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                                 <thead>
                                     <tr className="border-b border-base-content/10 text-base-content/60">
                                         <th className="py-1.5">Tool</th>
-                                        <th className="py-1.5">Share</th>
+                                        <th className="py-1.5 min-w-[120px]">Usage Share</th>
+                                        <th className="py-1.5 min-w-[120px]">Time Share</th>
+                                        <th className="py-1.5 min-w-[120px]">Token Share</th>
                                         <th className="py-1.5 text-right">Calls</th>
                                         <th className="py-1.5 text-right">Errors</th>
                                         <th className="py-1.5 text-right">Error Rate</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {validTopTools.map((t) => (
-                                        <tr key={t.id} className="border-b border-base-content/5 hover:bg-base-300/30">
-                                            <td className="py-1.5 font-bold">{t.id}</td>
-                                            <td className="py-1.5 w-28">
-                                                <SparkBar value={t.count} max={maxToolCalls} color="#3987e5" />
-                                            </td>
-                                            <td className="py-1.5 text-right tabular-nums">{fmtInt(t.count)}</td>
-                                            <td className="py-1.5 text-right tabular-nums">
-                                                {t.errors > 0 ? fmtInt(t.errors) : '0'}
-                                            </td>
-                                            <td className="py-1.5 text-right">
-                                                <span
-                                                    className={`px-1.5 py-0.5 rounded text-[10px] ${
-                                                        t.errorRate > 1
-                                                            ? 'bg-error/20 text-error font-bold'
-                                                            : 'bg-base-300 text-base-content/70'
-                                                    }`}
-                                                >
-                                                    {fmtPct(t.errorRate)}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {validTopTools.map((t) => {
+                                        const usagePct =
+                                            t.usageShare !== undefined
+                                                ? t.usageShare
+                                                : maxToolCalls > 0
+                                                  ? Math.round((t.count / maxToolCalls) * 1000) / 10
+                                                  : 0;
+                                        const timePct = t.timeShare ?? 0;
+                                        const tokenPct = t.tokenShare ?? 0;
+
+                                        return (
+                                            <tr
+                                                key={t.id}
+                                                className="border-b border-base-content/5 hover:bg-base-300/30"
+                                            >
+                                                <td className="py-1.5 font-bold">{t.id}</td>
+                                                <td className="py-1.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-16">
+                                                            <SparkBar value={usagePct} max={100} color="#3987e5" />
+                                                        </div>
+                                                        <span className="tabular-nums text-[10px] text-base-content/70">
+                                                            {fmtPct(usagePct)}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="py-1.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-16">
+                                                            <SparkBar value={timePct} max={100} color="#10b981" />
+                                                        </div>
+                                                        <span className="tabular-nums text-[10px] text-base-content/70">
+                                                            {timePct > 0 ? fmtPct(timePct) : '—'}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="py-1.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-16">
+                                                            <SparkBar value={tokenPct} max={100} color="#f59e0b" />
+                                                        </div>
+                                                        <span className="tabular-nums text-[10px] text-base-content/70">
+                                                            {tokenPct > 0 ? fmtPct(tokenPct) : '—'}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="py-1.5 text-right tabular-nums">{fmtInt(t.count)}</td>
+                                                <td className="py-1.5 text-right tabular-nums">
+                                                    {t.errors > 0 ? fmtInt(t.errors) : '0'}
+                                                </td>
+                                                <td className="py-1.5 text-right">
+                                                    <span
+                                                        className={`px-1.5 py-0.5 rounded text-[10px] ${
+                                                            t.errorRate > 1
+                                                                ? 'bg-error/20 text-error font-bold'
+                                                                : 'bg-base-300 text-base-content/70'
+                                                        }`}
+                                                    >
+                                                        {fmtPct(t.errorRate)}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

@@ -2,6 +2,7 @@ import type { HistoryInsightsResponse, HistoryKpiTrendPoint } from '@gobing-ai/s
 import type React from 'react';
 import { useState } from 'react';
 import { fmtInt, fmtMs, fmtPct, fmtTok, LineChart, RadarChart, type RadarSeries, SparkBar } from './charts';
+import { RepeatedToolCallsList } from './ToolCallDetail';
 
 export interface InsightsTabProps {
     data?: HistoryInsightsResponse['data'];
@@ -356,14 +357,15 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, 
                         <h3 className="font-bold text-base">Detected Execution Loops (Repeats ≥ 3)</h3>
                     </div>
                     <p className="text-xs text-base-content/60 mb-4">
-                        Identified consecutive identical tool invocations without intervening state changes.
+                        Identified consecutive identical tool invocations without intervening state changes. Hover or
+                        click on any invocation badge to inspect full arguments, duration, and diagnostics.
                     </p>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {loops.map((lp) => (
                             <div
                                 key={`${lp.tool}-${lp.sessionId}-${lp.fromSeq}`}
-                                className="p-4 bg-base-300/70 rounded-xl border border-base-content/10 flex flex-col justify-between gap-3"
+                                className="p-4 bg-base-300/70 rounded-xl border border-base-content/10 flex flex-col justify-between gap-3 shadow-xs"
                             >
                                 <div>
                                     <div className="flex justify-between items-center">
@@ -372,15 +374,38 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({ data, loading, error, 
                                         </span>
                                         <button
                                             type="button"
-                                            className="text-xs font-mono text-primary hover:underline"
+                                            className="text-xs font-mono text-primary hover:underline cursor-pointer"
                                             onClick={() => onSelectSession?.(lp.sessionId)}
+                                            title="Jump to session in Tool Using & Timeline"
                                         >
-                                            {lp.sessionId}
+                                            {lp.sessionId} →
                                         </button>
                                     </div>
-                                    <div className="font-mono text-xs text-base-content/80 mt-2">{lp.argsHint}</div>
+                                    <div
+                                        className="font-mono text-xs text-base-content/80 mt-2 truncate"
+                                        title={lp.argsHint}
+                                    >
+                                        {lp.argsHint ===
+                                        '74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b'
+                                            ? 'empty/unrecorded arguments'
+                                            : lp.argsHint}
+                                    </div>
                                     <div className="text-[11px] text-base-content/50 mt-1">
                                         Step sequence: #{lp.fromSeq} → #{lp.toSeq}
+                                    </div>
+
+                                    {/* Repeated Tool Invocations with Tooltips */}
+                                    <div className="mt-3 pt-2.5 border-t border-base-content/10">
+                                        <div className="text-[10px] font-mono uppercase tracking-wider text-base-content/50 mb-1.5">
+                                            Repeated Invocations (hover/click for details):
+                                        </div>
+                                        <RepeatedToolCallsList
+                                            calls={lp.repeatedCalls}
+                                            fromSeq={lp.fromSeq}
+                                            toSeq={lp.toSeq}
+                                            toolName={lp.tool}
+                                            sessionId={lp.sessionId}
+                                        />
                                     </div>
                                 </div>
                                 <div className="flex justify-between items-center text-xs font-mono pt-2 border-t border-base-content/10">

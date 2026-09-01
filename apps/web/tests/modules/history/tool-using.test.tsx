@@ -232,7 +232,8 @@ describe('ToolUsingTab component', () => {
         expect(tooltip.textContent?.toLowerCase()).toContain('bash');
         expect(tooltip.textContent).toContain('Execution Error:');
         expect(tooltip.textContent).toContain('Process failed with exit code 1: TypeError: boom');
-        expect(tooltip.textContent).toContain('"cmd": "bun test"');
+        expect(tooltip.textContent).toContain('"cmd"');
+        expect(tooltip.textContent).toContain('bun test');
         expect(tooltip.textContent).toContain('call-2');
         expect(tooltip.textContent).toContain('sess-abc-123');
     });

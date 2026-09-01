@@ -1,10 +1,6 @@
-import type {
-    HistoryToolCategory,
-    HistoryToolSequenceResponse,
-    HistoryToolStatusFilter,
-} from '@gobing-ai/spur-contracts';
+import type { HistoryToolSequenceResponse, HistoryToolStatusFilter } from '@gobing-ai/spur-contracts';
 import type React from 'react';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 
 export interface TimelineRosterEntry {
     id: string;
@@ -32,426 +28,21 @@ export interface ToolUsingTabProps {
     onSearchChange?: (search: string) => void;
 }
 
-export const CATEGORY_COLOR: Record<HistoryToolCategory, string> = {
-    read: '#10b981',
-    write: '#eab308',
-    bash: '#3b82f6',
-    search: '#a855f7',
-    mcp: '#6366f1',
-    other: '#64748b',
-};
+export {
+    AgentBadge,
+    CATEGORY_BG_CLASS,
+    CATEGORY_COLOR,
+    formatFilePath,
+    formatTokens,
+    formatToolDisplayValue,
+    getToolCategory,
+    ToolCallTag,
+    ToolItemTagTooltip,
+} from './ToolCallDetail';
 
-/**
- * Token shares arrive unrounded so they sum back to their message totals exactly (0724 R2).
- * Rounding is presentation-only — never fold it back into the DTO.
- */
-const fmtTokens = (value: number): string => Math.round(value).toLocaleString();
+import { AgentBadge, CATEGORY_COLOR, formatTokens, formatToolDisplayValue, ToolItemTagTooltip } from './ToolCallDetail';
 
-/**
- * Format a file path into a concise, readable relative or base path.
- */
-function formatFilePath(filePath: string): string {
-    if (!filePath) return '';
-    const clean = filePath.replace(/^\/?(Users|home)\/[^/]+\/[^/]+\/[^/]+\//, '');
-    return clean || filePath;
-}
-
-/**
- * Extract a human-readable primary value from a tool call for at-a-glance comprehension.
- */
-export function formatToolDisplayValue(item: {
-    toolName: string;
-    category: HistoryToolCategory;
-    argsRaw: string | null;
-    argsDigest: string | null;
-}): string {
-    const raw = item.argsRaw;
-    const digest = item.argsDigest;
-
-    if (raw) {
-        try {
-            const parsed = JSON.parse(raw);
-            if (parsed && typeof parsed === 'object') {
-                // 1. Subagent / Agent coordination tools
-                if (parsed.Subagents && Array.isArray(parsed.Subagents) && parsed.Subagents.length > 0) {
-                    const sub = parsed.Subagents[0];
-                    const role = sub.Role || sub.TypeName || 'subagent';
-                    const prompt = sub.Prompt ? ` — ${String(sub.Prompt).replace(/\s+/g, ' ').slice(0, 80)}` : '';
-                    const count = parsed.Subagents.length > 1 ? ` (+${parsed.Subagents.length - 1} more)` : '';
-                    return `${role}${count}${prompt}`;
-                }
-                if (parsed.Recipient || parsed.recipient) {
-                    const recipient = parsed.Recipient || parsed.recipient;
-                    const msg = parsed.Message || parsed.message || '';
-                    const msgSnippet = msg ? `: ${String(msg).replace(/\s+/g, ' ').slice(0, 80)}` : '';
-                    return `→ ${recipient}${msgSnippet}`;
-                }
-                if (parsed.Role || parsed.TypeName || parsed.agent_name || parsed.agent) {
-                    const agent = parsed.Role || parsed.TypeName || parsed.agent_name || parsed.agent;
-                    const prompt = parsed.Prompt || parsed.prompt || parsed.description || parsed.instruction || '';
-                    return prompt ? `${agent} — ${String(prompt).replace(/\s+/g, ' ').slice(0, 80)}` : String(agent);
-                }
-
-                // 2. Skill / SlashCommand tools
-                const skillName =
-                    parsed.skill ||
-                    parsed.skill_name ||
-                    parsed.skillName ||
-                    (item.toolName.toLowerCase().includes('skill') && (parsed.name || parsed.skill)) ||
-                    parsed.command_name ||
-                    parsed.commandName;
-                if (skillName && typeof skillName === 'string') {
-                    const argsVal = parsed.args || parsed.prompt || parsed.input || parsed.parameters || '';
-                    const argsSnippet = argsVal ? ` — ${String(argsVal).replace(/\s+/g, ' ').slice(0, 80)}` : '';
-                    return `${skillName}${argsSnippet}`;
-                }
-                if (
-                    typeof parsed.command === 'string' &&
-                    (parsed.command.startsWith('/') || parsed.command.startsWith('sp:'))
-                ) {
-                    const argsVal = parsed.args || '';
-                    const argsSnippet = argsVal ? ` — ${String(argsVal).replace(/\s+/g, ' ').slice(0, 80)}` : '';
-                    return `${parsed.command}${argsSnippet}`;
-                }
-
-                // 3. Web / URL fetch tools
-                const urlVal = parsed.Url || parsed.url;
-                if (urlVal && typeof urlVal === 'string' && /^https?:\/\//i.test(urlVal)) {
-                    return urlVal;
-                }
-
-                // 4. Read / View / File write tools
-                const pathVal =
-                    parsed.AbsolutePath ||
-                    parsed.TargetFile ||
-                    parsed.targetFile ||
-                    parsed.path ||
-                    parsed.file ||
-                    parsed.filePath ||
-                    parsed.file_path ||
-                    parsed.filename ||
-                    parsed.SearchDirectory ||
-                    parsed.searchDirectory ||
-                    parsed.uri ||
-                    parsed.Uri;
-
-                if (pathVal && typeof pathVal === 'string') {
-                    const formattedPath = formatFilePath(pathVal);
-                    if (parsed.StartLine !== undefined && parsed.EndLine !== undefined) {
-                        return `${formattedPath} (L${parsed.StartLine}-${parsed.EndLine})`;
-                    }
-                    if (parsed.StartLine !== undefined) {
-                        return `${formattedPath} (L${parsed.StartLine}+)`;
-                    }
-                    if (parsed.Instruction || parsed.Description) {
-                        const instr = String(parsed.Instruction || parsed.Description)
-                            .replace(/\s+/g, ' ')
-                            .slice(0, 60);
-                        return `${formattedPath} — ${instr}`;
-                    }
-                    return formattedPath;
-                }
-
-                // 5. Search / Grep / Find tools
-                const queryVal = parsed.Query || parsed.query || parsed.Pattern || parsed.pattern || parsed.search_term;
-                if (queryVal && typeof queryVal === 'string') {
-                    const searchPath = parsed.SearchPath || parsed.searchPath || parsed.SearchDirectory || parsed.path;
-                    const pathSuffix = searchPath ? ` in ${formatFilePath(String(searchPath))}` : '';
-                    return `"${queryVal}"${pathSuffix}`;
-                }
-
-                // 6. Bash / Command tools
-                const cmdVal = parsed.CommandLine || parsed.command || parsed.cmd || parsed.script;
-                if (cmdVal && typeof cmdVal === 'string') {
-                    return cmdVal;
-                }
-
-                // 7. MCP tools
-                if (parsed.ToolName || parsed.toolName) {
-                    const mcpTool = parsed.ToolName || parsed.toolName;
-                    const server =
-                        parsed.ServerName || parsed.serverName ? `${parsed.ServerName || parsed.serverName}: ` : '';
-                    return `${server}${mcpTool}`;
-                }
-
-                // 6. Generic object keys: find first meaningful string
-                for (const key of Object.keys(parsed)) {
-                    const val = parsed[key];
-                    if (
-                        typeof val === 'string' &&
-                        val.length > 0 &&
-                        !key.toLowerCase().includes('token') &&
-                        !key.toLowerCase().includes('action') &&
-                        !key.toLowerCase().includes('summary')
-                    ) {
-                        if (/^[a-f0-9]{32,}$/i.test(val)) {
-                            return `${key}: ${val.slice(0, 8)}…${val.slice(-6)}`;
-                        }
-                        return `${key}: ${val.replace(/\s+/g, ' ').slice(0, 80)}`;
-                    }
-                }
-            }
-        } catch {
-            if (/^[a-f0-9]{32,}$/i.test(raw.trim())) {
-                return `${raw.trim().slice(0, 8)}…${raw.trim().slice(-6)}`;
-            }
-            return raw;
-        }
-    }
-
-    if (digest) {
-        if (/^[a-f0-9]{32,}$/i.test(digest.trim())) {
-            return `digest: ${digest.trim().slice(0, 8)}…${digest.trim().slice(-6)}`;
-        }
-        return digest;
-    }
-
-    return '—';
-}
-
-interface ToolItemTagTooltipProps {
-    item: HistoryToolSequenceResponse['data']['items'][number];
-    categoryColor: string;
-}
-
-const ToolItemTagTooltip: React.FC<ToolItemTagTooltipProps> = ({ item, categoryColor }) => {
-    const [open, setOpen] = useState(false);
-    const [pinned, setPinned] = useState(false);
-    const [copied, setCopied] = useState(false);
-    const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    const formattedArgs = useMemo(() => {
-        if (!item.argsRaw) return null;
-        try {
-            const parsed = JSON.parse(item.argsRaw);
-            return JSON.stringify(parsed, null, 2);
-        } catch {
-            return item.argsRaw;
-        }
-    }, [item.argsRaw]);
-
-    const handleCopyArgs = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!formattedArgs) return;
-        try {
-            await navigator.clipboard.writeText(formattedArgs);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch {
-            // Clipboard fallback
-        }
-    };
-
-    const clearLeaveTimer = () => {
-        if (leaveTimerRef.current) {
-            clearTimeout(leaveTimerRef.current);
-            leaveTimerRef.current = null;
-        }
-    };
-
-    const handleMouseEnter = () => {
-        clearLeaveTimer();
-        setOpen(true);
-    };
-
-    const handleMouseLeave = () => {
-        if (pinned) return;
-        clearLeaveTimer();
-        leaveTimerRef.current = setTimeout(() => {
-            setOpen(false);
-        }, 150);
-    };
-
-    const handleTagClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        setPinned((prev) => !prev);
-        setOpen(true);
-    };
-
-    const isVisible = open || pinned;
-    const isError = item.status === 'error';
-
-    return (
-        <div className="relative inline-flex items-center">
-            <button
-                type="button"
-                aria-describedby={`tool-tooltip-${item.seq}`}
-                aria-expanded={isVisible}
-                className="px-2 py-0.5 rounded-md text-[11px] font-mono font-bold text-white shrink-0 tracking-wide cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary shadow-xs transition-opacity hover:opacity-90"
-                style={{ backgroundColor: categoryColor }}
-                onClick={handleTagClick}
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
-                onFocus={() => {
-                    clearLeaveTimer();
-                    setOpen(true);
-                }}
-                onBlur={() => {
-                    if (!pinned) setOpen(false);
-                }}
-                onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                        setPinned(false);
-                        setOpen(false);
-                    }
-                }}
-                data-testid={`tool-tag-${item.seq}`}
-            >
-                {item.toolName}
-            </button>
-
-            {isVisible && (
-                <div
-                    id={`tool-tooltip-${item.seq}`}
-                    role="tooltip"
-                    data-testid={`tool-tooltip-${item.seq}`}
-                    data-inspector-tooltip="true"
-                    className="absolute left-0 top-full mt-2 z-50 w-[880px] max-w-[95vw] bg-base-300 border border-base-content/20 shadow-2xl rounded-xl p-4 text-xs font-mono text-base-content backdrop-blur-md flex flex-col gap-3 pointer-events-auto select-text cursor-default"
-                    onMouseEnter={() => {
-                        clearLeaveTimer();
-                        setOpen(true);
-                    }}
-                    onMouseLeave={handleMouseLeave}
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Escape') {
-                            setPinned(false);
-                            setOpen(false);
-                        }
-                        e.stopPropagation();
-                    }}
-                >
-                    {/* Header: Exact tool name tag without duplicate text after it */}
-                    <div className="flex items-center justify-between border-b border-base-content/10 pb-2.5">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                            <span
-                                className="px-2.5 py-0.5 rounded-md text-xs font-bold text-white shrink-0 tracking-wide"
-                                style={{ backgroundColor: categoryColor }}
-                            >
-                                {item.toolName}
-                            </span>
-                            <span className="text-xs text-base-content/50 font-bold">#{item.seq}</span>
-                            <span className="text-[11px] text-base-content/60 uppercase tracking-wider">
-                                ({item.category})
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                            <span
-                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                    isError ? 'bg-error/20 text-error' : 'bg-success/20 text-success'
-                                }`}
-                            >
-                                {item.status}
-                            </span>
-                            {pinned && (
-                                <button
-                                    type="button"
-                                    className="text-base-content/50 hover:text-base-content text-xs p-1 leading-none rounded hover:bg-base-content/10 cursor-pointer"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setPinned(false);
-                                        setOpen(false);
-                                    }}
-                                    title="Close tooltip"
-                                >
-                                    ✕
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Execution Error Box */}
-                    {item.errorText && (
-                        <div className="bg-error/10 text-error border border-error/20 rounded-lg p-2.5 text-xs">
-                            <span className="font-bold block mb-1">Execution Error:</span>
-                            <pre className="font-mono text-[11px] whitespace-pre-wrap max-h-36 overflow-y-auto">
-                                {item.errorText}
-                            </pre>
-                        </div>
-                    )}
-
-                    {/* Arguments (raw) */}
-                    <div className="flex flex-col gap-1">
-                        <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-semibold text-base-content/70">Arguments (raw)</span>
-                            {formattedArgs && (
-                                <button
-                                    type="button"
-                                    className="px-2 py-0.5 rounded text-[10px] font-mono text-base-content/70 hover:text-base-content hover:bg-base-content/10 transition-colors cursor-pointer border border-base-content/10"
-                                    onClick={handleCopyArgs}
-                                >
-                                    {copied ? '✓ Copied' : 'Copy'}
-                                </button>
-                            )}
-                        </div>
-                        {formattedArgs ? (
-                            <pre className="bg-base-100 p-3 rounded-lg text-[11px] font-mono overflow-x-auto max-h-60 border border-base-content/10 whitespace-pre-wrap break-all text-base-content/90">
-                                {formattedArgs}
-                            </pre>
-                        ) : (
-                            <div className="p-2.5 bg-base-100/50 rounded-lg text-xs text-base-content/50 italic border border-base-content/10">
-                                Raw payload omitted at import; digest available: {item.argsDigest ?? '—'}
-                            </div>
-                        )}
-                        {item.argsDigest && item.argsDigest !== item.argsRaw && (
-                            <div className="text-[10px] text-base-content/50 truncate mt-0.5">
-                                <span className="font-semibold">Digest: </span>
-                                {item.argsDigest}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Metadata Diagnostics Grid - 3-4 columns for double width */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs font-mono bg-base-200/70 p-2.5 rounded-lg border border-base-content/10">
-                        <div>
-                            <span className="text-base-content/50 block text-[10px]">DURATION</span>
-                            <span className="text-[11px]">
-                                {item.durationMs !== null
-                                    ? `${item.durationMs} ms (${item.durationSource})`
-                                    : `— (${item.durationSource})`}
-                            </span>
-                        </div>
-                        <div>
-                            <span className="text-base-content/50 block text-[10px]">TIMESTAMP</span>
-                            <span className="text-[11px] truncate block">{item.ts ?? '—'}</span>
-                        </div>
-                        <div>
-                            <span className="text-base-content/50 block text-[10px]">SOURCE / MODEL</span>
-                            <span
-                                className="text-[11px] truncate block"
-                                title={`${item.source} / ${item.model ?? '—'}`}
-                            >
-                                {item.source} / {item.model ?? '—'}
-                            </span>
-                        </div>
-                        <div>
-                            <span className="text-base-content/50 block text-[10px]">SESSION ID</span>
-                            <span className="text-[11px] truncate block" title={item.sessionId}>
-                                {item.sessionId}
-                            </span>
-                        </div>
-                        {item.callId && (
-                            <div className="col-span-2 md:col-span-4">
-                                <span className="text-base-content/50 block text-[10px]">CALL ID</span>
-                                <span className="text-[11px] truncate block" title={item.callId}>
-                                    {item.callId}
-                                </span>
-                            </div>
-                        )}
-                        <div className="col-span-2 md:col-span-4 pt-1 border-t border-base-content/10">
-                            <span className="text-base-content/50 block text-[10px]">TOKEN LOAD (SHARE)</span>
-                            <span className="text-[11px]">
-                                Billed: {fmtTokens(item.tokens.billedTokens)} (Fresh:{' '}
-                                {fmtTokens(item.tokens.freshInputTokens)}, Cache:{' '}
-                                {fmtTokens(item.tokens.cacheReadTokens)}, Output: {fmtTokens(item.tokens.outputTokens)})
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
+const fmtTokens = formatTokens;
 
 export const ToolUsingTab: React.FC<ToolUsingTabProps> = ({
     data,
@@ -708,8 +299,18 @@ export const ToolUsingTab: React.FC<ToolUsingTabProps> = ({
                                 className="w-full text-left group p-3 rounded-xl border border-base-content/10 hover:border-base-content/30 hover:bg-base-200/50 bg-base-100 transition-all flex items-center justify-between gap-3 relative"
                                 data-testid={`tool-item-${item.seq}`}
                             >
-                                {/* Left section: Sequence number, Tool Name Tag with Tooltip, Raw Arguments */}
-                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                {/* Left section: Agent Icon, Sequence number, Tool Name Tag with Tooltip, Raw Arguments */}
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                    <AgentBadge
+                                        agentId={item.source}
+                                        model={item.model}
+                                        timestamp={item.ts}
+                                        freshInputTokens={item.tokens.freshInputTokens}
+                                        cacheReadTokens={item.tokens.cacheReadTokens}
+                                        outputTokens={item.tokens.outputTokens}
+                                        sessionId={item.sessionId}
+                                    />
+
                                     <span className="text-xs font-mono text-base-content/40 font-bold min-w-[28px]">
                                         #{item.seq}
                                     </span>

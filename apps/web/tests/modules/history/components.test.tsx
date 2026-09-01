@@ -445,39 +445,35 @@ describe('History Board components', () => {
         const agentTooltip = view.getByTestId('agent-tt-agy---session-1---0-1');
         expect(agentTooltip.getAttribute('role')).toBe('tooltip');
         expect(agentTooltip.className).toContain('z-50');
-        expect(agentTooltip.textContent).toContain('agy');
-        expect(agentTooltip.textContent).toContain('gemini-3-pro');
-        expect(agentTooltip.textContent).toContain('Timestamp:');
         expect(agentTooltip.className).toContain('hidden');
         fireEvent.focus(agentBadge);
         expect(agentTooltip.className).not.toContain('hidden');
+        expect(agentTooltip.textContent).toContain('agy');
+        expect(agentTooltip.textContent).toContain('gemini-3-pro');
+        expect(agentTooltip.textContent).toContain('Timestamp:');
+        expect(agentTooltip.textContent).toContain('Fresh input:');
+        expect(agentTooltip.textContent).toContain('55.0K');
+        expect(agentTooltip.textContent).toContain('Cache read:');
+        expect(agentTooltip.textContent).toContain('1.0K');
+        expect(agentTooltip.textContent).toContain('5.0K');
+        expect(agentTooltip.textContent).toContain('61.0K');
         fireEvent.keyDown(agentBadge, { key: 'Escape' });
         expect(agentTooltip.className).toContain('hidden');
-        fireEvent.mouseEnter(agentBadge);
-        expect(agentTooltip.className).not.toContain('hidden');
-        fireEvent.mouseLeave(agentBadge);
-        expect(agentTooltip.className).toContain('hidden');
 
-        // Operation card has tool tag with token breakdown tooltip elevated at z-50
+        // Operation card has tool tag with rich inspection tooltip elevated at z-50
         const toolBadge = view.getByTestId('timeline-tool-badge-tool-tt-agy---session-1---0-1');
         expect(toolBadge.textContent).toBe('Bash');
         const toolTooltip = view.getByTestId('tool-tt-agy---session-1---0-1');
         expect(toolTooltip.getAttribute('role')).toBe('tooltip');
         expect(toolTooltip.className).toContain('z-50');
-        expect(toolTooltip.textContent).toContain('55.0K');
-        expect(toolTooltip.textContent).toContain('1.0K');
-        expect(toolTooltip.textContent).toContain('5.0K');
-        expect(toolTooltip.textContent).toContain('61.0K');
-        expect(toolTooltip.textContent).toContain('Fresh input:');
-        expect(toolTooltip.textContent).toContain('Cache read:');
-        expect(toolTooltip.className).toContain('hidden');
-        fireEvent.focus(toolBadge);
-        expect(toolTooltip.className).not.toContain('hidden');
-        fireEvent.blur(toolBadge);
         expect(toolTooltip.className).toContain('hidden');
         fireEvent.mouseEnter(toolBadge);
         expect(toolTooltip.className).not.toContain('hidden');
-        fireEvent.mouseLeave(toolBadge);
+        expect(toolTooltip.textContent).toContain('Bash');
+        expect(toolTooltip.textContent).toContain('DURATION');
+        expect(toolTooltip.textContent).toContain('TIMESTAMP');
+        expect(toolTooltip.textContent).toContain('Arguments (raw)');
+        fireEvent.keyDown(toolBadge, { key: 'Escape' });
         expect(toolTooltip.className).toContain('hidden');
 
         // Right-aligned EXIT_CODE badge
@@ -587,7 +583,7 @@ describe('History Board components', () => {
         expect(view.getAllByText('assistant response body').length).toBeGreaterThanOrEqual(1);
 
         const tool = view.getByTestId('timeline-op-event-agy:::session-1:::0-1');
-        expect(tool.textContent?.match(/Read/g)).toHaveLength(1);
+        expect(tool.querySelector('[data-testid^="timeline-tool-badge-"]')?.textContent).toBe('Read');
         expect(tool.textContent).toContain('src/file.ts');
         const toolDisclosure = tool.querySelector('button[aria-label="Expand operation payload"]');
         if (!toolDisclosure) throw new Error('missing tool disclosure');
@@ -898,10 +894,10 @@ describe('History Board components', () => {
         const view = render(<TimelineTab data={enrichedTimeline} />);
 
         // As-is lowercase tool tags
-        expect(view.getByText('glob')).toBeDefined();
-        expect(view.getByText('grep')).toBeDefined();
-        expect(view.getByText('edit')).toBeDefined();
-        expect(view.getByText('run')).toBeDefined();
+        expect(view.getAllByText('glob').length).toBeGreaterThanOrEqual(1);
+        expect(view.getAllByText('grep').length).toBeGreaterThanOrEqual(1);
+        expect(view.getAllByText('edit').length).toBeGreaterThanOrEqual(1);
+        expect(view.getAllByText('run').length).toBeGreaterThanOrEqual(1);
 
         // Global expansion targets only the three non-empty operation payloads.
         fireEvent.click(view.getByRole('button', { name: 'Expand all' }));
@@ -1023,6 +1019,101 @@ describe('History Board components', () => {
         fireEvent.click(view.getByText(/Mean Speed \(ms\)/));
         const cells = view.container.querySelectorAll('tbody tr td:nth-child(2)');
         expect(cells[0]?.textContent).toBe('4,000'); // desc default for numeric
+    });
+
+    test('InsightsTab renders loop findings with repeated tool invocation tags and interactive tooltips', () => {
+        let selectedSession: string | undefined;
+        const insightsWithLoops: HistoryInsightsResponse['data'] = {
+            ...insights,
+            loops: [
+                {
+                    tool: 'grep_search',
+                    argsHint: 'query:find_user',
+                    sessionId: 'sess-loop-001',
+                    repeats: 4,
+                    fromSeq: 10,
+                    toSeq: 13,
+                    wastedTokens: 1000,
+                    repeatedCalls: [
+                        {
+                            seq: 10,
+                            toolSeq: 10,
+                            ts: '2026-09-01T12:00:00.000Z',
+                            toolName: 'grep_search',
+                            category: 'search',
+                            status: 'ok',
+                            durationMs: 45,
+                            durationSource: 'measured',
+                            resultBytes: 120,
+                            argsRaw: JSON.stringify({ Query: 'find_user' }),
+                            argsDigest: 'query:find_user',
+                            errorText: null,
+                            callId: 'call-10',
+                            messageHash: 'msg-10',
+                            sessionId: 'sess-loop-001',
+                            source: 'claude',
+                            model: 'claude-sonnet',
+                            tokens: {
+                                billedTokens: 250,
+                                freshInputTokens: 200,
+                                cacheReadTokens: 0,
+                                outputTokens: 50,
+                                cacheSavedTokens: 0,
+                            },
+                        },
+                        {
+                            seq: 11,
+                            toolSeq: 11,
+                            ts: '2026-09-01T12:00:05.000Z',
+                            toolName: 'grep_search',
+                            category: 'search',
+                            status: 'error',
+                            durationMs: 50,
+                            durationSource: 'measured',
+                            resultBytes: null,
+                            argsRaw: JSON.stringify({ Query: 'find_user' }),
+                            argsDigest: 'query:find_user',
+                            errorText: 'Pattern syntax error',
+                            callId: 'call-11',
+                            messageHash: 'msg-11',
+                            sessionId: 'sess-loop-001',
+                            source: 'claude',
+                            model: 'claude-sonnet',
+                            tokens: {
+                                billedTokens: 250,
+                                freshInputTokens: 200,
+                                cacheReadTokens: 0,
+                                outputTokens: 50,
+                                cacheSavedTokens: 0,
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+
+        const view = render(<InsightsTab data={insightsWithLoops} onSelectSession={(id) => (selectedSession = id)} />);
+
+        expect(view.getByText('Detected Execution Loops (Repeats ≥ 3)')).toBeDefined();
+        expect(view.getByText('grep_search × 4 repeats')).toBeDefined();
+
+        // Clicking session ID triggers onSelectSession
+        const sessionBtn = view.getByText('sess-loop-001 →');
+        fireEvent.click(sessionBtn);
+        expect(selectedSession).toBe('sess-loop-001');
+
+        // Repeated invocation tags are rendered
+        const tag10 = view.getByTestId('tool-tag-10');
+        expect(tag10).toBeDefined();
+        expect(tag10.textContent).toBe('#10');
+
+        // Clicking tag opens tooltip
+        fireEvent.click(tag10);
+        expect(view.getByTestId('tool-tooltip-10')).toBeDefined();
+        expect(view.getAllByText('sess-loop-001').length).toBeGreaterThanOrEqual(1);
+
+        // Close tooltip with Escape
+        fireEvent.keyDown(tag10, { key: 'Escape' });
     });
 
     test('Heatmap calendar carries weekday chrome and a screen-reader token digest', () => {

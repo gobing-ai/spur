@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { AgentIcon } from './AgentIcon';
 import { fmtDur, fmtInt, fmtMs, fmtTok } from './charts';
 import TimelineScrubber from './TimelineScrubber';
+import { ToolCallTag } from './ToolCallDetail';
 
 export interface TimelineTabProps {
     data?: HistoryTimelineResponse['data'];
@@ -195,19 +196,35 @@ const UserTokenBadge: React.FC<{
     );
 };
 
-/** Agent icon badge with hover/focus metadata tooltip. */
+/**
+ * Merged coding agent icon with unified metadata + token breakdown tooltip.
+ */
 const AgentBadge: React.FC<{
     agentId: string;
     model: string;
     timestamp: string | null;
     tooltipId: string;
-}> = ({ agentId, model, timestamp, tooltipId }) => {
+    freshInputTokens?: number;
+    cacheReadTokens?: number;
+    outputTokens?: number;
+    sessionId?: string;
+}> = ({
+    agentId,
+    model,
+    timestamp,
+    tooltipId,
+    freshInputTokens = 0,
+    cacheReadTokens = 0,
+    outputTokens = 0,
+    sessionId,
+}) => {
     const [open, setOpen] = useState(false);
+    const total = tokenLoad(freshInputTokens, cacheReadTokens, outputTokens);
     return (
         <div className="relative inline-flex items-center z-20">
             <button
                 type="button"
-                aria-label={`Show ${agentId} metadata`}
+                aria-label={`Show ${agentId} metadata and token breakdown`}
                 aria-describedby={tooltipId}
                 data-testid={`timeline-agent-badge-${tooltipId}`}
                 className="inline-flex items-center justify-center p-1 rounded hover:bg-base-content/10 text-base-content focus:outline-none focus-visible:ring-1 focus-visible:ring-primary transition-colors cursor-pointer"
@@ -225,78 +242,41 @@ const AgentBadge: React.FC<{
                 id={tooltipId}
                 role="tooltip"
                 data-testid={tooltipId}
-                className={`absolute left-0 top-full z-50 mt-1.5 w-56 p-2 rounded-lg bg-base-300 border border-base-content/20 shadow-2xl text-[11px] font-mono leading-relaxed pointer-events-none ${
+                className={`absolute left-0 top-full z-50 mt-1.5 w-60 p-2.5 rounded-xl bg-base-300 border border-base-content/20 shadow-2xl text-[11px] font-mono leading-relaxed pointer-events-none ${
                     open ? 'block' : 'hidden'
                 }`}
             >
-                <div className="font-bold text-base-content mb-1 flex items-center gap-1.5">
+                <div className="font-bold text-base-content mb-1.5 flex items-center gap-1.5 border-b border-base-content/10 pb-1">
                     <AgentIcon id={agentId} />
-                    <span>{agentId}</span>
+                    <span className="uppercase">{agentId}</span>
+                    <span className="text-base-content/50 font-normal truncate">({model})</span>
                 </div>
-                <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-base-content/80">
-                    <span className="text-base-content/60">Model:</span>
-                    <span className="truncate">{model}</span>
+                <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-base-content/80 text-[10.5px]">
                     <span className="text-base-content/60">Timestamp:</span>
                     <span className="truncate">{fmtUtcClock(timestamp)}</span>
+                    {sessionId && (
+                        <>
+                            <span className="text-base-content/60">Session:</span>
+                            <span className="truncate font-bold text-primary">{sessionId}</span>
+                        </>
+                    )}
                 </div>
-            </div>
-        </div>
-    );
-};
-
-/** Tool name tag with hover/focus token breakdown tooltip. */
-const ToolTokenBadge: React.FC<{
-    title: string;
-    freshInputTokens: number;
-    cacheReadTokens: number;
-    outputTokens: number;
-    color: string;
-    tooltipId: string;
-}> = ({ title, freshInputTokens, cacheReadTokens, outputTokens, color, tooltipId }) => {
-    const [open, setOpen] = useState(false);
-    const total = tokenLoad(freshInputTokens, cacheReadTokens, outputTokens);
-    return (
-        <div className="relative inline-flex items-center z-20">
-            <button
-                type="button"
-                aria-describedby={tooltipId}
-                data-testid={`timeline-tool-badge-${tooltipId}`}
-                className="px-1.5 py-0.5 rounded text-[10.5px] font-mono font-medium truncate max-w-[140px] sm:max-w-[200px] border focus:outline-none focus-visible:ring-1 focus-visible:ring-primary transition-colors cursor-pointer"
-                style={{
-                    color: color,
-                    backgroundColor: `${color}18`,
-                    borderColor: `${color}40`,
-                }}
-                onMouseEnter={() => setOpen(true)}
-                onMouseLeave={() => setOpen(false)}
-                onFocus={() => setOpen(true)}
-                onBlur={() => setOpen(false)}
-                onKeyDown={(e) => {
-                    if (e.key === 'Escape') setOpen(false);
-                }}
-            >
-                {title}
-            </button>
-            <div
-                id={tooltipId}
-                role="tooltip"
-                data-testid={tooltipId}
-                className={`absolute left-0 top-full z-50 mt-1.5 w-52 p-2 rounded-lg bg-base-300 border border-base-content/20 shadow-2xl text-[11px] font-mono leading-relaxed pointer-events-none ${
-                    open ? 'block' : 'hidden'
-                }`}
-            >
-                <div className="font-bold text-base-content mb-1">Token Breakdown</div>
-                <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-base-content/80">
-                    <span className="text-base-content/60">📥 Fresh input:</span>
-                    <span>{fmtTok(freshInputTokens)}</span>
-                    <span className="text-base-content/60">💾 Cache read:</span>
-                    <span className="text-cyan-400">{fmtTok(cacheReadTokens)}</span>
-                    <span className="text-base-content/60">📤 Output:</span>
-                    <span>{fmtTok(outputTokens)}</span>
-                    <span className="text-base-content/60 border-t border-base-content/10 pt-0.5">⚡ Total:</span>
-                    <span className="font-bold border-t border-base-content/10 pt-0.5 text-primary">
-                        {fmtTok(total)}
-                    </span>
+                <div className="mt-1.5 pt-1.5 border-t border-base-content/10">
+                    <div className="font-bold text-base-content/70 text-[10px] uppercase tracking-wider mb-0.5">
+                        Token Breakdown
+                    </div>
+                    <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-base-content/80 text-[10.5px]">
+                        <span className="text-base-content/60">📥 Fresh input:</span>
+                        <span>{fmtTok(freshInputTokens)}</span>
+                        <span className="text-base-content/60">💾 Cache read:</span>
+                        <span className="text-cyan-400">{fmtTok(cacheReadTokens)}</span>
+                        <span className="text-base-content/60">📤 Output:</span>
+                        <span>{fmtTok(outputTokens)}</span>
+                        <span className="text-base-content/60 border-t border-base-content/10 pt-0.5">⚡ Total:</span>
+                        <span className="font-bold border-t border-base-content/10 pt-0.5 text-primary">
+                            {fmtTok(total)}
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -903,6 +883,10 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                                 model={ev.model || block.model}
                                                                 timestamp={block.timestamp}
                                                                 tooltipId={agentTooltipId}
+                                                                freshInputTokens={ev.freshInputTokens}
+                                                                cacheReadTokens={ev.cacheReadTokens}
+                                                                outputTokens={ev.outputTokens}
+                                                                sessionId={block.sessionId}
                                                             />
                                                             <span className="font-mono text-xs text-base-content/60 truncate">
                                                                 {ev.model}
@@ -963,15 +947,45 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                                 model={ev.model || block.model}
                                                                 timestamp={block.timestamp}
                                                                 tooltipId={agentTooltipId}
-                                                            />
-
-                                                            <ToolTokenBadge
-                                                                title={presentation.label}
                                                                 freshInputTokens={ev.freshInputTokens}
                                                                 cacheReadTokens={ev.cacheReadTokens}
                                                                 outputTokens={ev.outputTokens}
-                                                                color={presentation.color}
+                                                                sessionId={block.sessionId}
+                                                            />
+
+                                                            <ToolCallTag
+                                                                item={{
+                                                                    toolName: presentation.label,
+                                                                    seq: ev.seq,
+                                                                    status:
+                                                                        ev.exitCode === 0
+                                                                            ? 'ok'
+                                                                            : ev.exitCode !== null
+                                                                              ? 'error'
+                                                                              : 'ok',
+                                                                    durationMs: ev.durationMs,
+                                                                    durationSource: ev.durationSource,
+                                                                    tokens: {
+                                                                        billedTokens: ev.tokens,
+                                                                        freshInputTokens: ev.freshInputTokens,
+                                                                        cacheReadTokens: ev.cacheReadTokens,
+                                                                        outputTokens: ev.outputTokens,
+                                                                        cacheSavedTokens: 0,
+                                                                    },
+                                                                    argsRaw: ev.payload,
+                                                                    sessionId: block.sessionId ?? activeSessionId,
+                                                                    source: ev.agent || block.source,
+                                                                    model: ev.model || block.model,
+                                                                    ts: block.timestamp,
+                                                                    errorText:
+                                                                        ev.exitCode !== null && ev.exitCode !== 0
+                                                                            ? ev.payload || `Exit code ${ev.exitCode}`
+                                                                            : null,
+                                                                }}
+                                                                categoryColor={presentation.color}
+                                                                testId={`timeline-tool-badge-${toolTooltipId}`}
                                                                 tooltipId={toolTooltipId}
+                                                                size="xs"
                                                             />
 
                                                             {ev.title && ev.title.trim().length > 0 ? (
