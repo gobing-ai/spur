@@ -374,13 +374,15 @@ function previousWindowSelector(sel: ArtifactSelector): ArtifactSelector | null 
 
 /** Project skill-dimension buckets into the wire skillTimeSeries shape. */
 function projectSkillTimeSeries(buckets: BucketedTokenRow[]): HistoryTimeSeriesPoint[] {
+    const totalTokens = buckets.reduce((sum, row) => sum + (row.freshInputTokens ?? 0) + (row.outputTokens ?? 0), 0);
+    const useCalls = totalTokens === 0;
     const byBucket = new Map<string, { cacheRead: number; billed: number; series: Record<string, number> }>();
     for (const row of buckets) {
         const point = byBucket.get(row.bucketStart) ?? { cacheRead: 0, billed: 0, series: {} };
-        const billed = (row.freshInputTokens ?? 0) + (row.outputTokens ?? 0);
-        point.billed += billed;
+        const val = useCalls ? (row.calls ?? 0) : (row.freshInputTokens ?? 0) + (row.outputTokens ?? 0);
+        point.billed += val;
         point.cacheRead += row.cacheReadTokens ?? 0;
-        point.series[row.key] = (point.series[row.key] ?? 0) + billed;
+        point.series[row.key] = (point.series[row.key] ?? 0) + val;
         byBucket.set(row.bucketStart, point);
     }
     return Array.from(byBucket.entries())
