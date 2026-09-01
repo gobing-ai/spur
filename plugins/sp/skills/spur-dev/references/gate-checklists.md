@@ -52,7 +52,7 @@ Entered before `spur task batch-create --file <json>` (idea-pipeline `batch-crea
 decomposition gate `/sp:dev-plan` also routes through since D5-K).
 
 - [ ] The batch JSON is a bare array (not an object with a `tasks` key).
-- [ ] Each entry validates locally against `apps/cli/schemas/task-batch.schema.json` (`additionalProperties: false` — no unknown keys).
+- [ ] Each entry validates locally against `task-batch.schema.json` (`additionalProperties: false` — no unknown keys).
 - [ ] Each entry has a non-empty `name` (required).
 - [ ] `feature_id` matches an existing feature (or is intentionally deferred with operator awareness).
 - [ ] `parent_wbs` is set when the task is a child of a decomposition parent.

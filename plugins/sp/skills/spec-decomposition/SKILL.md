@@ -57,7 +57,7 @@ granularity knobs (min/target/force-split hours), and parent/umbrella-task conve
 spur task batch-create --file decomposition.json   # bare JSON array; atomic, all-or-nothing
 ```
 
-Validate locally against `apps/cli/schemas/task-batch.schema.json` (runtime SSOT: the Zod
+Validate locally against `task-batch.schema.json` (runtime SSOT: the Zod
 `taskBatchSchema`) before invoking the CLI — a single violation rejects the entire batch. The gate is
 the only proof the decomposition is well-formed; never hand-write task files to bypass it.
 
