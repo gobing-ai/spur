@@ -29,9 +29,9 @@ Every JSON-capable verb also advertises `--json-envelope`; use the facade's mach
 ## `import` - isolated fan-out
 
 ```bash
-bun run apps/cli/src/index.ts history import --source all --dry-run --json
-bun run apps/cli/src/index.ts history import --source codex --mode incremental --json
-bun run apps/cli/src/index.ts history import --source codex --file session.jsonl --mode force-file --json
+spur history import --source all --dry-run --json
+spur history import --source codex --mode incremental --json
+spur history import --source codex --file session.jsonl --mode force-file --json
 ```
 
 - `--source all` and a single source use the same per-source fan-out path. A failed/timed-out source
@@ -39,9 +39,10 @@ bun run apps/cli/src/index.ts history import --source codex --file session.jsonl
 - Modes are `incremental`, `full`, and `force-file`. `--file` with the default `all` source is a
   usage error. `--file --mode full` requires `--dry-run`; use `force-file` for a real single-file
   write.
-- JSON contains `entries`, `warnings`, `exitCode`, and CLI/importer `provenance`. For real-data
-  validation, invoke the source-local CLI and record that provenance; never trust a bare global
-  `spur` that may be stale.
+- JSON contains `entries`, `warnings`, `exitCode`, and CLI/importer `provenance`. Record that
+  provenance for any real-data validation. **When developing Spur itself**, invoke the source-local
+  CLI (`bun run apps/cli/src/index.ts history import …`) instead of a global `spur` that may be a
+  stale published bundle; in every other project the installed `spur` is the CLI.
 - Exit `0` when every source is clean/empty, `2` for a mixed failure or any degraded source, and `1`
   when all sources fail. CLI usage guards also exit `1` on this noun.
 
