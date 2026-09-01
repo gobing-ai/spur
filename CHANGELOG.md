@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.3.71] - 2026-08-31
+
+### Added
+
+- feat(history): enhance tool argument display and multi-dimension summary charts (c8117bf0d)
+- feat(sp): harden inline pipeline driver observability and todo reconciliation (a5bbe98f8)
+- feat(sp): generalize verify-answer-lint requirement and AC ID extraction (b1b5b151c)
+- feat(workflow): add regen-composition-baseline command and prune inert schema (4c5e6750f)
+
+### Fixed
+
+- fix(sp): support markerless checkbox and test line-start requirement extraction (3b0e3e1dc)
+- fix(sp): resolve pipeline checker scripts via superskill staged fallback (4b35671cb)
+- fix(sp): stop quality and wrapup gates from re-verifying unchanged code (4a4b3a62b)
+- fix(sp): cite skill-owned references instead of repo paths in workflow prompts (e7b997ae9)
+- fix(sp): place feature-sync staged-mjs fallback inside the sync branch (e1094ddb0)
+
+### Changed
+
+- chore(release): bump spur-server + spur + spur-app + spur-config + spur-contracts + spur-domain to 0.4.50 (77e6a5262)
+- chore(release): revert accidental 0.4.50 version bump (ebb3ca00a)
+
+### Other
+
+- docs(sp): skip fixall confirming gate run under pipeline --gate-log (bbad5da29)
+- docs(sp): scope source-local CLI guidance to Spur development (82c2129ff)
+
 ## [0.3.70] - 2026-08-31
 
 ### Added
