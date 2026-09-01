@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 // ─── Formatters & Pure Math Helpers ──────────────────────────────────────────
 
 export function resolveAutoBucket(range: string): '5m' | '10m' | '30m' | '1h' | '4h' | '1d' {
-    if (range === '1h') return '5m';
-    if (range === '4h') return '10m';
+    if (range === '1h' || range === '4h') return '5m';
     if (range === '24h') return '10m';
     if (range === '7d') return '30m';
     return '1d';
@@ -289,7 +288,7 @@ export const StackedColumnsChart: React.FC<{
                     style={{ left: `${tooltipLeft}px`, transform: 'translateX(-50%)' }}
                 >
                     <div className="font-semibold text-base-content/90 border-b border-base-content/10 pb-1">
-                        {buckets[hoverIdx]?.label}
+                        {(buckets[hoverIdx]?.id ?? buckets[hoverIdx]?.label ?? '').slice(0, 16).replace('T', ' ')}
                     </div>
                     {series
                         .filter((s) => (buckets[hoverIdx]?.v[s.id] ?? 0) > 0)

@@ -157,8 +157,8 @@ function resolveBucket(bucket: string | undefined, range: HistoryRange = '4h'): 
     if (bucket && bucket !== 'auto') {
         return bucket as DomainHistoryBucket;
     }
-    if (range === '1h') return '5m';
-    if (range === '4h' || range === '24h') return '10m';
+    if (range === '1h' || range === '4h') return '5m';
+    if (range === '24h') return '10m';
     if (range === '7d') return '30m';
     return '1d';
 }
@@ -280,6 +280,9 @@ function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras):
         kpiTrend: extras.kpiTrend,
         previousKpis: extras.previousKpis,
         skillTimeSeries: extras.skillTimeSeries,
+        modelTimeSeries: extras.modelTimeSeries,
+        sourceTimeSeries: extras.sourceTimeSeries,
+        toolTimeSeries: extras.toolTimeSeries,
     };
 }
 
@@ -288,6 +291,9 @@ interface SummaryExtras {
     kpiTrend: HistoryKpiTrendPoint[];
     previousKpis: HistorySummaryKpis | null;
     skillTimeSeries: HistoryTimeSeriesPoint[];
+    modelTimeSeries?: HistoryTimeSeriesPoint[];
+    sourceTimeSeries?: HistoryTimeSeriesPoint[];
+    toolTimeSeries?: HistoryTimeSeriesPoint[];
 }
 
 /** Trend-selector resolution: end = bounded custom upper bound else current UTC day; start = end - 29d. */
@@ -416,7 +422,7 @@ async function computeSummaryExtras(
     const trendSel = resolveTrendSelector(sel);
     const endDay = trendSel.until.slice(0, 10);
     const previousSel = previousWindowSelector(sel);
-    const [trendRows, previousKpis, skillBuckets] = await Promise.all([
+    const [trendRows, previousKpis, modelBuckets, sourceBuckets, toolBuckets, skillBuckets] = await Promise.all([
         exact ? historyKpiTrend(db, trendSel) : historyBoardKpiTrendFromRollup(db, trendSel),
         (async () => {
             if (previousSel === null) return null;
@@ -426,7 +432,22 @@ async function computeSummaryExtras(
             return projectPreviousKpis(await historyBoardSummaryFromRollup(db, previousSel, '1d', 'model'));
         })(),
         (async () => {
-            if (dimension === 'skill') return activeBuckets ?? [];
+            if (dimension === 'model' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
+            if (exact) return await bucketedTokenSeries(db, sel, bucket, 'model');
+            return (await historyBoardSummaryFromRollup(db, sel, bucket, 'model')).buckets;
+        })(),
+        (async () => {
+            if (dimension === 'source' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
+            if (exact) return await bucketedTokenSeries(db, sel, bucket, 'source');
+            return (await historyBoardSummaryFromRollup(db, sel, bucket, 'source')).buckets;
+        })(),
+        (async () => {
+            if (dimension === 'tool' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
+            if (exact) return await bucketedTokenSeries(db, sel, bucket, 'tool');
+            return (await historyBoardSummaryFromRollup(db, sel, bucket, 'tool')).buckets;
+        })(),
+        (async () => {
+            if (dimension === 'skill' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
             if (exact) return await bucketedTokenSeries(db, sel, bucket, 'skill');
             return (await historyBoardSummaryFromRollup(db, sel, bucket, 'skill')).buckets;
         })(),
@@ -434,6 +455,9 @@ async function computeSummaryExtras(
     return {
         kpiTrend: projectKpiTrend(trendRows, endDay),
         previousKpis,
+        modelTimeSeries: projectSkillTimeSeries(modelBuckets),
+        sourceTimeSeries: projectSkillTimeSeries(sourceBuckets),
+        toolTimeSeries: projectSkillTimeSeries(toolBuckets),
         skillTimeSeries: projectSkillTimeSeries(skillBuckets),
     };
 }
@@ -565,6 +589,9 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                 kpiTrend: [],
                 previousKpis: null,
                 skillTimeSeries: [],
+                modelTimeSeries: [],
+                sourceTimeSeries: [],
+                toolTimeSeries: [],
             };
         }
 
@@ -599,14 +626,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                 target.set(key, aggregate);
             }
         }
-        const extras = await computeSummaryExtras(
-            db,
-            sel,
-            bucket,
-            dimension,
-            true,
-            dimension === 'skill' ? bucketRows : undefined,
-        );
+        const extras = await computeSummaryExtras(db, sel, bucket, dimension, true, bucketRows);
         return projectSummary(
             {
                 buckets: bucketRows,

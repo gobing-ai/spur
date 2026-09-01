@@ -25,6 +25,18 @@ export interface SummaryTabProps {
 }
 
 const BUCKET_OPTIONS: HistoryBucket[] = ['auto', '5m', '10m', '30m', '1h', '4h', '1d'];
+const SERIES_COLORS = [
+    '#3987e5',
+    '#199e70',
+    '#d95926',
+    '#9085e9',
+    '#c98500',
+    '#ec4899',
+    '#8b5cf6',
+    '#06b6d4',
+    '#f59e0b',
+    '#10b981',
+];
 
 const deltaPct = (current: number, previous: number | undefined): number | null => {
     if (previous === undefined || previous === 0) return null;
@@ -83,17 +95,166 @@ const KpiCard: React.FC<{
     </div>
 );
 
+interface SummaryDimensionBlockProps {
+    title: string;
+    description: string;
+    series: ChartSeries[];
+    buckets: StackedColumnBucket[];
+    chartMode: 'chart' | 'table';
+    onToggleChartMode: () => void;
+    testId?: string;
+}
+
+const SummaryDimensionBlock: React.FC<SummaryDimensionBlockProps> = ({
+    title,
+    description,
+    series,
+    buckets,
+    chartMode,
+    onToggleChartMode,
+    testId,
+}) => {
+    const hasData =
+        buckets.length > 0 && series.length > 0 && buckets.some((b) => Object.values(b.v).some((v) => v > 0));
+
+    return (
+        <div
+            className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5 flex flex-col gap-3 w-full"
+            data-testid={testId}
+        >
+            <div className="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-base-content/10">
+                <div>
+                    <h4 className="font-bold text-sm text-base-content flex items-center gap-2">
+                        {title}
+                        <span className="text-[11px] font-normal text-base-content/60 font-mono">
+                            ({series.length} {series.length === 1 ? 'tracked' : 'tracked'})
+                        </span>
+                    </h4>
+                    <p className="text-[11px] text-base-content/60">{description}</p>
+                </div>
+                <div className="flex items-center gap-1 bg-base-300 p-0.5 rounded-lg text-xs">
+                    <button
+                        type="button"
+                        aria-pressed={chartMode === 'chart'}
+                        className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
+                            chartMode === 'chart'
+                                ? 'bg-base-100 text-base-content font-bold shadow-xs'
+                                : 'text-base-content/60 hover:bg-base-content/10'
+                        }`}
+                        onClick={() => chartMode !== 'chart' && onToggleChartMode()}
+                    >
+                        Chart
+                    </button>
+                    <button
+                        type="button"
+                        aria-pressed={chartMode === 'table'}
+                        className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
+                            chartMode === 'table'
+                                ? 'bg-base-100 text-base-content font-bold shadow-xs'
+                                : 'text-base-content/60 hover:bg-base-content/10'
+                        }`}
+                        onClick={() => chartMode !== 'table' && onToggleChartMode()}
+                    >
+                        Table
+                    </button>
+                </div>
+            </div>
+
+            {/* Chart or Table or Empty State */}
+            <div className="min-h-[220px]">
+                {!hasData ? (
+                    <div className="flex flex-col items-center justify-center h-[220px] text-base-content/40 text-xs font-mono border border-dashed border-base-content/10 rounded-xl bg-base-100/30">
+                        <span>No {title.toLowerCase()} token activity recorded for this time range.</span>
+                    </div>
+                ) : chartMode === 'chart' ? (
+                    <StackedColumnsChart buckets={buckets} series={series} height={220} />
+                ) : (
+                    <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                        <table className="w-full text-xs text-left font-mono" data-testid="summary-bucket-table">
+                            <thead className="sticky top-0 bg-base-200">
+                                <tr className="border-b border-base-content/10 text-base-content/60">
+                                    <th className="py-1.5 pr-2">Bucket</th>
+                                    {series.map((s) => (
+                                        <th key={s.id} className="py-1.5 pr-2 text-right">
+                                            <span className="inline-flex items-center gap-1">
+                                                <span
+                                                    className="w-2 h-2 rounded-full inline-block shrink-0"
+                                                    style={{ background: s.color }}
+                                                />
+                                                {s.label}
+                                            </span>
+                                        </th>
+                                    ))}
+                                    <th className="py-1.5 pr-2 text-right">Total</th>
+                                    <th className="py-1.5 text-right">Cache Hit %</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {buckets.map((b) => {
+                                    const total = Object.values(b.v).reduce((sum, v) => sum + v, 0);
+                                    return (
+                                        <tr
+                                            key={b.id ?? b.label}
+                                            className="border-b border-base-content/5 hover:bg-base-300/30"
+                                        >
+                                            <td className="py-1.5 pr-2 font-bold">
+                                                {(b.id ?? b.label).slice(0, 16).replace('T', ' ')}
+                                            </td>
+                                            {series.map((s) => (
+                                                <td key={s.id} className="py-1.5 pr-2 text-right tabular-nums">
+                                                    {b.v[s.id] !== undefined ? fmtTok(b.v[s.id] ?? 0) : '—'}
+                                                </td>
+                                            ))}
+                                            <td className="py-1.5 pr-2 text-right tabular-nums font-bold">
+                                                {fmtTok(total)}
+                                            </td>
+                                            <td className="py-1.5 text-right tabular-nums">
+                                                {b.lineValue !== undefined ? `${b.lineValue.toFixed(1)}%` : '—'}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            {/* Series legend chips */}
+            {series.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-base-content/5">
+                    {series.map((s) => (
+                        <span
+                            key={s.id}
+                            className="inline-flex items-center px-2 py-0.5 rounded-md bg-base-300/80 border border-base-content/5 gap-1.5 font-mono text-[10px] text-base-content/80"
+                        >
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} />
+                            <span className="truncate max-w-[150px]">{s.label}</span>
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
 export const SummaryTab: React.FC<SummaryTabProps> = ({
     data,
     loading,
     error,
     dimension = 'model',
-    onDimensionChange,
+    onDimensionChange: _onDimensionChange,
     bucket = 'auto',
     onBucketChange,
     loopSummary,
 }) => {
     const [chartMode, setChartMode] = useState<'chart' | 'table'>('chart');
+    const [blockModes, setBlockModes] = useState<Record<'model' | 'source' | 'tool' | 'skill', 'chart' | 'table'>>({
+        model: 'chart',
+        source: 'chart',
+        tool: 'chart',
+        skill: 'chart',
+    });
 
     if (loading) {
         return (
@@ -123,6 +284,9 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
         topTools,
         skillsUsed,
         skillTimeSeries,
+        modelTimeSeries,
+        sourceTimeSeries,
+        toolTimeSeries,
         cacheEfficiency,
     } = data;
     const prev = previousKpis ?? undefined;
@@ -133,36 +297,86 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
         toolCalls: kpiTrend.map((p) => p.toolCallsCount),
     };
 
-    // Build series & buckets according to active dimension
-    let activeSeries: ChartSeries[] = [];
-    if (dimension === 'model') {
-        activeSeries = topModels.map((m) => ({ id: m.id, label: m.label, color: m.color }));
-    } else if (dimension === 'source') {
-        activeSeries = topSources.map((s) => ({ id: s.id, label: s.label, color: s.color }));
-    } else if (dimension === 'tool') {
-        const colors = ['#199e70', '#3987e5', '#d95926', '#9085e9', '#c98500', '#ec4899', '#8b5cf6'];
-        activeSeries = topTools.slice(0, 6).map((t, i) => ({
-            id: t.id,
-            label: t.id,
-            color: colors[i % colors.length] ?? '#3987e5',
-        }));
-    } else {
-        activeSeries = skillsUsed.map((sk) => ({ id: sk.id, label: sk.label, color: sk.color }));
-    }
+    const toolColors = [
+        '#199e70',
+        '#3987e5',
+        '#d95926',
+        '#9085e9',
+        '#c98500',
+        '#ec4899',
+        '#8b5cf6',
+        '#06b6d4',
+        '#f59e0b',
+        '#10b981',
+    ];
 
-    const buckets: StackedColumnBucket[] = timeSeries.map((b) => {
-        const label = b.bucketStart.slice(5, 10);
-        return {
+    // Helper to build series from top items + any keys present in the time series buckets
+    const buildSeries = (
+        topItems: Array<{ id: string; label: string; color?: string }>,
+        bucketPoints: Array<{ series: Record<string, number> }>,
+        palette: string[],
+    ): ChartSeries[] => {
+        const map = new Map<string, ChartSeries>();
+        topItems.forEach((item, i) => {
+            map.set(item.id, {
+                id: item.id,
+                label: item.label || item.id,
+                color: item.color || palette[i % palette.length] || '#3987e5',
+            });
+        });
+        let colorIdx = map.size;
+        for (const point of bucketPoints) {
+            for (const key of Object.keys(point.series)) {
+                if (key && !map.has(key)) {
+                    map.set(key, {
+                        id: key,
+                        label: key,
+                        color: palette[colorIdx % palette.length] || '#3987e5',
+                    });
+                    colorIdx++;
+                }
+            }
+        }
+        return Array.from(map.values());
+    };
+
+    const rawModelPoints =
+        modelTimeSeries && modelTimeSeries.length > 0 ? modelTimeSeries : dimension === 'model' ? timeSeries : [];
+    const rawSourcePoints =
+        sourceTimeSeries && sourceTimeSeries.length > 0 ? sourceTimeSeries : dimension === 'source' ? timeSeries : [];
+    const rawToolPoints =
+        toolTimeSeries && toolTimeSeries.length > 0 ? toolTimeSeries : dimension === 'tool' ? timeSeries : [];
+    const rawSkillPoints =
+        skillTimeSeries && skillTimeSeries.length > 0 ? skillTimeSeries : dimension === 'skill' ? timeSeries : [];
+
+    const modelSeries = buildSeries(topModels, rawModelPoints, SERIES_COLORS);
+    const sourceSeries = buildSeries(topSources, rawSourcePoints, SERIES_COLORS);
+    const toolSeries = buildSeries(
+        topTools.map((t, i) => ({ id: t.id, label: t.id, color: toolColors[i % toolColors.length] })),
+        rawToolPoints,
+        toolColors,
+    );
+    const skillSeries = buildSeries(skillsUsed, rawSkillPoints, SERIES_COLORS);
+
+    const toBuckets = (
+        points: Array<{ bucketStart: string; series: Record<string, number>; cacheHitRatio?: number }>,
+    ): StackedColumnBucket[] =>
+        points.map((b) => ({
             id: b.bucketStart,
-            label,
+            label: b.bucketStart.length > 10 ? b.bucketStart.slice(11, 16) : b.bucketStart.slice(5, 10),
             v: b.series,
             lineValue: b.cacheHitRatio,
-        };
-    });
+        }));
+
+    // 4 Bucket collections
+    const modelBuckets = toBuckets(rawModelPoints);
+    const sourceBuckets = toBuckets(rawSourcePoints);
+    const toolBuckets = toBuckets(rawToolPoints);
+    const skillBuckets = toBuckets(rawSkillPoints);
 
     const skillAreaBuckets = skillTimeSeries.map((b) => ({
         id: b.bucketStart,
-        label: b.bucketStart.slice(5, 10),
+        label: b.bucketStart.length > 10 ? b.bucketStart.slice(11, 16) : b.bucketStart.slice(5, 10),
         v: b.series,
     }));
 
@@ -230,17 +444,19 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
                 />
             </div>
 
-            {/* Main Token Chart with Dual-Axis Cache Hit Ratio */}
-            <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5">
-                <div className="flex flex-wrap justify-between items-center gap-3 pb-2 border-b border-base-content/10">
+            {/* Token Activity & Cache Hit Ratio Overview Header */}
+            <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap justify-between items-center gap-3">
                     <div>
-                        <h3 className="font-bold text-base">Token Activity & Cache Hit Ratio</h3>
+                        <h3 className="font-bold text-base text-base-content">Token Activity & Cache Hit Ratio</h3>
                         <p className="text-xs text-base-content/60">
-                            Stacked token bars (left) with Cache Hit % line overlay (right)
+                            4-block breakdown across Model, Source, Tool, and Skill (Stacked token bars with Cache Hit %
+                            line overlay)
                         </p>
                     </div>
 
                     <div className="flex items-center gap-3">
+                        {/* Bucket Interval Control */}
                         <fieldset className="flex items-center bg-base-300 p-0.5 rounded-lg text-xs border-0">
                             <legend className="sr-only">Bucket interval</legend>
                             {BUCKET_OPTIONS.map((b) => (
@@ -260,7 +476,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
                             ))}
                         </fieldset>
 
-                        {/* Chart/Table toggle */}
+                        {/* Global Chart/Table Switcher */}
                         <div className="flex items-center bg-base-300 p-0.5 rounded-lg text-xs">
                             {(['chart', 'table'] as const).map((m) => (
                                 <button
@@ -272,84 +488,64 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
                                             ? 'bg-base-100 text-base-content font-bold shadow-sm'
                                             : 'text-base-content/60 hover:bg-base-content/10'
                                     }`}
-                                    onClick={() => setChartMode(m)}
+                                    onClick={() => {
+                                        setChartMode(m);
+                                        setBlockModes({ model: m, source: m, tool: m, skill: m });
+                                    }}
                                 >
-                                    {m === 'chart' ? 'Chart' : 'Table'}
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Dimension Switcher */}
-                        <div className="flex items-center bg-base-300 p-0.5 rounded-lg text-xs">
-                            {(['model', 'source', 'tool', 'skill'] as const).map((dim) => (
-                                <button
-                                    key={dim}
-                                    type="button"
-                                    aria-pressed={dimension === dim}
-                                    className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${
-                                        dimension === dim
-                                            ? 'bg-primary text-primary-content font-bold'
-                                            : 'text-base-content/70 hover:bg-base-content/10'
-                                    }`}
-                                    onClick={() => onDimensionChange?.(dim)}
-                                >
-                                    By {dim.charAt(0).toUpperCase() + dim.slice(1)}
+                                    {m === 'chart' ? 'All Charts' : 'All Tables'}
                                 </button>
                             ))}
                         </div>
                     </div>
                 </div>
 
-                <div className="pt-3">
-                    {chartMode === 'chart' ? (
-                        <StackedColumnsChart buckets={buckets} series={activeSeries} height={260} />
-                    ) : (
-                        <div className="overflow-x-auto max-h-80 overflow-y-auto">
-                            <table className="w-full text-xs text-left font-mono" data-testid="summary-bucket-table">
-                                <thead className="sticky top-0 bg-base-200">
-                                    <tr className="border-b border-base-content/10 text-base-content/60">
-                                        <th className="py-1.5 pr-2">Bucket</th>
-                                        {activeSeries.map((s) => (
-                                            <th key={s.id} className="py-1.5 pr-2 text-right">
-                                                <span className="inline-flex items-center gap-1">
-                                                    <span
-                                                        className="w-2 h-2 rounded-full inline-block"
-                                                        style={{ background: s.color }}
-                                                    />
-                                                    {s.label}
-                                                </span>
-                                            </th>
-                                        ))}
-                                        <th className="py-1.5 pr-2 text-right">Total</th>
-                                        <th className="py-1.5 text-right">Cache Hit %</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {buckets.map((b) => {
-                                        const total = Object.values(b.v).reduce((sum, v) => sum + v, 0);
-                                        return (
-                                            <tr key={b.id ?? b.label} className="border-b border-base-content/5">
-                                                <td className="py-1.5 pr-2 font-bold">
-                                                    {(b.id ?? b.label).slice(0, 16).replace('T', ' ')}
-                                                </td>
-                                                {activeSeries.map((s) => (
-                                                    <td key={s.id} className="py-1.5 pr-2 text-right tabular-nums">
-                                                        {b.v[s.id] !== undefined ? fmtTok(b.v[s.id] ?? 0) : '—'}
-                                                    </td>
-                                                ))}
-                                                <td className="py-1.5 pr-2 text-right tabular-nums font-bold">
-                                                    {fmtTok(total)}
-                                                </td>
-                                                <td className="py-1.5 text-right tabular-nums">
-                                                    {b.lineValue !== undefined ? `${b.lineValue.toFixed(1)}%` : '—'}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
+                {/* 4 Dimension Blocks on 4 Lines (Full Width) */}
+                <div className="flex flex-col gap-6 w-full">
+                    <SummaryDimensionBlock
+                        title="By Model"
+                        description="Token load by LLM model with cache hit ratio overlay"
+                        series={modelSeries}
+                        buckets={modelBuckets}
+                        chartMode={blockModes.model}
+                        onToggleChartMode={() =>
+                            setBlockModes((prev) => ({ ...prev, model: prev.model === 'chart' ? 'table' : 'chart' }))
+                        }
+                        testId="summary-block-model"
+                    />
+                    <SummaryDimensionBlock
+                        title="By Source"
+                        description="Token load by agent platform with cache hit ratio overlay"
+                        series={sourceSeries}
+                        buckets={sourceBuckets}
+                        chartMode={blockModes.source}
+                        onToggleChartMode={() =>
+                            setBlockModes((prev) => ({ ...prev, source: prev.source === 'chart' ? 'table' : 'chart' }))
+                        }
+                        testId="summary-block-source"
+                    />
+                    <SummaryDimensionBlock
+                        title="By Tool"
+                        description="Token load by tool execution with cache hit ratio overlay"
+                        series={toolSeries}
+                        buckets={toolBuckets}
+                        chartMode={blockModes.tool}
+                        onToggleChartMode={() =>
+                            setBlockModes((prev) => ({ ...prev, tool: prev.tool === 'chart' ? 'table' : 'chart' }))
+                        }
+                        testId="summary-block-tool"
+                    />
+                    <SummaryDimensionBlock
+                        title="By Skill"
+                        description="Token load by specialized skill with cache hit ratio overlay"
+                        series={skillSeries}
+                        buckets={skillBuckets}
+                        chartMode={blockModes.skill}
+                        onToggleChartMode={() =>
+                            setBlockModes((prev) => ({ ...prev, skill: prev.skill === 'chart' ? 'table' : 'chart' }))
+                        }
+                        testId="summary-block-skill"
+                    />
                 </div>
             </div>
 

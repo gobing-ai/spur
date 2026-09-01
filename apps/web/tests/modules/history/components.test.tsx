@@ -301,14 +301,13 @@ describe('History Board components', () => {
         expect(next.range).toBe('1h');
     });
 
-    test('Summary dimension controls request a server-backed restack', () => {
-        let selected = '';
-        const view = render(
-            <SummaryTab data={summary} dimension="model" onDimensionChange={(value) => (selected = value)} />,
-        );
+    test('Summary renders all 4 dimension blocks (By Model, By Source, By Tool, By Skill) simultaneously', () => {
+        const view = render(<SummaryTab data={summary} />);
 
-        fireEvent.click(view.getByRole('button', { name: 'By Tool' }));
-        expect(selected).toBe('tool');
+        expect(view.getByTestId('summary-block-model')).toBeDefined();
+        expect(view.getByTestId('summary-block-source')).toBeDefined();
+        expect(view.getByTestId('summary-block-tool')).toBeDefined();
+        expect(view.getByTestId('summary-block-skill')).toBeDefined();
     });
 
     test('Sources renders vector agent icons, telemetry tooltip, and queued import state', async () => {
@@ -926,10 +925,10 @@ describe('History Board components', () => {
 
         // Default is chart mode; table appears only after the toggle.
         expect(view.queryByTestId('summary-bucket-table')).toBeNull();
-        fireEvent.click(view.getByRole('button', { name: 'Table' }));
-        expect(view.getByTestId('summary-bucket-table')).toBeDefined();
-        expect(view.getByText('Bucket')).toBeDefined();
-        fireEvent.click(view.getByRole('button', { name: 'Chart' }));
+        fireEvent.click(view.getByRole('button', { name: 'All Tables' }));
+        expect(view.getAllByTestId('summary-bucket-table').length).toBeGreaterThanOrEqual(1);
+        expect(view.getAllByText('Bucket').length).toBeGreaterThanOrEqual(1);
+        fireEvent.click(view.getByRole('button', { name: 'All Charts' }));
         expect(view.queryByTestId('summary-bucket-table')).toBeNull();
     });
 
@@ -963,9 +962,9 @@ describe('History Board components', () => {
         expect(view.getByText('3 redundant')).toBeDefined();
         expect(view.getByText('9.0K wasted')).toBeDefined();
 
-        fireEvent.click(view.getByRole('button', { name: 'Table' }));
-        expect(view.getByText('2026-08-21 10:00')).toBeDefined();
-        expect(view.getByText('2026-08-21 10:05')).toBeDefined();
+        fireEvent.click(view.getByRole('button', { name: 'All Tables' }));
+        expect(view.getAllByText('2026-08-21 10:00').length).toBeGreaterThanOrEqual(1);
+        expect(view.getAllByText('2026-08-21 10:05').length).toBeGreaterThanOrEqual(1);
     });
 
     test('Summary bucket fieldset exposes a legend and relays interval selection', () => {

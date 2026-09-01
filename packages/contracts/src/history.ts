@@ -135,6 +135,9 @@ export const historySummaryResponseDataSchema = z.object({
     kpiTrend: z.array(historyKpiTrendPointSchema),
     previousKpis: historySummaryKpisSchema.nullable(),
     skillTimeSeries: z.array(historyTimeSeriesPointSchema),
+    modelTimeSeries: z.array(historyTimeSeriesPointSchema).optional(),
+    sourceTimeSeries: z.array(historyTimeSeriesPointSchema).optional(),
+    toolTimeSeries: z.array(historyTimeSeriesPointSchema).optional(),
 });
 
 /** Summary tab API response envelope schema. */

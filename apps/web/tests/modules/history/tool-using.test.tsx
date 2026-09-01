@@ -5,7 +5,7 @@ registerHappyDom();
 import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import type { HistoryToolSequenceResponse } from '@gobing-ai/spur-contracts';
 import { cleanup, fireEvent, render } from '@testing-library/react';
-import ToolUsingTab from '../../../src/modules/history/ToolUsingTab';
+import ToolUsingTab, { formatToolDisplayValue } from '../../../src/modules/history/ToolUsingTab';
 
 afterEach(cleanup);
 afterAll(teardownHappyDom);
@@ -178,28 +178,28 @@ describe('ToolUsingTab component', () => {
             />,
         );
 
-        // Tool 1: view_file (read, ok, 150 ms)
+        // Tool 1: view_file (read, ok, 150 ms, formatted readable file path on bar)
         const item1 = getByTestId('tool-item-1');
         expect(item1.textContent).toContain('view_file');
-        expect(item1.textContent?.toLowerCase()).toContain('read');
+        expect(item1.textContent).toContain('src/index.ts');
         expect(item1.textContent).toContain('150 ms');
         expect(item1.textContent).toContain('ok');
 
-        // Tool 2: run_command (bash, error, NULL duration -> '—')
+        // Tool 2: run_command (bash, error, NULL duration -> '—', formatted command on bar)
         const item2 = getByTestId('tool-item-2');
         expect(item2.textContent).toContain('run_command');
-        expect(item2.textContent?.toLowerCase()).toContain('bash');
+        expect(item2.textContent).toContain('bun test');
         expect(item2.textContent).toContain('—');
         expect(item2.textContent).toContain('error');
 
         // Tool 3: mcp__context__search (mcp, ok, 300 ms)
         const item3 = getByTestId('tool-item-3');
         expect(item3.textContent).toContain('mcp__context__search');
-        expect(item3.textContent?.toLowerCase()).toContain('mcp');
+        expect(item3.textContent).toContain('not valid json string');
         expect(item3.textContent).toContain('300 ms');
     });
 
-    test('clicking an item opens inspection drawer with formatted args, error trace, and metadata', () => {
+    test('hovering or clicking a tool tag opens double-width inspection tooltip with formatted args, error trace, and metadata without duplicate tool name', () => {
         const { getByTestId } = render(
             <ToolUsingTab
                 data={toolSequenceSample}
@@ -220,18 +220,21 @@ describe('ToolUsingTab component', () => {
             />,
         );
 
-        // Click on error tool item #2
-        const item2 = getByTestId('tool-item-2');
-        fireEvent.click(item2);
+        // Click on error tool tag #2
+        const tag2 = getByTestId('tool-tag-2');
+        fireEvent.click(tag2);
 
-        const drawer = getByTestId('tool-inspection-drawer');
-        expect(drawer).toBeDefined();
-        expect(drawer.textContent).toContain('run_command');
-        expect(drawer.textContent).toContain('Execution Error:');
-        expect(drawer.textContent).toContain('Process failed with exit code 1: TypeError: boom');
-        expect(drawer.textContent).toContain('"cmd": "bun test"');
-        expect(drawer.textContent).toContain('call-2');
-        expect(drawer.textContent).toContain('sess-abc-123');
+        const tooltip = getByTestId('tool-tooltip-2');
+        expect(tooltip).toBeDefined();
+        // Double-width tooltip class check
+        expect(tooltip.className).toContain('w-[880px]');
+        expect(tooltip.textContent).toContain('run_command');
+        expect(tooltip.textContent?.toLowerCase()).toContain('bash');
+        expect(tooltip.textContent).toContain('Execution Error:');
+        expect(tooltip.textContent).toContain('Process failed with exit code 1: TypeError: boom');
+        expect(tooltip.textContent).toContain('"cmd": "bun test"');
+        expect(tooltip.textContent).toContain('call-2');
+        expect(tooltip.textContent).toContain('sess-abc-123');
     });
 
     test('filter controls trigger callbacks on status, tool name, and search changes', () => {
@@ -239,7 +242,7 @@ describe('ToolUsingTab component', () => {
         let searchKeyword = '';
         let selectedTools: string[] = [];
 
-        const { getByText, getByPlaceholderText, getByRole } = render(
+        const { getByText, getByPlaceholderText, getByTestId } = render(
             <ToolUsingTab
                 data={toolSequenceSample}
                 loading={false}
@@ -276,7 +279,7 @@ describe('ToolUsingTab component', () => {
         expect(searchKeyword).toBe('TypeError');
 
         // Toggle tool name pill
-        const viewFilePill = getByRole('button', { name: 'view_file' });
+        const viewFilePill = getByTestId('tool-filter-view_file');
         fireEvent.click(viewFilePill);
         expect(selectedTools).toEqual(['view_file']);
     });
@@ -327,5 +330,122 @@ describe('ToolUsingTab component', () => {
         );
 
         expect(getByText('No tool calls found')).toBeDefined();
+    });
+
+    test('formatToolDisplayValue formats read paths, subagent prompts, search queries, and hashes cleanly', () => {
+        // Read tool with line range
+        expect(
+            formatToolDisplayValue({
+                toolName: 'view_file',
+                category: 'read',
+                argsRaw: JSON.stringify({
+                    AbsolutePath: '/Users/robin/xprojects/spur-new/apps/web/src/modules/history/SummaryTab.tsx',
+                    StartLine: 1,
+                    EndLine: 100,
+                }),
+                argsDigest: 'SummaryTab.tsx',
+            }),
+        ).toBe('apps/web/src/modules/history/SummaryTab.tsx (L1-100)');
+
+        // Subagent invocation
+        expect(
+            formatToolDisplayValue({
+                toolName: 'invoke_subagent',
+                category: 'mcp',
+                argsRaw: JSON.stringify({
+                    Subagents: [
+                        {
+                            TypeName: 'research',
+                            Role: 'Codebase Researcher',
+                            Prompt: 'Analyze history module',
+                        },
+                    ],
+                }),
+                argsDigest: null,
+            }),
+        ).toBe('Codebase Researcher — Analyze history module');
+
+        // Subagent send_message
+        expect(
+            formatToolDisplayValue({
+                toolName: 'send_message',
+                category: 'mcp',
+                argsRaw: JSON.stringify({
+                    Recipient: 'subagent-1',
+                    Message: 'Run test suite',
+                }),
+                argsDigest: null,
+            }),
+        ).toBe('→ subagent-1: Run test suite');
+
+        // Search query with path
+        expect(
+            formatToolDisplayValue({
+                toolName: 'grep_search',
+                category: 'search',
+                argsRaw: JSON.stringify({
+                    Query: 'resolveAutoBucket',
+                    SearchPath: 'apps/web',
+                }),
+                argsDigest: null,
+            }),
+        ).toBe('"resolveAutoBucket" in apps/web');
+
+        // Skill invocation
+        expect(
+            formatToolDisplayValue({
+                toolName: 'Skill',
+                category: 'other',
+                argsRaw: JSON.stringify({
+                    skill: 'sp:dev-plan',
+                    args: '--feature 123',
+                }),
+                argsDigest: null,
+            }),
+        ).toBe('sp:dev-plan — --feature 123');
+
+        // Slash command invocation
+        expect(
+            formatToolDisplayValue({
+                toolName: 'SlashCommand',
+                category: 'other',
+                argsRaw: JSON.stringify({
+                    command: '/sp:dev-run',
+                    args: '0724',
+                }),
+                argsDigest: null,
+            }),
+        ).toBe('/sp:dev-run — 0724');
+
+        // Web URL fetch
+        expect(
+            formatToolDisplayValue({
+                toolName: 'WebFetch',
+                category: 'other',
+                argsRaw: JSON.stringify({
+                    url: 'https://docs.anthropic.com/en/api/overview',
+                }),
+                argsDigest: null,
+            }),
+        ).toBe('https://docs.anthropic.com/en/api/overview');
+
+        // 64-char SHA-256 hash in argsRaw or digest
+        expect(
+            formatToolDisplayValue({
+                toolName: 'Read',
+                category: 'read',
+                argsRaw: '71f931ed8a4a4b7c9ee8e1833c08df0a380e9f9ee7d6b511f7e5c127cbbd7d09',
+                argsDigest: null,
+            }),
+        ).toBe('71f931ed…bd7d09');
+
+        expect(
+            formatToolDisplayValue({
+                toolName: 'Read',
+                category: 'read',
+                argsRaw: null,
+                argsDigest: '71f931ed8a4a4b7c9ee8e1833c08df0a380e9f9ee7d6b511f7e5c127cbbd7d09',
+            }),
+        ).toBe('digest: 71f931ed…bd7d09');
     });
 });

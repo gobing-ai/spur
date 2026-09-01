@@ -936,11 +936,14 @@ const BUCKET_SECONDS: Record<HistoryBucket, number> = {
 };
 
 const HISTORY_SKILL_NAME_SQL = `CASE
-    WHEN LOWER(tc.tool_name) IN ('skill', 'use_skill', 'invoke_skill') AND json_valid(tc.args_raw)
+    WHEN LOWER(tc.tool_name) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)
     THEN COALESCE(
         CAST(json_extract(tc.args_raw, '$.skill') AS TEXT),
         CAST(json_extract(tc.args_raw, '$.skill_name') AS TEXT),
+        CAST(json_extract(tc.args_raw, '$.skillName') AS TEXT),
         CAST(json_extract(tc.args_raw, '$.name') AS TEXT),
+        CAST(json_extract(tc.args_raw, '$.command') AS TEXT),
+        CAST(json_extract(tc.args_raw, '$.command_name') AS TEXT),
         CAST(json_extract(tc.args_raw, '$') AS TEXT),
         ''
     )

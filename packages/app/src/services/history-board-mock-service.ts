@@ -354,9 +354,9 @@ export class MockHistoryBoardService implements HistoryBoardService {
         // Build time series buckets
         const bucket =
             filter?.bucket === 'auto' || filter?.bucket === undefined
-                ? filter?.range === '1h'
+                ? filter?.range === '1h' || filter?.range === '4h'
                     ? '5m'
-                    : filter?.range === '4h' || filter?.range === '24h'
+                    : filter?.range === '24h'
                       ? '10m'
                       : filter?.range === '7d'
                         ? '30m'
@@ -372,16 +372,47 @@ export class MockHistoryBoardService implements HistoryBoardService {
         }[bucket];
         const dimension = filter?.dimension ?? 'model';
         const buckets: Record<string, { total: number; cacheRead: number; series: Record<string, number> }> = {};
+        const modelBuckets: Record<string, { total: number; cacheRead: number; series: Record<string, number> }> = {};
+        const sourceBuckets: Record<string, { total: number; cacheRead: number; series: Record<string, number> }> = {};
+        const toolBuckets: Record<string, { total: number; cacheRead: number; series: Record<string, number> }> = {};
         const skillBuckets: typeof buckets = {};
 
         for (const s of matching) {
             const bKey = new Date(Math.floor(s.start / bucketInterval) * bucketInterval).toISOString();
             if (!buckets[bKey]) buckets[bKey] = { total: 0, cacheRead: 0, series: {} };
+            if (!modelBuckets[bKey]) modelBuckets[bKey] = { total: 0, cacheRead: 0, series: {} };
+            if (!sourceBuckets[bKey]) sourceBuckets[bKey] = { total: 0, cacheRead: 0, series: {} };
+            if (!toolBuckets[bKey]) toolBuckets[bKey] = { total: 0, cacheRead: 0, series: {} };
             if (!skillBuckets[bKey]) skillBuckets[bKey] = { total: 0, cacheRead: 0, series: {} };
+
             buckets[bKey].total += s.tokens.billedTokens;
             buckets[bKey].cacheRead += s.tokens.cacheReadTokens;
+            modelBuckets[bKey].total += s.tokens.billedTokens;
+            modelBuckets[bKey].cacheRead += s.tokens.cacheReadTokens;
+            sourceBuckets[bKey].total += s.tokens.billedTokens;
+            sourceBuckets[bKey].cacheRead += s.tokens.cacheReadTokens;
+            toolBuckets[bKey].total += s.tokens.billedTokens;
+            toolBuckets[bKey].cacheRead += s.tokens.cacheReadTokens;
             skillBuckets[bKey].total += s.tokens.billedTokens;
             skillBuckets[bKey].cacheRead += s.tokens.cacheReadTokens;
+
+            modelBuckets[bKey].series[s.model] = (modelBuckets[bKey].series[s.model] ?? 0) + s.tokens.billedTokens;
+            sourceBuckets[bKey].series[s.source] = (sourceBuckets[bKey].series[s.source] ?? 0) + s.tokens.billedTokens;
+
+            const toolWeight = Object.values(s.toolMix).reduce((sum, count) => sum + count, 0);
+            for (const [tool, count] of Object.entries(s.toolMix)) {
+                toolBuckets[bKey].series[tool] =
+                    (toolBuckets[bKey].series[tool] ?? 0) +
+                    (toolWeight > 0 ? (s.tokens.billedTokens * count) / toolWeight : 0);
+            }
+
+            const skillWeight = Object.values(s.skillMix).reduce((sum, count) => sum + count, 0);
+            for (const [skill, count] of Object.entries(s.skillMix)) {
+                skillBuckets[bKey].series[skill] =
+                    (skillBuckets[bKey].series[skill] ?? 0) +
+                    (skillWeight > 0 ? (s.tokens.billedTokens * count) / skillWeight : 0);
+            }
+
             const dimensions: Array<[string, number]> =
                 dimension === 'model'
                     ? [[s.model, s.tokens.billedTokens]]
@@ -401,35 +432,26 @@ export class MockHistoryBoardService implements HistoryBoardService {
                           : 0;
                 buckets[bKey].series[key] = (buckets[bKey].series[key] ?? 0) + tokens;
             }
-            const skillWeight = Object.values(s.skillMix).reduce((sum, count) => sum + count, 0);
-            for (const [skill, count] of Object.entries(s.skillMix)) {
-                skillBuckets[bKey].series[skill] =
-                    (skillBuckets[bKey].series[skill] ?? 0) +
-                    (skillWeight > 0 ? (s.tokens.billedTokens * count) / skillWeight : 0);
-            }
         }
 
-        const timeSeries = Object.entries(buckets)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([bKey, bVal]) => {
-                const denom = bVal.total + bVal.cacheRead;
-                const ratio = denom > 0 ? Math.round((bVal.cacheRead / denom) * 100) : 0;
-                return {
-                    bucketStart: bKey,
-                    cacheHitRatio: ratio,
-                    series: bVal.series,
-                };
-            });
-        const skillTimeSeries = Object.entries(skillBuckets)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([bucketStart, point]) => ({
-                bucketStart,
-                cacheHitRatio:
-                    point.total + point.cacheRead > 0
-                        ? Math.round((point.cacheRead / (point.total + point.cacheRead)) * 100)
-                        : 0,
-                series: point.series,
-            }));
+        const toTimeSeries = (map: typeof buckets) =>
+            Object.entries(map)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([bKey, bVal]) => {
+                    const denom = bVal.total + bVal.cacheRead;
+                    const ratio = denom > 0 ? Math.round((bVal.cacheRead / denom) * 100) : 0;
+                    return {
+                        bucketStart: bKey,
+                        cacheHitRatio: ratio,
+                        series: bVal.series,
+                    };
+                });
+
+        const timeSeries = toTimeSeries(buckets);
+        const modelTimeSeries = toTimeSeries(modelBuckets);
+        const sourceTimeSeries = toTimeSeries(sourceBuckets);
+        const toolTimeSeries = toTimeSeries(toolBuckets);
+        const skillTimeSeries = toTimeSeries(skillBuckets);
 
         const topModels = MODELS_CATALOG.map((m) => {
             const tokens = modelTokens[m.id] ?? 0;
@@ -483,6 +505,9 @@ export class MockHistoryBoardService implements HistoryBoardService {
             kpiTrend: this.buildKpiTrend(matching),
             previousKpis: null,
             skillTimeSeries,
+            modelTimeSeries,
+            sourceTimeSeries,
+            toolTimeSeries,
         };
     }
 
