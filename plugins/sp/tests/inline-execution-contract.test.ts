@@ -312,4 +312,29 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         const crossCutting = readFileSync(CROSS_CUTTING, 'utf8');
         expect(crossCutting).toContain('### Inline trade-off');
     });
+
+    test('0727 — inline driver contract: todo reconciliation, dispatch timeout, run-log stamps', () => {
+        const driver = readFileSync(
+            join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'inline-pipeline-driver.md'),
+            'utf8',
+        );
+        // R1: stage-todo reconciliation at every boundary is host-owned and surface-independent.
+        expect(driver).toContain('mark the finished stage completed and the next stage in_progress');
+        expect(driver).toContain('host-owned and execution-surface-independent');
+        // R2: governing timeout boundary, pre-dispatch logging, timeout classification, inline resume.
+        expect(driver).toContain("the host platform's subagent limit, not the YAML timeoutMs");
+        expect(driver).toContain('record the governing timeout boundary and its source before dispatch');
+        expect(driver).toContain('a dispatch timeout is a started-subagent failure');
+        expect(driver).toContain('resume from the partial tree, never restart the stage inline');
+        // R3: normalized run-log stamps; bare local-clock forms are a contract violation.
+        expect(driver).toContain('ISO-8601 UTC');
+        expect(driver).toContain('bare local-clock stamps are prohibited');
+        // The 0424 subprocess runbook names the inline-path equivalent so the resume route is
+        // reachable from the inline dispatch path.
+        const workflow = readFileSync(
+            join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'execution-workflow.md'),
+            'utf8',
+        );
+        expect(workflow).toContain('resume from the partial tree, never restart the stage inline');
+    });
 });

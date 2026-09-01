@@ -41,6 +41,12 @@ command, skill, script, or second workflow.
      the YAML parsed in step 1, shown only for the active state.
    - **Refresh cadence** = stage boundaries only (when the current state changes after a transition),
      never per action.
+   - **Transition reconciliation (task 0727)** = at every stage boundary the host must
+     **mark the finished stage completed and the next stage in_progress** in the host todo list.
+     This reconciliation is **host-owned and execution-surface-independent**: it fires identically
+     whether the stage ran via native subagent, host-inline execution, or the post-dispatch host
+     fallback, so a run can never terminate with earlier stages stuck `in_progress` (task 0726
+     ended 0/11 with precheck and implement still open).
    - **Source of truth** = the CLI projection for layer 1; the YAML parsed in step 1 for layer 2.
      Never hand-copy or hand-derive the state list into the driver, a command, a skill, or a script.
 5. For task execution only, record lifecycle provenance before entering the FSM:
@@ -119,6 +125,19 @@ before the subagent starts, log the reason and use host fallback. If a started s
 leaves invalid artifacts, do **not** replay the stage in the host — follow the YAML error policy so
 partial mutations are not duplicated.
 
+**Timeout boundary (task 0727):** a dispatched subagent is governed by
+**the host platform's subagent limit, not the YAML timeoutMs** — `timeoutMs` stays not-applicable
+for host execution only — and before dispatch the driver must
+**record the governing timeout boundary and its source before dispatch** in the run log
+(e.g. `host timeout <ms> (<platform subagent limit|yaml timeoutMs>)`). If the dispatch reaches that
+boundary, **a dispatch timeout is a started-subagent failure**: the no-replay rule above and the
+stage's declared YAML error policy govern (implement's default `fail` policy routes the run to
+`failed`); it is never a host re-execution. Recovery follows the
+[timed-out implement runbook](execution-workflow.md)'s inline-path equivalent:
+**resume from the partial tree, never restart the stage inline** — no
+`<runId>-implement-partial.md` artifact is written on this path, so the partial working tree
+itself is the recovery input.
+
 **Host-owned interaction:** the host alone executes operator-confirmation actions, owns
 `pause: true`, and surfaces approve/taste/ask decisions. A subagent that discovers missing authority
 or an operator decision returns a blocker; the host pauses at the current state and presents it. The
@@ -128,6 +147,12 @@ After every successful inline `agent.run` action append exactly one provenance l
 subagent form above) to `.spur/run/<run-id>.log`, where `<id>` is the current YAML state id. Also
 log start/failure and the ignored timeout value so an inline run remains auditable without
 fabricating an `AgentRunTracedResult`.
+
+Run-log stamps (task 0727): every appended line is prefixed with an **ISO-8601 UTC** timestamp
+(`YYYY-MM-DDTHH:MM:SSZ`, e.g. `2026-08-31T17:51:11Z`); the exact-template provenance lines above
+keep their exact content after the stamp prefix. This normalization is contractual:
+**bare local-clock stamps are prohibited** — a hand-appended `[stage 12:31]` form mixes timezones
+in one file and makes the run unauditable (task 0726 mixed both forms).
 
 Transition guards are not advisory. Execute the declared guard exactly, in order, with the same
 resolved variables and artifacts. `--no-lifecycle` remains bookkeeping only; the YAML's task checks,

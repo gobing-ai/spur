@@ -97,6 +97,7 @@ cache-conservation discipline (`plugins/sp/skills/dogfood-testing/references/mon
 ## Step 2: Pipeline run
 
 > **Pre-launch size-gate pre-check (R1 / 0478).** Before launching `spur workflow run task-pipeline.yaml`, probe the task's `## Plan` checklist item count (`spur task show <wbs> --json`). The default cap is 8 items (`maxImplementPlanItems: 8`). If the plan item count exceeds 8:
+>
 > - Without `--auto`: warn the operator before calling `spur workflow run` and prompt for confirmation or a plan-item override via `--vars '{"maxImplementPlanItems":"<count>"}'`.
 > - With `--auto`: automatically append `"maxImplementPlanItems": "<count>"` to `--vars` and log a single-line notice (e.g. `Notice: task <wbs> has N plan items (>8 default cap); injecting maxImplementPlanItems override`).
 
@@ -312,6 +313,12 @@ the partial work still in the working tree. The failure output names the partial
    pipeline is not worth re-driving, use the force-done recovery in
    [`done-housekeeping.md`](done-housekeeping.md) F6 — it carries the provenance obligations
    (honest `done_reason`, verdict regeneration).
+
+   **Inline path (task 0727).** There is no `<runId>-implement-partial.md` artifact on the inline
+   driver path — it is written only by the subprocess `agent.run` action. The inline equivalent is
+   the dispatch-timeout contract in [`inline-pipeline-driver.md`](inline-pipeline-driver.md):
+   resume from the partial tree, never restart the stage inline; the partial working tree is the
+   recovery input.
 
 **3. Match the executor to the size (task 0487 R3).** Size and executor capability are one
 decision, not two. **≥ 6 requirements or ≥ 9 Plan items → a `reviewer`-role executor (the

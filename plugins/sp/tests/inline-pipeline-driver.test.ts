@@ -105,6 +105,10 @@ function resolveSessionId(cwd: string): string {
     throw new Error('fixture session id missing');
 }
 
+// 0727 R3: the driver contract requires every hand-appended run-log line to carry an
+// ISO-8601 UTC stamp prefix — bare local-clock forms are prohibited.
+const isoStamp = (): string => `${new Date().toISOString()} `;
+
 function runInlineSmoke(options: { verdict?: 'PASS' | 'FAIL'; failCheckAt?: number } = {}): SmokeResult {
     const cwd = mkdtempSync(join(tmpdir(), 'spur-0503-inline-'));
     mkdirSync(join(cwd, '.spur/context'), { recursive: true });
@@ -155,11 +159,11 @@ function runInlineSmoke(options: { verdict?: 'PASS' | 'FAIL'; failCheckAt?: numb
                     mkdirSync(dirname(answerPath), { recursive: true });
                     writeFileSync(answerPath, `Verdict: ${options.verdict ?? 'PASS'}\n`);
                 }
-                appendFileSync(logPath, `stage ${state.id} executed inline in session ${sessionId}\n`);
+                appendFileSync(logPath, `${isoStamp()}stage ${state.id} executed inline in session ${sessionId}\n`);
                 continue;
             }
             if (action.kind === 'note') {
-                appendFileSync(logPath, `${expand(action.options?.message ?? '', vars)}\n`);
+                appendFileSync(logPath, `${isoStamp()}${expand(action.options?.message ?? '', vars)}\n`);
                 continue;
             }
             if (action.kind === 'file.read.into-var') {
@@ -216,10 +220,19 @@ function runInlineSmoke(options: { verdict?: 'PASS' | 'FAIL'; failCheckAt?: numb
         current = next;
     }
 
+    const log = readFileSync(logPath, 'utf8');
+    // 0727 R3: every appended line is ISO-8601 UTC-stamped; zero bare local-clock forms.
+    const logLines = log.split('\n').filter((line) => line.length > 0);
+    expect(logLines.length).toBeGreaterThan(0);
+    for (const line of logLines) {
+        expect(line).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z /);
+    }
+    expect(logLines.filter((line) => /^\[[a-z-]+ [0-9]{1,2}:[0-9]{2}\]/.test(line))).toEqual([]);
+
     return {
         terminal: current,
         hostStages,
-        log: readFileSync(logPath, 'utf8'),
+        log,
         runLink: readFileSync(join(cwd, '.spur/run/fixture-0503-run-link.json'), 'utf8'),
     };
 }
