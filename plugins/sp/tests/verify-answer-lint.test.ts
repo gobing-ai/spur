@@ -53,24 +53,25 @@ interface Sandbox {
 }
 
 /** Sandbox with a fake spur serving the fixture task + feature from JSON payload files. */
-function makeSandbox(): Sandbox {
+function makeSandbox(taskContent: string = TASK_CONTENT, wbs = '0726'): Sandbox {
     const dir = mkdtempSync(join(tmpdir(), 'spur-0726-lint-'));
-    writeFileSync(
-        join(dir, 'task-0726.json'),
-        JSON.stringify({ wbs: '0726', feature_id: 'F9', content: TASK_CONTENT }),
-    );
+    writeFileSync(join(dir, `task-${wbs}.json`), JSON.stringify({ wbs, feature_id: 'F9', content: taskContent }));
     writeFileSync(join(dir, 'feature-F9.json'), JSON.stringify({ id: 'F9', content: FEATURE_CONTENT }));
     const bin = join(dir, 'spur-fake');
     writeFileSync(bin, FAKE_SPUR_BODY);
     chmodSync(bin, 0o755);
     const answerPath = join(dir, 'verify-answer.txt');
-    const env = { ...process.env, FAKE_TASK: join(dir, 'task-0726.json'), FAKE_FEATURE: join(dir, 'feature-F9.json') };
+    const env = {
+        ...process.env,
+        FAKE_TASK: join(dir, `task-${wbs}.json`),
+        FAKE_FEATURE: join(dir, 'feature-F9.json'),
+    };
     return {
         dir,
         spurBin: bin,
         exec(answer: string) {
             writeFileSync(answerPath, answer);
-            const proc = Bun.spawnSync(['bun', SCRIPT, '0726', '--answer', answerPath, '--spur-bin', bin], {
+            const proc = Bun.spawnSync(['bun', SCRIPT, wbs, '--answer', answerPath, '--spur-bin', bin], {
                 cwd: dir,
                 env,
                 stdout: 'pipe',
@@ -147,7 +148,8 @@ describe('verify-answer-lint behavior (0726 R3)', () => {
 
     test('partial (in-progress) answer without a verdict line is rejected before verdict derivation', () => {
         const sb = makeSandbox();
-        const r = sb.exec(`${REQ_TABLE}\n| R1 | MET | \`src/guard.ts:42\` |\n`);
+        const partialAnswer = `${REQ_TABLE}\n| R1 | MET | \`src/guard.ts:42\` |\n`;
+        const r = sb.exec(partialAnswer);
         expect(r.code).not.toBe(0);
     });
 
@@ -198,6 +200,116 @@ describe('verify-answer-lint behavior (0726 R3)', () => {
             },
         );
         expect(absent.exitCode).not.toBe(0);
+    });
+});
+
+// ─── Corpus-form extraction matrix (0728 R1–R3) ─────────────────────────────
+
+const TASK_0727 = `## 0727. Fixture task
+
+### Requirements
+
+- [ ] R1. Host-owned stage-todo reconciliation. The driver must reconcile the todo list at
+  every transition so nothing is left stuck in_progress.
+- [ ] R2. Inline-dispatch timeout and partial-work contract. A dispatch that hangs must time
+  out and record the partial-work fate.
+- [ ] R3. Run-log timestamps. Every transition entry is timestamped.
+
+### Acceptance Criteria
+
+- AC1: Given a run whose precheck stage finished, when the driver transitions, then the todo
+  shows precheck completed.
+- AC2: Given a dispatch that hangs, when the timeout fires, then the driver records the fate.
+- AC3: Given a transition, when it is logged, then the log line carries a timestamp.
+`;
+
+const TASK_MIXED = `## Mixed. Fixture task
+
+### Requirements
+
+- [x] **R1. Bold checkbox requirement.** Guard the thing.
+- [ ] R2. Checkbox requirement. Lint the thing.
+- R3. Plain bullet requirement. Trace the thing.
+- R4: Colon-lead requirement.
+
+### Acceptance Criteria
+
+- [x] AC1 (R1): first acceptance criterion passes.
+- AC2: second acceptance criterion passes.
+`;
+
+const TASK_SUBIDS = `## Sub. Fixture task
+
+### Requirements
+
+- [ ] R1. Parent one.
+- [ ] R1.1. Child in checkbox form.
+- R2: Parent two.
+- R2.1: Child in plain colon form.
+
+### Acceptance Criteria
+
+- [ ] AC1: sub-ID acceptance criterion.
+`;
+
+/** A complete answer whose rows reference exactly the given declared IDs. */
+function answerWith(reqs: string[], acs: string[]): string {
+    const reqRows = reqs.map((id, i) => `| ${id} | MET | \`src/f${i}.ts:${i + 1}\` |`).join('\n');
+    const acRows = acs.map((id, i) => `| ${id} | MET | test | \`tests/f${i}.test.ts:${i + 1}\` |`).join('\n');
+    return [
+        VERDICT_LINE,
+        '',
+        '### Per-Requirement Traceability',
+        '| Req | Status | Evidence |',
+        '| --- | --- | --- |',
+        reqRows,
+        '',
+        '### Acceptance Criteria Verification',
+        '| AC | Status | Evidence Type | Evidence |',
+        '| --- | --- | --- |',
+        acRows,
+        '',
+    ].join('\n');
+}
+
+describe('corpus-form extraction (0728 R1–R3)', () => {
+    test('0726-rendered fixture (bold reqs, checkbox ACs) still extracts IDs end-to-end', () => {
+        const sb = makeSandbox();
+        const r = sb.exec(answerWith(['R1', 'R2'], ['AC1', 'AC2']));
+        expect(r.code).toBe(0);
+        expect(r.stderr).toContain('PASS');
+    });
+
+    test('0727-rendered fixture (checkbox reqs, plain ACs) extracts all IDs and passes', () => {
+        const sb = makeSandbox(TASK_0727, '0727');
+        const r = sb.exec(answerWith(['R1', 'R2', 'R3'], ['AC1', 'AC2', 'AC3']));
+        expect(r.code).toBe(0);
+        expect(r.stderr).toContain('PASS');
+        expect(r.stderr).toContain('3 requirement row(s), 3 AC row(s)');
+    });
+
+    test('mixed fixture (bold + checkbox + plain + colon reqs, checkbox + plain ACs) extracts all IDs', () => {
+        const sb = makeSandbox(TASK_MIXED, 'mixed');
+        const r = sb.exec(answerWith(['R1', 'R2', 'R3', 'R4'], ['AC1', 'AC2']));
+        expect(r.code).toBe(0);
+        expect(r.stderr).toContain('PASS');
+        expect(r.stderr).toContain('4 requirement row(s), 2 AC row(s)');
+    });
+
+    test('answer referencing genuinely unknown R9 on an R1–R3 doc fails with the unknown-ID finding', () => {
+        const sb = makeSandbox(TASK_0727, '0727');
+        const r = sb.exec(answerWith(['R1', 'R2', 'R9'], ['AC1']));
+        expect(r.code).not.toBe(0);
+        expect(r.stderr).toContain('unknown requirement ID "R9"');
+        expect(r.stderr).toContain('task declares: R1, R2, R3');
+    });
+
+    test('sub-ID R1.1 is recognized in checkbox and plain forms', () => {
+        const sb = makeSandbox(TASK_SUBIDS, 'subids');
+        const r = sb.exec(answerWith(['R1', 'R1.1', 'R2', 'R2.1'], ['AC1']));
+        expect(r.code).toBe(0);
+        expect(r.stderr).toContain('PASS');
+        expect(r.stderr).toContain('4 requirement row(s)');
     });
 });
 

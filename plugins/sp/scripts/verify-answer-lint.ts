@@ -245,15 +245,21 @@ function sectionBetween(text: string, heading: string): string {
 function extractRequirementIds(taskContent: string): string[] {
     const section = sectionBetween(taskContent, 'Requirements');
     const ids = new Set<string>();
-    for (const m of section.matchAll(/\*\*(R\d+(?:\.\d+)*)\s*\./g)) ids.add(m[1] ?? '');
-    for (const m of section.matchAll(/\*\*(R\d+(?:\.\d+)*)\*\*/g)) ids.add(m[1] ?? '');
+    // Corpus forms: bold-wrapped (`**R1. Title.**`, bare `**R1**`); right after a list
+    // marker with optional checkbox (`- [ ] R1.` — the dominant corpus form, `- R1. Title.`,
+    // `- R1:`); line-start (`R1:`). Sub-IDs (`R1.1`) match in every form.
+    for (const m of section.matchAll(/\*\*(R\d+(?:\.\d+)*)\b/g)) ids.add(m[1] ?? '');
+    for (const m of section.matchAll(/^[-*]\s+(?:\[[ xX]\]\s+)?(R\d+(?:\.\d+)*)/gm)) ids.add(m[1] ?? '');
+    for (const m of section.matchAll(/^(R\d+(?:\.\d+)*)\s*[.:]/gm)) ids.add(m[1] ?? '');
     return [...ids];
 }
 
 function extractAcIdentities(taskContent: string, featureContent: string | null): string[] {
     const identities = new Set<string>();
     const section = sectionBetween(taskContent, 'Acceptance Criteria');
-    for (const m of section.matchAll(/^[-*]\s+\[[ x]\]\s+(.+?)\s*(?::|$)/gm)) {
+    // Checkbox labels (`- [x] AC1 (R1): …`, 0726) and plain bullets (`- AC1: Given …`,
+    // 0713/0727) both yield the label text up to `:` plus its leading token.
+    for (const m of section.matchAll(/^[-*]\s+(?:\[[ xX]\]\s+)?(.+?)\s*(?::|$)/gm)) {
         const label = (m[1] ?? '').trim();
         if (!label) continue;
         identities.add(label);
