@@ -91,8 +91,18 @@ describe('0503 task-pipeline resilience', () => {
     test('precheck size gate fails closed when the checker script is absent (0723 R2)', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0723-nosize-'));
         try {
+            // Absent means unresolvable on BOTH branches: no repo-relative copy AND
+            // no staged copy. The stub mimics `superskill script path` on an
+            // unstaged script (stderr + exit 2), so the gate must write FAIL.
+            const bin = join(dir, 'bin');
+            mkdirSync(bin, { recursive: true });
+            executable(bin, 'superskill', 'echo "Script not found" >&2; exit 2');
             const command = commandFor('precheck', 2);
-            const result = runShell(command, dir, { wbs: '0723', spurBin: 'spur' });
+            const result = runShell(command, dir, {
+                wbs: '0723',
+                spurBin: 'spur',
+                PATH: `${bin}:${process.env.PATH ?? ''}`,
+            });
             expect(result.exitCode).toBe(0);
             expect(readFileSync(join(dir, '.spur/run/0723-precheck-size.status'), 'utf8')).toBe('FAIL\n');
             expect(result.output).toContain('failed closed');

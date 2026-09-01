@@ -182,6 +182,8 @@ states:
               $spurBin feature sync "$feature" --json;
             fi);
             SYNC_RC=$?;
+            elif SYNC_MJS="$(superskill script path sp feature-sync-bounded.mjs 2>/dev/null)" && [ -f "$SYNC_MJS" ]; then
+              node "$SYNC_MJS" "$feature" --spur-bin "$spurBin" --json;
             printf '%s\n' "$SYNC_OUTPUT";
             APPLIED=$(printf '%s' "$SYNC_OUTPUT" | jq -r '.applied // false' 2>/dev/null || echo false);
             if [ "$APPLIED" = "true" ] || [ "$SYNC_RC" -ne 0 ]; then

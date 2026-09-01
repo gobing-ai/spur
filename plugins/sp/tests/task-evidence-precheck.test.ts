@@ -259,10 +259,22 @@ describe('0726 pipeline wiring', () => {
     test('missing checker script fails closed through the YAML command (exit 0, status FAIL)', () => {
         const dir = makeSandbox(`{"content":"AC: ${DECL}"}`);
         try {
+            // Absent means unresolvable on BOTH branches: no repo-relative copy AND
+            // no staged copy. The stub mimics `superskill script path` on an
+            // unstaged script (stderr + exit 2), so the gate must write FAIL.
+            const bin = join(dir, 'bin');
+            mkdirSync(bin, { recursive: true });
+            writeFileSync(join(bin, 'superskill'), '#!/bin/sh\necho "Script not found" >&2; exit 2\n');
+            chmodSync(join(bin, 'superskill'), 0o755);
             const command = shellCommands('precheck').find((c) => c.includes('task-evidence-precheck.ts'));
             const result = Bun.spawnSync(['sh', '-c', command ?? ''], {
                 cwd: dir,
-                env: { ...process.env, wbs: '0726', spurBin: join(dir, 'spur-fake') },
+                env: {
+                    ...process.env,
+                    wbs: '0726',
+                    spurBin: join(dir, 'spur-fake'),
+                    PATH: `${bin}:${process.env.PATH ?? ''}`,
+                },
                 stdout: 'pipe',
                 stderr: 'pipe',
             });

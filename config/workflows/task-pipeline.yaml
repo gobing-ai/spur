@@ -208,13 +208,16 @@ states:
           command: >-
             SIZE_FILE=".spur/run/$wbs-precheck-size.status" &&
             mkdir -p .spur/run &&
-            if [ -f plugins/sp/scripts/task-size-precheck.ts ]; then
-            bun plugins/sp/scripts/task-size-precheck.ts "$wbs"
+            SIZE_SCRIPT="plugins/sp/scripts/task-size-precheck.ts";
+            [ -f "$SIZE_SCRIPT" ] ||
+            SIZE_SCRIPT="$(superskill script path sp task-size-precheck.ts 2>/dev/null)";
+            if [ -n "$SIZE_SCRIPT" ] && [ -f "$SIZE_SCRIPT" ]; then
+            bun "$SIZE_SCRIPT" "$wbs"
             --spur-bin "$spurBin" --max-reqs "$maxImplementReqs"
             --max-plan-items "$maxImplementPlanItems";
             else
-              echo "task-size-precheck failed closed — checker script" >&2 &&
-              echo "plugins/sp/scripts/task-size-precheck.ts absent." >&2 &&
+              echo "task-size-precheck failed closed — checker not found in" >&2 &&
+              echo "plugins/sp/scripts/ nor staged; run 'superskill install sp'." >&2 &&
               echo "FAIL" > "$SIZE_FILE";
             fi &&
             exit 0
@@ -228,12 +231,15 @@ states:
           command: >-
             EVID_FILE=".spur/run/$wbs-precheck-evidence.status" &&
             mkdir -p .spur/run &&
-            if [ -f plugins/sp/scripts/task-evidence-precheck.ts ]; then
-            bun plugins/sp/scripts/task-evidence-precheck.ts "$wbs"
+            EVID_SCRIPT="plugins/sp/scripts/task-evidence-precheck.ts";
+            [ -f "$EVID_SCRIPT" ] ||
+            EVID_SCRIPT="$(superskill script path sp task-evidence-precheck.ts 2>/dev/null)";
+            if [ -n "$EVID_SCRIPT" ] && [ -f "$EVID_SCRIPT" ]; then
+            bun "$EVID_SCRIPT" "$wbs"
             --spur-bin "$spurBin";
             else
-              echo "task-evidence-precheck failed closed —" >&2 &&
-              echo "plugins/sp/scripts/task-evidence-precheck.ts absent." >&2 &&
+              echo "task-evidence-precheck failed closed — checker not found" >&2 &&
+              echo "in plugins/sp/scripts/ nor staged; run 'superskill install sp'." >&2 &&
               echo "FAIL" > "$EVID_FILE";
             fi &&
             exit 0
@@ -563,7 +569,14 @@ states:
       - kind: shell
         options:
           command: >-
-            bun plugins/sp/scripts/verify-answer-lint.ts "$wbs"
+            LINT_SCRIPT="plugins/sp/scripts/verify-answer-lint.ts";
+            [ -f "$LINT_SCRIPT" ] ||
+            LINT_SCRIPT="$(superskill script path sp verify-answer-lint.ts 2>/dev/null)";
+            if [ -z "$LINT_SCRIPT" ] || [ ! -f "$LINT_SCRIPT" ]; then
+              echo "verify-answer-lint: checker not found in plugins/sp/scripts/ nor staged — run 'superskill install sp'" >&2;
+              exit 1;
+            fi;
+            bun "$LINT_SCRIPT" "$wbs"
             --answer ".spur/run/$wbs-verify-answer.txt"
             --spur-bin "$spurBin"
       - kind: shell
@@ -648,6 +661,8 @@ states:
               fi;
             else
               echo "Orphan task $wbs — no feature_id linked; proposal: consider linking to a parent feature." >> ".spur/run/$wbs-report.txt";
+              elif SYNC_MJS="$(superskill script path sp feature-sync-bounded.mjs 2>/dev/null)" && [ -f "$SYNC_MJS" ]; then
+                node "$SYNC_MJS" "$FID" --spur-bin "$spurBin" --json;
             fi;
             exit 0
 
