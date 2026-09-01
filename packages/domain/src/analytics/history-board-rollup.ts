@@ -290,7 +290,22 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                                MAX(CASE WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model END)
                                    OVER (PARTITION BY m.source, m.session_id),
                                'unknown'
-                           ) AS effective_model
+                           ) AS effective_model,
+                           COALESCE(
+                               m.input_tokens,
+                               LAG(CASE WHEN m.role = 'assistant' THEN m.input_tokens END)
+                                   OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
+                           ) AS resolved_input_tokens,
+                           COALESCE(
+                               m.cache_read_tokens,
+                               LAG(CASE WHEN m.role = 'assistant' THEN m.cache_read_tokens END)
+                                   OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
+                           ) AS resolved_cache_read_tokens,
+                           COALESCE(
+                               m.output_tokens,
+                               LAG(CASE WHEN m.role = 'assistant' THEN m.output_tokens END)
+                                   OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
+                           ) AS resolved_output_tokens
                     FROM history_message m
                     WHERE ${MESSAGE_DEDUP}
                 ), linked AS (
@@ -300,9 +315,9 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                            ) AS bucket_start,
                            m.session_id, m.source, m.effective_model AS model,
                            ${EFFECTIVE_TOOL_NAME_SQL} AS tool_name, ${SKILL_NAME_SQL} AS skill_name,
-                           COALESCE(m.input_tokens, 0) AS input_tokens,
-                           COALESCE(m.cache_read_tokens, 0) AS cache_read_tokens,
-                           COALESCE(m.output_tokens, 0) AS output_tokens,
+                           COALESCE(m.resolved_input_tokens, 0) AS input_tokens,
+                           COALESCE(m.resolved_cache_read_tokens, 0) AS cache_read_tokens,
+                           COALESCE(m.resolved_output_tokens, 0) AS output_tokens,
                            tc.status, COALESCE(tc.duration_ms, 0) AS duration_ms,
                            COUNT(*) OVER (PARTITION BY m.record_hash) AS tools_in_message
                     FROM enriched m
@@ -511,7 +526,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
     operations.push({
         sql: `INSERT INTO history_board_rollup_meta (id, history_version, refreshed_at)
               VALUES (1, ?, ?)`,
-        params: [seed.historyVersion, new Date().toISOString()],
+        params: [seed.historyVersion || 'v2:initial', new Date().toISOString()],
     });
     await db.batch(operations);
 }
@@ -656,6 +671,7 @@ export async function historyBoardSummaryFromRollup(
     const tokenSelect = `SUM(r.fresh_input_tokens) AS freshInputTokens,
                          SUM(r.cache_read_tokens) AS cacheReadTokens,
                          SUM(r.output_tokens) AS outputTokens`;
+    const seriesTokenSelect = dimension === 'tool' ? `${tokenSelect}, SUM(r.calls) AS calls` : tokenSelect;
 
     const toolWhere = buildRollupWhere(sel, 'r', { timestamp: 'bucket_start', toolFields: true });
     const sessionWhere = buildSessionWhere(sel);
@@ -670,7 +686,7 @@ export async function historyBoardSummaryFromRollup(
     const toolFilter = allTimeTools ? { where: '', params: [] } : toolWhere;
     const [buckets, models, sources, tools, skills, sessionCount] = await Promise.all([
         db.queryAll<BucketedTokenRow>(
-            `SELECT ${bucketExpr} AS bucketStart, ${seriesKey} AS key, ${tokenSelect}
+            `SELECT ${bucketExpr} AS bucketStart, ${seriesKey} AS key, ${seriesTokenSelect}
              FROM ${seriesTable} r
              ${seriesWhere.where}
              GROUP BY bucketStart, key ORDER BY bucketStart ASC`,

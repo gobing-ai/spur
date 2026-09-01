@@ -901,6 +901,7 @@ export interface BucketedTokenRow {
     freshInputTokens: number | null;
     cacheReadTokens: number | null;
     outputTokens: number | null;
+    calls?: number | null;
 }
 
 /** Chronological event row in a session execution timeline. */
@@ -1005,20 +1006,38 @@ export async function bucketedTokenSeries(
         const keyExpr = dim === 'tool' ? EFFECTIVE_TOOL_NAME_SQL : HISTORY_SKILL_NAME_SQL;
         const outerFilter = dim === 'skill' ? "WHERE key <> '' AND key <> 'unknown'" : '';
         return db.queryAll<BucketedTokenRow>(
-            `WITH linked AS (
-                 SELECT ${bucketExpr} AS bucketStart, ${keyExpr} AS key,
-                        COALESCE(m.input_tokens, 0) AS freshInputTokens,
-                        COALESCE(m.cache_read_tokens, 0) AS cacheReadTokens,
-                        COALESCE(m.output_tokens, 0) AS outputTokens,
-                        COUNT(*) OVER (PARTITION BY m.record_hash) AS links
+            `WITH enriched AS (
+                 SELECT m.*,
+                        COALESCE(
+                            m.input_tokens,
+                            LAG(CASE WHEN m.role = 'assistant' THEN m.input_tokens END)
+                                OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
+                        ) AS resolved_input_tokens,
+                        COALESCE(
+                            m.cache_read_tokens,
+                            LAG(CASE WHEN m.role = 'assistant' THEN m.cache_read_tokens END)
+                                OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
+                        ) AS resolved_cache_read_tokens,
+                        COALESCE(
+                            m.output_tokens,
+                            LAG(CASE WHEN m.role = 'assistant' THEN m.output_tokens END)
+                                OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
+                        ) AS resolved_output_tokens
                  FROM history_message m
-                 JOIN history_tool_call tc ON tc.message_hash = m.record_hash
                  ${folded}
+             ), linked AS (
+                 SELECT ${bucketExpr.replace(/m\.ts/g, 'm.ts')} AS bucketStart, ${keyExpr} AS key,
+                        COALESCE(m.resolved_input_tokens, 0) AS freshInputTokens,
+                        COALESCE(m.resolved_cache_read_tokens, 0) AS cacheReadTokens,
+                        COALESCE(m.resolved_output_tokens, 0) AS outputTokens,
+                        COUNT(*) OVER (PARTITION BY m.record_hash) AS links
+                 FROM enriched m
+                 JOIN history_tool_call tc ON tc.message_hash = m.record_hash
              )
              SELECT bucketStart, key,
                     SUM(CAST(freshInputTokens AS REAL) / links) AS freshInputTokens,
                     SUM(CAST(cacheReadTokens AS REAL) / links) AS cacheReadTokens,
-                    SUM(CAST(outputTokens AS REAL) / links) AS outputTokens
+                    SUM(CAST(outputTokens AS REAL) / links) AS outputTokens${dim === 'tool' ? ',\n                    COUNT(*) AS calls' : ''}
              FROM linked
              ${outerFilter}
              GROUP BY bucketStart, key
