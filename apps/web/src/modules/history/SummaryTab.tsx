@@ -3,6 +3,8 @@ import type React from 'react';
 import { useState } from 'react';
 import {
     type ChartSeries,
+    fmtBucketLabel,
+    fmtBucketTooltip,
     fmtInt,
     fmtPct,
     fmtTok,
@@ -162,13 +164,7 @@ const SummaryDimensionBlock: React.FC<SummaryDimensionBlockProps> = ({
 
             {/* Chart or Table or Empty State */}
             <div className="min-h-[220px]">
-                {!hasData ? (
-                    <div className="flex flex-col items-center justify-center h-[220px] text-base-content/40 text-xs font-mono border border-dashed border-base-content/10 rounded-xl bg-base-100/30">
-                        <span>No {title.toLowerCase()} token activity recorded for this time range.</span>
-                    </div>
-                ) : chartMode === 'chart' ? (
-                    <StackedColumnsChart buckets={buckets} series={series} height={220} />
-                ) : (
+                {chartMode === 'table' && buckets.length > 0 && series.length > 0 ? (
                     <div className="overflow-x-auto max-h-72 overflow-y-auto">
                         <table className="w-full text-xs text-left font-mono" data-testid="summary-bucket-table">
                             <thead className="sticky top-0 bg-base-200">
@@ -198,7 +194,7 @@ const SummaryDimensionBlock: React.FC<SummaryDimensionBlockProps> = ({
                                             className="border-b border-base-content/5 hover:bg-base-300/30"
                                         >
                                             <td className="py-1.5 pr-2 font-bold">
-                                                {(b.id ?? b.label).slice(0, 16).replace('T', ' ')}
+                                                {fmtBucketTooltip(b.id ?? b.label)}
                                             </td>
                                             {series.map((s) => (
                                                 <td key={s.id} className="py-1.5 pr-2 text-right tabular-nums">
@@ -216,6 +212,22 @@ const SummaryDimensionBlock: React.FC<SummaryDimensionBlockProps> = ({
                                 })}
                             </tbody>
                         </table>
+                    </div>
+                ) : hasData ? (
+                    <StackedColumnsChart buckets={buckets} series={series} height={220} />
+                ) : buckets.length > 0 && series.length > 0 ? (
+                    <div className="flex flex-col items-center justify-center h-[220px] text-base-content/50 text-xs font-mono border border-dashed border-base-content/10 rounded-xl bg-base-100/30 text-center px-4 gap-1">
+                        <span className="font-semibold text-base-content/70">
+                            No billed tokens recorded for {title.toLowerCase()} in this time range.
+                        </span>
+                        <span className="text-[11px] text-base-content/40">
+                            Tool activity is unmeasured or zero tokens. See call counts in Top Tools below, or switch to
+                            Table view.
+                        </span>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center h-[220px] text-base-content/40 text-xs font-mono border border-dashed border-base-content/10 rounded-xl bg-base-100/30">
+                        <span>No {title.toLowerCase()} token activity recorded for this time range.</span>
                     </div>
                 )}
             </div>
@@ -368,7 +380,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
     ): StackedColumnBucket[] =>
         points.map((b) => ({
             id: b.bucketStart,
-            label: b.bucketStart.length > 10 ? b.bucketStart.slice(11, 16) : b.bucketStart.slice(5, 10),
+            label: fmtBucketLabel(b.bucketStart),
             v: b.series,
             lineValue: b.cacheHitRatio,
         }));
@@ -381,7 +393,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
 
     const skillAreaBuckets = skillTimeSeries.map((b) => ({
         id: b.bucketStart,
-        label: b.bucketStart.length > 10 ? b.bucketStart.slice(11, 16) : b.bucketStart.slice(5, 10),
+        label: fmtBucketLabel(b.bucketStart),
         v: b.series,
     }));
 
@@ -531,7 +543,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
                     />
                     <SummaryDimensionBlock
                         title="By Tool"
-                        description="Token load by tool execution with cache hit ratio overlay"
+                        description="Token load (or call volume when unmeasured) by tool execution with cache hit ratio overlay"
                         series={toolSeries}
                         buckets={toolBuckets}
                         chartMode={blockModes.tool}

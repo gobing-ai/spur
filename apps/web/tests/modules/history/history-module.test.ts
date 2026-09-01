@@ -2,6 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+    fmtBucketLabel,
+    fmtBucketTooltip,
+    fmtDateTime,
     fmtDur,
     fmtInt,
     fmtMs,
@@ -9,6 +12,7 @@ import {
     fmtTok,
     fmtTokAxis,
     niceTicks,
+    parseUtcDate,
     resolveAutoBucket,
 } from '../../../src/modules/history/charts';
 import { module as historyModule } from '../../../src/modules/history/index';
@@ -62,6 +66,26 @@ describe('History Board Web Module', () => {
         expect(ticks.length).toBeGreaterThanOrEqual(4);
         expect(ticks[0]).toBe(0);
         expect(ticks[ticks.length - 1]).toBeGreaterThanOrEqual(100);
+    });
+
+    test('bucket and timestamp formatting uses local timezone with UTC parse support', () => {
+        // Daily bucket
+        expect(fmtBucketLabel('2026-09-01')).toBe('09-01');
+        expect(fmtBucketTooltip('2026-09-01')).toBe('2026-09-01');
+
+        // Sub-day timestamp (ISO UTC)
+        const d = new Date('2026-09-01T17:27:00Z');
+        const expectedHh = String(d.getHours()).padStart(2, '0');
+        const expectedMm = String(d.getMinutes()).padStart(2, '0');
+        expect(fmtBucketLabel('2026-09-01T17:27:00Z')).toBe(`${expectedHh}:${expectedMm}`);
+
+        // DB format with space
+        expect(fmtBucketLabel('2026-09-01 17:27:00')).toBe(`${expectedHh}:${expectedMm}`);
+        expect(parseUtcDate('2026-09-01 17:27:00').getTime()).toBe(d.getTime());
+
+        // Full date-time
+        expect(fmtDateTime('2026-09-01T17:27:30Z')).toContain(`${expectedHh}:${expectedMm}:30`);
+        expect(fmtDateTime(null)).toBe('—');
     });
 
     test('pure token rule: zero currency or dollar fields in web history module', () => {

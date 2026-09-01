@@ -47,6 +47,76 @@ export function fmtMs(ms: number): string {
     return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
 }
 
+/**
+ * Safely parse a database/ISO timestamp as UTC.
+ */
+export function parseUtcDate(ts: string): Date {
+    if (!ts) return new Date(Number.NaN);
+    if (ts.endsWith('Z') || ts.includes('+')) return new Date(ts);
+    if (ts.includes('T')) return new Date(`${ts}Z`);
+    if (ts.includes(' ')) return new Date(`${ts.replace(' ', 'T')}Z`);
+    return new Date(ts);
+}
+
+/**
+ * Format a bucket identifier / timestamp for chart X-axis labels in local time.
+ * - '2026-09-01T17:27:00Z' or '2026-09-01 17:27:00' -> '10:27' (in PDT)
+ * - '2026-09-01' -> '09-01'
+ */
+export function fmtBucketLabel(bucketStart: string): string {
+    if (!bucketStart) return '';
+    // Day-level bucket 'YYYY-MM-DD'
+    if (bucketStart.length === 10 && !bucketStart.includes('T') && !bucketStart.includes(' ')) {
+        return bucketStart.slice(5, 10);
+    }
+    const d = parseUtcDate(bucketStart);
+    if (Number.isNaN(d.getTime())) {
+        return bucketStart.length > 10 ? bucketStart.slice(11, 16) : bucketStart;
+    }
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+}
+
+/**
+ * Format a bucket identifier / timestamp for tooltips and table views in local time.
+ * - '2026-09-01T17:27:00Z' -> '2026-09-01 10:27' (in PDT)
+ * - '2026-09-01' -> '2026-09-01'
+ */
+export function fmtBucketTooltip(bucketStartOrId: string): string {
+    if (!bucketStartOrId) return '';
+    if (bucketStartOrId.length === 10 && !bucketStartOrId.includes('T') && !bucketStartOrId.includes(' ')) {
+        return bucketStartOrId;
+    }
+    const d = parseUtcDate(bucketStartOrId);
+    if (Number.isNaN(d.getTime())) {
+        return bucketStartOrId.slice(0, 16).replace('T', ' ');
+    }
+    const yyyy = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${mo}-${day} ${hh}:${mm}`;
+}
+
+/**
+ * Format an ISO timestamp to local full date & time with seconds.
+ * - '2026-09-01T17:27:00Z' -> '2026-09-01 10:27:00'
+ */
+export function fmtDateTime(ts: string | null | undefined): string {
+    if (!ts) return '—';
+    const d = parseUtcDate(ts);
+    if (Number.isNaN(d.getTime())) return ts.slice(0, 19).replace('T', ' ');
+    const yyyy = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    return `${yyyy}-${mo}-${day} ${hh}:${mm}:${ss}`;
+}
+
 export function niceTicks(max: number, count = 4): number[] {
     if (max <= 0) return [0, 1];
     const raw = max / count;
@@ -289,7 +359,7 @@ export const StackedColumnsChart: React.FC<{
                     style={{ left: `${tooltipLeft}px`, transform: 'translateX(-50%)' }}
                 >
                     <div className="font-semibold text-base-content/90 border-b border-base-content/10 pb-1">
-                        {(buckets[hoverIdx]?.id ?? buckets[hoverIdx]?.label ?? '').slice(0, 16).replace('T', ' ')}
+                        {fmtBucketTooltip(buckets[hoverIdx]?.id ?? buckets[hoverIdx]?.label ?? '')}
                     </div>
                     {series
                         .filter((s) => (buckets[hoverIdx]?.v[s.id] ?? 0) > 0)

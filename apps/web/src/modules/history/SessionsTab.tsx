@@ -1,6 +1,6 @@
 import type { HistorySessionsResponse } from '@gobing-ai/spur-contracts';
 import type React from 'react';
-import { fmtDur, fmtInt, fmtTok } from './charts';
+import { fmtDateTime, fmtDur, fmtInt, fmtTok } from './charts';
 
 export interface SessionsTabProps {
     data?: HistorySessionsResponse['data'];
@@ -137,7 +137,7 @@ export const SessionsTab: React.FC<SessionsTabProps> = ({
                                             </span>
                                         </td>
                                         <td className="p-3 text-base-content/70">{s.model}</td>
-                                        <td className="p-3">{s.start.slice(0, 19).replace('T', ' ')}</td>
+                                        <td className="p-3 font-mono text-xs">{fmtDateTime(s.start)}</td>
                                         <td className="p-3 text-right font-semibold tabular-nums">
                                             {fmtDur(s.durationMs / 60000)}
                                         </td>
