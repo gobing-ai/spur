@@ -9,7 +9,7 @@ import type {
     HistoryToolStatusFilter,
 } from '@gobing-ai/spur-contracts';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/rpc-client';
 import type { HistoryFilterOption } from './HistoryFilters';
 import HistoryFilters from './HistoryFilters';
@@ -427,47 +427,70 @@ export const HistoryShell: React.FC = () => {
             ? new Date(sourcesData.overview.lastImportedAt).toLocaleString()
             : 'never imported';
 
-    const loopSummary = insightsData
-        ? {
-              count: insightsData.loops.length,
-              redundantCalls: insightsData.loops.reduce((acc, loop) => acc + Math.max(0, loop.repeats - 1), 0),
-              wastedTokens: insightsData.loops.reduce((acc, loop) => acc + loop.wastedTokens, 0),
-          }
-        : undefined;
+    const loopSummary = useMemo(
+        () =>
+            insightsData
+                ? {
+                      count: insightsData.loops.length,
+                      redundantCalls: insightsData.loops.reduce((acc, loop) => acc + Math.max(0, loop.repeats - 1), 0),
+                      wastedTokens: insightsData.loops.reduce((acc, loop) => acc + loop.wastedTokens, 0),
+                  }
+                : undefined,
+        [insightsData],
+    );
 
     // Option catalogs: loaded API values union currently selected IDs, so applying a
     // filter never removes its own checkbox.
-    const sourceOptions = unionOptions(
-        sourcesData?.agents.map((agent) => ({ id: agent.id, label: agent.name, color: agent.color })) ?? [],
-        filter.sources,
+    const sourceOptions = useMemo(
+        () =>
+            unionOptions(
+                sourcesData?.agents.map((agent) => ({ id: agent.id, label: agent.name, color: agent.color })) ?? [],
+                filter.sources,
+            ),
+        [sourcesData?.agents, filter.sources],
     );
-    const modelOptions = unionOptions(
-        summaryData?.topModels.map((m) => ({ id: m.id, label: m.label, color: m.color })) ?? [],
-        filter.models,
+    const modelOptions = useMemo(
+        () =>
+            unionOptions(
+                summaryData?.topModels.map((m) => ({ id: m.id, label: m.label, color: m.color })) ?? [],
+                filter.models,
+            ),
+        [summaryData?.topModels, filter.models],
     );
-    const toolOptions = unionOptions(
-        summaryData?.topTools.map((t) => {
-            const id = t.id && t.id.trim() !== '' ? t.id.trim() : 'unknown';
-            return { id, label: id };
-        }) ?? [],
-        filter.tools?.map((t) => (t && t.trim() !== '' ? t.trim() : 'unknown')),
+    const toolOptions = useMemo(
+        () =>
+            unionOptions(
+                summaryData?.topTools.map((t) => {
+                    const id = t.id && t.id.trim() !== '' ? t.id.trim() : 'unknown';
+                    return { id, label: id };
+                }) ?? [],
+                filter.tools?.map((t) => (t && t.trim() !== '' ? t.trim() : 'unknown')),
+            ),
+        [summaryData?.topTools, filter.tools],
     );
-    const skillOptions = unionOptions(
-        summaryData?.skillsUsed
-            .filter((s) => s.id && s.id.trim() !== '' && s.id !== 'unknown')
-            .map((s) => ({ id: s.id, label: s.label, color: s.color })) ?? [],
-        filter.skills?.filter((s) => s && s.trim() !== '' && s !== 'unknown'),
+    const skillOptions = useMemo(
+        () =>
+            unionOptions(
+                summaryData?.skillsUsed
+                    .filter((s) => s.id && s.id.trim() !== '' && s.id !== 'unknown')
+                    .map((s) => ({ id: s.id, label: s.label, color: s.color })) ?? [],
+                filter.skills?.filter((s) => s && s.trim() !== '' && s !== 'unknown'),
+            ),
+        [summaryData?.skillsUsed, filter.skills],
     );
 
-    const scope = {
-        rangeLabel: rangeLabelFor(filter),
-        sessionCount: summaryError
-            ? null
-            : summaryLoading && summaryData === undefined
-              ? undefined
-              : summaryData?.kpis.sessionsCount,
-        sourceCount: filter.sources?.length ?? sourcesData?.agents.length,
-    };
+    const scope = useMemo(
+        () => ({
+            rangeLabel: rangeLabelFor(filter),
+            sessionCount: summaryError
+                ? null
+                : summaryLoading && summaryData === undefined
+                  ? undefined
+                  : summaryData?.kpis.sessionsCount,
+            sourceCount: filter.sources?.length ?? sourcesData?.agents.length,
+        }),
+        [filter, summaryError, summaryLoading, summaryData, sourcesData?.agents.length],
+    );
 
     return (
         <div className="flex flex-col gap-4 p-4 max-w-[1600px] mx-auto w-full">

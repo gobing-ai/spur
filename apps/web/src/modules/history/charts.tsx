@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
 // ─── Formatters & Pure Math Helpers ──────────────────────────────────────────
 
@@ -154,7 +154,7 @@ export const StackedColumnsChart: React.FC<{
     series: ChartSeries[];
     lineColor?: string;
     height?: number;
-}> = ({ buckets, series, lineColor = '#22d3ee', height = 260 }) => {
+}> = memo(({ buckets, series, lineColor = '#22d3ee', height = 260 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [width, setWidth] = useState(1000);
     const [hoverIdx, setHoverIdx] = useState<number | null>(null);
@@ -185,28 +185,40 @@ export const StackedColumnsChart: React.FC<{
     const iw = Math.max(60, W - PL - PR);
     const ih = height - PT - PB;
 
-    const totals = buckets.map((b) => series.reduce((a, s) => a + (b.v[s.id] || 0), 0));
-    const max = Math.max(1, ...totals);
-    const ticks = niceTicks(max, 4);
-    const top = ticks[ticks.length - 1] || max;
+    const { totals, ticks, top, band, bw, labelEvery, linePath } = useMemo(() => {
+        const t = buckets.map((b) => series.reduce((a, s) => a + (b.v[s.id] || 0), 0));
+        const m = Math.max(1, ...t);
+        const tk = niceTicks(m, 4);
+        const tp = tk[tk.length - 1] || m;
+        const bnd = iw / Math.max(1, buckets.length);
+        const bWidth = Math.max(2, bnd * 0.85);
+        const mLbls = Math.max(2, Math.floor(iw / 70));
+        const lblEvery = Math.max(1, Math.ceil(buckets.length / mLbls));
+
+        const yP = (v: number) => PT + ih - (Math.max(0, Math.min(100, v)) / 100) * ih;
+        const lPts = buckets
+            .map((b, i) => (b.lineValue !== undefined ? { x: PL + i * bnd + bnd / 2, y: yP(b.lineValue) } : null))
+            .filter((p): p is { x: number; y: number } => p !== null);
+
+        const lPath =
+            lPts.length > 1
+                ? lPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+                : '';
+
+        return {
+            totals: t,
+            ticks: tk,
+            top: tp,
+            band: bnd,
+            bw: bWidth,
+            labelEvery: lblEvery,
+            linePath: lPath,
+        };
+    }, [buckets, series, iw, ih]);
+
     const y = (v: number) => PT + ih - (v / top) * ih;
     const yPct = (v: number) => PT + ih - (Math.max(0, Math.min(100, v)) / 100) * ih;
-
-    const band = iw / Math.max(1, buckets.length);
-    const bw = Math.max(2, band * 0.85);
     const cx = (i: number) => PL + i * band + band / 2;
-
-    const maxLabels = Math.max(2, Math.floor(iw / 70));
-    const labelEvery = Math.max(1, Math.ceil(buckets.length / maxLabels));
-
-    const linePoints = buckets
-        .map((b, i) => (b.lineValue !== undefined ? { x: cx(i), y: yPct(b.lineValue) } : null))
-        .filter((p): p is { x: number; y: number } => p !== null);
-
-    const linePath =
-        linePoints.length > 1
-            ? linePoints.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
-            : '';
 
     const handleSvgMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
         const rect = e.currentTarget.getBoundingClientRect();
@@ -216,11 +228,11 @@ export const StackedColumnsChart: React.FC<{
         if (colX >= 0 && colX <= iw) {
             const idx = Math.floor(colX / band);
             if (idx >= 0 && idx < buckets.length) {
-                setHoverIdx(idx);
+                if (hoverIdx !== idx) setHoverIdx(idx);
                 return;
             }
         }
-        setHoverIdx(null);
+        if (hoverIdx !== null) setHoverIdx(null);
     };
 
     const tooltipLeft = hoverIdx !== null ? Math.max(110, Math.min(W - 110, cx(hoverIdx))) : W / 2;
@@ -386,7 +398,7 @@ export const StackedColumnsChart: React.FC<{
             )}
         </div>
     );
-};
+});
 
 // ─── Stacked Area Chart ──────────────────────────────────────────────────────
 
@@ -394,7 +406,7 @@ export const StackedAreaChart: React.FC<{
     buckets: { id?: string; label: string; v: Record<string, number> }[];
     series: ChartSeries[];
     height?: number;
-}> = ({ buckets, series, height = 200 }) => {
+}> = memo(({ buckets, series, height = 200 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [width, setWidth] = useState(540);
 
@@ -425,22 +437,29 @@ export const StackedAreaChart: React.FC<{
     const ih = height - PT - PB;
     const n = buckets.length;
 
-    const totals = buckets.map((b) => series.reduce((a, s) => a + (b.v[s.id] || 0), 0));
-    const top = niceTicks(Math.max(1, ...totals), 3).pop() || 1;
-    const x = (i: number) => PL + (n <= 1 ? iw / 2 : (i / (n - 1)) * iw);
-    const y = (v: number) => PT + ih - (v / top) * ih;
+    const { top, areas, x, ticks } = useMemo(() => {
+        const totals = buckets.map((b) => series.reduce((a, s) => a + (b.v[s.id] || 0), 0));
+        const tp = niceTicks(Math.max(1, ...totals), 3).pop() || 1;
+        const tks = niceTicks(tp, 3);
+        const xFn = (i: number) => PL + (n <= 1 ? iw / 2 : (i / (n - 1)) * iw);
+        const yFn = (v: number) => PT + ih - (v / tp) * ih;
 
-    const acc = new Array(n).fill(0);
-    const areas = series.map((s) => {
-        const lower = acc.slice();
-        const upper = acc.map((a, i) => a + (buckets[i]?.v[s.id] || 0));
-        let d = `M${x(0)},${y(upper[0] || 0)}`;
-        for (let i = 1; i < n; i++) d += `L${x(i)},${y(upper[i] || 0)}`;
-        for (let i = n - 1; i >= 0; i--) d += `L${x(i)},${y(lower[i] || 0)}`;
-        d += 'Z';
-        for (let i = 0; i < n; i++) acc[i] = upper[i] || 0;
-        return { id: s.id, color: s.color, d };
-    });
+        const acc = new Array(n).fill(0);
+        const ars = series.map((s) => {
+            const lower = acc.slice();
+            const upper = acc.map((a, i) => a + (buckets[i]?.v[s.id] || 0));
+            let d = `M${xFn(0)},${yFn(upper[0] || 0)}`;
+            for (let i = 1; i < n; i++) d += `L${xFn(i)},${yFn(upper[i] || 0)}`;
+            for (let i = n - 1; i >= 0; i--) d += `L${xFn(i)},${yFn(lower[i] || 0)}`;
+            d += 'Z';
+            for (let i = 0; i < n; i++) acc[i] = upper[i] || 0;
+            return { id: s.id, color: s.color, d };
+        });
+
+        return { top: tp, areas: ars, x: xFn, ticks: tks };
+    }, [buckets, series, n, iw, ih]);
+
+    const y = (v: number) => PT + ih - (v / top) * ih;
 
     return (
         <div ref={containerRef} className="w-full overflow-hidden">
@@ -452,7 +471,7 @@ export const StackedAreaChart: React.FC<{
                 role="img"
                 aria-label="Stacked area chart"
             >
-                {niceTicks(top, 3).map((t) => (
+                {ticks.map((t) => (
                     <g key={t}>
                         <line x1={PL} x2={PL + iw} y1={y(t)} y2={y(t)} stroke="currentColor" strokeOpacity={0.1} />
                         <text x={PL - 7} y={y(t) + 3.5} textAnchor="end" className="text-[10px] fill-base-content/60">
@@ -479,7 +498,7 @@ export const StackedAreaChart: React.FC<{
             </svg>
         </div>
     );
-};
+});
 
 // ─── Single Series Line Chart ────────────────────────────────────────────────
 
@@ -488,7 +507,7 @@ export const LineChart: React.FC<{
     color?: string;
     height?: number;
     valueFmt?: (v: number) => string;
-}> = ({ points, color = '#3987e5', height = 190, valueFmt: _valueFmt = fmtPct }) => {
+}> = memo(({ points, color = '#3987e5', height = 190, valueFmt: _valueFmt = fmtPct }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [width, setWidth] = useState(540);
 
@@ -518,13 +537,19 @@ export const LineChart: React.FC<{
     const iw = Math.max(60, W - PL - PR);
     const ih = height - PT - PB;
     const n = points.length;
-    const hi = 100;
-    const lo = 0;
-    const x = (i: number) => PL + (n <= 1 ? iw / 2 : (i / (n - 1)) * iw);
-    const y = (v: number) => PT + ih - ((v - lo) / (hi - lo)) * ih;
 
-    let d = `M${x(0)},${y(points[0]?.v ?? 0)}`;
-    for (let i = 1; i < n; i++) d += `L${x(i)},${y(points[i]?.v ?? 0)}`;
+    const { d, x } = useMemo(() => {
+        const hi = 100;
+        const lo = 0;
+        const xFn = (i: number) => PL + (n <= 1 ? iw / 2 : (i / (n - 1)) * iw);
+        const yFn = (v: number) => PT + ih - ((v - lo) / (hi - lo)) * ih;
+        if (n === 0) return { d: '', x: xFn };
+        let path = `M${xFn(0)},${yFn(points[0]?.v ?? 0)}`;
+        for (let i = 1; i < n; i++) path += `L${xFn(i)},${yFn(points[i]?.v ?? 0)}`;
+        return { d: path, x: xFn };
+    }, [points, n, iw, ih]);
+
+    const y = (v: number) => PT + ih - (Math.max(0, Math.min(100, v)) / 100) * ih;
 
     return (
         <div ref={containerRef} className="w-full overflow-hidden">
@@ -544,8 +569,19 @@ export const LineChart: React.FC<{
                         </text>
                     </g>
                 ))}
-                <path d={`${d}L${x(n - 1)},${PT + ih}L${x(0)},${PT + ih}Z`} fill={color} opacity={0.1} />
-                <path d={d} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                {d && (
+                    <>
+                        <path d={`${d}L${x(n - 1)},${PT + ih}L${x(0)},${PT + ih}Z`} fill={color} opacity={0.1} />
+                        <path
+                            d={d}
+                            fill="none"
+                            stroke={color}
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        />
+                    </>
+                )}
                 {points.map((p, i) =>
                     i % Math.ceil(n / 6) === 0 || i === n - 1 ? (
                         <text
@@ -562,7 +598,7 @@ export const LineChart: React.FC<{
             </svg>
         </div>
     );
-};
+});
 
 // ─── Radar Chart (4-Axis Model Comparison) ───────────────────────────────────
 
@@ -576,7 +612,7 @@ export const RadarChart: React.FC<{
     axes: string[];
     series: RadarSeries[];
     height?: number;
-}> = ({ axes, series, height = 260 }) => {
+}> = memo(({ axes, series, height = 260 }) => {
     const W = 520;
     const cx = W / 2;
     const cy = height / 2 + 4;
@@ -648,7 +684,7 @@ export const RadarChart: React.FC<{
             })}
         </svg>
     );
-};
+});
 
 // ─── 90-Day Daily Activity Heatmap Grid ──────────────────────────────────────
 
@@ -681,7 +717,7 @@ export const HeatmapGrid: React.FC<{
     days: Array<{ date: string; tokens: number; sessions: number }>;
     color?: string;
     maxDailyTokens?: number;
-}> = ({ days, color = '#3987e5', maxDailyTokens }) => {
+}> = memo(({ days, color = '#3987e5', maxDailyTokens }) => {
     const [hoveredCell, setHoveredCell] = useState<{
         date: string;
         tokens: number;
@@ -689,15 +725,16 @@ export const HeatmapGrid: React.FC<{
         colIdx: number;
     } | null>(null);
 
-    // Prefer token telemetry; fall back to session counts when the source reports none.
-    const tokenMax = maxDailyTokens ?? maxDailyValue(days, 'tokens');
-    const useSessions = tokenMax <= 0 && maxDailyValue(days, 'sessions') > 0;
-    const activeMax = useSessions ? maxDailyValue(days, 'sessions') : tokenMax;
+    const { useSessions, activeMax, weeks } = useMemo(() => {
+        const tokenMax = maxDailyTokens ?? maxDailyValue(days, 'tokens');
+        const uSessions = tokenMax <= 0 && maxDailyValue(days, 'sessions') > 0;
+        const actMax = uSessions ? maxDailyValue(days, 'sessions') : tokenMax;
 
-    // The prototype contract is exactly 90 sequential days: 13 columns, seven rows.
-    const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
-    const weeks: HeatDay[][] = [];
-    for (let i = 0; i < sorted.length; i += 7) weeks.push(sorted.slice(i, i + 7));
+        const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
+        const wks: HeatDay[][] = [];
+        for (let i = 0; i < sorted.length; i += 7) wks.push(sorted.slice(i, i + 7));
+        return { useSessions: uSessions, activeMax: actMax, weeks: wks };
+    }, [days, maxDailyTokens]);
 
     const monthLabel = (wi: number): string => {
         const firstReal = weeks[wi]?.[0];
@@ -821,7 +858,7 @@ export const HeatmapGrid: React.FC<{
             </div>
         </section>
     );
-};
+});
 
 // ─── SparkBar / Mini Progress ────────────────────────────────────────────────
 
@@ -830,7 +867,7 @@ export const SparkBar: React.FC<{
     max: number;
     color?: string;
     height?: number;
-}> = ({ value, max, color = '#3987e5', height = 6 }) => {
+}> = memo(({ value, max, color = '#3987e5', height = 6 }) => {
     const pct = Math.max(0, Math.min(100, max > 0 ? (value / max) * 100 : 0));
     return (
         <div className="w-full bg-base-300 rounded-full overflow-hidden" style={{ height }}>
@@ -840,7 +877,7 @@ export const SparkBar: React.FC<{
             />
         </div>
     );
-};
+});
 
 // ─── Sparkline ───────────────────────────────────────────────────────────────
 
@@ -849,18 +886,22 @@ export const Sparkline: React.FC<{
     color?: string;
     width?: number;
     height?: number;
-}> = ({ values, color = '#3987e5', width = 120, height = 36 }) => {
-    const max = Math.max(...values, 1);
-    const min = Math.min(...values, 0);
-    const span = max - min || 1;
-    const n = values.length;
-    const x = (i: number) => (n <= 1 ? width / 2 : (i / (n - 1)) * (width - 4) + 2);
-    const y = (v: number) => height - 3 - ((v - min) / span) * (height - 6);
-    let d = '';
-    if (n > 0) {
-        d = `M${x(0)},${y(values[0] ?? 0)}`;
-        for (let i = 1; i < n; i++) d += `L${x(i)},${y(values[i] ?? 0)}`;
-    }
+}> = memo(({ values, color = '#3987e5', width = 120, height = 36 }) => {
+    const { d, n, x, y } = useMemo(() => {
+        const max = Math.max(...values, 1);
+        const min = Math.min(...values, 0);
+        const span = max - min || 1;
+        const len = values.length;
+        const xFn = (i: number) => (len <= 1 ? width / 2 : (i / (len - 1)) * (width - 4) + 2);
+        const yFn = (v: number) => height - 3 - ((v - min) / span) * (height - 6);
+        let path = '';
+        if (len > 0) {
+            path = `M${xFn(0)},${yFn(values[0] ?? 0)}`;
+            for (let i = 1; i < len; i++) path += `L${xFn(i)},${yFn(values[i] ?? 0)}`;
+        }
+        return { d: path, n: len, x: xFn, y: yFn };
+    }, [values, width, height]);
+
     return (
         <svg
             viewBox={`0 0 ${width} ${height}`}
@@ -873,4 +914,4 @@ export const Sparkline: React.FC<{
             {n === 1 && <circle cx={x(0)} cy={y(values[0] ?? 0)} r={2} fill={color} />}
         </svg>
     );
-};
+});
