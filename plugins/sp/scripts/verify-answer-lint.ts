@@ -247,9 +247,12 @@ function extractRequirementIds(taskContent: string): string[] {
     const ids = new Set<string>();
     // Corpus forms: bold-wrapped (`**R1. Title.**`, bare `**R1**`); right after a list
     // marker with optional checkbox (`- [ ] R1.` — the dominant corpus form, `- R1. Title.`,
-    // `- R1:`); line-start (`R1:`). Sub-IDs (`R1.1`) match in every form.
+    // `- R1:`) or a bare checkbox with the marker omitted (`[x] R1.`); line-start (`R1:`).
+    // The marker and the checkbox are never both optional — that would match bare prose
+    // (`R1 is …`) and fabricate declarations. Sub-IDs (`R1.1`) match in every form.
     for (const m of section.matchAll(/\*\*(R\d+(?:\.\d+)*)\b/g)) ids.add(m[1] ?? '');
-    for (const m of section.matchAll(/^[-*]\s+(?:\[[ xX]\]\s+)?(R\d+(?:\.\d+)*)/gm)) ids.add(m[1] ?? '');
+    for (const m of section.matchAll(/^(?:[-*]\s+(?:\[[ xX]\]\s+)?|\[[ xX]\]\s+)(R\d+(?:\.\d+)*)/gm))
+        ids.add(m[1] ?? '');
     for (const m of section.matchAll(/^(R\d+(?:\.\d+)*)\s*[.:]/gm)) ids.add(m[1] ?? '');
     return [...ids];
 }

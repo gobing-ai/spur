@@ -252,6 +252,43 @@ const TASK_SUBIDS = `## Sub. Fixture task
 - [ ] AC1: sub-ID acceptance criterion.
 `;
 
+// 0696 form: column-0 requirement IDs with no list marker, bold title *after* the ID
+// (so the bold pattern cannot match) — isolates the line-start extractor branch. The
+// trailing prose pins the terminator rule: a bare `R4` reference must NOT be extracted.
+const TASK_LINESTART = `## 0696. Fixture task
+
+### Requirements
+
+R1. **Layer 1 comes from the CLI.** Rewrite the reference so layer 1 is obtained from
+the todo projection.
+
+R2. **Nothing else in the reference changes.** Layer 2 and the refresh cadence stay.
+
+R3: Colon terminator at line start is also a declaration.
+
+Prose mentioning R4 without a terminator is not a declaration.
+
+### Acceptance Criteria
+
+- AC1: line-start declarations are extracted.
+`;
+
+// 0571 form: checkbox declarations with the list marker omitted. The trailing prose pins
+// that marker and checkbox are never both optional — a bare `R3` must stay unextracted.
+const TASK_MARKERLESS = `## 0571. Fixture task
+
+### Requirements
+
+[x] R1. Engine fix. Accumulate setVars across the sequence.
+[ ] R2. Engine regression tests covering the accumulated map.
+
+R3 is mentioned in prose without a terminator and is not a declaration.
+
+### Acceptance Criteria
+
+- AC1: markerless checkbox declarations are extracted.
+`;
+
 /** A complete answer whose rows reference exactly the given declared IDs. */
 function answerWith(reqs: string[], acs: string[]): string {
     const reqRows = reqs.map((id, i) => `| ${id} | MET | \`src/f${i}.ts:${i + 1}\` |`).join('\n');
@@ -302,6 +339,38 @@ describe('corpus-form extraction (0728 R1–R3)', () => {
         expect(r.code).not.toBe(0);
         expect(r.stderr).toContain('unknown requirement ID "R9"');
         expect(r.stderr).toContain('task declares: R1, R2, R3');
+    });
+
+    test('line-start fixture (0696 form: column-0 IDs, no list marker) extracts via the terminator rule', () => {
+        const sb = makeSandbox(TASK_LINESTART, '0696');
+        const r = sb.exec(answerWith(['R1', 'R2', 'R3'], ['AC1']));
+        expect(r.code).toBe(0);
+        expect(r.stderr).toContain('PASS');
+        expect(r.stderr).toContain('3 requirement row(s)');
+    });
+
+    test('a bare line-start ID reference without a `.`/`:` terminator is not a declaration', () => {
+        const sb = makeSandbox(TASK_LINESTART, '0696');
+        const r = sb.exec(answerWith(['R1', 'R2', 'R3', 'R4'], ['AC1']));
+        expect(r.code).not.toBe(0);
+        expect(r.stderr).toContain('unknown requirement ID "R4"');
+        expect(r.stderr).toContain('task declares: R1, R2, R3');
+    });
+
+    test('markerless checkbox fixture (0571 form: `[x] R1.` with no list marker) extracts IDs', () => {
+        const sb = makeSandbox(TASK_MARKERLESS, '0571');
+        const r = sb.exec(answerWith(['R1', 'R2'], ['AC1']));
+        expect(r.code).toBe(0);
+        expect(r.stderr).toContain('PASS');
+        expect(r.stderr).toContain('2 requirement row(s)');
+    });
+
+    test('marker and checkbox are never both optional — bare prose `R3` is not a declaration', () => {
+        const sb = makeSandbox(TASK_MARKERLESS, '0571');
+        const r = sb.exec(answerWith(['R1', 'R2', 'R3'], ['AC1']));
+        expect(r.code).not.toBe(0);
+        expect(r.stderr).toContain('unknown requirement ID "R3"');
+        expect(r.stderr).toContain('task declares: R1, R2');
     });
 
     test('sub-ID R1.1 is recognized in checkbox and plain forms', () => {
