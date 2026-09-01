@@ -112,7 +112,7 @@ export interface HistoryBoardSummaryRollup {
     buckets: BucketedTokenRow[];
     models: HistoryBoardAggregateRow[];
     sources: HistoryBoardAggregateRow[];
-    tools: Array<{ toolName: string; calls: number; errors: number }>;
+    tools: Array<{ toolName: string; calls: number; errors: number; durationMs?: number; billedTokens?: number }>;
     skills: HistoryBoardSkillRow[];
     sessions: number;
     toolCalls: number;
@@ -408,10 +408,14 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
             params: [],
         },
         {
-            sql: `INSERT INTO history_board_tool_stats (tool_name, skill_name, calls, errors)
-                  SELECT tool_name, skill_name, SUM(calls), SUM(errors)
-                  FROM history_board_tool_5m
-                  GROUP BY tool_name, skill_name`,
+            sql: `INSERT INTO history_board_tool_stats (
+                    tool_name, skill_name, calls, errors,
+                    fresh_input_tokens, cache_read_tokens, output_tokens, duration_ms
+                )
+                SELECT tool_name, skill_name, SUM(calls), SUM(errors),
+                       SUM(fresh_input_tokens), SUM(cache_read_tokens), SUM(output_tokens), SUM(duration_ms)
+                FROM history_board_tool_5m
+                GROUP BY tool_name, skill_name`,
             params: [],
         },
         {
@@ -671,7 +675,8 @@ export async function historyBoardSummaryFromRollup(
     const tokenSelect = `SUM(r.fresh_input_tokens) AS freshInputTokens,
                          SUM(r.cache_read_tokens) AS cacheReadTokens,
                          SUM(r.output_tokens) AS outputTokens`;
-    const seriesTokenSelect = dimension === 'tool' ? `${tokenSelect}, SUM(r.calls) AS calls` : tokenSelect;
+    const callCountCol = seriesIsTool ? 'r.calls' : 'r.messages';
+    const seriesTokenSelect = `${tokenSelect}, SUM(${callCountCol}) AS calls`;
 
     const toolWhere = buildRollupWhere(sel, 'r', { timestamp: 'bucket_start', toolFields: true });
     const sessionWhere = buildSessionWhere(sel);
@@ -702,8 +707,10 @@ export async function historyBoardSummaryFromRollup(
              ${aggregateWhere.where} GROUP BY r.source ORDER BY (SUM(r.fresh_input_tokens) + SUM(r.output_tokens)) DESC`,
             ...aggregateWhere.params,
         ),
-        db.queryAll<{ toolName: string; calls: number; errors: number }>(
-            `SELECT r.tool_name AS toolName, SUM(r.calls) AS calls, SUM(r.errors) AS errors
+        db.queryAll<{ toolName: string; calls: number; errors: number; durationMs: number; billedTokens: number }>(
+            `SELECT r.tool_name AS toolName, SUM(r.calls) AS calls, SUM(r.errors) AS errors,
+                    SUM(r.duration_ms) AS durationMs,
+                    SUM(r.fresh_input_tokens + r.output_tokens) AS billedTokens
              FROM ${toolTable} r
              ${toolFilter.where}
              GROUP BY r.tool_name ORDER BY calls DESC`,
@@ -773,7 +780,8 @@ export async function historyBoardBucketsFromRollup(
     const tokenSelect = `SUM(r.fresh_input_tokens) AS freshInputTokens,
                          SUM(r.cache_read_tokens) AS cacheReadTokens,
                          SUM(r.output_tokens) AS outputTokens`;
-    const seriesTokenSelect = dimension === 'tool' ? `${tokenSelect}, SUM(r.calls) AS calls` : tokenSelect;
+    const callCountCol = seriesIsTool ? 'r.calls' : 'r.messages';
+    const seriesTokenSelect = `${tokenSelect}, SUM(${callCountCol}) AS calls`;
 
     return db.queryAll<BucketedTokenRow>(
         `SELECT ${bucketExpr} AS bucketStart, ${seriesKey} AS key, ${seriesTokenSelect}

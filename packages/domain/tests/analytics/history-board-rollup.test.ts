@@ -533,6 +533,7 @@ describe('historyBoardSummaryFromRollup', () => {
                 freshInputTokens: 110,
                 cacheReadTokens: 900,
                 outputTokens: 55,
+                calls: 4,
             },
             {
                 bucketStart: '2026-06-01 10:05:00',
@@ -540,6 +541,7 @@ describe('historyBoardSummaryFromRollup', () => {
                 freshInputTokens: 40,
                 cacheReadTokens: 0,
                 outputTokens: 20,
+                calls: 2,
             },
         ]);
 
@@ -552,6 +554,7 @@ describe('historyBoardSummaryFromRollup', () => {
                 freshInputTokens: 100,
                 cacheReadTokens: 900,
                 outputTokens: 50,
+                calls: 2,
             },
             {
                 bucketStart: '2026-06-01 09:59:00',
@@ -559,6 +562,7 @@ describe('historyBoardSummaryFromRollup', () => {
                 freshInputTokens: 10,
                 cacheReadTokens: 0,
                 outputTokens: 5,
+                calls: 2,
             },
             {
                 bucketStart: '2026-06-01 10:05:00',
@@ -566,6 +570,7 @@ describe('historyBoardSummaryFromRollup', () => {
                 freshInputTokens: 40,
                 cacheReadTokens: 0,
                 outputTokens: 20,
+                calls: 2,
             },
         ]);
 
@@ -578,6 +583,7 @@ describe('historyBoardSummaryFromRollup', () => {
                 freshInputTokens: 110,
                 cacheReadTokens: 900,
                 outputTokens: 55,
+                calls: 4,
             },
             {
                 bucketStart: '2026-06-01 10:03:00',
@@ -585,6 +591,7 @@ describe('historyBoardSummaryFromRollup', () => {
                 freshInputTokens: 40,
                 cacheReadTokens: 0,
                 outputTokens: 20,
+                calls: 2,
             },
         ]);
     });
@@ -602,6 +609,7 @@ describe('historyBoardSummaryFromRollup', () => {
                 freshInputTokens: 50,
                 cacheReadTokens: 450,
                 outputTokens: 25,
+                calls: 1,
             },
         ]);
     });
@@ -627,7 +635,7 @@ describe('historyBoardSummaryFromRollup', () => {
             { key: 'gpt-5-mini', freshInputTokens: 40, cacheReadTokens: 0, outputTokens: 20 },
         ]);
         expect(summary.sessions).toBe(1);
-        expect(summary.tools).toEqual([{ toolName: 'Bash', calls: 1, errors: 1 }]);
+        expect(summary.tools).toEqual([{ toolName: 'Bash', calls: 1, errors: 1, durationMs: 0, billedTokens: 60 }]);
     });
 
     test('sources and models filters narrow the 5m read model', async () => {
@@ -721,8 +729,22 @@ describe('historyBoardSummaryFromRollup', () => {
         await seedCorpusAndRefresh(db);
         const summary = await historyBoardSummaryFromRollup(db, ALL, '1d', 'model');
         expect(summary.buckets).toEqual([
-            { bucketStart: '2026-06-01', key: 'gpt-5', freshInputTokens: 110, cacheReadTokens: 0, outputTokens: 0 },
-            { bucketStart: '2026-06-02', key: 'gpt-5', freshInputTokens: 7, cacheReadTokens: 0, outputTokens: 0 },
+            {
+                bucketStart: '2026-06-01',
+                key: 'gpt-5',
+                freshInputTokens: 110,
+                cacheReadTokens: 0,
+                outputTokens: 0,
+                calls: 4,
+            },
+            {
+                bucketStart: '2026-06-02',
+                key: 'gpt-5',
+                freshInputTokens: 7,
+                cacheReadTokens: 0,
+                outputTokens: 0,
+                calls: 1,
+            },
         ]);
     });
 

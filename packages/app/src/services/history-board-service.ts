@@ -52,13 +52,16 @@ import {
     historyBoardSourcesFromRollup,
     historyBoardSummaryFromRollup,
     historyKpiTrend,
+    loopRepeatedCallsQuery,
     loops,
     messageRollup,
     modelComparison,
+    selectionPopulation,
     sessionTimeline,
     sourceSummary,
     type TimelineQueryResult,
     type ToolSequenceFilters,
+    toolCallErrorTotals,
     toolRollup,
     toolSequenceQuery,
     topCacheWasteSteps,
@@ -218,10 +221,16 @@ function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras):
     const totalBilledTokens = rows.models.reduce((sum, row) => sum + tokenTotal(row), 0);
     const cacheSavedTokens = rows.models.reduce((sum, row) => sum + row.cacheReadTokens, 0);
     const cacheDenominator = totalBilledTokens + cacheSavedTokens;
+
+    const totalBucketTokens = rows.buckets.reduce(
+        (sum, row) => sum + (row.freshInputTokens ?? 0) + (row.outputTokens ?? 0),
+        0,
+    );
+    const useCalls = totalBucketTokens === 0;
     const timeSeries = new Map<string, { cacheRead: number; billed: number; series: Record<string, number> }>();
     for (const row of rows.buckets) {
         const point = timeSeries.get(row.bucketStart) ?? { cacheRead: 0, billed: 0, series: {} };
-        const billed = (row.freshInputTokens ?? 0) + (row.outputTokens ?? 0);
+        const billed = useCalls ? (row.calls ?? 0) : (row.freshInputTokens ?? 0) + (row.outputTokens ?? 0);
         point.billed += billed;
         point.cacheRead += row.cacheReadTokens ?? 0;
         point.series[row.key] = (point.series[row.key] ?? 0) + billed;
@@ -242,6 +251,10 @@ function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras):
                 share: totalBilledTokens > 0 ? Math.round((tokens / totalBilledTokens) * 100) : 0,
             };
         });
+
+    const totalToolCalls = rows.tools.reduce((sum, row) => sum + row.calls, 0);
+    const totalToolDuration = rows.tools.reduce((sum, row) => sum + (row.durationMs ?? 0), 0);
+    const totalToolTokens = rows.tools.reduce((sum, row) => sum + (row.billedTokens ?? 0), 0);
 
     return {
         kpis: {
@@ -267,6 +280,11 @@ function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras):
             count: row.calls,
             errors: row.errors,
             errorRate: row.calls > 0 ? Math.round((row.errors / row.calls) * 1000) / 10 : 0,
+            durationMs: row.durationMs ?? 0,
+            tokens: row.billedTokens ?? 0,
+            usageShare: totalToolCalls > 0 ? Math.round((row.calls / totalToolCalls) * 1000) / 10 : 0,
+            timeShare: totalToolDuration > 0 ? Math.round(((row.durationMs ?? 0) / totalToolDuration) * 1000) / 10 : 0,
+            tokenShare: totalToolTokens > 0 ? Math.round(((row.billedTokens ?? 0) / totalToolTokens) * 1000) / 10 : 0,
         })),
         skillsUsed: rows.skills
             .filter((row) => row.skillName && row.skillName.trim() !== '' && row.skillName !== 'unknown')
@@ -415,21 +433,21 @@ function projectPreviousKpis(rows: HistoryBoardSummaryRollup): HistorySummaryKpi
 
 /** Previous-window KPIs via exact (non-rollup) reads. */
 async function previousExactKpis(db: DbAdapter, sel: ArtifactSelector): Promise<HistorySummaryKpis> {
-    const [rollups, toolStats, sessionRows] = await Promise.all([
+    const [rollups, pop, toolStatsRow] = await Promise.all([
         messageRollup(db, sel),
-        byTool(db, sel, 1_000_000),
-        bySession(db, sel, 1_000_000),
+        selectionPopulation(db, sel),
+        toolCallErrorTotals(db, sel),
     ]);
     const totalBilledTokens = rollups.reduce((sum, row) => sum + (row.inputTokens ?? 0) + (row.outputTokens ?? 0), 0);
     const cacheSavedTokens = rollups.reduce((sum, row) => sum + (row.cacheReadTokens ?? 0), 0);
     const cacheDenominator = totalBilledTokens + cacheSavedTokens;
-    const toolCalls = toolStats.reduce((sum, row) => sum + row.calls, 0);
-    const toolErrors = toolStats.reduce((sum, row) => sum + row.errors, 0);
+    const toolCalls = toolStatsRow.calls;
+    const toolErrors = toolStatsRow.errors;
     return {
         totalBilledTokens,
         cacheSavedTokens,
         cacheSavedPercent: cacheDenominator > 0 ? Math.round((cacheSavedTokens / cacheDenominator) * 100) : 0,
-        sessionsCount: sessionRows.length,
+        sessionsCount: pop.sessions,
         toolCallsCount: toolCalls,
         errorRate: toolCalls > 0 ? Math.round((toolErrors / toolCalls) * 1000) / 10 : 0,
     };
@@ -660,7 +678,13 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                 sources: Array.from(sources, ([key, value]) => ({ key, ...value })).sort(
                     (a, b) => b.freshInputTokens + b.outputTokens - a.freshInputTokens - a.outputTokens,
                 ),
-                tools: toolStats.map((row) => ({ toolName: row.toolName, calls: row.calls, errors: row.errors })),
+                tools: toolStats.map((row) => ({
+                    toolName: row.toolName,
+                    calls: row.calls,
+                    errors: row.errors,
+                    durationMs: row.durationMsTotal ?? 0,
+                    billedTokens: row.billedTokens ?? 0,
+                })),
                 skills: skillStats,
                 sessions: sessionRows.length,
                 toolCalls: toolStats.reduce((sum, row) => sum + row.calls, 0),
@@ -1273,15 +1297,65 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                   modelComparison(db, sel),
               ]);
 
-        const loopFindings = loopRows.map((l) => ({
-            tool: l.toolName,
-            argsHint: l.argsDigest ?? 'repeated execution',
-            sessionId: l.sessionId,
-            repeats: l.repeats,
-            fromSeq: l.firstSeq,
-            toSeq: l.lastSeq,
-            wastedTokens: l.repeats * 250,
-        }));
+        const loopFindings = await Promise.all(
+            loopRows.map(async (l) => {
+                let repeatedCalls: HistoryToolCallItem[] = [];
+                try {
+                    const callRows = await loopRepeatedCallsQuery(db, {
+                        source: l.source,
+                        sessionId: l.sessionId,
+                        toolName: l.toolName,
+                        argsDigest: l.argsDigest,
+                        limit: 50,
+                    });
+
+                    repeatedCalls = callRows.map((row) => {
+                        const category = toolCategory(row.toolName);
+                        const links = row.links && row.links > 0 ? row.links : 1;
+                        const billedTokens = row.inputTokens + row.outputTokens;
+                        return {
+                            seq: row.toolSeq,
+                            toolSeq: row.toolSeq,
+                            ts: row.ts,
+                            toolName: row.toolName,
+                            category,
+                            status: row.status === 'ok' ? 'ok' : row.status === 'error' ? 'error' : 'unknown',
+                            durationMs: row.durationMs,
+                            durationSource: row.durationMs !== null ? 'measured' : 'unmeasured',
+                            resultBytes: row.resultBytes,
+                            argsRaw: row.argsRaw,
+                            argsDigest: row.argsDigest,
+                            errorText: row.errorText,
+                            callId: row.callId,
+                            messageHash: row.messageHash,
+                            sessionId: row.sessionId,
+                            source: row.source,
+                            model: row.model,
+                            tokens: {
+                                billedTokens: Math.round(billedTokens / links),
+                                freshInputTokens: Math.round(row.inputTokens / links),
+                                cacheReadTokens: Math.round(row.cacheReadTokens / links),
+                                outputTokens: Math.round(row.outputTokens / links),
+                                cacheSavedTokens: 0,
+                            },
+                        };
+                    });
+                } catch {
+                    repeatedCalls = [];
+                }
+
+                return {
+                    tool: l.toolName,
+                    argsHint: l.argsDigest ?? 'repeated execution',
+                    sessionId: l.sessionId,
+                    repeats: l.repeats,
+                    fromSeq: l.firstSeq,
+                    toSeq: l.lastSeq,
+                    wastedTokens: l.repeats * 250,
+                    repeatedCalls,
+                };
+            }),
+        );
 
         const cacheWaste = cacheWasteRows.map((c) => {
             const fresh = c.inputTokens ?? 0;

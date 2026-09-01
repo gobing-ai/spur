@@ -100,6 +100,11 @@ export const historyTopToolSchema = z.object({
     count: z.number(),
     errors: z.number(),
     errorRate: z.number(),
+    durationMs: z.number().optional(),
+    tokens: z.number().optional(),
+    usageShare: z.number().optional(),
+    timeShare: z.number().optional(),
+    tokenShare: z.number().optional(),
 });
 /** Inferred type for HistoryTopTool. */
 export type HistoryTopTool = z.infer<typeof historyTopToolSchema>;
@@ -418,6 +423,7 @@ export const historyLoopFindingSchema = z.object({
     fromSeq: z.number(),
     toSeq: z.number(),
     wastedTokens: z.number(),
+    repeatedCalls: z.array(historyToolCallItemSchema).optional(),
 });
 /** Inferred type for HistoryLoopFinding. */
 export type HistoryLoopFinding = z.infer<typeof historyLoopFindingSchema>;

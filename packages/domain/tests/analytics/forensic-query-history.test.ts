@@ -383,6 +383,7 @@ describe('forensic-query history live extensions (task 0628)', () => {
                 freshInputTokens: 100 / 3,
                 cacheReadTokens: 40 / 3,
                 outputTokens: 60 / 3,
+                calls: 1,
             },
         ]);
         // Blank-skill and non-skill rows are excluded; tool dimension still sees all 3 tools.

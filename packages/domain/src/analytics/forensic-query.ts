@@ -56,6 +56,7 @@ export interface ToolStatRow {
     durationMsMax: number | null;
     durationUnmeasured: number;
     resultBytes: number | null;
+    billedTokens: number;
 }
 
 /** Explicit skill-tool invocation aggregate. */
@@ -255,25 +256,31 @@ export async function messageRollup(
     opts?: WatermarkQueryOptions,
 ): Promise<MessageRollupRow[]> {
     const { where, params } = buildMessageWhere(sel);
-    // 0624 R1: claude re-emits an assistant message while a response streams —
-    // all copies share `request_id`; fold duplicates via MESSAGE_DEDUP (MAX rowid
-    // keeps the complete cumulative usage) instead of double-counting them.
-    const folded = withMessageDedup(where);
-    const wm = applyWatermarkToWhere(folded, opts?.watermark);
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
     return db.queryAll<MessageRollupRow>(
-        `SELECT m.source AS source, m.model AS model, DATE(m.ts) AS day,
+        `WITH filtered AS (
+             SELECT m.source, m.model, m.ts, m.input_tokens, m.output_tokens,
+                    m.cache_read_tokens, m.cache_write_tokens, m.cost_usd, m.role, m.duration_ms,
+                    ROW_NUMBER() OVER (PARTITION BY m.request_id ORDER BY m.rowid DESC) AS rn,
+                    m.request_id
+             FROM history_message m
+             ${wm.where}
+         ),
+         selected AS (
+             SELECT * FROM filtered WHERE request_id IS NULL OR rn = 1
+         )
+         SELECT source, model, DATE(ts) AS day,
                 COUNT(*) AS messages,
-                SUM(m.input_tokens) AS inputTokens,
-                SUM(m.output_tokens) AS outputTokens,
-                SUM(m.cache_read_tokens) AS cacheReadTokens,
-                SUM(m.cache_write_tokens) AS cacheWriteTokens,
-                SUM(m.cost_usd) AS costUsd,
-                SUM(CASE WHEN m.input_tokens IS NOT NULL OR m.output_tokens IS NOT NULL THEN 1 ELSE 0 END) AS recordsWithUsage,
-                SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms END) AS assistantDurationMs,
-                SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms IS NULL END) AS assistantDurationUnmeasured
-         FROM history_message m
-         ${wm.where}
-         GROUP BY m.source, m.model, DATE(m.ts)`,
+                SUM(input_tokens) AS inputTokens,
+                SUM(output_tokens) AS outputTokens,
+                SUM(cache_read_tokens) AS cacheReadTokens,
+                SUM(cache_write_tokens) AS cacheWriteTokens,
+                SUM(cost_usd) AS costUsd,
+                SUM(CASE WHEN input_tokens IS NOT NULL OR output_tokens IS NOT NULL THEN 1 ELSE 0 END) AS recordsWithUsage,
+                SUM(CASE WHEN role = 'assistant' THEN duration_ms END) AS assistantDurationMs,
+                SUM(CASE WHEN role = 'assistant' THEN duration_ms IS NULL END) AS assistantDurationUnmeasured
+         FROM selected
+         GROUP BY source, model, DATE(ts)`,
         ...params,
         ...wm.params,
     );
@@ -288,14 +295,18 @@ export async function toolRollup(
     const { where, params } = buildMessageWhere(sel);
     const wm = applyWatermarkToWhere(where, opts?.watermark);
     return db.queryAll<ToolRollupRow>(
-        `SELECT m.source AS source, m.model AS model, DATE(m.ts) AS day,
+        `WITH filtered_messages AS (
+             SELECT m.record_hash, m.source, m.model, m.ts
+             FROM history_message m
+             ${wm.where}
+         )
+         SELECT fm.source AS source, fm.model AS model, DATE(fm.ts) AS day,
                 COUNT(*) AS toolCalls,
                 SUM(tc.duration_ms) AS durationMs,
                 SUM(tc.duration_ms IS NULL) AS durationUnmeasured
-         FROM history_tool_call tc
-         JOIN history_message m ON m.record_hash = tc.message_hash
-         ${wm.where}
-         GROUP BY m.source, m.model, DATE(m.ts)`,
+         FROM filtered_messages fm
+         CROSS JOIN history_tool_call tc ON tc.message_hash = fm.record_hash
+         GROUP BY fm.source, fm.model, DATE(fm.ts)`,
         ...params,
         ...wm.params,
     );
@@ -311,17 +322,28 @@ export async function byTool(
     const { where, params } = buildMessageWhere(sel);
     const wm = applyWatermarkToWhere(where, opts?.watermark);
     return db.queryAll<ToolStatRow>(
-        `SELECT ${EFFECTIVE_TOOL_NAME_SQL} AS toolName,
+        `WITH filtered_messages AS (
+             SELECT m.record_hash, m.input_tokens, m.output_tokens
+             FROM history_message m
+             ${wm.where}
+         ),
+         filtered_tools AS (
+             SELECT tc.tool_name, tc.args_raw, tc.call_id, tc.status, tc.duration_ms, tc.result_bytes,
+                    fm.input_tokens, fm.output_tokens,
+                    COUNT(*) OVER (PARTITION BY tc.message_hash) AS links
+             FROM filtered_messages fm
+             CROSS JOIN history_tool_call tc ON tc.message_hash = fm.record_hash
+         )
+         SELECT ${EFFECTIVE_TOOL_NAME_SQL} AS toolName,
                 COUNT(*) AS calls,
                 SUM(tc.status = 'error') AS errors,
                 SUM(tc.duration_ms) AS durationMsTotal,
                 CAST(AVG(tc.duration_ms) AS INT) AS durationMsMean,
                 MAX(tc.duration_ms) AS durationMsMax,
                 SUM(tc.duration_ms IS NULL) AS durationUnmeasured,
-                SUM(tc.result_bytes) AS resultBytes
-         FROM history_tool_call tc
-         JOIN history_message m ON m.record_hash = tc.message_hash
-         ${wm.where}
+                SUM(tc.result_bytes) AS resultBytes,
+                ROUND(SUM(CAST(COALESCE(tc.input_tokens, 0) + COALESCE(tc.output_tokens, 0) AS REAL) / tc.links)) AS billedTokens
+         FROM filtered_tools tc
          GROUP BY ${EFFECTIVE_TOOL_NAME_SQL}
          ORDER BY durationMsTotal DESC
          LIMIT ?`,
@@ -334,28 +356,35 @@ export async function byTool(
 /** Explicit skill invocations extracted from retained Skill tool arguments. */
 export async function bySkill(db: DbAdapter, sel: ArtifactSelector, top: number): Promise<SkillStatRow[]> {
     const { where, params } = buildMessageWhere(sel);
-    const folded = withMessageDedup(where);
     return db.queryAll<SkillStatRow>(
-        `SELECT ${HISTORY_SKILL_NAME_SQL} AS skillName, COUNT(*) AS calls
-         FROM history_tool_call tc
-         JOIN history_message m ON m.record_hash = tc.message_hash
-         ${folded}${folded ? ' AND' : ' WHERE'} ${HISTORY_SKILL_NAME_SQL} <> '' AND ${HISTORY_SKILL_NAME_SQL} <> 'unknown'
+        `WITH filtered_messages AS (
+             SELECT m.record_hash
+             FROM history_message m
+             ${where}
+         )
+         SELECT ${HISTORY_SKILL_NAME_SQL} AS skillName, COUNT(*) AS calls
+         FROM filtered_messages fm
+         CROSS JOIN history_tool_call tc ON tc.message_hash = fm.record_hash
+         WHERE ${HISTORY_SKILL_NAME_SQL} <> '' AND ${HISTORY_SKILL_NAME_SQL} <> 'unknown'
          GROUP BY skillName ORDER BY calls DESC LIMIT ?`,
         ...params,
         top,
     );
 }
 
-/** Per-session leaderboard (Q5), bounded by `top`. */ export async function bySession(
+/** Per-session leaderboard (Q5), bounded by `top`. */
+export async function bySession(
     db: DbAdapter,
     sel: ArtifactSelector,
     top: number,
     opts?: WatermarkQueryOptions,
 ): Promise<SessionRow[]> {
     const { where, params } = buildMessageWhere(sel);
-    const folded = withMessageDedup(where);
-    const sessionScoped = `${folded} AND m.session_id NOT IN ('', 'unknown', 'session')`;
-    const wm = applyWatermarkToWhere(sessionScoped, opts?.watermark);
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
+    const sessionWhere =
+        wm.where === ''
+            ? "WHERE m.session_id NOT IN ('', 'unknown', 'session')"
+            : `${wm.where} AND m.session_id NOT IN ('', 'unknown', 'session')`;
 
     const msgRows = await db.queryAll<{
         sessionId: string;
@@ -373,9 +402,19 @@ export async function bySkill(db: DbAdapter, sel: ArtifactSelector, top: number)
         assistantDurationUnmeasured: number;
         state: 'complete' | 'in-progress';
     }>(
-        `WITH selected AS (
-             SELECT m.rowid AS source_rowid, m.* FROM history_message m ${wm.where}
-         ), message_stats AS (
+        `WITH filtered AS (
+             SELECT m.record_hash, m.ts, m.input_tokens, m.cache_read_tokens, m.output_tokens,
+                    m.session_id, m.source, m.model, m.cost_usd, m.role, m.duration_ms,
+                    m.rowid AS source_rowid, m.seq, m.disposition,
+                    ROW_NUMBER() OVER (PARTITION BY m.request_id ORDER BY m.rowid DESC) AS rn,
+                    m.request_id
+             FROM history_message m
+             ${sessionWhere}
+         ),
+         selected AS (
+             SELECT * FROM filtered WHERE request_id IS NULL OR rn = 1
+         ),
+         message_stats AS (
              SELECT source, session_id,
                     COALESCE(
                         m.model,
@@ -423,20 +462,29 @@ export async function bySkill(db: DbAdapter, sel: ArtifactSelector, top: number)
 
     if (msgRows.length === 0) return [];
 
-    // Tool-call stats per (session, tool), scoped to the same message watermark so a
+    // Tool-call stats per (session, tool), scoped to the returned sessions and message watermark so a
     // watermark-filtered query doesn't read unbounded tool calls or count
     // tool calls outside the window (F1).
-    const toolRows = await db.queryAll<{ sessionId: string; source: string; toolName: string; cnt: number }>(
-        `SELECT m.session_id AS sessionId, m.source AS source,
+    const sessionIds = Array.from(new Set(msgRows.map((m) => m.sessionId)));
+    const toolRows =
+        sessionIds.length === 0
+            ? []
+            : await db.queryAll<{ sessionId: string; source: string; toolName: string; cnt: number }>(
+                  `WITH filtered_messages AS (
+             SELECT m.record_hash, m.session_id, m.source
+             FROM history_message m
+             ${wm.where}${wm.where === '' ? 'WHERE' : ' AND'} m.session_id IN (${sessionIds.map(() => '?').join(',')})
+         )
+         SELECT fm.session_id AS sessionId, fm.source AS source,
                 ${EFFECTIVE_TOOL_NAME_SQL} AS toolName,
                 COUNT(*) AS cnt
-         FROM history_tool_call tc
-         JOIN history_message m ON m.record_hash = tc.message_hash
-         ${wm.where}
-         GROUP BY m.session_id, m.source, ${EFFECTIVE_TOOL_NAME_SQL}`,
-        ...params,
-        ...wm.params,
-    );
+         FROM filtered_messages fm
+         CROSS JOIN history_tool_call tc ON tc.message_hash = fm.record_hash
+         GROUP BY fm.session_id, fm.source, ${EFFECTIVE_TOOL_NAME_SQL}`,
+                  ...params,
+                  ...wm.params,
+                  ...sessionIds,
+              );
 
     // Build per-session tool counts from the flat (session, tool) rows.
     const toolMap = new Map<string, Map<string, number>>();
@@ -507,23 +555,28 @@ export async function selectionPopulation(
     opts?: WatermarkQueryOptions,
 ): Promise<{ sessions: number; tools: number }> {
     const { where, params } = buildMessageWhere(sel);
-    const folded = withMessageDedup(where);
-    const sessionScoped = `${folded} AND m.session_id NOT IN ('', 'unknown', 'session')`;
     const wm = applyWatermarkToWhere(where, opts?.watermark);
-    const wmSession = applyWatermarkToWhere(sessionScoped, opts?.watermark);
+    const sessionWhere =
+        wm.where === ''
+            ? "WHERE m.session_id NOT IN ('', 'unknown', 'session')"
+            : `${wm.where} AND m.session_id NOT IN ('', 'unknown', 'session')`;
 
     const [sessionRow, toolRow] = await Promise.all([
         db.queryFirst<{ n: number }>(
-            `SELECT COUNT(DISTINCT m.session_id) AS n FROM history_message m ${wmSession.where} LIMIT ?`,
+            `SELECT COUNT(DISTINCT m.session_id) AS n FROM history_message m ${sessionWhere} LIMIT ?`,
             ...params,
-            ...wmSession.params,
+            ...wm.params,
             1,
         ),
         db.queryFirst<{ n: number }>(
-            `SELECT COUNT(DISTINCT tc.tool_name) AS n
-             FROM history_tool_call tc
-             JOIN history_message m ON m.record_hash = tc.message_hash
-             ${wm.where}
+            `WITH filtered_messages AS (
+                 SELECT m.record_hash
+                 FROM history_message m
+                 ${wm.where}
+             )
+             SELECT COUNT(DISTINCT tc.tool_name) AS n
+             FROM filtered_messages fm
+             CROSS JOIN history_tool_call tc ON tc.message_hash = fm.record_hash
              LIMIT ?`,
             ...params,
             ...wm.params,
@@ -537,26 +590,94 @@ export async function selectionPopulation(
 export async function loops(db: DbAdapter, sel: ArtifactSelector, opts?: WatermarkQueryOptions): Promise<LoopRow[]> {
     const { where, params } = buildMessageWhere(sel);
     const wm = applyWatermarkToWhere(where, opts?.watermark);
-    const extra =
-        wm.where === ''
-            ? "WHERE tc.args_digest IS NOT NULL AND tc.session_id NOT IN ('', 'unknown', 'session')"
-            : `${wm.where} AND tc.args_digest IS NOT NULL AND tc.session_id NOT IN ('', 'unknown', 'session')`;
     return db.queryAll<LoopRow>(
-        `SELECT m.source AS source, tc.session_id AS sessionId,
-                COALESCE(MAX(m.model), 'unknown') AS model, MIN(m.ts) AS startedAt,
+        `WITH filtered_messages AS (
+             SELECT m.record_hash, m.source, m.model, m.ts
+             FROM history_message m
+             ${wm.where}
+         )
+         SELECT fm.source AS source, tc.session_id AS sessionId,
+                COALESCE(MAX(fm.model), 'unknown') AS model, MIN(fm.ts) AS startedAt,
                 tc.tool_name AS toolName,
                 tc.args_digest AS argsDigest,
                 COUNT(*) AS repeats,
                 MIN(tc.seq) AS firstSeq,
                 MAX(tc.seq) AS lastSeq
-         FROM history_tool_call tc
-         JOIN history_message m ON m.record_hash = tc.message_hash
-         ${extra}
-         GROUP BY m.source, tc.session_id, tc.tool_name, tc.args_digest
+         FROM filtered_messages fm
+         CROSS JOIN history_tool_call tc ON tc.message_hash = fm.record_hash
+         WHERE tc.args_digest IS NOT NULL AND tc.session_id NOT IN ('', 'unknown', 'session')
+         GROUP BY fm.source, tc.session_id, tc.tool_name, tc.args_digest
          HAVING COUNT(*) >= 3
          ORDER BY repeats DESC`,
         ...params,
         ...wm.params,
+    );
+}
+
+/** Row result for detailed repeated tool invocations in an execution loop. */
+export interface LoopRepeatedCallRow {
+    toolSeq: number;
+    ts: string | null;
+    toolName: string;
+    status: string;
+    durationMs: number | null;
+    resultBytes: number | null;
+    argsRaw: string | null;
+    argsDigest: string | null;
+    errorText: string | null;
+    callId: string | null;
+    messageHash: string;
+    sessionId: string;
+    source: string;
+    model: string | null;
+    links: number | null;
+    inputTokens: number;
+    cacheReadTokens: number;
+    outputTokens: number;
+}
+
+/** Query detailed repeated invocations for a detected execution loop. */
+export async function loopRepeatedCallsQuery(
+    db: DbAdapter,
+    params: {
+        source: string;
+        sessionId: string;
+        toolName: string;
+        argsDigest: string | null;
+        limit?: number;
+    },
+): Promise<LoopRepeatedCallRow[]> {
+    return db.queryAll<LoopRepeatedCallRow>(
+        `SELECT tc.seq AS toolSeq,
+                COALESCE(tc.started_at, m.ts) AS ts,
+                tc.tool_name AS toolName,
+                tc.status AS status,
+                tc.duration_ms AS durationMs,
+                tc.result_bytes AS resultBytes,
+                tc.args_raw AS argsRaw,
+                tc.args_digest AS argsDigest,
+                tc.error_text AS errorText,
+                tc.call_id AS callId,
+                tc.message_hash AS messageHash,
+                tc.session_id AS sessionId,
+                tc.source AS source,
+                m.model AS model,
+                (SELECT COUNT(*) FROM history_tool_call l WHERE l.message_hash = m.record_hash) AS links,
+                m.input_tokens AS inputTokens,
+                m.cache_read_tokens AS cacheReadTokens,
+                m.output_tokens AS outputTokens
+         FROM history_tool_call tc
+         JOIN history_message m ON m.record_hash = tc.message_hash
+         WHERE tc.source = ? AND tc.session_id = ? AND tc.tool_name = ?
+           AND (tc.args_digest = ? OR (tc.args_digest IS NULL AND ? = ''))
+         ORDER BY tc.seq ASC
+         LIMIT ?`,
+        params.source,
+        params.sessionId,
+        params.toolName,
+        params.argsDigest ?? '',
+        params.argsDigest ?? '',
+        params.limit ?? 50,
     );
 }
 
@@ -693,8 +814,8 @@ export async function topStepsByTokens(
                 m.input_tokens AS inputTokens, m.cache_read_tokens AS cacheReadTokens,
                 m.output_tokens AS outputTokens, m.cost_usd AS costUsd, m.duration_ms AS durationMs
          FROM history_message m
-         ${withStepPredicates(wm.where, "m.role = 'assistant' AND (m.input_tokens IS NOT NULL OR m.output_tokens IS NOT NULL)")}
-         ORDER BY (COALESCE(m.input_tokens, 0) + COALESCE(m.cache_read_tokens, 0)) DESC
+         ${withStepPredicates(wm.where, "m.role = 'assistant' AND +(m.input_tokens IS NOT NULL OR m.output_tokens IS NOT NULL)")}
+         ORDER BY +(COALESCE(m.input_tokens, 0) + COALESCE(m.cache_read_tokens, 0)) DESC
          LIMIT ?`,
         ...params,
         ...wm.params,
@@ -716,8 +837,8 @@ export async function topStepsByDuration(
                 m.input_tokens AS inputTokens, m.cache_read_tokens AS cacheReadTokens,
                 m.output_tokens AS outputTokens, m.cost_usd AS costUsd, m.duration_ms AS durationMs
          FROM history_message m
-         ${withStepPredicates(wm.where, "m.role = 'assistant' AND m.duration_ms IS NOT NULL")}
-         ORDER BY m.duration_ms DESC
+         ${withStepPredicates(wm.where, "m.role = 'assistant' AND +m.duration_ms IS NOT NULL")}
+         ORDER BY +m.duration_ms DESC
          LIMIT ?`,
         ...params,
         ...wm.params,
@@ -742,7 +863,7 @@ export async function cacheWasteAggregate(
          FROM history_message m
          ${withStepPredicates(
              wm.where,
-             "m.role = 'assistant' AND m.input_tokens > ? AND m.cache_read_tokens < m.input_tokens * ?",
+             "m.role = 'assistant' AND +m.input_tokens > ? AND m.cache_read_tokens < m.input_tokens * ?",
          )}
          LIMIT ?`,
         ...params,
@@ -769,9 +890,9 @@ export async function topCacheWasteSteps(
          FROM history_message m
          ${withStepPredicates(
              wm.where,
-             "m.role = 'assistant' AND m.input_tokens > ? AND m.cache_read_tokens < m.input_tokens * ?",
+             "m.role = 'assistant' AND +m.input_tokens > ? AND m.cache_read_tokens < m.input_tokens * ?",
          )}
-         ORDER BY m.input_tokens DESC
+         ORDER BY +m.input_tokens DESC
          LIMIT ?`,
         ...params,
         CACHE_WASTE_MIN_INPUT_TOKENS,
@@ -997,8 +1118,6 @@ export async function bucketedTokenSeries(
             ? 'DATE(m.ts)'
             : `datetime(CAST(strftime('%s', m.ts) / ${BUCKET_SECONDS[bucket]} * ${BUCKET_SECONDS[bucket]} AS INTEGER), 'unixepoch')`;
 
-    const folded = withMessageDedup(wm.where);
-
     if (dim === 'tool' || dim === 'skill') {
         // Allocation is canonical: a message's tokens divide across ALL linked tool calls,
         // and skill rows are selected only after that division — matching how
@@ -1006,7 +1125,18 @@ export async function bucketedTokenSeries(
         const keyExpr = dim === 'tool' ? EFFECTIVE_TOOL_NAME_SQL : HISTORY_SKILL_NAME_SQL;
         const outerFilter = dim === 'skill' ? "WHERE key <> '' AND key <> 'unknown'" : '';
         return db.queryAll<BucketedTokenRow>(
-            `WITH enriched AS (
+            `WITH filtered AS (
+                 SELECT m.record_hash, m.ts, m.source, m.session_id, m.seq, m.rowid, m.role,
+                        m.input_tokens, m.cache_read_tokens, m.output_tokens,
+                        ROW_NUMBER() OVER (PARTITION BY m.request_id ORDER BY m.rowid DESC) AS rn,
+                        m.request_id
+                 FROM history_message m
+                 ${wm.where}
+             ),
+             deduped AS (
+                 SELECT * FROM filtered WHERE request_id IS NULL OR rn = 1
+             ),
+             enriched AS (
                  SELECT m.*,
                         COALESCE(
                             m.input_tokens,
@@ -1023,8 +1153,7 @@ export async function bucketedTokenSeries(
                             LAG(CASE WHEN m.role = 'assistant' THEN m.output_tokens END)
                                 OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
                         ) AS resolved_output_tokens
-                 FROM history_message m
-                 ${folded}
+                 FROM deduped m
              ), linked AS (
                  SELECT ${bucketExpr.replace(/m\.ts/g, 'm.ts')} AS bucketStart, ${keyExpr} AS key,
                         COALESCE(m.resolved_input_tokens, 0) AS freshInputTokens,
@@ -1032,12 +1161,13 @@ export async function bucketedTokenSeries(
                         COALESCE(m.resolved_output_tokens, 0) AS outputTokens,
                         COUNT(*) OVER (PARTITION BY m.record_hash) AS links
                  FROM enriched m
-                 JOIN history_tool_call tc ON tc.message_hash = m.record_hash
+                 CROSS JOIN history_tool_call tc ON tc.message_hash = m.record_hash
              )
              SELECT bucketStart, key,
                     SUM(CAST(freshInputTokens AS REAL) / links) AS freshInputTokens,
                     SUM(CAST(cacheReadTokens AS REAL) / links) AS cacheReadTokens,
-                    SUM(CAST(outputTokens AS REAL) / links) AS outputTokens${dim === 'tool' ? ',\n                    COUNT(*) AS calls' : ''}
+                    SUM(CAST(outputTokens AS REAL) / links) AS outputTokens,
+                    COUNT(*) AS calls
              FROM linked
              ${outerFilter}
              GROUP BY bucketStart, key
@@ -1052,17 +1182,27 @@ export async function bucketedTokenSeries(
             ? "COALESCE(m.model, MAX(CASE WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model END) OVER (PARTITION BY m.source, m.session_id), 'unknown')"
             : 'm.source';
     return db.queryAll<BucketedTokenRow>(
-        `WITH enriched AS (
-             SELECT m.input_tokens, m.cache_read_tokens, m.output_tokens, m.ts,
-                    ${keyExpr} AS key
+        `WITH filtered AS (
+             SELECT m.input_tokens, m.cache_read_tokens, m.output_tokens, m.ts, m.source, m.session_id, m.model,
+                    ROW_NUMBER() OVER (PARTITION BY m.request_id ORDER BY m.rowid DESC) AS rn,
+                    m.request_id
              FROM history_message m
-             ${folded}
+             ${wm.where}
+         ),
+         deduped AS (
+             SELECT * FROM filtered WHERE request_id IS NULL OR rn = 1
+         ),
+         enriched AS (
+             SELECT input_tokens, cache_read_tokens, output_tokens, ts,
+                    ${keyExpr} AS key
+             FROM deduped m
          )
          SELECT ${bucketExpr.replace(/m\.ts/g, 'ts')} AS bucketStart,
                 key,
                 SUM(COALESCE(input_tokens, 0)) AS freshInputTokens,
                 SUM(COALESCE(cache_read_tokens, 0)) AS cacheReadTokens,
-                SUM(COALESCE(output_tokens, 0)) AS outputTokens
+                SUM(COALESCE(output_tokens, 0)) AS outputTokens,
+                COUNT(*) AS calls
          FROM enriched
          GROUP BY bucketStart, key
          ORDER BY bucketStart ASC`,
@@ -1453,9 +1593,16 @@ export async function modelComparison(
 ): Promise<ModelComparisonRow[]> {
     const { where, params } = buildMessageWhere(sel, 'm');
     const wm = applyWatermarkToWhere(where, opts?.watermark);
-    const folded = withMessageDedup(wm.where);
     return db.queryAll<ModelComparisonRow>(
-        `WITH selected AS (
+        `WITH filtered AS (
+             SELECT m.record_hash, m.source, m.session_id, m.role, m.duration_ms,
+                    m.input_tokens, m.cache_read_tokens, m.output_tokens, m.model,
+                    ROW_NUMBER() OVER (PARTITION BY m.request_id ORDER BY m.rowid DESC) AS rn,
+                    m.request_id
+             FROM history_message m
+             ${wm.where}
+         ),
+         selected AS (
              SELECT m.record_hash,
                     COALESCE(
                         m.model,
@@ -1465,7 +1612,8 @@ export async function modelComparison(
                     ) AS model,
                     m.role, m.duration_ms,
                     m.input_tokens, m.cache_read_tokens, m.output_tokens
-             FROM history_message m ${folded}
+             FROM filtered m
+             WHERE m.request_id IS NULL OR m.rn = 1
          ), message_stats AS (
              SELECT model,
                     AVG(CASE WHEN role = 'assistant' AND duration_ms > 0 THEN duration_ms END) AS speedMsMean,
@@ -1475,7 +1623,8 @@ export async function modelComparison(
              FROM selected GROUP BY model
          ), tool_stats AS (
              SELECT s.model, COUNT(*) AS calls, SUM(tc.status = 'error') AS errors
-             FROM selected s JOIN history_tool_call tc ON tc.message_hash = s.record_hash
+             FROM selected s
+             CROSS JOIN history_tool_call tc ON tc.message_hash = s.record_hash
              GROUP BY s.model
          )
          SELECT m.model, m.speedMsMean,
@@ -1516,25 +1665,42 @@ export async function historyKpiTrend(
 ): Promise<KpiTrendRow[]> {
     const { where, params } = buildMessageWhere(sel, 'm');
     const wm = applyWatermarkToWhere(where, opts?.watermark);
-    const folded = withMessageDedup(wm.where);
     return db.queryAll<KpiTrendRow>(
-        `WITH selected AS (
-             SELECT m.record_hash, m.ts, m.input_tokens, m.cache_read_tokens, m.output_tokens, m.session_id
-             FROM history_message m ${folded}
-         ), tools AS (
-             SELECT s.record_hash, COUNT(*) AS toolCalls
-             FROM selected s JOIN history_tool_call tc ON tc.message_hash = s.record_hash
-             GROUP BY s.record_hash
+        `WITH filtered_messages AS (
+             SELECT m.record_hash, m.ts, m.input_tokens, m.cache_read_tokens, m.output_tokens, m.session_id,
+                    ROW_NUMBER() OVER (PARTITION BY m.request_id ORDER BY m.rowid DESC) AS rn,
+                    m.request_id
+             FROM history_message m
+             ${wm.where}
+         ),
+         selected_messages AS (
+             SELECT * FROM filtered_messages WHERE request_id IS NULL OR rn = 1
+         ),
+         message_daily AS (
+             SELECT DATE(ts) AS day,
+                    SUM(COALESCE(input_tokens, 0)) AS freshInputTokens,
+                    SUM(COALESCE(output_tokens, 0)) AS outputTokens,
+                    SUM(COALESCE(cache_read_tokens, 0)) AS cacheReadTokens,
+                    COUNT(DISTINCT CASE WHEN session_id NOT IN ('', 'unknown', 'session') THEN session_id END) AS sessions
+             FROM selected_messages
+             GROUP BY DATE(ts)
+         ),
+         tool_daily AS (
+             SELECT DATE(m.ts) AS day,
+                    COUNT(*) AS toolCalls
+             FROM selected_messages m
+             CROSS JOIN history_tool_call tc ON tc.message_hash = m.record_hash
+             GROUP BY DATE(m.ts)
          )
-         SELECT DATE(s.ts) AS day,
-                SUM(COALESCE(s.input_tokens, 0)) AS freshInputTokens,
-                SUM(COALESCE(s.output_tokens, 0)) AS outputTokens,
-                SUM(COALESCE(s.cache_read_tokens, 0)) AS cacheReadTokens,
-                COUNT(DISTINCT CASE WHEN s.session_id NOT IN ('', 'unknown', 'session') THEN s.session_id END) AS sessions,
-                SUM(COALESCE(t.toolCalls, 0)) AS toolCalls
-         FROM selected s LEFT JOIN tools t ON t.record_hash = s.record_hash
-         GROUP BY DATE(s.ts)
-         ORDER BY day ASC`,
+         SELECT m.day,
+                m.freshInputTokens,
+                m.outputTokens,
+                m.cacheReadTokens,
+                m.sessions,
+                COALESCE(t.toolCalls, 0) AS toolCalls
+         FROM message_daily m
+         LEFT JOIN tool_daily t ON t.day = m.day
+         ORDER BY m.day ASC`,
         ...params,
         ...wm.params,
     );
@@ -1662,5 +1828,28 @@ export async function toolSequenceQuery(
     return {
         truncated,
         rows: finalRows,
+    };
+}
+
+/** Total tool calls and errors matching a selector (fast aggregate without name/duration grouping). */
+export async function toolCallErrorTotals(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+): Promise<{ calls: number; errors: number }> {
+    const { where, params } = buildMessageWhere(sel);
+    const row = await db.queryFirst<{ errors: number; calls: number }>(
+        `WITH filtered_messages AS (
+             SELECT m.record_hash FROM history_message m ${where}
+         )
+         SELECT COUNT(*) AS calls, SUM(tc.status = 'error') AS errors
+         FROM filtered_messages fm
+         CROSS JOIN history_tool_call tc ON tc.message_hash = fm.record_hash
+         LIMIT ?`,
+        ...params,
+        1,
+    );
+    return {
+        calls: row?.calls ?? 0,
+        errors: row?.errors ?? 0,
     };
 }

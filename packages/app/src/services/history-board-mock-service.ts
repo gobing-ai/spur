@@ -469,12 +469,18 @@ export class MockHistoryBoardService implements HistoryBoardService {
             return { id: s.id, label: s.name, color: s.color, tokens, share };
         }).sort((a, b) => b.tokens - a.tokens);
 
+        const totalMockCalls = Object.values(toolCounts).reduce((s, x) => s + x.count, 0);
         const topTools = Object.entries(toolCounts)
             .map(([id, stats]) => ({
                 id: id && id.trim() !== '' ? id.trim() : 'unknown',
                 count: stats.count,
                 errors: stats.errors,
                 errorRate: stats.count > 0 ? Math.round((stats.errors / stats.count) * 1000) / 10 : 0,
+                durationMs: 0,
+                tokens: 0,
+                usageShare: totalMockCalls > 0 ? Math.round((stats.count / totalMockCalls) * 1000) / 10 : 0,
+                timeShare: 0,
+                tokenShare: 0,
             }))
             .sort((a, b) => b.count - a.count)
             .slice(0, 15);

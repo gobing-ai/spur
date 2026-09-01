@@ -154,6 +154,11 @@ covers the source-local `bun run apps/cli/src/index.ts task …` spelling). The 
   (`task_run_links` → `history_run_session`) with `history_task_session`; task+run selection keeps
   intersection semantics through the run chain only.
 
+### 2.4 Tool Arguments Extraction, Ingestion Diagnostics, and Field Provenance
+
+Tool execution arguments (`args_raw`, `args_digest`, `call_id`) are ingested per tool call into `history_tool_call`. For full source JSONL mapping matrices, root-cause taxonomy of missing payloads (`args_raw IS NULL`), the 5-step diagnostic recovery procedure, and config-driven frontend syntax highlighting rules, refer to the companion satellite:
+- **Satellite SSOT:** [`docs/design/history-importer-arguments-provenance.md`](history-importer-arguments-provenance.md)
+
 ## 3. Materialization Plane (`spur history analyze`)
 
 The single refresh choke point is `refreshHistoryRollups(db)` (`packages/app/src/services/history-analysis-service.ts`), invoked at the end of `HistoryService.analyze()` — which `spur history analyze` and the `spur history daily` pipeline both route through. It is a no-op when `historyBoardRollupsFresh(db)` reports the stored version current; otherwise it fully deletes and rebuilds every `history_board_*` / `history_daily_stats` table via `replaceHistoryBoardRollups`.

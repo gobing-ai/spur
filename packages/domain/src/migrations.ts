@@ -523,10 +523,14 @@ CREATE TABLE IF NOT EXISTS history_board_model_stats (
 
 -- Summary (27.02s): bounded all-time Top Tools and Skills Used aggregates.
 CREATE TABLE IF NOT EXISTS history_board_tool_stats (
-    tool_name  TEXT NOT NULL,
-    skill_name TEXT NOT NULL,
-    calls      INTEGER NOT NULL,
-    errors     INTEGER NOT NULL,
+    tool_name           TEXT NOT NULL,
+    skill_name          TEXT NOT NULL,
+    calls               INTEGER NOT NULL,
+    errors              INTEGER NOT NULL,
+    fresh_input_tokens  INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens   INTEGER NOT NULL DEFAULT 0,
+    output_tokens       INTEGER NOT NULL DEFAULT 0,
+    duration_ms         INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (tool_name, skill_name)
 );
 
@@ -774,6 +778,16 @@ CREATE INDEX IF NOT EXISTS idx_history_task_session_session_id
     ON history_task_session (session_id);
 `;
 
+/**
+ * Migration 0031: Token and duration columns on history_board_tool_stats.
+ */
+export const HISTORY_BOARD_TOOL_STATS_COLUMNS_SCHEMA_SQL = `
+ALTER TABLE history_board_tool_stats ADD COLUMN fresh_input_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE history_board_tool_stats ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE history_board_tool_stats ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE history_board_tool_stats ADD COLUMN duration_ms INTEGER NOT NULL DEFAULT 0;
+`;
+
 export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
     // Renamed from `0001_spur_team_inbox` so the filename carries the
@@ -885,6 +899,10 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     {
         id: '0030_spur_cli_history_board_covering_indexes',
         sql: HISTORY_BOARD_COVERING_INDEXES_SCHEMA_SQL,
+    },
+    {
+        id: '0031_spur_cli_history_board_tool_stats_columns',
+        sql: HISTORY_BOARD_TOOL_STATS_COLUMNS_SCHEMA_SQL,
     },
 ];
 
@@ -1047,6 +1065,12 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             migration.id === '0017_spur_cli_runs_status_completed_to_done' &&
             (!(await tableExists(adapter, 'runs')) || !(await columnExists(adapter, 'runs', 'status')));
 
+        // Migration 0031 token and duration columns on history_board_tool_stats.
+        const historyBoardToolStatsColumnsSkip =
+            migration.id === '0031_spur_cli_history_board_tool_stats_columns' &&
+            (!(await tableExists(adapter, 'history_board_tool_stats')) ||
+                (await columnExists(adapter, 'history_board_tool_stats', 'fresh_input_tokens')));
+
         // Migration 0027 retires duplicate ACTIVE history.refresh rows and swaps
         // the pending-only unique index for the active one — DDL/DML against
         // queue_jobs, which the loadSqlMigrations path (drizzle/, which excludes
@@ -1065,6 +1089,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !historyPerformanceIndexesSkip &&
             !historyToolCallIndexesSkip &&
             !historyBoardCoveringIndexesSkip &&
+            !historyBoardToolStatsColumnsSkip &&
             !callIdSkip &&
             !tsNullableSkip &&
             !queueJobsActiveIndexSkip
