@@ -157,7 +157,8 @@ function resolveBucket(bucket: string | undefined, range: HistoryRange = '4h'): 
     if (bucket && bucket !== 'auto') {
         return bucket as DomainHistoryBucket;
     }
-    if (range === '1h' || range === '4h') return '5m';
+    if (range === '1h') return '1m';
+    if (range === '4h') return '3m';
     if (range === '24h') return '10m';
     if (range === '7d') return '30m';
     return '1d';
@@ -260,22 +261,43 @@ function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras):
         })),
         topModels: toTopItems(rows.models, false),
         topSources: toTopItems(rows.sources, true),
-        topTools: rows.tools.slice(0, 10).map((row) => ({
-            id: row.toolName,
+        topTools: rows.tools.slice(0, 15).map((row) => ({
+            id: row.toolName && row.toolName.trim() !== '' ? row.toolName.trim() : 'unknown',
             count: row.calls,
             errors: row.errors,
             errorRate: row.calls > 0 ? Math.round((row.errors / row.calls) * 1000) / 10 : 0,
         })),
-        skillsUsed: rows.skills.map((row, index) => ({
-            id: row.skillName,
-            label: row.skillName,
-            color: SERIES_COLORS[index % SERIES_COLORS.length] ?? '#3987e5',
-            count: row.calls,
-        })),
+        skillsUsed: rows.skills
+            .filter((row) => row.skillName && row.skillName.trim() !== '' && row.skillName !== 'unknown')
+            .map((row, index) => ({
+                id: row.skillName,
+                label: row.skillName,
+                color: SERIES_COLORS[index % SERIES_COLORS.length] ?? '#3987e5',
+                count: row.calls,
+            })),
         cacheEfficiency: {
             hitRatio: cacheDenominator > 0 ? Math.round((cacheSavedTokens / cacheDenominator) * 100) : 0,
             savedTokens: cacheSavedTokens,
             totalRead: cacheSavedTokens + rows.models.reduce((sum, row) => sum + row.freshInputTokens, 0),
+            bySource: rows.sources.map((row) => {
+                const catalog = AGENT_CATALOG.find((agent) => agent.id === row.key);
+                const savedTokens = row.cacheReadTokens ?? 0;
+                const freshTokens = row.freshInputTokens ?? 0;
+                const outputTokens = row.outputTokens ?? 0;
+                const totalRead = savedTokens + freshTokens;
+                const billedTokens = freshTokens + outputTokens;
+                const hitRatio = totalRead > 0 ? Math.round((savedTokens / totalRead) * 100) : 0;
+                return {
+                    source: row.key,
+                    sourceName: catalog?.name ?? row.key,
+                    color: catalog?.color ?? '#3987e5',
+                    hitRatio,
+                    savedTokens,
+                    freshTokens,
+                    totalRead,
+                    billedTokens,
+                };
+            }),
         },
         kpiTrend: extras.kpiTrend,
         previousKpis: extras.previousKpis,
@@ -598,8 +620,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         const sel = toArtifactSelector(filter);
         const bucket = resolveBucket(filter?.bucket, filter?.range ?? '4h');
         const dimension = filter?.dimension ?? 'model';
-        const exactSummaryRollup = (sel.tools?.length ?? 0) === 0 && (sel.skills?.length ?? 0) === 0;
-        if (exactSummaryRollup && (await historyBoardRollupsFresh(db))) {
+        if (await historyBoardRollupsFresh(db)) {
             const rows = await historyBoardSummaryFromRollup(db, sel, bucket, dimension);
             const extras = await computeSummaryExtras(db, sel, bucket, dimension, false, rows.buckets);
             return projectSummary(rows, extras);
@@ -1126,8 +1147,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         const sel = toArtifactSelector(input.filter);
         const page = input.page ?? 1;
         const pageSize = input.pageSize ?? 20;
-        const exactSessionRollup = (sel.tools?.length ?? 0) === 0 && (sel.skills?.length ?? 0) === 0;
-        if (exactSessionRollup && (await historyBoardRollupsFresh(db))) {
+        if (await historyBoardRollupsFresh(db)) {
             const result = await historyBoardSessionsFromRollup(db, sel, {
                 page,
                 pageSize,
@@ -1231,8 +1251,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         }
 
         const sel = toArtifactSelector(filter);
-        const exactInsightRollup = (sel.tools?.length ?? 0) === 0 && (sel.skills?.length ?? 0) === 0;
-        const rollupsFresh = exactInsightRollup && (await historyBoardRollupsFresh(db));
+        const rollupsFresh = await historyBoardRollupsFresh(db);
         const [loopRows, cacheWasteRows, sessionRows, largeSteps, slowStepsRows, modelCompRows] = rollupsFresh
             ? await Promise.all([
                   historyBoardLoopsFromRollup(db, sel, 100),

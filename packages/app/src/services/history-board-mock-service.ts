@@ -354,15 +354,19 @@ export class MockHistoryBoardService implements HistoryBoardService {
         // Build time series buckets
         const bucket =
             filter?.bucket === 'auto' || filter?.bucket === undefined
-                ? filter?.range === '1h' || filter?.range === '4h'
-                    ? '5m'
-                    : filter?.range === '24h'
-                      ? '10m'
-                      : filter?.range === '7d'
-                        ? '30m'
-                        : '1d'
+                ? filter?.range === '1h'
+                    ? '1m'
+                    : filter?.range === '4h'
+                      ? '3m'
+                      : filter?.range === '24h'
+                        ? '10m'
+                        : filter?.range === '7d'
+                          ? '30m'
+                          : '1d'
                 : filter.bucket;
         const bucketInterval = {
+            '1m': 1 * 60_000,
+            '3m': 3 * 60_000,
             '5m': 5 * 60_000,
             '10m': 10 * 60_000,
             '30m': 30 * 60_000,
@@ -467,12 +471,13 @@ export class MockHistoryBoardService implements HistoryBoardService {
 
         const topTools = Object.entries(toolCounts)
             .map(([id, stats]) => ({
-                id,
+                id: id && id.trim() !== '' ? id.trim() : 'unknown',
                 count: stats.count,
                 errors: stats.errors,
                 errorRate: stats.count > 0 ? Math.round((stats.errors / stats.count) * 1000) / 10 : 0,
             }))
-            .sort((a, b) => b.count - a.count);
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 15);
 
         const skillsUsed = SKILLS_CATALOG.map((sk) => ({
             id: sk.id,
@@ -482,6 +487,30 @@ export class MockHistoryBoardService implements HistoryBoardService {
         })).sort((a, b) => b.count - a.count);
 
         const hitRatio = totalTokensWithCache > 0 ? Math.round((totalCacheRead / totalTokensWithCache) * 100) : 0;
+
+        const sourceCacheMap: Record<string, { saved: number; fresh: number; billed: number }> = {};
+        for (const s of matching) {
+            const entry = sourceCacheMap[s.source] ?? { saved: 0, fresh: 0, billed: 0 };
+            entry.saved += s.tokens.cacheReadTokens;
+            entry.fresh += s.tokens.freshInputTokens;
+            entry.billed += s.tokens.billedTokens;
+            sourceCacheMap[s.source] = entry;
+        }
+        const cacheBySource = SOURCES_CATALOG.map((s) => {
+            const stats = sourceCacheMap[s.id] ?? { saved: 0, fresh: 0, billed: 0 };
+            const totalRead = stats.saved + stats.fresh;
+            const sourceHitRatio = totalRead > 0 ? Math.round((stats.saved / totalRead) * 100) : 0;
+            return {
+                source: s.id,
+                sourceName: s.name,
+                color: s.color,
+                hitRatio: sourceHitRatio,
+                savedTokens: stats.saved,
+                freshTokens: stats.fresh,
+                totalRead,
+                billedTokens: stats.billed,
+            };
+        }).filter((item) => item.totalRead > 0 || item.billedTokens > 0);
 
         return {
             kpis: {
@@ -501,6 +530,7 @@ export class MockHistoryBoardService implements HistoryBoardService {
                 hitRatio,
                 savedTokens: totalCacheSaved,
                 totalRead: totalCacheRead + matching.reduce((sum, session) => sum + session.tokens.freshInputTokens, 0),
+                bySource: cacheBySource,
             },
             kpiTrend: this.buildKpiTrend(matching),
             previousKpis: null,

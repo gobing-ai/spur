@@ -10,7 +10,7 @@ export const historyRangeEnum = z.enum(['1h', '4h', '24h', '7d', '30d', 'all', '
 export type HistoryRange = z.infer<typeof historyRangeEnum>;
 
 /** Supported time aggregation bucket intervals. */
-export const historyBucketEnum = z.enum(['auto', '5m', '10m', '30m', '1h', '4h', '1d']);
+export const historyBucketEnum = z.enum(['auto', '1m', '3m', '5m', '10m', '30m', '1h', '4h', '1d']);
 /** Inferred type for HistoryBucket enum. */
 export type HistoryBucket = z.infer<typeof historyBucketEnum>;
 
@@ -114,11 +114,26 @@ export const historySkillItemSchema = z.object({
 /** Inferred type for HistorySkillItem. */
 export type HistorySkillItem = z.infer<typeof historySkillItemSchema>;
 
+/** Cache efficiency breakdown per source item schema. */
+export const historySourceCacheEfficiencyItemSchema = z.object({
+    source: z.string(),
+    sourceName: z.string(),
+    color: z.string(),
+    hitRatio: z.number(),
+    savedTokens: z.number(),
+    freshTokens: z.number(),
+    totalRead: z.number(),
+    billedTokens: z.number(),
+});
+/** Inferred type for HistorySourceCacheEfficiencyItem. */
+export type HistorySourceCacheEfficiencyItem = z.infer<typeof historySourceCacheEfficiencyItemSchema>;
+
 /** Cache efficiency summary metrics schema. */
 export const historyCacheEfficiencySchema = z.object({
     hitRatio: z.number(),
     savedTokens: z.number(),
     totalRead: z.number(),
+    bySource: z.array(historySourceCacheEfficiencyItemSchema).optional(),
 });
 /** Inferred type for HistoryCacheEfficiency. */
 export type HistoryCacheEfficiency = z.infer<typeof historyCacheEfficiencySchema>;

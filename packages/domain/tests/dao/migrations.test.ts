@@ -119,7 +119,7 @@ describe('db migrations', () => {
         });
 
         test('has foundation through History Board indexes, rollups, checkpoint identity, the history-refresh single-flight index, and the 0722 task↔session attribution table', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(29);
+            expect(CLI_MIGRATIONS).toHaveLength(30);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -154,6 +154,8 @@ describe('db migrations', () => {
 
             // 0722 (feature E6): direct task↔session attribution authority.
             expect(CLI_MIGRATIONS[28]?.id).toBe('0028_spur_cli_history_task_session');
+            // 0029: composite indexes on history_tool_call and history_message.
+            expect(CLI_MIGRATIONS[29]?.id).toBe('0029_spur_cli_history_tool_call_indexes');
         });
 
         test('run-pid migration adds a pid column to runs', () => {
@@ -228,9 +230,9 @@ describe('db migrations', () => {
             // history_import_checkpoint, so they skip without error (0678).
             // 0027's active-unique swap applies: the stub's queue_jobs (from 0004)
             // exists, so the table guard passes. 0028 history_task_session applies
-            // (standalone DDL, 0722).
+            // (standalone DDL, 0722). 0029 history_tool_call_indexes applies.
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(25);
+            expect(applied).toBe(26);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -272,8 +274,8 @@ describe('db migrations', () => {
             // + 0021 rollups + 0022 performance indexes + 0023 request_id index
             // + 0675/0678 guarded checkpoint identity columns (0024, 0025)
             // + 0026 duration-source column + 0027 active-unique swap
-            // + 0028 history_task_session (0722).
-            expect(applied).toBe(28);
+            // + 0028 history_task_session (0722) + 0029 history_tool_call_indexes.
+            expect(applied).toBe(29);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -468,8 +470,9 @@ describe('db migrations', () => {
             // indexes + 0023 request_id index + 0024/0025 checkpoint identity
             // + 0026 duration-source column + 0027 active-unique swap (skipped:
             // this pre-provisioned journal never creates queue_jobs)
-            // + 0028 history_task_session (standalone DDL, applies).
-            expect(await applyCliMigrations(adapter)).toBe(20);
+            // + 0028 history_task_session (standalone DDL, applies)
+            // + 0029 history_tool_call_indexes (applies).
+            expect(await applyCliMigrations(adapter)).toBe(21);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );
@@ -526,10 +529,10 @@ describe('db migrations', () => {
             adapter.close();
         });
 
-        test('upgraded DB journaled through 0021 receives 0022-0028 and converges with a fresh DB', async () => {
+        test('upgraded DB journaled through 0021 receives 0022-0029 and converges with a fresh DB', async () => {
             const upgraded = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(upgraded, CLI_MIGRATIONS.slice(0, 22));
-            expect(await applyCliMigrations(upgraded)).toBe(7);
+            expect(await applyCliMigrations(upgraded)).toBe(8);
 
             const fresh = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(fresh);

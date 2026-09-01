@@ -24,7 +24,7 @@ export interface SummaryTabProps {
     loopSummary?: { count: number; redundantCalls: number; wastedTokens: number };
 }
 
-const BUCKET_OPTIONS: HistoryBucket[] = ['auto', '5m', '10m', '30m', '1h', '4h', '1d'];
+const BUCKET_OPTIONS: HistoryBucket[] = ['auto', '1m', '3m', '5m', '10m', '30m', '1h', '4h', '1d'];
 const SERIES_COLORS = [
     '#3987e5',
     '#199e70',
@@ -349,14 +349,19 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
     const rawSkillPoints =
         skillTimeSeries && skillTimeSeries.length > 0 ? skillTimeSeries : dimension === 'skill' ? timeSeries : [];
 
+    const validTopTools = topTools.map((t) => ({
+        ...t,
+        id: t.id && t.id.trim() !== '' ? t.id.trim() : 'unknown',
+    }));
+    const validSkillsUsed = skillsUsed.filter((s) => s.id && s.id.trim() !== '' && s.id !== 'unknown');
     const modelSeries = buildSeries(topModels, rawModelPoints, SERIES_COLORS);
     const sourceSeries = buildSeries(topSources, rawSourcePoints, SERIES_COLORS);
     const toolSeries = buildSeries(
-        topTools.map((t, i) => ({ id: t.id, label: t.id, color: toolColors[i % toolColors.length] })),
+        validTopTools.map((t, i) => ({ id: t.id, label: t.id, color: toolColors[i % toolColors.length] })),
         rawToolPoints,
         toolColors,
     );
-    const skillSeries = buildSeries(skillsUsed, rawSkillPoints, SERIES_COLORS);
+    const skillSeries = buildSeries(validSkillsUsed, rawSkillPoints, SERIES_COLORS);
 
     const toBuckets = (
         points: Array<{ bucketStart: string; series: Record<string, number>; cacheHitRatio?: number }>,
@@ -380,7 +385,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
         v: b.series,
     }));
 
-    const maxToolCalls = Math.max(...topTools.map((t) => t.count), 1);
+    const maxToolCalls = Math.max(...validTopTools.map((t) => t.count), 1);
     const avgBilledPerSession = kpis.sessionsCount > 0 ? kpis.totalBilledTokens / kpis.sessionsCount : 0;
     const avgBilledPerCall = kpis.toolCallsCount > 0 ? kpis.totalBilledTokens / kpis.toolCallsCount : 0;
     const prevAvgPerSession = prev && prev.sessionsCount > 0 ? prev.totalBilledTokens / prev.sessionsCount : undefined;
@@ -618,7 +623,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
                                 </tr>
                             </thead>
                             <tbody>
-                                {topTools.map((t) => (
+                                {validTopTools.map((t) => (
                                     <tr key={t.id} className="border-b border-base-content/5 hover:bg-base-300/30">
                                         <td className="py-1.5 font-bold">{t.id}</td>
                                         <td className="py-1.5 w-28">
@@ -649,23 +654,58 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
                 {/* Cache Efficiency & Skills Area */}
                 <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5 flex flex-col gap-4">
                     <div>
-                        <h4 className="font-bold text-sm mb-2">Cache Efficiency Overview</h4>
-                        <div className="bg-base-300/60 p-3.5 rounded-xl border border-base-content/5 mb-4">
-                            <div className="flex justify-between items-center mb-1.5 text-xs font-semibold">
-                                <span>Global Cache Hit Ratio</span>
-                                <span className="text-cyan-400 font-mono text-sm">{cacheEfficiency.hitRatio}%</span>
+                        <h4 className="font-bold text-sm mb-3">Cache Efficiency</h4>
+
+                        {/* Cache Efficiency by Source */}
+                        {((cacheEfficiency.bySource && cacheEfficiency.bySource.length > 0) ||
+                            topSources.length > 0) && (
+                            <div className="flex flex-col gap-2 mb-4">
+                                <div className="flex flex-col gap-2">
+                                    {(cacheEfficiency.bySource && cacheEfficiency.bySource.length > 0
+                                        ? cacheEfficiency.bySource
+                                        : topSources.map((s) => ({
+                                              source: s.id,
+                                              sourceName: s.label,
+                                              color: s.color,
+                                              hitRatio: cacheEfficiency.hitRatio,
+                                              savedTokens: Math.round(cacheEfficiency.savedTokens * (s.share / 100)),
+                                              freshTokens: Math.round(freshInputTokens * (s.share / 100)),
+                                              totalRead: Math.round(cacheEfficiency.totalRead * (s.share / 100)),
+                                              billedTokens: s.tokens,
+                                          }))
+                                    ).map((s) => (
+                                        <div
+                                            key={s.source}
+                                            className="flex flex-col gap-1 bg-base-300/40 p-2.5 rounded-lg border border-base-content/5"
+                                        >
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="flex items-center gap-1.5 font-medium">
+                                                    <span
+                                                        className="w-2.5 h-2.5 rounded-full"
+                                                        style={{ background: s.color }}
+                                                    />
+                                                    {s.sourceName}
+                                                </span>
+                                                <span className="font-mono font-bold text-cyan-400">{s.hitRatio}%</span>
+                                            </div>
+                                            <div className="w-full bg-base-100 h-1.5 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full rounded-full"
+                                                    style={{ width: `${s.hitRatio}%`, background: s.color }}
+                                                />
+                                            </div>
+                                            <div className="flex justify-between text-[10px] text-base-content/60 font-mono">
+                                                <span>Saved: {fmtTok(s.savedTokens)}</span>
+                                                <span>
+                                                    Total Read: {fmtTok(s.totalRead)} · Billed: {fmtTok(s.billedTokens)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                            <div className="w-full bg-base-100 h-2.5 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-cyan-400 rounded-full"
-                                    style={{ width: `${cacheEfficiency.hitRatio}%` }}
-                                />
-                            </div>
-                            <div className="flex justify-between text-[11px] text-base-content/60 mt-2 font-mono">
-                                <span>Saved: {fmtTok(cacheEfficiency.savedTokens)}</span>
-                                <span>Total Read: {fmtTok(cacheEfficiency.totalRead)}</span>
-                            </div>
-                        </div>
+                        )}
+
                         <div className="grid grid-cols-2 gap-3 text-xs font-mono">
                             <div className="flex flex-col gap-0.5">
                                 <span className="text-base-content/60 text-[10px] uppercase tracking-wider">

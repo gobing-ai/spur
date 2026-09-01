@@ -15,8 +15,57 @@ const MESSAGE_DEDUP = `(m.rowid IN (
     SELECT MIN(rowid) FROM history_message WHERE request_id IS NOT NULL GROUP BY request_id
 ) OR m.request_id IS NULL)`;
 
+/**
+ * SQL expression resolving the effective tool name for a history_tool_call `tc` row.
+ * Recovers missing/empty tool names from JSON `args_raw` payload fields or `call_id` prefixes,
+ * defaulting unresolved tools to `'unknown'`.
+ */
+export const EFFECTIVE_TOOL_NAME_SQL = `CASE
+    WHEN tc.tool_name IS NOT NULL AND TRIM(tc.tool_name) != '' AND tc.tool_name != 'unknown'
+    THEN TRIM(tc.tool_name)
+    WHEN json_valid(tc.args_raw) AND COALESCE(
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.tool') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.tool_name') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.toolName') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.name') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.command') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.cmd') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.action') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.function') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.operation') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.skill') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.skill_name') AS TEXT)), '')
+    ) IS NOT NULL
+    THEN COALESCE(
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.tool') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.tool_name') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.toolName') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.name') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.command') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.cmd') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.action') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.function') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.operation') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.skill') AS TEXT)), ''),
+        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.skill_name') AS TEXT)), '')
+    )
+    WHEN tc.call_id IS NOT NULL AND (
+        tc.call_id LIKE 'call_bash_%' OR tc.call_id LIKE 'bash_%' OR tc.call_id LIKE 'exec_%'
+    ) THEN 'bash'
+    WHEN tc.call_id IS NOT NULL AND (
+        tc.call_id LIKE 'call_read_%' OR tc.call_id LIKE 'read_%'
+    ) THEN 'read'
+    WHEN tc.call_id IS NOT NULL AND (
+        tc.call_id LIKE 'call_edit_%' OR tc.call_id LIKE 'edit_%'
+    ) THEN 'edit'
+    WHEN tc.call_id IS NOT NULL AND (
+        tc.call_id LIKE 'call_search_%' OR tc.call_id LIKE 'search_%' OR tc.call_id LIKE 'web_search_%'
+    ) THEN 'search'
+    ELSE 'unknown'
+END`;
+
 const SKILL_NAME_SQL = `CASE
-    WHEN LOWER(tc.tool_name) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)
+    WHEN LOWER(${EFFECTIVE_TOOL_NAME_SQL}) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)
     THEN COALESCE(
         CAST(json_extract(tc.args_raw, '$.skill') AS TEXT),
         CAST(json_extract(tc.args_raw, '$.skill_name') AS TEXT),
@@ -203,20 +252,30 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                     fresh_input_tokens, cache_read_tokens, output_tokens,
                     messages, assistant_duration_ms, assistant_duration_samples
                 )
+                WITH enriched AS (
+                    SELECT m.*,
+                           COALESCE(
+                               m.model,
+                               MAX(CASE WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model END)
+                                   OVER (PARTITION BY m.source, m.session_id),
+                               'unknown'
+                           ) AS effective_model
+                    FROM history_message m
+                    WHERE ${MESSAGE_DEDUP}
+                )
                 SELECT COALESCE(
-                           strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', m.ts) / 300 * 300 AS INTEGER), 'unixepoch'),
+                           strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', m.ts) / 60 * 60 AS INTEGER), 'unixepoch'),
                            ''
                        ) AS bucket_start,
-                       m.session_id, m.source, COALESCE(m.model, 'unknown'),
+                       m.session_id, m.source, m.effective_model AS model,
                        SUM(COALESCE(m.input_tokens, 0)),
                        SUM(COALESCE(m.cache_read_tokens, 0)),
                        SUM(COALESCE(m.output_tokens, 0)),
                        COUNT(*),
                        SUM(CASE WHEN m.role = 'assistant' THEN COALESCE(m.duration_ms, 0) ELSE 0 END),
                        SUM(CASE WHEN m.role = 'assistant' AND m.duration_ms > 0 THEN 1 ELSE 0 END)
-                FROM history_message m
-                WHERE ${MESSAGE_DEDUP}
-                GROUP BY bucket_start, m.session_id, m.source, COALESCE(m.model, 'unknown')`,
+                FROM enriched m
+                GROUP BY bucket_start, m.session_id, m.source, m.effective_model`,
             params: [],
         },
         {
@@ -224,21 +283,30 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                     bucket_start, session_id, source, model, tool_name, skill_name,
                     fresh_input_tokens, cache_read_tokens, output_tokens, calls, errors, duration_ms
                 )
-                WITH linked AS (
+                WITH enriched AS (
+                    SELECT m.*,
+                           COALESCE(
+                               m.model,
+                               MAX(CASE WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model END)
+                                   OVER (PARTITION BY m.source, m.session_id),
+                               'unknown'
+                           ) AS effective_model
+                    FROM history_message m
+                    WHERE ${MESSAGE_DEDUP}
+                ), linked AS (
                     SELECT COALESCE(
-                               strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', m.ts) / 300 * 300 AS INTEGER), 'unixepoch'),
+                               strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', m.ts) / 60 * 60 AS INTEGER), 'unixepoch'),
                                ''
                            ) AS bucket_start,
-                           m.session_id, m.source, COALESCE(m.model, 'unknown') AS model,
-                           tc.tool_name, ${SKILL_NAME_SQL} AS skill_name,
+                           m.session_id, m.source, m.effective_model AS model,
+                           ${EFFECTIVE_TOOL_NAME_SQL} AS tool_name, ${SKILL_NAME_SQL} AS skill_name,
                            COALESCE(m.input_tokens, 0) AS input_tokens,
                            COALESCE(m.cache_read_tokens, 0) AS cache_read_tokens,
                            COALESCE(m.output_tokens, 0) AS output_tokens,
                            tc.status, COALESCE(tc.duration_ms, 0) AS duration_ms,
                            COUNT(*) OVER (PARTITION BY m.record_hash) AS tools_in_message
-                    FROM history_message m
+                    FROM enriched m
                     JOIN history_tool_call tc ON tc.message_hash = m.record_hash
-                    WHERE ${MESSAGE_DEDUP}
                 )
                 SELECT bucket_start, session_id, source, model, tool_name, skill_name,
                        SUM(CAST(input_tokens AS REAL) / tools_in_message),
@@ -273,11 +341,11 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                     GROUP BY m.source, m.session_id
                 ), tool_ranks AS (
                     SELECT source, session_id, tool_name,
-                           ROW_NUMBER() OVER (PARTITION BY source, session_id ORDER BY calls DESC, tool_name ASC) AS rank
+                           ROW_NUMBER() OVER (PARTITION BY source, session_id ORDER BY (tool_name != 'unknown') DESC, calls DESC, tool_name ASC) AS rank
                     FROM (
-                        SELECT m.source, m.session_id, tc.tool_name, COUNT(*) AS calls
+                        SELECT m.source, m.session_id, ${EFFECTIVE_TOOL_NAME_SQL} AS tool_name, COUNT(*) AS calls
                         FROM selected m JOIN history_tool_call tc ON tc.message_hash = m.record_hash
-                        GROUP BY m.source, m.session_id, tc.tool_name
+                        GROUP BY m.source, m.session_id, ${EFFECTIVE_TOOL_NAME_SQL}
                     )
                 ), last_messages AS (
                     SELECT source, session_id, record_hash, role,
@@ -327,7 +395,8 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
         {
             sql: `INSERT INTO history_board_tool_stats (tool_name, skill_name, calls, errors)
                   SELECT tool_name, skill_name, SUM(calls), SUM(errors)
-                  FROM history_board_tool_5m GROUP BY tool_name, skill_name`,
+                  FROM history_board_tool_5m
+                  GROUP BY tool_name, skill_name`,
             params: [],
         },
         {
@@ -478,7 +547,13 @@ interface WhereSpec {
 function buildRollupWhere(
     sel: ArtifactSelector,
     alias: string,
-    options: { timestamp: string; dateOnly?: boolean; toolFields?: boolean; skillOnly?: boolean },
+    options: {
+        timestamp: string;
+        dateOnly?: boolean;
+        toolFields?: boolean;
+        skillOnly?: boolean;
+        toolOnly?: boolean;
+    },
 ): WhereSpec {
     const clauses: string[] = [];
     const params: unknown[] = [];
@@ -503,15 +578,23 @@ function buildRollupWhere(
         params.push(...sel.models);
     }
     if (options.toolFields && sel.tools !== null && sel.tools !== undefined && sel.tools.length > 0) {
-        clauses.push(`${alias}.tool_name IN (${sel.tools.map(() => '?').join(', ')})`);
-        params.push(...sel.tools);
+        const validTools = sel.tools.map((t) => (t && t.trim() !== '' ? t.trim() : 'unknown'));
+        if (validTools.length > 0) {
+            clauses.push(`${alias}.tool_name IN (${validTools.map(() => '?').join(', ')})`);
+            params.push(...validTools);
+        }
     }
     if (options.toolFields && sel.skills !== null && sel.skills !== undefined && sel.skills.length > 0) {
-        clauses.push(`${alias}.skill_name IN (${sel.skills.map(() => '?').join(', ')})`);
-        params.push(...sel.skills);
+        const validSkills = sel.skills.filter((s) => s && s.trim() !== '' && s !== 'unknown');
+        if (validSkills.length > 0) {
+            clauses.push(`${alias}.skill_name IN (${validSkills.map(() => '?').join(', ')})`);
+            params.push(...validSkills);
+        }
     }
     if (options.skillOnly) {
-        clauses.push(`${alias}.skill_name <> ''`);
+        clauses.push(
+            `${alias}.skill_name IS NOT NULL AND TRIM(${alias}.skill_name) <> '' AND ${alias}.skill_name <> 'unknown'`,
+        );
     }
     return { where: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '', params };
 }
@@ -519,6 +602,8 @@ function buildRollupWhere(
 function bucketExpression(bucket: HistoryBucket, alias: string): string {
     if (bucket === '1d') return `SUBSTR(${alias}.bucket_start, 1, 10)`;
     const seconds: Record<Exclude<HistoryBucket, '1d'>, number> = {
+        '1m': 60,
+        '3m': 180,
         '5m': 300,
         '10m': 600,
         '30m': 1800,
@@ -557,6 +642,7 @@ export async function historyBoardSummaryFromRollup(
         dateOnly: seriesUsesDaily,
         toolFields: seriesIsTool,
         skillOnly: dimension === 'skill',
+        toolOnly: dimension === 'tool',
     });
     const seriesKey =
         dimension === 'model'
@@ -602,14 +688,15 @@ export async function historyBoardSummaryFromRollup(
         ),
         db.queryAll<{ toolName: string; calls: number; errors: number }>(
             `SELECT r.tool_name AS toolName, SUM(r.calls) AS calls, SUM(r.errors) AS errors
-             FROM ${toolTable} r ${toolFilter.where}
+             FROM ${toolTable} r
+             ${toolFilter.where}
              GROUP BY r.tool_name ORDER BY calls DESC`,
             ...toolFilter.params,
         ),
         db.queryAll<HistoryBoardSkillRow>(
             `SELECT r.skill_name AS skillName, SUM(r.calls) AS calls
              FROM ${toolTable} r
-             ${toolFilter.where}${toolFilter.where ? ' AND' : ' WHERE'} r.skill_name <> ''
+             ${toolFilter.where}${toolFilter.where ? ' AND' : ' WHERE'} r.skill_name <> '' AND r.skill_name <> 'unknown'
              GROUP BY r.skill_name ORDER BY calls DESC LIMIT 10`,
             ...toolFilter.params,
         ),

@@ -171,11 +171,18 @@ describe('historyContract', () => {
         expect(parsedFull.sources).toEqual(['claude', 'codex']);
         expect(parsedFull.bucket).toBe('1h');
         expect(parsedFull.dimension).toBe('skill');
+
+        const parsed1m = historyFilterSchema.parse({ range: '1h', bucket: '1m' });
+        expect(parsed1m.bucket).toBe('1m');
+
+        const parsed3m = historyFilterSchema.parse({ range: '4h', bucket: '3m' });
+        expect(parsed3m.bucket).toBe('3m');
     });
 
     test('historyFilterSchema rejects invalid range or bucket values', () => {
         expect(() => historyFilterSchema.parse({ range: 'invalid_range' })).toThrow();
         expect(() => historyFilterSchema.parse({ bucket: '2d' })).toThrow();
+        expect(() => historyFilterSchema.parse({ bucket: '2m' })).toThrow();
         expect(() => historyFilterSchema.parse({ dimension: 'agent' })).toThrow();
         expect(() => historyFilterSchema.parse({ from: 'not-a-date' })).toThrow();
     });
@@ -235,7 +242,23 @@ describe('historyContract', () => {
                 topSources: [{ id: 'claude', label: 'Claude Code', color: '#3987e5', tokens: 80000, share: 67 }],
                 topTools: [{ id: 'Read', count: 45, errors: 0, errorRate: 0 }],
                 skillsUsed: [{ id: 'sp-dev-run', label: 'Sp Dev Run', color: '#199e70', count: 12 }],
-                cacheEfficiency: { hitRatio: 79, savedTokens: 450000, totalRead: 450000 },
+                cacheEfficiency: {
+                    hitRatio: 79,
+                    savedTokens: 450000,
+                    totalRead: 450000,
+                    bySource: [
+                        {
+                            source: 'claude',
+                            sourceName: 'Claude Code',
+                            color: '#3987e5',
+                            hitRatio: 85,
+                            savedTokens: 400000,
+                            freshTokens: 50000,
+                            totalRead: 450000,
+                            billedTokens: 80000,
+                        },
+                    ],
+                },
                 kpiTrend: [
                     {
                         day: '2026-08-21',
@@ -265,6 +288,8 @@ describe('historyContract', () => {
         });
         expect(parsed.ok).toBe(true);
         expect(parsed.data.kpis.totalBilledTokens).toBe(120000);
+        expect(parsed.data.cacheEfficiency.bySource?.[0]?.source).toBe('claude');
+        expect(parsed.data.cacheEfficiency.bySource?.[0]?.hitRatio).toBe(85);
         expect(parsed.data.kpiTrend.length).toBe(1);
         expect(parsed.data.previousKpis?.sessionsCount).toBe(12);
         expect(parsed.data.skillTimeSeries[0]?.series['sp-dev-run']).toBe(12);

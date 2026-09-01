@@ -339,13 +339,14 @@ describe('replaceHistoryBoardRollups', () => {
         const db = await setup();
         await seedCorpusAndRefresh(db);
 
-        // message_5m: bucket flooring to 300s (09:58 and 09:59 both floor to 09:55).
+        // message_5m: bucket flooring to 60s (09:58 and 09:59 are distinct 1m buckets).
         const buckets = await db.queryAll<{ bucket_start: string; session_id: string; messages: number }>(
             `SELECT bucket_start, session_id, messages FROM history_board_message_5m
              ORDER BY bucket_start, session_id`,
         );
         expect(buckets).toEqual([
-            { bucket_start: '2026-06-01T09:55:00Z', session_id: 's1', messages: 4 },
+            { bucket_start: '2026-06-01T09:58:00Z', session_id: 's1', messages: 2 },
+            { bucket_start: '2026-06-01T09:59:00Z', session_id: 's1', messages: 2 },
             { bucket_start: '2026-06-01T10:05:00Z', session_id: 's2', messages: 2 },
         ]);
 
@@ -453,7 +454,10 @@ describe('replaceHistoryBoardRollups', () => {
         const rows = await db.queryAll<{ bucket_start: string; messages: number; fresh_input_tokens: number }>(
             `SELECT bucket_start, messages, fresh_input_tokens FROM history_board_message_5m ORDER BY bucket_start`,
         );
-        expect(rows).toEqual([{ bucket_start: '2026-06-01T11:00:00Z', messages: 2, fresh_input_tokens: 107 }]);
+        expect(rows).toEqual([
+            { bucket_start: '2026-06-01T11:00:00Z', messages: 1, fresh_input_tokens: 100 },
+            { bucket_start: '2026-06-01T11:02:00Z', messages: 1, fresh_input_tokens: 7 },
+        ]);
     });
 
     test('splits message tokens evenly across the tools of the same message', async () => {
@@ -538,6 +542,51 @@ describe('historyBoardSummaryFromRollup', () => {
                 outputTokens: 20,
             },
         ]);
+
+        // 1m bucket interval test: outputs granular per-minute buckets from the 1m base rollup
+        const summary1m = await historyBoardSummaryFromRollup(db, ALL, '1m', 'model');
+        expect(summary1m.buckets).toEqual([
+            {
+                bucketStart: '2026-06-01 09:58:00',
+                key: 'gpt-5',
+                freshInputTokens: 100,
+                cacheReadTokens: 900,
+                outputTokens: 50,
+            },
+            {
+                bucketStart: '2026-06-01 09:59:00',
+                key: 'gpt-5',
+                freshInputTokens: 10,
+                cacheReadTokens: 0,
+                outputTokens: 5,
+            },
+            {
+                bucketStart: '2026-06-01 10:05:00',
+                key: 'gpt-5-mini',
+                freshInputTokens: 40,
+                cacheReadTokens: 0,
+                outputTokens: 20,
+            },
+        ]);
+
+        // 3m bucket interval test: aggregates into 3-minute buckets (09:58 and 09:59 floor to 09:57)
+        const summary3m = await historyBoardSummaryFromRollup(db, ALL, '3m', 'model');
+        expect(summary3m.buckets).toEqual([
+            {
+                bucketStart: '2026-06-01 09:57:00',
+                key: 'gpt-5',
+                freshInputTokens: 110,
+                cacheReadTokens: 900,
+                outputTokens: 55,
+            },
+            {
+                bucketStart: '2026-06-01 10:03:00',
+                key: 'gpt-5-mini',
+                freshInputTokens: 40,
+                cacheReadTokens: 0,
+                outputTokens: 20,
+            },
+        ]);
     });
 
     test('skill dimension excludes empty skill names and groups by skill', async () => {
@@ -594,6 +643,53 @@ describe('historyBoardSummaryFromRollup', () => {
             { key: 'gpt-5', freshInputTokens: 110, cacheReadTokens: 900, outputTokens: 55 },
         ]);
         expect(summary.sessions).toBe(1);
+    });
+
+    test('codex messages without individual model inherit model from session_meta in rollups', async () => {
+        const db = await setup();
+        // Seed session_meta with model='gpt-5-codex' and assistant message with model=null
+        await insertMessage(db, {
+            recordHash: 'codex_meta',
+            sessionId: 'sess_codex_1',
+            seq: 1,
+            role: 'meta',
+            disposition: 'meta',
+            ts: '2026-06-01T11:00:00Z',
+            model: 'gpt-5-codex',
+        });
+        await insertMessage(db, {
+            recordHash: 'codex_asst',
+            sessionId: 'sess_codex_1',
+            seq: 2,
+            role: 'assistant',
+            disposition: 'conversation',
+            ts: '2026-06-01T11:01:00Z',
+            model: null,
+            input: 500,
+            output: 100,
+            cacheRead: 2000,
+            durationMs: 1500,
+        });
+        await replaceHistoryBoardRollups(db, {
+            ...EMPTY_SEED,
+            historyVersion: await historyBoardHistoryVersion(db),
+        });
+
+        const summary = await historyBoardSummaryFromRollup(db, ALL, '5m', 'model');
+        const codexBucket = summary.buckets.find((b) => b.key === 'gpt-5-codex');
+        expect(codexBucket).toBeDefined();
+        expect(codexBucket?.freshInputTokens).toBe(500);
+        expect(codexBucket?.outputTokens).toBe(100);
+        expect(codexBucket?.cacheReadTokens).toBe(2000);
+
+        // Ensure no 'unknown' model bucket was created for this session
+        const unknownBucket = summary.buckets.find((b) => b.key === 'unknown');
+        expect(unknownBucket).toBeUndefined();
+
+        // Check model breakdown
+        const codexModel = summary.models.find((m) => m.key === 'gpt-5-codex');
+        expect(codexModel).toBeDefined();
+        expect(codexModel?.freshInputTokens).toBe(500);
     });
 
     test('skill filter matches the extracted skill name', async () => {
@@ -1099,5 +1195,69 @@ describe('historyBoardKpiTrendFromRollup', () => {
                 toolCalls: 0,
             },
         ]);
+    });
+
+    test('tool name is recovered from args_raw / call_id when blank, and unresolved tools are accepted as unknown', async () => {
+        const db = await setup();
+        await insertMessage(db, {
+            recordHash: 'tool-msg-1',
+            sessionId: 'tool-sess-1',
+            seq: 1,
+            ts: '2026-06-01T10:00:00Z',
+            model: 'gpt-5',
+            input: 100,
+            output: 50,
+        });
+        await insertToolCall(db, {
+            recordHash: 'tc-valid',
+            messageHash: 'tool-msg-1',
+            sessionId: 'tool-sess-1',
+            seq: 1,
+            toolName: 'Read',
+        });
+        await insertToolCall(db, {
+            recordHash: 'tc-recovered-args',
+            messageHash: 'tool-msg-1',
+            sessionId: 'tool-sess-1',
+            seq: 2,
+            toolName: '',
+            argsRaw: JSON.stringify({ tool_name: 'custom_query', query: 'SELECT 1' }),
+        });
+        await insertToolCall(db, {
+            recordHash: 'tc-recovered-callid',
+            messageHash: 'tool-msg-1',
+            sessionId: 'tool-sess-1',
+            seq: 3,
+            toolName: '   ',
+            argsRaw: null,
+        });
+        // Update call_id directly on tc-recovered-callid
+        await db.run(
+            "UPDATE history_tool_call SET call_id = 'call_bash_999' WHERE record_hash = 'tc-recovered-callid'",
+        );
+
+        await insertToolCall(db, {
+            recordHash: 'tc-unresolved',
+            messageHash: 'tool-msg-1',
+            sessionId: 'tool-sess-1',
+            seq: 4,
+            toolName: '',
+            argsRaw: null,
+        });
+        await replaceHistoryBoardRollups(db, { ...EMPTY_SEED, historyVersion: 'v2:test' });
+
+        const summary = await historyBoardSummaryFromRollup(db, ALL, '5m', 'tool');
+        const toolNames = summary.tools.map((t) => t.toolName).sort();
+        expect(toolNames).toEqual(['Read', 'bash', 'custom_query', 'unknown'].sort());
+
+        const tool5m = await db.queryAll<{ tool_name: string }>('SELECT DISTINCT tool_name FROM history_board_tool_5m');
+        expect(tool5m.map((t) => t.tool_name).sort()).toEqual(['Read', 'bash', 'custom_query', 'unknown'].sort());
+
+        const sess = await db.queryFirst<{ top_tool: string }>(
+            'SELECT top_tool FROM history_board_session_stats WHERE session_id = ?',
+            'tool-sess-1',
+        );
+        expect(sess?.top_tool).not.toBeNull();
+        expect(['Read', 'bash', 'custom_query']).toContain(sess?.top_tool ?? '');
     });
 });

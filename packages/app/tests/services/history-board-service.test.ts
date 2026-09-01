@@ -109,7 +109,17 @@ describe('LiveHistoryBoardService', () => {
         expect(summary.topSources.length).toBeGreaterThan(0);
         expect(summary.topTools.length).toBeGreaterThan(0);
         expect(summary.cacheEfficiency.hitRatio).toBeGreaterThan(0);
+        expect(summary.cacheEfficiency.bySource?.length).toBeGreaterThan(0);
+        expect(summary.cacheEfficiency.bySource?.[0]?.hitRatio).toBeGreaterThanOrEqual(0);
         expect(summary.previousKpis).not.toBeNull();
+
+        // 1H range resolves to 1m bucket interval
+        const summary1h = await svc.getSummary({ range: '1h' });
+        expect(summary1h.cacheEfficiency.bySource).toBeDefined();
+
+        // 4H range resolves to 3m bucket interval
+        const summary4h = await svc.getSummary({ range: '4h' });
+        expect(summary4h.cacheEfficiency.bySource).toBeDefined();
     });
 
     test('fresh unfiltered Summary across all four dimensions reads only rollup tables (no raw scans)', async () => {
@@ -189,6 +199,96 @@ describe('LiveHistoryBoardService', () => {
             (sql) => /history_message|history_tool_call/.test(sql) && !sql.includes('ORDER BY rowid DESC LIMIT 1'),
         );
         expect(rawReads).toEqual([]);
+    });
+
+    test('dropdown filter selections (tools, skills, models, sources) execute via rollups without raw scans or errors', async () => {
+        const db = await setupTestDb();
+        await seedCorpus(db, 12, 6);
+        await seedSkillCalls(db);
+        await refreshHistoryRollups(db);
+
+        const queries: string[] = [];
+        const recording: DbAdapter = new Proxy(db, {
+            get(target, prop) {
+                const value = Reflect.get(target, prop, target);
+                if (typeof prop === 'string' && ['queryAll', 'queryFirst', 'run', 'exec'].includes(prop)) {
+                    return (sql: string, ...params: unknown[]) => {
+                        queries.push(sql);
+                        return (value as (...args: unknown[]) => unknown).call(target, sql, ...params);
+                    };
+                }
+                return typeof value === 'function' ? value.bind(target) : value;
+            },
+        });
+
+        const svc = new LiveHistoryBoardService({ db: recording });
+
+        // Tool filter: existing tool 'Read' and non-existent tool 'nonexistent_tool'
+        const toolSummary = await svc.getSummary({ range: '4h', tools: ['Read'] });
+        expect(toolSummary.kpis.sessionsCount).toBeGreaterThan(0);
+        expect(toolSummary.topTools.length).toBeGreaterThan(0);
+        expect(toolSummary.topTools.some((t) => t.id === 'Read')).toBe(true);
+        expect(toolSummary.toolTimeSeries?.length).toBeGreaterThan(0);
+        expect(toolSummary.modelTimeSeries?.length).toBeGreaterThan(0);
+        expect(toolSummary.sourceTimeSeries?.length).toBeGreaterThan(0);
+
+        const missingToolSummary = await svc.getSummary({ range: '4h', tools: ['nonexistent_tool'] });
+        expect(missingToolSummary.kpis.sessionsCount).toBe(0);
+        expect(missingToolSummary.topTools).toEqual([]);
+
+        // Explicitly seed a session with 'run_terminal_command'
+        const nowTs = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+        await db.run(
+            `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq, turn_index,
+                 role, record_type, disposition, ts, model, input_tokens, output_tokens, cache_read_tokens,
+                 provenance, duration_ms, imported_at)
+             VALUES ('msg-rtc-1', 'opencode', 'test.jsonl', 1, 'sess-rtc-1', 1, 1, 'assistant', 'message', 'ok',
+                     ?, 'claude-sonnet-4', 500, 200, 100, 'agent', 120, '2026-08-31T00:00:00Z')`,
+            nowTs,
+        );
+        await db.run(
+            `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line,
+                 session_id, seq, tool_name, args_digest, args_raw, status, duration_ms, imported_at)
+             VALUES ('tc-rtc-1', 'msg-rtc-1', 'opencode', 'test.jsonl', 1, 'sess-rtc-1', 1, 'run_terminal_command',
+                     'h-rtc', '{"command": "ls"}', 'success', 50, '2026-08-31T00:00:00Z')`,
+        );
+        await refreshHistoryRollups(db);
+
+        const rtcSummary = await svc.getSummary({ range: '4h', tools: ['run_terminal_command'] });
+        expect(rtcSummary.kpis.sessionsCount).toBe(1);
+        expect(rtcSummary.kpis.totalBilledTokens).toBe(700);
+        expect(rtcSummary.topTools.map((t) => t.id)).toEqual(['run_terminal_command']);
+        expect(rtcSummary.toolTimeSeries?.length).toBeGreaterThan(0);
+        expect(rtcSummary.toolTimeSeries?.some((p) => p.series.run_terminal_command === 700)).toBe(true);
+        expect(rtcSummary.modelTimeSeries?.length).toBeGreaterThan(0);
+        expect(rtcSummary.modelTimeSeries?.some((p) => p.series['claude-sonnet-4'] === 700)).toBe(true);
+        expect(rtcSummary.sourceTimeSeries?.length).toBeGreaterThan(0);
+        expect(rtcSummary.sourceTimeSeries?.some((p) => p.series.opencode === 700)).toBe(true);
+
+        // Skill filter: 'sp-code-testing' and missing skill
+        const skillSummary = await svc.getSummary({ range: '4h', skills: ['sp-code-testing'] });
+        expect(skillSummary.kpis.sessionsCount).toBeGreaterThan(0);
+
+        // Model and Source filters
+        const modelSummary = await svc.getSummary({ range: '4h', models: ['claude-opus-4.6'] });
+        expect(modelSummary.kpis.sessionsCount).toBeGreaterThan(0);
+
+        const sourceSummary = await svc.getSummary({ range: '4h', sources: ['claude'] });
+        expect(sourceSummary.kpis.sessionsCount).toBeGreaterThan(0);
+
+        // Filtered Sessions and Insights queries
+        const toolSessions = await svc.getSessions({ filter: { tools: ['Read'] }, page: 1, pageSize: 20 });
+        expect(toolSessions.items.length).toBeGreaterThan(0);
+
+        const toolInsights = await svc.getInsights({ tools: ['Read'] });
+        expect(toolInsights).toBeDefined();
+
+        // Ensure all filtered queries hit rollup tables rather than raw message/tool scans
+        const rawScans = queries.filter(
+            (sql) =>
+                /FROM history_message|FROM history_tool_call/.test(sql) && !sql.includes('ORDER BY rowid DESC LIMIT 1'),
+        );
+        expect(rawScans).toEqual([]);
     });
 
     test('getTimeline returns session metadata and blocks', async () => {

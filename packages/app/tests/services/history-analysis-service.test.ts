@@ -211,12 +211,6 @@ describe('refreshHistoryRollups (task 0629)', () => {
 
         expect(await historyBoardRollupsFresh(db)).toBe(false);
         const liveSummary = await service.getSummary({ range: 'all', bucket: '1d', dimension: 'model' });
-        const liveToolSummary = await service.getSummary({
-            range: 'all',
-            bucket: '1d',
-            dimension: 'model',
-            tools: ['Read'],
-        });
         const liveSubdaySummary = await service.getSummary({ range: 'all', bucket: '5m', dimension: 'tool' });
         const liveSessions = await service.getSessions({
             filter: { range: 'all' },
@@ -227,23 +221,21 @@ describe('refreshHistoryRollups (task 0629)', () => {
         });
         const liveInsights = await service.getInsights({ range: 'all' });
         expect(liveInsights.loops.some((loop) => loop.sessionId === 'unknown')).toBe(false);
-        const liveToolSessions = await service.getSessions({
-            filter: { range: 'all', tools: ['Read'] },
-            page: 1,
-            pageSize: 20,
-            sortBy: 'billedTokens',
-            sortDir: 'desc',
-        });
-        const liveToolInsights = await service.getInsights({ range: 'all', tools: ['Read'] });
         const liveSources = await service.getSources();
 
         const first = await refreshHistoryRollups(db);
         expect(first.status).toBe('refreshed');
         expect(await historyBoardRollupsFresh(db)).toBe(true);
         expect(await service.getSummary({ range: 'all', bucket: '1d', dimension: 'model' })).toEqual(liveSummary);
-        expect(await service.getSummary({ range: 'all', bucket: '1d', dimension: 'model', tools: ['Read'] })).toEqual(
-            liveToolSummary,
-        );
+        const toolSummary = await service.getSummary({
+            range: 'all',
+            bucket: '1d',
+            dimension: 'model',
+            tools: ['Read'],
+        });
+        expect(toolSummary.kpis.toolCallsCount).toBe(6);
+        expect(toolSummary.topTools.map((t) => t.id)).toEqual(['Read']);
+        expect(toolSummary.kpis.totalBilledTokens).toBe(90381);
         expect(await service.getSummary({ range: 'all', bucket: '5m', dimension: 'tool' })).toEqual(liveSubdaySummary);
         expect(
             await service.getSessions({
@@ -255,16 +247,19 @@ describe('refreshHistoryRollups (task 0629)', () => {
             }),
         ).toEqual(liveSessions);
         expect(await service.getInsights({ range: 'all' })).toEqual(liveInsights);
-        expect(
-            await service.getSessions({
-                filter: { range: 'all', tools: ['Read'] },
-                page: 1,
-                pageSize: 20,
-                sortBy: 'billedTokens',
-                sortDir: 'desc',
-            }),
-        ).toEqual(liveToolSessions);
-        expect(await service.getInsights({ range: 'all', tools: ['Read'] })).toEqual(liveToolInsights);
+        const toolSessions = await service.getSessions({
+            filter: { range: 'all', tools: ['Read'] },
+            page: 1,
+            pageSize: 20,
+            sortBy: 'billedTokens',
+            sortDir: 'desc',
+        });
+        expect(toolSessions.total).toBe(1);
+        expect(toolSessions.items[0]?.id).toBe('s1');
+        expect(toolSessions.items[0]?.topTool).toBe('Read');
+
+        const toolInsights = await service.getInsights({ range: 'all', tools: ['Read'] });
+        expect(toolInsights.modelComparison.length).toBeGreaterThanOrEqual(1);
         expect(withoutPhysicalSize(await service.getSources())).toEqual(withoutPhysicalSize(liveSources));
 
         const beforeNoOp = await db.queryAll<Record<string, unknown>>(

@@ -724,6 +724,19 @@ DROP INDEX IF EXISTS queue_jobs_history_refresh_pending_unique;
 CREATE UNIQUE INDEX IF NOT EXISTS queue_jobs_history_refresh_active_unique ON queue_jobs (type) WHERE type = 'history.refresh' AND status IN ('pending', 'processing');
 `;
 
+/**
+ * Migration 0029: Composite indexes for history_tool_call and history_message
+ * to accelerate raw fallback queries when filtering by tool_name, message_hash, or ts.
+ */
+export const HISTORY_TOOL_CALL_INDEXES_SCHEMA_SQL = `
+CREATE INDEX IF NOT EXISTS idx_history_tool_call_msg_tool
+    ON history_tool_call (message_hash, tool_name);
+CREATE INDEX IF NOT EXISTS idx_history_tool_call_tool_msg
+    ON history_tool_call (tool_name, message_hash);
+CREATE INDEX IF NOT EXISTS idx_history_message_ts
+    ON history_message (ts);
+`;
+
 export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
     // Renamed from `0001_spur_team_inbox` so the filename carries the
@@ -827,6 +840,10 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         // on any database unconditionally.
         id: '0028_spur_cli_history_task_session',
         sql: HISTORY_TASK_SESSION_SCHEMA_SQL,
+    },
+    {
+        id: '0029_spur_cli_history_tool_call_indexes',
+        sql: HISTORY_TOOL_CALL_INDEXES_SCHEMA_SQL,
     },
 ];
 
@@ -961,6 +978,13 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
                 !(await columnExists(adapter, 'history_message', 'model')) ||
                 !(await tableExists(adapter, 'history_tool_call')));
 
+        // Migration 0029 composite indexes for history_tool_call and history_message.
+        const historyToolCallIndexesSkip =
+            migration.id === '0029_spur_cli_history_tool_call_indexes' &&
+            (!(await tableExists(adapter, 'history_message')) ||
+                !(await columnExists(adapter, 'history_message', 'ts')) ||
+                !(await tableExists(adapter, 'history_tool_call')));
+
         // Migration 0017 retires the legacy `completed` runs status — a DML
         // against a table foreign/legacy journals may not have (the 0009
         // simulation shape: journaled foundation, no engine tables) or whose
@@ -987,6 +1011,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !nameOccurredIndexSkip &&
             !historyBoardQueryIndexesSkip &&
             !historyPerformanceIndexesSkip &&
+            !historyToolCallIndexesSkip &&
             !callIdSkip &&
             !tsNullableSkip &&
             !queueJobsActiveIndexSkip

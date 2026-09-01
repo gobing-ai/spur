@@ -965,6 +965,12 @@ describe('History Board components', () => {
         fireEvent.click(view.getByRole('button', { name: 'All Tables' }));
         expect(view.getAllByText('2026-08-21 10:00').length).toBeGreaterThanOrEqual(1);
         expect(view.getAllByText('2026-08-21 10:05').length).toBeGreaterThanOrEqual(1);
+
+        // Cache Efficiency header and by-source breakdown
+        expect(view.getByText('Cache Efficiency')).toBeDefined();
+        expect(view.queryByText('Cache Efficiency Overview')).toBeNull();
+        expect(view.queryByText('Global Cache Hit Ratio')).toBeNull();
+        expect(view.getAllByText('Codex').length).toBeGreaterThanOrEqual(1);
     });
 
     test('Summary bucket fieldset exposes a legend and relays interval selection', () => {
@@ -972,6 +978,10 @@ describe('History Board components', () => {
         const view = render(<SummaryTab data={summary} onBucketChange={(b) => (chosen = b)} />);
 
         expect(view.getByText('Bucket interval')).toBeDefined();
+        fireEvent.click(view.getByRole('button', { name: '1m' }));
+        expect(chosen).toBe('1m');
+        fireEvent.click(view.getByRole('button', { name: '3m' }));
+        expect(chosen).toBe('3m');
         fireEvent.click(view.getByRole('button', { name: '5m' }));
         expect(chosen).toBe('5m');
     });

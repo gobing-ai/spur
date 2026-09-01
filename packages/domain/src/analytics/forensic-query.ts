@@ -1,6 +1,7 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import type { ArtifactSelector } from './artifact';
 import type { SessionSpanRow, SessionToolDurationRow, TodoToolCallRow } from './derived';
+import { EFFECTIVE_TOOL_NAME_SQL } from './history-board-rollup';
 import { applyWatermarkToWhere, type WatermarkQueryOptions } from './watermark';
 
 /**
@@ -155,24 +156,30 @@ export function buildMessageWhereClauses(
         params.push(...sel.models);
     }
     if (sel.tools != null && sel.tools.length > 0) {
-        const placeholders = sel.tools.map(() => '?').join(', ');
-        clauses.push(
-            'EXISTS (SELECT 1 FROM ' +
-                `history_tool_call tc_filt WHERE tc_filt.message_hash = ${alias}.record_hash AND tc_filt.tool_name IN (${placeholders}))`,
-        );
-        params.push(...sel.tools);
+        const validTools = sel.tools.map((t) => (t && t.trim() !== '' ? t.trim() : 'unknown'));
+        if (validTools.length > 0) {
+            const placeholders = validTools.map(() => '?').join(', ');
+            clauses.push(
+                'EXISTS (SELECT 1 FROM ' +
+                    `history_tool_call tc_filt WHERE tc_filt.message_hash = ${alias}.record_hash AND ${EFFECTIVE_TOOL_NAME_SQL.replace(/tc\./g, 'tc_filt.')} IN (${placeholders}))`,
+            );
+            params.push(...validTools);
+        }
     }
     if (sel.skills != null && sel.skills.length > 0) {
-        const skillConditions = sel.skills.map(
-            () => "tc_filt.tool_name LIKE ? ESCAPE '!' OR tc_filt.args_raw LIKE ? ESCAPE '!'",
-        );
-        clauses.push(
-            'EXISTS (SELECT 1 FROM ' +
-                `history_tool_call tc_filt WHERE tc_filt.message_hash = ${alias}.record_hash AND (${skillConditions.join(' OR ')}))`,
-        );
-        for (const sk of sel.skills) {
-            const escaped = escapeLike(sk);
-            params.push(`%${escaped}%`, `%${escaped}%`);
+        const validSkills = sel.skills.filter((s) => s && s.trim() !== '' && s !== 'unknown');
+        if (validSkills.length > 0) {
+            const skillConditions = validSkills.map(
+                () => "tc_filt.tool_name LIKE ? ESCAPE '!' OR tc_filt.args_raw LIKE ? ESCAPE '!'",
+            );
+            clauses.push(
+                'EXISTS (SELECT 1 FROM ' +
+                    `history_tool_call tc_filt WHERE tc_filt.message_hash = ${alias}.record_hash AND (${skillConditions.join(' OR ')}))`,
+            );
+            for (const sk of validSkills) {
+                const escaped = escapeLike(sk);
+                params.push(`%${escaped}%`, `%${escaped}%`);
+            }
         }
     }
     if (sel.sessionId != null) {
@@ -304,7 +311,7 @@ export async function byTool(
     const { where, params } = buildMessageWhere(sel);
     const wm = applyWatermarkToWhere(where, opts?.watermark);
     return db.queryAll<ToolStatRow>(
-        `SELECT tc.tool_name AS toolName,
+        `SELECT ${EFFECTIVE_TOOL_NAME_SQL} AS toolName,
                 COUNT(*) AS calls,
                 SUM(tc.status = 'error') AS errors,
                 SUM(tc.duration_ms) AS durationMsTotal,
@@ -315,7 +322,7 @@ export async function byTool(
          FROM history_tool_call tc
          JOIN history_message m ON m.record_hash = tc.message_hash
          ${wm.where}
-         GROUP BY tc.tool_name
+         GROUP BY ${EFFECTIVE_TOOL_NAME_SQL}
          ORDER BY durationMsTotal DESC
          LIMIT ?`,
         ...params,
@@ -332,7 +339,7 @@ export async function bySkill(db: DbAdapter, sel: ArtifactSelector, top: number)
         `SELECT ${HISTORY_SKILL_NAME_SQL} AS skillName, COUNT(*) AS calls
          FROM history_tool_call tc
          JOIN history_message m ON m.record_hash = tc.message_hash
-         ${folded}${folded ? ' AND' : ' WHERE'} ${HISTORY_SKILL_NAME_SQL} <> ''
+         ${folded}${folded ? ' AND' : ' WHERE'} ${HISTORY_SKILL_NAME_SQL} <> '' AND ${HISTORY_SKILL_NAME_SQL} <> 'unknown'
          GROUP BY skillName ORDER BY calls DESC LIMIT ?`,
         ...params,
         top,
@@ -350,7 +357,6 @@ export async function bySkill(db: DbAdapter, sel: ArtifactSelector, top: number)
     const sessionScoped = `${folded} AND m.session_id NOT IN ('', 'unknown', 'session')`;
     const wm = applyWatermarkToWhere(sessionScoped, opts?.watermark);
 
-    // Message-side stats per session, selector-scoped (Q5).
     const msgRows = await db.queryAll<{
         sessionId: string;
         source: string;
@@ -358,41 +364,56 @@ export async function bySkill(db: DbAdapter, sel: ArtifactSelector, top: number)
         startedAt: string | null;
         endedAt: string | null;
         messages: number;
-        tokens: number | null;
-        inputTokens: number | null;
-        cacheReadTokens: number | null;
-        outputTokens: number | null;
+        tokens: number;
+        inputTokens: number;
+        cacheReadTokens: number;
+        outputTokens: number;
         costUsd: number | null;
-        assistantDurationMs: number | null;
+        assistantDurationMs: number;
         assistantDurationUnmeasured: number;
         state: 'complete' | 'in-progress';
     }>(
         `WITH selected AS (
              SELECT m.rowid AS source_rowid, m.* FROM history_message m ${wm.where}
+         ), message_stats AS (
+             SELECT source, session_id,
+                    COALESCE(
+                        m.model,
+                        MAX(CASE WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model END)
+                            OVER (PARTITION BY m.source, m.session_id),
+                        'unknown'
+                    ) AS model,
+                    MIN(ts) AS started_at, MAX(ts) AS ended_at, COUNT(*) AS messages,
+                    SUM(COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0)) AS tokens,
+                    SUM(COALESCE(input_tokens, 0)) AS input_tokens,
+                    SUM(COALESCE(cache_read_tokens, 0)) AS cache_read_tokens,
+                    SUM(COALESCE(output_tokens, 0)) AS output_tokens,
+                    SUM(cost_usd) AS cost_usd,
+                    SUM(CASE WHEN role = 'assistant' THEN COALESCE(duration_ms, 0) ELSE 0 END) AS assistant_duration_ms,
+                    SUM(CASE WHEN role = 'assistant' AND duration_ms IS NULL THEN 1 ELSE 0 END) AS assistant_duration_unmeasured
+             FROM selected m
+             GROUP BY source, session_id
          ), last_messages AS (
              SELECT source, session_id, record_hash, role,
-                    ROW_NUMBER() OVER (PARTITION BY source, session_id ORDER BY seq DESC, source_rowid DESC) AS rank
+                    ROW_NUMBER() OVER (
+                        PARTITION BY source, session_id ORDER BY seq DESC, source_rowid DESC
+                    ) AS rank
              FROM selected WHERE disposition != 'meta'
          )
-         SELECT m.session_id AS sessionId, m.source AS source, MAX(m.model) AS model,
-                MIN(m.ts) AS startedAt, MAX(m.ts) AS endedAt,
-                COUNT(*) AS messages,
-                SUM(COALESCE(m.input_tokens, 0) + COALESCE(m.output_tokens, 0)) AS tokens,
-                SUM(COALESCE(m.input_tokens, 0)) AS inputTokens,
-                SUM(COALESCE(m.cache_read_tokens, 0)) AS cacheReadTokens,
-                SUM(COALESCE(m.output_tokens, 0)) AS outputTokens,
-                SUM(m.cost_usd) AS costUsd,
-                SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms END) AS assistantDurationMs,
-                SUM(CASE WHEN m.role = 'assistant' THEN m.duration_ms IS NULL END) AS assistantDurationUnmeasured,
+         SELECT ms.session_id AS sessionId, ms.source AS source, ms.model AS model,
+                ms.started_at AS startedAt, ms.ended_at AS endedAt, ms.messages AS messages,
+                ms.tokens AS tokens,
+                ms.input_tokens AS inputTokens, ms.cache_read_tokens AS cacheReadTokens,
+                ms.output_tokens AS outputTokens, ms.cost_usd AS costUsd,
+                ms.assistant_duration_ms AS assistantDurationMs,
+                ms.assistant_duration_unmeasured AS assistantDurationUnmeasured,
                 CASE WHEN COALESCE(lm.role, 'unknown') IN ('assistant', 'unknown', '')
                           AND NOT EXISTS (
                               SELECT 1 FROM history_tool_call open_tc WHERE open_tc.message_hash = lm.record_hash
                           )
                      THEN 'complete' ELSE 'in-progress' END AS state
-         FROM selected m
-         LEFT JOIN last_messages lm
-           ON lm.source = m.source AND lm.session_id = m.session_id AND lm.rank = 1
-         GROUP BY m.session_id, m.source
+         FROM message_stats ms
+         LEFT JOIN last_messages lm ON lm.source = ms.source AND lm.session_id = ms.session_id AND lm.rank = 1
          ORDER BY tokens DESC
          LIMIT ?`,
         ...params,
@@ -402,18 +423,17 @@ export async function bySkill(db: DbAdapter, sel: ArtifactSelector, top: number)
 
     if (msgRows.length === 0) return [];
 
-    // Tool-call stats per (session, tool), selector-scoped via JOIN to history_message.
-    // Both queries honor the same selector window: the old correlated subqueries only
-    // filtered by session_id+source, ignoring since/until/runId/taskWbs and over-counting
+    // Tool-call stats per (session, tool), scoped to the same message watermark so a
+    // watermark-filtered query doesn't read unbounded tool calls or count
     // tool calls outside the window (F1).
     const toolRows = await db.queryAll<{ sessionId: string; source: string; toolName: string; cnt: number }>(
         `SELECT m.session_id AS sessionId, m.source AS source,
-                tc.tool_name AS toolName,
+                ${EFFECTIVE_TOOL_NAME_SQL} AS toolName,
                 COUNT(*) AS cnt
          FROM history_tool_call tc
          JOIN history_message m ON m.record_hash = tc.message_hash
          ${wm.where}
-         GROUP BY m.session_id, m.source, tc.tool_name`,
+         GROUP BY m.session_id, m.source, ${EFFECTIVE_TOOL_NAME_SQL}`,
         ...params,
         ...wm.params,
     );
@@ -441,7 +461,13 @@ export async function bySkill(db: DbAdapter, sel: ArtifactSelector, top: number)
         if (tools) {
             for (const [name, count] of tools) {
                 toolCalls += count;
-                if (topTool === null || count > maxCount || (count === maxCount && name < topTool)) {
+                if (
+                    topTool === null ||
+                    (topTool === 'unknown' && name !== 'unknown') ||
+                    (name !== 'unknown' && count > maxCount) ||
+                    (name !== 'unknown' && count === maxCount && name < topTool) ||
+                    (topTool === 'unknown' && count > maxCount)
+                ) {
                     maxCount = count;
                     topTool = name;
                 }
@@ -863,7 +889,7 @@ export async function todoToolCalls(
 // ─── History Board Live Queries (task 0628 R2) ───────────────────────────────
 
 /** Supported bucket intervals for token time-series aggregations. */
-export type HistoryBucket = '5m' | '10m' | '30m' | '1h' | '4h' | '1d';
+export type HistoryBucket = '1m' | '3m' | '5m' | '10m' | '30m' | '1h' | '4h' | '1d';
 
 /** Supported dimensions for breakdown in token time-series. */
 export type HistoryDimension = 'model' | 'source' | 'tool' | 'skill';
@@ -927,6 +953,8 @@ export interface ModelComparisonRow {
 }
 
 const BUCKET_SECONDS: Record<HistoryBucket, number> = {
+    '1m': 60,
+    '3m': 180,
     '5m': 300,
     '10m': 600,
     '30m': 1800,
@@ -936,7 +964,7 @@ const BUCKET_SECONDS: Record<HistoryBucket, number> = {
 };
 
 const HISTORY_SKILL_NAME_SQL = `CASE
-    WHEN LOWER(tc.tool_name) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)
+    WHEN LOWER(${EFFECTIVE_TOOL_NAME_SQL}) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)
     THEN COALESCE(
         CAST(json_extract(tc.args_raw, '$.skill') AS TEXT),
         CAST(json_extract(tc.args_raw, '$.skill_name') AS TEXT),
@@ -974,8 +1002,8 @@ export async function bucketedTokenSeries(
         // Allocation is canonical: a message's tokens divide across ALL linked tool calls,
         // and skill rows are selected only after that division — matching how
         // history_board_tool_5m was materialized so fresh and stale results stay equal.
-        const keyExpr = dim === 'tool' ? 'tc.tool_name' : HISTORY_SKILL_NAME_SQL;
-        const outerSkillFilter = dim === 'skill' ? "WHERE key <> ''" : '';
+        const keyExpr = dim === 'tool' ? EFFECTIVE_TOOL_NAME_SQL : HISTORY_SKILL_NAME_SQL;
+        const outerFilter = dim === 'skill' ? "WHERE key <> '' AND key <> 'unknown'" : '';
         return db.queryAll<BucketedTokenRow>(
             `WITH linked AS (
                  SELECT ${bucketExpr} AS bucketStart, ${keyExpr} AS key,
@@ -992,7 +1020,7 @@ export async function bucketedTokenSeries(
                     SUM(CAST(cacheReadTokens AS REAL) / links) AS cacheReadTokens,
                     SUM(CAST(outputTokens AS REAL) / links) AS outputTokens
              FROM linked
-             ${outerSkillFilter}
+             ${outerFilter}
              GROUP BY bucketStart, key
              ORDER BY bucketStart ASC`,
             ...params,
@@ -1000,15 +1028,23 @@ export async function bucketedTokenSeries(
         );
     }
 
-    const keyExpr = dim === 'model' ? "COALESCE(m.model, 'unknown')" : 'm.source';
+    const keyExpr =
+        dim === 'model'
+            ? "COALESCE(m.model, MAX(CASE WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model END) OVER (PARTITION BY m.source, m.session_id), 'unknown')"
+            : 'm.source';
     return db.queryAll<BucketedTokenRow>(
-        `SELECT ${bucketExpr} AS bucketStart,
-                ${keyExpr} AS key,
-                SUM(COALESCE(m.input_tokens, 0)) AS freshInputTokens,
-                SUM(COALESCE(m.cache_read_tokens, 0)) AS cacheReadTokens,
-                SUM(COALESCE(m.output_tokens, 0)) AS outputTokens
-         FROM history_message m
-         ${folded}
+        `WITH enriched AS (
+             SELECT m.input_tokens, m.cache_read_tokens, m.output_tokens, m.ts,
+                    ${keyExpr} AS key
+             FROM history_message m
+             ${folded}
+         )
+         SELECT ${bucketExpr.replace(/m\.ts/g, 'ts')} AS bucketStart,
+                key,
+                SUM(COALESCE(input_tokens, 0)) AS freshInputTokens,
+                SUM(COALESCE(cache_read_tokens, 0)) AS cacheReadTokens,
+                SUM(COALESCE(output_tokens, 0)) AS outputTokens
+         FROM enriched
          GROUP BY bucketStart, key
          ORDER BY bucketStart ASC`,
         ...params,
@@ -1401,7 +1437,14 @@ export async function modelComparison(
     const folded = withMessageDedup(wm.where);
     return db.queryAll<ModelComparisonRow>(
         `WITH selected AS (
-             SELECT m.record_hash, COALESCE(m.model, 'unknown') AS model, m.role, m.duration_ms,
+             SELECT m.record_hash,
+                    COALESCE(
+                        m.model,
+                        MAX(CASE WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model END)
+                            OVER (PARTITION BY m.source, m.session_id),
+                        'unknown'
+                    ) AS model,
+                    m.role, m.duration_ms,
                     m.input_tokens, m.cache_read_tokens, m.output_tokens
              FROM history_message m ${folded}
          ), message_stats AS (

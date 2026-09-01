@@ -15,6 +15,16 @@ describe('MockHistoryBoardService', () => {
         expect(summary.topTools.length).toBeGreaterThan(0);
         expect(summary.timeSeries.length).toBeGreaterThan(0);
         expect(summary.skillTimeSeries.length).toBeGreaterThan(0);
+        expect(summary.cacheEfficiency.bySource?.length).toBeGreaterThan(0);
+        expect(summary.cacheEfficiency.bySource?.[0]?.source).toBeDefined();
+        expect(summary.cacheEfficiency.bySource?.[0]?.hitRatio).toBeGreaterThanOrEqual(0);
+
+        // 1H range uses 1m interval, 4H range uses 3m interval
+        const summary1h = await service.getSummary({ range: '1h' });
+        expect(summary1h.cacheEfficiency.bySource).toBeDefined();
+
+        const summary4h = await service.getSummary({ range: '4h' });
+        expect(summary4h.cacheEfficiency.bySource).toBeDefined();
     });
 
     test('getSummary filters by sources and models', async () => {

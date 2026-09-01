@@ -234,7 +234,7 @@ describe('HistoryService', () => {
             ).toMatchObject({ n: 1 });
             expect(
                 await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_board_model_stats'),
-            ).toMatchObject({ n: 2 });
+            ).toMatchObject({ n: 1 });
             expect(
                 await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_board_tool_stats'),
             ).toMatchObject({ n: 2 }); // Read + Bash

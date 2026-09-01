@@ -129,12 +129,16 @@ export const HistoryShell: React.FC = () => {
             if (summaryRes.status === 'fulfilled' && summaryRes.value?.data) {
                 setSummaryData(summaryRes.value.data);
             } else {
-                setSummaryError('Failed to load summary');
+                setSummaryError(
+                    summaryRes.status === 'rejected' ? errorMessage(summaryRes.reason) : 'Failed to load summary',
+                );
             }
             if (insightsRes.status === 'fulfilled' && insightsRes.value?.data) {
                 setInsightsData(insightsRes.value.data);
             } else {
-                setInsightsError('Failed to load insights');
+                setInsightsError(
+                    insightsRes.status === 'rejected' ? errorMessage(insightsRes.reason) : 'Failed to load insights',
+                );
             }
             setSummaryLoading(false);
             setInsightsLoading(false);
@@ -441,10 +445,18 @@ export const HistoryShell: React.FC = () => {
         summaryData?.topModels.map((m) => ({ id: m.id, label: m.label, color: m.color })) ?? [],
         filter.models,
     );
-    const toolOptions = unionOptions(summaryData?.topTools.map((t) => ({ id: t.id, label: t.id })) ?? [], filter.tools);
+    const toolOptions = unionOptions(
+        summaryData?.topTools.map((t) => {
+            const id = t.id && t.id.trim() !== '' ? t.id.trim() : 'unknown';
+            return { id, label: id };
+        }) ?? [],
+        filter.tools?.map((t) => (t && t.trim() !== '' ? t.trim() : 'unknown')),
+    );
     const skillOptions = unionOptions(
-        summaryData?.skillsUsed.map((s) => ({ id: s.id, label: s.label, color: s.color })) ?? [],
-        filter.skills,
+        summaryData?.skillsUsed
+            .filter((s) => s.id && s.id.trim() !== '' && s.id !== 'unknown')
+            .map((s) => ({ id: s.id, label: s.label, color: s.color })) ?? [],
+        filter.skills?.filter((s) => s && s.trim() !== '' && s !== 'unknown'),
     );
 
     const scope = {
