@@ -14,6 +14,7 @@ import {
     getCcusageData,
     getDateRange,
     getGitCommits,
+    getSpurHistoryHealth,
     main,
     parseArgs,
     printUsage,
@@ -338,6 +339,61 @@ describe('generateMarkdown', () => {
         const md = generateMarkdown(baseSummary);
         expect(md).not.toContain('## History Report');
     });
+
+    test('renders execution loops and auto-healing remediation proposals when historyHealth present', () => {
+        const md = generateMarkdown({
+            ...baseSummary,
+            historyHealth: {
+                toolCalls: 150,
+                toolErrors: 15,
+                errorRatePct: 10.0,
+                loops: [
+                    {
+                        toolName: 'grep_search',
+                        argsDigest: 'query:find_pattern',
+                        repeats: 4,
+                        sessionId: 'sess_123',
+                        fromSeq: 10,
+                        toSeq: 13,
+                        wastedTokens: 1000,
+                    },
+                ],
+                redundantCalls: 3,
+                wastedTokens: 1000,
+                remediationProposals: [
+                    {
+                        key: 'repetition:grep_search:query:find_patter',
+                        title: 'Break execution loop in grep_search (4 repeats)',
+                        command:
+                            'spur task create --section "Fix grep_search repetition loop" --body "Finding details"',
+                    },
+                ],
+            },
+        });
+        expect(md).toContain('## Execution Loops & Health Findings');
+        expect(md).toContain('| Tool Invocations | 150 |');
+        expect(md).toContain('### Detected Execution Loops');
+        expect(md).toContain('`grep_search` × **4 repeats**');
+        expect(md).toContain('### Auto-Healing Remediation Proposals');
+        expect(md).toContain('spur task create --section "Fix grep_search repetition loop"');
+    });
+
+    test('renders clean status when historyHealth has no loops or tool calls', () => {
+        const md = generateMarkdown({
+            ...baseSummary,
+            historyHealth: {
+                toolCalls: 0,
+                toolErrors: 0,
+                errorRatePct: 0,
+                loops: [],
+                redundantCalls: 0,
+                wastedTokens: 0,
+                remediationProposals: [],
+            },
+        });
+        expect(md).toContain('## Execution Loops & Health Findings');
+        expect(md).toContain('✅ Clean — No execution loops or tool calls recorded');
+    });
 });
 
 // ───────── promptUser ─────────
@@ -445,6 +501,66 @@ describe('promptUser', () => {
                 process.env.RD3_DAILY_SUMMARY_NO_PROMPT = originalNoPrompt;
             }
         }
+    });
+});
+
+// ───────── getSpurHistoryHealth ─────────
+
+describe('getSpurHistoryHealth', () => {
+    let tmpDir: string;
+    let dbFile: string;
+
+    beforeEach(() => {
+        tmpDir = mkdtempSync(join(tmpdir(), 'history-health-test-'));
+        dbFile = join(tmpDir, 'spur.db');
+    });
+
+    afterEach(() => {
+        rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    test('returns null when database file does not exist', async () => {
+        const result = await getSpurHistoryHealth('2026-09-01', join(tmpDir, 'non-existent.db'));
+        expect(result).toBeNull();
+    });
+
+    test('returns health summary with loop findings and tool stats from database', async () => {
+        const { Database } = await import('bun:sqlite');
+        const db = new Database(dbFile);
+        db.exec(`
+            CREATE TABLE history_board_loop_findings (
+                tool_name TEXT NOT NULL,
+                args_digest TEXT NOT NULL,
+                repeats INTEGER NOT NULL,
+                session_id TEXT NOT NULL,
+                first_seq INTEGER NOT NULL,
+                last_seq INTEGER NOT NULL,
+                started_at TEXT
+            );
+            CREATE TABLE history_board_tool_5m (
+                bucket_start TEXT NOT NULL,
+                calls INTEGER NOT NULL,
+                errors INTEGER NOT NULL
+            );
+            INSERT INTO history_board_loop_findings VALUES
+                ('grep_search', 'search:foo', 4, 's1', 1, 4, '2026-09-01T10:00:00Z');
+            INSERT INTO history_board_tool_5m VALUES
+                ('2026-09-01T10:00', 100, 20);
+        `);
+        db.close();
+
+        const result = await getSpurHistoryHealth('2026-09-01', dbFile);
+        expect(result).not.toBeNull();
+        expect(result?.loops).toHaveLength(1);
+        expect(result?.loops[0]?.toolName).toBe('grep_search');
+        expect(result?.loops[0]?.repeats).toBe(4);
+        expect(result?.redundantCalls).toBe(3);
+        expect(result?.wastedTokens).toBe(1000);
+        expect(result?.toolCalls).toBe(100);
+        expect(result?.toolErrors).toBe(20);
+        expect(result?.errorRatePct).toBe(20);
+        expect(result?.remediationProposals.length).toBeGreaterThanOrEqual(1);
+        expect(result?.remediationProposals[0]?.command).toContain('spur task create');
     });
 });
 

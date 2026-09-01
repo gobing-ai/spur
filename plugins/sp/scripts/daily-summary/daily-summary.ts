@@ -59,6 +59,30 @@ export interface UserAnnotations {
     pending: string;
 }
 
+export interface HistoryLoopFinding {
+    toolName: string;
+    argsDigest: string;
+    repeats: number;
+    sessionId: string;
+    fromSeq?: number;
+    toSeq?: number;
+    wastedTokens: number;
+}
+
+export interface HistoryHealthSummary {
+    toolCalls: number;
+    toolErrors: number;
+    errorRatePct: number;
+    loops: HistoryLoopFinding[];
+    redundantCalls: number;
+    wastedTokens: number;
+    remediationProposals: Array<{
+        key: string;
+        title: string;
+        command: string;
+    }>;
+}
+
 export interface DailySummary {
     date: string;
     platforms: string[];
@@ -77,6 +101,8 @@ export interface DailySummary {
     };
     commits: GitCommit[];
     annotations: UserAnnotations;
+    /** Health metrics and loop findings from Spur history analytics. */
+    historyHealth?: HistoryHealthSummary;
     /** Path to the newest history report artifact (R7), resolved from the
      * `.spur/reports/history/latest.json` pointer. Omitted when no report exists. */
     historyReportPath?: string;
@@ -253,6 +279,122 @@ export async function getCcusageData(date: string): Promise<CcusageData | null> 
         return data;
     } catch (error) {
         logger.warn(`Failed to get ccusage data: ${error}`);
+        return null;
+    }
+}
+
+// ─── Spur History Health Integration ──────────────────────────────────────────
+
+export async function getSpurHistoryHealth(
+    date: string,
+    dbPath = '.spur/spur.db',
+): Promise<HistoryHealthSummary | null> {
+    try {
+        const resolvedPath = resolve(process.cwd(), dbPath);
+        if (!existsSync(resolvedPath)) {
+            return null;
+        }
+
+        const { Database } = await import('bun:sqlite');
+        const db = new Database(resolvedPath, { readonly: true });
+
+        try {
+            // 1. Query execution loop findings
+            const loopTable = db
+                .query<{ name: string }, [string]>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+                .get('history_board_loop_findings');
+
+            let loops: HistoryLoopFinding[] = [];
+            if (loopTable) {
+                const rows = db
+                    .query<
+                        {
+                            tool_name: string;
+                            args_digest: string;
+                            repeats: number;
+                            session_id: string;
+                            first_seq: number;
+                            last_seq: number;
+                            started_at: string | null;
+                        },
+                        [string]
+                    >(
+                        `SELECT tool_name, args_digest, repeats, session_id, first_seq, last_seq, started_at
+                         FROM history_board_loop_findings
+                         WHERE started_at IS NULL OR started_at LIKE ?
+                         ORDER BY repeats DESC
+                         LIMIT 20`,
+                    )
+                    .all(`${date}%`);
+
+                loops = rows.map((r) => ({
+                    toolName: r.tool_name,
+                    argsDigest: r.args_digest || 'repeated execution',
+                    repeats: r.repeats,
+                    sessionId: r.session_id,
+                    fromSeq: r.first_seq,
+                    toSeq: r.last_seq,
+                    wastedTokens: r.repeats * 250,
+                }));
+            }
+
+            // 2. Query tool calls and errors
+            let toolCalls = 0;
+            let toolErrors = 0;
+            const toolTable = db
+                .query<{ name: string }, [string]>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+                .get('history_board_tool_5m');
+
+            if (toolTable) {
+                const stats = db
+                    .query<{ calls: number | null; errors: number | null }, [string]>(
+                        `SELECT SUM(calls) AS calls, SUM(errors) AS errors
+                         FROM history_board_tool_5m
+                         WHERE bucket_start LIKE ?`,
+                    )
+                    .get(`${date}%`);
+
+                toolCalls = stats?.calls ?? 0;
+                toolErrors = stats?.errors ?? 0;
+            }
+
+            const redundantCalls = loops.reduce((acc, l) => acc + Math.max(0, l.repeats - 1), 0);
+            const wastedTokens = loops.reduce((acc, l) => acc + l.wastedTokens, 0);
+            const errorRatePct = toolCalls > 0 ? (toolErrors / toolCalls) * 100 : 0;
+
+            // 3. Generate auto-healing remediation proposals
+            const remediationProposals: Array<{ key: string; title: string; command: string }> = [];
+
+            for (const lp of loops.slice(0, 5)) {
+                const cleanTool = lp.toolName.replace(/[^a-zA-Z0-9_-]/g, '_');
+                const key = `repetition:${cleanTool}:${lp.argsDigest.slice(0, 16)}`;
+                const title = `Break execution loop in ${lp.toolName} (${lp.repeats} repeats)`;
+                const body = `Finding: ${key}\\nObserved ${lp.repeats} redundant invocations in session ${lp.sessionId} (steps #${lp.fromSeq ?? 1}→#${lp.toSeq ?? lp.repeats}). Wasted tokens: ~${lp.wastedTokens}.`;
+                const command = `spur task create --section "Fix ${cleanTool} repetition loop" --body "${body}"`;
+                remediationProposals.push({ key, title, command });
+            }
+
+            if (toolCalls > 0 && errorRatePct > 10) {
+                const key = 'reliability:tooling:high-error-rate';
+                const title = `Investigate high tool error rate (${errorRatePct.toFixed(1)}%)`;
+                const body = `Finding: ${key}\\nObserved ${toolErrors} errors across ${toolCalls} tool calls (${errorRatePct.toFixed(1)}% error rate) on ${date}.`;
+                const command = `spur task create --section "Investigate tool error rate spikes" --body "${body}"`;
+                remediationProposals.push({ key, title, command });
+            }
+
+            return {
+                toolCalls,
+                toolErrors,
+                errorRatePct,
+                loops,
+                redundantCalls,
+                wastedTokens,
+                remediationProposals,
+            };
+        } finally {
+            db.close();
+        }
+    } catch {
         return null;
     }
 }
@@ -477,6 +619,61 @@ export function generateMarkdown(summary: DailySummary): string {
         lines.push('');
     }
 
+    // Execution Loops & Health Findings
+    if (summary.historyHealth) {
+        const hh = summary.historyHealth;
+        lines.push('## Execution Loops & Health Findings');
+        lines.push('');
+
+        if (hh.loops.length === 0 && hh.toolCalls === 0) {
+            lines.push('- **Status:** ✅ Clean — No execution loops or tool calls recorded for this date.');
+            lines.push('');
+        } else {
+            lines.push('| Metric | Value |');
+            lines.push('|--------|-------|');
+            lines.push(`| Tool Invocations | ${hh.toolCalls.toLocaleString()} |`);
+            lines.push(`| Tool Errors | ${hh.toolErrors.toLocaleString()} (${hh.errorRatePct.toFixed(1)}%) |`);
+            lines.push(`| Detected Loops (Repeats ≥ 3) | ${hh.loops.length} |`);
+            lines.push(`| Redundant Invocations | ${hh.redundantCalls.toLocaleString()} |`);
+            lines.push(`| Estimated Wasted Tokens | ${hh.wastedTokens.toLocaleString()} |`);
+            lines.push('');
+
+            if (hh.loops.length > 0) {
+                lines.push('### Detected Execution Loops');
+                lines.push('');
+                for (const lp of hh.loops.slice(0, 10)) {
+                    const seqInfo = lp.fromSeq && lp.toSeq ? ` (steps #${lp.fromSeq} → #${lp.toSeq})` : '';
+                    const argsHint =
+                        lp.argsDigest === '74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b'
+                            ? 'empty/unrecorded arguments'
+                            : lp.argsDigest.length > 28
+                              ? `${lp.argsDigest.slice(0, 24)}...`
+                              : lp.argsDigest;
+                    lines.push(
+                        `- \`${lp.toolName || 'unknown'}\` × **${lp.repeats} repeats** in session \`${lp.sessionId}\`${seqInfo}`,
+                    );
+                    lines.push(`  - *Args hint:* \`${argsHint}\` (~${lp.wastedTokens.toLocaleString()} wasted tokens)`);
+                }
+                lines.push('');
+            }
+
+            if (hh.remediationProposals.length > 0) {
+                lines.push('### Auto-Healing Remediation Proposals');
+                lines.push('');
+                lines.push('To remediate root causes and prevent recurring token waste, execute:');
+                lines.push('');
+                lines.push('```bash');
+                for (const prop of hh.remediationProposals) {
+                    lines.push(`# ${prop.title} [${prop.key}]`);
+                    lines.push(prop.command);
+                    lines.push('');
+                }
+                lines.push('```');
+                lines.push('');
+            }
+        }
+    }
+
     // History report path (R7 — surfaces the newest nightly-run artifact).
     if (summary.historyReportPath) {
         lines.push('## History Report');
@@ -596,6 +793,13 @@ export async function buildDailySummary(options: CliOptions): Promise<DailySumma
     }
     if (gitActivity !== undefined) {
         result.gitActivity = gitActivity;
+    }
+
+    // Query Spur history health (loops, tool errors, and auto-healing proposals)
+    const historyHealth = await getSpurHistoryHealth(options.date);
+    if (historyHealth && (historyHealth.loops.length > 0 || historyHealth.toolCalls > 0)) {
+        result.historyHealth = historyHealth;
+        platforms.push('Spur History');
     }
 
     return result;
