@@ -54,12 +54,16 @@ vars:
   # Corpus-aware quality gate for the feature-transition hop (R1, task 0625).
   # The per-task gate (`spur-check`) deliberately excludes corpus-check — the only
   # sweep that observes feature-level findings — so a transition that arms one
-  # would go green. A feature transition happens once per feature, so the ~41 s
-  # corpus sweep is paid once here. Soft by design: the gate reports PASS/FAIL
-  # and lets the operator decide; it never hard-fails the wrap-up shell.
+  # would go green. This gate is therefore the CORPUS SWEEP ALONE (~29 s), not
+  # `spur-check-new`: every task in the feature already paid a full `spur-check`
+  # in its own pipeline, and the states that run before this hop (`doc-sync`,
+  # `metrics-record`) write only markdown and task sections, which Biome skips
+  # (`ignoreUnknown: true`). Re-running the ~105 s per-task gate here re-verifies
+  # unchanged code and measures nothing new. Soft by design: the gate reports
+  # PASS/FAIL and lets the operator decide; it never hard-fails the wrap-up shell.
   # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (same surface as
   # task-pipeline's qualityGateCmd). Never interpolate untrusted input into it.
-  featureGateCmd: "bun run spur-check-new"
+  featureGateCmd: "bun run corpus-check"
   __hitlAnswer: ""
 
 states:

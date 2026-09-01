@@ -629,7 +629,7 @@ linked task edges
 
 The per-task quality gate deliberately remains the fast `spur-check` chain. The wrap-up
 `feature-transition` action reads the sync result and runs trusted project command `featureGateCmd`
-(default `bun run spur-check-new`) when either `applied` is true or sync exits non-zero (a
+(default `bun run corpus-check`) when either `applied` is true or sync exits non-zero (a
 conservative signal that an earlier hop may already have landed). The shell remains advisory: it
 emits an explicit corpus-gate PASS or FAIL and exits 0 so the operator owns the recovery decision;
 a complete or partial feature transition cannot leave the corpus gate unobserved.

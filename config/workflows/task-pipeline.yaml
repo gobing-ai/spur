@@ -19,7 +19,7 @@
 #   agent / spurBin           — executor + spur binary (CLI overrides spurBin)
 #   stepTimeoutMs             — agent.run budget for review/verify/test-fix (ms)
 #   implementTimeoutMs        — implement agent.run budget (ms)
-#   qualityGateCmd            — project gate (default: bun run autofix && bun run spur-check)
+#   qualityGateCmd            — project gate (default: bun run spur-check)
 #   qualityGateMaxFixAttempts — max /sp:dev-fixall hops after a red gate (default: 2)
 #
 # Seeded by `spur init`. agent.run inputs are pure slash commands (ADR-043).
@@ -104,7 +104,12 @@ vars:
   # and the fixall slash input all use this same var so the command stays single-sourced.
   # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (see test/test-recheck). Never
   # interpolate untrusted operator/LLM input into qualityGateCmd (task 0436 SECUA residual).
-  qualityGateCmd: "bun run format && bun run spur-check"
+  # NO `format` PREFIX: `implement` already ran `$formatCmd` on its way out, and `test`
+  # captures `proofDigest` (onEnter[3]) BEFORE this command runs (onEnter[4]) — a formatter
+  # inside the gate rewrites the very tree the digest just fingerprinted (ADR-071 proof
+  # window). It was a no-op only because the implement-stage format got there first; that is
+  # an accident, not an invariant. The gate observes, it does not mutate.
+  qualityGateCmd: "bun run spur-check"
   # Cheap red-detector run before the full gate on **recheck only**; empty ⇒ no probe
   # (full gate every recheck — the pre-0587 behavior). A project overriding qualityGateCmd
   # should override this too. TRUSTED CONFIG ONLY — executed via `sh -c` (same surface as

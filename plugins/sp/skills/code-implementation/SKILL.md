@@ -81,7 +81,7 @@ surfaces is what keeps that gate quiet.
 ## Implement scope: do not run the project quality gate
 
 During implement, the pipeline's `test` hop runs `${vars.qualityGateCmd}` (the full project gate:
-`bun run format && bun run spur-check`) immediately after this step and is the gate that actually
+`bun run spur-check`) immediately after this step and is the gate that actually
 decides pass/fail. Running it inside implement is pure redundancy — it cannot change the outcome and
 only burns wall clock and context budget.
 

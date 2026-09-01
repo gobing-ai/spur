@@ -1208,7 +1208,8 @@ Sync feature status with linked task states via conservative forward-only deriva
 - Pipeline integration (task 0328; bounded by 0411, amended by 0625): `task-pipeline.yaml`'s
   post-record step syncs the linked feature or records an orphan proposal. `wrapup-pipeline.yaml`'s
   `feature-transition` step syncs `${vars.feature}`, captures the result and exit code, and runs
-  trusted workflow var `featureGateCmd` (default `bun run spur-check-new`) when `applied` is true or
+  trusted workflow var `featureGateCmd` (default `bun run corpus-check` — the corpus sweep alone; the
+  full `spur-check` chain already ran per task) when `applied` is true or
   sync exits non-zero after a possible partial transition. Both prefer `feature-sync-bounded.ts` and
   fall back to plain `spur feature sync` in a seeded project. The shells remain advisory (`exit 0`);
   the wrap-up gate emits explicit PASS/FAIL while leaving recovery to the operator. An empty wrap-up
@@ -2234,7 +2235,7 @@ demonstrate stands on its own and governs any future candidate. Composition, act
 git-tree half), `proofDigest` (canonical capture at quality-gate entry, re-captured at
 `test-recheck`), and `proofDigestNow` (live re-capture compared at verify entry and before
 `record`). Three are command-shaped (the per-project override
-surface): `qualityGateCmd` (default `bun run format && bun run spur-check`) is single-sourced across the soft
+surface): `qualityGateCmd` (default `bun run spur-check`) is single-sourced across the soft
 probe, the `/sp:dev-fixall` input and the recheck; `formatCmd` (default `bun run format`) is the
 post-implement auto-format; `gateProbeCmd` (default `bun run lint`) is the cheap red-detector run before
 the full gate on `test-recheck` only — a red probe records `FAIL` and skips the full gate (empty ⇒ pre-0587
