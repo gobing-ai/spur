@@ -661,13 +661,13 @@ states:
             if [ -n "$FID" ]; then
               if [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then
                 bun plugins/sp/scripts/feature-sync-bounded.ts "$FID" --spur-bin "$spurBin" --json;
+              elif SYNC_MJS="$(superskill script path sp feature-sync-bounded.mjs 2>/dev/null)" && [ -f "$SYNC_MJS" ]; then
+                node "$SYNC_MJS" "$FID" --spur-bin "$spurBin" --json;
               else
                 $spurBin feature sync "$FID" --json;
               fi;
             else
               echo "Orphan task $wbs — no feature_id linked; proposal: consider linking to a parent feature." >> ".spur/run/$wbs-report.txt";
-              elif SYNC_MJS="$(superskill script path sp feature-sync-bounded.mjs 2>/dev/null)" && [ -f "$SYNC_MJS" ]; then
-                node "$SYNC_MJS" "$FID" --spur-bin "$spurBin" --json;
             fi;
             exit 0
 
