@@ -109,6 +109,7 @@ export {
     type HistoryBoardSkillRow,
     type HistoryBoardSourceRollupRow,
     type HistoryBoardSummaryRollup,
+    historyBoardBucketsFromRollup,
     historyBoardDatabaseBytes,
     historyBoardHeavySessionsFromRollup,
     historyBoardHistoryVersion,

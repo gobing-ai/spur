@@ -40,6 +40,7 @@ import {
     type HistoryBoardSourceRollupRow,
     type HistoryBoardSummaryRollup,
     type HistoryDimension,
+    historyBoardBucketsFromRollup,
     historyBoardDatabaseBytes,
     historyBoardHeavySessionsFromRollup,
     historyBoardKpiTrendFromRollup,
@@ -458,22 +459,22 @@ async function computeSummaryExtras(
         (async () => {
             if (dimension === 'model' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
             if (exact) return await bucketedTokenSeries(db, sel, bucket, 'model');
-            return (await historyBoardSummaryFromRollup(db, sel, bucket, 'model')).buckets;
+            return await historyBoardBucketsFromRollup(db, sel, bucket, 'model');
         })(),
         (async () => {
             if (dimension === 'source' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
             if (exact) return await bucketedTokenSeries(db, sel, bucket, 'source');
-            return (await historyBoardSummaryFromRollup(db, sel, bucket, 'source')).buckets;
+            return await historyBoardBucketsFromRollup(db, sel, bucket, 'source');
         })(),
         (async () => {
             if (dimension === 'tool' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
             if (exact) return await bucketedTokenSeries(db, sel, bucket, 'tool');
-            return (await historyBoardSummaryFromRollup(db, sel, bucket, 'tool')).buckets;
+            return await historyBoardBucketsFromRollup(db, sel, bucket, 'tool');
         })(),
         (async () => {
             if (dimension === 'skill' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
             if (exact) return await bucketedTokenSeries(db, sel, bucket, 'skill');
-            return (await historyBoardSummaryFromRollup(db, sel, bucket, 'skill')).buckets;
+            return await historyBoardBucketsFromRollup(db, sel, bucket, 'skill');
         })(),
     ]);
     return {

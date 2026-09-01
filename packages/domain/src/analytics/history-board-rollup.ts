@@ -736,6 +736,54 @@ export async function historyBoardSummaryFromRollup(
     };
 }
 
+/**
+ * Efficiently query only the bucketed token time-series for a single dimension
+ * from materialized rollups without computing full summary breakdowns.
+ */
+export async function historyBoardBucketsFromRollup(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    bucket: HistoryBucket,
+    dimension: HistoryDimension,
+): Promise<BucketedTokenRow[]> {
+    const seriesTable =
+        dimension === 'tool' || dimension === 'skill'
+            ? 'history_board_tool_5m'
+            : bucket === '1d'
+              ? 'history_daily_stats'
+              : 'history_board_message_5m';
+    const seriesIsTool = seriesTable === 'history_board_tool_5m';
+    const seriesUsesDaily = seriesTable === 'history_daily_stats';
+    const seriesWhere = buildRollupWhere(sel, 'r', {
+        timestamp: seriesUsesDaily ? 'day' : 'bucket_start',
+        dateOnly: seriesUsesDaily,
+        toolFields: seriesIsTool,
+        skillOnly: dimension === 'skill',
+        toolOnly: dimension === 'tool',
+    });
+    const seriesKey =
+        dimension === 'model'
+            ? 'r.model'
+            : dimension === 'source'
+              ? 'r.source'
+              : dimension === 'skill'
+                ? 'r.skill_name'
+                : 'r.tool_name';
+    const bucketExpr = seriesUsesDaily ? 'r.day' : bucketExpression(bucket, 'r');
+    const tokenSelect = `SUM(r.fresh_input_tokens) AS freshInputTokens,
+                         SUM(r.cache_read_tokens) AS cacheReadTokens,
+                         SUM(r.output_tokens) AS outputTokens`;
+    const seriesTokenSelect = dimension === 'tool' ? `${tokenSelect}, SUM(r.calls) AS calls` : tokenSelect;
+
+    return db.queryAll<BucketedTokenRow>(
+        `SELECT ${bucketExpr} AS bucketStart, ${seriesKey} AS key, ${seriesTokenSelect}
+         FROM ${seriesTable} r
+         ${seriesWhere.where}
+         GROUP BY bucketStart, key ORDER BY bucketStart ASC`,
+        ...seriesWhere.params,
+    );
+}
+
 function buildSessionWhere(sel: ArtifactSelector, alias = 's'): WhereSpec {
     const clauses: string[] = [];
     const params: unknown[] = [];

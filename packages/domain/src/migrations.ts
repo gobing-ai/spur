@@ -182,6 +182,7 @@ CREATE TABLE IF NOT EXISTS history_task_session (
 );
 
 CREATE INDEX IF NOT EXISTS idx_history_task_session_source_session ON history_task_session (source, session_id);
+CREATE INDEX IF NOT EXISTS idx_history_task_session_session_id ON history_task_session (session_id);
 `;
 
 /** SQL that creates the Spur CLI-owned domain tables plus package-owned tables. */
@@ -586,6 +587,19 @@ CREATE TABLE IF NOT EXISTS history_board_source_daily (
     tool_calls         INTEGER NOT NULL,
     PRIMARY KEY (source, day)
 );
+
+CREATE INDEX IF NOT EXISTS idx_history_daily_stats_day
+    ON history_daily_stats (day, source, model);
+CREATE INDEX IF NOT EXISTS idx_history_daily_stats_model_day
+    ON history_daily_stats (model, day);
+CREATE INDEX IF NOT EXISTS idx_history_board_source_daily_day
+    ON history_board_source_daily (day, source);
+CREATE INDEX IF NOT EXISTS idx_history_board_message_5m_bucket_source
+    ON history_board_message_5m (bucket_start, source);
+CREATE INDEX IF NOT EXISTS idx_history_board_tool_5m_bucket_tool
+    ON history_board_tool_5m (bucket_start, tool_name);
+CREATE INDEX IF NOT EXISTS idx_history_board_session_source_model_started
+    ON history_board_session_stats (source, model, started_at DESC);
 `;
 
 /**
@@ -737,6 +751,29 @@ CREATE INDEX IF NOT EXISTS idx_history_message_ts
     ON history_message (ts);
 `;
 
+/**
+ * Migration 0030: Covering indexes for history board rollups, tool calls, and session attribution.
+ * Eliminates table scans and skip-scans on date ranges, model/source filters, and tool queries.
+ */
+export const HISTORY_BOARD_COVERING_INDEXES_SCHEMA_SQL = `
+CREATE INDEX IF NOT EXISTS idx_history_daily_stats_day
+    ON history_daily_stats (day, source, model);
+CREATE INDEX IF NOT EXISTS idx_history_daily_stats_model_day
+    ON history_daily_stats (model, day);
+CREATE INDEX IF NOT EXISTS idx_history_board_source_daily_day
+    ON history_board_source_daily (day, source);
+CREATE INDEX IF NOT EXISTS idx_history_board_message_5m_bucket_source
+    ON history_board_message_5m (bucket_start, source);
+CREATE INDEX IF NOT EXISTS idx_history_board_tool_5m_bucket_tool
+    ON history_board_tool_5m (bucket_start, tool_name);
+CREATE INDEX IF NOT EXISTS idx_history_board_session_source_model_started
+    ON history_board_session_stats (source, model, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_history_tool_call_source_imported
+    ON history_tool_call (source, imported_at);
+CREATE INDEX IF NOT EXISTS idx_history_task_session_session_id
+    ON history_task_session (session_id);
+`;
+
 export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
     // Renamed from `0001_spur_team_inbox` so the filename carries the
@@ -844,6 +881,10 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     {
         id: '0029_spur_cli_history_tool_call_indexes',
         sql: HISTORY_TOOL_CALL_INDEXES_SCHEMA_SQL,
+    },
+    {
+        id: '0030_spur_cli_history_board_covering_indexes',
+        sql: HISTORY_BOARD_COVERING_INDEXES_SCHEMA_SQL,
     },
 ];
 
@@ -985,6 +1026,17 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
                 !(await columnExists(adapter, 'history_message', 'ts')) ||
                 !(await tableExists(adapter, 'history_tool_call')));
 
+        // Migration 0030 covering indexes for rollups, tool calls, and session attribution.
+        const historyBoardCoveringIndexesSkip =
+            migration.id === '0030_spur_cli_history_board_covering_indexes' &&
+            (!(await tableExists(adapter, 'history_daily_stats')) ||
+                !(await tableExists(adapter, 'history_board_tool_5m')) ||
+                !(await tableExists(adapter, 'history_board_message_5m')) ||
+                !(await tableExists(adapter, 'history_board_session_stats')) ||
+                !(await tableExists(adapter, 'history_board_source_daily')) ||
+                !(await tableExists(adapter, 'history_tool_call')) ||
+                !(await tableExists(adapter, 'history_task_session')));
+
         // Migration 0017 retires the legacy `completed` runs status — a DML
         // against a table foreign/legacy journals may not have (the 0009
         // simulation shape: journaled foundation, no engine tables) or whose
@@ -1012,6 +1064,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !historyBoardQueryIndexesSkip &&
             !historyPerformanceIndexesSkip &&
             !historyToolCallIndexesSkip &&
+            !historyBoardCoveringIndexesSkip &&
             !callIdSkip &&
             !tsNullableSkip &&
             !queueJobsActiveIndexSkip
