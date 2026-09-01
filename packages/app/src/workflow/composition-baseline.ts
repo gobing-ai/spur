@@ -16,10 +16,6 @@ export interface WorkflowActionBaseline {
     kind: string;
     /** Canonical invocation representation (e.g. input prompt or executable args). */
     invocation?: string;
-    /** Classification of state mutation effect on domain state. */
-    stateEffect: 'read' | 'write' | 'may-write';
-    /** Classification of evidence creation effect. */
-    evidenceEffect: 'none' | 'write';
     /**
      * Advisory-only ownership disposition for shell actions (0614): why this
      * multi-line shell program is the right owner for the step. Consumed by
@@ -32,22 +28,17 @@ export interface WorkflowActionBaseline {
 
 /**
  * Baseline fact specification for a single tracked workflow definition.
+ *
+ * Every field here is compared by {@link checkWorkflowComposition}. Descriptive
+ * classifications (boundary, callers, artifacts, failure policy) belong in
+ * `docs/design/workflow-shell-ownership.md`, not here — a field this file records
+ * but never compares reads as an enforced contract while enforcing nothing.
  */
 export interface WorkflowEntryBaseline {
     /** Relative path to definition file. */
     definition: string;
-    /** Boundary containment classification. */
-    boundary: string;
-    /** Disposition classification for workflow deprecation or migration. */
-    disposition?: string;
-    /** List of known entrypoint callers invoking this workflow. */
-    callers: string[];
     /** Declared terminal states. */
     terminalStates: string[];
-    /** Recorded artifact paths or kinds produced by the workflow. */
-    artifacts: string[];
-    /** Failure disposition policy. */
-    failurePolicy: string;
     /** List of state identifiers that perform LLM / model queries. */
     modelQueries: string[];
     /** Map of indexed action keys to action facts. */
@@ -60,16 +51,6 @@ export interface WorkflowEntryBaseline {
 export interface WorkflowCompositionBaseline {
     /** Schema version number. */
     schemaVersion: 1;
-    /** Proof input scoping and normalization parameters. */
-    proofInputs: {
-        repository: {
-            excludeConfiguredCorpusFolders: boolean;
-        };
-        taskFields: string[];
-        taskSections: string[];
-        featureFields: string[];
-        featureSections: string[];
-    };
     /** Map of workflow IDs to their baseline specifications. */
     workflows: Record<string, WorkflowEntryBaseline>;
 }

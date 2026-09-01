@@ -87,6 +87,7 @@
         "spur-check-new:full": "bun run link-check && bun run transition-shim-check && bun run script-contract-check && bun run lint && bun run test-pre-check:full && bun run test:coverage && bun run test-post-check:full && bun run corpus-check",
         "eval": "bun run plugins/sp/evals/run-eval.ts",
         "corpus-check": "bun run apps/cli/src/index.ts task check --corpus",
+        "regen-composition-baseline": "bun run scripts/commands/regen-composition-baseline.ts",
         "transition-shim-check": "bun plugins/sp/scripts/transition-shim-check.ts",
         "script-contract-check": "bun plugins/sp/scripts/script-contract-check.ts",
         "validate-commands": "bun plugins/sp/scripts/validate-commands.ts",

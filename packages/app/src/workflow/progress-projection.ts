@@ -8,7 +8,7 @@ import {
     type WorkflowDef,
 } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
-import { computeDefinitionDigest, type WorkflowCompositionBaseline } from './composition-baseline';
+import { computeDefinitionDigest } from './composition-baseline';
 
 /**
  * Pure read-only projection representing the structured execution progress of a workflow run.
@@ -153,8 +153,6 @@ export interface ProjectWorkflowProgressOptions {
     projectRoot?: string;
     /** Optional explicit workflow definition override. */
     workflowDef?: WorkflowDef;
-    /** Optional composition baseline override. */
-    baseline?: WorkflowCompositionBaseline;
     /** FileSystem abstraction. */
     fileSystem?: FileSystem;
 }
@@ -313,9 +311,6 @@ export async function projectWorkflowProgress(
         currentState = normalizedStatus === 'pending' || normalizedStatus === 'running' ? initialState : null;
     }
 
-    // Determine baseline action effects if baseline exists
-    const baselineWorkflow = options.baseline?.workflows[smDef.name || workflowName];
-
     // Build state visit sequence from transition history
     const stateVisits: Array<{ state: string; visit: number }> = [];
     const visitCounter: Record<string, number> = {};
@@ -398,9 +393,11 @@ export async function projectWorkflowProgress(
         for (const item of defActionList) {
             const actionKey = `${stateId}:${item.type}:${item.idx}`;
             const kind = item.action.kind;
-            const baselineAction = baselineWorkflow?.actions[actionKey];
-            const stateEffect = baselineAction?.stateEffect ?? 'may-write';
-            const evidenceEffect = baselineAction?.evidenceEffect ?? 'none';
+            // Fixed classifications: the composition baseline never carried per-action
+            // effects (0 of 120 actions declared one) and no caller ever passed a
+            // baseline in, so every action always projected these defaults.
+            const stateEffect = 'may-write' as const;
+            const evidenceEffect = 'none' as const;
 
             // Find matching rows by node + kind
             const candidateRows = stateActionRows.filter((r) => r.kind === kind && !usedActionRowIds.has(r.id));

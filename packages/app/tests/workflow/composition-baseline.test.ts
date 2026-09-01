@@ -115,11 +115,7 @@ describe('Workflow Composition Baseline', () => {
         const mutatedBaseline = JSON.parse(JSON.stringify(baselineContent)) as WorkflowCompositionBaseline;
         const docsWf = mutatedBaseline.workflows['docs-pipeline'];
         if (docsWf) {
-            docsWf.actions['nonexistent:onEnter:0'] = {
-                kind: 'shell',
-                stateEffect: 'read',
-                evidenceEffect: 'none',
-            };
+            docsWf.actions['nonexistent:onEnter:0'] = { kind: 'shell' };
         }
 
         const result = await checkWorkflowComposition({
@@ -295,12 +291,7 @@ describe('Workflow Composition Baseline', () => {
         const mutatedBaseline = JSON.parse(JSON.stringify(baselineContent)) as WorkflowCompositionBaseline;
         mutatedBaseline.workflows['invalid-wf'] = {
             definition: '.spur/run/temp-test-baseline-dir/invalid.yaml',
-            boundary: 'test',
-            disposition: 'keep',
-            callers: [],
             terminalStates: [],
-            artifacts: [],
-            failurePolicy: 'fail-closed',
             modelQueries: [],
             actions: {},
         };
