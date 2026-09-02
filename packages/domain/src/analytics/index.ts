@@ -99,6 +99,7 @@ export {
     topStepsByTokens,
 } from './forensic-query';
 export {
+    HISTORY_BOARD_ACTIVITY_DAYS,
     type HistoryBoardAggregateRow,
     type HistoryBoardDailyRollupRow,
     type HistoryBoardKpiTrendRow,
@@ -109,6 +110,7 @@ export {
     type HistoryBoardSessionPage,
     type HistoryBoardSessionRollupRow,
     type HistoryBoardSkillRow,
+    type HistoryBoardSourceModelRow,
     type HistoryBoardSourceRollupRow,
     type HistoryBoardSummaryRollup,
     historyBoardBucketsFromRollup,

@@ -47,6 +47,9 @@ export const SourcesTab: React.FC<SourcesTabProps> = ({ data, loading, error, on
     if (!data) return null;
 
     const { overview, agents, roots } = data;
+    // Heatmap span is driven by the backend activity window (HISTORY_BOARD_ACTIVITY_DAYS);
+    // derive the label from the actual returned grid so a window bump needs no web edit.
+    const heatmapSpan = agents[0]?.heatmapDays.length;
 
     return (
         <div className="flex flex-col gap-6">
@@ -108,7 +111,7 @@ export const SourcesTab: React.FC<SourcesTabProps> = ({ data, loading, error, on
 
             {/* 9 Agent Activity Cards Grid */}
             <div>
-                <h4 className="font-bold text-sm mb-3">Agent Activity (180-Day Daily Heatmaps)</h4>
+                <h4 className="font-bold text-sm mb-3">Agent Activity ({heatmapSpan ?? '—'}-Day Daily Heatmaps)</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     {agents.map((ag) => (
                         <div
@@ -167,7 +170,7 @@ export const SourcesTab: React.FC<SourcesTabProps> = ({ data, loading, error, on
                             {/* Daily Heatmap */}
                             <div className="bg-base-300/60 p-2 rounded-lg border border-base-content/5">
                                 <div className="text-[10px] font-mono text-base-content/50 mb-1 flex justify-between">
-                                    <span>180 days ago</span>
+                                    <span>{heatmapSpan ?? '—'} days ago</span>
                                     <span>Today</span>
                                 </div>
                                 <HeatmapGrid

@@ -686,7 +686,7 @@ export const RadarChart: React.FC<{
     );
 });
 
-// ─── 90-Day Daily Activity Heatmap Grid ──────────────────────────────────────
+// ─── Daily Activity Heatmap Grid ─────────────────────────────────────────────
 
 const HEAT_LEVEL_OPACITY = [0, 0.3, 0.5, 0.75, 1] as const;
 

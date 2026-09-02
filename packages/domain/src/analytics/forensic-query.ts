@@ -1,7 +1,7 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import type { ArtifactSelector } from './artifact';
 import type { SessionSpanRow, SessionToolDurationRow, TodoToolCallRow } from './derived';
-import { EFFECTIVE_TOOL_NAME_SQL } from './history-board-rollup';
+import { EFFECTIVE_TOOL_NAME_SQL, HISTORY_BOARD_ACTIVITY_DAYS } from './history-board-rollup';
 import { applyWatermarkToWhere, type WatermarkQueryOptions } from './watermark';
 
 /**
@@ -1553,9 +1553,10 @@ export async function consolidatedTimeline(
 }
 
 /**
- * Per (source, day) token matrix for the 90-day heatmap grid.
+ * Per (source, day) token matrix for the board's daily activity heatmap grid
+ * (window = {@link HISTORY_BOARD_ACTIVITY_DAYS} by default).
  */
-export async function dailyTokenMatrix(db: DbAdapter, days = 90): Promise<DailyTokenRow[]> {
+export async function dailyTokenMatrix(db: DbAdapter, days = HISTORY_BOARD_ACTIVITY_DAYS): Promise<DailyTokenRow[]> {
     return db.queryAll<DailyTokenRow>(
         `WITH messages AS (
              SELECT m.source, DATE(m.ts) AS day,

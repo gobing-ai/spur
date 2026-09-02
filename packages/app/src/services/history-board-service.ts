@@ -35,6 +35,7 @@ import {
     type DbAdapter,
     type HistoryBucket as DomainHistoryBucket,
     dailyTokenMatrix,
+    HISTORY_BOARD_ACTIVITY_DAYS,
     type HistoryBoardDailyRollupRow,
     type HistoryBoardKpiTrendRow,
     type HistoryBoardSourceRollupRow,
@@ -516,8 +517,10 @@ function projectSources(
     today.setUTCHours(0, 0, 0, 0);
     const agents = AGENT_CATALOG.map((catalog) => {
         const source = sourceMap.get(catalog.id);
-        const heatmapDays = Array.from({ length: 180 }, (_, index) => {
-            const date = new Date(today.getTime() - (179 - index) * 86_400_000).toISOString().slice(0, 10);
+        const heatmapDays = Array.from({ length: HISTORY_BOARD_ACTIVITY_DAYS }, (_, index) => {
+            const date = new Date(today.getTime() - (HISTORY_BOARD_ACTIVITY_DAYS - 1 - index) * 86_400_000)
+                .toISOString()
+                .slice(0, 10);
             const row = dailyMap.get(`${catalog.id}\0${date}`);
             return {
                 date,
@@ -1433,14 +1436,14 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         }
 
         if (await historyBoardRollupsFresh(db)) {
-            const result = await historyBoardSourcesFromRollup(db, 90);
+            const result = await historyBoardSourcesFromRollup(db, HISTORY_BOARD_ACTIVITY_DAYS);
             return projectSources(result.sources, result.daily, result.databaseBytes);
         }
 
         const selector = toArtifactSelector();
         const [summaries, matrix, messageRows, toolRows, sessions, databaseBytes] = await Promise.all([
             sourceSummary(db, selector),
-            dailyTokenMatrix(db, 90),
+            dailyTokenMatrix(db, HISTORY_BOARD_ACTIVITY_DAYS),
             messageRollup(db, selector),
             toolRollup(db, selector),
             bySession(db, selector, 1_000_000),

@@ -64,6 +64,15 @@ export const EFFECTIVE_TOOL_NAME_SQL = `CASE
     ELSE 'unknown'
 END`;
 
+/**
+ * Activity window (days) backing the History board Sources tab per-day heatmap grid.
+ * Single knob for the window — the board's `historyBoardSourcesFromRollup` /
+ * `dailyTokenMatrix` defaults and the app-side heatmap span all read it. Raise to
+ * widen the visible activity history; the materialized tables are all-time, so no
+ * re-import is needed.
+ */
+export const HISTORY_BOARD_ACTIVITY_DAYS = 180;
+
 const SKILL_NAME_SQL = `CASE
     WHEN LOWER(${EFFECTIVE_TOOL_NAME_SQL}) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)
     THEN COALESCE(
@@ -1005,7 +1014,7 @@ export async function historyBoardModelComparisonFromRollup(
 /** Read all-time source summaries and an activity window from materialized rows. */
 export async function historyBoardSourcesFromRollup(
     db: DbAdapter,
-    days = 90,
+    days = HISTORY_BOARD_ACTIVITY_DAYS,
 ): Promise<{ sources: HistoryBoardSourceRollupRow[]; daily: HistoryBoardDailyRollupRow[]; databaseBytes: number }> {
     const [sources, daily, databaseBytes] = await Promise.all([
         db.queryAll<HistoryBoardSourceRollupRow>(
