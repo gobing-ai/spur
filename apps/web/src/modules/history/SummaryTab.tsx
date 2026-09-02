@@ -344,19 +344,10 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
         const topSources = data?.topSources ?? [];
         const topTools = data?.topTools ?? [];
         // Universal bar scale for both the Token-by-Model and Token-by-Agent stacked breakdowns:
-        // the widest total (fresh + cached + output) across all shown models and agent sources,
-        // ensuring consistent and directly comparable bar scales across both cards.
+        // the highest billed token volume (item.tokens) across all shown models and agent sources,
+        // ensuring bar lengths directly and proportionally reflect token usage/cost distribution.
         const tokenBarMax = useMemo(
-            () =>
-                Math.max(
-                    0,
-                    ...topModels.map(
-                        (m) => (m.freshInputTokens ?? 0) + (m.cacheReadTokens ?? 0) + (m.outputTokens ?? 0),
-                    ),
-                    ...topSources.map(
-                        (s) => (s.freshInputTokens ?? 0) + (s.cacheReadTokens ?? 0) + (s.outputTokens ?? 0),
-                    ),
-                ),
+            () => Math.max(0, ...topModels.map((m) => m.tokens), ...topSources.map((s) => s.tokens)),
             [topModels, topSources],
         );
         const skillsUsed = data?.skillsUsed ?? [];
@@ -991,13 +982,13 @@ const activeSeriesFor = (skills: Array<{ id: string; label: string; color: strin
     skills.map((sk) => ({ id: sk.id, label: sk.label, color: sk.color }));
 
 /**
- * Stacked fresh / cached / output token bar for the Token by Model / Token by Agent Source
- * cards. The headline value is billed (fresh + output) — consistent with the Token Activity
- * chart — while the bar and breakdown expose cached reads as a lighter input segment, so
- * reused-context volume is visible without inflating the ranking.
+ * Stacked fresh / output billed token bar for the Token by Model / Token by Agent Source
+ * cards. The bar width represents the billed token cost (fresh + output) scaled against the
+ * universal maximum across both cards, while the footer displays the full fresh / cached / output
+ * metrics.
  */
 const TokenBreakdownBar: React.FC<{ item: HistoryTopItem; maxTotal: number }> = memo(({ item, maxTotal }) => {
-    const fresh = item.freshInputTokens ?? 0;
+    const fresh = item.freshInputTokens ?? (item.outputTokens ? item.tokens - item.outputTokens : item.tokens);
     const cache = item.cacheReadTokens ?? 0;
     const output = item.outputTokens ?? 0;
     const scale = maxTotal > 0 ? maxTotal : 1;
@@ -1013,9 +1004,6 @@ const TokenBreakdownBar: React.FC<{ item: HistoryTopItem; maxTotal: number }> = 
             </div>
             <div className="w-full bg-base-300 h-3 rounded-full overflow-hidden flex">
                 {fresh > 0 && <div className="h-full" style={{ width: seg(fresh), background: '#3987e5' }} />}
-                {cache > 0 && (
-                    <div className="h-full" style={{ width: seg(cache), background: 'rgba(57, 135, 229, 0.35)' }} />
-                )}
                 {output > 0 && <div className="h-full" style={{ width: seg(output), background: '#f59e0b' }} />}
             </div>
             <div className="flex justify-between text-[10px] text-base-content/60 font-mono">

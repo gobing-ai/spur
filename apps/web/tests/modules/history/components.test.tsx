@@ -1079,11 +1079,11 @@ describe('History Board components', () => {
 
         expect(view.getByText('Token by Model')).toBeDefined();
         expect(view.getByText('Token by Agent Source')).toBeDefined();
-        // Model has 50 tokens out of universal max (200) -> width: 25%
-        // Source fresh has 100 tokens out of universal max (200) -> width: 50%
+        // Model has 50 billed tokens out of universal max (100) -> width: 50%
+        // Source fresh has 100 billed tokens out of universal max (100) -> width: 100%
         const html = view.container.innerHTML;
-        expect(html).toContain('width: 25%;');
         expect(html).toContain('width: 50%;');
+        expect(html).toContain('width: 100%;');
     });
 
     test('Summary bucket fieldset exposes a legend and relays interval selection', () => {
