@@ -22,7 +22,36 @@ async function seedCorpus(
 ): Promise<{ messages: number; toolCalls: number }> {
     const sources = ['claude', 'codex', 'agy', 'omp', 'openclaw', 'hermes', 'grok', 'opencode', 'pi'];
     const models = ['claude-opus-4.6', 'claude-sonnet-4.6', 'gpt-5.6-sol', 'gemini-3.0-flash'];
-    const tools = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'];
+    // >15 distinct tools so topTools' displayed top-15 is a strict subset of all tools —
+    // pins that share columns normalize over the displayed rows, not all tools.
+    const tools = [
+        'Read',
+        'Write',
+        'Edit',
+        'Bash',
+        'Glob',
+        'Grep',
+        'WebFetch',
+        'WebSearch',
+        'TodoWrite',
+        'Task',
+        'NotebookEdit',
+        'MultiEdit',
+        'ExitPlanMode',
+        'SlashCommand',
+        'KillShell',
+        'TaskOutput',
+        'AskFollowupQuestion',
+        'ListMcpResources',
+        'ReadMcpResource',
+        'ToolSearch',
+        'ContextCompile',
+        'EnterWorktree',
+        'ApplyPatch',
+        'SnapshotMemory',
+        'RouteAgent',
+        'SummarizeSession',
+    ];
 
     let messageTotal = 0;
     let toolCallTotal = 0;
@@ -108,6 +137,11 @@ describe('LiveHistoryBoardService', () => {
         expect(summary.topModels.length).toBeGreaterThan(0);
         expect(summary.topSources.length).toBeGreaterThan(0);
         expect(summary.topTools.length).toBeGreaterThan(0);
+        // Each share dimension must sum to ~100% over the displayed rows (≤0.75 drift from 0.1% rounding).
+        for (const key of ['usageShare', 'timeShare', 'tokenShare'] as const) {
+            const sum = summary.topTools.reduce((acc, t) => acc + (t[key] ?? 0), 0);
+            expect(Math.abs(sum - 100)).toBeLessThan(1);
+        }
         expect(summary.cacheEfficiency.hitRatio).toBeGreaterThan(0);
         expect(summary.cacheEfficiency.bySource?.length).toBeGreaterThan(0);
         expect(summary.cacheEfficiency.bySource?.[0]?.hitRatio).toBeGreaterThanOrEqual(0);

@@ -13,6 +13,13 @@ describe('MockHistoryBoardService', () => {
         expect(summary.topModels.length).toBeGreaterThan(0);
         expect(summary.topSources.length).toBeGreaterThan(0);
         expect(summary.topTools.length).toBeGreaterThan(0);
+        // All three share dimensions are real shares over the displayed top-15 — none hardcodeed to 0.
+        for (const key of ['usageShare', 'timeShare', 'tokenShare'] as const) {
+            const sum = summary.topTools.reduce((acc, t) => acc + (t[key] ?? 0), 0);
+            expect(Math.abs(sum - 100)).toBeLessThan(1);
+        }
+        expect(summary.topTools.some((t) => (t.timeShare ?? 0) > 0)).toBe(true);
+        expect(summary.topTools.some((t) => (t.tokenShare ?? 0) > 0)).toBe(true);
         expect(summary.timeSeries.length).toBeGreaterThan(0);
         expect(summary.skillTimeSeries.length).toBeGreaterThan(0);
         expect(summary.cacheEfficiency.bySource?.length).toBeGreaterThan(0);

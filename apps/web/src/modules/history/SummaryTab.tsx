@@ -348,8 +348,21 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
             hitRatio: 0,
             totalRead: 0,
             bySource: [],
+            byModel: [],
+            byAgentModel: [],
         };
         const prev = previousKpis ?? undefined;
+
+        const agentModelCells = cacheEfficiency.byAgentModel ?? [];
+        // Correlation-matrix layout: agents as rows, models as columns (first-appearance
+        // order matches the API's agent-ASC / model-token-DESC ordering), cells keyed by pair.
+        const modelOrder = useMemo(() => Array.from(new Set(agentModelCells.map((c) => c.model))), [agentModelCells]);
+        const agentOrder = useMemo(() => Array.from(new Set(agentModelCells.map((c) => c.source))), [agentModelCells]);
+        const agentModelCellMap = useMemo(
+            () => new Map(agentModelCells.map((c) => [`${c.source}\u0000${c.model}`, c])),
+            [agentModelCells],
+        );
+        const sourceNameById = useMemo(() => new Map(topSources.map((s) => [s.id, s.label])), [topSources]);
 
         const trend = useMemo(
             () => ({
@@ -446,7 +459,9 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
         );
 
         const {
-            maxToolCalls,
+            toolCallTotal,
+            toolTimeTotal,
+            toolTokenTotal,
             avgBilledPerSession,
             avgBilledPerCall,
             prevAvgPerSession,
@@ -455,7 +470,10 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
             outputTokens,
             skillTokenTotals,
         } = useMemo(() => {
-            const maxTC = Math.max(...validTopTools.map((t) => t.count), 1);
+            // Displayed-set totals: share fallbacks normalize over the rows shown, not per-row maxima.
+            const toolCallTotal = validTopTools.reduce((sum, t) => sum + t.count, 0);
+            const toolTimeTotal = validTopTools.reduce((sum, t) => sum + (t.durationMs ?? 0), 0);
+            const toolTokenTotal = validTopTools.reduce((sum, t) => sum + (t.tokens ?? 0), 0);
             const totalBilled = kpis?.totalBilledTokens ?? 0;
             const sessionsCount = kpis?.sessionsCount ?? 0;
             const toolCallsCount = kpis?.toolCallsCount ?? 0;
@@ -472,7 +490,9 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
             }, {});
 
             return {
-                maxToolCalls: maxTC,
+                toolCallTotal,
+                toolTimeTotal,
+                toolTokenTotal,
                 avgBilledPerSession: avgSess,
                 avgBilledPerCall: avgCall,
                 prevAvgPerSession: prevSess,
@@ -729,13 +749,18 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                                 <tbody>
                                     {validTopTools.map((t) => {
                                         const usagePct =
-                                            t.usageShare !== undefined
-                                                ? t.usageShare
-                                                : maxToolCalls > 0
-                                                  ? Math.round((t.count / maxToolCalls) * 1000) / 10
-                                                  : 0;
-                                        const timePct = t.timeShare ?? 0;
-                                        const tokenPct = t.tokenShare ?? 0;
+                                            t.usageShare ??
+                                            (toolCallTotal > 0 ? Math.round((t.count / toolCallTotal) * 1000) / 10 : 0);
+                                        const timePct =
+                                            t.timeShare ??
+                                            (toolTimeTotal > 0
+                                                ? Math.round(((t.durationMs ?? 0) / toolTimeTotal) * 1000) / 10
+                                                : 0);
+                                        const tokenPct =
+                                            t.tokenShare ??
+                                            (toolTokenTotal > 0
+                                                ? Math.round(((t.tokens ?? 0) / toolTokenTotal) * 1000) / 10
+                                                : 0);
 
                                         return (
                                             <tr
@@ -799,14 +824,14 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                     {/* Cache Efficiency & Skills Area */}
                     <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5 flex flex-col gap-4">
                         <div>
-                            <h4 className="font-bold text-sm mb-3">Cache Efficiency</h4>
+                            <h4 className="font-bold text-sm mb-3">Cache Efficiency By Agent</h4>
 
-                            {/* Cache Efficiency by Source */}
+                            {/* Cache Efficiency by Agent */}
                             {((cacheEfficiency.bySource && cacheEfficiency.bySource.length > 0) ||
                                 topSources.length > 0) && (
                                 <div className="flex flex-col gap-2 mb-4">
-                                    <div className="flex flex-col gap-2">
-                                        {(cacheEfficiency.bySource && cacheEfficiency.bySource.length > 0
+                                    <CacheEfficiencyBars
+                                        items={(cacheEfficiency.bySource && cacheEfficiency.bySource.length > 0
                                             ? cacheEfficiency.bySource
                                             : topSources.map((s) => ({
                                                   source: s.id,
@@ -816,42 +841,105 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                                                   savedTokens: Math.round(
                                                       cacheEfficiency.savedTokens * (s.share / 100),
                                                   ),
-                                                  freshTokens: Math.round(freshInputTokens * (s.share / 100)),
                                                   totalRead: Math.round(cacheEfficiency.totalRead * (s.share / 100)),
                                                   billedTokens: s.tokens,
                                               }))
-                                        ).map((s) => (
-                                            <div
-                                                key={s.source}
-                                                className="flex flex-col gap-1 bg-base-300/40 p-2.5 rounded-lg border border-base-content/5"
-                                            >
-                                                <div className="flex justify-between items-center text-xs">
-                                                    <span className="flex items-center gap-1.5 font-medium">
-                                                        <span
-                                                            className="w-2.5 h-2.5 rounded-full"
-                                                            style={{ background: s.color }}
-                                                        />
-                                                        {s.sourceName}
-                                                    </span>
-                                                    <span className="font-mono font-bold text-cyan-400">
-                                                        {s.hitRatio}%
-                                                    </span>
-                                                </div>
-                                                <div className="w-full bg-base-100 h-1.5 rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full rounded-full"
-                                                        style={{ width: `${s.hitRatio}%`, background: s.color }}
-                                                    />
-                                                </div>
-                                                <div className="flex justify-between text-[10px] text-base-content/60 font-mono">
-                                                    <span>Saved: {fmtTok(s.savedTokens)}</span>
-                                                    <span>
-                                                        Total Read: {fmtTok(s.totalRead)} · Billed:{' '}
-                                                        {fmtTok(s.billedTokens)}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        ))}
+                                        ).map((s) => ({
+                                            id: s.source,
+                                            label: s.sourceName,
+                                            color: s.color,
+                                            hitRatio: s.hitRatio,
+                                            savedTokens: s.savedTokens,
+                                            totalRead: s.totalRead,
+                                            billedTokens: s.billedTokens,
+                                        }))}
+                                    />
+                                </div>
+                            )}
+
+                            {/* Cache Efficiency by Model */}
+                            {cacheEfficiency.byModel && cacheEfficiency.byModel.length > 0 && (
+                                <div className="flex flex-col gap-2 mb-4">
+                                    <h5 className="font-bold text-xs mb-1">Cache Efficiency By Model</h5>
+                                    <CacheEfficiencyBars
+                                        items={cacheEfficiency.byModel.map((m) => ({
+                                            id: m.model,
+                                            label: m.modelName,
+                                            color: m.color,
+                                            hitRatio: m.hitRatio,
+                                            savedTokens: m.savedTokens,
+                                            totalRead: m.totalRead,
+                                            billedTokens: m.billedTokens,
+                                        }))}
+                                    />
+                                </div>
+                            )}
+
+                            {/* Agent × Model Correlation Matrix */}
+                            {agentOrder.length > 0 && modelOrder.length > 0 && (
+                                <div className="flex flex-col gap-2 mb-4">
+                                    <h5 className="font-bold text-xs mb-1">Agent × Model Correlation Matrix</h5>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-xs font-mono border-collapse">
+                                            <thead>
+                                                <tr>
+                                                    <th className="text-left pr-2 py-1 text-base-content/60 sticky left-0 bg-base-200 z-10">
+                                                        Agent \ Model
+                                                    </th>
+                                                    {modelOrder.map((m) => (
+                                                        <th
+                                                            key={m}
+                                                            className="px-1 py-1 text-base-content/60 whitespace-nowrap"
+                                                            title={m}
+                                                        >
+                                                            {m}
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {agentOrder.map((src) => (
+                                                    <tr key={src}>
+                                                        <td className="pr-2 py-1 font-bold text-base-content/80 whitespace-nowrap sticky left-0 bg-base-200">
+                                                            {sourceNameById.get(src) ?? src}
+                                                        </td>
+                                                        {modelOrder.map((m) => {
+                                                            const cell = agentModelCellMap.get(`${src}\u0000${m}`);
+                                                            return (
+                                                                <td key={m} className="p-0.5">
+                                                                    {cell ? (
+                                                                        <div
+                                                                            className="h-8 min-w-[3rem] rounded-md flex items-center justify-center text-[10px] font-bold border border-base-content/10 cursor-default"
+                                                                            style={{
+                                                                                background: `rgba(6, 182, 212, ${
+                                                                                    0.08 + 0.5 * (cell.hitRatio / 100)
+                                                                                })`,
+                                                                            }}
+                                                                            title={`${cell.sourceName} × ${cell.modelName}: ${cell.hitRatio}% hit · saved ${fmtTok(
+                                                                                cell.savedTokens,
+                                                                            )} / read ${fmtTok(
+                                                                                cell.totalRead,
+                                                                            )} / billed ${fmtTok(cell.billedTokens)}`}
+                                                                        >
+                                                                            {cell.hitRatio}%
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="h-8 min-w-[3rem] rounded-md flex items-center justify-center text-[10px] text-base-content/25 bg-base-300/40">
+                                                                            —
+                                                                        </div>
+                                                                    )}
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[10px] font-mono text-base-content/60">
+                                        <span>0%</span>
+                                        <div className="h-1.5 w-32 rounded-full bg-gradient-to-r from-base-300 to-cyan-400" />
+                                        <span>100% cache hit ratio</span>
                                     </div>
                                 </div>
                             )}
@@ -918,5 +1006,47 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
 
 const activeSeriesFor = (skills: Array<{ id: string; label: string; color: string }>): ChartSeries[] =>
     skills.map((sk) => ({ id: sk.id, label: sk.label, color: sk.color }));
+
+interface CacheBarItem {
+    id: string;
+    label: string;
+    color: string;
+    hitRatio: number;
+    savedTokens: number;
+    totalRead: number;
+    billedTokens: number;
+}
+
+/** Shared per-item cache-efficiency bar list (used by the By Agent and By Model charts). */
+const CacheEfficiencyBars: React.FC<{ items: CacheBarItem[] }> = memo(({ items }) => (
+    <div className="flex flex-col gap-2">
+        {items.map((item) => (
+            <div
+                key={item.id}
+                className="flex flex-col gap-1 bg-base-300/40 p-2.5 rounded-lg border border-base-content/5"
+            >
+                <div className="flex justify-between items-center text-xs">
+                    <span className="flex items-center gap-1.5 font-medium">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: item.color }} />
+                        {item.label}
+                    </span>
+                    <span className="font-mono font-bold text-cyan-400">{item.hitRatio}%</span>
+                </div>
+                <div className="w-full bg-base-100 h-1.5 rounded-full overflow-hidden">
+                    <div
+                        className="h-full rounded-full"
+                        style={{ width: `${item.hitRatio}%`, background: item.color }}
+                    />
+                </div>
+                <div className="flex justify-between text-[10px] text-base-content/60 font-mono">
+                    <span>Saved: {fmtTok(item.savedTokens)}</span>
+                    <span>
+                        Total Read: {fmtTok(item.totalRead)} · Billed: {fmtTok(item.billedTokens)}
+                    </span>
+                </div>
+            </div>
+        ))}
+    </div>
+));
 
 export default SummaryTab;

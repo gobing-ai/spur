@@ -253,9 +253,12 @@ function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras):
             };
         });
 
-    const totalToolCalls = rows.tools.reduce((sum, row) => sum + row.calls, 0);
-    const totalToolDuration = rows.tools.reduce((sum, row) => sum + (row.durationMs ?? 0), 0);
-    const totalToolTokens = rows.tools.reduce((sum, row) => sum + (row.billedTokens ?? 0), 0);
+    // Shares describe the displayed top-15 ranking: denominators must come from the same rows,
+    // or each share column sums below 100% once more than 15 distinct tools exist.
+    const topToolRows = rows.tools.slice(0, 15);
+    const totalToolCalls = topToolRows.reduce((sum, row) => sum + row.calls, 0);
+    const totalToolDuration = topToolRows.reduce((sum, row) => sum + (row.durationMs ?? 0), 0);
+    const totalToolTokens = topToolRows.reduce((sum, row) => sum + (row.billedTokens ?? 0), 0);
 
     return {
         kpis: {
@@ -276,7 +279,7 @@ function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras):
         })),
         topModels: toTopItems(rows.models, false),
         topSources: toTopItems(rows.sources, true),
-        topTools: rows.tools.slice(0, 15).map((row) => ({
+        topTools: topToolRows.map((row) => ({
             id: row.toolName && row.toolName.trim() !== '' ? row.toolName.trim() : 'unknown',
             count: row.calls,
             errors: row.errors,
@@ -314,6 +317,44 @@ function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras):
                     hitRatio,
                     savedTokens,
                     freshTokens,
+                    totalRead,
+                    billedTokens,
+                };
+            }),
+            byModel: rows.models.map((row, index) => {
+                const savedTokens = row.cacheReadTokens ?? 0;
+                const freshTokens = row.freshInputTokens ?? 0;
+                const outputTokens = row.outputTokens ?? 0;
+                const totalRead = savedTokens + freshTokens;
+                const billedTokens = freshTokens + outputTokens;
+                const hitRatio = totalRead > 0 ? Math.round((savedTokens / totalRead) * 100) : 0;
+                return {
+                    model: row.key,
+                    modelName: row.key,
+                    color: SERIES_COLORS[index % SERIES_COLORS.length] ?? '#3987e5',
+                    hitRatio,
+                    savedTokens,
+                    freshTokens,
+                    totalRead,
+                    billedTokens,
+                };
+            }),
+            byAgentModel: rows.sourceModels.map((row) => {
+                const catalog = AGENT_CATALOG.find((agent) => agent.id === row.source);
+                const savedTokens = row.cacheReadTokens ?? 0;
+                const freshTokens = row.freshInputTokens ?? 0;
+                const outputTokens = row.outputTokens ?? 0;
+                const totalRead = savedTokens + freshTokens;
+                const billedTokens = freshTokens + outputTokens;
+                const hitRatio = totalRead > 0 ? Math.round((savedTokens / totalRead) * 100) : 0;
+                return {
+                    source: row.source,
+                    sourceName: catalog?.name ?? row.source,
+                    model: row.model,
+                    modelName: row.model,
+                    color: catalog?.color ?? '#3987e5',
+                    hitRatio,
+                    savedTokens,
                     totalRead,
                     billedTokens,
                 };

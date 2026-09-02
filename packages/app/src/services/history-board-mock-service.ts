@@ -322,7 +322,7 @@ export class MockHistoryBoardService implements HistoryBoardService {
 
         const modelTokens: Record<string, number> = {};
         const sourceTokens: Record<string, number> = {};
-        const toolCounts: Record<string, { count: number; errors: number }> = {};
+        const toolCounts: Record<string, { count: number; errors: number; durationMs: number; tokens: number }> = {};
         const skillCounts: Record<string, number> = {};
 
         for (const s of matching) {
@@ -335,10 +335,15 @@ export class MockHistoryBoardService implements HistoryBoardService {
             modelTokens[s.model] = (modelTokens[s.model] ?? 0) + s.tokens.billedTokens;
             sourceTokens[s.source] = (sourceTokens[s.source] ?? 0) + s.tokens.billedTokens;
 
+            const toolWeight = Object.values(s.toolMix).reduce((sum, count) => sum + count, 0);
             for (const [tool, count] of Object.entries(s.toolMix)) {
-                if (!toolCounts[tool]) toolCounts[tool] = { count: 0, errors: 0 };
+                if (!toolCounts[tool]) toolCounts[tool] = { count: 0, errors: 0, durationMs: 0, tokens: 0 };
                 toolCounts[tool].count += count;
                 if (s.errors > 0) toolCounts[tool].errors += Math.min(count, s.errors);
+                if (toolWeight > 0) {
+                    toolCounts[tool].durationMs += (s.durationMs * count) / toolWeight;
+                    toolCounts[tool].tokens += (s.tokens.billedTokens * count) / toolWeight;
+                }
             }
 
             for (const [skill, count] of Object.entries(s.skillMix)) {
@@ -469,21 +474,27 @@ export class MockHistoryBoardService implements HistoryBoardService {
             return { id: s.id, label: s.name, color: s.color, tokens, share };
         }).sort((a, b) => b.tokens - a.tokens);
 
-        const totalMockCalls = Object.values(toolCounts).reduce((s, x) => s + x.count, 0);
-        const topTools = Object.entries(toolCounts)
+        const topToolRows = Object.entries(toolCounts)
             .map(([id, stats]) => ({
                 id: id && id.trim() !== '' ? id.trim() : 'unknown',
                 count: stats.count,
                 errors: stats.errors,
                 errorRate: stats.count > 0 ? Math.round((stats.errors / stats.count) * 1000) / 10 : 0,
-                durationMs: 0,
-                tokens: 0,
-                usageShare: totalMockCalls > 0 ? Math.round((stats.count / totalMockCalls) * 1000) / 10 : 0,
-                timeShare: 0,
-                tokenShare: 0,
+                durationMs: Math.round(stats.durationMs),
+                tokens: Math.round(stats.tokens),
             }))
             .sort((a, b) => b.count - a.count)
             .slice(0, 15);
+        // Same displayed-set denominators as LiveHistoryBoardService: each share column sums to ~100%.
+        const totalTopToolCalls = topToolRows.reduce((s, t) => s + t.count, 0);
+        const totalTopToolDuration = topToolRows.reduce((s, t) => s + t.durationMs, 0);
+        const totalTopToolTokens = topToolRows.reduce((s, t) => s + t.tokens, 0);
+        const topTools = topToolRows.map((t) => ({
+            ...t,
+            usageShare: totalTopToolCalls > 0 ? Math.round((t.count / totalTopToolCalls) * 1000) / 10 : 0,
+            timeShare: totalTopToolDuration > 0 ? Math.round((t.durationMs / totalTopToolDuration) * 1000) / 10 : 0,
+            tokenShare: totalTopToolTokens > 0 ? Math.round((t.tokens / totalTopToolTokens) * 1000) / 10 : 0,
+        }));
 
         const skillsUsed = SKILLS_CATALOG.map((sk) => ({
             id: sk.id,
@@ -495,12 +506,27 @@ export class MockHistoryBoardService implements HistoryBoardService {
         const hitRatio = totalTokensWithCache > 0 ? Math.round((totalCacheRead / totalTokensWithCache) * 100) : 0;
 
         const sourceCacheMap: Record<string, { saved: number; fresh: number; billed: number }> = {};
+        const modelCacheMap: Record<string, { saved: number; fresh: number; billed: number }> = {};
+        const agentModelCacheMap: Record<string, { saved: number; fresh: number; billed: number }> = {};
         for (const s of matching) {
             const entry = sourceCacheMap[s.source] ?? { saved: 0, fresh: 0, billed: 0 };
             entry.saved += s.tokens.cacheReadTokens;
             entry.fresh += s.tokens.freshInputTokens;
             entry.billed += s.tokens.billedTokens;
             sourceCacheMap[s.source] = entry;
+
+            const modelEntry = modelCacheMap[s.model] ?? { saved: 0, fresh: 0, billed: 0 };
+            modelEntry.saved += s.tokens.cacheReadTokens;
+            modelEntry.fresh += s.tokens.freshInputTokens;
+            modelEntry.billed += s.tokens.billedTokens;
+            modelCacheMap[s.model] = modelEntry;
+
+            const key = `${s.source}\0${s.model}`;
+            const agentModelEntry = agentModelCacheMap[key] ?? { saved: 0, fresh: 0, billed: 0 };
+            agentModelEntry.saved += s.tokens.cacheReadTokens;
+            agentModelEntry.fresh += s.tokens.freshInputTokens;
+            agentModelEntry.billed += s.tokens.billedTokens;
+            agentModelCacheMap[key] = agentModelEntry;
         }
         const cacheBySource = SOURCES_CATALOG.map((s) => {
             const stats = sourceCacheMap[s.id] ?? { saved: 0, fresh: 0, billed: 0 };
@@ -517,6 +543,41 @@ export class MockHistoryBoardService implements HistoryBoardService {
                 billedTokens: stats.billed,
             };
         }).filter((item) => item.totalRead > 0 || item.billedTokens > 0);
+
+        const cacheByModel = MODELS_CATALOG.map((m) => {
+            const stats = modelCacheMap[m.id] ?? { saved: 0, fresh: 0, billed: 0 };
+            const totalRead = stats.saved + stats.fresh;
+            const modelHitRatio = totalRead > 0 ? Math.round((stats.saved / totalRead) * 100) : 0;
+            return {
+                model: m.id,
+                modelName: m.label,
+                color: m.color,
+                hitRatio: modelHitRatio,
+                savedTokens: stats.saved,
+                freshTokens: stats.fresh,
+                totalRead,
+                billedTokens: stats.billed,
+            };
+        }).filter((item) => item.totalRead > 0 || item.billedTokens > 0);
+
+        const cacheByAgentModel = Object.entries(agentModelCacheMap)
+            .map(([key, stats]) => {
+                const [source, model] = key.split('\0');
+                const totalRead = stats.saved + stats.fresh;
+                const cellHitRatio = totalRead > 0 ? Math.round((stats.saved / totalRead) * 100) : 0;
+                return {
+                    source,
+                    sourceName: SOURCES_CATALOG.find((s) => s.id === source)?.name ?? source,
+                    model,
+                    modelName: MODELS_CATALOG.find((m) => m.id === model)?.label ?? model,
+                    color: SOURCES_CATALOG.find((s) => s.id === source)?.color ?? '#3987e5',
+                    hitRatio: cellHitRatio,
+                    savedTokens: stats.saved,
+                    totalRead,
+                    billedTokens: stats.billed,
+                };
+            })
+            .filter((cell) => cell.totalRead > 0 || cell.billedTokens > 0);
 
         return {
             kpis: {
@@ -537,6 +598,8 @@ export class MockHistoryBoardService implements HistoryBoardService {
                 savedTokens: totalCacheSaved,
                 totalRead: totalCacheRead + matching.reduce((sum, session) => sum + session.tokens.freshInputTokens, 0),
                 bySource: cacheBySource,
+                byModel: cacheByModel,
+                byAgentModel: cacheByAgentModel,
             },
             kpiTrend: this.buildKpiTrend(matching),
             previousKpis: null,
