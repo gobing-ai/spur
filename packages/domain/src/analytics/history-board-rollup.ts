@@ -116,11 +116,21 @@ export interface HistoryBoardSkillRow {
     calls: number;
 }
 
+/** Per (source, model) token aggregate — the agent × model correlation grid. */
+export interface HistoryBoardSourceModelRow {
+    source: string;
+    model: string;
+    freshInputTokens: number;
+    cacheReadTokens: number;
+    outputTokens: number;
+}
+
 /** Exact aggregate rows needed by the Summary projection. */
 export interface HistoryBoardSummaryRollup {
     buckets: BucketedTokenRow[];
     models: HistoryBoardAggregateRow[];
     sources: HistoryBoardAggregateRow[];
+    sourceModels: HistoryBoardSourceModelRow[];
     tools: Array<{ toolName: string; calls: number; errors: number; durationMs?: number; billedTokens?: number }>;
     skills: HistoryBoardSkillRow[];
     sessions: number;
@@ -698,7 +708,7 @@ export async function historyBoardSummaryFromRollup(
         (sel.skills?.length ?? 0) === 0;
     const toolTable = allTimeTools ? 'history_board_tool_stats' : 'history_board_tool_5m';
     const toolFilter = allTimeTools ? { where: '', params: [] } : toolWhere;
-    const [buckets, models, sources, tools, skills, sessionCount] = await Promise.all([
+    const [buckets, models, sources, sourceModels, tools, skills, sessionCount] = await Promise.all([
         db.queryAll<BucketedTokenRow>(
             `SELECT ${bucketExpr} AS bucketStart, ${seriesKey} AS key, ${seriesTokenSelect}
              FROM ${seriesTable} r
@@ -714,6 +724,14 @@ export async function historyBoardSummaryFromRollup(
         db.queryAll<HistoryBoardAggregateRow>(
             `SELECT r.source AS key, ${tokenSelect} FROM ${aggregateTable} r
              ${aggregateWhere.where} GROUP BY r.source ORDER BY (SUM(r.fresh_input_tokens) + SUM(r.output_tokens)) DESC`,
+            ...aggregateWhere.params,
+        ),
+        db.queryAll<HistoryBoardSourceModelRow>(
+            `SELECT r.source AS source, r.model AS model, ${tokenSelect}
+             FROM ${aggregateTable} r
+             ${aggregateWhere.where}
+             GROUP BY r.source, r.model
+             ORDER BY r.source ASC, (SUM(r.fresh_input_tokens) + SUM(r.output_tokens)) DESC`,
             ...aggregateWhere.params,
         ),
         db.queryAll<{ toolName: string; calls: number; errors: number; durationMs: number; billedTokens: number }>(
@@ -744,6 +762,7 @@ export async function historyBoardSummaryFromRollup(
         buckets,
         models,
         sources,
+        sourceModels,
         tools,
         skills,
         sessions: sessionCount?.sessions ?? 0,

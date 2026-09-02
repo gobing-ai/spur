@@ -133,12 +133,43 @@ export const historySourceCacheEfficiencyItemSchema = z.object({
 /** Inferred type for HistorySourceCacheEfficiencyItem. */
 export type HistorySourceCacheEfficiencyItem = z.infer<typeof historySourceCacheEfficiencyItemSchema>;
 
+/** Cache efficiency breakdown per model item schema. */
+export const historyModelCacheEfficiencyItemSchema = z.object({
+    model: z.string(),
+    modelName: z.string(),
+    color: z.string(),
+    hitRatio: z.number(),
+    savedTokens: z.number(),
+    freshTokens: z.number(),
+    totalRead: z.number(),
+    billedTokens: z.number(),
+});
+/** Inferred type for HistoryModelCacheEfficiencyItem. */
+export type HistoryModelCacheEfficiencyItem = z.infer<typeof historyModelCacheEfficiencyItemSchema>;
+
+/** Cache efficiency cross-tab cell (agent × model) schema. */
+export const historyAgentModelCacheEfficiencyCellSchema = z.object({
+    source: z.string(),
+    sourceName: z.string(),
+    model: z.string(),
+    modelName: z.string(),
+    color: z.string(),
+    hitRatio: z.number(),
+    savedTokens: z.number(),
+    totalRead: z.number(),
+    billedTokens: z.number(),
+});
+/** Inferred type for HistoryAgentModelCacheEfficiencyCell. */
+export type HistoryAgentModelCacheEfficiencyCell = z.infer<typeof historyAgentModelCacheEfficiencyCellSchema>;
+
 /** Cache efficiency summary metrics schema. */
 export const historyCacheEfficiencySchema = z.object({
     hitRatio: z.number(),
     savedTokens: z.number(),
     totalRead: z.number(),
     bySource: z.array(historySourceCacheEfficiencyItemSchema).optional(),
+    byModel: z.array(historyModelCacheEfficiencyItemSchema).optional(),
+    byAgentModel: z.array(historyAgentModelCacheEfficiencyCellSchema).optional(),
 });
 /** Inferred type for HistoryCacheEfficiency. */
 export type HistoryCacheEfficiency = z.infer<typeof historyCacheEfficiencySchema>;
