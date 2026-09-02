@@ -343,27 +343,21 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
         const topModels = data?.topModels ?? [];
         const topSources = data?.topSources ?? [];
         const topTools = data?.topTools ?? [];
-        // Bar scale for the Token-by-Model / Token-by-Agent stacked breakdowns: the widest
-        // total (fresh + cached + output) among the shown items, so segments are comparable.
-        const modelBarMax = useMemo(
+        // Universal bar scale for both the Token-by-Model and Token-by-Agent stacked breakdowns:
+        // the widest total (fresh + cached + output) across all shown models and agent sources,
+        // ensuring consistent and directly comparable bar scales across both cards.
+        const tokenBarMax = useMemo(
             () =>
                 Math.max(
                     0,
                     ...topModels.map(
                         (m) => (m.freshInputTokens ?? 0) + (m.cacheReadTokens ?? 0) + (m.outputTokens ?? 0),
                     ),
-                ),
-            [topModels],
-        );
-        const sourceBarMax = useMemo(
-            () =>
-                Math.max(
-                    0,
                     ...topSources.map(
                         (s) => (s.freshInputTokens ?? 0) + (s.cacheReadTokens ?? 0) + (s.outputTokens ?? 0),
                     ),
                 ),
-            [topSources],
+            [topModels, topSources],
         );
         const skillsUsed = data?.skillsUsed ?? [];
         const skillTimeSeries = data?.skillTimeSeries ?? [];
@@ -704,7 +698,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                         <h4 className="font-bold text-sm mb-3">Token by Model</h4>
                         <div className="flex flex-col gap-3">
                             {topModels.map((m) => (
-                                <TokenBreakdownBar key={m.id} item={m} maxTotal={modelBarMax} />
+                                <TokenBreakdownBar key={m.id} item={m} maxTotal={tokenBarMax} />
                             ))}
                         </div>
                     </div>
@@ -714,7 +708,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                         <h4 className="font-bold text-sm mb-3">Token by Agent Source</h4>
                         <div className="flex flex-col gap-3">
                             {topSources.map((s) => (
-                                <TokenBreakdownBar key={s.id} item={s} maxTotal={sourceBarMax} />
+                                <TokenBreakdownBar key={s.id} item={s} maxTotal={tokenBarMax} />
                             ))}
                         </div>
                     </div>

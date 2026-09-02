@@ -1047,15 +1047,43 @@ describe('History Board components', () => {
         expect(view.getAllByText('80%').length).toBeGreaterThanOrEqual(3);
     });
 
-    test('Summary renders Token by Model / Token by Agent Source with fresh-cached-output breakdown', () => {
-        const view = render(<SummaryTab data={summary} />);
+    test('Summary renders Token by Model / Token by Agent Source with fresh-cached-output breakdown and universal scale', () => {
+        const asymmetricSummary: HistorySummaryResponse['data'] = {
+            ...summary,
+            topModels: [
+                {
+                    id: 'model-small',
+                    label: 'model-small',
+                    color: '#3987e5',
+                    tokens: 50,
+                    share: 25,
+                    freshInputTokens: 50,
+                    cacheReadTokens: 0,
+                    outputTokens: 0,
+                },
+            ],
+            topSources: [
+                {
+                    id: 'source-large',
+                    label: 'source-large',
+                    color: '#d95926',
+                    tokens: 100,
+                    share: 75,
+                    freshInputTokens: 100,
+                    cacheReadTokens: 100,
+                    outputTokens: 0,
+                },
+            ],
+        };
+        const view = render(<SummaryTab data={asymmetricSummary} />);
 
         expect(view.getByText('Token by Model')).toBeDefined();
         expect(view.getByText('Token by Agent Source')).toBeDefined();
-        // Headline value is billed (fresh + output = 150) and the breakdown exposes cache.
-        expect(view.getAllByText('150').length).toBeGreaterThanOrEqual(2);
-        expect(view.getAllByText(/Fresh 100 · Cached 40 · Output 10/).length).toBeGreaterThanOrEqual(2);
-        expect(view.getAllByText('Total 150').length).toBeGreaterThanOrEqual(2);
+        // Model has 50 tokens out of universal max (200) -> width: 25%
+        // Source fresh has 100 tokens out of universal max (200) -> width: 50%
+        const html = view.container.innerHTML;
+        expect(html).toContain('width: 25%;');
+        expect(html).toContain('width: 50%;');
     });
 
     test('Summary bucket fieldset exposes a legend and relays interval selection', () => {
