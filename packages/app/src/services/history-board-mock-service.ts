@@ -320,8 +320,8 @@ export class MockHistoryBoardService implements HistoryBoardService {
         let totalTools = 0;
         let totalErrors = 0;
 
-        const modelTokens: Record<string, number> = {};
-        const sourceTokens: Record<string, number> = {};
+        const modelTokens: Record<string, { fresh: number; cache: number; output: number }> = {};
+        const sourceTokens: Record<string, { fresh: number; cache: number; output: number }> = {};
         const toolCounts: Record<string, { count: number; errors: number; durationMs: number; tokens: number }> = {};
         const skillCounts: Record<string, number> = {};
 
@@ -332,8 +332,18 @@ export class MockHistoryBoardService implements HistoryBoardService {
             totalTools += s.toolCalls;
             totalErrors += s.errors;
 
-            modelTokens[s.model] = (modelTokens[s.model] ?? 0) + s.tokens.billedTokens;
-            sourceTokens[s.source] = (sourceTokens[s.source] ?? 0) + s.tokens.billedTokens;
+            // Per-model / per-source fresh, cache-read and output components — mirrors the
+            // live service's top-item breakdown (headline = billed, cache exposed as a segment).
+            const modelAcc = modelTokens[s.model] ?? { fresh: 0, cache: 0, output: 0 };
+            modelAcc.fresh += s.tokens.freshInputTokens;
+            modelAcc.cache += s.tokens.cacheReadTokens;
+            modelAcc.output += s.tokens.outputTokens;
+            modelTokens[s.model] = modelAcc;
+            const sourceAcc = sourceTokens[s.source] ?? { fresh: 0, cache: 0, output: 0 };
+            sourceAcc.fresh += s.tokens.freshInputTokens;
+            sourceAcc.cache += s.tokens.cacheReadTokens;
+            sourceAcc.output += s.tokens.outputTokens;
+            sourceTokens[s.source] = sourceAcc;
 
             const toolWeight = Object.values(s.toolMix).reduce((sum, count) => sum + count, 0);
             for (const [tool, count] of Object.entries(s.toolMix)) {
@@ -463,15 +473,35 @@ export class MockHistoryBoardService implements HistoryBoardService {
         const skillTimeSeries = toTimeSeries(skillBuckets);
 
         const topModels = MODELS_CATALOG.map((m) => {
-            const tokens = modelTokens[m.id] ?? 0;
+            const t = modelTokens[m.id] ?? { fresh: 0, cache: 0, output: 0 };
+            const tokens = t.fresh + t.output;
             const share = totalBilled > 0 ? Math.round((tokens / totalBilled) * 100) : 0;
-            return { id: m.id, label: m.label, color: m.color, tokens, share };
+            return {
+                id: m.id,
+                label: m.label,
+                color: m.color,
+                tokens,
+                share,
+                freshInputTokens: t.fresh,
+                cacheReadTokens: t.cache,
+                outputTokens: t.output,
+            };
         }).sort((a, b) => b.tokens - a.tokens);
 
         const topSources = SOURCES_CATALOG.map((s) => {
-            const tokens = sourceTokens[s.id] ?? 0;
+            const t = sourceTokens[s.id] ?? { fresh: 0, cache: 0, output: 0 };
+            const tokens = t.fresh + t.output;
             const share = totalBilled > 0 ? Math.round((tokens / totalBilled) * 100) : 0;
-            return { id: s.id, label: s.name, color: s.color, tokens, share };
+            return {
+                id: s.id,
+                label: s.name,
+                color: s.color,
+                tokens,
+                share,
+                freshInputTokens: t.fresh,
+                cacheReadTokens: t.cache,
+                outputTokens: t.output,
+            };
         }).sort((a, b) => b.tokens - a.tokens);
 
         const topToolRows = Object.entries(toolCounts)
@@ -562,7 +592,7 @@ export class MockHistoryBoardService implements HistoryBoardService {
 
         const cacheByAgentModel = Object.entries(agentModelCacheMap)
             .map(([key, stats]) => {
-                const [source, model] = key.split('\0');
+                const [source = '', model = ''] = key.split('\0');
                 const totalRead = stats.saved + stats.fresh;
                 const cellHitRatio = totalRead > 0 ? Math.round((stats.saved / totalRead) * 100) : 0;
                 return {

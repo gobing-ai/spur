@@ -11,9 +11,13 @@ import type {
     ToolRollupRow,
 } from './forensic-query';
 
-const MESSAGE_DEDUP = `(m.rowid IN (
-    SELECT MIN(rowid) FROM history_message WHERE request_id IS NOT NULL GROUP BY request_id
-) OR m.request_id IS NULL)`;
+// Keep the first row (MIN rowid) per request_id. NOT EXISTS form: only rows carrying a
+// request_id (retries, a tiny fraction of the corpus) pay a correlated lookup, instead of
+// a bloom-filter membership check over every row — same representative, far cheaper scan.
+const MESSAGE_DEDUP = `(m.request_id IS NULL OR NOT EXISTS (
+    SELECT 1 FROM history_message o
+    WHERE o.request_id = m.request_id AND o.rowid < m.rowid
+))`;
 
 /**
  * SQL expression resolving the effective tool name for a history_tool_call `tc` row.

@@ -31,8 +31,30 @@ const summary: HistorySummaryResponse['data'] = {
         errorRate: 0,
     },
     timeSeries: [{ bucketStart: '2026-08-21', cacheHitRatio: 57, series: { Read: 150 } }],
-    topModels: [{ id: 'gpt-5.6-sol', label: 'gpt-5.6-sol', color: '#3987e5', tokens: 150, share: 100 }],
-    topSources: [{ id: 'codex', label: 'Codex', color: '#d95926', tokens: 150, share: 100 }],
+    topModels: [
+        {
+            id: 'gpt-5.6-sol',
+            label: 'gpt-5.6-sol',
+            color: '#3987e5',
+            tokens: 150,
+            share: 100,
+            freshInputTokens: 100,
+            cacheReadTokens: 40,
+            outputTokens: 10,
+        },
+    ],
+    topSources: [
+        {
+            id: 'codex',
+            label: 'Codex',
+            color: '#d95926',
+            tokens: 150,
+            share: 100,
+            freshInputTokens: 100,
+            cacheReadTokens: 40,
+            outputTokens: 10,
+        },
+    ],
     topTools: [{ id: 'Read', count: 2, errors: 0, errorRate: 0 }],
     skillsUsed: [{ id: 'sp-dev-verify', label: 'Sp Dev Verify', color: '#199e70', count: 1 }],
     cacheEfficiency: { hitRatio: 57, savedTokens: 200, totalRead: 300 },
@@ -962,11 +984,78 @@ describe('History Board components', () => {
         expect(view.getAllByText('2026-08-21 10:00').length).toBeGreaterThanOrEqual(1);
         expect(view.getAllByText('2026-08-21 10:05').length).toBeGreaterThanOrEqual(1);
 
-        // Cache Efficiency header and by-source breakdown
-        expect(view.getByText('Cache Efficiency')).toBeDefined();
+        // Cache Efficiency header (By Agent) and by-source breakdown
+        expect(view.getByText('Cache Efficiency By Agent')).toBeDefined();
         expect(view.queryByText('Cache Efficiency Overview')).toBeNull();
         expect(view.queryByText('Global Cache Hit Ratio')).toBeNull();
         expect(view.getAllByText('Codex').length).toBeGreaterThanOrEqual(1);
+    });
+
+    test('Summary renders cache efficiency by model and the agent × model correlation matrix', () => {
+        const matrixSummary: HistorySummaryResponse['data'] = {
+            ...summary,
+            cacheEfficiency: {
+                hitRatio: 80,
+                savedTokens: 200,
+                totalRead: 250,
+                bySource: [
+                    {
+                        source: 'codex',
+                        sourceName: 'Codex',
+                        color: '#d95926',
+                        hitRatio: 80,
+                        savedTokens: 200,
+                        freshTokens: 50,
+                        totalRead: 250,
+                        billedTokens: 150,
+                    },
+                ],
+                byModel: [
+                    {
+                        model: 'gpt-5.6-sol',
+                        modelName: 'gpt-5.6-sol',
+                        color: '#9085e9',
+                        hitRatio: 80,
+                        savedTokens: 200,
+                        freshTokens: 50,
+                        totalRead: 250,
+                        billedTokens: 150,
+                    },
+                ],
+                byAgentModel: [
+                    {
+                        source: 'codex',
+                        sourceName: 'Codex',
+                        model: 'gpt-5.6-sol',
+                        modelName: 'gpt-5.6-sol',
+                        color: '#d95926',
+                        hitRatio: 80,
+                        savedTokens: 200,
+                        totalRead: 250,
+                        billedTokens: 150,
+                    },
+                ],
+            },
+        };
+        const view = render(<SummaryTab data={matrixSummary} />);
+
+        expect(view.getByText('Cache Efficiency By Model')).toBeDefined();
+        expect(view.getByText('Agent × Model Correlation Matrix')).toBeDefined();
+        // Model column header + by-model bar label both name the model.
+        expect(view.getAllByText('gpt-5.6-sol').length).toBeGreaterThanOrEqual(2);
+        // By-agent, by-model bars and the (codex × gpt-5.6-sol) matrix cell all show 80%.
+        expect(view.getAllByText('80%').length).toBeGreaterThanOrEqual(3);
+    });
+
+    test('Summary renders Token by Model / Token by Agent Source with fresh-cached-output breakdown', () => {
+        const view = render(<SummaryTab data={summary} />);
+
+        expect(view.getByText('Token by Model')).toBeDefined();
+        expect(view.getByText('Token by Agent Source')).toBeDefined();
+        // Headline value is billed (fresh + output = 150) and the breakdown exposes cache.
+        expect(view.getAllByText('150').length).toBeGreaterThanOrEqual(2);
+        expect(view.getAllByText(/Fresh 100 · Cached 40 · Output 10/).length).toBeGreaterThanOrEqual(2);
+        expect(view.getAllByText('Total 150').length).toBeGreaterThanOrEqual(2);
     });
 
     test('Summary bucket fieldset exposes a legend and relays interval selection', () => {

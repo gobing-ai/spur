@@ -57,8 +57,10 @@ import {
     loops,
     messageRollup,
     modelComparison,
+    type SourceDelta,
     selectionPopulation,
     sessionTimeline,
+    sourceDelta,
     sourceSummary,
     type TimelineQueryResult,
     type ToolSequenceFilters,
@@ -240,7 +242,13 @@ function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras):
 
     const toTopItems = (items: HistoryBoardSummaryRollup['models'], sourceColors: boolean): HistoryTopItem[] =>
         items.slice(0, 5).map((row, index) => {
-            const tokens = tokenTotal(row);
+            // Headline value matches the Token Activity chart (fresh + output) so the two
+            // views stay consistent; cached reads ride the same request but are exposed as a
+            // dedicated segment (cacheReadTokens) instead of inflating the ranking.
+            const freshInputTokens = row.freshInputTokens ?? 0;
+            const cacheReadTokens = row.cacheReadTokens ?? 0;
+            const outputTokens = row.outputTokens ?? 0;
+            const tokens = freshInputTokens + outputTokens;
             return {
                 id: row.key,
                 label: row.key,
@@ -249,6 +257,9 @@ function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras):
                     SERIES_COLORS[index % SERIES_COLORS.length] ??
                     '#3987e5',
                 tokens,
+                freshInputTokens,
+                cacheReadTokens,
+                outputTokens,
                 share: totalBilledTokens > 0 ? Math.round((tokens / totalBilledTokens) * 100) : 0,
             };
         });
@@ -547,6 +558,91 @@ async function computeSummaryExtras(
     };
 }
 
+function earlier(a: string | null, b: string | null): string | null {
+    if (a === null) return b;
+    if (b === null) return a;
+    return a < b ? a : b;
+}
+
+function later(a: string | null, b: string | null): string | null {
+    if (a === null) return b;
+    if (b === null) return a;
+    return a > b ? a : b;
+}
+
+/** Fold the trailing-corpus delta into the materialized per-source rollup rows. */
+function foldSourceDelta(
+    sources: readonly HistoryBoardSourceRollupRow[],
+    delta: SourceDelta,
+): HistoryBoardSourceRollupRow[] {
+    const deltaBySource = new Map(delta.bySource.map((d) => [d.source, d]));
+    const merged = sources.map((s) => {
+        const d = deltaBySource.get(s.source);
+        if (!d) return s;
+        return {
+            ...s,
+            messages: s.messages + d.messages,
+            sessions: s.sessions + d.sessions,
+            freshInputTokens: s.freshInputTokens + d.freshInputTokens,
+            cacheReadTokens: s.cacheReadTokens + d.cacheReadTokens,
+            outputTokens: s.outputTokens + d.outputTokens,
+            toolCalls: s.toolCalls + d.toolCalls,
+            firstDate: earlier(s.firstDate, d.firstDate),
+            lastDate: later(s.lastDate, d.lastDate),
+            // `files` intentionally stays at the materialized value: a delta file may already
+            // be counted by the rollup, so folding distinct-file counts would double-count.
+            // New files surface on the next rollup refresh.
+        };
+    });
+    const existing = new Set(sources.map((s) => s.source));
+    const added = delta.bySource
+        .filter((d) => !existing.has(d.source))
+        .map((d) => ({
+            source: d.source,
+            files: d.files,
+            messages: d.messages,
+            lastImportedAt: d.lastDate,
+            sessions: d.sessions,
+            freshInputTokens: d.freshInputTokens,
+            cacheReadTokens: d.cacheReadTokens,
+            outputTokens: d.outputTokens,
+            toolCalls: d.toolCalls,
+            firstDate: d.firstDate,
+            lastDate: d.lastDate,
+        }));
+    return [...merged, ...added];
+}
+
+/** Fold the trailing-corpus delta into the materialized per-(source, day) rows. */
+function foldDailyDelta(
+    daily: readonly HistoryBoardDailyRollupRow[],
+    delta: SourceDelta,
+): HistoryBoardDailyRollupRow[] {
+    const byKey = new Map(daily.map((r) => [`${r.source}\u0000${r.day}`, { ...r }]));
+    for (const d of delta.byDay) {
+        const key = `${d.source}\u0000${d.day}`;
+        const existing = byKey.get(key);
+        if (existing) {
+            existing.freshInputTokens += d.freshInputTokens;
+            existing.cacheReadTokens += d.cacheReadTokens;
+            existing.outputTokens += d.outputTokens;
+            existing.sessions += d.sessions;
+            existing.toolCalls += d.toolCalls;
+        } else {
+            byKey.set(key, {
+                source: d.source,
+                day: d.day,
+                freshInputTokens: d.freshInputTokens,
+                cacheReadTokens: d.cacheReadTokens,
+                outputTokens: d.outputTokens,
+                sessions: d.sessions,
+                toolCalls: d.toolCalls,
+            });
+        }
+    }
+    return Array.from(byKey.values());
+}
+
 function projectSources(
     sources: readonly HistoryBoardSourceRollupRow[],
     daily: readonly HistoryBoardDailyRollupRow[],
@@ -700,9 +796,14 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         ]);
         const models = new Map<string, { freshInputTokens: number; cacheReadTokens: number; outputTokens: number }>();
         const sources = new Map<string, { freshInputTokens: number; cacheReadTokens: number; outputTokens: number }>();
+        const sourceModels = new Map<
+            string,
+            { source: string; model: string; freshInputTokens: number; cacheReadTokens: number; outputTokens: number }
+        >();
         for (const row of rollups) {
+            const modelKey = row.model ?? 'unknown';
             for (const [key, target] of [
-                [row.model ?? 'unknown', models],
+                [modelKey, models],
                 [row.source, sources],
             ] as const) {
                 const aggregate = target.get(key) ?? { freshInputTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
@@ -711,6 +812,18 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                 aggregate.outputTokens += row.outputTokens ?? 0;
                 target.set(key, aggregate);
             }
+            const pairKey = `${row.source}\u0000${modelKey}`;
+            const pair = sourceModels.get(pairKey) ?? {
+                source: row.source,
+                model: modelKey,
+                freshInputTokens: 0,
+                cacheReadTokens: 0,
+                outputTokens: 0,
+            };
+            pair.freshInputTokens += row.inputTokens ?? 0;
+            pair.cacheReadTokens += row.cacheReadTokens ?? 0;
+            pair.outputTokens += row.outputTokens ?? 0;
+            sourceModels.set(pairKey, pair);
         }
         const extras = await computeSummaryExtras(db, sel, bucket, dimension, true, bucketRows);
         return projectSummary(
@@ -722,6 +835,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                 sources: Array.from(sources, ([key, value]) => ({ key, ...value })).sort(
                     (a, b) => b.freshInputTokens + b.outputTokens - a.freshInputTokens - a.outputTokens,
                 ),
+                sourceModels: Array.from(sourceModels.values()),
                 tools: toolStats.map((row) => ({
                     toolName: row.toolName,
                     calls: row.calls,
@@ -1476,8 +1590,20 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             };
         }
 
-        if (await historyBoardRollupsFresh(db)) {
-            const result = await historyBoardSourcesFromRollup(db, HISTORY_BOARD_ACTIVITY_DAYS);
+        // Materialized rollups are rebuilt atomically and cover every message through the
+        // last refresh. Read them whenever they exist; when stale (messages imported since),
+        // fold in only that trailing delta with a bounded scan — exact, and never re-scans
+        // the whole corpus. Raw scans remain only for the cold start (no rollup yet).
+        const result = await historyBoardSourcesFromRollup(db, HISTORY_BOARD_ACTIVITY_DAYS);
+        if (result.sources.length > 0) {
+            if (!(await historyBoardRollupsFresh(db))) {
+                const delta = await sourceDelta(db, HISTORY_BOARD_ACTIVITY_DAYS);
+                return projectSources(
+                    foldSourceDelta(result.sources, delta),
+                    foldDailyDelta(result.daily, delta),
+                    result.databaseBytes,
+                );
+            }
             return projectSources(result.sources, result.daily, result.databaseBytes);
         }
 

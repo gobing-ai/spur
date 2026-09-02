@@ -624,9 +624,18 @@ describe('R2 structural invariant — every corpus query is bounded', () => {
     // SQL template literals that scan a corpus table. The forensic queries are the
     // only place these two tables appear in an aggregate; a builder helper like
     // `buildMessageWhere` (no FROM) must not be flagged.
+    //
+    // Carve-out: the `MESSAGE_DEDUP` predicate. It is a WHERE-clause existence check
+    // (`NOT EXISTS (SELECT 1 FROM ... )`) that returns at most one row per evaluation and
+    // never materializes an array, so it cannot violate R2 — but the regex sees its
+    // `FROM history_message` and would flag it. It carries no GROUP BY / LIMIT because
+    // either collapses the correlated subquery to a 10s plan (measured on a 1.7M-row
+    // corpus) where the bare NOT EXISTS is ~0.5s. The scan it sits inside is bounded by
+    // the enclosing query's GROUP BY / LIMIT.
     const queries = [...noComments.matchAll(/`([^`]*\bFROM\s+history_(?:message|tool_call)[^`]*)`/g)]
         .map((m) => m[1])
-        .filter((q): q is string => q !== undefined);
+        .filter((q): q is string => q !== undefined)
+        .filter((q) => !/^\(m\.request_id IS NULL OR NOT EXISTS/.test(q));
 
     test('the query set is non-empty', () => {
         expect(queries.length).toBeGreaterThan(0);

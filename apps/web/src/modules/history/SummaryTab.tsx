@@ -1,4 +1,9 @@
-import type { HistoryBucket, HistoryDimension, HistorySummaryResponse } from '@gobing-ai/spur-contracts';
+import type {
+    HistoryBucket,
+    HistoryDimension,
+    HistorySummaryResponse,
+    HistoryTopItem,
+} from '@gobing-ai/spur-contracts';
 import type React from 'react';
 import { memo, useCallback, useMemo, useState } from 'react';
 import {
@@ -338,6 +343,28 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
         const topModels = data?.topModels ?? [];
         const topSources = data?.topSources ?? [];
         const topTools = data?.topTools ?? [];
+        // Bar scale for the Token-by-Model / Token-by-Agent stacked breakdowns: the widest
+        // total (fresh + cached + output) among the shown items, so segments are comparable.
+        const modelBarMax = useMemo(
+            () =>
+                Math.max(
+                    0,
+                    ...topModels.map(
+                        (m) => (m.freshInputTokens ?? 0) + (m.cacheReadTokens ?? 0) + (m.outputTokens ?? 0),
+                    ),
+                ),
+            [topModels],
+        );
+        const sourceBarMax = useMemo(
+            () =>
+                Math.max(
+                    0,
+                    ...topSources.map(
+                        (s) => (s.freshInputTokens ?? 0) + (s.cacheReadTokens ?? 0) + (s.outputTokens ?? 0),
+                    ),
+                ),
+            [topSources],
+        );
         const skillsUsed = data?.skillsUsed ?? [];
         const skillTimeSeries = data?.skillTimeSeries ?? [];
         const modelTimeSeries = data?.modelTimeSeries ?? [];
@@ -672,62 +699,143 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
 
                 {/* Breakdowns Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Top Models */}
+                    {/* Token by Model */}
                     <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5">
-                        <h4 className="font-bold text-sm mb-3">Top Models by Billed Tokens</h4>
+                        <h4 className="font-bold text-sm mb-3">Token by Model</h4>
                         <div className="flex flex-col gap-3">
                             {topModels.map((m) => (
-                                <div key={m.id} className="flex flex-col gap-1">
-                                    <div className="flex justify-between text-xs font-mono">
-                                        <span className="flex items-center gap-1.5">
-                                            <span
-                                                className="w-2.5 h-2.5 rounded-full"
-                                                style={{ background: m.color }}
-                                            />
-                                            {m.label}
-                                        </span>
-                                        <span>
-                                            {fmtTok(m.tokens)} ({m.share}%)
-                                        </span>
-                                    </div>
-                                    <div className="w-full bg-base-300 h-2 rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full rounded-full"
-                                            style={{ width: `${m.share}%`, background: m.color }}
-                                        />
-                                    </div>
-                                </div>
+                                <TokenBreakdownBar key={m.id} item={m} maxTotal={modelBarMax} />
                             ))}
                         </div>
                     </div>
 
-                    {/* Top Sources */}
+                    {/* Token by Agent Source */}
                     <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5">
-                        <h4 className="font-bold text-sm mb-3">Top Agent Sources by Billed Tokens</h4>
+                        <h4 className="font-bold text-sm mb-3">Token by Agent Source</h4>
                         <div className="flex flex-col gap-3">
                             {topSources.map((s) => (
-                                <div key={s.id} className="flex flex-col gap-1">
-                                    <div className="flex justify-between text-xs">
-                                        <span className="flex items-center gap-1.5 font-medium">
-                                            <span
-                                                className="w-2.5 h-2.5 rounded-full"
-                                                style={{ background: s.color }}
-                                            />
-                                            {s.label}
-                                        </span>
-                                        <span className="font-mono">
-                                            {fmtTok(s.tokens)} ({s.share}%)
-                                        </span>
-                                    </div>
-                                    <div className="w-full bg-base-300 h-2 rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full rounded-full"
-                                            style={{ width: `${s.share}%`, background: s.color }}
-                                        />
-                                    </div>
-                                </div>
+                                <TokenBreakdownBar key={s.id} item={s} maxTotal={sourceBarMax} />
                             ))}
                         </div>
+                    </div>
+
+                    {/* Cache Efficiency By Agent */}
+                    <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5">
+                        <h4 className="font-bold text-sm mb-3">Cache Efficiency By Agent</h4>
+                        {((cacheEfficiency.bySource && cacheEfficiency.bySource.length > 0) ||
+                            topSources.length > 0) && (
+                            <CacheEfficiencyBars
+                                items={(cacheEfficiency.bySource && cacheEfficiency.bySource.length > 0
+                                    ? cacheEfficiency.bySource
+                                    : topSources.map((s) => ({
+                                          source: s.id,
+                                          sourceName: s.label,
+                                          color: s.color,
+                                          hitRatio: cacheEfficiency.hitRatio,
+                                          savedTokens: Math.round(cacheEfficiency.savedTokens * (s.share / 100)),
+                                          totalRead: Math.round(cacheEfficiency.totalRead * (s.share / 100)),
+                                          billedTokens: s.tokens,
+                                      }))
+                                ).map((s) => ({
+                                    id: s.source,
+                                    label: s.sourceName,
+                                    color: s.color,
+                                    hitRatio: s.hitRatio,
+                                    savedTokens: s.savedTokens,
+                                    totalRead: s.totalRead,
+                                    billedTokens: s.billedTokens,
+                                }))}
+                            />
+                        )}
+                    </div>
+
+                    {/* Cache Efficiency By Model */}
+                    <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5">
+                        <h4 className="font-bold text-sm mb-3">Cache Efficiency By Model</h4>
+                        {cacheEfficiency.byModel && cacheEfficiency.byModel.length > 0 && (
+                            <CacheEfficiencyBars
+                                items={cacheEfficiency.byModel.map((m) => ({
+                                    id: m.model,
+                                    label: m.modelName,
+                                    color: m.color,
+                                    hitRatio: m.hitRatio,
+                                    savedTokens: m.savedTokens,
+                                    totalRead: m.totalRead,
+                                    billedTokens: m.billedTokens,
+                                }))}
+                            />
+                        )}
+                    </div>
+
+                    {/* Agent × Model Correlation Matrix */}
+                    <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5">
+                        <h4 className="font-bold text-sm mb-3">Agent × Model Correlation Matrix</h4>
+                        {modelOrder.length > 0 && agentOrder.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs font-mono">
+                                        <thead>
+                                            <tr>
+                                                <th className="text-left pr-2 py-1 text-base-content/60 sticky left-0 bg-base-200 z-10">
+                                                    Model \ Agent
+                                                </th>
+                                                {agentOrder.map((src) => (
+                                                    <th
+                                                        key={src}
+                                                        className="px-1 py-1 text-base-content/60 whitespace-nowrap"
+                                                        title={sourceNameById.get(src) ?? src}
+                                                    >
+                                                        {sourceNameById.get(src) ?? src}
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {modelOrder.map((m) => (
+                                                <tr key={m}>
+                                                    <td className="pr-2 py-1 font-bold text-base-content/80 whitespace-nowrap sticky left-0 bg-base-200">
+                                                        {m}
+                                                    </td>
+                                                    {agentOrder.map((src) => {
+                                                        const cell = agentModelCellMap.get(`${src}\u0000${m}`);
+                                                        return (
+                                                            <td key={src} className="p-0.5">
+                                                                {cell ? (
+                                                                    <div
+                                                                        className="h-8 min-w-[3rem] rounded-md flex items-center justify-center text-[10px] font-bold border border-base-content/10 cursor-default"
+                                                                        style={{
+                                                                            background: `rgba(6, 182, 212, ${
+                                                                                0.08 + 0.5 * (cell.hitRatio / 100)
+                                                                            })`,
+                                                                        }}
+                                                                        title={`${cell.sourceName} × ${cell.modelName}: ${cell.hitRatio}% hit · saved ${fmtTok(
+                                                                            cell.savedTokens,
+                                                                        )} / read ${fmtTok(
+                                                                            cell.totalRead,
+                                                                        )} / billed ${fmtTok(cell.billedTokens)}`}
+                                                                    >
+                                                                        {cell.hitRatio}%
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="h-8 min-w-[3rem] rounded-md flex items-center justify-center text-[10px] text-base-content/25 bg-base-300/40">
+                                                                        —
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px] font-mono text-base-content/60">
+                                    <span>0%</span>
+                                    <div className="h-1.5 w-32 rounded-full bg-gradient-to-r from-base-300 to-cyan-400" />
+                                    <span>100% cache hit ratio</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Top Tools Table */}
@@ -821,129 +929,10 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                         </div>
                     </div>
 
-                    {/* Cache Efficiency & Skills Area */}
+                    {/* Efficiency Stats & Skills */}
                     <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5 flex flex-col gap-4">
+                        <h4 className="font-bold text-sm mb-3">Efficiency Stats & Skills</h4>
                         <div>
-                            <h4 className="font-bold text-sm mb-3">Cache Efficiency By Agent</h4>
-
-                            {/* Cache Efficiency by Agent */}
-                            {((cacheEfficiency.bySource && cacheEfficiency.bySource.length > 0) ||
-                                topSources.length > 0) && (
-                                <div className="flex flex-col gap-2 mb-4">
-                                    <CacheEfficiencyBars
-                                        items={(cacheEfficiency.bySource && cacheEfficiency.bySource.length > 0
-                                            ? cacheEfficiency.bySource
-                                            : topSources.map((s) => ({
-                                                  source: s.id,
-                                                  sourceName: s.label,
-                                                  color: s.color,
-                                                  hitRatio: cacheEfficiency.hitRatio,
-                                                  savedTokens: Math.round(
-                                                      cacheEfficiency.savedTokens * (s.share / 100),
-                                                  ),
-                                                  totalRead: Math.round(cacheEfficiency.totalRead * (s.share / 100)),
-                                                  billedTokens: s.tokens,
-                                              }))
-                                        ).map((s) => ({
-                                            id: s.source,
-                                            label: s.sourceName,
-                                            color: s.color,
-                                            hitRatio: s.hitRatio,
-                                            savedTokens: s.savedTokens,
-                                            totalRead: s.totalRead,
-                                            billedTokens: s.billedTokens,
-                                        }))}
-                                    />
-                                </div>
-                            )}
-
-                            {/* Cache Efficiency by Model */}
-                            {cacheEfficiency.byModel && cacheEfficiency.byModel.length > 0 && (
-                                <div className="flex flex-col gap-2 mb-4">
-                                    <h5 className="font-bold text-xs mb-1">Cache Efficiency By Model</h5>
-                                    <CacheEfficiencyBars
-                                        items={cacheEfficiency.byModel.map((m) => ({
-                                            id: m.model,
-                                            label: m.modelName,
-                                            color: m.color,
-                                            hitRatio: m.hitRatio,
-                                            savedTokens: m.savedTokens,
-                                            totalRead: m.totalRead,
-                                            billedTokens: m.billedTokens,
-                                        }))}
-                                    />
-                                </div>
-                            )}
-
-                            {/* Agent × Model Correlation Matrix */}
-                            {agentOrder.length > 0 && modelOrder.length > 0 && (
-                                <div className="flex flex-col gap-2 mb-4">
-                                    <h5 className="font-bold text-xs mb-1">Agent × Model Correlation Matrix</h5>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-xs font-mono border-collapse">
-                                            <thead>
-                                                <tr>
-                                                    <th className="text-left pr-2 py-1 text-base-content/60 sticky left-0 bg-base-200 z-10">
-                                                        Agent \ Model
-                                                    </th>
-                                                    {modelOrder.map((m) => (
-                                                        <th
-                                                            key={m}
-                                                            className="px-1 py-1 text-base-content/60 whitespace-nowrap"
-                                                            title={m}
-                                                        >
-                                                            {m}
-                                                        </th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {agentOrder.map((src) => (
-                                                    <tr key={src}>
-                                                        <td className="pr-2 py-1 font-bold text-base-content/80 whitespace-nowrap sticky left-0 bg-base-200">
-                                                            {sourceNameById.get(src) ?? src}
-                                                        </td>
-                                                        {modelOrder.map((m) => {
-                                                            const cell = agentModelCellMap.get(`${src}\u0000${m}`);
-                                                            return (
-                                                                <td key={m} className="p-0.5">
-                                                                    {cell ? (
-                                                                        <div
-                                                                            className="h-8 min-w-[3rem] rounded-md flex items-center justify-center text-[10px] font-bold border border-base-content/10 cursor-default"
-                                                                            style={{
-                                                                                background: `rgba(6, 182, 212, ${
-                                                                                    0.08 + 0.5 * (cell.hitRatio / 100)
-                                                                                })`,
-                                                                            }}
-                                                                            title={`${cell.sourceName} × ${cell.modelName}: ${cell.hitRatio}% hit · saved ${fmtTok(
-                                                                                cell.savedTokens,
-                                                                            )} / read ${fmtTok(
-                                                                                cell.totalRead,
-                                                                            )} / billed ${fmtTok(cell.billedTokens)}`}
-                                                                        >
-                                                                            {cell.hitRatio}%
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="h-8 min-w-[3rem] rounded-md flex items-center justify-center text-[10px] text-base-content/25 bg-base-300/40">
-                                                                            —
-                                                                        </div>
-                                                                    )}
-                                                                </td>
-                                                            );
-                                                        })}
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-[10px] font-mono text-base-content/60">
-                                        <span>0%</span>
-                                        <div className="h-1.5 w-32 rounded-full bg-gradient-to-r from-base-300 to-cyan-400" />
-                                        <span>100% cache hit ratio</span>
-                                    </div>
-                                </div>
-                            )}
-
                             <div className="grid grid-cols-2 gap-3 text-xs font-mono">
                                 <div className="flex flex-col gap-0.5">
                                     <span className="text-base-content/60 text-[10px] uppercase tracking-wider">
@@ -1006,6 +995,44 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
 
 const activeSeriesFor = (skills: Array<{ id: string; label: string; color: string }>): ChartSeries[] =>
     skills.map((sk) => ({ id: sk.id, label: sk.label, color: sk.color }));
+
+/**
+ * Stacked fresh / cached / output token bar for the Token by Model / Token by Agent Source
+ * cards. The headline value is billed (fresh + output) — consistent with the Token Activity
+ * chart — while the bar and breakdown expose cached reads as a lighter input segment, so
+ * reused-context volume is visible without inflating the ranking.
+ */
+const TokenBreakdownBar: React.FC<{ item: HistoryTopItem; maxTotal: number }> = memo(({ item, maxTotal }) => {
+    const fresh = item.freshInputTokens ?? 0;
+    const cache = item.cacheReadTokens ?? 0;
+    const output = item.outputTokens ?? 0;
+    const scale = maxTotal > 0 ? maxTotal : 1;
+    const seg = (value: number) => `${Math.round((value / scale) * 1000) / 10}%`;
+    return (
+        <div className="flex flex-col gap-1">
+            <div className="flex justify-between text-xs font-mono">
+                <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: item.color }} />
+                    {item.label}
+                </span>
+                <span>{fmtTok(item.tokens)}</span>
+            </div>
+            <div className="w-full bg-base-300 h-3 rounded-full overflow-hidden flex">
+                {fresh > 0 && <div className="h-full" style={{ width: seg(fresh), background: '#3987e5' }} />}
+                {cache > 0 && (
+                    <div className="h-full" style={{ width: seg(cache), background: 'rgba(57, 135, 229, 0.35)' }} />
+                )}
+                {output > 0 && <div className="h-full" style={{ width: seg(output), background: '#f59e0b' }} />}
+            </div>
+            <div className="flex justify-between text-[10px] text-base-content/60 font-mono">
+                <span>
+                    Fresh {fmtTok(fresh)} · Cached {fmtTok(cache)} · Output {fmtTok(output)}
+                </span>
+                <span>Total {fmtTok(fresh + cache + output)}</span>
+            </div>
+        </div>
+    );
+});
 
 interface CacheBarItem {
     id: string;

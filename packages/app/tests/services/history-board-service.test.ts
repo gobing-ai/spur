@@ -440,6 +440,53 @@ describe('LiveHistoryBoardService', () => {
         expect(sources.agents.find((agent) => agent.id === 'agy')?.sessionCount).toBeGreaterThan(0);
     });
 
+    test('getSources folds in messages imported since the last rollup refresh', async () => {
+        const db = await setupTestDb();
+        await seedCorpus(db, 12, 4);
+        await refreshHistoryRollups(db);
+        const svc = new LiveHistoryBoardService({ db });
+
+        const before = await svc.getSources();
+        const codexBefore = before.agents.find((a) => a.id === 'codex');
+        expect(codexBefore).toBeDefined();
+
+        // A new message AFTER the rollup watermark makes the rollups stale; the bounded
+        // delta scan must fold it into the materialized read (exact, no full-corpus scan).
+        const now = new Date().toISOString();
+        await db.run(
+            `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq, turn_index,
+                 role, record_type, disposition, ts, model, input_tokens, output_tokens, cache_read_tokens,
+                 provenance, duration_ms, imported_at)
+             VALUES ('delta-1', 'codex', 'delta.jsonl', 1, 'sess-delta', 1, 1, 'assistant', 'message', 'ok', ?, 'gpt-5.6-sol',
+                     300, 75, 150, 'agent', 100, ?)`,
+            now,
+            now,
+        );
+        await db.run(
+            `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line,
+                 session_id, seq, tool_name, args_digest, args_raw, status, duration_ms, imported_at)
+             VALUES ('delta-tc', 'delta-1', 'codex', 'delta.jsonl', 1, 'sess-delta', 1, 'Read', 'h', '{}', 'success', 10, ?)`,
+            now,
+        );
+        // Advance the checkpoint so the rollups read as stale (new version vs meta).
+        await db.run(
+            `UPDATE history_import_checkpoint SET last_imported_line = 2, updated_at = ? WHERE source = 'codex'`,
+            now,
+        );
+
+        const after = await svc.getSources();
+        const codexAfter = after.agents.find((a) => a.id === 'codex');
+        expect(codexAfter).toBeDefined();
+        // 300 fresh + 75 output added to the codex total; cache is tracked separately.
+        expect(codexAfter?.totalTokens).toBe((codexBefore?.totalTokens ?? 0) + 375);
+        expect(codexAfter?.sessionCount).toBe((codexBefore?.sessionCount ?? 0) + 1);
+        expect(codexAfter?.cacheSavedTokens).toBe((codexBefore?.cacheSavedTokens ?? 0) + 150);
+        // The delta lands on today's heatmap cell.
+        const today = now.slice(0, 10);
+        const heatCell = codexAfter?.heatmapDays.find((d) => d.date === today);
+        expect(heatCell && heatCell.tokens > 0).toBe(true);
+    });
+
     test('triggerImport returns pending job status', async () => {
         const svc = new LiveHistoryBoardService({
             triggerImport: async (mode) => ({

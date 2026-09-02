@@ -118,9 +118,13 @@ export interface SourceSummaryRow {
 // 0624 R1 re-audit: claude re-emits an assistant message while a response streams;
 // the final row (MAX rowid) carries the complete cumulative usage. Keep that row
 // once per request_id; unidentified responses stay distinct.
-const MESSAGE_DEDUP = `(m.rowid IN (
-    SELECT MAX(rowid) FROM history_message WHERE request_id IS NOT NULL GROUP BY request_id
-) OR m.request_id IS NULL)`;
+// NOT EXISTS form: only rows carrying a request_id (retries, a tiny fraction of the corpus)
+// pay a correlated lookup, instead of a bloom-filter membership check over every row —
+// keeps the identical MAX(rowid) representative while cutting raw-scan cost on large DBs.
+const MESSAGE_DEDUP = `(m.request_id IS NULL OR NOT EXISTS (
+    SELECT 1 FROM history_message o
+    WHERE o.request_id = m.request_id AND o.rowid > m.rowid
+))`;
 
 function withMessageDedup(where: string): string {
     return where === '' ? `WHERE ${MESSAGE_DEDUP}` : `${where} AND ${MESSAGE_DEDUP}`;
@@ -1582,6 +1586,105 @@ export async function dailyTokenMatrix(db: DbAdapter, days = HISTORY_BOARD_ACTIV
         days,
         days,
     );
+}
+
+/** Per-source aggregate for messages newer than the last rollup refresh. */
+export interface SourceDeltaSource {
+    source: string;
+    messages: number;
+    files: number;
+    sessions: number;
+    freshInputTokens: number;
+    cacheReadTokens: number;
+    outputTokens: number;
+    toolCalls: number;
+    firstDate: string | null;
+    lastDate: string | null;
+}
+
+/** Per-(source, day) aggregate for messages newer than the last rollup refresh. */
+export interface SourceDeltaDay {
+    source: string;
+    day: string;
+    freshInputTokens: number;
+    cacheReadTokens: number;
+    outputTokens: number;
+    sessions: number;
+    toolCalls: number;
+}
+
+/** Trailing corpus delta (messages imported since the rollup watermark). */
+export interface SourceDelta {
+    bySource: SourceDeltaSource[];
+    byDay: SourceDeltaDay[];
+}
+
+/**
+ * Per-source and per-(source, day) aggregates for the messages NOT yet covered by the
+ * materialized board rollups — the delta newer than the rollup watermark
+ * (`MAX(last_date)` across `history_board_source_stats`). Bounded by `days` for the
+ * daily grid, so the Sources board can fold this small raw scan on top of the
+ * pre-aggregated rollups and stay exact without re-scanning the whole corpus.
+ * Returns an empty delta when no rollup has ever run.
+ */
+export async function sourceDelta(db: DbAdapter, days: number): Promise<SourceDelta> {
+    const watermarkRow = await db.queryFirst<{ watermark: string | null }>(
+        'SELECT MAX(last_date) AS watermark FROM history_board_source_stats',
+    );
+    const watermark = watermarkRow?.watermark ?? null;
+    if (watermark === null) {
+        return { bySource: [], byDay: [] };
+    }
+    // R2 structural invariant: every template literal referencing a corpus table must
+    // carry `GROUP BY` / `LIMIT ?` — so the delta subquery is inlined per query instead
+    // of factored into a shared (ungrouped) CTE. The window (ts > watermark) bounds the
+    // scan to the trailing delta, which is inherently small.
+    const windowed = `
+               WHERE m.ts > ?
+                 AND m.ts >= datetime('now', '-' || ? || ' days')
+                 AND ${MESSAGE_DEDUP}`;
+    const [bySource, byDay] = await Promise.all([
+        db.queryAll<SourceDeltaSource>(
+            `SELECT d.source, COUNT(*) AS messages, COUNT(DISTINCT d.source_file) AS files,
+                    COUNT(DISTINCT CASE WHEN d.session_id NOT IN ('', 'unknown', 'session') THEN d.session_id END) AS sessions,
+                    SUM(d.fresh) AS freshInputTokens, SUM(d.cache) AS cacheReadTokens,
+                    SUM(d.out) AS outputTokens, COUNT(tc.rowid) AS toolCalls,
+                    MIN(d.ts) AS firstDate, MAX(d.ts) AS lastDate
+             FROM (
+                 SELECT m.source, m.source_file, m.session_id, m.ts, m.record_hash,
+                        COALESCE(m.input_tokens, 0) AS fresh,
+                        COALESCE(m.cache_read_tokens, 0) AS cache,
+                        COALESCE(m.output_tokens, 0) AS out
+                 FROM history_message m
+                 ${windowed}
+             ) d
+             LEFT JOIN history_tool_call tc ON tc.message_hash = d.record_hash
+             GROUP BY d.source`,
+            watermark,
+            days,
+        ),
+        db.queryAll<SourceDeltaDay>(
+            `SELECT d.source, DATE(d.ts) AS day,
+                    SUM(d.fresh) AS freshInputTokens, SUM(d.cache) AS cacheReadTokens,
+                    SUM(d.out) AS outputTokens,
+                    COUNT(DISTINCT CASE WHEN d.session_id NOT IN ('', 'unknown', 'session') THEN d.session_id END) AS sessions,
+                    COUNT(tc.rowid) AS toolCalls
+             FROM (
+                 SELECT m.source, m.source_file, m.session_id, m.ts, m.record_hash,
+                        COALESCE(m.input_tokens, 0) AS fresh,
+                        COALESCE(m.cache_read_tokens, 0) AS cache,
+                        COALESCE(m.output_tokens, 0) AS out
+                 FROM history_message m
+                 ${windowed}
+             ) d
+             LEFT JOIN history_tool_call tc ON tc.message_hash = d.record_hash
+             GROUP BY d.source, DATE(d.ts)
+             ORDER BY d.source ASC, day ASC`,
+            watermark,
+            days,
+        ),
+    ]);
+    return { bySource, byDay };
 }
 
 /**

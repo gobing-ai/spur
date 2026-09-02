@@ -90,6 +90,9 @@ export const historyTopItemSchema = z.object({
     color: z.string(),
     tokens: z.number(),
     share: z.number(),
+    freshInputTokens: z.number().optional(),
+    cacheReadTokens: z.number().optional(),
+    outputTokens: z.number().optional(),
 });
 /** Inferred type for HistoryTopItem. */
 export type HistoryTopItem = z.infer<typeof historyTopItemSchema>;
