@@ -967,7 +967,7 @@ export class MockHistoryBoardService implements HistoryBoardService {
             const toolCalls = srcSessions.reduce((acc, s) => acc + s.toolCalls, 0);
 
             const heatmapDays: Array<{ date: string; tokens: number; sessions: number }> = [];
-            for (let d = 89; d >= 0; d--) {
+            for (let d = 179; d >= 0; d--) {
                 const dayTs = baseDate - d * DAY_MS;
                 const dKey = new Date(dayTs).toISOString().slice(0, 10);
                 const daySessions = srcSessions.filter((s) => new Date(s.start).toISOString().slice(0, 10) === dKey);

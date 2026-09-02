@@ -1130,13 +1130,13 @@ describe('History Board components', () => {
         expect(view.getByText('2026-08-21: 1.2K tokens, 3 sessions')).toBeDefined();
 
         const start = Date.UTC(2026, 4, 24);
-        const days = Array.from({ length: 90 }, (_, index) => ({
+        const days = Array.from({ length: 180 }, (_, index) => ({
             date: new Date(start + index * 86_400_000).toISOString().slice(0, 10),
             tokens: index,
             sessions: 1,
         }));
-        view.rerender(<HeatmapGrid days={days} maxDailyTokens={89} />);
-        expect(view.getAllByTestId('heatmap-week')).toHaveLength(13);
+        view.rerender(<HeatmapGrid days={days} maxDailyTokens={179} />);
+        expect(view.getAllByTestId('heatmap-week')).toHaveLength(26);
     });
 
     test('Sessions table truncates long IDs behind a full-ID title and surfaces loading/error states', () => {

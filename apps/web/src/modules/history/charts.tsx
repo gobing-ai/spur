@@ -761,7 +761,7 @@ export const HeatmapGrid: React.FC<{
                 <div
                     className="absolute -top-1 pointer-events-none z-30 transform -translate-x-1/2 -translate-y-full flex flex-col items-center min-w-[140px] transition-all duration-75"
                     style={{
-                        left: `${Math.max(20, Math.min(80, ((hoveredCell.colIdx + 0.5) / 13) * 100))}%`,
+                        left: `${Math.max(20, Math.min(80, ((hoveredCell.colIdx + 0.5) / weeks.length) * 100))}%`,
                     }}
                 >
                     <div className="bg-base-100 border border-base-content/20 shadow-xl rounded-md px-2.5 py-1.5 text-[10px] font-mono text-center text-base-content backdrop-blur-md">
@@ -777,67 +777,68 @@ export const HeatmapGrid: React.FC<{
                 </div>
             )}
 
-            <div className="flex items-start gap-1 w-full">
-                <div
-                    className="w-5 shrink-0 pt-3 flex flex-col gap-[3px] text-[9px] font-mono text-base-content/50 select-none"
-                    aria-hidden="true"
-                >
+            <div
+                className="flex-1 w-full"
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${weeks.length + 1}, minmax(0, 1fr))`,
+                    gap: '3px',
+                }}
+            >
+                {/* Leading label track shares the grid so weekday rows stay aligned at any cell size */}
+                <div className="flex flex-col gap-[3px] select-none" aria-hidden="true">
+                    <div className="h-3 shrink-0" />
                     {['Mon', '', 'Wed', '', 'Fri', '', ''].map((label, index) => (
                         <div
                             key={label || `weekday-${index}`}
-                            className="w-full aspect-square flex items-center justify-end pr-1 leading-none"
+                            className="w-full aspect-square flex items-center justify-end pr-0.5 text-[8px] font-mono text-base-content/50 leading-none"
                         >
                             {label}
                         </div>
                     ))}
                 </div>
-                <div
-                    className="flex-1 w-full"
-                    style={{ display: 'grid', gridTemplateColumns: 'repeat(13, minmax(0, 1fr))', gap: '3px' }}
-                >
-                    {weeks.map((week, wi) => {
-                        const firstDay = week[0];
-                        return (
-                            <div
-                                key={firstDay?.date ?? `week-${wi}`}
-                                className="flex flex-col gap-[3px]"
-                                data-testid="heatmap-week"
-                            >
-                                <div className="h-3 text-[9px] leading-3 text-base-content/50 truncate font-mono">
-                                    {monthLabel(wi)}
-                                </div>
-                                <div className="flex flex-col gap-[3px]">
-                                    {week.map((cell) => {
-                                        const lvl = heatLevel(useSessions ? cell.sessions : cell.tokens, activeMax);
-                                        return (
-                                            <button
-                                                type="button"
-                                                key={cell.date}
-                                                className="w-full aspect-square rounded-[2px] p-0 border-0 transition-transform hover:scale-125 focus:scale-125 focus:outline-hidden cursor-pointer"
-                                                style={
-                                                    lvl === 0
-                                                        ? { backgroundColor: 'currentColor', opacity: 0.08 }
-                                                        : {
-                                                              backgroundColor: color,
-                                                              opacity: HEAT_LEVEL_OPACITY[lvl],
-                                                          }
-                                                }
-                                                onMouseEnter={() => setHoveredCell({ ...cell, colIdx: wi })}
-                                                onFocus={() => setHoveredCell({ ...cell, colIdx: wi })}
-                                                onBlur={() => setHoveredCell(null)}
-                                                title={`${cell.date}: ${fmtTok(cell.tokens)} tokens (${cell.sessions} sessions)`}
-                                            >
-                                                <span className="sr-only">
-                                                    {`${cell.date}: ${fmtTok(cell.tokens)} tokens, ${cell.sessions} sessions`}
-                                                </span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
+                {weeks.map((week, wi) => {
+                    const firstDay = week[0];
+                    return (
+                        <div
+                            key={firstDay?.date ?? `week-${wi}`}
+                            className="flex flex-col gap-[3px]"
+                            data-testid="heatmap-week"
+                        >
+                            <div className="h-3 text-[9px] leading-3 text-base-content/50 truncate font-mono">
+                                {monthLabel(wi)}
                             </div>
-                        );
-                    })}
-                </div>
+                            <div className="flex flex-col gap-[3px]">
+                                {week.map((cell) => {
+                                    const lvl = heatLevel(useSessions ? cell.sessions : cell.tokens, activeMax);
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={cell.date}
+                                            className="w-full aspect-square rounded-[2px] p-0 border-0 transition-transform hover:scale-125 focus:scale-125 focus:outline-hidden cursor-pointer"
+                                            style={
+                                                lvl === 0
+                                                    ? { backgroundColor: 'currentColor', opacity: 0.08 }
+                                                    : {
+                                                          backgroundColor: color,
+                                                          opacity: HEAT_LEVEL_OPACITY[lvl],
+                                                      }
+                                            }
+                                            onMouseEnter={() => setHoveredCell({ ...cell, colIdx: wi })}
+                                            onFocus={() => setHoveredCell({ ...cell, colIdx: wi })}
+                                            onBlur={() => setHoveredCell(null)}
+                                            title={`${cell.date}: ${fmtTok(cell.tokens)} tokens (${cell.sessions} sessions)`}
+                                        >
+                                            <span className="sr-only">
+                                                {`${cell.date}: ${fmtTok(cell.tokens)} tokens, ${cell.sessions} sessions`}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
             <div className="flex items-center justify-end gap-1.5 pt-0.5">
                 <div className="flex items-center gap-1 text-[9px] font-mono text-base-content/50">

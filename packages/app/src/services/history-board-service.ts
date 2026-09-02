@@ -516,8 +516,8 @@ function projectSources(
     today.setUTCHours(0, 0, 0, 0);
     const agents = AGENT_CATALOG.map((catalog) => {
         const source = sourceMap.get(catalog.id);
-        const heatmapDays = Array.from({ length: 90 }, (_, index) => {
-            const date = new Date(today.getTime() - (89 - index) * 86_400_000).toISOString().slice(0, 10);
+        const heatmapDays = Array.from({ length: 180 }, (_, index) => {
+            const date = new Date(today.getTime() - (179 - index) * 86_400_000).toISOString().slice(0, 10);
             const row = dailyMap.get(`${catalog.id}\0${date}`);
             return {
                 date,

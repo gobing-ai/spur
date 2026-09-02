@@ -130,7 +130,7 @@ describe('MockHistoryBoardService', () => {
         expect(sources.overview.totalFiles).toBeGreaterThan(0);
         expect(sources.agents.length).toBe(9);
         expect(sources.roots.length).toBe(9);
-        expect(sources.agents[0]?.heatmapDays.length).toBe(90);
+        expect(sources.agents[0]?.heatmapDays.length).toBe(180);
     });
 
     test('getSources keeps empty and single-source fixtures honest', async () => {
