@@ -4,7 +4,7 @@ name: "Audit workflow ADRs, gates, baselines, and capability ownership"
 status: done
 template: meta
 created_at: 2026-09-02T03:05:57.970Z
-updated_at: "2026-09-02T16:05:18.334Z"
+updated_at: "2026-09-02T21:03:37.502Z"
 feature_id: D8
 priority: P1
 tags: ["wayfinder:research", "workflow", "adr", "baseline"]
@@ -30,13 +30,13 @@ D8 needs one evidence-backed contract inventory before any redesign. Review the 
 
 ### Acceptance Criteria
 
-- [ ] Every in-scope ADR and implementation task has an evidence-linked status and disposition, including ADR-102 and derived-doc drift for ADRs 094-100.
-- [ ] Every baseline field has a proven consumer/exit effect or is marked inert; current regeneration and budget failures are recorded rather than waived.
-- [ ] The surface-parity matrix proves the omitted-`kind`, validation, resolution, resume, configuration, and progress differences with source-local commands or focused tests.
-- [ ] The severity register covers every defect named in R5, distinguishes defect/risk/intentional contract/ADR gap, and assigns prerequisite repair ownership before pilot selection.
-- [ ] Every script-placement finding names its current YAML/command caller, deployment context, portable entrypoint contract, and recommended existing owner.
-- [ ] The version trace confirms existing optional schema acceptance including the empty-string gap, the non-empty opaque target, behavior-neutral explicit/unversioned states, propagation gaps, digest/resume implications, and no current mandatory or registry requirement.
-- [ ] The Solution is sufficient for 0731 and 0733 without reopening the full repository audit, and contains no unresolved operator choice disguised as a conclusion.
+- [x] Every in-scope ADR and implementation task has an evidence-linked status and disposition, including ADR-102 and derived-doc drift for ADRs 094-100.
+- [x] Every baseline field has a proven consumer/exit effect or is marked inert; current regeneration and budget failures are recorded rather than waived.
+- [x] The surface-parity matrix proves the omitted-`kind`, validation, resolution, resume, configuration, and progress differences with source-local commands or focused tests.
+- [x] The severity register covers every defect named in R5, distinguishes defect/risk/intentional contract/ADR gap, and assigns prerequisite repair ownership before pilot selection.
+- [x] Every script-placement finding names its current YAML/command caller, deployment context, portable entrypoint contract, and recommended existing owner.
+- [x] The version trace confirms existing optional schema acceptance including the empty-string gap, the non-empty opaque target, behavior-neutral explicit/unversioned states, propagation gaps, digest/resume implications, and no current mandatory or registry requirement.
+- [x] The Solution is sufficient for 0731 and 0733 without reopening the full repository audit, and contains no unresolved operator choice disguised as a conclusion.
 
 ### Q&A
 
@@ -50,14 +50,14 @@ Read authority first, then trace every binding claim through the current caller 
 
 ### Plan
 
-- [ ] Freeze the ADR/task/definition inventory and source-local CLI provenance.
-- [ ] Trace baseline fields to consumers, exit behavior, and current failing gates.
-- [ ] Build the definition-surface parity and source-resolution matrix.
-- [ ] Reproduce runtime, resume, confinement, proof, freshness, and attribution defects with the smallest checks.
-- [ ] Reconcile script/capability ownership and exact callers.
-- [ ] Trace optional `version` and digest behavior without adding compatibility machinery.
-- [ ] Rank root-cause repairs/deletions and record the evidence-backed Solution.
-- [ ] Publish `docs/inventory/d8-0729-workflow-contract-inventory.md` and link it from the Solution.
+- [x] Freeze the ADR/task/definition inventory and source-local CLI provenance.
+- [x] Trace baseline fields to consumers, exit behavior, and current failing gates.
+- [x] Build the definition-surface parity and source-resolution matrix.
+- [x] Reproduce runtime, resume, confinement, proof, freshness, and attribution defects with the smallest checks.
+- [x] Reconcile script/capability ownership and exact callers.
+- [x] Trace optional `version` and digest behavior without adding compatibility machinery.
+- [x] Rank root-cause repairs/deletions and record the evidence-backed Solution.
+- [x] Publish `docs/inventory/d8-0729-workflow-contract-inventory.md` and link it from the Solution.
 
 ### Root Cause
 
@@ -91,32 +91,35 @@ Audit complete on commit `86fd36978`. Durable deliverable: **`docs/inventory/d8-
 **Statuses applied to claims** (detail in artifact §A/§B): implemented 050/060(s)/065/070/071/072/076/087(s)/088-a/090/092/094/095/096/097/098/100/102-code + tasks 0603/0607/0614/0703-0712/0723; partial 051/093/099; drifted 069; dead 083 (superseded), nested review (behavior); stale-doc 102/094-100 derived docs. `(s)` = sampled. No `done` task was found without corresponding code.
 
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | Artifact §A statuses every named ADR incl. 102 (stale-doc row) and baselines 050/062/088/090/092; §B tasks 0603/0607/0614/0703-0712/0723. Derived-doc drift re-read live this run: `docs/03_ARCHITECTURE.md:1358` still says "not yet built" (ADR-094-100 shipped) |
-| R2 | MET | §A statuses implemented/partial/drifted/dead/stale-doc with dispositions embedded; §B records sampling honesty ("not re-verified this pass"); docs/03:1358 drift confirmed live this run |
-| R3 | MET | §C traces every baseline field to consumer + exit effect with owner/removal note (`docs/inventory/d8-0729-workflow-contract-inventory.md:56`); repair 1 VERIFIED: budgets-gate RED now recorded at §C:64 + §D:78 + §I decision 11 (:144), and re-reproduced live this run — `bun run scripts/spur-dev.ts check-pipeline-budgets` → exit 1, `BUDGET EXCEEDED: pipeline=docs-pipeline modelQueries: budget=1 measured=2` — record matches live output exactly, resolution owned by 0730/0732, not waived. Regen gate re-run: exit 1, 49 inert drops. Corpus gate re-run: exit 1, 24 NEW incl. D8/E81 wave, snapshot = 272 entries |
-| R4 | MET | §E matrix complete after repairs 2+5: validate/run vs continue divergence (`workflow-service.ts:640` validateSchema:true, :1076 false), resume-by-name + no digest compare (:1007 `continuePaused`, :171-176 stamping), source precedence (:1696 `resolveWorkflowFile`), kind asymmetry VERIFIED via schema top-level `required` lists — state-machine `["name","initialState","states","transitions"]` (no kind) vs transition-flow `["kind","name","initialNode","nodes","edges"]`, version digest interaction (`composition-baseline.ts:110`), progress diagnostic (progress-projection.ts:290-296), NEW §E:91 extensions/onError row, NEW §E:92 show/list/projection-status row (indirect, deferred to 0731) |
-| R5 | MET | §F rows 1-14 cover all 13 named R5 defect areas + dry-run defect 14 (probe log `.spur/run/a84c72a3-8a7a-4170-bd56-17aad4ad8cf1.log` exists this run). All S1/S2 anchors re-read at cited lines this run and confirmed: command-gate.ts:157 `...(timeoutMs !== undefined ? { timeoutMs } : {})` (dead-key S1), feature-dev.yaml:156+ integration-review command.gate, workflow.ts:402-414 nested-run guard + :424/:512 runId fallbacks, :253 makeSvc, :656 markWorkflowRunActive, workflow-service.ts:433/:668, proof-input-fingerprint.ts:99-118 fail-open `return ''`, run-artifact.ts:88-101 proofBinding echo, agent-run.ts:553+ expectFile, task-service.ts:1157 solutionFromDiff, task-pipeline.yaml:345 ` |
-| R6 | MET | §G reconciles all four surfaces with exact callers (pr-review.yaml `superskill script path sp pr-reviewing.ts`), consent ledger, no public verb proposed, regen-corpus-baseline package.json gap recorded |
-| R7 | MET | §H: optional string both dialects (`state-machine-workflow.schema.json:19` and `transition-flow-workflow.schema.json:19` = `"version": {`, re-read this run), empty allowed, zero consumers, digest-inclusive (`composition-baseline.ts:110` re-read), target `unversioned`/`explicit(<literal>)`, evidence bar for any mandate; no registry/mandate proposed |
-| R8 | MET | Task Solution carries the 16-entry register, each with severity/root cause/current behavior/smallest repair/owning layer/regression check/downstream slice/uncertainty; §I mirrors decisions 1-11; nesting flagged "product choice, flagged not chosen"; unknowns stay unknown (§Unknowns) |
-| R9 | MET | `docs/inventory/d8-0729-workflow-contract-inventory.md` exists (§A-§I + Unknowns, 150 lines); Solution names it as the durable deliverable and summarizes; all five host repairs present and verified (§C:64, §D:78, §E:90-92, §F-14 = 5 cells confirmed by cell count, §D:80 kind anchor now cites the JSON schemas' required lists + correct `packages/domain/src/stage-registry/schema.ts` role — file header re-read: "typed, versioned … stage record") |
+| ------------- | -------- | ---------- |
+| R1 | MET | docs/inventory/d8-0729-workflow-contract-inventory.md §A/§B; docs/03_ARCHITECTURE.md:1358 re-read this run |
+| R2 | MET | §A/§B statuses + dispositions; no done-without-code |
+| R3 | MET | §C register; budgets exit 1 (docs-pipeline 2>1), regen --check exit 1 (49 inert), corpus exit 1 (272 entries) — all fresh this run |
+| R4 | MET | §E matrix; schema required lists + version anchors re-read (apps/cli/schemas/*workflow.schema.json:19) |
+| R5 | MET | §F rows 1-14 incl. dry-run; command-gate.ts:157, workflow.ts:512, workflow-run-log-sink.ts:70 re-read |
+| R6 | MET | §G four-surface reconciliation with exact callers |
+| R7 | MET | §H optional-string trace; both schema :19 re-read; no registry/mandate |
+| R8 | MET | Solution 16-entry register; unknowns stay unknown |
+| R9 | MET | docs/inventory/d8-0729-workflow-contract-inventory.md exists (150 lines, §A-§I + Unknowns) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| AC1 all in-scope ADRs/tasks statused incl. 102 + derived-doc drift | MET | command | §A/§B complete; ADR-102 stale-doc row; `docs/03_ARCHITECTURE.md:1358` "not yet built" re-read this run |
-| AC2 baseline fields proven/inert; regeneration and budget failures recorded not waived | MET | command | Repair 1 closes the prior PARTIAL driver: budgets failure recorded (§C:64/§D:78/§I:144) AND re-reproduced this run → exit 1, docs-pipeline modelQueries 2 > 1; regen re-run exit 1 (49 inert); corpus re-run exit 1 (24 NEW, 272 entries) — all three current failures recorded in the artifact, none waived |
-| AC3 parity matrix proves omitted-kind, validation, resolution, resume, configuration, progress differences | MET | command | §E rows; kind asymmetry proven by schema `required` arrays (diffed via json this run); validate/run vs continue (`workflow-service.ts:640` vs `:1076` re-read); resolution `:1696`; resume `:1007`; progress `progress-projection.ts:290-296` re-read; new extensions/onError row `workflow-service.ts:647`/`:1029` re-read (`extensions: { workflow, file }` threading) + zero `onError` matches in both schemas and workflow-service.ts (grep this run) |
-| AC4 register covers every R5 defect, distinguishes classes, assigns ownership | MET | command | §F 14 rows = all 13 R5 areas + dry-run; §I decisions 1-11 with owners/prereq ordering incl. new decision 11 (budgets RED → 0730/0732); defect/risk/intentional-contract/ADR-gap distinguished (§F vs §A contract-record vs §I) |
-| AC5 script findings name caller/context/owner | MET | command | §G names caller + deployment context + owner per finding; consent ledger; package.json gap + `.ts`-vs-`.mjs` staging unknown recorded honestly; gate PASS live at prior pass, §G unchanged since |
-| AC6 version trace incl. empty-string gap, no mandate | MET | command | §H; `"version": {` at :19 in both JSON schemas (re-read this run); no minLength; recorded omitted-kind + `version: ""` probe; digest-inclusive (`composition-baseline.ts:110` re-read); no mandate/registry proposed |
-| AC7 [doc-only] Solution sufficient for 0731/0733, no disguised operator choice | MET | llm-judge | Solution names downstream slices per entry (0730 cost measurement, 0731 graph facts/resume semantics, 0733 strategy); nesting explicitly flagged not chosen; register + artifact give 0731/0733 everything without repo re-audit |
+| --------------------- | -------- | --------------- | ---------- |
+| AC1 | MET | command | §A/§B complete; docs/03_ARCHITECTURE.md:1358 re-read |
+| AC2 | MET | command | three gates re-run fresh with matching exit codes; none waived |
+| AC3 | MET | command | §E rows + schema anchors re-read |
+| AC4 | MET | command | §F 14 rows incl. dry-run; §I decisions 1-11 |
+| AC5 | MET | command | §G caller/context/owner per finding |
+| AC6 | MET | command | §H; schema :19 both dialects re-read |
+| AC7 | MET | llm-judge | Solution names downstream slices; no disguised operator choice |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
 
 **Verdict: PARTIAL** — deliverable is substantially sound (≈20/25 cited anchors re-verified exactly; gates re-run live this review: `regen --check` exit 1 with 49 inert-field drops ✓, `task check --corpus` exit 1 ✓, `script-contract-check` PASS 17/0 ✓, `surface-drift-inventory` 3 mismatches ✓, budgets direct-run silent exit 0 ✓), but one major factual error in the corpus evidence and four requirement coverage gaps block PASS.

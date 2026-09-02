@@ -25,7 +25,7 @@ Statuses: **implemented** (code matches AC), **partial** (some ACs), **drifted**
 | 083 | corpus-snapshot gate as waiver | superseded-in-practice | recorded supersession by 090 in ADR chain |
 | 087 | Agent var substitution warnings | implemented (sampled) | resolveAgent warning path (0687 R10 comment, workflow.ts makeSvc) |
 | 088 | Reconcile no-op (warning only) | implemented-as-amended | severity stays warning; practice retired under 090 |
-| 090 | Machine-regenerated corpus snapshot, severity contract | **implemented, gate failing by design** | `task check --corpus` → **exit 1**: snapshot has 272 accepted entries but lacks the D8/E81 wave — 24 findings incl. 0729–0734 + E81 are NEW; regeneration + ADR-093 waiver migration pending |
+| 090 | Machine-regenerated corpus snapshot, severity contract | **implemented, gate failing by design** | `task check --corpus` → **exit 1**: snapshot has 272 accepted entries but lacks the D8/E81 wave — the D8/E81-wave findings are NEW (24 at audit; 14 at the 2026-09-02 re-verify after D8 hygiene repairs — the count drifts as findings land); regeneration + ADR-093 waiver migration pending |
 | 092 | Single-sided snapshot ratchet (new fails, vanished silent) | implemented | corpus-check.ts:630–700 loadAcceptedFindings; sweep scoped to active folder |
 | 093 | Every PASS-changing waiver carries owner/review-date/removal condition | **partial** | pipeline-budgets.json complies (reference sensors, not waivers; silent-raise check vs git HEAD). Corpus snapshot (waiver-role) still has **no owner/review-date/removal fields** — the migration 093 names "pending" has not happened |
 | 094 | requiresCapabilities axis in workflow YAML | implemented | 0706 `done`; agent-run parse + agent-service pre-spawn gate (agent-service.ts:987–990) |
@@ -63,7 +63,7 @@ Owner/removal-criteria columns: per R3, the owner of each traced field is the so
 | config/workflow-composition-baseline.json | top-level `proofInputs` | **inert** | zero code consumers | dead weight |
 | config/pipeline-budgets.json | `budgets.<name>.modelQueries/wallClockMs` | enforced | scripts/spur-dev.ts check-pipeline-budgets (median-of-sane vs ceiling) | keep; `null` = unenforced-until-measured debt (recorded, ADR-compliant). **Currently FAILING: docs-pipeline modelQueries measured 2 > ceiling 1, gate exit 1 at audit HEAD — recorded, not waived; the raise/fix decision lands with 0730's real-run cost measurement** |
 | config/pipeline-budgets.json | `source`, `decision` | provenance | silent-raise gate requires fresh `decision` on numeric raise vs git HEAD | keep |
-| config/corpus-baseline.json | `entries` (`kind:id:code` → severity) | one-sided | corpus-check.ts:630–700: new-vs-accepted fails; vanished-accepted silent | 272 entries; gate fails on the 24 not-yet-accepted findings (D8/E81 wave) pending regeneration |
+| config/corpus-baseline.json | `entries` (`kind:id:code` → severity) | one-sided | corpus-check.ts:630–700: new-vs-accepted fails; vanished-accepted silent | 272 entries; gate fails on the not-yet-accepted D8/E81-wave findings (24 at audit; count drifts) pending regeneration |
 | plugins/sp/scripts (plugin-scripts.json) | 17 entries, `contract: standard/repo-only` + twins | two-sided | script-contract-check → PASS live | keep |
 
 ## D. Gate reproduction log (live, this audit)
@@ -73,7 +73,7 @@ Owner/removal-criteria columns: per R3, the owner of each traced field is the so
 | `bun run scripts/commands/regen-composition-baseline.ts --check` | FAIL — **49 drifted facts**; every workflow entry carries the 6 inert fields regen would delete |
 | `workflow validate config/workflows/<each of 11>.yaml` | all `valid: yes`; **42 `composition advisory` findings** unsuppressed across the set (task-pipeline 14, idea-pipeline 9, pr-review 5, history-anatomy 4, wrapup 4, wayfinder 3, basic/docs/feature-dev 1 each); exit 0 (advisory posture per 069 amendment holds) |
 | `bun scripts/commands/pipeline-budgets.ts` | **silent no-op** — exits 0 with no output (no `import.meta.main` bootstrap; only reachable via `bun scripts/spur-dev.ts check-pipeline-budgets`). Budgets gate itself was anchored, not live-reproduced this pass |
-| `task check --corpus` | FAIL exit 1 — snapshot has 272 accepted entries; 24 NEW findings including D8's own wave (0729–0734, E81) |
+| `task check --corpus` | FAIL exit 1 — snapshot has 272 accepted entries; NEW findings include D8's own wave (0729–0734, E81) — 24 at audit, 14 at 2026-09-02 re-verify |
 | `bun plugins/sp/scripts/script-contract-check.ts` | PASS — 17 scripts baselined (7 standard / 10 repo-only), 0 violations |
 | `bun run scripts/spur-dev.ts check-pipeline-budgets` | FAIL exit 1 — **BUDGET EXCEEDED: docs-pipeline modelQueries measured 2 > ceiling 1** (live at audit HEAD; recorded per AC2, resolution owned by 0730/0732 cost work) |
 | `bun plugins/sp/scripts/surface-drift-inventory.ts` | **3 confirmed mismatches** — captured help surface stale vs live CLI: `spur database` noun gone; `task create --section` / `--body` flags gone (live roots now include `builder`, `projects`, `self`) |

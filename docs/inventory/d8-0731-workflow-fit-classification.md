@@ -177,6 +177,8 @@ See the matrices in §1–§7. Summary dispositions: **keep** = task-lifecycle, 
 
 ### Unknowns (honest)
 
+- (2026-09-02 re-verify) DB-derived cells (68-run cohort, 0 real terminal runs, `task_run_links`=10) are point-in-time: the isolated run environment was removed post-close; the main-tree DB now holds 1,167 runs (220 done). Classification conclusions rest on code/structure anchors and are unaffected; re-measure run frequency before budget work.
+
 - Real-run frequency for all 11: **0 terminal runs in this worktree's evidence window** — no measured cost/outcome/attention basis for any bound or budget (0730 §G sufficiency not met).
 - `history-anatomy` and `pr-review` caller state: no proven `workflow run` caller in this worktree; adoption intent is documented but unobserved. `superskill script path sp pr-reviewing.ts` / `history-anatomy-cache.mjs` staging behavior (0729 §G-4) still unverified on a real machine.
 - Pause-resume safety for wrapup-pipeline / idea-pipeline / docs-pipeline under F4 (continue-drift) — unsafe until the digest-comparison fix lands.

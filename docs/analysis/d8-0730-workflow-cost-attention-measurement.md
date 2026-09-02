@@ -137,3 +137,7 @@ Per-workflow numbers come from the repaired `real-run-cost --json` (every value 
 - Whether a pause, once it happens, would be separable in wall-clock: **no** — `transition_runs` records state entries, not pause intervals; `activeMs` is a lower bound only.
 - Whether superskill stages `pr-reviewing.ts` (0729 §G-4 unknown) — unchanged, not re-tested here.
 - The `0539` task referenced in `task_run_links` — its verdict/proof state was not audited in this pass; its links to dry sweeps are recorded as binding hazards regardless of 0539's own state.
+
+## Postscript (2026-09-02 re-verify)
+
+The frozen cohort lived in the D8 chain's isolated run environment, removed post-close; its run rows are absent from the main-tree `.spur/spur.db`. The main-tree DB now holds 1,167 `runs` (220 done) and 25 `history_run_session` rows, so gap item (2) in §G ("importer has never emitted run-scoped sessions") is **outdated**. The no-budget conclusion is unaffected (sufficiency was never re-evaluated on the new data), but §G must be re-measured before any strategy slice proposes budgets. Tooling re-verified fresh: `real-run-cost.test.ts` 10/0/28, `real-run-cost --json` honest nulls.

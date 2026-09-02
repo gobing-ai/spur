@@ -4,7 +4,7 @@ name: "Measure workflow cost, human attention, and bypass pressure"
 status: done
 template: meta
 created_at: 2026-09-02T03:05:58.045Z
-updated_at: "2026-09-02T17:10:01.414Z"
+updated_at: "2026-09-02T21:03:37.977Z"
 feature_id: D8
 priority: P1
 tags: ["wayfinder:research", "workflow", "cost", "observability"]
@@ -30,13 +30,13 @@ The upgrade must optimize measured work rather than model-query counts alone. Ex
 
 ### Acceptance Criteria
 
-- [ ] Cohort provenance permits each included row to be reproduced and excludes dry runs from real-work claims.
-- [ ] Focused tests prove any measurement-helper repair before its output is used; unknown tokens, cost, duration, outcomes, model tier, and executor remain null with coverage reported.
-- [ ] Verified PASS is bound to the certifying run, current proof digest, and fresh verifier artifact; failed nested review, missing resume logs, suppressed task lookup, or stale evidence cannot count as useful completion.
-- [ ] Static composition query counts and declared `maxTokens`/`maxCostUsd` adoption are reported separately from measured model invocations and spend.
-- [ ] Human-attention and bypass findings state observation, inference, confidence, and alternative explanation separately.
-- [ ] Budget candidates satisfy the declared sufficiency rule, or the Solution explicitly says no budget is established and identifies the missing evidence.
-- [ ] Dominant stages and failure modes are ranked from reproducible source-local evidence for consumption by 0731 and 0733.
+- [x] Cohort provenance permits each included row to be reproduced and excludes dry runs from real-work claims.
+- [x] Focused tests prove any measurement-helper repair before its output is used; unknown tokens, cost, duration, outcomes, model tier, and executor remain null with coverage reported.
+- [x] Verified PASS is bound to the certifying run, current proof digest, and fresh verifier artifact; failed nested review, missing resume logs, suppressed task lookup, or stale evidence cannot count as useful completion.
+- [x] Static composition query counts and declared `maxTokens`/`maxCostUsd` adoption are reported separately from measured model invocations and spend.
+- [x] Human-attention and bypass findings state observation, inference, confidence, and alternative explanation separately.
+- [x] Budget candidates satisfy the declared sufficiency rule, or the Solution explicitly says no budget is established and identifies the missing evidence.
+- [x] Dominant stages and failure modes are ranked from reproducible source-local evidence for consumption by 0731 and 0733.
 
 ### Q&A
 
@@ -50,13 +50,13 @@ Reuse existing traces, history, token columns, proof records, and outcome servic
 
 ### Plan
 
-- [ ] Declare cohorts, provenance, sufficiency thresholds, and premium-tier classification.
-- [ ] Reproduce and test measurement-helper defects; apply only necessary correctness fixes.
-- [ ] Build exact run-bound evidence joins and coverage tables.
-- [ ] Calculate stage/workflow cost, duration, failure, and attention summaries.
-- [ ] Analyze execution cohorts and bypass signals conservatively.
-- [ ] Rank findings and publish budgets only where the sufficiency rule holds.
-- [ ] Publish `docs/analysis/d8-0730-workflow-cost-attention-measurement.md` and link it from the Solution.
+- [x] Declare cohorts, provenance, sufficiency thresholds, and premium-tier classification.
+- [x] Reproduce and test measurement-helper defects; apply only necessary correctness fixes.
+- [x] Build exact run-bound evidence joins and coverage tables.
+- [x] Calculate stage/workflow cost, duration, failure, and attention summaries.
+- [x] Analyze execution cohorts and bypass signals conservatively.
+- [x] Rank findings and publish budgets only where the sufficiency rule holds.
+- [x] Publish `docs/analysis/d8-0730-workflow-cost-attention-measurement.md` and link it from the Solution.
 
 ### Root Cause
 
@@ -78,32 +78,35 @@ Measurement-correctness fixes (R2), `scripts/commands/real-run-cost.ts` (+237/�
 Tests: `scripts/commands/real-run-cost.test.ts` — 10 focused tests covering the R2 blocker classes (dry-run inclusion, partial scope, blanket long-run exclusion, null-USD token rows, active-vs-paused duration, unknown-as-zero, mapped-session fold, cohort scope).
 
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | §A freezes all 11 `config/workflows/*.yaml`; per-workflow `definitionDigest` re-read live from `runs.metadata_json` this run — all 11 match the table (basic `9d7723a9…`, docs-pipeline `ee5c8858…`, feature-dev `6d4b7535…`, feature-lifecycle `9f119639…`, history-anatomy `a898d445…`, idea-pipeline `d33fb1a6…`, pr-review `eb3f5187…`, task-lifecycle `fb5b8639…`, task-pipeline `b3b82966…`, wayfinder-resolution `1b1ba738…`, wrapup-pipeline `3d8e8964…`). Dry/real split verified live (65 dry + 2 non-terminal). Correction 1 verified: §A task-pipeline now reads **6 dry (incl. probe a84c72a3)** — live query shows exactly 6 task-pipeline dry-failed rows, probe `a84c72a3` among them; per-workflow dry sum = 65, internally consistent. Premium classified **unknown** (no tier column; `runs.agent` empty 67/67). |
-| R2 | MET | 6 blocker classes reproduced + repaired in `real-run-cost.ts`, each with a focused test. This run: `bun test real-run-cost.test.ts` → **10 pass / 0 fail / 28 expect()** (re-ran fresh). `bun x tsc --noEmit` → zero errors in `real-run-cost.ts` / `pipeline-budgets.ts` / `real-run-cost.test.ts` (the only tsc hits are in pre-existing untouched files `pipeline-budgets.test.ts:123`, `eval-pipeline.test.ts`, `regen-corpus-baseline.ts` — not in this task's diff). Live `real-run-cost --json` shows unknown values as null (n/a), never 0; dry/non-terminal excluded from terminal stats. No telemetry plane added. |
-| R3 | MET | Live: `history_run_session` = 0 rows (cost joins correctly `no`); 0/1,758,670 `history_message` rows carry `run_id`; `.spur/run/0729-verdict.json` keys re-read this run = `[wbs, verdict, requirements, acceptanceCriteria, checks, source]` — no `proof`/`proofDigest` (binding defect documented). Correction 3 verified: §B-2 now reads **0539 → 5 dry-run sweep links** — live `task_run_links` shows 5 `0539→pipeline` rows (`5460643c, e62a290e, 7d855950, 86e84e88, b35417b5`), all dry-failed; total 9 links, ≥6 at dry probes/driver labels. Correction 2 verified: §C join row now reads **67 runs with hops (847 hops total; 33 runs have ≥2 hops)** — live distribution 34×1 + 8×2 + 1×5 + 6×9 + 6×21 + 12×51 = 847 ✓. |
-| R4 | MET | Live `real-run-cost --json` (fresh this run): 11 workflows, 67 runs total, **terminalRuns=0** for all, dry=65, nonTerminal=2 (feature-lifecycle `run_618bd87b`, task-lifecycle `run_ea369461`, both `running`). USD/tokens/cost null with coverage reported per workflow (`mappedRuns=0, historyRows=0, usdRows=0`). History plane: USD on 318,319/1,758,670 (18.1%), tokens 311,127 (17.7%), model 274,370 (15.6%) — within documented drift of the artifact's frozen snapshot. |
-| R5 | MET | `grep maxTokens |
-| R6 | MET | 59 escalation packets, all `trigger: terminal-failure` / `decision.kind: inspect_failure` (re-verified this run). 1 HITL auto-approval in `d8-0729-6nqppc.log`. Correction 4 verified: §F now records **five full-cohort dry sweeps** at 14:48, 15:11, 15:34, 15:39, 15:49 (11 runs each — live run clusters confirmed) plus partial waves (15:36×8, 15:37×1) and probes (15:22 task-pipeline, 15:01/16:04 lifecycle rows). Observation/inference/confidence/alternative stated separately; idle paused time zero. |
-| R7 | MET | §G sufficiency rule predeclared (≥20 terminal runs/workflow p50/p95; ≥5 weak median; ≥5 verified-PASS ≥80% coverage; ≥5 attention-verified) — all NOT MET; **no budget is established**; collection gap named in order (real runs → run-scoped sessions → verdict binding). Honest no-false-target. |
-| R8 | MET | Static `modelQueries` re-read from `config/workflow-composition-baseline.json` `workflows` this run: task-pipeline 4 (`implement/test-fix/review/verify`), idea-pipeline 5, docs-pipeline 2 (`draft/verify`), feature-dev 4, wayfinder-resolution 2, wrapup-pipeline 1, basic 1, pr-review 0 — all match §H. 4 measured targets + 3 safety floors + static counts + speculative opportunities separated. |
-| R9 | MET | `docs/analysis/d8-0730-workflow-cost-attention-measurement.md` = exactly 139 lines, §A–§H + Unknowns. Solution links it and summarizes faithfully; all 5 corrections present in the artifact. |
+| ------------- | -------- | ---------- |
+| R1 | MET | §A freeze with provenance; frozen rows not re-reproducible (isolated env removed) — P2 finding recorded |
+| R2 | MET | bun test scripts/commands/real-run-cost.test.ts → 10/0/28 fresh; tsc clean on task files |
+| R3 | MET | §B/§C joins + binding defects; history_run_session now 25 (0 at freeze) |
+| R4 | MET | real-run-cost --json exit 0 fresh; nulls never 0; coverage fields reported |
+| R5 | MET | configured-vs-measured separation; command-gate.ts:157 re-read |
+| R6 | MET | §F observation/inference/confidence/alternative separated |
+| R7 | MET | §G sufficiency rule NOT MET → no budget established; gap named; premise-refresh flagged |
+| R8 | MET | §H measured targets vs safety floors vs static counts separated |
+| R9 | MET | docs/analysis/d8-0730-workflow-cost-attention-measurement.md exists (139 lines) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| AC1 cohort provenance reproducible; dry runs excluded from real-work claims | MET | test | Live `real-run-cost --json`: 11 workflows, 67 runs, terminal=0, dry=65, nonTerminal=2, all digests match §A; dry exclusion enforced by `dry-run and non-terminal rows never enter real-work stats` focused test (10/0 pass). Every row reproducible via `SELECT id, workflow_name, status, started_at FROM runs`. |
-| AC2 focused tests prove measurement-helper repairs; unknowns null with coverage | MET | test | `bun test real-run-cost.test.ts` → **10 pass / 0 fail / 28 expect** (fresh this run) across all 6 blocker classes; live JSON shows `tokenCostUsd: null`, `tokens: null`, `wallClockMs: null` (n/a) with `mappedRuns/historyRows/usdRows` coverage, never 0. tsc clean for the 3 task files. |
-| AC3 verified-PASS bound to certifying run/digest/artifact; stale evidence can't count | MET | command | `history_run_session` = 0; 0/1,758,670 messages carry `run_id`; `0729-verdict.json` keys re-read = no proof/proofDigest (unbound). §B documents both binding defects; verified-PASS excluded from study per R3 — nothing counted as useful completion without exact binding. |
-| AC4 static query counts and maxTokens/maxCostUsd adoption reported separately from measured spend | MET | command | Baseline `modelQueries` re-read live (all match §H); `grep maxTokens |
-| AC5 [doc-only] attention/bypass findings state observation/inference/confidence/alternative separately | MET | static-ref | §F structure verified: Observations → Inference (with stated confidence: high engine-run-zero, low intent) → Alternative explanations (a/b/c). Never infers intent from absence. 5 sweeps / 59 escalations / 1 HITL auto-approval / zero paused. |
-| AC6 budget candidates satisfy sufficiency rule or Solution says no budget + names gap | MET | command | §G applies predeclared thresholds → all NOT MET → "No budget is established" + exact 3-part collection gap. Solution states headline "no budget is established". Docs-pipeline budget RED reproduced live (`check-pipeline-budgets` → exit 1, `docs-pipeline modelQueries: budget=1 measured=2`) — §B decides **FIX, not raise** (Correction 5 verified: Solution wording now matches §B). |
-| AC7 [doc-only] dominant stages/failure modes ranked from reproducible source-local evidence for 0731/0733 | MET | static-ref | §H ranks 4 measured targets + 3 safety floors with evidence; §B/§C/§D give 0731/0733 the reproducible joins and the collection gap order; artifact is the reviewable baseline. |
+| --------------------- | -------- | --------------- | ---------- |
+| AC1 | MET | test | provenance recipe in §A; dry-exclusion test 10/0 fresh; frozen-row replay loss recorded as P2 |
+| AC2 | MET | test | 10 pass/0 fail/28 expect fresh; nulls with coverage, never 0 |
+| AC3 | MET | command | §B binding defects; verified-PASS excluded without exact binding |
+| AC4 | MET | command | §H static vs measured planes; budgets RED reproduced (exit 1) |
+| AC5 | MET | static-ref | §F four-part structure verified |
+| AC6 | MET | command | §G no budget established + named gap |
+| AC7 | MET | static-ref | §H ranking consumed by 0731/0733 |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
 
 **Review verdict: PASS** — distinct-executor review of the 0730 measurement stage. Functional traceability 9/9 MET (R1–R9 all evidenced in the artifact). R2 measurement-correctness fixes are correct and test-proven (10/0, 28 expect); `spur-check` green (7101/0) is driver-owned. No P1/P2 findings. Five P3/P4 documentation-precision findings below — all in the artifact's count/observation cells, none change the headline conclusion (**no budget established**; zero real terminal runs) or invalidate any measurement fix. Approve for `testing → done` with the P3 cells corrected in a follow-up edit (routes to `/sp-dev-verify --fix`).

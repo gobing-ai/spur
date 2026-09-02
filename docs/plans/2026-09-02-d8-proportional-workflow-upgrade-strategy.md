@@ -43,7 +43,7 @@ Three phases, each gated:
 
 ### Option B — Stabilize and measure only (no new routing machinery)
 
-Do A1 only; **defer all proportional routing** (A2/A3) until real runs + cost attribution accumulate. Rationale: 0730 §G established no budget and 0 real terminal runs; 0732 proved the route table on a *fixture*, not a real caller. Option B is the conservative floor.
+Do A1 only; **defer all proportional routing** (A2/A3) until real runs + cost attribution accumulate. Rationale: 0730 §G established no budget and (at freeze) 0 real terminal runs — premise refreshed 2026-09-02: the main-tree DB now holds terminal runs + 25 run-scoped sessions, so re-measure before A2/A3; 0732 proved the route table on a *fixture*, not a real caller. Option B is the conservative floor.
 
 - **Trade-offs:** lowest risk, no speculative machinery; but it leaves the 97%-dry-probe run economy (§F) and the inline-driver-as-real-execution-path asymmetry (0730 §F) untouched, and defers the actual proportional benefit indefinitely.
 - **Confidence:** Highest (smallest claim); **Complexity:** Low; **Blast radius:** Low.
@@ -159,7 +159,7 @@ Adopted from the 0732 prototype (§2, §5) as the closed contract for any propor
 4. **Bounded observable reasons.** Every route writes a bounded per-run reason to `.spur/run/<runId>-reason.txt`; no silent skip. (Do **not** rely on the fixture's reason *labels* — the `safety:conflict` mislabel quirk in 0732 §2 is a fixture wart; rely on the route table + transition records.)
 5. **Exact proof.** Route/skip facts come from `transition_runs` (engine-persisted) + the run's own artifacts + the run-start `definitionDigest` stamp; run-bound evidence is machine-readable (0732 §5).
 6. **Rollback.** Each slice is isolated (surrounding-first); a proportional gate is a per-workflow option that can be reverted without touching the engine or other workflows (§7 rollback boundaries).
-7. **Budgets.** No budget number is proposed as a gate ceiling — 0730 §G sufficiency rule is **NOT MET** (0 real terminal runs, 0 run-scoped cost mappings, defective verified-outcome binding). Any ceiling written before real runs + ≥80% run-scoped cost coverage is **explicitly unestablished** and must be labeled as such, not treated as evidence.
+7. **Budgets.** No budget number is proposed as a gate ceiling — 0730 §G sufficiency rule is **NOT MET** (at freeze: 0 real terminal runs, 0 run-scoped cost mappings, defective verified-outcome binding — the first two changed post-close, see 0730 Postscript 2026-09-02; re-measure before proposing any ceiling). Any ceiling written before real runs + ≥80% run-scoped cost coverage is **explicitly unestablished** and must be labeled as such, not treated as evidence.
 
 **Note on the P2-repair quirk:** 0732 §2 documents that the fixture's skip reason mislabels (`safety:conflict` on the `skipped` terminal). This packet reads the corrected route table (skipped is a genuine terminal, not a safety route) and the transition records, not the reason labels.
 

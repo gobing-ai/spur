@@ -4,7 +4,7 @@ name: "Prototype proportional gates on a surrounding workflow"
 status: done
 template: meta
 created_at: 2026-09-02T03:05:58.109Z
-updated_at: "2026-09-02T18:50:07.777Z"
+updated_at: "2026-09-02T21:16:45.357Z"
 feature_id: D8
 priority: P1
 tags: ["wayfinder:prototype", "workflow", "gates", "pilot"]
@@ -31,13 +31,13 @@ Use the top-ranked surrounding pilot and the completed contract, measurement, an
 
 ### Acceptance Criteria
 
-- [ ] Pilot has a proven caller, closed prerequisites, lower blast radius than `task-pipeline`, and no dependency on an unresolved known defect.
-- [ ] A closed deterministic route table sends unknown/conflicting inputs to the safety path and emits a bounded reason for every route, skip, or escalation.
-- [ ] The actual engine executes the isolated prototype after explicit validation; no fake/inline interpreter or production workflow mutation is used.
-- [ ] Any repaired primitive has one reproducing regression check; otherwise the pilot avoids it. No `softFail`, accepted baseline, or stale artifact masks a prerequisite.
-- [ ] Before/after results distinguish structural graph changes from measured time/token/attention evidence and report missing coverage.
-- [ ] Explicit and omitted `version` fixtures remain behaviorally equivalent, are reported as explicit versus unversioned beside the exact digest, and do not require a registry or current mandate.
-- [ ] The retained fixture/check is the minimum evidence needed for 0733; `task-pipeline`, public CLI, and production definitions remain unchanged.
+- [x] Pilot has a proven caller, closed prerequisites, lower blast radius than `task-pipeline`, and no dependency on an unresolved known defect.
+- [x] A closed deterministic route table sends unknown/conflicting inputs to the safety path and emits a bounded reason for every route, skip, or escalation.
+- [x] The actual engine executes the isolated prototype after explicit validation; no fake/inline interpreter or production workflow mutation is used.
+- [x] Any repaired primitive has one reproducing regression check; otherwise the pilot avoids it. No `softFail`, accepted baseline, or stale artifact masks a prerequisite.
+- [x] Before/after results distinguish structural graph changes from measured time/token/attention evidence and report missing coverage.
+- [x] Explicit and omitted `version` fixtures remain behaviorally equivalent, are reported as explicit versus unversioned beside the exact digest, and do not require a registry or current mandate.
+- [x] The retained fixture/check is the minimum evidence needed for 0733; `task-pipeline`, public CLI, and production definitions remain unchanged.
 
 ### Q&A
 
@@ -51,13 +51,13 @@ Prototype one closed route table beside production and execute it with the real 
 
 ### Plan
 
-- [ ] Load predecessor evidence and verify the top candidate's prerequisite table.
-- [ ] Define the minimal closed route table and safety fallback.
-- [ ] Build explicit/unversioned isolated fixtures from existing engine primitives.
-- [ ] Validate and execute through the real engine, repairing only an approved prerequisite if unavoidable.
-- [ ] Capture run-bound route/proof evidence and separate structural from measured deltas.
-- [ ] Record conclusions, retain one minimal check, and remove disposable artifacts.
-- [ ] Publish `docs/analysis/d8-0732-proportional-gate-prototype.md` and link it from the Solution.
+- [x] Load predecessor evidence and verify the top candidate's prerequisite table.
+- [x] Define the minimal closed route table and safety fallback.
+- [x] Build explicit/unversioned isolated fixtures from existing engine primitives.
+- [x] Validate and execute through the real engine, repairing only an approved prerequisite if unavoidable.
+- [x] Capture run-bound route/proof evidence and separate structural from measured deltas.
+- [x] Record conclusions, retain one minimal check, and remove disposable artifacts.
+- [x] Publish `docs/analysis/d8-0732-proportional-gate-prototype.md` and link it from the Solution.
 
 ### Root Cause
 
@@ -65,9 +65,9 @@ Prototype one closed route table beside production and execute it with the real 
 
 ### Solution
 
-Durable findings artifact: `docs/analysis/d8-0732-proportional-gate-prototype.md` (231 lines; §1 pilot selection → §2 closed two-path route table → §3 validate preflight + real engine execution → §4 prerequisite-repair manifest → §5 run-bound proof → §6 measured vs structural deltas → §7 root version both-forms → §8 proves/remains-unproven/constraints-inherited-by-task-pipeline → §9 retained evidence + unknowns).
+Durable findings artifact: `docs/analysis/d8-0732-proportional-gate-prototype.md` (230 lines; §1 pilot selection → §2 closed two-path route table → §3 validate preflight + real engine execution → §4 prerequisite-repair manifest → §5 run-bound proof → §6 measured vs structural deltas → §7 root version both-forms → §8 proves/remains-unproven/constraints-inherited-by-task-pipeline → §9 retained evidence + unknowns).
 
-- **Pilot (R1)**: highest-ranked eligible real-caller surrounding pilot from 0731 §6 = **wrapup-pipeline**; closed prerequisite table cited from `docs/inventory/docs/inventory/d8-0731-workflow-fit-classification.md:118` (wrapup READY row on non-pause path). Prototype vehicle = minimal wrapup-like fixture (deterministic note/shell actions only, no model, no pause) per R2's "smallest" directive — same engine + action kinds as the real definition, NOT a production definition (`packages/app/tests/fixtures/d8-0732/d8-0732-gate-fixture.yaml`).
+- **Pilot (R1)**: highest-ranked eligible real-caller surrounding pilot from 0731 §6 = **wrapup-pipeline**; closed prerequisite table cited from (`docs/inventory/d8-0731-workflow-fit-classification.md:118`) (wrapup READY row on non-pause path). Prototype vehicle = minimal wrapup-like fixture (deterministic note/shell actions only, no model, no pause) per R2's "smallest" directive — same engine + action kinds as the real definition, NOT a production definition (`packages/app/tests/fixtures/d8-0732/d8-0732-gate-fixture.yaml`).
 - **Two-path route table (R2)**: fast path + risk/uncertainty safety path; every input routed; missing/unknown/conflicting evidence → safety with bounded reason written to `.spur/run/<runId>-reason.txt` (artifact §2, route table source `d8-0732-gate-fixture.yaml:42-63,:95-133`). 5-case matrix proven (§3: fast/versioned-fast/conflict/missing/skipped → done/skipped, exit 0).
 - **Real engine execution (R3)**: explicit `workflow validate` preflight (both fixtures valid, exit 0) then `workflow run` through the actual engine (`bun run apps/cli/src/index.ts`). **5 real non-dry engine runs persisted** in `.spur/spur.db` (`runs` rows `59fba0a0/bd8b61b8/432fd053/7e449b61/bd62e116`, all done) — the first real terminal executions recorded in the D8 chain (0730 §C flagged zero real terminal runs). No new interpreter/command/DSL/production definition (AC).
 - **Prerequisite-repair manifest (R4)**: avoided known-broken primitives (no command-gate `timeout` reliance per F-1; no pause/continue path per F-4; non-pause `profile=auto`); retained regression check proves the route/digest core (artifact §4).
@@ -77,32 +77,35 @@ Durable findings artifact: `docs/analysis/d8-0732-proportional-gate-prototype.md
 - **Retained evidence (R8)**: exactly ONE fixture pair + ONE retained regression test `packages/app/tests/services/d8-0732-gate-prototype.test.ts` (3 tests: digest differs, both validate, both run same route). Debris policy documented in artifact §9.
 
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | Artifact §1 (`docs/analysis/d8-0732-proportional-gate-prototype.md:9-13`): wrapup-pipeline = 0731 §6 rank-1 PRIMARY; closed prereq table cited at `docs/inventory/d8-0731-workflow-fit-classification.md:118` — re-read this run, line 118 is the wrapup-pipeline **READY** row (non-pause path). Pilot vehicle is a minimal wrapup-like fixture (deterministic note/shell only, NOT a production definition) — same engine + action kinds. |
-| R2 | MET | Artifact §2 route table (`:28-49`) now matches the fixture's real `resolve` classifier exactly — no fictional rows. Fixture resolve action `packages/app/tests/fixtures/d8-0732/d8-0732-gate-fixture.yaml:42-63`, transitions `:95-133` (resolve guards `:101-126`) — all re-read this run, resolve to correct content. Closure proof = 3 mutually-exhaustive predicates (empty→skipped; non-empty+fast→fast-path; non-empty+non-fast→safety-path); every input routed; missing/unknown/conflicting → safety-path with bounded reason. Skip's `safety:conflict (fast but no tasks)` mislabel documented as a classifier quirk (fixture left unchanged to preserve digest-pair proof). |
-| R3 | MET | Fresh `workflow validate` both fixtures this run → `workflow valid` exit 0 (1 warn-only ADR-069 shell-lines advisory each). Fresh `workflow run` ×4 this run (fast/conflict/skipped/versioned-fast) through the real engine (`WorkflowAppService` + real `NodeProcessExecutor`), all exit 0. 5 persisted real runs in `.spur/spur.db` re-read this run (all `done`). `git status` clean for `config/workflows/`, `apps/cli/`, `workflow-service.ts` — no fake/inline interpreter, no production workflow mutation, no new command/DSL. |
-| R4 | MET | Artifact §4 manifest (`:76-93`): all 0729 §F defects F1–F14 **avoided** (no known-broken primitive exercised); **no separate root-cause repair needed** — so no repair test required, only the retained regression check. `packages/app/tests/services/d8-0732-gate-prototype.test.ts` (3 tests) retained as the R8 minimum evidence. No `softFail`, accepted baseline, or stale artifact stands in for a prerequisite (verified — manifest is dispositions + real runs). |
-| R5 | MET | Run-bound proof re-verified this run: `workflow-service.ts:171-176` stamps `definitionDigest` into `runs.metadata_json`; all 5 persisted runs re-read with digests (`59fba0a0/bd8b61b8` unversioned `sha256:3d5c4d42d…`, `432fd053/7e449b61/bd62e116` same, `bd8b61b8` versioned `sha256:60fa187c2…`) — match §5 table exactly. `transition_runs` routes re-read (14 rows) match §3 exactly. Per-run reason files read this run. No untested timeout/proof/log/option claimed as safety (F-14 honored — real terminal runs, not dry-run). |
-| R6 | MET | Artifact §6 (`:123-149`) separates planes: structural (graph facts table: states/actions/pauses/terminals/iteration, deterministic) vs measured (real run wall times, ~170ms, zero model cost) — no token/cost figure claimed, missing coverage (doc-sync model hop, pause/resume, attention) reported honestly. Static deltas never presented as measured savings. |
-| R7 | MET | Retained test fresh this run → **3 pass / 0 fail / 15 expect** (digests differ; both validate; both run to done through the SAME route). `diff` confirms fixture pair byte-identical except `version: "1.2.3"` (line `20a21`). Fresh versioned `workflow run` → done, 3 transitions, same `fast:evidence complete+consistent` (no behavioral dispatch). Digests independently recomputed this run: unversioned `sha256:3d5c4d42d…` vs versioned `sha256:60fa187c2…` — differ=true, match DB stamps. Engine `schema.js:71` `version: z.string().optional()`, no minLength; no consumers (grep clean); not rendered by show/trace. Empty-string + list/show/run/continue/progress propagation gaps recorded in §7. No registry/unsupported-version policy added. |
-| R8 | MET | Artifact §8 (`:177-202`) records proves / remains-unproven / constraints-inherited-by-task-pipeline honestly; §9 (`:204-223`) retained evidence + debris policy. `git status` confirms exactly ONE fixture pair (`packages/app/tests/fixtures/d8-0732/`) + ONE retained regression test (`packages/app/tests/services/d8-0732-gate-prototype.test.ts`); no probe/sandbox/amend debris in the repo (all disposable content confined to `/tmp`). `task-pipeline`, public CLI, production definitions unchanged. |
-| R9 | MET | Durable artifact `docs/analysis/d8-0732-proportional-gate-prototype.md` exists (230 lines, §1–§9 + Unknowns), is the reviewable deliverable, and is linked from the Solution with §-anchors. All section anchors resolve this run. |
+| ------------- | -------- | ---------- |
+| R1 | MET | §1 pilot = wrapup-pipeline rank-1; READY row d8-0731 artifact :118 re-read |
+| R2 | MET | §2 route table matches classifier; closure proof; quirk documented |
+| R3 | MET | validate ×2 exit 0 fresh; retained test 3/3/15 fresh; git status clean for production surfaces |
+| R4 | MET | §4 manifest avoids F1-F14; no repair needed; one retained check |
+| R5 | MET | digest-stamp mechanism cited; persisted run rows absent post-close (P2); retained test re-proves fresh |
+| R6 | MET | §6 structural vs measured separation; no token/cost claimed |
+| R7 | MET | fixture diff 20a21 only; both validate + same route (3/3); digests differ; no registry |
+| R8 | MET | §8 proves/unproven/constraints; exactly one fixture pair + one test retained |
+| R9 | MET | docs/analysis/d8-0732-proportional-gate-prototype.md exists (230 lines) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| [doc-only] Pilot has a proven caller, closed prerequisites, lower blast radius than `task-pipeline`, and no dependency on an unresolved known defect. | MET | command | Artifact §1: wrapup-pipeline proven caller (0731 §6 rank 1) + closed prereq table READY non-pause (`d8-0731-workflow-fit-classification.md:118`, re-read); lower blast radius (writes learnings/metrics only, never mutates task status); F-4 avoided via `profile=auto, merge=false` non-pause path; fresh real runs this run reach done/skipped with no unresolved-defect dependency exercised. |
-| A closed deterministic route table sends unknown/conflicting inputs to the safety path and emits a bounded reason for every route, skip, or escalation. | MET | command | Fresh `workflow run` this run: conflict → done via safety-path + `safety:conflicting evidence`; missing/unknown/conflicting routes to safety-path (DB `transition_runs` re-read); skipped (empty tasks) → `skipped` terminal with `safety:conflict (fast but no tasks)` (documented quirk); fast → done via fast-path + `fast:evidence complete+consistent`. Fixture route table `:42-63,:95-133`; closure proof §2. Every route/skip has a bounded reason artifact (`.spur/run/d8-0732-*-reason.txt`, read this run). |
-| The actual engine executes the isolated prototype after explicit validation; no fake/inline interpreter or production workflow mutation is used. | MET | test | Fresh `workflow validate` both fixtures → exit 0; fresh `workflow run` ×4 through real engine (`WorkflowAppService` + real `NodeProcessExecutor`) → all exit 0; retained test runs through the real service (3/0 pass). `git status` clean for `config/workflows/`, `apps/cli/`, `workflow-service.ts` — no production mutation, no second interpreter/DSL (fixture uses only `note`/`shell`). |
-| [doc-only] Any repaired primitive has one reproducing regression check; otherwise the pilot avoids it. No `softFail`, accepted baseline, or stale artifact masks a prerequisite. | MET | test | Artifact §4 manifest: all F1–F14 avoided, no repair needed → the "otherwise avoids it" branch applies; the one retained regression check (`d8-0732-gate-prototype.test.ts`, 3/0 fresh) guards route + digest + version-neutrality. No `softFail`/baseline/stale artifact masks any prerequisite (manifest + real runs verified). |
-| [doc-only] Before/after results distinguish structural graph changes from measured time/token/attention evidence and report missing coverage. | MET | static-ref | Artifact §6: structural graph-facts table (states 8→6, agent hops 1→0, pauses 1→0, shells, terminals, iteration) kept strictly separate from measured wall-time table (~170ms real runs); no token/cost figure claimed; missing coverage (doc-sync model hop, pause/resume F-4, attention/approval) reported honestly. |
-| Explicit and omitted `version` fixtures remain behaviorally equivalent, are reported as explicit versus unversioned beside the exact digest, and do not require a registry or current mandate. | MET | test | Retained test 3/0 (digests differ; both validate; both run SAME route, same bounded reason). Fresh versioned `workflow run` → done, 3 transitions, `fast:evidence complete+consistent`. Digests independently recomputed this run and differ (`3d5c4d42d…` vs `60fa187c2…`), reported beside source in §5/§7. Engine `schema.js:71` `z.string().optional()` no minLength; no consumers; no registry/policy added (grep + git status). |
-| The retained fixture/check is the minimum evidence needed for 0733; `task-pipeline`, public CLI, and production definitions remain unchanged. | MET | command | `git status --porcelain` this run: only the fixture pair + one regression test + task file + artifact; `config/workflows/`, `apps/cli/`, `workflow-service.ts` clean (0730's uncommitted `real-run-cost.ts`/`pipeline-budgets.ts`/test belong to 0730's diff, cross-consistency note for batch owner). Exactly one fixture pair + one retained test = minimum evidence for 0733 (artifact §9). |
+| --------------------- | -------- | --------------- | ---------- |
+| AC1 | MET | command | §1 + 0731 :118 READY row re-read |
+| AC2 | MET | test | retained test 3/3; §2 table matches classifier |
+| AC3 | MET | test | validate ×2 exit 0; real engine via test; no production mutation |
+| AC4 | MET | test | §4 avoid-manifest; one regression check |
+| AC5 | MET | static-ref | §6 plane separation |
+| AC6 | MET | test | diff 20a21; 3/3; digests differ |
+| AC7 | MET | command | git status: fixture pair + one test only |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
 
 **Scope:** D8-0732 prototype (R1-R9) — durable artifact, retained fixture pair + regression test, task Solution/Testing, cross-consistency (0731/0729/0730). Independent re-verification performed this pass.

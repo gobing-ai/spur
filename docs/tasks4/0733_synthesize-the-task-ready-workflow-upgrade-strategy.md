@@ -4,7 +4,7 @@ name: "Synthesize the task-ready workflow upgrade strategy"
 status: done
 template: meta
 created_at: 2026-09-02T03:05:58.141Z
-updated_at: "2026-09-02T19:14:53.434Z"
+updated_at: "2026-09-02T21:09:25.303Z"
 feature_id: D8
 priority: P1
 tags: ["wayfinder:research", "workflow", "strategy", "handoff"]
@@ -32,15 +32,15 @@ D8 ends when the operator can approve a concrete workflow upgrade strategy witho
 
 ### Acceptance Criteria
 
-- [ ] The strategy is reviewable without loading predecessor task bodies, while every material claim links to its source task evidence.
-- [ ] The recommendation prioritizes correctness and verified outcomes, then human attention, fresh premium tokens per verified PASS, wall-clock, and maintenance simplicity.
-- [ ] No option treats timeout fields, proof bindings, baselines, composition snapshots, static query counts, or consolidated logs as effective controls without an executable test.
-- [ ] Stabilization repairs one shared root-cause seam per cross-surface defect before proportional optimization or migration.
-- [ ] Baseline and inline-interpreter recommendations explicitly choose keep/simplify/replace/remove and include effect/parity, lifecycle, observability, rollback, and sunset criteria.
-- [ ] Implementation slices are executable after approval, expose dependencies and consent gates, start with surrounding workflows, and migrate `task-pipeline` last.
-- [ ] The optional-first version contract preserves unversioned files, exposes literal plus digest, handles paused/in-flight runs, and defines objective evidence—not aspiration—for any future-major mandate.
-- [ ] The dated plan has no placeholders or hidden operator decisions, and records approval/rejection consequences explicitly.
-- [ ] Project/Workspace/Inbox/Teams consolidation, a second engine/DSL/version registry, production workflow mutation, and unapproved public CLI changes remain out of scope.
+- [x] The strategy is reviewable without loading predecessor task bodies, while every material claim links to its source task evidence.
+- [x] The recommendation prioritizes correctness and verified outcomes, then human attention, fresh premium tokens per verified PASS, wall-clock, and maintenance simplicity.
+- [x] No option treats timeout fields, proof bindings, baselines, composition snapshots, static query counts, or consolidated logs as effective controls without an executable test.
+- [x] Stabilization repairs one shared root-cause seam per cross-surface defect before proportional optimization or migration.
+- [x] Baseline and inline-interpreter recommendations explicitly choose keep/simplify/replace/remove and include effect/parity, lifecycle, observability, rollback, and sunset criteria.
+- [x] Implementation slices are executable after approval, expose dependencies and consent gates, start with surrounding workflows, and migrate `task-pipeline` last.
+- [x] The optional-first version contract preserves unversioned files, exposes literal plus digest, handles paused/in-flight runs, and defines objective evidence—not aspiration—for any future-major mandate.
+- [x] The dated plan has no placeholders or hidden operator decisions, and records approval/rejection consequences explicitly.
+- [x] Project/Workspace/Inbox/Teams consolidation, a second engine/DSL/version registry, production workflow mutation, and unapproved public CLI changes remain out of scope.
 
 ### Q&A
 
@@ -54,13 +54,13 @@ Treat the dated plan as the decision packet: compact evidence tables, two or thr
 
 ### Plan
 
-- [ ] Load predecessor Solutions and resolve contradictory claims against their executable evidence.
-- [ ] Generate and score two or three options, including deletion/demotion and stabilization-only.
-- [ ] Write the stabilization prerequisites, proportional contract, matrices, and evidence-qualified budgets.
-- [ ] Define optional-version propagation and future-major evidence threshold.
-- [ ] Build surrounding-first implementation slices, ADR/doc map, rollback, and consent gates.
-- [ ] Self-review the dated plan and record the operator's approval or requested revision.
-- [ ] Publish `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` and link it from the Solution.
+- [x] Load predecessor Solutions and resolve contradictory claims against their executable evidence.
+- [x] Generate and score two or three options, including deletion/demotion and stabilization-only.
+- [x] Write the stabilization prerequisites, proportional contract, matrices, and evidence-qualified budgets.
+- [x] Define optional-version propagation and future-major evidence threshold.
+- [x] Build surrounding-first implementation slices, ADR/doc map, rollback, and consent gates.
+- [x] Self-review the dated plan and record the operator's approval or requested revision.
+- [x] Publish `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` and link it from the Solution.
 
 ### Root Cause
 
@@ -74,7 +74,7 @@ Deliverable published: `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-s
 
 **Matrices (R2, plan §2):** deployment role × keep/simplify/demote/retire (11 workflows, `docs/inventory/d8-0731-workflow-fit-classification.md` §2/§4); gate classification mandatory/proportional/optional/remove; baseline semantics reference/temporary-waiver/remove (`docs/inventory/d8-0729-workflow-contract-inventory.md` §C + ADR-093); capability/script ownership (0729 §G).
 
-**Stabilization slice (R3, plan §3):** one root-cause seam per cross-surface defect: F-1 timeout key (`command-gate.ts:157`), F-2 nested feature-dev review, F-3 spurConfig (`apps/cli/src/commands/workflow.ts:253-286`), F-4 continue-drift (`workflow-service.ts:1007,1076`), F-5 fail-open proof (`proof-input-fingerprint.ts:99-118`), F-6 run-id, F-7 suppressed lookup, F-8 stale expectFile, F-9 decorative binding, F-11 budget no-op, F-14 dry-run smoke; corpus regen + ADR-093 waiver migration (Decision 8); budgets FIX-not-raise (Decision 11); escalation-noise fix.
+**Stabilization slice (R3, plan §3):** one root-cause seam per cross-surface defect: F-1 timeout key (`packages/app/src/workflow/actions/command-gate.ts:157`), F-2 nested feature-dev review, F-3 spurConfig (`apps/cli/src/commands/workflow.ts:253-286`), F-4 continue-drift (`workflow-service.ts:1007,1076`), F-5 fail-open proof (`packages/app/src/workflow/proof-input-fingerprint.ts:99-118`), F-6 run-id, F-7 suppressed lookup, F-8 stale expectFile, F-9 decorative binding, F-11 budget no-op, F-14 dry-run smoke; corpus regen + ADR-093 waiver migration (Decision 8); budgets FIX-not-raise (Decision 11); escalation-noise fix.
 
 **Proportional contract (R4, plan §4):** closed route table + immutable safety floor + unknown-to-safety + bounded reasons + exact proof + rollback; budgets explicitly unestablished under 0730 §G sufficiency rule (0 real terminal runs).
 
@@ -89,42 +89,45 @@ Deliverable published: `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-s
 **Self-review (R9, plan §9):** evidence links, no placeholders, contradictions resolved, scope boundaries, explicit disposition gate (approval freezes strategy + unlocks task creation; rejection keeps D8 open). Open operator decisions D1-D8 enumerated with defaults.
 
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | Plan §0-§1 (`docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md:18-67`): Options A (stabilize → pilot surrounding → task-pipeline last), B (stabilize+measure only), C (direct task-pipeline + registry, rejected). Each names trade-offs, confidence, complexity, blast radius, affected ADRs. Deletion/demotion (inert baseline fields, pipeline-budgets no-op, docs/03 §24 dead framing, nested feature-dev review) and stabilization-only (Option B) are considered BEFORE new routing machinery (AC). Recommendation = Option A, with B as automatic fallback. |
-| R2 | MET | Plan §2 (`:68-124`): §2.1 deployment role × keep/simplify/demote/retire disposition matrix (11 workflows, source 0731 §4); §2.2 gate classification mandatory/proportional/optional/remove (source 0729 §F, 0730 §H, 0732 §2); §2.3 baseline semantics reference/temporary-waiver/remove (source 0729 §C, ADR-093); §2.4 deterministic capability/script ownership (source 0729 §G). |
-| R3 | MET | Plan §3 (`:125-151`): 8 R3 seams (S1-S8) map to 13 seam-repair rows + 3 baseline/ops rows, one shared root-cause seam per cross-surface defect (F-1 timeout key `command-gate.ts:157`, F-2 nested review `feature-dev.yaml:156-169`, F-3 spurConfig `workflow.ts:253-286`, F-4 continue-drift `workflow-service.ts:1007,1076`, F-5 fail-open proof `proof-input-fingerprint.ts:99-118`, F-6 run-id, F-7 suppressed lookup, F-8 stale expectFile, F-9 decorative binding `run-artifact.ts:88-101`, F-11 budget no-op, F-14 dry-run smoke) — all anchored to 0729 §F. Stabilization precedes any proportional optimization (ordering constraint stated). |
-| R4 | MET | Plan §4 (`:152-167`): closed route table (0732 §2), immutable safety floor (proof-bracket guards, budget-unverifiable fail-closed, reviewer independence, run-id confinement — 0730 §H), unknown-to-safety, bounded observable reasons (per-run `.spur/run/<runId>-reason.txt`), exact proof (transition_runs + run artifacts + definitionDigest stamp), rollback (per-slice isolated). Budgets explicitly unestablished under 0730 §G sufficiency rule (0 real terminal runs, 0 run-scoped cost mappings, defective verified-outcome binding) — `:162`. |
-| R5 | MET | Plan §5 (`:168-192`): §5.1 per-baseline keep/simplify/replace/remove with effect/parity check, lifecycle/sunset, maintenance budget, inert-fields audit (matches 0729 §C dispositions); §5.2 inline-interpreter decision = keep with single owner (spur-dev/runall driver) + executable parity check + A3 removal gate + maintenance budget + no inert fields (source 0730 §F: inline driver is the only real-work execution cohort today). |
-| R6 | MET | Plan §6 (`:193-233`): ADR keep/amend/supersede/retire matrix incl. ADR-102 stale-doc (`docs/04_DESIGN.md:2358` mislabeled ADR-101/task 0706; detail pointer `04 §agent-capability-attestation` unresolvable) and ADRs 094-100 derived-doc drift (`docs/03_ARCHITECTURE.md:1358` "not yet built" while 0703-0712 done; ADRs 094-100 0× in docs/04) — both anchors re-read live this verify. Authority-first update order (architecture → design → observability → composition → surface governance) in S1. No authority doc mutated (git status clean for docs/00, 03, 04, 99, design/, config/workflows/, plugins/sp/). |
-| R7 | MET | Plan §7 (`:234-301`): six slices S0-S5, each with dependencies, owner, changed surfaces, checks, rollback boundary, observability, and public-surface consent gate. Surrounding-workflow-first (S3 pilots wrapup-pipeline + task-lifecycle); `task-pipeline` LAST in S5. Consent gates: S1 (surface inventory + corpus/baseline regen), S3 (surrounding routing), S5 (task-pipeline routing); S0/S2/S4 internal/behavior-neutral. |
-| R8 | MET | Plan §8 (`:302-320`): absent=`unversioned` (all 11 today, 0731 §1), present=`explicit(<literal>)` opaque behavior-neutral, empty-value diagnostic (`minLength: 1`), source/digest propagation (folded into `computeDefinitionDigest`, `composition-baseline.ts:110` — version-only edit changes digest, proven 0732 §7), pause-resume subsumed by F-4 continue-digest fix (S0), bundled/project precedence unify (project-first; `make-lifecycle-adapter.ts:24-34` bundled-first divergence), in-flight compatibility (version not a dispatch key), rollout/rollback (additive/removable), future-major mandate = objective evidence only (consumer branching on version or real drift incident — neither exists, 0729 §H). No registry. |
-| R9 | MET | Plan §9 (`:321-356`): §9.1 non-trivial Design Summary (decision surface: option, 4 matrices, 8 seams, contract, baseline+inline decisions, ADR map, 6 slices, version contract); §9.2 self-review covers evidence links, no placeholders, contradictions resolved (cohort 67/68/69→74 sequential DB states; version-digest-accepted; safety:conflict fixture wart), scope boundaries, ambiguous handoff (disposition gate = hard handoff), unproven controls (budgets explicitly unestablished); §9.3 D1-D8 open operator decisions each with a default. Operator disposition gate recorded: approval freezes strategy + unlocks S0-S5 task creation; rejection keeps D8 open with requested revisions (`:14`, `:353`). |
-| R10 | MET | Durable artifact `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` exists (366 lines, `wc -l` verified), is the task-ready strategy body, and is linked from the task Solution ("Deliverable published: ... (R10)"). Dated plan; format matches prior dated plans in `docs/plans/`. |
+| ------------- | -------- | ---------- |
+| R1 | MET | plan §0-§1 options A/B/C with trade-offs; A recommended; C rejected |
+| R2 | MET | plan §2 four matrices sourced from 0729/0731 |
+| R3 | MET | plan §3 seam-per-defect; command-gate.ts:157 re-read; budgets RED reproduced |
+| R4 | MET | plan §4 contract; budgets unestablished; real-run-cost --json corroborates fresh |
+| R5 | MET | plan §5 baseline + inline-driver decisions with parity/sunset |
+| R6 | MET | plan §6 ADR matrix; docs/03:1358 + docs/04:2358 re-read live; no authority mutation |
+| R7 | MET | plan §7 S0-S5; surrounding-first; task-pipeline last; consent gates |
+| R8 | MET | plan §8 version contract; digest mechanism re-proven via 0732 test 3/3 |
+| R9 | MET | plan §9 self-review + D1-D8 + disposition gate; D8 closed done 19:22Z |
+| R10 | MET | docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md exists (366 lines) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| [doc-only] The strategy is reviewable without loading predecessor task bodies, while every material claim links to its source task evidence. | MET | static-ref | Plan `:8-12` input-evidence header names all four authority artifacts (0729 §F/§C/§G/Decision 8/11; 0730 §F/§G/§H; 0731 §2/§4/§5/§6; 0732 §2/§5/§7/§8); every §1-§8 section cites its source artifact by name — no predecessor task body must be loaded. |
-| [doc-only] The recommendation prioritizes correctness and verified outcomes, then human attention, fresh premium tokens per verified PASS, wall-clock, and maintenance simplicity. | MET | static-ref | Plan §0 (`:20`) and Option A trade-offs (`:34`): correctness & verified outcomes → human attention → fresh premium tokens per verified PASS → wall-clock → maintenance simplicity, exactly the AC ordering. Option B (measure-only) is the lower-priority fallback; Option C rejected. |
-| [doc-only] No option treats timeout fields, proof bindings, baselines, composition snapshots, static query counts, or consolidated logs as effective controls without an executable test. | MET | static-ref | Plan §0 (`:20`), §4 item 7 (`:162`), §9.2 Unproven controls (`:338`): every such mechanism is either fixed to have an executable test (S0 seam repairs) or explicitly not counted; budgets explicitly unestablished under 0730 §G (no budget is proposed as a gate ceiling). |
-| [doc-only] Stabilization repairs one shared root-cause seam per cross-surface defect before proportional optimization or migration. | MET | static-ref | Plan §3 (`:125-151`): 8 R3 seams S1-S8 mapped to root-cause seam repairs (one shared seam per cross-surface defect, not per-caller patches); ordering constraint (`:150`) lands repairs BEFORE any proportional gate (0732 §8 constraints). |
-| [doc-only] Baseline and inline-interpreter recommendations explicitly choose keep/simplify/replace/remove and include effect/parity, lifecycle, observability, rollback, and sunset criteria. | MET | static-ref | Plan §5 (`:168-192`): each baseline row has Decision (keep/simplify/fix/replace/remove), Effect/parity check, Lifecycle/sunset, Maintenance budget, Inert fields? — full 5-column coverage; §5.2 inline driver keep with owner, parity check, removal gate (sunset at A3), maintenance budget, no inert fields. |
-| [doc-only] Implementation slices are executable after approval, expose dependencies and consent gates, start with surrounding workflows, and migrate `task-pipeline` last. | MET | static-ref | Plan §7 (`:234-301`): each slice names dependencies, owner, changed surfaces, checks, rollback, observability, consent gate; S3 pilots surrounding workflows first; `task-pipeline` migration is S5 (LAST); consent gates on S1/S3/S5. |
-| [doc-only] The optional-first version contract preserves unversioned files, exposes literal plus digest, handles paused/in-flight runs, and defines objective evidence—not aspiration—for any future-major mandate. | MET | static-ref | Plan §8 (`:302-320`): absent=`unversioned` preserved; present=`explicit(<literal>)` + digest (folded into `computeDefinitionDigest`, `composition-baseline.ts:110`); pause-resume handled via F-4 continue-digest fix (S0, subsumes version drift); in-flight compatibility (no dispatch on version); future-major mandate = objective evidence only (consumer branching on version or real drift incident — neither exists, 0729 §H). |
-| [doc-only] The dated plan has no placeholders or hidden operator decisions, and records approval/rejection consequences explicitly. | MET | static-ref | Plan §9.2 (`:327-339`): "Placeholders: none — every table fully populated; unknowns named as unknowns"; §9.3 D1-D8 open decisions each enumerated with an explicit default (no hidden decisions); disposition gate (`:14`, `:353`) records approval freezes + unlocks task creation / rejection keeps D8 open with revisions. |
-| [doc-only] Project/Workspace/Inbox/Teams consolidation, a second engine/DSL/version registry, production workflow mutation, and unapproved public CLI changes remain out of scope. | MET | static-ref | Plan §9.2 Scope creep (`:335-336`): explicitly excluded — consolidation, second engine/DSL/version registry, production workflow mutation (all post-approval with consent gates), unapproved public CLI changes. Git status confirms no config/workflows/, apps/cli/, or authority-doc mutation by this task. |
+| --------------------- | -------- | --------------- | ---------- |
+| AC1 | MET | static-ref | input-evidence header; per-section source citations |
+| AC2 | MET | static-ref | §0/§1 priority ordering |
+| AC3 | MET | static-ref | §0/§4/§9.2 no untested control counted |
+| AC4 | MET | static-ref | §3 seam-per-defect + ordering |
+| AC5 | MET | static-ref | §5 five-column decisions |
+| AC6 | MET | static-ref | §7 slices + consent gates + S5 last |
+| AC7 | MET | static-ref | §8 version contract complete |
+| AC8 | MET | static-ref | §9.2/§9.3; disposition executed (D8 done) |
+| AC9 | MET | static-ref | §9.2 exclusions; git status clean |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
 
 **Scope:** WBS 0733 diff (R10 durable plan deliverable) — strategy plan cross-checked against the four authority artifacts (0729 inventory, 0730 measurement, 0731 fit classification, 0732 prototype) plus live `file:line` anchors.
 **Dimensions:** functional (R1-R10), correctness, architecture, evidence quality.
 **Verdict:** PASS
 
-### Findings (ranked)
+#### Findings (ranked)
 
 | # | Severity | Dimension | Finding | Location |
 | --- | ---------- | ----------- | --------- | ---------- |
@@ -137,7 +140,7 @@ Deliverable published: `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-s
 | 7 | P4 | correctness | Task Testing states plan "created (356 lines)" but the file is 366 lines. | task `:96`; `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` (wc -l = 366) |
 | 8 | P4 | architecture | S0 Changed surfaces omits the R8 source-precedence unify (`make-lifecycle-adapter.ts` bundled-first), which §8 explicitly attributes to S0 — slice surface list incomplete for the precedence fix. | plan `:242` (S0) vs `:307` (R8 precedence row) |
 
-### Functional Traceability (R1-R10)
+#### Functional Traceability (R1-R10)
 
 | Req | Status | Evidence |
 | ----- | -------- | ---------- |
@@ -152,7 +155,7 @@ Deliverable published: `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-s
 | R9 | MET | §9.1 Design Summary; §9.2 self-review (evidence links, no placeholders, contradictions reconciled incl. cohort 67/68/69→74 and version-digest-accepted and safety:conflict fixture wart); §9.3 D1-D8 open decisions with defaults; disposition gate explicit (approval freezes + unlocks tasks; rejection keeps D8 open). |
 | R10 | MET | Deliverable published at `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` (366 lines); Solution links it; references correct. |
 
-### Spot-check evidence (fresh, this review)
+#### Spot-check evidence (fresh, this review)
 
 - `docs/03_ARCHITECTURE.md:1358` = `## 24. Production Autonomy Contracts (accepted design — ADR-094–100; not yet built)` while tasks 0703-0712 are all `done` — drift claim real.
 - `docs/04_DESIGN.md:2358` = `**Capability attestation (ADR-101, task 0706).**` — ADR-101 is "History Refresh Uses Process Isolation" (`docs/00_ADR.md:2005`); capability attestation is ADR-102 (`:2023`). Mislabel claim real. ADR-102 Detail pointer `04 Design §agent-capability-attestation` does not resolve (0 hits for that anchor in docs/04).
@@ -167,13 +170,13 @@ Deliverable published: `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-s
 - pipeline-budgets docs-pipeline still `modelQueries: 1` with `decision: null` — FIX correctly framed as a proposed S1 action, not claimed done.
 - corpus-baseline 272 entries; composition-baseline carries the 6 inert per-workflow fields + `proofInputs` — baseline claims real.
 
-### Residual Risk
+#### Residual Risk
 
 - ADR-094/102 supersede-or-duplicate relationship (P3-1) and affected-ADR summary gaps (P3-2) should be resolved when S1 creates the authority/derived-doc repair tasks; neither blocks strategy approval.
 - F-10 (whole-tree attribution) remains unowned by the plan — recommend an explicit in/out-of-scope line when implementation tasks are created.
 - All R8/P2 claims verified against live sources; no unverified control is treated as effective (0730 §G "no budget" honored throughout).
 
-### Disposition
+#### Disposition
 
 **APPROVE.** No P1/P2 findings; all R1-R10 requirements met; drift claims verified against live `file:line` evidence; no authority doc mutated; plan is a clean draft decision packet with explicit consent gates. P3/P4 items are recorded for the S0/S1 implementation-task creation step, not gating.
 
