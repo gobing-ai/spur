@@ -345,7 +345,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
         const topTools = data?.topTools ?? [];
         // Universal bar scale for both the Token-by-Model and Token-by-Agent stacked breakdowns:
         // the highest billed token volume (item.tokens) across all shown models and agent sources,
-        // ensuring bar lengths directly and proportionally reflect token usage/cost distribution.
+        // ensuring bar lengths directly and proportionally reflect token usage volume distribution.
         const tokenBarMax = useMemo(
             () => Math.max(0, ...topModels.map((m) => m.tokens), ...topSources.map((s) => s.tokens)),
             [topModels, topSources],
@@ -983,7 +983,7 @@ const activeSeriesFor = (skills: Array<{ id: string; label: string; color: strin
 
 /**
  * Stacked fresh / output billed token bar for the Token by Model / Token by Agent Source
- * cards. The bar width represents the billed token cost (fresh + output) scaled against the
+ * cards. The bar width represents the billed token volume (fresh + output) scaled against the
  * universal maximum across both cards, while the footer displays the full fresh / cached / output
  * metrics.
  */
