@@ -4,7 +4,7 @@ name: "Configurable scheduler jobs (interval + real cron) in ts-libs adapter and
 status: backlog
 template: standard
 created_at: 2026-09-02T06:54:51.770Z
-updated_at: "2026-09-02T16:00:59.622Z"
+updated_at: "2026-09-02T18:00:33.296Z"
 feature_id: A2
 ---
 
@@ -200,13 +200,39 @@ The handler validates the queue boundary, then calls `executor.run({ command: '/
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: FAIL (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | @gobing-ai/ts-infra `packages/infra/src/scheduler/cron.ts` line 126 — parseCronExpression five-field grammar; RangeError sites lines 64, 72, 84, 93, 98, 101, 108, 112, 131; day-of-week 7→0 normalization line 143; day-OR semantics line 175. `bun test tests/scheduler/node.test.ts tests/scheduler-node.test.ts tests/scheduler/cron.test.ts` → 26 pass / 0 fail |
+| R2 | MET | @gobing-ai/ts-infra `packages/infra/src/scheduler/node.ts` line 30 — parseInterval preserves the three legacy interval forms; armCron chunking at MAX_TIMEOUT line 204; non-overlapping fireCron re-arm line 240; drainTimeoutMs stop drain line 166; `now?: () => number` clock seam line 86. Same 26-test run above |
+| R3 | MET | @gobing-ai/ts-infra `packages/infra/src/scheduler/types.ts` line 30 — SchedulerJobConfig union; `packages/infra/src/application/types.ts` line 93 — SchedulerOptions.jobs, line 116 — resolved scheduler.jobs; `packages/infra/src/application-node.ts` line 106 — normalizeSchedulerJobs with bootstrap.scheduler.jobs.<index>.<field> ConfigValidationError paths (lines 120-179), forwarded regardless of enabled at line 371. No new dependency (packages/infra/package.json deps = ts-utils + logtape). `bun test tests/application-node.test.ts tests/application.test.ts` → 70 pass / 0 fail |
+| R4 | UNMET | No implementation. `apps/server/src/serve.ts:111` and `apps/server/src/serve.ts:124` still declare and construct `StartServerDeps.createScheduler` (a second `NodeSchedulerAdapter`), and `apps/server/src/serve.ts:401` still calls it. No `appRt.scheduler` registration exists anywhere in the Spur tree |
+| R5 | UNMET | No implementation. `grep -n jobs apps/cli/schemas/spur-config.schema.json config/config.example.yaml` returns no match; no `bootstrap.scheduler.jobs` mirror, no configured-job registration in `registerSchedulerEntries` |
+| R6 | UNMET | No implementation. `grep -rn 'SCHEDULER_CUSTOM_JOB\|scheduler.custom\|handleSchedulerCustomJob' packages/app/src apps/server/src` returns no match; the app-layer service does not exist |
+| R7 | UNMET | Not reachable — depends on R5/R6 enqueue path. No `scheduler.custom` tick exists to emit `scheduler.job.executed` or the `queue.job.*` sequence |
+| R8 | PARTIAL | Upstream half MET: ts-libs commit `9a777e5` updates README (+22), `docs/03_ARCHITECTURE.md` (+12), `CHANGELOG.md` (+17); release commit `5914977`, tag `@gobing-ai/ts-infra-v0.4.51`, registry `dist-tags.latest = 0.4.51` (verified via registry.npmjs.org this run). Spur half UNMET: `package.json:35` still pins `^0.4.50` and `package.json:109` still pins exact `0.4.50`; installed `node_modules/@gobing-ai/ts-infra/package.json` version = 0.4.50; `docs/04_DESIGN.md` unchanged; no Spur check run recorded for this task |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: Scheduler fires a registered cron entry | PARTIAL | test | Adapter + config halves MET upstream (26+70 tests pass, R1-R3 rows). Spur half UNMET: `apps/server/src/serve.ts:124` still creates a second adapter, so "built-in and custom entries registered on appRt.scheduler" and "no second scheduler adapter is created" both fail |
+| Scenario: Worker executes an enqueued job | UNMET | static-ref | No `scheduler.custom` handler exists (R6 UNMET); no ProcessExecutor job path, no bounded-stderr `last_error` behavior to exercise |
+| Scenario: Graceful shutdown never orphans a claimed job | PARTIAL | test | DST fall-back next-fire and in-flight cron drain are covered upstream (`packages/infra/tests/scheduler/node.test.ts`, `tests/scheduler-node.test.ts`, in the 26-pass run). The 3,600,000 ms command-timeout leg is UNMET — no command executor exists (R6) |
+| Scenario: Cloudflare entrypoint is unaffected | UNMET | static-ref | Cannot be certified: the Spur-side change that would need to stay out of the Workers bundle does not exist yet, and R8's Spur checks (`bun run test-cf`, `bun run build`) were not run for this task |
+| Scenario: Job stats are readable over the API | UNMET | static-ref | No `scheduler.custom` rows can be produced (R6 UNMET), so completed/failed counts cannot include them |
+| Scenario: Jobs tab shows queue activity on the board | UNMET | static-ref | No configured scheduler tick exists to persist `scheduler.job.executed` or render `scheduler.custom:<name>` (R5/R6/R7 UNMET) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: FAIL)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - Feature: `docs/features/A2_embedded-job-queue-and-scheduler.md:14`; shipped seams: tasks 0190, 0200, and 0201.
 - Current Spur scheduler registration and duplicate lifecycle: `apps/server/src/serve.ts:105`, `apps/server/src/serve.ts:124`, `apps/server/src/serve.ts:398`, `apps/server/src/serve.ts:515`, and `apps/server/src/serve.ts:557`.
