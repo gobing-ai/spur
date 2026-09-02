@@ -192,9 +192,15 @@ export async function checkPipelineBudgets(argv: string[]): Promise<number> {
     const filters: string[] = [];
     let measuredFile: string | null = null;
     for (let i = 0; i < argv.length; i++) {
-        if (argv[i] === '--workflow') filters.push(argv[++i]);
-        else if (argv[i] === '--measured-file') measuredFile = argv[++i];
-        else throw new Error(`check-pipeline-budgets: unknown argument ${argv[i]}`);
+        if (argv[i] === '--workflow') {
+            const value = argv[++i];
+            if (value === undefined) throw new Error('check-pipeline-budgets: --workflow requires a value');
+            filters.push(value);
+        } else if (argv[i] === '--measured-file') {
+            const value = argv[++i];
+            if (value === undefined) throw new Error('check-pipeline-budgets: --measured-file requires a value');
+            measuredFile = value;
+        } else throw new Error(`check-pipeline-budgets: unknown argument ${argv[i]}`);
     }
 
     const config = await loadPipelineBudgets();

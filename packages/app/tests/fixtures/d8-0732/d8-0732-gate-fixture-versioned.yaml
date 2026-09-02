@@ -1,0 +1,135 @@
+# D8-0732 proportional-gate prototype - minimal wrapup-like surrounding
+# pipeline with a closed two-path route table (fast / risk-uncertainty safety).
+#
+# RETAINED FIXTURE (task 0732 R8) - one of two version-forms of the same
+# fixture; the other (d8-0732-gate-fixture-versioned.yaml) is byte-identical
+# except it declares `version: "1.2.3"` at the root. The engine treats version
+# as behavior-neutral: both forms validate and execute identically (R7), and a
+# version-only edit changes only `definitionDigest`.
+#
+# Route table (R2) - closed, deterministic, every input has exactly one route:
+#   tasks empty                    -> skipped     (wrapup task-resolve analog)
+#   tasks non-empty + mode=fast    -> fast-path   -> done (complete+consistent)
+#   tasks non-empty + mode != fast -> safety-path -> done
+#          (missing/unknown/conflicting/unrecognized, bounded reason)
+#
+# Non-pause path only (R4/F-4): profile=auto, merge=false - no branch-cleanup
+# HITL pause, so continue-drift (0729 F-4) is never exercised. Never mutates
+# task status.
+name: d8-0732-gate-fixture
+kind: state-machine
+version: "1.2.3"
+description: "D8-0732 gate prototype: wrapup-like two-path route."
+iterationBound: 5
+initialState: start
+terminalStates:
+  - done
+  - skipped
+vars:
+  mode: ""
+  tasks: "[]"
+  profile: "standard"
+  merge: "false"
+  reasonFile: ".spur/run/d8-0732-route-reason.txt"
+states:
+  - id: start
+    description: "Wrap-up start - never mutates task status."
+    onEnter:
+      - kind: note
+        options:
+          message: >-
+            D8-0732 gate prototype start: mode=${vars.mode}
+            profile=${vars.profile} merge=${vars.merge} tasks=${vars.tasks}
+  - id: resolve
+    description: "Closed two-path route: fast / risk-uncertainty safety."
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            if [ "$mode" = "fast" ] &&
+               [ "$(echo "$tasks" | jq length 2>/dev/null || echo 0)" -gt 0 ] \
+               ; then
+              echo 'fast:evidence complete+consistent' > "$reasonFile";
+            elif [ -z "$mode" ]; then
+              echo 'safety:missing evidence (mode empty)' > "$reasonFile";
+            elif [ "$mode" = "unknown" ]; then
+              echo 'safety:unknown evidence quality' > "$reasonFile";
+            elif [ "$mode" = "conflict" ]; then
+              echo 'safety:conflicting evidence' > "$reasonFile";
+            elif [ "$mode" = "fast" ]; then
+              echo 'safety:conflict (fast but no tasks)' > "$reasonFile";
+            else
+              echo "safety:unrecognized evidence (mode=$mode)" > "$reasonFile";
+            fi
+  - id: fast-path
+    description: "Fast path: complete + consistent evidence."
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/memory &&
+            cat "$reasonFile" >> .spur/memory/d8-0732-routes.log
+  - id: safety-path
+    description: "Safety path: bounded reason recorded, completes."
+    onEnter:
+      - kind: note
+        options:
+          message: "safety-path: bounded reason at ${vars.reasonFile}"
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/memory &&
+            cat "$reasonFile" >> .spur/memory/d8-0732-routes.log
+  - id: done
+    description: "Terminal - wrap-up complete."
+    onEnter:
+      - kind: note
+        options:
+          message: "D8-0732 gate prototype done: route in ${vars.reasonFile}"
+  - id: skipped
+    description: "Terminal - no tasks to wrap."
+    onEnter:
+      - kind: note
+        options:
+          message: "D8-0732 gate prototype skipped: empty task list."
+transitions:
+  - from: start
+    to: resolve
+    description: "Begin routing."
+    guard:
+      kind: always
+  - from: resolve
+    to: skipped
+    description: "Empty task list -> skip wrap-up."
+    guard:
+      kind: shell
+      options:
+        command: >-
+          test "$(echo "$tasks" | jq length 2>/dev/null || echo 0)" -eq 0
+  - from: resolve
+    to: fast-path
+    description: "Complete + consistent evidence -> fast path."
+    guard:
+      kind: shell
+      options:
+        command: >-
+          test "$(echo "$tasks" | jq length 2>/dev/null || echo 0)" -gt 0 &&
+          test "$mode" = fast
+  - from: resolve
+    to: safety-path
+    description: "Missing/unknown/conflicting evidence -> safety path."
+    guard:
+      kind: shell
+      options:
+        command: >-
+          test "$(echo "$tasks" | jq length 2>/dev/null || echo 0)" -gt 0 &&
+          test "$mode" != fast
+  - from: fast-path
+    to: done
+    guard:
+      kind: always
+  - from: safety-path
+    to: done
+    guard:
+      kind: always
