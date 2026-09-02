@@ -25,7 +25,7 @@ bootstrap:
     driver: bun-sqlite
     url: .spur/spur.db
   scheduler:
-    enabled: false
+    enabled: true
 
 # # ── Spur app section (validated by spurConfigSchema in
 # @gobing-ai/spur-config) ──
