@@ -13,6 +13,8 @@
         ".git/hooks",
         "config/",
         "~/xprojects/ts-libs",
+        "~/xprojects/spur-new-run-0734-78335347",
+        "~/xprojects/spur-new-*",
         "~/.omp",
         "~/tools/dot_files/config/omp",
         "~/tools/dot_files/config/pi",
