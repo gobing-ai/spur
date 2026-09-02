@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D8"
 name: "Proportional workflow upgrade strategy"
-status: verifying
+status: done
 priority: P1
 tags: ["wayfinder-map"]
 created_at: "2026-09-02T03:02:34.947Z"
-updated_at: "2026-09-02T19:19:43.291Z"
+updated_at: "2026-09-02T19:22:07.908Z"
 ---
 
 # D8: Proportional workflow upgrade strategy
@@ -113,3 +113,4 @@ The review found correctness prerequisites, not merely tuning opportunities. The
 
 - 2026-09-02T15:01:53.960Z backlog → active (system)
 - 2026-09-02T19:19:43.291Z active → verifying (system)
+- 2026-09-02T19:22:07.908Z verifying → done (system)
