@@ -1167,7 +1167,7 @@ bootstrap:
     jobs:
       - name: history-refresh
         intervalMinutes: 10
-        command: bun apps/cli/spur.js --no-logo history daily
+        command: bun apps/cli/src/index.ts --no-logo history daily
 ```
 
 The debounce default (600 000 ms = 10 min) follows task 0548's measured figures

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Retire history.refresh.schedule_minutes in favor of bootstrap.scheduler.jobs"
-status: wip
+status: done
 template: standard
 created_at: 2026-09-03T18:15:52.095Z
-updated_at: "2026-09-03T18:49:39.301Z"
+updated_at: "2026-09-03T19:01:39.604Z"
 feature_id: A2
 ---
 
@@ -175,28 +175,39 @@ The tick enqueues `scheduler.custom { name, command }`; the worker runs it throu
   `apps/server/tests/serve.test.ts` (unused `createMigratedDb` import dropped).
 
 ### Testing
+**Pipeline verify results**
 
-- `packages/config`: 14 pass / 0 fail — retired key resolves to completion shape only.
-- `packages/app`: 20 pass / 0 fail — `'schedule'` falls back to the on_completion gate;
-  persisted rows still validate.
-- `apps/server`: 38 pass / 0 fail — registration is prune + smoke only; configured jobs
-  unchanged; unused import removed (typecheck clean).
-- Resolved-config probe via `runNodeApplication` against `.spur/config.yaml`:
-  `{enabled:true, jobs:[{name:'history-refresh', command:'bun apps/cli/spur.js --no-logo
-  history daily', intervalMinutes:10}]}` — the migrated job survives upstream validation.
-- `bun apps/cli/spur.js --no-logo history daily --help` resolves the bundle the command
-  names (path-independent of a global install).
-- `bun run spur-check` PASS (7149 pass / 0 fail); `bun run test-cf` PASS;
-  `bun run build` PASS; `bun run lint` clean.
-- First `spur-check` run showed 26 flakes from concurrent-DB contention; rerun green.
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/config/src/index.ts:757` — schema has only `on_completion`/`debounce_ms`; test `the retired schedule_minutes key no longer resolves a trigger (task 0750)` at `packages/config/tests/config-schemas.test.ts:89` passes (14/14 this run) |
+| R2 | MET | `apps/server/src/serve.ts:136` — `registerSchedulerEntries(scheduler, ctx, jobs)` with no `spurConfig` parameter; test `registers no built-in history refresh entry (task 0750)` at `apps/server/tests/serve.test.ts:707` passes (38/38 this run) |
+| R3 | MET | `packages/app/src/services/history-refresh-service.ts:182` — gate is `onCompletion |
+| R4 | MET | `.spur/config.yaml:33` — `history-refresh` job under `bootstrap.scheduler.jobs` (repo-local CLI command); no `history:` block; `runNodeApplication` probe resolves `{enabled:true, jobs:[history-refresh]}` |
+| R5 | MET | `docs/04_DESIGN.md:806` — Periodic refresh paragraph names the shared surface and the recorded trade-off; config snippet at `:1160` |
+| R6 | MET | `rg schedule_minutes apps/cli/schemas/spur-config.schema.json` exit 1 (key absent); `bootstrap.scheduler.jobs` shape unchanged from 0734 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: Scheduler fires a registered cron entry | MET | test | `apps/server/tests/serve.test.ts:707` — built-ins are `['300000','600000']` (prune, smoke) only, no config argument; 38/38 pass this run |
+| Scenario: Worker executes an enqueued job | MET | command | `runNodeApplication` probe against `.spur/config.yaml` resolved exactly the normalized history-refresh job; `bun run apps/cli/src/index.ts --no-logo history daily --help` exits 0 |
+| Scenario: Graceful shutdown never orphans a claimed job | MET | test | `packages/app/tests/services/history-refresh-service.test.ts:179` — trigger `'schedule'` returns `{status:'disabled'}` while `on_completion` is false and still validates as a payload value; 20/20 pass this run |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
 - 2026-09-03T18:49:39.301Z todo → wip (system)
+- 2026-09-03T19:01:08.541Z wip → testing (system)
+- 2026-09-03T19:01:39.604Z testing → done (system)
