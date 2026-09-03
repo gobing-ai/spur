@@ -1,6 +1,6 @@
 {
     "name": "@gobing-ai/spur-app",
-    "version": "0.3.71",
+    "version": "0.3.72",
     "type": "module",
     "private": true,
     "exports": {
@@ -17,9 +17,9 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "@gobing-ai/spur-config": "workspace:0.3.71",
+        "@gobing-ai/spur-config": "workspace:0.3.72",
         "@gobing-ai/spur-contracts": "workspace:*",
-        "@gobing-ai/spur-domain": "workspace:0.3.71",
+        "@gobing-ai/spur-domain": "workspace:0.3.72",
         "@gobing-ai/ts-ai-runner": "catalog:",
         "@gobing-ai/ts-db": "catalog:",
         "@gobing-ai/ts-dual-workflow-engine": "catalog:",
