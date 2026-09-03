@@ -4,7 +4,7 @@ name: "Prototype proportional gates on a surrounding workflow"
 status: done
 template: meta
 created_at: 2026-09-02T03:05:58.109Z
-updated_at: "2026-09-02T21:16:45.357Z"
+updated_at: "2026-09-03T03:52:08.041Z"
 feature_id: D8
 priority: P1
 tags: ["wayfinder:prototype", "workflow", "gates", "pilot"]
@@ -77,35 +77,32 @@ Durable findings artifact: `docs/analysis/d8-0732-proportional-gate-prototype.md
 - **Retained evidence (R8)**: exactly ONE fixture pair + ONE retained regression test `packages/app/tests/services/d8-0732-gate-prototype.test.ts` (3 tests: digest differs, both validate, both run same route). Debris policy documented in artifact §9.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | §1 pilot = wrapup-pipeline rank-1; READY row d8-0731 artifact :118 re-read |
-| R2 | MET | §2 route table matches classifier; closure proof; quirk documented |
-| R3 | MET | validate ×2 exit 0 fresh; retained test 3/3/15 fresh; git status clean for production surfaces |
-| R4 | MET | §4 manifest avoids F1-F14; no repair needed; one retained check |
-| R5 | MET | digest-stamp mechanism cited; persisted run rows absent post-close (P2); retained test re-proves fresh |
-| R6 | MET | §6 structural vs measured separation; no token/cost claimed |
-| R7 | MET | fixture diff 20a21 only; both validate + same route (3/3); digests differ; no registry |
-| R8 | MET | §8 proves/unproven/constraints; exactly one fixture pair + one test retained |
-| R9 | MET | docs/analysis/d8-0732-proportional-gate-prototype.md exists (230 lines) |
+|-------------|--------|----------|
+| R1 | MET | §1 pilot = wrapup-pipeline (0731 rank-1); READY prerequisite row re-read at `docs/inventory/d8-0731-workflow-fit-classification.md:118` (exact row, fresh) |
+| R2 | MET | §2 closure proof re-read (`docs/analysis/d8-0732-proportional-gate-prototype.md:40-51`): three mutually-exhaustive predicates over (tasks, mode); classifier quirk (`safety:conflict (fast but no tasks)` on skipped terminal) now explicitly documented — prior P2 reason-row mismatch resolved by recording actual fixture behavior |
+| R3 | MET | `bun test tests/services/d8-0732-gate-prototype.test.ts` (from `packages/app/`) → 3 pass / 0 fail / 15 expect, fresh this run; both fixtures `workflow validate` exit 0 (pinned by retained test + §3 table); no production definition touched |
+| R4 | MET | §4 avoid-manifest re-read; no repair of a broken primitive was needed; exactly one retained regression check |
+| R5 | MET | Digest-stamp mechanism re-read exact: `packages/app/src/services/workflow-service.ts:171-176` (`mergeMetadata(runId, { definitionDigest })` wrapper); run rows absent post-close (isolated env removed) disclosed in Testing; retained test re-proves route/digest core fresh |
+| R6 | MET | §6 measured-vs-structural separation re-read; no token/cost claimed from static counts |
+| R7 | MET | `diff` of fixture pair → `20a21` only (`version: "1.2.3"` added), fresh this run; both validate + execute same route (retained test 3/3); digests differ; empty-string + propagation gaps recorded; no registry added |
+| R8 | MET | §8 proves/unproven/constraints re-read; exactly one fixture pair + one test retained (`packages/app/tests/fixtures/d8-0732/` + `packages/app/tests/services/d8-0732-gate-prototype.test.ts`) |
+| R9 | MET | `docs/analysis/d8-0732-proportional-gate-prototype.md` exists (230 lines, §1–§9) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
-| AC1 | MET | command | §1 + 0731 :118 READY row re-read |
-| AC2 | MET | test | retained test 3/3; §2 table matches classifier |
-| AC3 | MET | test | validate ×2 exit 0; real engine via test; no production mutation |
-| AC4 | MET | test | §4 avoid-manifest; one regression check |
-| AC5 | MET | static-ref | §6 plane separation |
-| AC6 | MET | test | diff 20a21; 3/3; digests differ |
-| AC7 | MET | command | git status: fixture pair + one test only |
-
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | §1 + 0731 `:118` READY row re-read fresh; lower blast radius than task-pipeline (append-only artifacts) |
+| AC2 | MET | test | Retained test 3/3/15 fresh; §2 route table matches classifier with quirk documented |
+| AC3 | MET | test | Validate ×2 exit 0 + real-engine execution pinned by retained test; no production mutation (`git status` clean) |
+| AC4 | MET | test | §4 avoid-manifest; one reproducing regression check retained |
+| AC5 [non-behavior] | MET | static-ref | §6 plane separation re-read |
+| AC6 | MET | test | Fixture diff `20a21` fresh; digests differ; 3/3 same-route proof |
+| AC7 | MET | command | `git status --porcelain` clean; only fixture pair + one test retained |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Scope:** D8-0732 prototype (R1-R9) — durable artifact, retained fixture pair + regression test, task Solution/Testing, cross-consistency (0731/0729/0730). Independent re-verification performed this pass.

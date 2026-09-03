@@ -4,7 +4,7 @@ name: "Classify shipped workflows by fit and select surrounding pilots"
 status: done
 template: meta
 created_at: 2026-09-02T03:05:58.076Z
-updated_at: "2026-09-02T21:10:24.654Z"
+updated_at: "2026-09-03T03:52:07.762Z"
 feature_id: D8
 priority: P1
 tags: ["wayfinder:research", "workflow", "fit", "pilot"]
@@ -76,35 +76,32 @@ Durable deliverable (R9): **`docs/inventory/d8-0731-workflow-fit-classification.
 - **R8/R9** — compact matrix + disposition summary + recommendation published in the artifact; this Solution links it. See artifact §8 (`:162`).
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | workflow validate exit 0 ×11 fresh; §1 freeze; baseline 8 keys; schema version optional re-read |
-| R2 | MET | task.ts:439,1528; feature.ts:556; dev-wrap.md:31,45; dev-wrapall.md:33,47 — all re-read this run |
-| R3 | MET | §3 graph facts; pause count repaired to 4 (idea-pipeline.yaml:123,219,277,334) |
-| R4 | MET | §4 dispositions; feature-dev.yaml:156-169 re-read; git status clean for production surfaces |
-| R5 | MET | §5 closed prereq table; d8-0731 artifact :118 READY row; lifecycle-adapter.ts:100-104 re-read |
-| R6 | MET | §6 ranking wrapup #1 / task-lifecycle #2; task-pipeline excluded |
-| R7 | MET | §7 unversioned ×11; digest mechanism re-proven via 0732 retained test 3/3 |
-| R8 | MET | §8 published; anchors resolve; no production change |
-| R9 | MET | docs/inventory/d8-0731-workflow-fit-classification.md exists (184 lines) |
+|-------------|--------|----------|
+| R1 | MET | `bun run apps/cli/src/index.ts workflow validate config/workflows/<each>.yaml` ×11 → all valid, exit 0, fresh this run; §1 freeze re-read in `docs/inventory/d8-0731-workflow-fit-classification.md` |
+| R2 | MET | Caller anchors re-read exact: `packages/app/src/workflow/lifecycle-adapter.ts:100-104` (requestTransition provenance contract doc); §2 task_run_links listing repaired (`docs/inventory/d8-0731-workflow-fit-classification.md:51` — 0539 → exactly 5 IDs, `a84c72a3` correctly attributed to 0729) |
+| R3 | MET | §3 graph facts re-read; idea-pipeline pause count repaired to 4 (§4 `:91` "4 HITL pauses"; §5 `:122` "4 pauses") — matches `config/workflows/idea-pipeline.yaml:123,219,277,334`; prior P3 overcount closed |
+| R4 | MET | §4 dispositions re-read; `config/workflows/feature-dev.yaml:156-169` nested-review spawn re-read (softFail + dead timeoutMs); retire/demote evaluated before optimization |
+| R5 | MET | §5 closed prerequisite table re-read; wrapup READY row at `docs/inventory/d8-0731-workflow-fit-classification.md:118` (exact anchor cited by 0732 Solution — resolves to the correct row) |
+| R6 | MET | §6 ranking re-read: wrapup-pipeline #1 PRIMARY (`:138,:145`), task-lifecycle #2; task-pipeline excluded; no-caller definitions excluded |
+| R7 | MET | §7 all-11-unversioned; digest mechanism re-read at `packages/app/src/workflow/composition-baseline.ts:110`; version-both-forms re-proven by 0732 retained test (3/3/15 fresh) |
+| R8 | MET | §8 compact matrix published; Solution anchors re-resolve (:118 READY row confirmed this run); `git status --porcelain` clean — no production definition or public CLI change |
+| R9 | MET | `docs/inventory/d8-0731-workflow-fit-classification.md` exists (186 lines post-repair, §1–§8 + unknowns) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
-| AC1 | MET | command | validate ×11 exit 0 fresh; baseline independence re-confirmed |
-| AC2 | MET | command | §2/§4/§7 matrices; anchors re-read |
-| AC3 | MET | static-ref | §1/§2/§3/§7 coverage |
-| AC4 | MET | static-ref | §4 demote/retire evaluated before optimization |
-| AC5 | MET | command | §5 closed table; provenance gate re-read |
-| AC6 | MET | command | §5/§6 exclusions; feature-dev.yaml:156-169 re-read |
-| AC7 | MET | command | git status clean for production surfaces this run |
-
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | `workflow validate` ×11 exit 0 fresh; baseline-independence rows in §1 |
+| AC2 | MET | command | §2/§4/§7 matrices re-read; version state "unversioned ×11" consistent with schema (`version` optional string) |
+| AC3 [non-behavior] | MET | static-ref | §1/§2/§3/§7 coverage re-read; run/continue/resolution paths represented |
+| AC4 [non-behavior] | MET | static-ref | §4 demote/retire-before-optimize ordering re-read |
+| AC5 | MET | command | §5 closed table; provenance gate doc re-read at `packages/app/src/workflow/lifecycle-adapter.ts:100-104` |
+| AC6 | MET | command | §5/§6 exclusions; `config/workflows/feature-dev.yaml:156-169` re-read fresh |
+| AC7 | MET | command | `git status --porcelain` clean this run — no production workflow or public CLI surface change |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Scope:** task 0731 (feature D8) — durable artifact `docs/inventory/d8-0731-workflow-fit-classification.md` (184 lines, §1–§8 + unknowns), Solution/Testing sections, cross-consistency with `docs/inventory/d8-0729-workflow-contract-inventory.md` (§F register) and `docs/analysis/d8-0730-workflow-cost-attention-measurement.md` (cohort freeze). Independent verification pass: DB reads (`.spur/spur.db` — `runs`, `task_run_links`, `queue_jobs`), YAML graph re-derivation (all 11 `config/workflows/*.yaml`), `workflow validate` ×11, `workflow show`, live version-in-digest probe, caller-anchor verification (code + plugin docs), composition-baseline + schema reads, git status (no production change).

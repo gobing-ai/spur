@@ -4,7 +4,7 @@ name: "Audit workflow ADRs, gates, baselines, and capability ownership"
 status: done
 template: meta
 created_at: 2026-09-02T03:05:57.970Z
-updated_at: "2026-09-02T21:03:37.502Z"
+updated_at: "2026-09-03T03:52:07.040Z"
 feature_id: D8
 priority: P1
 tags: ["wayfinder:research", "workflow", "adr", "baseline"]
@@ -91,35 +91,32 @@ Audit complete on commit `86fd36978`. Durable deliverable: **`docs/inventory/d8-
 **Statuses applied to claims** (detail in artifact §A/§B): implemented 050/060(s)/065/070/071/072/076/087(s)/088-a/090/092/094/095/096/097/098/100/102-code + tasks 0603/0607/0614/0703-0712/0723; partial 051/093/099; drifted 069; dead 083 (superseded), nested review (behavior); stale-doc 102/094-100 derived docs. `(s)` = sampled. No `done` task was found without corresponding code.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | docs/inventory/d8-0729-workflow-contract-inventory.md §A/§B; docs/03_ARCHITECTURE.md:1358 re-read this run |
-| R2 | MET | §A/§B statuses + dispositions; no done-without-code |
-| R3 | MET | §C register; budgets exit 1 (docs-pipeline 2>1), regen --check exit 1 (49 inert), corpus exit 1 (272 entries) — all fresh this run |
-| R4 | MET | §E matrix; schema required lists + version anchors re-read (apps/cli/schemas/*workflow.schema.json:19) |
-| R5 | MET | §F rows 1-14 incl. dry-run; command-gate.ts:157, workflow.ts:512, workflow-run-log-sink.ts:70 re-read |
-| R6 | MET | §G four-surface reconciliation with exact callers |
-| R7 | MET | §H optional-string trace; both schema :19 re-read; no registry/mandate |
-| R8 | MET | Solution 16-entry register; unknowns stay unknown |
-| R9 | MET | docs/inventory/d8-0729-workflow-contract-inventory.md exists (150 lines, §A-§I + Unknowns) |
+|-------------|--------|----------|
+| R1 | MET | `docs/inventory/d8-0729-workflow-contract-inventory.md` §A/§B re-read this run (150 lines); §A-090 row carries repaired corpus wording ("272 accepted entries but lacks the D8/E81 wave", close-out commit 7c33b6d3b verified via git show) |
+| R2 | MET | §A/§B statuses + dispositions present; sampled-claim honesty preserved; no done-without-code found (spot anchors re-read exact) |
+| R3 | MET | §C register rows re-read (`docs/inventory/d8-0729-workflow-contract-inventory.md:64-65,:75`); budgets direct-run no-op reproduced fresh: `bun scripts/commands/pipeline-budgets.ts` → silent exit 0; corpus gate failure recorded, not waived |
+| R4 | MET | §E parity matrix row re-read (`docs/inventory/d8-0729-workflow-contract-inventory.md:92` — CLI show/list/projection-status exposure row present) |
+| R5 | MET | §F row 14 (S3 dry-run validity) present at `docs/inventory/d8-0729-workflow-contract-inventory.md:112` — prior review's R5 dry-run gap closed; defect anchors re-read exact this run: `packages/app/src/workflow/actions/command-gate.ts:157` (timeoutMs spread), `apps/cli/src/commands/workflow.ts:512` + `:424` (unvalidated runId), `apps/cli/src/commands/workflow.ts:402-414` (nested guard), `packages/app/src/services/workflow-service.ts:1007` + `:1076` (validateSchema:false), `packages/app/src/workflow/proof-input-fingerprint.ts:99-118` (fail-open `''`), `packages/app/src/observability/workflow-run-log-sink.ts:70` (join runId), `packages/app/src/workflow/actions/agent-run.ts:553-556` (expectFile), `config/workflows/feature-dev.yaml:156-169` (nested pr-review spawn, softFail, timeoutMs 1800000) |
+| R6 | MET | §G four-surface reconciliation present; `bun plugins/sp/scripts/script-contract-check.ts` → PASS 17 scripts, 0 violations, exit 0 (fresh); `bun plugins/sp/scripts/surface-drift-inventory.ts` → 3 mismatches, exit 0 (fresh) |
+| R7 | MET | §H optional-version trace present; digest mechanism re-read at `packages/app/src/workflow/composition-baseline.ts:110` (`computeDefinitionDigest`, canonical JSON → sha256) |
+| R8 | MET | Solution 16-entry severity register re-read in task body; unknowns stay unknown (product-choice nesting flagged, not chosen) |
+| R9 | MET | `docs/inventory/d8-0729-workflow-contract-inventory.md` exists (150 lines, §A–§I + Unknowns) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
-| AC1 | MET | command | §A/§B complete; docs/03_ARCHITECTURE.md:1358 re-read |
-| AC2 | MET | command | three gates re-run fresh with matching exit codes; none waived |
-| AC3 | MET | command | §E rows + schema anchors re-read |
-| AC4 | MET | command | §F 14 rows incl. dry-run; §I decisions 1-11 |
-| AC5 | MET | command | §G caller/context/owner per finding |
-| AC6 | MET | command | §H; schema :19 both dialects re-read |
-| AC7 | MET | llm-judge | Solution names downstream slices; no disguised operator choice |
-
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | §A/§B complete incl. ADR-102 + derived-doc drift rows; anchors re-read fresh (above) |
+| AC2 | MET | command | Gates re-run fresh: `bun scripts/commands/pipeline-budgets.ts` silent exit 0 (no-op recorded, not waived); `bun plugins/sp/scripts/script-contract-check.ts` exit 0 PASS; `bun plugins/sp/scripts/surface-drift-inventory.ts` exit 0, 3 mismatches |
+| AC3 | MET | command | §E rows + schema anchors; `packages/app/src/services/workflow-service.ts:1076` validateSchema:false re-read |
+| AC4 | MET | command | §F 14 rows incl. dry-run validity row 14 (`docs/inventory/d8-0729-workflow-contract-inventory.md:112`) — prior PARTIAL cause repaired |
+| AC5 | MET | command | §G caller/context/owner per finding; script-contract-check PASS fresh |
+| AC6 | MET | command | §H trace; `packages/app/src/workflow/composition-baseline.ts:110` re-read |
+| AC7 [non-behavior] | MET | llm-judge | Solution names downstream slices per register entry; product-choice (nested review) flagged not chosen; no disguised operator decision found this re-read |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Verdict: PARTIAL** — deliverable is substantially sound (≈20/25 cited anchors re-verified exactly; gates re-run live this review: `regen --check` exit 1 with 49 inert-field drops ✓, `task check --corpus` exit 1 ✓, `script-contract-check` PASS 17/0 ✓, `surface-drift-inventory` 3 mismatches ✓, budgets direct-run silent exit 0 ✓), but one major factual error in the corpus evidence and four requirement coverage gaps block PASS.

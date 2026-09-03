@@ -4,7 +4,7 @@ name: "Measure workflow cost, human attention, and bypass pressure"
 status: done
 template: meta
 created_at: 2026-09-02T03:05:58.045Z
-updated_at: "2026-09-02T21:03:37.977Z"
+updated_at: "2026-09-03T03:52:07.483Z"
 feature_id: D8
 priority: P1
 tags: ["wayfinder:research", "workflow", "cost", "observability"]
@@ -78,35 +78,32 @@ Measurement-correctness fixes (R2), `scripts/commands/real-run-cost.ts` (+237/�
 Tests: `scripts/commands/real-run-cost.test.ts` — 10 focused tests covering the R2 blocker classes (dry-run inclusion, partial scope, blanket long-run exclusion, null-USD token rows, active-vs-paused duration, unknown-as-zero, mapped-session fold, cohort scope).
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | §A freeze with provenance; frozen rows not re-reproducible (isolated env removed) — P2 finding recorded |
-| R2 | MET | bun test scripts/commands/real-run-cost.test.ts → 10/0/28 fresh; tsc clean on task files |
-| R3 | MET | §B/§C joins + binding defects; history_run_session now 25 (0 at freeze) |
-| R4 | MET | real-run-cost --json exit 0 fresh; nulls never 0; coverage fields reported |
-| R5 | MET | configured-vs-measured separation; command-gate.ts:157 re-read |
-| R6 | MET | §F observation/inference/confidence/alternative separated |
-| R7 | MET | §G sufficiency rule NOT MET → no budget established; gap named; premise-refresh flagged |
-| R8 | MET | §H measured targets vs safety floors vs static counts separated |
-| R9 | MET | docs/analysis/d8-0730-workflow-cost-attention-measurement.md exists (139 lines) |
+|-------------|--------|----------|
+| R1 | MET | `docs/analysis/d8-0730-workflow-cost-attention-measurement.md` §A re-read: 11/11 workflow rows, task-pipeline cell repaired to "6 dry (incl. probe a84c72a3)" (`:23`); dry cells sum 65 = stated total; postscript documents frozen-cohort replay loss honestly |
+| R2 | MET | `bun test scripts/commands/real-run-cost.test.ts` (from `scripts/`) → 10 pass / 0 fail / 28 expect, fresh this run |
+| R3 | MET | §B binding defects + §C join table re-read; §C repaired: "67 runs with hops (847 hops total; 33 runs have ≥2 hops)" (`docs/analysis/d8-0730-workflow-cost-attention-measurement.md:62`) — prior "3 runs only" error fixed |
+| R4 | MET | `bun run scripts/spur-dev.ts real-run-cost --json` → exit 0 fresh; null USD/tokens/duration reported as null (never 0); exclusion counts present per workflow row |
+| R5 | MET | Configured-vs-measured separation re-read (`:87` dead timeoutMs row); `packages/app/src/workflow/actions/command-gate.ts:157` re-read exact |
+| R6 | MET | §F re-read: "five full-cohort dry sweeps at 14:48, 15:11, 15:34, 15:39 and 15:49" (`:99`) — sweep undercount repaired; observation/inference/confidence/alternative structure intact (`:105`) |
+| R7 | MET | §G sufficiency rule NOT MET → no budget established; postscript (2026-09-02) flags §G gap item (2) outdated after 25 `history_run_session` rows landed and mandates re-measurement before budgets — honest posture |
+| R8 | MET | §H ranked classes re-read; §B-2 repaired to "0539 → 5 dry-run sweep runs" (`:55`) |
+| R9 | MET | `docs/analysis/d8-0730-workflow-cost-attention-measurement.md` exists (143 lines post-repair, §A–§H + Unknowns + Postscript) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
-| AC1 | MET | test | provenance recipe in §A; dry-exclusion test 10/0 fresh; frozen-row replay loss recorded as P2 |
-| AC2 | MET | test | 10 pass/0 fail/28 expect fresh; nulls with coverage, never 0 |
-| AC3 | MET | command | §B binding defects; verified-PASS excluded without exact binding |
-| AC4 | MET | command | §H static vs measured planes; budgets RED reproduced (exit 1) |
-| AC5 | MET | static-ref | §F four-part structure verified |
-| AC6 | MET | command | §G no budget established + named gap |
-| AC7 | MET | static-ref | §H ranking consumed by 0731/0733 |
-
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | §A provenance recipe + dry-exclusion proven by `bun test scripts/commands/real-run-cost.test.ts` 10/0/28 fresh |
+| AC2 | MET | test | Same suite: 10 pass / 0 fail / 28 expect; nulls-with-coverage semantics pinned by tests |
+| AC3 | MET | command | §B binding defects re-read; verified-PASS exclusion without exact binding preserved; `task_run_links` hazard rows at `:55` |
+| AC4 | MET | command | §H static vs measured planes; budgets RED path recorded; `bun run scripts/spur-dev.ts real-run-cost --json` exit 0 with null-not-zero fields |
+| AC5 [non-behavior] | MET | static-ref | §F four-part structure (observation/inference/confidence/alternative) re-read at `:98-105` |
+| AC6 | MET | command | §G "no budget established" + named collection gap; postscript re-measure mandate |
+| AC7 [non-behavior] | MET | static-ref | §H ranking present for 0731/0733 consumption; 0733 plan §0 cites it (cross-doc link verified in 0733 leg) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Review verdict: PASS** — distinct-executor review of the 0730 measurement stage. Functional traceability 9/9 MET (R1–R9 all evidenced in the artifact). R2 measurement-correctness fixes are correct and test-proven (10/0, 28 expect); `spur-check` green (7101/0) is driver-owned. No P1/P2 findings. Five P3/P4 documentation-precision findings below — all in the artifact's count/observation cells, none change the headline conclusion (**no budget established**; zero real terminal runs) or invalidate any measurement fix. Approve for `testing → done` with the P3 cells corrected in a follow-up edit (routes to `/sp-dev-verify --fix`).

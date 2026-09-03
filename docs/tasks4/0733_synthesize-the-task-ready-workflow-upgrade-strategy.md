@@ -4,7 +4,7 @@ name: "Synthesize the task-ready workflow upgrade strategy"
 status: done
 template: meta
 created_at: 2026-09-02T03:05:58.141Z
-updated_at: "2026-09-02T21:09:25.303Z"
+updated_at: "2026-09-03T03:54:11.264Z"
 feature_id: D8
 priority: P1
 tags: ["wayfinder:research", "workflow", "strategy", "handoff"]
@@ -89,38 +89,35 @@ Deliverable published: `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-s
 **Self-review (R9, plan §9):** evidence links, no placeholders, contradictions resolved, scope boundaries, explicit disposition gate (approval freezes strategy + unlocks task creation; rejection keeps D8 open). Open operator decisions D1-D8 enumerated with defaults.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | plan §0-§1 options A/B/C with trade-offs; A recommended; C rejected |
-| R2 | MET | plan §2 four matrices sourced from 0729/0731 |
-| R3 | MET | plan §3 seam-per-defect; command-gate.ts:157 re-read; budgets RED reproduced |
-| R4 | MET | plan §4 contract; budgets unestablished; real-run-cost --json corroborates fresh |
-| R5 | MET | plan §5 baseline + inline-driver decisions with parity/sunset |
-| R6 | MET | plan §6 ADR matrix; docs/03:1358 + docs/04:2358 re-read live; no authority mutation |
-| R7 | MET | plan §7 S0-S5; surrounding-first; task-pipeline last; consent gates |
-| R8 | MET | plan §8 version contract; digest mechanism re-proven via 0732 test 3/3 |
-| R9 | MET | plan §9 self-review + D1-D8 + disposition gate; D8 closed done 19:22Z |
-| R10 | MET | docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md exists (366 lines) |
+|-------------|--------|----------|
+| R1 | MET | `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §0–§1 re-read via close-out diff + plan body: options A/B/C with trade-offs; A recommended; C rejected; deletion/stabilization-only (B) considered before routing |
+| R2 | MET | Plan §2 four matrices (role×disposition, gate classes, baseline semantics, capability ownership) present, sourced from 0729 §C/§G + 0731 §2/§4 (cross-doc links verified in those legs) |
+| R3 | MET | Plan §3 seam-per-defect table; F-1 anchor re-read exact (`packages/app/src/workflow/actions/command-gate.ts:157` timeoutMs spread); budgets RED reproduced via no-op probe + spur-dev entrypoint |
+| R4 | MET | Plan §4 closed route table + unknown-to-safety + bounded reasons + budgets explicitly unestablished; corroborated fresh by `bun run scripts/spur-dev.ts real-run-cost --json` exit 0 (nulls null, never 0) |
+| R5 | MET | Plan §5 baseline keep/simplify/replace/remove decisions + inline-driver keep with owner/parity/removal gate |
+| R6 | MET | Plan §6 ADR matrix; drift claims verified fresh: `docs/03_ARCHITECTURE.md:1358` = "## 24. Production Autonomy Contracts (accepted design — ADR-094–100; not yet built)" while 0703–0712 done; `docs/00_ADR.md:2039` ADR-102 detail pointer `04 Design §agent-capability-attestation` has 0 hits in docs/04 (dangling, confirmed); mislabeled heading real at `docs/04_DESIGN.md:2436` ("Capability attestation (ADR-101, task 0706)"); no authority doc mutated (`git status` clean) |
+| R7 | MET | Plan §7 slices S0–S5, surrounding-first, task-pipeline last (S5), consent gates named |
+| R8 | MET | Plan §8 version contract; digest mechanism re-read at `packages/app/src/workflow/composition-baseline.ts:110`; both-forms execution re-proven by 0732 retained test 3/3/15 fresh |
+| R9 | MET | Plan §9 self-review + D1–D8 + explicit disposition gate; premise-refresh edits from 2026-09-02 re-verify present (close-out 7c33b6d3b) |
+| R10 | MET | `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` exists (366 lines) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
-| AC1 | MET | static-ref | input-evidence header; per-section source citations |
-| AC2 | MET | static-ref | §0/§1 priority ordering |
-| AC3 | MET | static-ref | §0/§4/§9.2 no untested control counted |
-| AC4 | MET | static-ref | §3 seam-per-defect + ordering |
-| AC5 | MET | static-ref | §5 five-column decisions |
-| AC6 | MET | static-ref | §7 slices + consent gates + S5 last |
-| AC7 | MET | static-ref | §8 version contract complete |
-| AC8 | MET | static-ref | §9.2/§9.3; disposition executed (D8 done) |
-| AC9 | MET | static-ref | §9.2 exclusions; git status clean |
-
+|---------------------|--------|---------------|----------|
+| AC1 [non-behavior] | MET | static-ref | Plan carries input-evidence header + per-section source citations; reviewable standalone (read this run without predecessor bodies) |
+| AC2 [non-behavior] | MET | static-ref | §0/§1 priority ordering (correctness → attention → tokens/PASS → wall-clock → simplicity) |
+| AC3 [non-behavior] | MET | static-ref | §0/§4/§9.2: no untested control counted as effective; F-1/F-5 anchors re-verified true this run (`packages/app/src/workflow/actions/command-gate.ts:157`, `packages/app/src/workflow/proof-input-fingerprint.ts:99-118` fail-open `''` paths) |
+| AC4 [non-behavior] | MET | static-ref | §3 one root-cause seam per cross-surface defect, stabilization before optimization |
+| AC5 [non-behavior] | MET | static-ref | §5 five-column decisions incl. effect/parity, lifecycle, observability, rollback, sunset |
+| AC6 [non-behavior] | MET | static-ref | §7 slices with dependencies/consent gates; S5 = task-pipeline LAST |
+| AC7 [non-behavior] | MET | static-ref | §8 optional-first version contract: unversioned/explicit(<literal>)/empty-diagnostic + digest + pause-resume + precedence + no registry + objective evidence bar |
+| AC8 [non-behavior] | MET | static-ref | §9.2/§9.3: no placeholders found this read; disposition consequences explicit; D8 closed done 2026-09-02 |
+| AC9 [non-behavior] | MET | static-ref | §9.2 exclusions honored; `git status --porcelain` clean — no production/authority mutation |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Scope:** WBS 0733 diff (R10 durable plan deliverable) — strategy plan cross-checked against the four authority artifacts (0729 inventory, 0730 measurement, 0731 fit classification, 0732 prototype) plus live `file:line` anchors.
