@@ -4,7 +4,7 @@ name: "Eliminate raw scan fallback in getSummary by routing skill time series an
 status: done
 template: feature-impl
 created_at: 2026-08-22T22:52:28.891Z
-updated_at: "2026-09-03T05:27:26.353Z"
+updated_at: "2026-09-03T16:59:12.151Z"
 feature_id: E9
 dependencies: ["0631"]
 ---
@@ -115,26 +115,24 @@ Feature: Eliminate raw scan fallback in getSummary by routing skill time series 
 Rationale: the already-materialized `history_board_tool_5m` allocation (tokens / all linked tool calls, skill rows selected after division) becomes canonical; the stale live fallback is aligned to it, so fresh and stale results stay numerically equal with no schema change and `HISTORY_BOARD_ROLLUP_VERSION` untouched.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 | ------------- | -------- | ---------- |
-| R1 | MET | `packages/domain/src/analytics/history-board-rollup.ts:722` — `seriesTable` is `history_board_tool_5m` for both `tool` and `skill`; `:684-688` `skillOnly` appends `r.skill_name IS NOT NULL AND TRIM(r.skill_name) <> '' AND r.skill_name <> 'unknown'`; `:737-743` the skill series key is `r.skill_name`. Fresh unfiltered Summary path (`history-board-service.ts:806-809`, `exact=false`) never calls `bucketedTokenSeries()`; proven by `history-board-service.test.ts:159-235` (`rawReads` empty). |
-| R2 | MET | `packages/domain/src/analytics/forensic-query.ts:1166,1171,1175-1176` — the `linked` CTE counts ALL linked tool calls (`COUNT(*) OVER (PARTITION BY m.record_hash) AS links`) and divides each message's tokens across that count, then `:1130` applies the outer `WHERE key <> '' AND key <> 'unknown'` after division — same order of operations as the rollup materialization. Parity: `history-board-rollup.test.ts:620-628`; 1/3 denominator + blank-skill exclusion: `forensic-query-history.test.ts:324-391`. |
+| R1 | MET | `packages/domain/src/analytics/history-board-rollup.ts:722` — `seriesTable` is `history_board_tool_5m` for both `tool` and `skill`; `:684-688` `skillOnly` appends `r.skill_name IS NOT NULL AND TRIM(r.skill_name) <> '' AND r.skill_name <> 'unknown'`; `:737-743` the skill series key is `r.skill_name`. Fresh unfiltered Summary path (`packages/app/src/services/history-board-service.ts:806-809`, `exact=false`) never calls `bucketedTokenSeries()`; proven by `packages/app/tests/services/history-board-service.test.ts:159-235` (`rawReads` empty). |
+| R2 | MET | `packages/domain/src/analytics/forensic-query.ts:1166,1171,1175-1176` — the `linked` CTE counts ALL linked tool calls (`COUNT(*) OVER (PARTITION BY m.record_hash) AS links`) and divides each message's tokens across that count, then `:1130` applies the outer `WHERE key <> '' AND key <> 'unknown'` after division — same order of operations as the rollup materialization. Parity: `packages/domain/tests/analytics/history-board-rollup.test.ts:620-628`; 1/3 denominator + blank-skill exclusion: `packages/domain/tests/analytics/forensic-query-history.test.ts:324-391`. |
 | R3 | MET | `packages/app/src/services/history-board-service.ts:551` — when `dimension === 'skill'` `computeSummaryExtras` reuses active buckets; otherwise the skill bucket path reads the fresh rollup (`historyBoardBucketsFromRollup`, `:553`). `:533` previous-window KPIs always call `historyBoardSummaryFromRollup(db, previousSel, '1d', 'model')`. No app-layer SQL or new exported helper added. |
 | R4 | MET | `docs/design/history-data-processing.md:56-75` distinguishes 10 importer source ids from 9 Board cards; `:47-49` accounting/currency boundary limited to Board DTOs; `:267-273` canonical skill allocation + previous-window seam; `:274-285` latency numbers tied to recorded 0632 background evidence. Registered in `docs/04_DESIGN.md:51`. |
-| R5 | MET | Domain/app tests cover mixed skill/non-skill calls, rollup/live parity, blank-skill exclusion, all four Summary dimensions, bounded previous-window reads, and a fresh-path raw-table query guard: `history-board-rollup.test.ts:602,620`, `forensic-query-history.test.ts:324,377-391`, `history-board-service.test.ts:159-235,238-323,502-539`. Fresh run: 74 pass / 0 fail / 367 expect() calls. |
+| R5 | MET | Domain/app tests cover mixed skill/non-skill calls, rollup/live parity, blank-skill exclusion, all four Summary dimensions, bounded previous-window reads, and a fresh-path raw-table query guard: `packages/domain/tests/analytics/history-board-rollup.test.ts:602,620`, `packages/domain/tests/analytics/forensic-query-history.test.ts:324,377-391`, `packages/app/tests/services/history-board-service.test.ts:159-235,238-323,502-539`. Fresh run: 74 pass / 0 fail / 367 expect() calls. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | test | Fresh unfiltered Summary reads only bounded rollup tables for all four dimensions (`history-board-service.test.ts:159-235`, `rawReads` empty); skill series equals the canonical `history_board_tool_5m` aggregate (`history-board-rollup.test.ts:620-628`); freshness regression asserts `summary:skill` median <50ms over 5 serial reads (`history-board-service.test.ts:502-539`). |
+| Scenario: Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | test | Fresh unfiltered Summary reads only bounded rollup tables for all four dimensions (`packages/app/tests/services/history-board-service.test.ts:159-235`, `rawReads` empty); skill series equals the canonical `history_board_tool_5m` aggregate (`packages/domain/tests/analytics/history-board-rollup.test.ts:620-628`); freshness regression asserts `summary:skill` median <50ms over 5 serial reads (`packages/app/tests/services/history-board-service.test.ts:502-539`). |
 | Scenario: Comprehensive History Data Processing Architecture Documentation (R4) | MET | command | `docs/design/history-data-processing.md:56-75` (10 importer vs 9 Board), `:47-49` (currency boundary), `:267-285` (canonical allocation + measured-latency evidence); `docs/04_DESIGN.md:51` registers the satellite. `spur feature check E9 --json` -> status done, findings [], pass true. |
 
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Verdict:** PASS

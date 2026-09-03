@@ -4,7 +4,7 @@ name: "History module Summary tab skill-load breakdown with materialized rollup"
 status: done
 template: standard
 created_at: 2026-09-02T17:50:14.145Z
-updated_at: "2026-09-03T05:59:28.612Z"
+updated_at: "2026-09-03T16:59:12.618Z"
 dependencies: ["0735", "0736"]
 feature_id: E9
 ---
@@ -127,7 +127,6 @@ Implemented spur-side: the History Summary tab skill-load breakdown backed by a 
 Design note: the rollup is rebuilt full-replace within the freshness-gated analyze run (corrected from the draft's "incremental" — the board pipeline is freshness-gated full replace per Q&A). Empty-state: `fresh: false` shows an explicit "pending analyze" state; `fresh: true` with zero rows hides/no-skill-activity (R5).
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
@@ -136,18 +135,17 @@ Design note: the rollup is rebuilt full-replace within the freshness-gated analy
 | ------------- | -------- | ---------- |
 | R1 | MET | Summary tab skill-load breakdown: `apps/web/src/modules/history/SummaryTab.tsx:315` section (chart/table toggle across model/source/tool/skill blockModes), `:1012` stale state, `:1078` zero-rows state; `packages/app/src/services/history-board-service.ts:564` `skillBreakdown` (bySkill/bySource/byInvocationKind/trend) assembled in `computeSummaryExtras` `:514`. |
 | R2 | MET | `history_board_skill_5m` DDL `packages/domain/src/migrations.ts:608` (inlined in `HISTORY_BOARD_ROLLUPS_SCHEMA_SQL`) + migration `0032_spur_cli_history_board_skill_5m` `:941` via `HISTORY_BOARD_SKILL_5M_SCHEMA_SQL` `:638` — columns/sk/idx exactly per frozen names (bucket_start/source/skill_name/invocation_kind TEXT NOT NULL, calls INTEGER NOT NULL, PK `(bucket_start,source,skill_name,invocation_kind)`, idx `(skill_name,bucket_start)`). `skillCallRollup` `packages/domain/src/analytics/history-board-rollup.ts:266` groups `history_skill_call` by minute floor; `replaceHistoryBoardRollups` `:295` deletes+inserts the table (`:309`,`:310`). |
-| R3 | MET | `historyBoardRollupsFresh` `history-board-rollup.ts:281` reused from the shared `history_board_rollup_meta`; freshness surfaced in `history-board-service.ts:564` as `fresh: !exact` (flagged, never silent-empty). |
+| R3 | MET | `historyBoardRollupsFresh` `packages/domain/src/analytics/history-board-rollup.ts:281` reused from the shared `history_board_rollup_meta`; freshness surfaced in `packages/app/src/services/history-board-service.ts:564` as `fresh: !exact` (flagged, never silent-empty). |
 | R4 | MET | Full-replace within the freshness-gated analyze run (`replaceHistoryBoardRollups` `:295`; `refreshHistoryRollups` at `packages/app/src/services/history-analysis-service.ts:44` freshness gate, `:63` full replace, `:45` `historyBoardRollupsFresh`); idempotent under re-analyze (domain idempotency test). `packages/domain/src/analytics/history-reset.ts:40` adds `history_board_skill_5m` to the reset set. |
-| R5 | MET | Two empty states, no crash: `SummaryTab.tsx:1012` `fresh === false` → "run history analyze to populate"; `:1078` "No skill activity recorded for this window." (fresh, zero rows). |
+| R5 | MET | Two empty states, no crash: `apps/web/src/modules/history/SummaryTab.tsx:1012` `fresh === false` → "run history analyze to populate"; `:1078` "No skill activity recorded for this window." (fresh, zero rows). |
 | R6 | MET | Service wires `skillBreakdown` (history-board-service.ts:564) + `skill` dimension (`packages/contracts/src/history.ts:18` `historyDimensionEnum`); oRPC payload additive `historySkillBreakdownSchema` `:126` (`fresh: z.boolean().default(true)` `:134`) wired at `:202`. No existing field reshaped. |
 | R7 | MET | Rollup aggregation + UI tests pass: domain `history-board-rollup.test.ts` (per-key count, bucket alignment, idempotency, empty/unknown exclusion), app `history-board-service.test.ts` (rollup-read assertion, empty, stale), contracts `history-contract.test.ts` (additive shape + fresh default), web `components.test.tsx` (sample-data render). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | test | AC1 `packages/app/tests/services/history-board-service.test.ts:776-784` — seeded `history_skill_call` → `summary.skillBreakdown.bySkill`/`bySource`/`byInvocationKind` correct per counts; SummaryTab renders from sample data. AC2 `packages/domain/tests/analytics/history-board-rollup.test.ts` — `replaceHistoryBoardRollups` materializes `history_board_skill_5m`; re-analyze produces identical rows (idempotent). AC3 `history-board-service.test.ts:729` — "getSummary skillBreakdown reads history_board_skill_5m, not history_skill_call" + latency budget; `historyBoardSkillBreakdownFromRollup` `history-board-rollup.ts:1121` reads only `history_board_skill_5m`. AC4 `:787` — zero skill rows → empty `skillBreakdown` (no crash); UI `SummaryTab.tsx:1078`. AC5 `:802` — stale/never-analyzed rollup → `skillBreakdown.fresh === false`; `history-board-service.ts:564` `fresh: !exact`. AC6 `spur task check 0737` → PASS (exit 0, this run). |
+| Scenario: Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | test | AC1 `packages/app/tests/services/history-board-service.test.ts:776-784` — seeded `history_skill_call` → `summary.skillBreakdown.bySkill`/`bySource`/`byInvocationKind` correct per counts; SummaryTab renders from sample data. AC2 `packages/domain/tests/analytics/history-board-rollup.test.ts` — `replaceHistoryBoardRollups` materializes `history_board_skill_5m`; re-analyze produces identical rows (idempotent). AC3 `packages/app/tests/services/history-board-service.test.ts:729` — "getSummary skillBreakdown reads history_board_skill_5m, not history_skill_call" + latency budget; `historyBoardSkillBreakdownFromRollup` `packages/domain/src/analytics/history-board-rollup.ts:1121` reads only `history_board_skill_5m`. AC4 `:787` — zero skill rows → empty `skillBreakdown` (no crash); UI `apps/web/src/modules/history/SummaryTab.tsx:1078`. AC5 `:802` — stale/never-analyzed rollup → `skillBreakdown.fresh === false`; `packages/app/src/services/history-board-service.ts:564` `fresh: !exact`. AC6 `spur task check 0737` → PASS (exit 0, this run). |
 
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 | Priority | Dimension | Location | Finding |

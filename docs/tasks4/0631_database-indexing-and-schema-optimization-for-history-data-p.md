@@ -4,7 +4,7 @@ name: "Database indexing and schema optimization for History data plane"
 status: done
 template: feature-impl
 created_at: 2026-08-22T22:52:26.674Z
-updated_at: "2026-09-03T05:23:14.081Z"
+updated_at: "2026-09-03T16:59:11.683Z"
 feature_id: E9
 ---
 
@@ -114,7 +114,6 @@ No ADR is required: this extends the existing SQLite migration/read-plane mechan
 **R5 rejection:** `history_import_checkpoint(source, updated_at)` not added — the source lookup is served by the PK `(source, source_file)` and the freshness query (`MAX(updated_at) GROUP BY source`) has no selective predicate; recorded as a test, not DDL.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
@@ -122,8 +121,8 @@ No ADR is required: this extends the existing SQLite migration/read-plane mechan
 | Requirement | Status | Evidence |
 | ------------- | -------- | ---------- |
 | R1 | MET | `packages/domain/src/migrations.ts:380` — `HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL` defines the three raw-plane indexes: `idx_history_message_source_ts (source, ts)`, `idx_history_message_model_ts (model, ts)`, `idx_history_tool_call_session_id_seq (session_id, seq)`; idempotent-DDL + frozen-order assertions `packages/domain/tests/dao/migrations.test.ts:494,519-521`. |
-| R2 | MET | `packages/domain/src/migrations.ts:384-395` — rollup indexes `idx_history_board_message_5m_bucket_model (bucket_start, model)`, `idx_history_board_tool_5m_bucket_skill (bucket_start, skill_name)`, and `idx_history_board_session_source_started (source, started_at DESC)` (DESC bit via `index_xinfo`); EXPLAIN plan selections `migrations.test.ts:587-617`. |
-| R3 | MET | `CLI_MIGRATIONS[22]` = `0022_spur_cli_history_performance_indexes` at `packages/domain/src/migrations.ts:882-883`; top-level mirror `drizzle/0022_spur_cli_history_performance_indexes.sql` byte-identical (672 bytes, verified this run); every statement is `CREATE INDEX IF NOT EXISTS` (`migrations.test.ts:494`); no `CLI_SCHEMA_SQL`/`drizzle/_legacy_reference/` change. |
+| R2 | MET | `packages/domain/src/migrations.ts:384-395` — rollup indexes `idx_history_board_message_5m_bucket_model (bucket_start, model)`, `idx_history_board_tool_5m_bucket_skill (bucket_start, skill_name)`, and `idx_history_board_session_source_started (source, started_at DESC)` (DESC bit via `index_xinfo`); EXPLAIN plan selections `packages/domain/tests/dao/migrations.test.ts:587-617`. |
+| R3 | MET | `CLI_MIGRATIONS[22]` = `0022_spur_cli_history_performance_indexes` at `packages/domain/src/migrations.ts:882-883`; top-level mirror `drizzle/0022_spur_cli_history_performance_indexes.sql` byte-identical (672 bytes, verified this run); every statement is `CREATE INDEX IF NOT EXISTS` (`packages/domain/tests/dao/migrations.test.ts:494`); no `CLI_SCHEMA_SQL`/`drizzle/_legacy_reference/` change. |
 | R4 | MET | `packages/domain/tests/dao/migrations.test.ts:501,542,561,619` — fresh-DB six-index order/direction, 0021→0022 upgraded-vs-fresh convergence, second-apply idempotence (journals 0), per-index `EXPLAIN QUERY PLAN` selection, R5 rejection. Fresh run: 49 pass / 0 fail / 205 expect() / 100% migration coverage. |
 | R5 | MET | `packages/domain/tests/dao/migrations.test.ts:619` — `history_import_checkpoint(source, updated_at)` rejected: PK `(source, source_file)` covers the source lookup, freshness aggregate has no selective predicate, index absent. |
 
@@ -132,7 +131,6 @@ No ADR is required: this extends the existing SQLite migration/read-plane mechan
 | Scenario: Targeted SQLite Index Coverage for History Query Paths (R2) | MET | test | `packages/domain/tests/dao/migrations.test.ts:501` (fresh DB gains six indexes with frozen order/direction + second-apply idempotence), `:561` (EXPLAIN QUERY PLAN selects each retained index), `:542` (fresh vs 0021-upgraded schema convergence). Fresh run 49/49 pass. |
 
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Reviewed:** 2026-08-22 · Dimensions: functional, security, efficiency, correctness, usability, architecture · **Verdict: PASS**
