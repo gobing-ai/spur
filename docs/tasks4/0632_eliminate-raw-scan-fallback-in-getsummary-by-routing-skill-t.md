@@ -4,7 +4,7 @@ name: "Eliminate raw scan fallback in getSummary by routing skill time series an
 status: done
 template: feature-impl
 created_at: 2026-08-22T22:52:28.891Z
-updated_at: "2026-08-24T20:43:29.094Z"
+updated_at: "2026-09-03T05:27:26.353Z"
 feature_id: E9
 dependencies: ["0631"]
 ---
@@ -107,16 +107,16 @@ Rationale: the already-materialized `history_board_tool_5m` allocation (tokens /
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | `historyBoardSummaryFromRollup()` routes tool and skill dimensions through `history_board_tool_5m`, selects `r.skill_name`, and excludes blanks at `packages/domain/src/analytics/history-board-rollup.ts:535`; the canonical suite covers the fresh four-dimension path. |
-| R2 | MET | `bucketedTokenSeries()` owns the canonical all-tool allocation and outer skill filter at `packages/domain/src/analytics/forensic-query.ts:892`; the canonical suite proves mixed skill/non-skill parity and blank exclusion. |
-| R3 | MET | `computeSummaryExtras()` reuses active skill buckets and uses the existing one-day/model rollup seam for previous-window KPIs at `packages/app/src/services/history-board-service.ts:397`. No app-layer SQL or new exported helper was added. |
-| Comprehensive History Data Processing Architecture Documentation (R4) | MET | The current History data-processing architecture defines the Q1–Q10 forensic query contract at `docs/design/history-data-processing.md:166` and also covers the importer/Board catalogs, checkpoint/ledger truth, refresh/fallback/accounting boundaries, and five-tab gate. |
-| R5 | MET | Domain/app tests cover mixed calls, parity, blanks, all four dimensions, bounded previous-window reads, and SQL-recorded absence of raw scans. Canonical root suite: 6,230 pass, 0 fail, 99.07% lines; production `summary:skill` median: 24.7 ms. |
+| R1 | MET | `packages/domain/src/analytics/history-board-rollup.ts:722` — `seriesTable` is `history_board_tool_5m` for both `tool` and `skill`; `:684-688` `skillOnly` appends `r.skill_name IS NOT NULL AND TRIM(r.skill_name) <> '' AND r.skill_name <> 'unknown'`; `:737-743` the skill series key is `r.skill_name`. Fresh unfiltered Summary path (`history-board-service.ts:806-809`, `exact=false`) never calls `bucketedTokenSeries()`; proven by `history-board-service.test.ts:159-235` (`rawReads` empty). |
+| R2 | MET | `packages/domain/src/analytics/forensic-query.ts:1166,1171,1175-1176` — the `linked` CTE counts ALL linked tool calls (`COUNT(*) OVER (PARTITION BY m.record_hash) AS links`) and divides each message's tokens across that count, then `:1130` applies the outer `WHERE key <> '' AND key <> 'unknown'` after division — same order of operations as the rollup materialization. Parity: `history-board-rollup.test.ts:620-628`; 1/3 denominator + blank-skill exclusion: `forensic-query-history.test.ts:324-391`. |
+| R3 | MET | `packages/app/src/services/history-board-service.ts:551` — when `dimension === 'skill'` `computeSummaryExtras` reuses active buckets; otherwise the skill bucket path reads the fresh rollup (`historyBoardBucketsFromRollup`, `:553`). `:533` previous-window KPIs always call `historyBoardSummaryFromRollup(db, previousSel, '1d', 'model')`. No app-layer SQL or new exported helper added. |
+| R4 | MET | `docs/design/history-data-processing.md:56-75` distinguishes 10 importer source ids from 9 Board cards; `:47-49` accounting/currency boundary limited to Board DTOs; `:267-273` canonical skill allocation + previous-window seam; `:274-285` latency numbers tied to recorded 0632 background evidence. Registered in `docs/04_DESIGN.md:51`. |
+| R5 | MET | Domain/app tests cover mixed skill/non-skill calls, rollup/live parity, blank-skill exclusion, all four Summary dimensions, bounded previous-window reads, and a fresh-path raw-table query guard: `history-board-rollup.test.ts:602,620`, `forensic-query-history.test.ts:324,377-391`, `history-board-service.test.ts:159-235,238-323,502-539`. Fresh run: 74 pass / 0 fail / 367 expect() calls. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | test | Fresh unfiltered Summary reads bounded rollups for model/source/tool/skill; parity tests match canonical allocation; the production-scale skill median is 24.7 ms. |
-| Comprehensive History Data Processing Architecture Documentation (R4) | MET | command | The satellite and `docs/04_DESIGN.md` index are synchronized and match current code, catalogs, schema, query owners, fallback semantics, accounting boundary, and recorded measurements. |
+| Scenario: Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | test | Fresh unfiltered Summary reads only bounded rollup tables for all four dimensions (`history-board-service.test.ts:159-235`, `rawReads` empty); skill series equals the canonical `history_board_tool_5m` aggregate (`history-board-rollup.test.ts:620-628`); freshness regression asserts `summary:skill` median <50ms over 5 serial reads (`history-board-service.test.ts:502-539`). |
+| Scenario: Comprehensive History Data Processing Architecture Documentation (R4) | MET | command | `docs/design/history-data-processing.md:56-75` (10 importer vs 9 Board), `:47-49` (currency boundary), `:267-285` (canonical allocation + measured-latency evidence); `docs/04_DESIGN.md:51` registers the satellite. `spur feature check E9 --json` -> status done, findings [], pass true. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **Verdict:** PASS

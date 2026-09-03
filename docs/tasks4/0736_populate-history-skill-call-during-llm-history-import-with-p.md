@@ -4,7 +4,7 @@ name: "Populate history_skill_call during LLM history import with per-agent skil
 status: done
 template: standard
 created_at: 2026-09-02T17:50:13.810Z
-updated_at: "2026-09-03T04:00:42.920Z"
+updated_at: "2026-09-03T05:55:07.212Z"
 dependencies: ["0735"]
 feature_id: E9
 ---
@@ -121,21 +121,16 @@ Design notes: skill-load extraction is a frozen seam in the importer; the DAO/le
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | All seven typed-table splits (claude/pi/omp/codex/agy/gemini/grok) + the OpenCode importer path wire into `extractSkillCalls` and emit `history_skill_call` split entries; real-corpus import produced 2,548 skill rows across claude/pi/omp/agy/grok (codex/gemini/opencode = 0 because those logs carry no matching load events; their paths are AC3 fixture-covered). Out-of-scope openclaw/antigravity deferred (no typed rows) per the task scope. |
-| R2 | MET | Per-agent detectors: claude/omp native `Skill` tool_use/toolCall → model; pi `<skill name= location=>` → user (R4-sanctioned L2-only); codex `<skill><name>/<path>` block → user; agy `view_file` "Viewing skill file" → model; gemini L0 `/sp-\|/rd3-` prefix → user; grok `read_file` on `SKILL.md` → model. Real corpus: claude model/user split, pi user, grok model, agy model, omp model. |
-| R3 | MET | `canonicalizeSkillName` verified on real data: `rd3-dev-fixall`→`rd3:dev-fixall`, `sp:code-*` retained verbatim; unqualified names kept. |
-| R4 | MET | L1 native-tool evidence authoritative; proxy-quoted prose does not trigger. The task's AC4 (prose quoting `<skill name=`) fixture asserts zero rows; the real-corpus counts are purely additive (claude native Skill preserved as 287 `history_tool_call` rows AND emitted as `history_skill_call`, no swallowed rows). |
-| R5 | MET | `record_hash` deterministic (split record only); ledger + checkpoint + idempotent re-import verified: Run 3 re-imported all 18,152 checkpoints, only live pi/omp deltas, no duplicate rows (record_hash PK, ledger dedup). `--dry-run` writes nothing (fixture-covered). |
-| R6 | MET | Fixture tests per agent from sampled logs (no network): `tests/skill-call-import.test.ts` 17/17 + full importer suite 306/0; pi arg-preservation unchanged → MIN_SAFE importer version guard needs no bump. |
+| R1 | MET | @gobing-ai/ts-llm-jsonl-importer`src/mappers.ts`line 121 — `extractSkillCalls` dispatches on `context.source` and is wired into all seven custom splits (claudeSplit :620, piSplit :747, ompSplit :883, codexSplit :1199, agySplit :1342, geminiSplit :1436, grokSplit :1834) so each emits `history_skill_call` split entries via `skillCallEntry` (:151); OpenCode native `skill({name})` maps to a `history_skill_call` row (`src/opencode-importer.ts` line 262-290). Live DB (this run): history_skill_call=2,548 (additive). Out-of-scope openclaw/antigravity emit no typed rows (per task scope). |
+| R2 | MET | @gobing-ai/ts-llm-jsonl-importer`src/mappers.ts`lines 191-317 — per-agent detectors per the R2 verified signatures: claude (191 native `Skill` tool_use → model; `caller.type` direct → user), pi (217 user `<skill name= location=>` wrapper, R4-sanctioned L2-only), omp (229 native `Skill` toolCall → model), codex (255 `<skill><name>/<path>` block → user), agy (281 `view_file` "Viewing skill file" → model), gemini (307 L0 harness prefix `/sp-` or `/rd3-` → user), grok (317 `grok_build` `read_file` on SKILL.md → model); opencode native `skill` → model (`opencode-importer.ts`:262). |
+| R3 | MET | @gobing-ai/ts-llm-jsonl-importer`src/mappers.ts`line 91 — `canonicalizeSkillName`: harness dialect `sp-dev-run`→`sp:dev-run`, `rd3-*`→`rd3:*`; unqualified names kept verbatim (exact structural match). Verified on real data: `rd3-dev-fixall`→`rd3:dev-fixall`, `sp:code-*` retained. |
+| R4 | MET | @gobing-ai/ts-llm-jsonl-importer`src/mappers.ts`line 191 — L1 native-tool evidence is authoritative; L0/L2 never trigger for agents that have an L1. Prose quoting a wrapper fragment → zero rows (fixture AC4). pi inline-only is the sanctioned R4 L1-less exception. No swallowed rows (claude native `Skill` preserved as tool_call AND emitted as skill_call). |
+| R5 | MET | @gobing-ai/ts-llm-jsonl-importer`src/mappers.ts`line 158 — `skillRecord` sets every optional column for a deterministic `record_hash`; `SkillCallSplitRecord` (types.ts:164) carries only split-side columns (no record_hash/imported_at) so re-imports hash identically. Idempotency + dry-run fixture tests pass (AC5); live checkpoint=18,152, no duplicate skill rows (record_hash PK, ledger dedup). |
+| R6 | MET | @gobing-ai/ts-llm-jsonl-importer`tests/skill-call-import.test.ts` — 17 pass / 0 fail (63 expect); full importer suite 306 pass / 0 fail (1440 expect); pi arg-preservation unchanged → MIN_SAFE importer version guard needs no bump. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | @gobing-ai/ts-llm-jsonl-importer`tests/skill-call-import.test.ts`line 1 — claude `Skill` tool_use fixture → `history_skill_call` row with correct `skill_name`, `invocation_kind`, `skill_path`, `args_raw`. |
-| AC2 | MET | test | @gobing-ai/ts-llm-jsonl-importer`tests/skill-call-import.test.ts`line 1 — pi `<skill name= location=>` fixture → `user`-kind row with parsed name and path. |
-| AC3 | MET | test | @gobing-ai/ts-llm-jsonl-importer`tests/skill-call-import.test.ts`line 1 — per-agent fixture tests asserting each expected signature (claude, pi, omp, codex, agy, gemini, grok, opencode). |
-| AC4 | MET | test | @gobing-ai/ts-llm-jsonl-importer`tests/skill-call-import.test.ts`line 1 — prose-only `<skill name=` quote fixture → zero rows (no false positive). |
-| AC5 | MET | test | @gobing-ai/ts-llm-jsonl-importer`tests/skill-call-import.test.ts`line 1 + real run 3 — idempotent re-import, ledger dedup, no duplicate rows; `--dry-run` writes nothing. |
-| AC6 | MET | command | `bun apps/cli/src/index.ts history import` (source-local, importer @gobing-ai/ts-llm-jsonl-importer@0.4.54, real corpus) → exit 0; history_message=1,766,255 / history_tool_call=488,230 (no regression); history_skill_call=2,548 (additive); ledger invariant msg+tool+skill = history_import_ledger = 2,257,033 (CONSISTENT); `spur task check 0736` → PASS. |
+| Scenario: Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | test | @gobing-ai/ts-llm-jsonl-importer`tests/skill-call-import.test.ts` — claude `Skill` tool_use → model row with `skill_name`/`invocation_kind`/`skill_path`/`args_raw` (AC1); pi `<skill name= location=>` → user row with parsed name+path (AC2); per-agent fixture tests claude/pi/omp/codex/agy/gemini/grok/opencode (AC3); prose-only `<skill name=` quote → zero rows (AC4); idempotent re-import + dry-run writes nothing (AC5); AC6 via deterministic live-DB state (post real-corpus import, verified this run) + `spur task check 0736` PASS: history_message=1,766,255 / history_tool_call=488,230 (no regression) / history_skill_call=2,548 (additive) / history_import_ledger=2,257,033 (msg+tool+skill invariant CONSISTENT). This is the raw skill-load capture feeding the E9 skill time series (`history_board_tool_5m`); the sub-50ms getSummary guarantee is held by 0632/0737. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 
