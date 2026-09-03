@@ -3,7 +3,6 @@ import type { SectionMatrix } from '@gobing-ai/spur-app';
 import {
     AgentService,
     configuredSecretValues,
-    enqueueHistoryRefresh,
     type FeatureActionJob,
     HISTORY_REFRESH_JOB,
     handleHistoryRefreshJob,
@@ -17,8 +16,7 @@ import {
     SCHEDULER_CUSTOM_JOB,
     type TaskActionJob,
 } from '@gobing-ai/spur-app';
-import type { SpurConfig } from '@gobing-ai/spur-config';
-import { IN_MEMORY_DATABASE_URL, resolveHistoryRefreshTrigger } from '@gobing-ai/spur-config';
+import { IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
 import {
     bundledConfigRoot,
     loadSpurConfig,
@@ -130,11 +128,6 @@ export const defaultDeps: StartServerDeps = {
  * Each scheduled action emits `scheduler.job.executed` to the server EventBus
  * so the System Events tab surfaces scheduler activity alongside queue events.
  *
- * `spurConfig` gates the opt-in interval history refresh (task 0696): when
- * `history.refresh.schedule_minutes` is set, one entry enqueues the same
- * coalesced `history.refresh` job the completion trigger uses — the job body
- * (incremental checkpoint-resumed import-all → analyze) is unchanged.
- *
  * `jobs` (task 0734) are the validated `bootstrap.scheduler.jobs` definitions
  * resolved by the upstream runtime. Each configured job registers one entry
  * using its cron string or `intervalMinutes * 60_000`, enqueuing
@@ -143,7 +136,6 @@ export const defaultDeps: StartServerDeps = {
 export function registerSchedulerEntries(
     scheduler: ServerScheduler,
     ctx: ServerContext,
-    spurConfig?: SpurConfig | null,
     jobs: readonly SchedulerJobConfig[] = [],
 ): void {
     const register = (cron: string, name: string, action: () => Promise<void>): void => {
@@ -173,18 +165,6 @@ export function registerSchedulerEntries(
         const queue = await ctx.jobQueue();
         await queue.enqueue(SMOKE_JOB, { source: 'scheduler' }, { maxRetries: 1 });
     });
-    const scheduleMinutes = resolveHistoryRefreshTrigger(spurConfig ?? null).scheduleMinutes;
-    if (scheduleMinutes !== null) {
-        register(String(scheduleMinutes * 60_000), HISTORY_REFRESH_JOB, async () => {
-            // Single-flight writer (task 0716 R3): scheduled refreshes coalesce through
-            // the queue table instead of a raw enqueue, so a pending or in-flight
-            // refresh absorbs the tick instead of stacking a second job behind it.
-            await enqueueHistoryRefresh(await ctx.getDb(), {
-                config: spurConfig ?? null,
-                trigger: 'schedule',
-            });
-        });
-    }
     // Configured declarative jobs (task 0734): one queue entry per job, using the
     // validated cron string or the interval form. A tick is a normal non-coalesced
     // enqueue of `scheduler.custom`; the queue's existing retry/attempt policy owns
@@ -539,7 +519,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 // scheduler plugin auto-starts (registration order: user callback
                 // runs before scheduler start — verified in ts-infra application
                 // tests). Configured jobs come only from the resolved runtime config.
-                registerSchedulerEntries(scheduler, ctx, spurConfig, appRt.config.scheduler.jobs);
+                registerSchedulerEntries(scheduler, ctx, appRt.config.scheduler.jobs);
                 appRt.logger.info('Scheduler entries registered', { jobs: appRt.config.scheduler.jobs.length });
             }
 

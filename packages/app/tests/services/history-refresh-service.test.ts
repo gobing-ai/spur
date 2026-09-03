@@ -13,16 +13,16 @@ import {
     type HistoryRefreshEnqueueResult,
     handleHistoryRefreshJob,
     parseHistoryRefreshContext,
+    validateHistoryRefreshPayload,
 } from '../../src/services/history-refresh-service';
 
 /** Config fixture — only `history.refresh` matters to the trigger. */
-function config(onCompletion: boolean, debounceMs = 60_000, scheduleMinutes: number | null = null): SpurConfig {
+function config(onCompletion: boolean, debounceMs = 60_000): SpurConfig {
     return {
         history: {
             refresh: {
                 on_completion: onCompletion,
                 debounce_ms: debounceMs,
-                ...(scheduleMinutes !== null ? { schedule_minutes: scheduleMinutes } : {}),
             },
         },
     } as unknown as SpurConfig;
@@ -176,23 +176,26 @@ describe('enqueueHistoryRefresh single-flight producers (task 0716)', () => {
         }
     });
 
-    test('schedule trigger is gated on schedule_minutes (R3)', async () => {
+    test('the schedule trigger no longer has its own gate (task 0750)', async () => {
+        // Periodic refresh is a `bootstrap.scheduler.jobs` entry now; nothing in
+        // the codebase enqueues with trigger 'schedule'. What survives is the
+        // payload value, so queue rows written by the old interval path still
+        // validate — and a caller passing it falls back to the on_completion gate
+        // instead of silently scheduling behind a removed config key.
         const db = await createMigratedDb({ url: ':memory:' });
         try {
             const t0 = 1_000_000;
-            const off = await enqueueHistoryRefresh(db, { config: config(true), trigger: 'schedule', now: () => t0 });
+            const off = await enqueueHistoryRefresh(db, { config: config(false), trigger: 'schedule', now: () => t0 });
             expect(off).toEqual({ status: 'disabled' });
             expect((await refreshRows(db)).length).toBe(0);
-            const on = await enqueueHistoryRefresh(db, {
-                config: config(false, 60_000, 30),
-                trigger: 'schedule',
-                now: () => t0,
-            });
-            expect(on.status).toBe('enqueued');
-            const rows = await refreshRows(db);
-            expect(rows.length).toBe(1);
-            expect(rows[0]?.next_retry_at).toBe(t0); // scheduled ticks are also immediate
-            expect(rows[0]?.max_retries).toBe(3); // shared single-flight retry policy
+            expect(
+                validateHistoryRefreshPayload({
+                    trigger: 'schedule',
+                    triggerId: null,
+                    windowStart: t0,
+                    windowEnd: t0,
+                }).trigger,
+            ).toBe('schedule');
         } finally {
             db.close();
         }

@@ -22,7 +22,9 @@ import { splitLaunchCommand } from '../workflow/split-launch-command';
 /** Built-in queue job kind for the coalesced completion-triggered history refresh. */
 export const HISTORY_REFRESH_JOB = 'history.refresh';
 
-/** Named completion points that may fire the trigger — never "every CLI invocation". */
+/** Named completion points that may fire the trigger — never "every CLI invocation".
+ * `'schedule'` is retired as a live trigger (task 0750) but stays in the union so
+ * queue rows and System Events persisted by the old interval path still validate. */
 export type HistoryRefreshTriggerPoint = 'task-done' | 'pipeline-run' | 'manual' | 'schedule';
 
 /** Payload of a `history.refresh` queue job. */
@@ -172,12 +174,13 @@ export async function enqueueHistoryRefresh(
     options: HistoryRefreshEnqueueOptions,
 ): Promise<HistoryRefreshEnqueueResult> {
     const triggerConfig = resolveHistoryRefreshTrigger(options.config);
-    // Manual refreshes are explicit user intent — never gated. The schedule trigger
-    // fires only while an interval is configured (0716 R3); completion triggers stay
-    // behind the on_completion opt-in. One gate, before any DB access.
+    // Manual refreshes are explicit user intent — never gated; completion triggers
+    // stay behind the on_completion opt-in. One gate, before any DB access. Periodic
+    // refreshes are no longer a trigger here (task 0750): they are declared as a
+    // `bootstrap.scheduler.jobs` entry that runs `spur history daily` directly.
+    // `'schedule'` survives only as a payload value so persisted rows still validate.
     let enabled = triggerConfig.onCompletion;
     if (options.trigger === 'manual') enabled = true;
-    if (options.trigger === 'schedule') enabled = triggerConfig.scheduleMinutes !== null;
     if (!enabled) return { status: 'disabled' };
     const now = options.now?.() ?? Date.now();
     // Manual and scheduled refreshes are user-facing "run it now" requests: a fresh

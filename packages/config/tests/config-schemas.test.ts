@@ -83,18 +83,18 @@ describe('historyConfigSchema / resolveHistoryRefreshTrigger (task 0549)', () =>
         expect(resolveHistoryRefreshTrigger(null)).toEqual({
             onCompletion: false,
             debounceMs: 600_000,
-            scheduleMinutes: null,
         });
     });
 
-    test('schedule_minutes resolves to a scheduler interval; unset stays null (task 0696)', () => {
+    test('the retired schedule_minutes key no longer resolves a trigger (task 0750)', () => {
+        // Periodic refresh moved to `bootstrap.scheduler.jobs`. A stale key in an
+        // old config must not resurrect a second scheduling path — it is simply
+        // not part of the resolved trigger shape any more.
         expect(
             resolveHistoryRefreshTrigger({
                 history: { refresh: { on_completion: false, debounce_ms: 600_000, schedule_minutes: 10 } },
-            }).scheduleMinutes,
-        ).toBe(10);
-        expect(resolveHistoryRefreshTrigger({ history: {} }).scheduleMinutes).toBeNull();
-        expect(HistoryRefreshConfigSchema.safeParse({ schedule_minutes: 0 }).success).toBe(false);
+            } as never),
+        ).toEqual({ onCompletion: false, debounceMs: 600_000 });
     });
 });
 

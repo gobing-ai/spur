@@ -755,9 +755,6 @@ export const RedactionConfigSchema = z.object({
 export const HistoryRefreshConfigSchema = z.object({
     on_completion: z.boolean().default(false),
     debounce_ms: z.number().int().min(1000).default(600_000),
-    /** Interval-based trigger: enqueue one history.refresh every N minutes while the
-     * server scheduler runs. Unset = off (hidden automation stays opt-in, T-rules). */
-    schedule_minutes: z.number().int().min(1).optional(),
 });
 
 /** Schema for the `history` section. */
@@ -769,8 +766,6 @@ export const HistoryConfigSchema = z.object({
 export interface HistoryRefreshTriggerConfig {
     onCompletion: boolean;
     debounceMs: number;
-    /** Server-scheduler interval in minutes; `null` = scheduled trigger off. */
-    scheduleMinutes: number | null;
 }
 
 /**
@@ -785,9 +780,6 @@ export function resolveHistoryRefreshTrigger(
     return {
         onCompletion: parsed.on_completion,
         debounceMs: parsed.debounce_ms,
-        ...(parsed.schedule_minutes !== undefined
-            ? { scheduleMinutes: parsed.schedule_minutes }
-            : { scheduleMinutes: null }),
     };
 }
 

@@ -803,7 +803,9 @@ pruning) is untouched; without `--mode`, behavior is unchanged.
 
 **Operation-triggered refresh (feature E3, tasks 0549–0550).** Completing a task (`spur task update <wbs> done`) or a non-dry workflow run (`status: done`) enqueues a `history.refresh` job on the embedded job queue when `history.refresh.on_completion` is `true` in `.spur/config.yaml`. The key is **opt-in and defaults off**. Completions inside `history.refresh.debounce_ms` (default **600000**) join one pending job and stretch its covered window — a burst produces one refresh, not N. The server queue handler does not call `HistoryService.daily` in-process: E31 (0717) executes `<invocation> --no-logo history daily` in an isolated child via `ProcessExecutor`, passing the validated payload through `SPUR_HISTORY_REFRESH_CONTEXT`; 0716's single-flight writer extends exclusion through `processing`. See [`history-refresh-process-isolation.md`](design/history-refresh-process-isolation.md).
 
-**Schedule-triggered refresh (task 0696).** While the server scheduler runs, `history.refresh.schedule_minutes` (opt-in; unset = off) registers one interval entry that enqueues `history.refresh` every N minutes. The scheduler enqueues through the shared pending-or-processing single-flight writer (`enqueueHistoryRefresh`), so a tick during a running refresh joins it or returns `already-running` instead of stacking a second row. Config: `packages/config/src/index.ts` (`HistoryRefreshConfigSchema`); registration: `apps/server/src/serve.ts` (`registerSchedulerEntries`); accepted shape: [`history-refresh-process-isolation.md`](design/history-refresh-process-isolation.md).
+**Periodic refresh (task 0750, replacing 0696).** There is no history-specific scheduling key. Recurring refresh is declared like any other periodic execution, as a `bootstrap.scheduler.jobs` entry running `history daily` (see *Scheduled jobs*, task 0734); `registerSchedulerEntries` no longer reads project config and registers only the prune and smoke built-ins plus the configured jobs. The retired `history.refresh.schedule_minutes` key is dropped from `HistoryRefreshConfigSchema`, and `HistoryRefreshTriggerConfig` no longer carries `scheduleMinutes`. `'schedule'` remains a valid `history.refresh` payload trigger value so rows persisted by the old path still validate, but nothing enqueues with it.
+
+**Trade-off recorded at migration.** A configured job is a plain non-coalesced `scheduler.custom` enqueue, so a periodic refresh no longer shares the `enqueueHistoryRefresh` single-flight row with the completion trigger, and no longer inherits its `DATABASE_URL`/`resolveSpurBin` plumbing — the command's own `cwd` (project root) resolves the database. Coalescing and per-job env for configured jobs are open enhancements against the shared scheduler surface, not a reason to keep a second scheduling mechanism.
 
 `DailyResult.coverage` is `{ refreshed, skipped, window: { since, until } }`. Analyze stamps `bySession[].sessionState` (`in-progress` | `complete`): a session whose last stored message is not an assistant turn is in progress, and derived aggregates clip to the last complete turn so a partial turn cannot fabricate totals. Re-analyzing a growing session replaces the previous `bySession` row (one record per session, not one per refresh). Events: `history.refresh.enqueued`, `history.refresh.completed`, `history.refresh.skipped` (disabled). No new CLI noun.
 
@@ -1153,7 +1155,19 @@ history:
   refresh:
     on_completion: false   # default; set true to enable
     debounce_ms: 600000    # coalescing window, floor 1000 ms
-    # schedule_minutes: 10 # opt-in; refresh every N min while the server scheduler runs (task 0696)
+```
+
+Periodic (clock-driven) refresh is **not** configured here — it is a `bootstrap.scheduler.jobs`
+entry like every other recurring command (task 0750):
+
+```yaml
+bootstrap:
+  scheduler:
+    enabled: true
+    jobs:
+      - name: history-refresh
+        intervalMinutes: 10
+        command: bun apps/cli/spur.js --no-logo history daily
 ```
 
 The debounce default (600 000 ms = 10 min) follows task 0548's measured figures

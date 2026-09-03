@@ -26,6 +26,14 @@ bootstrap:
     url: .spur/spur.db
   scheduler:
     enabled: true
+    # Periodic executions live here and nowhere else (task 0750). A tick enqueues
+    # `scheduler.custom`, which the server's job worker runs through /bin/sh -c in
+    # the project root. Use the repo-local CLI, never a global `spur` that may be
+    # a stale bundle (AGENTS.md history-validation rule).
+    jobs:
+      - name: history-refresh
+        intervalMinutes: 10
+        command: bun apps/cli/spur.js --no-logo history daily
 
 # # ── Spur app section (validated by spurConfigSchema in
 # @gobing-ai/spur-config) ──
@@ -212,14 +220,6 @@ rules:
 
 redaction:
   enabled: false
-
-# ── History refresh (task 0696) ──
-# While `spur serve` runs, the server scheduler enqueues the coalesced
-# `history.refresh` job every N minutes: import-all (checkpoint-resumed,
-# per-source isolation) → analyze → artifact. Opt-in; unset = off.
-history:
-  refresh:
-    schedule_minutes: 10
 
 # ── Planning (design §2.1 / §9) ──
 tasks:

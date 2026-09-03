@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { handleSchedulerCustomJob, registerSystemEventTap } from '@gobing-ai/spur-app';
-import { createMigratedDb, SystemEventDao } from '@gobing-ai/spur-domain';
+import { SystemEventDao } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import type { ApplicationRuntime, ApplicationStopReason, SchedulerJobConfig } from '@gobing-ai/ts-infra/application';
 import { createNodeFileSystem, type FileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -704,40 +704,11 @@ describe('startServer', () => {
         expect(smokePayload).toMatchObject({ name: 'smoke' });
     });
 
-    test('registerSchedulerEntries enqueues history.refresh on schedule_minutes (opt-in, task 0696)', async () => {
-        const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
-        const scheduler = {
-            register: (cron: string, action: () => Promise<void>) => {
-                registered.push({ cron, action });
-            },
-            start: async () => {},
-            stop: async () => {},
-        };
-        // Task 0716 R3: the tick rides the shared single-flight writer, so the
-        // assertion targets a real migrated DB instead of an enqueue spy.
-        const db = await createMigratedDb({ url: ':memory:' });
-        const ctx = {
-            getDb: async () => db,
-            eventBus: () => ({ emit: async () => {} }),
-        } as unknown as ServerContext;
-        const spurConfig = { history: { refresh: { schedule_minutes: 10 } } } as never;
-
-        try {
-            registerSchedulerEntries(scheduler, ctx, spurConfig);
-            expect(registered.map((r) => r.cron)).toEqual(['300000', '600000', '600000']);
-            await registered[2]?.action();
-            const row = await db.queryFirst<{ type: string; payload: string; status: string }>(
-                'SELECT type, payload, status FROM queue_jobs',
-            );
-            expect(row?.type).toBe(HISTORY_REFRESH_JOB);
-            expect(row?.status).toBe('pending');
-            expect(JSON.parse(row?.payload ?? '{}')).toMatchObject({ trigger: 'schedule', triggerId: null });
-        } finally {
-            db.close();
-        }
-    });
-
-    test('registerSchedulerEntries skips the history refresh entry when schedule_minutes is unset', () => {
+    test('registerSchedulerEntries registers no built-in history refresh entry (task 0750)', () => {
+        // The interval refresh is no longer a built-in gated by
+        // `history.refresh.schedule_minutes`; periodic execution is declared as a
+        // `bootstrap.scheduler.jobs` entry like any other. Built-ins are the prune
+        // and smoke entries only, regardless of project config.
         const registered: Array<{ cron: string }> = [];
         const scheduler = {
             register: (cron: string) => {
@@ -751,7 +722,7 @@ describe('startServer', () => {
             eventBus: () => ({ emit: async () => {} }),
         } as unknown as ServerContext;
 
-        registerSchedulerEntries(scheduler, ctx, null);
+        registerSchedulerEntries(scheduler, ctx);
         expect(registered.map((r) => r.cron)).toEqual(['300000', '600000']);
     });
 
@@ -769,7 +740,7 @@ describe('startServer', () => {
             eventBus: () => ({ emit: async () => {} }),
         } as unknown as ServerContext;
 
-        registerSchedulerEntries(scheduler, ctx, null, []);
+        registerSchedulerEntries(scheduler, ctx, []);
         expect(registered.map((r) => r.cron)).toEqual(['300000', '600000']);
     });
 
@@ -802,7 +773,7 @@ describe('startServer', () => {
             { name: 'hourly-analyze', command: 'spur history analyze', intervalMinutes: 60 },
         ];
 
-        registerSchedulerEntries(scheduler, ctx, null, jobs);
+        registerSchedulerEntries(scheduler, ctx, jobs);
 
         // Cron passes through verbatim; the interval form converts to milliseconds.
         expect(registered.map((r) => r.cron)).toEqual(['300000', '600000', '30 2 * * *', '3600000']);
@@ -1262,7 +1233,7 @@ describe('configured scheduler jobs round-trip through the real queue (task 0734
         };
 
         try {
-            registerSchedulerEntries(scheduler, ctx, null, [
+            registerSchedulerEntries(scheduler, ctx, [
                 { name: 'ok-job', command: 'exit 0', intervalMinutes: 5 },
                 { name: 'bad-job', command: 'exit 3', intervalMinutes: 5 },
             ]);
