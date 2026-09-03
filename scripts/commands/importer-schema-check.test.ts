@@ -28,7 +28,7 @@ describe('importer-schema-check (0748 R3/R5)', () => {
         await db.exec(
             'CREATE TABLE IF NOT EXISTS "__spur_cli_migrations" (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)',
         );
-        const currentVersionId = IMPORTER_SCHEMA_LEDGER_PREFIX + HISTORY_IMPORT_SCHEMA_VERSION;
+        const currentVersionId = `${IMPORTER_SCHEMA_LEDGER_PREFIX}${HISTORY_IMPORT_SCHEMA_VERSION}`;
         await db.run('INSERT INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)', [
             currentVersionId,
             Date.now(),
@@ -50,7 +50,7 @@ describe('importer-schema-check (0748 R3/R5)', () => {
         await db.exec(
             'CREATE TABLE IF NOT EXISTS "__spur_cli_migrations" (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)',
         );
-        const olderVersionId = IMPORTER_SCHEMA_LEDGER_PREFIX + '0.4.51';
+        const olderVersionId = `${IMPORTER_SCHEMA_LEDGER_PREFIX}0.4.51`;
         await db.run('INSERT INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)', [
             olderVersionId,
             Date.now(),

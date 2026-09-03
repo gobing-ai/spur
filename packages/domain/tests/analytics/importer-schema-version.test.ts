@@ -36,7 +36,7 @@ describe('importer-schema-version (task 0748)', () => {
             await db.exec(
                 'CREATE TABLE IF NOT EXISTS "__spur_cli_migrations" (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)',
             );
-            const versionRowId = IMPORTER_SCHEMA_LEDGER_PREFIX + '0.4.55';
+            const versionRowId = `${IMPORTER_SCHEMA_LEDGER_PREFIX}0.4.55`;
             await db.run('INSERT INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)', [
                 versionRowId,
                 Date.now(),
@@ -86,7 +86,7 @@ describe('importer-schema-version (task 0748)', () => {
             await db.exec(
                 'CREATE TABLE IF NOT EXISTS "__spur_cli_migrations" (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)',
             );
-            const olderVersionId = IMPORTER_SCHEMA_LEDGER_PREFIX + '0.4.51';
+            const olderVersionId = `${IMPORTER_SCHEMA_LEDGER_PREFIX}0.4.51`;
             await db.run('INSERT INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)', [
                 olderVersionId,
                 Date.now(),
