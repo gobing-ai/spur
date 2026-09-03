@@ -358,6 +358,16 @@ export {
     summarizeActionResult,
 } from './services/run-store-service';
 export type {
+    SchedulerCustomJobDeps,
+    SchedulerCustomJobPayload,
+} from './services/scheduler-custom-job-service';
+export {
+    handleSchedulerCustomJob,
+    SCHEDULER_CUSTOM_JOB,
+    SCHEDULER_CUSTOM_TIMEOUT_MS,
+    validateSchedulerCustomJobPayload,
+} from './services/scheduler-custom-job-service';
+export type {
     ProcessEntry,
     ProcessEventBus,
     ProcessEventPayload,

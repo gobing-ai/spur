@@ -7,12 +7,14 @@ import {
     type FeatureActionJob,
     HISTORY_REFRESH_JOB,
     handleHistoryRefreshJob,
+    handleSchedulerCustomJob,
     JobHandlerRegistry,
     JobWorkerService,
     ProjectRegistry,
     resolveAutostartSet,
     resolvePlanningFolders,
     resolveRetentionQuotas,
+    SCHEDULER_CUSTOM_JOB,
     type TaskActionJob,
 } from '@gobing-ai/spur-app';
 import type { SpurConfig } from '@gobing-ai/spur-config';
@@ -24,7 +26,7 @@ import {
     resolveConfigFile,
 } from '@gobing-ai/spur-config/loader';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
-import type { ApplicationRuntime, ApplicationStopReason } from '@gobing-ai/ts-infra/application';
+import type { ApplicationRuntime, ApplicationStopReason, SchedulerJobConfig } from '@gobing-ai/ts-infra/application';
 import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -79,8 +81,9 @@ export const TASK_ACTION_JOB = 'task-action';
 export const FEATURE_ACTION_JOB = 'feature-action';
 
 // Re-exported so server tests can exercise the refresh handler (task 0549 /
-// feature E3); the job kind itself is owned by the app service.
-export { HISTORY_REFRESH_JOB } from '@gobing-ai/spur-app';
+// feature E3) and the configured scheduler jobs (task 0734); the job kinds
+// themselves are owned by the app services.
+export { HISTORY_REFRESH_JOB, SCHEDULER_CUSTOM_JOB } from '@gobing-ai/spur-app';
 
 const SYSTEM_EVENTS_PRUNE_CRON = '300000';
 const SMOKE_CRON = '600000';
@@ -108,23 +111,17 @@ export interface StartServerDeps {
     createApp: typeof createApp;
     createNodeFileSystem: (cwd: string) => FileSystem;
     createServerContext: typeof createServerContext;
-    createScheduler: () => Promise<ServerScheduler>;
     openUrl: typeof openUrl;
     resolveConfigFile: typeof resolveConfigFile;
 }
 
-/** Default collaborators wiring the real implementations. Exported for coverage of the lazy scheduler import. */
+/** Default collaborators wiring the real implementations. */
 export const defaultDeps: StartServerDeps = {
     serverBootstrapConfig,
     runNodeApplication,
     createApp,
     createNodeFileSystem,
     createServerContext,
-    // Platform-specific — scheduler-node doesn't exist on CF Workers, so it's a lazy import.
-    createScheduler: async () => {
-        const { NodeSchedulerAdapter } = await import('@gobing-ai/ts-infra/scheduler-node');
-        return new NodeSchedulerAdapter();
-    },
     openUrl,
     resolveConfigFile,
 };
@@ -136,11 +133,18 @@ export const defaultDeps: StartServerDeps = {
  * `spurConfig` gates the opt-in interval history refresh (task 0696): when
  * `history.refresh.schedule_minutes` is set, one entry enqueues the same
  * coalesced `history.refresh` job the completion trigger uses — the job body
- * (incremental checkpoint-resumed import-all → analyze) is unchanged. */
+ * (incremental checkpoint-resumed import-all → analyze) is unchanged.
+ *
+ * `jobs` (task 0734) are the validated `bootstrap.scheduler.jobs` definitions
+ * resolved by the upstream runtime. Each configured job registers one entry
+ * using its cron string or `intervalMinutes * 60_000`, enqueuing
+ * `scheduler.custom` with payload `{ name, command }`. An absent/empty jobs
+ * array leaves the built-in registrations unchanged. */
 export function registerSchedulerEntries(
     scheduler: ServerScheduler,
     ctx: ServerContext,
     spurConfig?: SpurConfig | null,
+    jobs: readonly SchedulerJobConfig[] = [],
 ): void {
     const register = (cron: string, name: string, action: () => Promise<void>): void => {
         scheduler.register(cron, async () => {
@@ -179,6 +183,17 @@ export function registerSchedulerEntries(
                 config: spurConfig ?? null,
                 trigger: 'schedule',
             });
+        });
+    }
+    // Configured declarative jobs (task 0734): one queue entry per job, using the
+    // validated cron string or the interval form. A tick is a normal non-coalesced
+    // enqueue of `scheduler.custom`; the queue's existing retry/attempt policy owns
+    // command execution, and `queue.job.*` events report the attempt outcome.
+    for (const job of jobs) {
+        const schedule = job.cron ?? String(job.intervalMinutes * 60_000);
+        register(schedule, `${SCHEDULER_CUSTOM_JOB}:${job.name}`, async () => {
+            const queue = await ctx.jobQueue();
+            await queue.enqueue(SCHEDULER_CUSTOM_JOB, { name: job.name, command: job.command });
         });
     }
 }
@@ -395,11 +410,12 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 await fs.ensureDir(dirname(options.dbUrl));
             }
 
-            // Platform-specific — scheduler-node doesn't exist on CF Workers.
-            let scheduler: ServerScheduler | undefined;
-            if (bootConfig.scheduler.enabled) {
-                scheduler = await deps.createScheduler();
-            }
+            // The upstream runtime owns the sole scheduler lifecycle (task 0734 R4):
+            // it constructs the adapter before this callback and its scheduler
+            // plugin starts it after, so we only register entries against it. When
+            // the scheduler is disabled, `appRt.scheduler` is undefined and there is
+            // nothing to register.
+            const scheduler = appRt.config.scheduler.enabled ? appRt.scheduler : undefined;
 
             const webDistPath = await resolveWebDistPath(options.webDistPath);
             if (!webDistPath) {
@@ -491,7 +507,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 // by CLI trigger points; consumed here. Since 0717 the job body runs
                 // `history daily` in an isolated child process, so the server only
                 // awaits its exit — the child owns every `history.*` event.
-                const refreshExecutor = new NodeProcessExecutor();
+                const childExecutor = new NodeProcessExecutor();
                 registry.register(HISTORY_REFRESH_JOB, (job) =>
                     handleHistoryRefreshJob(
                         {
@@ -499,10 +515,16 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                             ...(options.dbUrl !== undefined ? { databaseUrl: options.dbUrl } : {}),
                             // Omitted invocation fails loudly in splitLaunchCommand at run time.
                             invocation: options.spurInvocation ?? '',
-                            executor: refreshExecutor,
+                            executor: childExecutor,
                         },
                         job,
                     ),
+                );
+                // Configured `bootstrap.scheduler.jobs` ticks (task 0734): the
+                // scheduler only enqueues; the command runs here, in a child, under
+                // the queue's existing attempt/retry policy.
+                registry.register(SCHEDULER_CUSTOM_JOB, (job) =>
+                    handleSchedulerCustomJob({ cwd: ctx.cwd, executor: childExecutor }, job),
                 );
                 jobWorker = new JobWorkerService({
                     consumer: await ctx.queueConsumer(),
@@ -513,9 +535,12 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             }
 
             if (scheduler) {
-                registerSchedulerEntries(scheduler, ctx, spurConfig);
-                await scheduler.start();
-                appRt.logger.info('Scheduler started');
+                // Register built-in + configured entries before the upstream
+                // scheduler plugin auto-starts (registration order: user callback
+                // runs before scheduler start — verified in ts-infra application
+                // tests). Configured jobs come only from the resolved runtime config.
+                registerSchedulerEntries(scheduler, ctx, spurConfig, appRt.config.scheduler.jobs);
+                appRt.logger.info('Scheduler entries registered', { jobs: appRt.config.scheduler.jobs.length });
             }
 
             const server = Bun.serve({
@@ -554,7 +579,6 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 } catch (err) {
                     appRt.logger.warn('Failed to deregister project port in ProjectRegistry', { error: String(err) });
                 }
-                if (scheduler) await scheduler.stop();
                 if (jobWorker) await jobWorker.stop();
                 try {
                     await ctx.supervisor().stopAll();

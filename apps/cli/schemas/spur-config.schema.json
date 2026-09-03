@@ -92,6 +92,41 @@
                         "enabled": {
                             "type": "boolean",
                             "description": "Enable the scheduled-task runner. OFF by default for CLI (run-once)."
+                        },
+                        "jobs": {
+                            "type": "array",
+                            "description": "Declarative scheduled commands (task 0734). Each entry registers one scheduler tick that enqueues a `scheduler.custom` queue job running `command` through `/bin/sh -c`. Normalized and validated by @gobing-ai/ts-infra runNodeApplication before the server starts.",
+                            "items": {
+                                "type": "object",
+                                "required": ["name", "command"],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "Job name, unique across the list after trimming. Reported as the `scheduler.custom:<name>` display name on scheduler.job.executed."
+                                    },
+                                    "command": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "Shell command run by `/bin/sh -c` with the project root as cwd. Trusted operator input \u2014 never logged."
+                                    },
+                                    "intervalMinutes": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 35791,
+                                        "description": "Fixed interval in minutes. Mutually exclusive with `cron`. The upper bound is the Node timer ceiling (2147483647 ms)."
+                                    },
+                                    "cron": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "Five-field cron expression (minute hour day-of-month month day-of-week) evaluated in local time. Mutually exclusive with `intervalMinutes`."
+                                    }
+                                },
+                                "oneOf": [
+                                    { "required": ["intervalMinutes"], "not": { "required": ["cron"] } },
+                                    { "required": ["cron"], "not": { "required": ["intervalMinutes"] } }
+                                ]
+                            }
                         }
                     }
                 }
