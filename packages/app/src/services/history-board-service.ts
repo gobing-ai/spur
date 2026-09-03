@@ -30,6 +30,7 @@ import {
     type BucketedTokenRow,
     bucketedTokenSeries,
     bySession,
+    bySessionPage,
     bySkill,
     byTool,
     consolidatedTimeline,
@@ -1518,9 +1519,17 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             };
         }
 
-        const rows = await bySession(db, sel, 1_000_000);
+        // Task 0744: the stale-fallback session listing must sort and paginate in SQL.
+        // Ordering, LIMIT/OFFSET, and the unpaged total are all the database's work; the
+        // returned rows ARE the page, so nothing is sorted or sliced in JavaScript here.
+        const pageResult = await bySessionPage(db, sel, {
+            sortBy: input.sortBy ?? 'start',
+            sortDir: input.sortDir ?? 'desc',
+            limit: pageSize,
+            offset: (page - 1) * pageSize,
+        });
 
-        const items: HistorySessionItem[] = rows.map((r) => {
+        const items: HistorySessionItem[] = pageResult.items.map((r) => {
             const start = r.startedAt ?? new Date(0).toISOString();
             const span = r.endedAt ? Math.max(0, Date.parse(r.endedAt) - Date.parse(start)) : 0;
             return {
@@ -1540,36 +1549,9 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             };
         });
 
-        // Sorting
-        const sortBy = input.sortBy ?? 'start';
-        const sortDir = input.sortDir ?? 'desc';
-        items.sort((a, b) => {
-            let diff = 0;
-            if (sortBy === 'start') {
-                diff = new Date(a.start).getTime() - new Date(b.start).getTime();
-            } else if (sortBy === 'duration') {
-                diff = a.durationMs - b.durationMs;
-            } else if (sortBy === 'messages') {
-                diff = a.messages - b.messages;
-            } else if (sortBy === 'toolCalls') {
-                diff = a.toolCalls - b.toolCalls;
-            } else if (sortBy === 'billedTokens') {
-                diff = a.billedTokens - b.billedTokens;
-            } else if (sortBy === 'cacheRead') {
-                diff = a.cacheReadTokens - b.cacheReadTokens;
-            } else if (sortBy === 'freshInput') {
-                diff = a.freshInputTokens - b.freshInputTokens;
-            }
-            return sortDir === 'asc' ? diff : -diff;
-        });
-
-        const total = items.length;
-        const startIdx = (page - 1) * pageSize;
-        const paginated = items.slice(startIdx, startIdx + pageSize);
-
         return {
-            items: paginated,
-            total,
+            items,
+            total: pageResult.total,
             page,
             pageSize,
         };

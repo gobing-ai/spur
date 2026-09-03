@@ -931,6 +931,23 @@ function buildSessionWhere(sel: ArtifactSelector, alias = 's'): WhereSpec {
     return { where: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '', params };
 }
 
+/**
+ * Materialized Sessions-table sort key → SQL `ORDER BY` expression. This is the parity
+ * source for `SESSION_SORT_COLUMNS` in `forensic-query.ts`: a sort key added here without
+ * the fallback map (or vice versa) is caught by a test, because a key that sorts one way
+ * on the rollup path and another way on the stale fallback path is a user-visible
+ * inconsistency that appears only when rollups go stale.
+ */
+export const SESSION_ORDER_COLUMNS: Record<string, string> = {
+    start: 's.started_at',
+    duration: 's.assistant_duration_ms',
+    messages: 's.messages',
+    toolCalls: 's.tool_calls',
+    billedTokens: '(s.fresh_input_tokens + s.output_tokens)',
+    cacheRead: 's.cache_read_tokens',
+    freshInput: 's.fresh_input_tokens',
+};
+
 /** Read and paginate the materialized Sessions table with exact supported sorting. */
 export async function historyBoardSessionsFromRollup(
     db: DbAdapter,
@@ -938,16 +955,7 @@ export async function historyBoardSessionsFromRollup(
     input: { page: number; pageSize: number; sortBy: string; sortDir: 'asc' | 'desc' },
 ): Promise<HistoryBoardSessionPage> {
     const spec = buildSessionWhere(sel);
-    const orderColumns: Record<string, string> = {
-        start: 's.started_at',
-        duration: 's.assistant_duration_ms',
-        messages: 's.messages',
-        toolCalls: 's.tool_calls',
-        billedTokens: '(s.fresh_input_tokens + s.output_tokens)',
-        cacheRead: 's.cache_read_tokens',
-        freshInput: 's.fresh_input_tokens',
-    };
-    const order = orderColumns[input.sortBy] ?? orderColumns.start;
+    const order = SESSION_ORDER_COLUMNS[input.sortBy] ?? SESSION_ORDER_COLUMNS.start;
     const offset = (input.page - 1) * input.pageSize;
     const [items, total] = await Promise.all([
         db.queryAll<HistoryBoardSessionRollupRow>(

@@ -45,6 +45,7 @@ export {
     bucketedTokenSeries,
     buildMessageWhere,
     bySession,
+    bySessionPage,
     bySkill,
     byTool,
     type CacheWasteAggregateRow,
@@ -67,6 +68,9 @@ export {
     type ModelComparisonRow,
     messageRollup,
     modelComparison,
+    SESSION_SORT_COLUMNS,
+    type SessionPage,
+    type SessionPageInput,
     type SessionRow,
     type SkillStatRow,
     type SourceDelta,
@@ -146,6 +150,7 @@ export {
     ROLLUP_SOURCE_TABLES,
     refreshHistoryBoardRollupsIncremental,
     replaceHistoryBoardRollups,
+    SESSION_ORDER_COLUMNS,
     skillCallRollup,
 } from './history-board-rollup';
 export {

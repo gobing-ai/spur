@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { historySessionItemSchema } from '@gobing-ai/spur-contracts';
 import { applyCliMigrations, CLI_SCHEMA_SQL } from '@gobing-ai/spur-domain';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import { refreshHistoryRollups } from '../../src/services/history-analysis-service';
@@ -941,5 +942,49 @@ describe('LiveHistoryBoardService mart read routing (0743)', () => {
             (s) => /history_tool_call|history_message/.test(s) && /\bLIMIT\s+\d+/i.test(s),
         );
         expect(cappedRaw.length).toBeGreaterThan(0);
+    });
+
+    test('fallback and materialized read paths return the same page and total for a fixed sort (0744)', async () => {
+        const db = await setupTestDb();
+        await seedCorpus(db, 12, 4);
+        const svc = new LiveHistoryBoardService({ db });
+
+        // No refresh: the request serves from the stale fallback (bySessionPage).
+        const fallback = await svc.getSessions({ page: 1, pageSize: 8, sortBy: 'start', sortDir: 'desc' });
+        await refreshHistoryRollups(db);
+        // Rollups fresh: the request serves from the materialized path.
+        const materialized = await svc.getSessions({ page: 1, pageSize: 8, sortBy: 'start', sortDir: 'desc' });
+
+        expect(materialized.total).toBe(fallback.total);
+        expect(materialized.page).toBe(fallback.page);
+        expect(materialized.pageSize).toBe(fallback.pageSize);
+        // Same ordering and membership for a fixed filter/sort on both read paths.
+        expect(materialized.items.map((i) => i.id)).toEqual(fallback.items.map((i) => i.id));
+    });
+
+    test('getSessions items match the contract shape on both read paths (0744 R4)', async () => {
+        const shape = historySessionItemSchema.shape as Record<string, { isOptional?: () => boolean }>;
+        const requiredKeys = Object.keys(shape)
+            .filter((k) => !shape[k]?.isOptional?.())
+            .sort();
+
+        const db = await setupTestDb();
+        await seedCorpus(db, 12, 4);
+        const svc = new LiveHistoryBoardService({ db });
+
+        // Stale fallback path (no rollups refreshed).
+        const fallback = await svc.getSessions({ page: 1, pageSize: 8, sortBy: 'billedTokens', sortDir: 'desc' });
+        expect(fallback.items.length).toBeGreaterThan(0);
+        for (const item of fallback.items) {
+            expect(Object.keys(item).sort()).toEqual(requiredKeys);
+        }
+
+        // Materialized path (rollups refreshed).
+        await refreshHistoryRollups(db);
+        const materialized = await svc.getSessions({ page: 1, pageSize: 8, sortBy: 'billedTokens', sortDir: 'desc' });
+        expect(materialized.items.length).toBeGreaterThan(0);
+        for (const item of materialized.items) {
+            expect(Object.keys(item).sort()).toEqual(requiredKeys);
+        }
     });
 });
