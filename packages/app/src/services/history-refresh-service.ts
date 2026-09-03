@@ -183,9 +183,11 @@ export async function enqueueHistoryRefresh(
     if (options.trigger === 'manual') enabled = true;
     if (!enabled) return { status: 'disabled' };
     const now = options.now?.() ?? Date.now();
-    // Manual and scheduled refreshes are user-facing "run it now" requests: a fresh
-    // job becomes due immediately, and joining one only SHORTENS the pending due
-    // time — a due burst is never delayed behind the debounce window (0716 R2).
+    // Manual refreshes are user-facing "run it now" requests: a fresh job becomes
+    // due immediately, and joining one only SHORTENS the pending due time — a due
+    // burst is never delayed behind the debounce window (0716 R2). Nothing enqueues
+    // with trigger 'schedule' since task 0750, but the immediate branch stays so a
+    // replayed row from the retired interval path keeps its due-now semantics.
     const immediate = options.trigger === 'manual' || options.trigger === 'schedule';
     const incoming: HistoryRefreshPayload = {
         trigger: options.trigger,
