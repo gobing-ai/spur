@@ -75,6 +75,16 @@ export const EFFECTIVE_TOOL_NAME_SQL = `CASE
 END`;
 
 /**
+ * Resolves effective tool name, preferring the persisted column if not 'unknown',
+ * falling back to the CASE expression for unmigrated or unpopulated test rows.
+ */
+export const RESOLVED_TOOL_NAME_SQL = `CASE
+    WHEN tc.effective_tool_name IS NOT NULL AND tc.effective_tool_name != '' AND tc.effective_tool_name != 'unknown'
+    THEN tc.effective_tool_name
+    ELSE ${EFFECTIVE_TOOL_NAME_SQL}
+END`;
+
+/**
  * Activity window (days) backing the History board Sources tab per-day heatmap grid.
  * Single knob for the window — the board's `historyBoardSourcesFromRollup` /
  * `dailyTokenMatrix` defaults and the app-side heatmap span all read it. Raise to
@@ -84,7 +94,7 @@ END`;
 export const HISTORY_BOARD_ACTIVITY_DAYS = 180;
 
 const SKILL_NAME_SQL = `CASE
-    WHEN LOWER(${EFFECTIVE_TOOL_NAME_SQL}) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)
+    WHEN LOWER(${RESOLVED_TOOL_NAME_SQL}) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)
     THEN COALESCE(
         CAST(json_extract(tc.args_raw, '$.skill') AS TEXT),
         CAST(json_extract(tc.args_raw, '$.skill_name') AS TEXT),
@@ -382,7 +392,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                                ''
                            ) AS bucket_start,
                            m.session_id, m.source, m.effective_model AS model,
-                           ${EFFECTIVE_TOOL_NAME_SQL} AS tool_name, ${SKILL_NAME_SQL} AS skill_name,
+                           ${RESOLVED_TOOL_NAME_SQL} AS tool_name, ${SKILL_NAME_SQL} AS skill_name,
                            COALESCE(m.resolved_input_tokens, 0) AS input_tokens,
                            COALESCE(m.resolved_cache_read_tokens, 0) AS cache_read_tokens,
                            COALESCE(m.resolved_output_tokens, 0) AS output_tokens,
@@ -426,9 +436,9 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                     SELECT source, session_id, tool_name,
                            ROW_NUMBER() OVER (PARTITION BY source, session_id ORDER BY (tool_name != 'unknown') DESC, calls DESC, tool_name ASC) AS rank
                     FROM (
-                        SELECT m.source, m.session_id, ${EFFECTIVE_TOOL_NAME_SQL} AS tool_name, COUNT(*) AS calls
+                        SELECT m.source, m.session_id, ${RESOLVED_TOOL_NAME_SQL} AS tool_name, COUNT(*) AS calls
                         FROM selected m JOIN history_tool_call tc ON tc.message_hash = m.record_hash
-                        GROUP BY m.source, m.session_id, ${EFFECTIVE_TOOL_NAME_SQL}
+                        GROUP BY m.source, m.session_id, ${RESOLVED_TOOL_NAME_SQL}
                     )
                 ), last_messages AS (
                     SELECT source, session_id, record_hash, role,

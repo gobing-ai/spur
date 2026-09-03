@@ -9,6 +9,8 @@ export const SPUR_OWNED_HISTORY_TABLES: readonly string[] = [
     // session attribution
     'history_run_session',
     'history_task_session',
+    // tool alias mapping
+    'history_tool_alias_map',
     // derived analytics
     'history_daily_stats',
     'history_board_loop_findings',

@@ -820,6 +820,58 @@ ALTER TABLE history_board_tool_stats ADD COLUMN output_tokens INTEGER NOT NULL D
 ALTER TABLE history_board_tool_stats ADD COLUMN duration_ms INTEGER NOT NULL DEFAULT 0;
 `;
 
+/**
+ * Migration 0034: Persist effective_tool_name and tool_name_alias on history_tool_call,
+ * create history_tool_alias_map, supporting indexes, and backfill existing rows.
+ */
+export const HISTORY_TOOL_IDENTITY_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS history_tool_alias_map (
+    source TEXT NOT NULL,
+    effective_tool_name TEXT NOT NULL,
+    alias TEXT NOT NULL,
+    PRIMARY KEY (source, effective_tool_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_history_tool_call_effective_tool_name
+ON history_tool_call (effective_tool_name);
+
+CREATE INDEX IF NOT EXISTS idx_history_tool_call_alias
+ON history_tool_call (tool_name_alias);
+
+UPDATE history_tool_call SET
+    effective_tool_name = CASE
+        WHEN tool_name IS NOT NULL AND TRIM(tool_name) != '' AND tool_name != 'unknown'
+        THEN TRIM(tool_name)
+        WHEN json_valid(args_raw) AND COALESCE(
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.tool') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.tool_name') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.toolName') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.name') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.command') AS TEXT)), '')
+        ) IS NOT NULL
+        THEN COALESCE(
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.tool') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.tool_name') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.toolName') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.name') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.command') AS TEXT)), '')
+        )
+        WHEN call_id LIKE 'call_bash_%' THEN 'bash'
+        WHEN call_id LIKE 'call_read_%' THEN 'read'
+        WHEN call_id LIKE 'call_edit_%' THEN 'edit'
+        WHEN call_id LIKE 'call_write_%' THEN 'write'
+        WHEN call_id LIKE 'call_grep_%' THEN 'grep'
+        WHEN call_id LIKE 'call_find_%' THEN 'find'
+        WHEN call_id LIKE 'call_ls_%' THEN 'ls'
+        ELSE 'unknown'
+    END
+WHERE effective_tool_name = 'unknown';
+
+UPDATE history_tool_call SET
+    tool_name_alias = effective_tool_name
+WHERE tool_name_alias = 'unknown';
+`;
+
 export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
     // Renamed from `0001_spur_team_inbox` so the filename carries the
@@ -946,6 +998,11 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         // 0748 R2: record the applied importer schema version in the Spur migration ledger.
         id: '0033_spur_cli_importer_schema_version',
         sql: `INSERT OR REPLACE INTO "__spur_cli_migrations" (id, applied_at) VALUES ('${IMPORTER_SCHEMA_LEDGER_PREFIX}${HISTORY_IMPORT_SCHEMA_VERSION}', strftime('%s', 'now') * 1000);`,
+    },
+    {
+        // 0739: Persist tool identity at import: effective_tool_name, tool_name_alias, and alias map.
+        id: '0034_spur_cli_history_tool_identity',
+        sql: HISTORY_TOOL_IDENTITY_SCHEMA_SQL,
     },
 ];
 
@@ -1127,6 +1184,11 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
         const queueJobsActiveIndexSkip =
             migration.id === '0027_spur_cli_history_refresh_active_unique' &&
             !(await tableExists(adapter, 'queue_jobs'));
+
+        const historyToolIdentitySkip =
+            migration.id === '0034_spur_cli_history_tool_identity' &&
+            !(await tableExists(adapter, 'history_tool_call'));
+
         if (
             shouldApplySql &&
             !sequenceIndexSkip &&
@@ -1140,11 +1202,17 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !historyBoardToolStatsColumnsSkip &&
             !callIdSkip &&
             !tsNullableSkip &&
-            !queueJobsActiveIndexSkip
+            !queueJobsActiveIndexSkip &&
+            !historyToolIdentitySkip
         ) {
             for (const statement of splitSqlStatements(migration.sql)) {
                 await adapter.exec(statement);
             }
+        }
+        if (historyToolIdentitySkip && !(await tableExists(adapter, 'history_tool_alias_map'))) {
+            await adapter.exec(
+                'CREATE TABLE IF NOT EXISTS history_tool_alias_map (source TEXT NOT NULL, effective_tool_name TEXT NOT NULL, alias TEXT NOT NULL, PRIMARY KEY (source, effective_tool_name));',
+            );
         }
         await adapter.run(
             'INSERT INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)',

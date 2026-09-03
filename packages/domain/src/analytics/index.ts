@@ -203,6 +203,11 @@ export {
     loadAttributionEvidence,
     type TaskAttributionSummary,
 } from './task-attribution';
+export {
+    loadToolAliasMap,
+    resolveToolAlias,
+    resolveToolAliasFromDb,
+} from './tool-alias';
 export type { AnalyticsSummary, ClaudeUsagePayload, CostRecord, ModelPricing, TokenTotals } from './types';
 export {
     type CostCoverageStat,

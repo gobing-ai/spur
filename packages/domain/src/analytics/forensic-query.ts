@@ -166,7 +166,7 @@ export function buildMessageWhereClauses(
             const placeholders = validTools.map(() => '?').join(', ');
             clauses.push(
                 'EXISTS (SELECT 1 FROM ' +
-                    `history_tool_call tc_filt WHERE tc_filt.message_hash = ${alias}.record_hash AND ${EFFECTIVE_TOOL_NAME_SQL.replace(/tc\./g, 'tc_filt.')} IN (${placeholders}))`,
+                    `history_tool_call tc_filt WHERE tc_filt.message_hash = ${alias}.record_hash AND COALESCE(NULLIF(NULLIF(tc_filt.effective_tool_name, 'unknown'), ''), tc_filt.tool_name) IN (${placeholders}))`,
             );
             params.push(...validTools);
         }
@@ -332,13 +332,13 @@ export async function byTool(
              ${wm.where}
          ),
          filtered_tools AS (
-             SELECT tc.tool_name, tc.args_raw, tc.call_id, tc.status, tc.duration_ms, tc.result_bytes,
+             SELECT tc.tool_name, tc.effective_tool_name, tc.args_raw, tc.call_id, tc.status, tc.duration_ms, tc.result_bytes,
                     fm.input_tokens, fm.output_tokens,
                     COUNT(*) OVER (PARTITION BY tc.message_hash) AS links
              FROM filtered_messages fm
              CROSS JOIN history_tool_call tc ON tc.message_hash = fm.record_hash
          )
-         SELECT ${EFFECTIVE_TOOL_NAME_SQL} AS toolName,
+         SELECT ${RESOLVED_TOOL_NAME_SQL} AS toolName,
                 COUNT(*) AS calls,
                 SUM(tc.status = 'error') AS errors,
                 SUM(tc.duration_ms) AS durationMsTotal,
@@ -348,7 +348,7 @@ export async function byTool(
                 SUM(tc.result_bytes) AS resultBytes,
                 ROUND(SUM(CAST(COALESCE(tc.input_tokens, 0) + COALESCE(tc.output_tokens, 0) AS REAL) / tc.links)) AS billedTokens
          FROM filtered_tools tc
-         GROUP BY ${EFFECTIVE_TOOL_NAME_SQL}
+         GROUP BY ${RESOLVED_TOOL_NAME_SQL}
          ORDER BY durationMsTotal DESC
          LIMIT ?`,
         ...params,
@@ -480,11 +480,11 @@ export async function bySession(
              ${wm.where}${wm.where === '' ? 'WHERE' : ' AND'} m.session_id IN (${sessionIds.map(() => '?').join(',')})
          )
          SELECT fm.session_id AS sessionId, fm.source AS source,
-                ${EFFECTIVE_TOOL_NAME_SQL} AS toolName,
+                ${RESOLVED_TOOL_NAME_SQL} AS toolName,
                 COUNT(*) AS cnt
          FROM filtered_messages fm
          CROSS JOIN history_tool_call tc ON tc.message_hash = fm.record_hash
-         GROUP BY fm.session_id, fm.source, ${EFFECTIVE_TOOL_NAME_SQL}`,
+         GROUP BY fm.session_id, fm.source, ${RESOLVED_TOOL_NAME_SQL}`,
                   ...params,
                   ...wm.params,
                   ...sessionIds,
@@ -1089,8 +1089,14 @@ const BUCKET_SECONDS: Record<HistoryBucket, number> = {
     '1d': 86400,
 };
 
+const RESOLVED_TOOL_NAME_SQL = `CASE
+    WHEN tc.effective_tool_name IS NOT NULL AND tc.effective_tool_name != '' AND tc.effective_tool_name != 'unknown'
+    THEN tc.effective_tool_name
+    ELSE ${EFFECTIVE_TOOL_NAME_SQL}
+END`;
+
 const HISTORY_SKILL_NAME_SQL = `CASE
-    WHEN LOWER(${EFFECTIVE_TOOL_NAME_SQL}) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)
+    WHEN LOWER(${RESOLVED_TOOL_NAME_SQL}) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)
     THEN COALESCE(
         CAST(json_extract(tc.args_raw, '$.skill') AS TEXT),
         CAST(json_extract(tc.args_raw, '$.skill_name') AS TEXT),
@@ -1126,7 +1132,7 @@ export async function bucketedTokenSeries(
         // Allocation is canonical: a message's tokens divide across ALL linked tool calls,
         // and skill rows are selected only after that division — matching how
         // history_board_tool_5m was materialized so fresh and stale results stay equal.
-        const keyExpr = dim === 'tool' ? EFFECTIVE_TOOL_NAME_SQL : HISTORY_SKILL_NAME_SQL;
+        const keyExpr = dim === 'tool' ? RESOLVED_TOOL_NAME_SQL : HISTORY_SKILL_NAME_SQL;
         const outerFilter = dim === 'skill' ? "WHERE key <> '' AND key <> 'unknown'" : '';
         return db.queryAll<BucketedTokenRow>(
             `WITH filtered AS (
@@ -1817,6 +1823,7 @@ export interface ToolSequenceRow {
     toolSeq: number;
     ts: string | null;
     toolName: string;
+    effectiveToolName?: string;
     status: string;
     durationMs: number | null;
     resultBytes: number | null;
@@ -1877,7 +1884,9 @@ export async function toolSequenceQuery(
 
     if (filters.toolNames && filters.toolNames.length > 0) {
         const placeholders = filters.toolNames.map(() => '?').join(', ');
-        clauses.push(`tc.tool_name IN (${placeholders})`);
+        clauses.push(
+            `COALESCE(NULLIF(NULLIF(tc.effective_tool_name, 'unknown'), ''), tc.tool_name) IN (${placeholders})`,
+        );
         params.push(...filters.toolNames);
     }
 
@@ -1889,9 +1898,9 @@ export async function toolSequenceQuery(
     if (filters.search && filters.search.trim().length > 0) {
         const searchPattern = `%${escapeLike(filters.search.trim())}%`;
         clauses.push(
-            "(tc.args_raw LIKE ? ESCAPE '!' OR tc.error_text LIKE ? ESCAPE '!' OR tc.tool_name LIKE ? ESCAPE '!')",
+            "(tc.args_raw LIKE ? ESCAPE '!' OR tc.error_text LIKE ? ESCAPE '!' OR tc.effective_tool_name LIKE ? ESCAPE '!' OR tc.tool_name LIKE ? ESCAPE '!')",
         );
-        params.push(searchPattern, searchPattern, searchPattern);
+        params.push(searchPattern, searchPattern, searchPattern, searchPattern);
     }
 
     const whereCombined = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
@@ -1903,6 +1912,7 @@ export async function toolSequenceQuery(
         `SELECT tc.seq AS toolSeq,
                 COALESCE(tc.started_at, m.ts) AS ts,
                 tc.tool_name AS toolName,
+                tc.effective_tool_name AS effectiveToolName,
                 tc.status AS status,
                 tc.duration_ms AS durationMs,
                 tc.result_bytes AS resultBytes,
