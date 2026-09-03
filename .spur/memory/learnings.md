@@ -1059,6 +1059,7 @@ This batch adds the skill-load data plane end to end: the `history_skill_call` d
 ### Getting from the run
 
 - **The `skill` dimension and `SkillCall` extraction are strictly additive** — claude native `Skill` tool_use is preserved as a `history_tool_call` row AND emitted as `history_skill_call` (287 rows in the real corpus), so no regression in message/tool-call counts. The ledger invariant holds: `history_message + history_tool_call + history_skill_call == history_import_ledger`.
+
 ## 2026-09-02 — Feature E9 skill-call loading band (0735–0737, runall inline driver)
 
 This batch adds the skill-load data plane end to end: the `history_skill_call` derived table, the importer extraction that populates it, and the Summary-tab skill-load breakdown backed by a materialized rollup. The cross-cutting thread is **cross-repo (ts-libs) upstream work + a published-version release dependency + one migration-index test sweep**.
@@ -1090,4 +1091,3 @@ This batch adds the skill-load data plane end to end: the `history_skill_call` d
 ### Getting from the run
 
 - **The `skill` dimension and `SkillCall` extraction are strictly additive** — claude native `Skill` tool_use is preserved as a `history_tool_call` row AND emitted as `history_skill_call` (287 rows in the real corpus), so no regression in message/tool-call counts. The ledger invariant holds: `history_message + history_tool_call + history_skill_call == history_import_ledger`.
-
