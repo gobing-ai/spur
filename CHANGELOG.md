@@ -1,5 +1,64 @@
 # Changelog
 
+## [0.3.72] - 2026-09-02
+
+### Added
+
+- feat(history): E9 skill-call loading band — materialized rollup, Summary breakdown, ts-libs 0.4.54 consumption (cfd1d05c7)
+- feat(server): configurable scheduler jobs on the upstream runtime (task 0734) (ad180077f)
+- feat(d8): complete workflow upgrade-strategy research batch (0729-0733) (d5e895c62)
+- feat(web): use universal scale across Token by Model and Token by Agent Source charts (a6d49b687)
+- feat(history): cache-efficiency breakdowns and token-by-model charts (462fe214a)
+- feat(history): cache-efficiency rollup by model and agent-model (7717b94e0)
+- feat(history): extend sources heatmap window to 180 days (f51d38494)
+- feat(plugins): add history findings and health summary to daily report (5f9e33fea)
+- feat(web): unified tool-call inspection across history tabs (06abca22a)
+- feat(domain): add tool token stats and arguments provenance (9eedc29a4)
+- feat(web): render history timestamps in local time (7bbefc568)
+- feat(app): fall back to call volume when skill tokens are unmeasured (d60ce9e98)
+- feat(history): enhance Summary tab intervals, attribution, and cache efficiency (dcc300502)
+
+### Fixed
+
+- fix(scripts): make real-run-cost and pipeline-budgets direct-invocation executable (7a3f34ff8)
+- fix(history): enhance UI for tab Timeline (d2714ac4f)
+- fix(history): enhance UI for tab Timeline (98c5f0f78)
+- fix(history): enhance UI for tab Timeline (02e4c5746)
+- fix(history): enhance UI for tab Sessions (a54bebc33)
+- fix(history): enhance UI for tab Insights (348c8679b)
+- fix(history): fix issue with historyBoardSourcesFromRollup (230138810)
+- fix(history): top-tools shares sum to 100% per dimension (0b38abb7c)
+- fix(domain): carry forward missing assistant token counts in analytics (2af1c0a0e)
+
+### Changed
+
+- refactor(history): single activity-window knob for heatmap days (fcb37ddba)
+- perf(web): memoize history module components and derived options (5f38aa7c6)
+- perf(domain): add covering indexes and board rollup for history queries (b56fd4003)
+- chore(project): adjust the sanbox permission (e4b724d44)
+- chore(project): adjust the sanbox permission (1f263b114)
+- chore(project): adjust the sanbox permission (07c570ce9)
+- chore(spur): enable scheduler in project config (eba5f515f)
+
+### Other
+
+- docs(memory): update memory (06800533a)
+- docs(history): markdownlint formatting on E9 corpus (0631-0633, 0735-0737, feature E9) (05a615c5d)
+- docs(history): re-render E9 task Testing sections from verifyall re-audit (0631-0633, 0735-0737) (783ac0523)
+- docs(memory): update memory (875d6d830)
+- docs(d8): close out proportional-workflow strategy + verifyall leftovers (6563e78f8)
+- docs(task): update task status after verification (448e05520)
+- docs(tasks): ready-depth refine E9 skill-call chain (0735/0736/0737) (66111732e)
+- docs(features): mark D8 strategy feature done (0201a2338)
+- docs(features): sync D8 feature status (verifying) + INDEX after batch (6e0002dc0)
+- docs(dogfood): index D8 runall batch dogfood report (0aa4b485d)
+- docs(d8): close out workflow upgrade research batch (0729-0733) (7c33b6d3b)
+- docs(task): record 0734 verify FAIL verdict and evidence (8147dc886)
+- docs(task): add new tasks (90446759e)
+- docs(task): refine 0734 scheduler-jobs to implement-ready sections (86fd36978)
+- docs(task): add new tasks (7094b196e)
+- docs: add proportional workflow upgrade strategy (D8) and task batch (d282bf652)
+
 ## [0.3.71] - 2026-08-31
 
 ### Added
