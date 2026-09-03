@@ -2038,3 +2038,164 @@ to `unknown`, never permissive.
 
 **Detail:** task 0706; `04 Design §agent-capability-attestation`.
 
+
+## ADR-103: History Rollups Refresh Incrementally by Bucket Under a Refresh Watermark
+
+**Status:** Accepted (design) · **Date:** 2026-09-03
+
+**Decision.** The History rollup refresh becomes incremental: a **refresh watermark** over
+`imported_at` — a concept distinct from the existing turn-completeness watermark, which the pass
+still composes with — selects newly imported rows; their distinct `bucket_start` values define the
+buckets to delete and re-derive. Freshness moves from one global checkpoint hash to per-table
+watermark plus materialized bucket range plus a rollup **definition version**, so an import degrades
+only the buckets it touched while a change to the derivation logic still forces a rebuild. A bucket's
+delete and re-derive commit as one unit, so a concurrent reader never observes an emptied bucket. The
+skill rollup keeps `history_skill_call` as its source — the table's DDL is owned by the importer
+package (`@gobing-ai/ts-llm-jsonl-importer`), not by Spur migrations, and its absence is dependency
+version skew rather than a schema gap; tool identity is persisted as **two** columns on
+`history_tool_call` — `effective_tool_name` (extraction, replacing the per-row JSON `CASE`) and
+`tool_name_alias` (cross-agent canonicalization, defaulting to `effective_tool_name`) — so tool
+identity is consistent and filterable across the Summary and tool-sequence paths and groupable
+across coding agents. Read-path aggregation over `history_message` / `history_tool_call` is prohibited;
+point lookups by `record_hash` remain permitted. The History UI and `packages/contracts/src/history.ts`
+are enforced unchanged by diff assertion.
+
+**Why.** The current refresh rebuilds all twelve rollup tables from the whole corpus on every
+import (43.9 s measured at 1.79 M messages) and its freshness key inverts on any new line, so the
+board falls back to full-corpus scans measured at 2.3–4.2 s per analyzer. Cost must track imported
+delta, not corpus size. Bucket-scoped recomputation is sound because dedup keeps the lowest-rowid
+row per `request_id` and imports only append, so a late duplicate is always the loser and can never
+change an already materialized bucket.
+
+Rollup source tables are additionally asserted against the *importer-applied* schema, and installed
+`@gobing-ai/ts-*` versions against the lockfile, so an upstream table or a stale `node_modules`
+fails a check rather than a production refresh.
+
+**Detail:** `docs/design/history-incremental-materialization.md`; feature E91; ADR-101;
+E9/0632–0633; E9/0735–0737.
+
+---
+
+## ADR-104: The History Schema Has One DDL Authority — Spur's Migration Ledger
+
+**Status:** Accepted (design) · **Date:** 2026-09-03
+
+**Decision.** Spur's migration ledger becomes the single DDL authority and single ordering for the
+`history_*` schema. `@gobing-ai/ts-llm-jsonl-importer` keeps its `HISTORY_IMPORT_SCHEMA_SQL` so the
+library remains usable standalone, but inside Spur that SQL is applied as an **input to a versioned
+migration step**, not as an implicit side-effect of the next import. Alongside it, the three
+importer-populated tables are named as the project's **core fact tables**: `history_message`,
+`history_tool_call`, and `history_skill_call`. `history_etl_*` is raw landing/staging; every
+`history_board_*` and `history_daily_stats` table is a derived mart, rebuildable from the facts and
+therefore disposable. New insight work adds marts; it never adds a second source of truth.
+
+**Why.** DDL authority is currently split across two repositories. The importer owns
+`history_message`, `history_tool_call`, `history_skill_call`, `history_import_checkpoint`, and
+`history_import_ledger`, plus all `history_etl_*` created dynamically at run time; Spur owns the
+twelve `history_board_*` tables, `history_daily_stats`, `history_run_session`, and
+`history_task_session`. Spur nonetheless already behaves as owner for everything except
+`CREATE TABLE`: eight migrations mutate importer-owned tables (`ALTER TABLE` in 0024, 0025, 0026;
+`CREATE INDEX` in 0009, 0020, 0022, 0029, 0030), and `request_id` is defined twice — inline in the
+upstream `CREATE` (`schema-sql.ts:52`) and as migration `0018`'s `ALTER TABLE`. The two coexist only
+because Spur carries an `addColumnIfMissing` guard, a drift-tolerance mechanism that exists
+precisely because authority is split.
+
+The failure mode is structural, not incidental: `CREATE TABLE IF NOT EXISTS` against an existing
+database silently never applies new upstream columns, because the table already exists and the
+statement no-ops. A missing table is the loud version of this (the `history_skill_call` incident,
+ADR-103/D1); a missing column is the quiet one. Neither is visible to Spur, because an upstream
+schema change writes no ledger entry and carries no version Spur can compare against. One authority
+with one ordering and one recorded version closes the class rather than the instance.
+
+**Detail:** `docs/design/history-incremental-materialization.md` §9 (D9); feature E91; ADR-103.
+
+---
+
+## ADR-105: History Schema Ownership Splits on Three Axes — Table, Column, Index
+
+**Status:** Accepted (design) · **Date:** 2026-09-03
+
+**Decision.** Ownership of the `history_*` schema is decided per element, on three axes rather than
+one:
+
+| Axis | Owner | Rationale |
+| --- | --- | --- |
+| **Table DDL** | By layer — raw landing and core facts to `@gobing-ai/ts-llm-jsonl-importer`; marts and Spur-specific tables to Spur | A table has one creator, one `CREATE`, one ledger entry |
+| **Columns on a fact table** | Whoever **produces the value** | A column nobody upstream populates is a downstream column living in the wrong house |
+| **Indexes** | Whoever **runs the query** | An index is a consumer optimization, not schema semantics; the importer cannot know a consumer's query shapes exist |
+
+Concretely: the importer owns `history_message`, `history_tool_call`, `history_skill_call`,
+`history_import_checkpoint`, `history_import_ledger`, and the `history_etl_*` raw landing tables
+(uniform six-column payload tables created lazily on first accepted row). Spur owns the twelve
+`history_board_*` tables, `history_daily_stats`, `history_run_session`, and `history_task_session`.
+
+**No third package is created.** A `ts-llm-history-etl`-style package would hold nothing:
+`history_board_*` has zero references in `ts-libs` and its tables are Spur-shaped — they encode this
+UI's bucket sizes, `RANK_DEPTH`, and `history_task_session`'s link to Spur's own task corpus — while
+`history_etl_*` is raw landing the importer itself creates and writes. Extracting either would be
+speculative reuse for a second consumer that does not exist.
+
+**Why three axes rather than one.** A single "one owner per table" rule produces the wrong answer
+twice. It would force Spur's twelve board-query indexes (migrations 0009, 0020, 0022, 0029, 0030 —
+`idx_history_message_duration_rank`, `idx_history_message_token_rank`, and similar) upstream into a
+package that has no knowledge of the board, and it would leave columns like
+`history_import_checkpoint.source_size` downstream even though the migration adding them states
+outright that they back the importer's own incremental short-circuit. Splitting the axes assigns
+each element to the party that can actually reason about it: the producer of a value knows when to
+write it, and the consumer of a query knows what it must scan.
+
+The corollary is that fact-row identity is computed at import. `duration_source`,
+`effective_tool_name`, and `tool_name_alias` are all properties of the fact row, so all three are
+written by the importer — recomputing them per query is the read-path work ADR-103 exists to remove.
+
+**Why ownership needs enforcement, not documentation.** The importer exports no schema version, so
+an installed package older than the lockfile applies an older `CREATE TABLE IF NOT EXISTS` set and
+the divergence is invisible until a query hits a missing table (ADR-103/D1). Documentation cannot
+catch this; a version constant recorded in the migration ledger and compared at check time can.
+
+**Detail:** feature E92; ADR-104 (application protocol); ADR-103 (the incident that surfaced it).
+
+---
+
+## ADR-106: History Aggregates Store One Additive Measure Vector and No Derived Ratios
+
+**Status:** Accepted (design) · **Date:** 2026-09-03
+
+**Decision.** Every history aggregate that serves a KPI surface carries the same nine-member measure
+vector: `messages`, `tool_calls`, `skill_calls`, `fresh_input_tokens`, `cache_read_tokens`,
+`cache_write_tokens`, `output_tokens`, `duration_ms`, `duration_samples`. Every member is a count or
+a sum, and therefore additive across any bucket, dimension, or window.
+
+**No rate, ratio, percentage, or mean is ever materialized.** `cache_hit_rate`, `gain_rate`, mean
+duration, and error rate are computed from the vector at read time:
+
+```
+cache_hit_rate = cache_read / (fresh + cache_read + cache_write)
+gain_rate      = output     / (fresh + cache_read + cache_write + output)
+```
+
+Two corollaries follow. **Every sum ships with its denominator** — a mean is not additive, so a sum
+without its sample count cannot be averaged across buckets correctly. **Cache write is its own
+measure**, never folded into cache read: it is the premium-billed cost of populating the cache, not a
+hit, and merging them makes a session that wrote a large cache and never reused it score as high
+cache-hit. **Attributed measures are named distinctly from measured ones** (`_alloc` suffix), because
+tool-grain token columns hold message tokens allocated across calls and summing them with
+message-grain measures double counts.
+
+The vector lands on the dimension-grain tables. Per-row ranking tables, findings tables, and rollup
+metadata do not carry it; top-N breakdown tables carry only what is well defined at their grain.
+
+**Why.** The twelve existing rollup tables each chose an ad-hoc measure subset, so what is answerable
+depends on which table happens to hold the dimension — `cache_write_tokens` appears in none of them
+despite `run-cost.ts` and `role-tokens.ts` using it, and `duration_samples` is missing from three
+tables that carry `duration_ms`, making a correct mean uncomputable there. A fixed additive vector
+turns each new question into a `GROUP BY` over an existing table instead of a new rollup table, which
+is the property that keeps the aggregate layer from growing one table per question. Storing a ratio
+would destroy it: a materialized rate invites `AVG()` across buckets, which is wrong and looks
+plausible.
+
+This is a storage-layer decision. No History response gains a field, so the transport contract is
+unchanged (ADR-103, E91/R11).
+
+**Detail:** `docs/design/history-incremental-materialization.md` §12 (D10); feature E91 R21–R25.
+
