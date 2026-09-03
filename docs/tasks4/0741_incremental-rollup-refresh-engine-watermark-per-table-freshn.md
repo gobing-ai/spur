@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: "Incremental rollup refresh engine: watermark, per-table freshness, transactional bucket rebuild, and definition versioning"
-status: testing
+status: done
 template: feature-impl
 created_at: 2026-09-03T16:43:04.106Z
-updated_at: "2026-09-03T21:52:24.283Z"
+updated_at: "2026-09-03T22:13:26.014Z"
 feature_id: E91
 priority: P0
 tags: ["history", "etl", "performance"]
 dependencies: ["0738", "0740"]
+done_forced: "true"
+done_reason: "R8 delta-vs-full wall-time ratio cannot be measured on a test fixture (requires the real 1.79M-row corpus). Operator approved force-done: R8 is PARTIAL, accepted as documented residual risk — the bucketed class is delta-proportional by construction and the 5%/15% target ratios are stated in the Design; the benchmark is a live-corpus follow-up. All other requirements R1-R7 and AC (R5,R6,R16,R26,R27) are MET with tests; spur-check 7196 pass / 0 fail."
 ---
 
 ## 0741. Incremental rollup refresh engine: watermark, per-table freshness, transactional bucket rebuild, and definition versioning
@@ -233,3 +235,4 @@ File:line change map and rationale.
 ### History
 - 2026-09-03T21:51:40.214Z todo → wip (system)
 - 2026-09-03T21:52:24.283Z wip → testing (system)
+- 2026-09-03T22:13:26.010Z testing → done (system)
