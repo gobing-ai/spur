@@ -4,7 +4,7 @@ name: "Measure workflow cost, human attention, and bypass pressure"
 status: done
 template: meta
 created_at: 2026-09-02T03:05:58.045Z
-updated_at: "2026-09-03T03:52:07.483Z"
+updated_at: "2026-09-03T04:30:35.966Z"
 feature_id: D8
 priority: P1
 tags: ["wayfinder:research", "workflow", "cost", "observability"]
@@ -85,9 +85,9 @@ Tests: `scripts/commands/real-run-cost.test.ts` — 10 focused tests covering th
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | `docs/analysis/d8-0730-workflow-cost-attention-measurement.md` §A re-read: 11/11 workflow rows, task-pipeline cell repaired to "6 dry (incl. probe a84c72a3)" (`:23`); dry cells sum 65 = stated total; postscript documents frozen-cohort replay loss honestly |
-| R2 | MET | `bun test scripts/commands/real-run-cost.test.ts` (from `scripts/`) → 10 pass / 0 fail / 28 expect, fresh this run |
+| R2 | MET | `bun test scripts/commands/real-run-cost.test.ts` (from `scripts/`) → 10 pass / 0 fail / 28 expect, re-run fresh after the bootstrap addition |
 | R3 | MET | §B binding defects + §C join table re-read; §C repaired: "67 runs with hops (847 hops total; 33 runs have ≥2 hops)" (`docs/analysis/d8-0730-workflow-cost-attention-measurement.md:62`) — prior "3 runs only" error fixed |
-| R4 | MET | `bun run scripts/spur-dev.ts real-run-cost --json` → exit 0 fresh; null USD/tokens/duration reported as null (never 0); exclusion counts present per workflow row |
+| R4 | MET | `bun run scripts/spur-dev.ts real-run-cost --json` → exit 0 fresh; null USD/tokens/duration reported as null (never 0); direct invocation `bun scripts/commands/real-run-cost.ts --json` now also emits the metrics JSON (bootstrap added this pass, `scripts/commands/real-run-cost.ts:320-322`) |
 | R5 | MET | Configured-vs-measured separation re-read (`:87` dead timeoutMs row); `packages/app/src/workflow/actions/command-gate.ts:157` re-read exact |
 | R6 | MET | §F re-read: "five full-cohort dry sweeps at 14:48, 15:11, 15:34, 15:39 and 15:49" (`:99`) — sweep undercount repaired; observation/inference/confidence/alternative structure intact (`:105`) |
 | R7 | MET | §G sufficiency rule NOT MET → no budget established; postscript (2026-09-02) flags §G gap item (2) outdated after 25 `history_run_session` rows landed and mandates re-measurement before budgets — honest posture |

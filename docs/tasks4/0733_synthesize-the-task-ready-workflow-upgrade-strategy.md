@@ -4,7 +4,7 @@ name: "Synthesize the task-ready workflow upgrade strategy"
 status: done
 template: meta
 created_at: 2026-09-02T03:05:58.141Z
-updated_at: "2026-09-03T03:54:11.264Z"
+updated_at: "2026-09-03T04:30:36.418Z"
 feature_id: D8
 priority: P1
 tags: ["wayfinder:research", "workflow", "strategy", "handoff"]
@@ -95,16 +95,16 @@ Deliverable published: `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-s
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §0–§1 re-read via close-out diff + plan body: options A/B/C with trade-offs; A recommended; C rejected; deletion/stabilization-only (B) considered before routing |
-| R2 | MET | Plan §2 four matrices (role×disposition, gate classes, baseline semantics, capability ownership) present, sourced from 0729 §C/§G + 0731 §2/§4 (cross-doc links verified in those legs) |
-| R3 | MET | Plan §3 seam-per-defect table; F-1 anchor re-read exact (`packages/app/src/workflow/actions/command-gate.ts:157` timeoutMs spread); budgets RED reproduced via no-op probe + spur-dev entrypoint |
+| R1 | MET | `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §0–§1 re-read: options A/B/C with trade-offs; A recommended; C rejected; deletion/stabilization-only (B) considered before routing; affected-ADR summaries now complete (051/071/098/099 added per prior review P3) |
+| R2 | MET | Plan §2 four matrices (role×disposition, gate classes, baseline semantics, capability ownership) present, sourced from 0729 §C/§G + 0731 §2/§4; §2.2 ADR-098 row corrected to 59 packets across the 65-run sweeps |
+| R3 | MET | Plan §3 seam-per-defect table; F-1 anchor re-read exact (`packages/app/src/workflow/actions/command-gate.ts:157` timeoutMs spread); budgets RED reproduced (direct run exit 1 post-bootstrap); F-11 bootstrap row marked done pre-slice; F-10 explicitly scoped out |
 | R4 | MET | Plan §4 closed route table + unknown-to-safety + bounded reasons + budgets explicitly unestablished; corroborated fresh by `bun run scripts/spur-dev.ts real-run-cost --json` exit 0 (nulls null, never 0) |
 | R5 | MET | Plan §5 baseline keep/simplify/replace/remove decisions + inline-driver keep with owner/parity/removal gate |
-| R6 | MET | Plan §6 ADR matrix; drift claims verified fresh: `docs/03_ARCHITECTURE.md:1358` = "## 24. Production Autonomy Contracts (accepted design — ADR-094–100; not yet built)" while 0703–0712 done; `docs/00_ADR.md:2039` ADR-102 detail pointer `04 Design §agent-capability-attestation` has 0 hits in docs/04 (dangling, confirmed); mislabeled heading real at `docs/04_DESIGN.md:2436` ("Capability attestation (ADR-101, task 0706)"); no authority doc mutated (`git status` clean) |
-| R7 | MET | Plan §7 slices S0–S5, surrounding-first, task-pipeline last (S5), consent gates named |
+| R6 | MET | Plan §6 ADR matrix; drift claims verified fresh: `docs/03_ARCHITECTURE.md:1358` = "## 24. Production Autonomy Contracts (accepted design — ADR-094–100; not yet built)" while 0703–0712 done; `docs/00_ADR.md:2039` ADR-102 detail pointer `04 Design §agent-capability-attestation` has 0 hits in docs/04 (dangling, confirmed); mislabeled heading real at `docs/04_DESIGN.md:2436` ("Capability attestation (ADR-101, task 0706)"); 094→102 refined-by relationship now stated in the 094 row; no authority doc mutated (`git status` clean for docs/00-05) |
+| R7 | MET | Plan §7 slices S0–S5, surrounding-first, task-pipeline last (S5), consent gates named; S0 surface list completed (make-lifecycle-adapter precedence unify) and escalation-noise ownership made consistent (S0) |
 | R8 | MET | Plan §8 version contract; digest mechanism re-read at `packages/app/src/workflow/composition-baseline.ts:110`; both-forms execution re-proven by 0732 retained test 3/3/15 fresh |
 | R9 | MET | Plan §9 self-review + D1–D8 + explicit disposition gate; premise-refresh edits from 2026-09-02 re-verify present (close-out 7c33b6d3b) |
-| R10 | MET | `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` exists (366 lines) |
+| R10 | MET | `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` exists (366 lines, accuracy repairs applied this pass) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
@@ -116,7 +116,7 @@ Deliverable published: `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-s
 | AC6 [non-behavior] | MET | static-ref | §7 slices with dependencies/consent gates; S5 = task-pipeline LAST |
 | AC7 [non-behavior] | MET | static-ref | §8 optional-first version contract: unversioned/explicit(<literal>)/empty-diagnostic + digest + pause-resume + precedence + no registry + objective evidence bar |
 | AC8 [non-behavior] | MET | static-ref | §9.2/§9.3: no placeholders found this read; disposition consequences explicit; D8 closed done 2026-09-02 |
-| AC9 [non-behavior] | MET | static-ref | §9.2 exclusions honored; `git status --porcelain` clean — no production/authority mutation |
+| AC9 [non-behavior] | MET | static-ref | §9.2 exclusions honored; no production/authority mutation outside the plan's own accuracy repairs |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 

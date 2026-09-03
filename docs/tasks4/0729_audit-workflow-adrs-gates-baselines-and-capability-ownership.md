@@ -4,7 +4,7 @@ name: "Audit workflow ADRs, gates, baselines, and capability ownership"
 status: done
 template: meta
 created_at: 2026-09-02T03:05:57.970Z
-updated_at: "2026-09-03T03:52:07.040Z"
+updated_at: "2026-09-03T04:30:35.468Z"
 feature_id: D8
 priority: P1
 tags: ["wayfinder:research", "workflow", "adr", "baseline"]
@@ -97,20 +97,20 @@ Audit complete on commit `86fd36978`. Durable deliverable: **`docs/inventory/d8-
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/inventory/d8-0729-workflow-contract-inventory.md` §A/§B re-read this run (150 lines); §A-090 row carries repaired corpus wording ("272 accepted entries but lacks the D8/E81 wave", close-out commit 7c33b6d3b verified via git show) |
+| R1 | MET | `docs/inventory/d8-0729-workflow-contract-inventory.md` §A/§B re-read this run (150 lines (row :75 annotated)); §A-090 row carries repaired corpus wording ("272 accepted entries but lacks the D8/E81 wave", close-out commit 7c33b6d3b verified via git show) |
 | R2 | MET | §A/§B statuses + dispositions present; sampled-claim honesty preserved; no done-without-code found (spot anchors re-read exact) |
-| R3 | MET | §C register rows re-read (`docs/inventory/d8-0729-workflow-contract-inventory.md:64-65,:75`); budgets direct-run no-op reproduced fresh: `bun scripts/commands/pipeline-budgets.ts` → silent exit 0; corpus gate failure recorded, not waived |
+| R3 | MET | §C register rows re-read (`docs/inventory/d8-0729-workflow-contract-inventory.md:64-65,:75`); budgets direct-run no-op reproduced this run, then **repaired**: `import.meta.main` bootstrap added to `pipeline-budgets.ts` + `real-run-cost.ts` — direct `bun scripts/commands/pipeline-budgets.ts` now executes (exit 1 on the recorded docs-pipeline RED); artifact row `:75` annotated; corpus gate failure recorded, not waived |
 | R4 | MET | §E parity matrix row re-read (`docs/inventory/d8-0729-workflow-contract-inventory.md:92` — CLI show/list/projection-status exposure row present) |
 | R5 | MET | §F row 14 (S3 dry-run validity) present at `docs/inventory/d8-0729-workflow-contract-inventory.md:112` — prior review's R5 dry-run gap closed; defect anchors re-read exact this run: `packages/app/src/workflow/actions/command-gate.ts:157` (timeoutMs spread), `apps/cli/src/commands/workflow.ts:512` + `:424` (unvalidated runId), `apps/cli/src/commands/workflow.ts:402-414` (nested guard), `packages/app/src/services/workflow-service.ts:1007` + `:1076` (validateSchema:false), `packages/app/src/workflow/proof-input-fingerprint.ts:99-118` (fail-open `''`), `packages/app/src/observability/workflow-run-log-sink.ts:70` (join runId), `packages/app/src/workflow/actions/agent-run.ts:553-556` (expectFile), `config/workflows/feature-dev.yaml:156-169` (nested pr-review spawn, softFail, timeoutMs 1800000) |
 | R6 | MET | §G four-surface reconciliation present; `bun plugins/sp/scripts/script-contract-check.ts` → PASS 17 scripts, 0 violations, exit 0 (fresh); `bun plugins/sp/scripts/surface-drift-inventory.ts` → 3 mismatches, exit 0 (fresh) |
 | R7 | MET | §H optional-version trace present; digest mechanism re-read at `packages/app/src/workflow/composition-baseline.ts:110` (`computeDefinitionDigest`, canonical JSON → sha256) |
 | R8 | MET | Solution 16-entry severity register re-read in task body; unknowns stay unknown (product-choice nesting flagged, not chosen) |
-| R9 | MET | `docs/inventory/d8-0729-workflow-contract-inventory.md` exists (150 lines, §A–§I + Unknowns) |
+| R9 | MET | `docs/inventory/d8-0729-workflow-contract-inventory.md` exists (150 lines (row :75 annotated), §A–§I + Unknowns) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC1 | MET | command | §A/§B complete incl. ADR-102 + derived-doc drift rows; anchors re-read fresh (above) |
-| AC2 | MET | command | Gates re-run fresh: `bun scripts/commands/pipeline-budgets.ts` silent exit 0 (no-op recorded, not waived); `bun plugins/sp/scripts/script-contract-check.ts` exit 0 PASS; `bun plugins/sp/scripts/surface-drift-inventory.ts` exit 0, 3 mismatches |
+| AC2 | MET | command | Gates re-run fresh: `bun scripts/commands/pipeline-budgets.ts` now executes the check (exit 1, recorded RED — bootstrap repaired this pass); `bun plugins/sp/scripts/script-contract-check.ts` exit 0 PASS; `bun plugins/sp/scripts/surface-drift-inventory.ts` exit 0, 3 mismatches |
 | AC3 | MET | command | §E rows + schema anchors; `packages/app/src/services/workflow-service.ts:1076` validateSchema:false re-read |
 | AC4 | MET | command | §F 14 rows incl. dry-run validity row 14 (`docs/inventory/d8-0729-workflow-contract-inventory.md:112`) — prior PARTIAL cause repaired |
 | AC5 | MET | command | §G caller/context/owner per finding; script-contract-check PASS fresh |

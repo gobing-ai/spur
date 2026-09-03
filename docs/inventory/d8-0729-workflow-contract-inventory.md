@@ -72,7 +72,7 @@ Owner/removal-criteria columns: per R3, the owner of each traced field is the so
 | --- | --- |
 | `bun run scripts/commands/regen-composition-baseline.ts --check` | FAIL — **49 drifted facts**; every workflow entry carries the 6 inert fields regen would delete |
 | `workflow validate config/workflows/<each of 11>.yaml` | all `valid: yes`; **42 `composition advisory` findings** unsuppressed across the set (task-pipeline 14, idea-pipeline 9, pr-review 5, history-anatomy 4, wrapup 4, wayfinder 3, basic/docs/feature-dev 1 each); exit 0 (advisory posture per 069 amendment holds) |
-| `bun scripts/commands/pipeline-budgets.ts` | **silent no-op** — exits 0 with no output (no `import.meta.main` bootstrap; only reachable via `bun scripts/spur-dev.ts check-pipeline-budgets`). Budgets gate itself was anchored, not live-reproduced this pass |
+| `bun scripts/commands/pipeline-budgets.ts` | **silent no-op at audit** — exited 0 with no output (no `import.meta.main` bootstrap; only reachable via `bun scripts/spur-dev.ts check-pipeline-budgets`). **Resolved 2026-09-02 post-audit:** bootstrap added (also to `real-run-cost.ts`, same class); direct run now executes the check and exits 1 on the recorded docs-pipeline RED |
 | `task check --corpus` | FAIL exit 1 — snapshot has 272 accepted entries; NEW findings include D8's own wave (0729–0734, E81) — 24 at audit, 14 at 2026-09-02 re-verify |
 | `bun plugins/sp/scripts/script-contract-check.ts` | PASS — 17 scripts baselined (7 standard / 10 repo-only), 0 violations |
 | `bun run scripts/spur-dev.ts check-pipeline-budgets` | FAIL exit 1 — **BUDGET EXCEEDED: docs-pipeline modelQueries measured 2 > ceiling 1** (live at audit HEAD; recorded per AC2, resolution owned by 0730/0732 cost work) |

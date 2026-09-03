@@ -39,7 +39,7 @@ Three phases, each gated:
 - **Confidence:** High. Every phase gate is run-bound evidence, not aspiration.
 - **Complexity:** Medium — 3 sequential phases, but each is a small coherent slice (§7).
 - **Blast radius:** Low-to-moderate — surrounding workflows first; `task-pipeline` mutations only after its defects are closed.
-- **Affected ADRs:** amend 069/071/093/099/100/102; update derived docs 03 §24 / 04 capability-attestation; new ADR-103 (proportional-gate contract) + ADR-104 (optional version contract) drafted post-approval (§6).
+- **Affected ADRs:** amend 051/069/071/093/098/099/100/102 (051 surface-governance placement + 098 escalation exclusion land in S0/S1 per §6); update derived docs 03 §24 / 04 capability-attestation; new ADR-103 (proportional-gate contract) + ADR-104 (optional version contract) drafted post-approval (§6).
 
 ### Option B — Stabilize and measure only (no new routing machinery)
 
@@ -47,7 +47,7 @@ Do A1 only; **defer all proportional routing** (A2/A3) until real runs + cost at
 
 - **Trade-offs:** lowest risk, no speculative machinery; but it leaves the 97%-dry-probe run economy (§F) and the inline-driver-as-real-execution-path asymmetry (0730 §F) untouched, and defers the actual proportional benefit indefinitely.
 - **Confidence:** Highest (smallest claim); **Complexity:** Low; **Blast radius:** Low.
-- **Affected ADRs:** amend 069/093/100/102 + derived docs; no new ADR for routing.
+- **Affected ADRs:** amend 051/069/071/093/098/099/100/102 + derived docs (all land in S0/S1); no new ADR for routing.
 - **Why not recommended:** The prototype (0732 §8) already proved the route-table pattern is engine-executable on a real caller-class workflow; freezing at A1 would hold back the only path that converts the 65-dry-probe economy into measured real work. But it is the required fallback if the operator wants zero new behavior before more measurement.
 
 ### Option C — Direct proportional build on task-pipeline (skip stabilization-first)
@@ -95,7 +95,7 @@ Build the route table straight onto `task-pipeline` and ship a version-mandate/r
 | Run-id confinement | **mandatory** | 0730 §H safety floor; **F-6 broken today** | repair (R3) |
 | Corpus gate (ADR-090 single-sided) | **mandatory** (gate), snapshot = **temporary waiver** | 0729 §A — gate failing by design (24 NEW) | regenerate + ADR-093 waiver fields |
 | Composition advisory (ADR-069) | **optional** (advisory posture per 069 amendment) | 0729 §A — 42 unsuppressed findings | re-baseline; stay advisory |
-| Escalation packets (ADR-098) | mandatory (on blocked/failed) | 0730 §F — fired for all 65 dry probes (noise) | fix by excluding dry-probe escalations (R3) |
+| Escalation packets (ADR-098) | mandatory (on blocked/failed) | 0730 §F — 59 packets across the 65-run dry sweeps (noise) | fix by excluding dry-probe escalations (R3, slice S0) |
 | Continue-drift digest comparison | **proportional target** | 0729 §F-4; 0732 §7 — unsafe pause/resume today | repair first (R3), then mandatory |
 | Proportional fast/safety routing | **proportional** (post-stabilization) | 0732 §2 closed route table | prototype-proven on fixture; pilot on wrapup |
 | `workflow validate` as run-readiness | **remove as evidence** (smoke only) | 0729 §F-14, 0731 §3 | dry-run is smoke; real runs are the proof |
@@ -124,7 +124,7 @@ Build the route table straight onto `task-pipeline` and ship a version-mandate/r
 
 ## 3. R3 — Minimal stabilization slice (BEFORE any proportional optimization)
 
-One shared root-cause seam per cross-surface defect — the AC requirement. Each repair fixes the seam all callers route through, not a per-caller patch. The R3 requirement's 8 seams (S1-S8) map to the 13 seam-repair rows below; the final 3 rows (corpus waiver, budgets FIX, escalation noise) are baseline/ops items that land in slice S1, not the 8-seam stabilization.
+One shared root-cause seam per cross-surface defect — the AC requirement. Each repair fixes the seam all callers route through, not a per-caller patch. The R3 requirement's 8 seams (S1-S8) map to the 13 seam-repair rows below; the final 3 rows are baseline/ops items outside the 8-seam stabilization: corpus waiver and budgets FIX land in slice S1; escalation noise is an emission-side engine repair owned by slice S0. F-10 (whole-worktree Solution attribution, 0729 §F-10) is explicitly **out of scope** for S0 — single-task worktrees make it non-live today; it re-opens only if shared-tree execution returns.
 
 | R3 seam | Repair | Root cause | One-seam fix | Verification |
 | --- | --- | --- | --- | --- |
@@ -137,13 +137,13 @@ One shared root-cause seam per cross-surface defect — the AC requirement. Each
 | S7 fail-closed proof/fresh artifacts | F-7 suppressed task lookup | `task path … 2>/dev/null \|\| true … exit 0` (task-pipeline.yaml) | non-suppressed lookup; empty taskpath is an error | missing task spec fails, not silently tree-only |
 | S7 fail-closed proof/fresh artifacts | F-8 stale verifier expectFile | no step removes a prior run's `<wbs>-verify-answer.txt` (agent-run.ts:553+) | remove/require-fresh before assert | stale answer file does not satisfy verifier |
 | S7 fail-closed proof/fresh artifacts | F-9 run.artifact proof binding | proofBinding echoed into result data only (run-artifact.ts:88-101) | bind/validate proof at artifact write | decorative binding becomes enforced |
-| S1 load/resolve/preflight seam | F-11 pipeline-budgets no-op | no `import.meta.main` bootstrap in `pipeline-budgets.ts` | add bootstrap | `bun scripts/commands/pipeline-budgets.ts` runs, not silent success |
+| S1 load/resolve/preflight seam | F-11 pipeline-budgets no-op | no `import.meta.main` bootstrap in `pipeline-budgets.ts` | add bootstrap — **done 2026-09-02 pre-slice** (also applied to `real-run-cost.ts`, same class) | `bun scripts/commands/pipeline-budgets.ts` runs the check (exit 1 on the recorded docs-pipeline RED), not silent success |
 | S2 run/continue execution harness | F-14 dry-run smoke | dry-run validates schema/reachability + runs real guards | treat as smoke only; real runs are the proof | no consumer uses dry-run as run-readiness |
 | S2 run/continue harness (parity) | run/continue/validate divergence | validate/run `validateSchema: true`, continue `false` + name re-resolution (0729 §E) | one shared resolve/preflight seam for run/continue/validate | continue and validate agree on the same definition+digest |
 | S5 paused progress | resume never reads checkpoint | `continuePaused` never reads the checkpoint (ADR-099 partial) | resume-side freshness validation reads the checkpoint | paused run resumes only with a fresh checkpoint |
 | (S1 baseline) | Corpus + waiver | snapshot lacks D8/E81 wave (24 NEW) + no ADR-093 fields | regenerate; add owner/review-date/removal (Decision 8) | corpus gate green on regenerated snapshot |
 | (S1 baseline) | Budgets | docs-pipeline `modelQueries` 2 > ceiling 1 (SSOT contradiction) | set 2 with recorded decision (FIX not raise, 0730 Decision 11) | budget gate green with decision recorded |
-| (S2 ops) | Escalation noise | 59 packets from dry sweeps (0730 §F) | exclude dry-run-probe escalations from packet emission | dry sweep emits no human-inspect packet |
+| (S0 ops) | Escalation noise | 59 packets from dry sweeps (0730 §F) | exclude dry-run-probe escalations from packet emission | dry sweep emits no human-inspect packet |
 
 **Ordering constraint:** repairs are cross-surface (run/continue/validate divergence — 0729 §E) and land **before** any proportional gate, because the prototype (0732 §8) explicitly avoided these and could not transfer them to task-pipeline without repair.
 
@@ -208,7 +208,7 @@ Including ADR-102 and ADRs 094-100 derived-doc drift. **No authority doc is muta
 | 090 | Corpus gate single-sided + dated residue | implemented, **gate failing by design** (24 NEW) | **keep**; regenerate snapshot (Decision 8) |
 | 092 | Single-sided snapshot ratchet | implemented | **keep** |
 | 093 | Waiver fields (owner/review-date/removal) | **partial** — corpus snapshot lacks the fields; migration "pending" never happened | **amend/complete**: migrate corpus snapshot to waiver fields (Decision 8) |
-| 094 | Capability attestation (host-enforced) | implemented (0706) | **keep** |
+| 094 | Capability attestation (host-enforced) | implemented (0706) | **keep** — design principle refined by ADR-102's concrete contract (same task-0706 work); not a duplicate, no supersede needed |
 | 095 | Runtime budgets measured; unknown never zero | implemented (0707); budgets RED → FIX | **keep**; apply FIX-not-raise (0730 Decision 11) |
 | 096 | Tripwire catalog + evidence-bound events | implemented (0708) | **keep**; wire real budget-verifiable dispatch (zero adoption today, 0730 §H) |
 | 097 | Reviewer/executor independence | implemented (0710) | **keep** |
@@ -216,7 +216,7 @@ Including ADR-102 and ADRs 094-100 derived-doc drift. **No authority doc is muta
 | 099 | Checkpoints freshness-bound resume | **partial** — `continuePaused` never reads checkpoint | **amend**: resume-side freshness validation (R3, F-4) |
 | 100 | Verified-outcome metrics digest-bound | implemented (0712); **binding defective** (proof shape + no runId + no re-check, 0730 §B) | **amend**: fix `.proof.digest` shape + write `runId` into verdict + re-check digest at read time |
 | 101 | History refresh isolation | implemented (0716-0717) | **keep** (not in D8 scope) |
-| 102 | Constrained agent stages attest executor capabilities | implemented, **stale-doc** — detail pointer `04 §agent-capability-attestation` does not resolve as cited; the existing docs/04 section (`04_DESIGN.md:2358`) is labeled **ADR-101/task 0706**, mislabeling the 0706 capability work under the wrong ADR number | **amend (docs)**: fix the docs/04 heading/label to ADR-102 + task 0706; add the missing anchor |
+| 102 | Constrained agent stages attest executor capabilities | implemented, **stale-doc** — detail pointer `04 §agent-capability-attestation` does not resolve as cited; the existing docs/04 section (`04_DESIGN.md:2436`) is labeled **ADR-101/task 0706**, mislabeling the 0706 capability work under the wrong ADR number | **amend (docs)**: fix the docs/04 heading/label to ADR-102 + task 0706; add the missing anchor |
 
 **Derived-doc drift (AC item):**
 
@@ -239,11 +239,11 @@ Each slice: dependencies, owner, changed surfaces, reproducing/regression/verifi
 
 - **Dependencies:** none (unblocks all).
 - **Owner:** engine/harness (packages/app + apps/cli) with the spur-dev skill for the corpus/budget edits.
-- **Changed surfaces:** command-gate.ts, makeSvc (workflow.ts), workflow-service.ts continuePaused, proof-input-fingerprint.ts, run-id validation (workflow.ts), task-pipeline.yaml lookup/expectFile hops, run-artifact.ts, pipeline-budgets.ts bootstrap, escalation emission.
+- **Changed surfaces:** command-gate.ts, makeSvc (workflow.ts), workflow-service.ts continuePaused, proof-input-fingerprint.ts, run-id validation (workflow.ts), task-pipeline.yaml lookup/expectFile hops, run-artifact.ts, make-lifecycle-adapter.ts (project-first precedence unify, §8), escalation emission. (`pipeline-budgets.ts` + `real-run-cost.ts` bootstraps landed 2026-09-02 pre-slice.)
 - **Checks:** per-defect regression tests (R3 table); full workflow-service suite.
 - **Rollback:** per-file revert; seams are isolated (no schema change).
 - **Observability:** per-run digest stamp + resume drift diagnostic now enforced; escalation packets exclude dry probes.
-- **Consent gate:** none public (internal seam repairs); corpus regeneration is a baseline change → operator consent (Decision 8).
+- **Consent gate:** none public (internal seam repairs). (Corpus regeneration carries operator consent — Decision 8 — and lives in slice S1.)
 
 ### S1 — Authority/derived-doc + baseline repair
 
