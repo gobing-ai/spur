@@ -19,9 +19,15 @@ import {
     historyBoardSourcesFromRollup,
     historyBoardSummaryFromRollup,
     ROLLUP_SOURCE_TABLES,
+    refreshHistoryBoardRollupsIncremental,
     replaceHistoryBoardRollups,
     skillCallRollup,
 } from '../../src/analytics/history-board-rollup';
+import {
+    ROLLUP_DEFINITION_VERSION,
+    readRollupWatermarks,
+    writeRollupWatermark,
+} from '../../src/analytics/rollup-watermark';
 import { applyCliMigrations } from '../../src/migrations';
 
 const ALL: ArtifactSelector = {
@@ -323,18 +329,21 @@ describe('historyBoardHistoryVersion', () => {
     });
 });
 
-describe('historyBoardRollupsFresh', () => {
-    test('fresh only when the stored meta version equals the current history version', async () => {
+describe('historyBoardRollupsFresh (task 0741)', () => {
+    test('fresh only when every rollup watermark covers the newest imported row and version matches', async () => {
         const db = await setup();
         expect(await historyBoardRollupsFresh(db)).toBe(false);
-        await db.run(
-            `INSERT INTO history_board_rollup_meta (id, history_version, refreshed_at)
-             VALUES (1, ?, '2026-06-01T00:00:00Z')`,
-            await historyBoardHistoryVersion(db),
-        );
+        // A full rebuild records the per-table watermarks → the corpus is fresh.
+        await replaceHistoryBoardRollups(db, { ...EMPTY_SEED, historyVersion: 'v2:test' });
         expect(await historyBoardRollupsFresh(db)).toBe(true);
-        // Any new message invalidates the version → stale.
-        await insertMessage(db, { recordHash: 'm2', sessionId: 's1', seq: 2, ts: '2026-06-01T02:00:00Z' });
+        // A message imported at a later cursor makes every table stale again.
+        await insertMessage(db, {
+            recordHash: 'm2',
+            sessionId: 's1',
+            seq: 2,
+            ts: '2026-06-01T02:00:00Z',
+            importedAt: '2026-06-01T04:00:00Z',
+        });
         expect(await historyBoardRollupsFresh(db)).toBe(false);
     });
 });
@@ -1720,5 +1729,271 @@ describe('measure vector additivity invariant (0740 R4/R6/R7)', () => {
             }
         }
         db.close();
+    });
+});
+
+/** Incremental engine corpus: two messages in two buckets on 2026-06-01, imported at 05:00Z. */
+async function seedIncrementalCorpus(db: DbAdapter): Promise<void> {
+    await insertMessage(db, {
+        recordHash: 'inc-a1',
+        sessionId: 'inc-s1',
+        seq: 1,
+        ts: '2026-06-01T09:58:00Z',
+        model: 'gpt-5',
+        input: 100,
+        output: 50,
+        importedAt: '2026-06-01T05:00:00Z',
+    });
+    await insertMessage(db, {
+        recordHash: 'inc-a2',
+        sessionId: 'inc-s2',
+        seq: 1,
+        ts: '2026-06-01T10:05:00Z',
+        model: 'gpt-5-mini',
+        input: 40,
+        output: 20,
+        importedAt: '2026-06-01T05:00:00Z',
+    });
+    await insertToolCall(db, {
+        recordHash: 'inc-t1',
+        messageHash: 'inc-a1',
+        sessionId: 'inc-s1',
+        seq: 1,
+        toolName: 'Read',
+    });
+    await insertToolCall(db, {
+        recordHash: 'inc-t2',
+        messageHash: 'inc-a2',
+        sessionId: 'inc-s2',
+        seq: 1,
+        toolName: 'Bash',
+        status: 'error',
+    });
+}
+
+describe('refreshHistoryBoardRollupsIncremental (task 0741)', () => {
+    test('first run (no watermark) performs a full rebuild and records per-table watermarks', async () => {
+        const db = await setup();
+        await seedIncrementalCorpus(db);
+        await refreshHistoryBoardRollupsIncremental(db);
+        const watermarks = await readRollupWatermarks(db);
+        expect(watermarks.size).toBeGreaterThan(0);
+        for (const table of [
+            'history_board_message_5m',
+            'history_board_tool_5m',
+            'history_board_model_stats',
+            'history_board_ranked_steps',
+        ]) {
+            expect(watermarks.get(table)?.definitionVersion).toBe(ROLLUP_DEFINITION_VERSION);
+        }
+        // The first run left the corpus fresh.
+        expect(await historyBoardRollupsFresh(db)).toBe(true);
+    });
+
+    test('a backfilled import lands in an old bucket and the watermark advances past it (R5)', async () => {
+        const db = await setup();
+        await seedIncrementalCorpus(db);
+        await refreshHistoryBoardRollupsIncremental(db);
+        expect(
+            await db.queryFirst<{ n: number }>(
+                "SELECT COUNT(*) AS n FROM history_board_message_5m WHERE bucket_start = '2026-06-01T09:57:00Z'",
+            ),
+        ).toEqual({ n: 0 });
+
+        // Backfill: an old `ts` (09:57 bucket) imported later than the current cursor.
+        await insertMessage(db, {
+            recordHash: 'inc-backfill',
+            sessionId: 'inc-s1',
+            seq: 2,
+            ts: '2026-06-01T09:57:00Z',
+            model: 'gpt-5',
+            input: 7,
+            importedAt: '2026-06-01T07:00:00Z',
+        });
+        await refreshHistoryBoardRollupsIncremental(db);
+        expect(
+            await db.queryFirst<{ n: number }>(
+                "SELECT COUNT(*) AS n FROM history_board_message_5m WHERE bucket_start = '2026-06-01T09:57:00Z'",
+            ),
+        ).toEqual({ n: 1 });
+        const wm = await readRollupWatermarks(db);
+        expect(wm.get('history_board_message_5m')?.importedAtWatermark).toBe('2026-06-01T07:00:00Z');
+        // Pre-existing buckets are untouched (still 1 row each).
+        expect(
+            await db.queryFirst<{ n: number }>(
+                "SELECT COUNT(*) AS n FROM history_board_message_5m WHERE bucket_start = '2026-06-01T09:58:00Z'",
+            ),
+        ).toEqual({ n: 1 });
+    });
+
+    test('incremental keyed aggregates equal a full rebuild on the same corpus (R6)', async () => {
+        const base = async (db: DbAdapter): Promise<void> => {
+            await insertMessage(db, {
+                recordHash: 'inc-a1',
+                sessionId: 'inc-s1',
+                seq: 1,
+                ts: '2026-06-01T09:58:00Z',
+                model: 'gpt-5',
+                input: 100,
+                output: 50,
+                importedAt: '2026-06-01T05:00:00Z',
+            });
+            await insertMessage(db, {
+                recordHash: 'inc-a2',
+                sessionId: 'inc-s2',
+                seq: 1,
+                ts: '2026-06-01T10:05:00Z',
+                model: 'gpt-5-mini',
+                input: 40,
+                output: 20,
+                importedAt: '2026-06-01T05:00:00Z',
+            });
+            await insertToolCall(db, {
+                recordHash: 'inc-t1',
+                messageHash: 'inc-a1',
+                sessionId: 'inc-s1',
+                seq: 1,
+                toolName: 'Read',
+            });
+            await insertToolCall(db, {
+                recordHash: 'inc-t2',
+                messageHash: 'inc-a2',
+                sessionId: 'inc-s2',
+                seq: 1,
+                toolName: 'Bash',
+                status: 'error',
+            });
+        };
+        const addDelta = async (db: DbAdapter): Promise<void> => {
+            await insertMessage(db, {
+                recordHash: 'inc-delta',
+                sessionId: 'inc-s1',
+                seq: 2,
+                ts: '2026-06-01T09:59:00Z',
+                model: 'gpt-5',
+                input: 12,
+                output: 6,
+                importedAt: '2026-06-01T07:00:00Z',
+            });
+            await insertToolCall(db, {
+                recordHash: 'inc-delta-t',
+                messageHash: 'inc-delta',
+                sessionId: 'inc-s1',
+                seq: 2,
+                toolName: 'Edit',
+            });
+        };
+
+        // Incremental path: baseline full build, then a delta, then the incremental refresh.
+        const incrementalDb = await setup();
+        await base(incrementalDb);
+        await refreshHistoryBoardRollupsIncremental(incrementalDb);
+        await addDelta(incrementalDb);
+        await refreshHistoryBoardRollupsIncremental(incrementalDb);
+
+        // Full-rebuild path: the identical final corpus re-derived wholesale.
+        const freshDb = await setup();
+        await base(freshDb);
+        await addDelta(freshDb);
+        await refreshHistoryBoardRollupsIncremental(freshDb);
+
+        const readKeyed = async (db: DbAdapter) => ({
+            model: await db.queryAll(
+                'SELECT model, fresh_input_tokens, output_tokens, tool_calls FROM history_board_model_stats ORDER BY model',
+            ),
+            tool: await db.queryAll('SELECT tool_name, calls, errors FROM history_board_tool_stats ORDER BY tool_name'),
+            sessions: await db.queryAll(
+                'SELECT session_id, messages, tool_calls, state FROM history_board_session_stats ORDER BY session_id',
+            ),
+        });
+
+        expect(await readKeyed(incrementalDb)).toEqual(await readKeyed(freshDb));
+    });
+
+    test('a definition-version mismatch forces a rebuild and resets the watermark to the current version (R8)', async () => {
+        const db = await setup();
+        await seedIncrementalCorpus(db);
+        await refreshHistoryBoardRollupsIncremental(db);
+
+        const before = await db.queryAll<{ session_id: string; messages: number }>(
+            'SELECT session_id, messages FROM history_board_message_5m ORDER BY session_id',
+        );
+        expect(before.length).toBeGreaterThan(0);
+
+        // Simulate a derivation change: the stored version no longer matches.
+        await writeRollupWatermark(db, 'history_board_message_5m', {
+            importedAtWatermark: '2026-06-01T05:00:00Z',
+            definitionVersion: 'v999-old',
+        });
+
+        await refreshHistoryBoardRollupsIncremental(db);
+        const wm = await readRollupWatermarks(db);
+        expect(wm.get('history_board_message_5m')?.definitionVersion).toBe(ROLLUP_DEFINITION_VERSION);
+        // The rebuild preserves the same materialized rows (content unchanged, just re-derived).
+        const after = await db.queryAll<{ session_id: string; messages: number }>(
+            'SELECT session_id, messages FROM history_board_message_5m ORDER BY session_id',
+        );
+        expect(after).toEqual(before);
+    });
+
+    test('an interrupted run never advances the watermark past an unprocessed backfilled bucket (R16/R7)', async () => {
+        const db = await setup();
+        // Prior watermark at 04:00 from an earlier run.
+        await insertMessage(db, {
+            recordHash: 'r16-base',
+            sessionId: 'r16-s1',
+            seq: 1,
+            ts: '2026-06-01T09:57:00Z',
+            model: 'gpt-5',
+            input: 10,
+            importedAt: '2026-06-01T04:00:00Z',
+        });
+        await refreshHistoryBoardRollupsIncremental(db);
+
+        // Backfill creating the non-monotonic ordering: bucket A (09:57) gets a row
+        // imported at 10:00 (LATER than bucket B's rows), while bucket B (10:05) gets a
+        // row imported at 05:00. Processed ascending, A's naive MAX advance to 10:00 would
+        // leap past B's 05:00 rows, so an interrupted run would never re-select B.
+        await insertMessage(db, {
+            recordHash: 'r16-a',
+            sessionId: 'r16-s2',
+            seq: 1,
+            ts: '2026-06-01T09:57:00Z',
+            model: 'gpt-5',
+            input: 7,
+            importedAt: '2026-06-01T10:00:00Z',
+        });
+        await insertMessage(db, {
+            recordHash: 'r16-b',
+            sessionId: 'r16-s3',
+            seq: 1,
+            ts: '2026-06-01T10:05:00Z',
+            model: 'gpt-5-mini',
+            input: 20,
+            importedAt: '2026-06-01T05:00:00Z',
+        });
+        await refreshHistoryBoardRollupsIncremental(db);
+        const wm = await readRollupWatermarks(db);
+        // The watermark must clamp below B's min (05:00): it may NOT advance to A's 10:00,
+        // else an interrupted run would skip B forever.
+        expect(wm.get('history_board_message_5m')?.importedAtWatermark ?? '').toBe('2026-06-01T05:00:00Z');
+        // A complete run still materializes both buckets (09:57 holds base + backfill = 2 rows).
+        expect(
+            await db.queryFirst<{ n: number }>(
+                "SELECT COUNT(*) AS n FROM history_board_message_5m WHERE bucket_start = '2026-06-01T09:57:00Z'",
+            ),
+        ).toEqual({ n: 2 });
+        expect(
+            await db.queryFirst<{ n: number }>(
+                "SELECT COUNT(*) AS n FROM history_board_message_5m WHERE bucket_start = '2026-06-01T10:05:00Z'",
+            ),
+        ).toEqual({ n: 1 });
+        // A recovery pass re-selects B (rows at/after the clamped watermark) and re-materializes it.
+        await refreshHistoryBoardRollupsIncremental(db);
+        expect(
+            await db.queryFirst<{ n: number }>(
+                "SELECT COUNT(*) AS n FROM history_board_message_5m WHERE bucket_start = '2026-06-01T10:05:00Z'",
+            ),
+        ).toEqual({ n: 1 });
     });
 });

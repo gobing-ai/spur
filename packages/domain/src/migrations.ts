@@ -912,6 +912,32 @@ CREATE TABLE history_board_tool_stats (
 );
 `;
 
+/**
+ * Migration 0036: Incremental rollup refresh watermark (task 0741).
+ * Per-table refresh watermark over `imported_at`, the materialized bucket range,
+ * and the index that makes the watermark predicate range-scan instead of
+ * scanning the whole `history_message` table. All statements are idempotent
+ * (`CREATE TABLE / INDEX IF NOT EXISTS`), so the migration applies cleanly on a
+ * database that already has it.
+ */
+export const HISTORY_ROLLUP_WATERMARK_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS history_board_rollup_watermark (
+    table_name            TEXT PRIMARY KEY,
+    imported_at_watermark TEXT NOT NULL,
+    definition_version    TEXT NOT NULL,
+    updated_at            TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS history_board_rollup_bucket (
+    table_name   TEXT NOT NULL,
+    bucket_start TEXT NOT NULL,
+    PRIMARY KEY (table_name, bucket_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_history_message_imported_at
+    ON history_message (imported_at);
+`;
+
 export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
     // Renamed from `0001_spur_team_inbox` so the filename carries the
@@ -1048,6 +1074,12 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         // 0740: Complete measure vector on existing rollup tables and enforce additivity invariant.
         id: '0035_spur_cli_history_measure_vector',
         sql: HISTORY_MEASURE_VECTOR_SCHEMA_SQL,
+    },
+    {
+        // 0741: Incremental rollup refresh watermark, materialized bucket range, and
+        // the history_message(imported_at) index. Idempotent CREATE TABLE/INDEX IF NOT EXISTS.
+        id: '0036_spur_cli_history_rollup_watermark',
+        sql: HISTORY_ROLLUP_WATERMARK_SCHEMA_SQL,
     },
 ];
 
@@ -1239,6 +1271,12 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             (!(await tableExists(adapter, 'history_board_message_5m')) ||
                 (await columnExists(adapter, 'history_board_message_5m', 'cache_write_tokens')));
 
+        const historyRollupWatermarkSkip =
+            migration.id === '0036_spur_cli_history_rollup_watermark' &&
+            ((await tableExists(adapter, 'history_board_rollup_watermark')) ||
+                !(await tableExists(adapter, 'history_message')) ||
+                !(await columnExists(adapter, 'history_message', 'imported_at')));
+
         if (
             shouldApplySql &&
             !sequenceIndexSkip &&
@@ -1254,7 +1292,8 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !tsNullableSkip &&
             !queueJobsActiveIndexSkip &&
             !historyToolIdentitySkip &&
-            !historyMeasureVectorSkip
+            !historyMeasureVectorSkip &&
+            !historyRollupWatermarkSkip
         ) {
             for (const statement of splitSqlStatements(migration.sql)) {
                 await adapter.exec(statement);

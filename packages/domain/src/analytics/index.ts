@@ -126,7 +126,9 @@ export {
     historyBoardSkillBreakdownFromRollup,
     historyBoardSourcesFromRollup,
     historyBoardSummaryFromRollup,
+    ROLLUP_DEFINITION_VERSION,
     ROLLUP_SOURCE_TABLES,
+    refreshHistoryBoardRollupsIncremental,
     replaceHistoryBoardRollups,
     skillCallRollup,
 } from './history-board-rollup';
@@ -181,6 +183,18 @@ export {
     type RoleTokenTotals,
     roleTokenSummary,
 } from './role-tokens';
+export {
+    ALL_ROLLUP_TABLES,
+    BUCKETED_ROLLUP_TABLES,
+    EMPTY_ROLLUP_WATERMARK,
+    GLOBAL_RANKED_ROLLUP_TABLES,
+    KEYED_ROLLUP_TABLES,
+    type RollupTableFreshness,
+    type RollupWatermarkState,
+    readRollupWatermarks,
+    rollupTableFreshness,
+    writeRollupWatermark,
+} from './rollup-watermark';
 export {
     type ActionCost,
     type ActionCostAttribution,

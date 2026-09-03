@@ -18,6 +18,8 @@ export const SPUR_OWNED_HISTORY_TABLES: readonly string[] = [
     'history_board_model_stats',
     'history_board_ranked_steps',
     'history_board_rollup_meta',
+    'history_board_rollup_watermark',
+    'history_board_rollup_bucket',
     'history_board_session_stats',
     'history_board_skill_5m',
     'history_board_source_daily',

@@ -113,13 +113,13 @@ describe('history schema ownership conformance (task 0749 / ADR-105)', () => {
     });
 
     describe('HISTORY_RESET_TABLES split and coverage (R1a, R1b, R1d)', () => {
-        test('contains exactly 30 tables: 15 importer-owned + 15 spur-owned', () => {
+        test('contains exactly 32 tables: 15 importer-owned + 17 spur-owned', () => {
             expect(IMPORTER_OWNED_TABLES.length).toBe(15);
-            expect(SPUR_OWNED_HISTORY_TABLES.length).toBe(15);
-            expect(HISTORY_RESET_TABLES.length).toBe(30);
+            expect(SPUR_OWNED_HISTORY_TABLES.length).toBe(17);
+            expect(HISTORY_RESET_TABLES.length).toBe(32);
         });
 
-        test('matches expected 30 table names exactly (regression check)', () => {
+        test('matches expected 32 table names exactly (regression check)', () => {
             const expected30 = [
                 'history_message',
                 'history_tool_call',
@@ -143,6 +143,8 @@ describe('history schema ownership conformance (task 0749 / ADR-105)', () => {
                 'history_board_model_stats',
                 'history_board_ranked_steps',
                 'history_board_rollup_meta',
+                'history_board_rollup_watermark',
+                'history_board_rollup_bucket',
                 'history_board_session_stats',
                 'history_board_skill_5m',
                 'history_board_source_daily',
