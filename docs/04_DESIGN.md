@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.62.0
+version: 1.63.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-08-29
+updated_at: 2026-09-02
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -1066,9 +1066,14 @@ was imported later than its own recorded timestamp.
 #### History nightly loop — scheduling surface and observability (task 0471)
 
 The daily pipeline runs on an **external macOS launchd agent**, not Spur's embedded scheduler. The
-embedded scheduler (`ts-infra` `NodeSchedulerAdapter.parseInterval`) cannot express `0 2 * * *` — it
-silently degrades to a 60-second `setInterval`, needs a daemon the run-once CLI is not, and drives
-nothing today (`bootstrap.scheduler.enabled = false`). An external supervisor is the only correct fit.
+embedded scheduler needs a daemon the run-once CLI is not, and drives nothing under the CLI
+(`bootstrap.scheduler.enabled = false`). An external supervisor is the only correct fit.
+
+> **Amendment (2026-09-02, task 0734):** the *cron* half of this rationale is obsolete —
+> `NodeSchedulerAdapter` now accepts real five-field cron, so `0 2 * * *` is expressible and no
+> longer degrades to a 60-second interval. The decision stands on the remaining premise: the daily
+> pipeline must run whether or not `spur serve` is up. An operator who *does* run the server can now
+> express the same schedule as a `bootstrap.scheduler.jobs` entry instead (§5.2).
 
 **Template:** `config/launchd/ai.gobing.spur.history.daily.plist` — `StartCalendarInterval` (daily
 wall-clock), `WorkingDirectory` = project root, `StandardOutPath`/`StandardErrorPath` →
@@ -1394,6 +1399,7 @@ bootstrap:
     url: .spur/spur.db # ${DATABASE_URL} interpolation supported
   scheduler:
     enabled: false # CLI is run-once; no scheduler
+    # jobs: [] # declarative recurring commands, read only under `spur serve` — §5.2
 agent:
   default: coder # default role for `--agent auto` when nothing is declared (0542 R2 — role domain; legacy executor names warn once under shim agent-default-executor)
   executors: # ADR-033 / 0343 — declare tier (capable-1/2/3 quality ladder)
@@ -1866,6 +1872,78 @@ The server bootstraps through `@gobing-ai/ts-infra` using a runtime-aware split:
 The Worker entry uses a **lazy singleton** (`let rtPromise`) — no top-level await, `runApplication`
 initialized on first `fetch`. Its static asset directory is `../../dist/web`, resolved relative to
 `apps/server/wrangler.toml`. The Bun entry uses `runNodeApplication` mirroring the CLI (ADR-017).
+
+### 5.2 Scheduler surface — `bootstrap.scheduler` (task 0734)
+
+Recurring commands are declared in **one** place: the `bootstrap.scheduler` object that
+`runNodeApplication` already owns. There is no top-level Spur `scheduler` section and no second
+cron grammar in `packages/config` — `bootstrap` is deliberately excluded from the Spur Zod schema
+(`packages/config/src/index.ts`), so adding one there would fork validation.
+
+```yaml
+bootstrap:
+  scheduler:
+    enabled: true
+    jobs:
+      - name: nightly-import
+        cron: "30 2 * * *" # five fields, local wall-clock time
+        command: bun run load-history
+      - name: hourly-analyze
+        intervalMinutes: 60 # 1..35791; mutually exclusive with `cron`
+        command: spur history analyze
+```
+
+Mirrored for editor completion in `apps/cli/schemas/spur-config.schema.json` and documented in
+`config/config.example.yaml`. The JSON Schema is an IDE aid only — `runNodeApplication` is the
+validator of record and aborts startup with an issue path under
+`bootstrap.scheduler.jobs.<index>.<field>`.
+
+**Ownership seam.** `@gobing-ai/ts-infra` owns the contract and the lifecycle; Spur owns execution:
+
+| Concern                                                        | Owner                                            |
+| -------------------------------------------------------------- | ------------------------------------------------ |
+| `SchedulerJobConfig` shape, validation, normalization           | ts-infra (`/application`)                        |
+| Cron parsing and the `NodeSchedulerAdapter` timers              | ts-infra                                         |
+| Adapter construction, `start()`, `stop()`                       | ts-infra runtime (`appRt.scheduler`)             |
+| Binding each job to a queue entry                               | `registerSchedulerEntries` (`apps/server/src/serve.ts`) |
+| Running the command                                             | `handleSchedulerCustomJob` (`packages/app`)      |
+
+`spur serve` registers built-in **and** configured entries against `appRt.scheduler` inside the
+`start` callback — which runs before ts-infra's scheduler plugin starts the adapter — and reads
+configured jobs only from `appRt.config.scheduler.jobs`. `StartServerDeps.createScheduler` is gone:
+a second Spur-owned adapter would have run every entry twice once the production scheduler was
+enabled. `appRt.config.scheduler.enabled` is the effective gate; a disabled scheduler still carries
+validated job definitions but creates no adapter and runs nothing.
+
+**Cron semantics.** Five fields (minute hour day-of-month month day-of-week), evaluated in **local
+process wall-clock time** — no timezone or DST policy per job. `ts-infra` keeps the three legacy
+interval forms (`"600000"`, `* * * * *`, `*/N * * * *`) on `setInterval`; every other valid
+expression self-reschedules with `setTimeout` to the next matching minute, never overlaps its own
+tick, and skips occurrences missed while a tick runs. Anything outside the grammar throws
+`RangeError` at registration — nothing silently degrades to a 60-second fallback.
+
+**Trust boundary.** `command` is trusted operator input from the project's own config file, executed
+as `/bin/sh -c <command>` with the project root as `cwd`. It is never echoed into an event payload
+or a log line — only the job `name` is. Spur adds no per-job `cwd`, `env`, `enabled`, timeout, or
+concurrency knob; a job that needs those wraps them in the script it invokes.
+
+**Execution bounds** (`handleSchedulerCustomJob`): buffered output capped at 1,000,000 bytes, a
+3,600,000 ms timeout (deliberately under the server queue's two-hour visibility timeout so the
+queue never reclaims a still-running command), and the child's exit code as the only success
+verdict. A non-zero exit, signal, or spawn failure throws an error naming the job plus at most the
+final 400 characters of stderr (stdout only when stderr is empty), so retry and failure records
+carry bounded, non-secret detail.
+
+**Observability — enqueue vs. attempt.** The two are separate on purpose and reuse existing events:
+
+| Event                                                     | Emitted by            | Means                                   |
+| --------------------------------------------------------- | --------------------- | --------------------------------------- |
+| `scheduler.job.executed` (name `scheduler.custom:<name>`) | the scheduler tick    | the tick fired and enqueued (or failed to) |
+| `queue.job.completed` / `.retrying` / `.failed`           | the queue consumer    | one execution **attempt** of the command |
+
+A tick is a normal non-coalesced enqueue of `scheduler.custom` with payload `{ name, command }`, so
+it inherits the queue's default three-total-attempt policy. No new table, column, event name, API
+route, or UI component: the Jobs tab and System Events already render both families.
 
 ## 6. Plugin System (Removed — ADR-012 amended 2026-06-09)
 

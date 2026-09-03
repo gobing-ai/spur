@@ -2,11 +2,14 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { createMigratedDb } from '@gobing-ai/spur-domain';
-import type { ApplicationRuntime, ApplicationStopReason } from '@gobing-ai/ts-infra/application';
-import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { handleSchedulerCustomJob, registerSystemEventTap } from '@gobing-ai/spur-app';
+import { createMigratedDb, SystemEventDao } from '@gobing-ai/spur-domain';
+import { EventBus } from '@gobing-ai/ts-infra';
+import type { ApplicationRuntime, ApplicationStopReason, SchedulerJobConfig } from '@gobing-ai/ts-infra/application';
+import { createNodeFileSystem, type FileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { serverBootstrapConfig } from '../src/bootstrap';
-import type { CreateServerContextOptions, ServerContext } from '../src/context';
+import type { CreateServerContextOptions, ServerContext, ServerScheduler } from '../src/context';
+import { createServerContext } from '../src/context';
 import {
     createTaskActionAgentService,
     defaultDeps,
@@ -20,15 +23,30 @@ import {
     resolveWebDistPath,
     runFeatureActionJob,
     runTaskActionJob,
+    SCHEDULER_CUSTOM_JOB,
     type StartServerDeps,
     startServer,
     TASK_ACTION_JOB,
 } from '../src/serve';
 
+/**
+ * Scheduler shape the upstream runtime owns since task 0734: `startServer` no
+ * longer builds an adapter, so tests supply the resolved config *and* the
+ * adapter through the runtime, exactly as `runNodeApplication` does.
+ */
+interface FakeRuntimeScheduler {
+    enabled?: boolean;
+    jobs?: readonly SchedulerJobConfig[];
+    adapter?: ServerScheduler;
+}
+
 /** Build a fake ApplicationRuntime; `log` collects logger.info calls when provided. */
-function fakeRuntime(log?: { msg: string; data?: Record<string, unknown> }[]): ApplicationRuntime {
+function fakeRuntime(
+    log?: { msg: string; data?: Record<string, unknown> }[],
+    scheduler: FakeRuntimeScheduler = {},
+): ApplicationRuntime {
     return {
-        config: {},
+        config: { scheduler: { enabled: scheduler.enabled ?? false, jobs: scheduler.jobs ?? [] } },
         logger: {
             info: (msg: string, data?: Record<string, unknown>) => log?.push({ msg, data }),
             warn: () => {},
@@ -37,8 +55,37 @@ function fakeRuntime(log?: { msg: string; data?: Record<string, unknown> }[]): A
         },
         events: { emit: () => {}, on: () => {}, off: () => {} },
         db: undefined,
+        scheduler: scheduler.adapter,
         stop: async (_reason: ApplicationStopReason) => {},
     } as unknown as ApplicationRuntime;
+}
+
+/** Wrap a runtime factory as the `runNodeApplication` dep `startServer` expects. */
+function runNodeApplicationWith(build: () => ApplicationRuntime): StartServerDeps['runNodeApplication'] {
+    return (async (opts: { config: unknown; start: (rt: ApplicationRuntime) => Promise<void> }) => {
+        const rt = build();
+        await opts.start(rt);
+        return rt;
+    }) as unknown as StartServerDeps['runNodeApplication'];
+}
+
+/** Recording scheduler adapter; `register` captures cron + action per entry. */
+function recordingScheduler(order?: string[]) {
+    const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+    return {
+        registered,
+        adapter: {
+            register: (cron: string, action: () => Promise<void>) => {
+                registered.push({ cron, action });
+            },
+            start: async () => {
+                order?.push('scheduler.start');
+            },
+            stop: async () => {
+                order?.push('scheduler.stop');
+            },
+        } as unknown as ServerScheduler,
+    };
 }
 
 /** A no-op FileSystem fake — startServer threads it into the context only. */
@@ -86,7 +133,6 @@ function makeDeps(overrides: Partial<StartServerDeps> = {}): StartServerDeps {
         createApp: (() => fakeApp()) as unknown as StartServerDeps['createApp'],
         createNodeFileSystem: () => fakeFs,
         createServerContext: (() => ({}) as never) as unknown as StartServerDeps['createServerContext'],
-        createScheduler: async () => ({ start: async () => {}, stop: async () => {}, register: () => {} }) as never,
         openUrl: async () => {},
         resolveConfigFile: () => undefined,
         ...overrides,
@@ -189,13 +235,23 @@ describe('startServer', () => {
         expect(opts.port).toBe(3000);
     });
 
-    test('defaultDeps.createScheduler lazily builds a real NodeSchedulerAdapter', async () => {
-        const scheduler = await defaultDeps.createScheduler();
-        expect(typeof scheduler.start).toBe('function');
-        expect(typeof scheduler.stop).toBe('function');
-        expect(typeof scheduler.register).toBe('function');
-        // Real adapters may hold timers — always stop so the suite can exit.
-        if (typeof scheduler.stop === 'function') await scheduler.stop();
+    test('no scheduler entries are registered when the runtime reports it disabled', async () => {
+        installProcessMocks();
+        Bun.serve = (() => ({ stop: () => {} })) as unknown as typeof Bun.serve;
+        const logMessages: { msg: string; data?: Record<string, unknown> }[] = [];
+        const { registered, adapter } = recordingScheduler();
+
+        // `bootstrap.scheduler.enabled: false` — the adapter exists on the runtime
+        // but startServer must leave it untouched (no entries, no lifecycle call).
+        await startServer(
+            { port: 4001, host: '127.0.0.1', openBrowser: false, keepAlive: false },
+            makeDeps({
+                runNodeApplication: runNodeApplicationWith(() => fakeRuntime(logMessages, { enabled: false, adapter })),
+            }),
+        );
+
+        expect(registered).toHaveLength(0);
+        expect(logMessages.some((m) => m.msg === 'Scheduler entries registered')).toBe(false);
     });
 
     test('start callback wires Bun.serve and serves health', async () => {
@@ -360,12 +416,12 @@ describe('startServer', () => {
         expect(opened).toBe(false);
     });
 
-    test('scheduler branch and signal handlers covered via injected deps', async () => {
+    test('registers against the runtime scheduler and never owns its lifecycle (task 0734)', async () => {
         const { sigHandlers, exitCodes, exitCalled } = installProcessMocks();
 
         let serverStopped = false;
-        let schedulerStopped = false;
-        let schedulerStarted = false;
+        const lifecycle: string[] = [];
+        const stopReasons: ApplicationStopReason[] = [];
         const logMessages: { msg: string; data?: Record<string, unknown> }[] = [];
 
         Bun.serve = (() => ({
@@ -375,6 +431,7 @@ describe('startServer', () => {
             },
         })) as unknown as typeof Bun.serve;
 
+        const { registered, adapter } = recordingScheduler(lifecycle);
         const deps = makeDeps({
             serverBootstrapConfig: () => ({
                 logging: { enabled: false, level: 'info' as const, console: false },
@@ -384,29 +441,30 @@ describe('startServer', () => {
                 scheduler: { enabled: true },
                 teamAutostart: [],
             }),
-            runNodeApplication: (async (opts: {
-                config: unknown;
-                start: (rt: ApplicationRuntime) => Promise<void>;
-            }) => {
-                const rt = fakeRuntime(logMessages);
-                await opts.start(rt);
+            runNodeApplication: runNodeApplicationWith(() => {
+                const rt = fakeRuntime(logMessages, { enabled: true, adapter });
+                rt.stop = (async (reason: ApplicationStopReason) => {
+                    stopReasons.push(reason);
+                }) as ApplicationRuntime['stop'];
                 return rt;
-            }) as unknown as StartServerDeps['runNodeApplication'],
-            createScheduler: async () =>
+            }),
+            createServerContext: (() =>
                 ({
-                    start: async () => {
-                        schedulerStarted = true;
-                    },
-                    stop: async () => {
-                        schedulerStopped = true;
-                    },
-                    register: () => {},
-                }) as never,
+                    jobQueue: async () => ({ enqueue: async () => 'id' }),
+                    eventBus: () => ({ emit: () => {} }),
+                }) as unknown as ServerContext) as unknown as StartServerDeps['createServerContext'],
         });
 
         await startServer({ port: 5000, host: '127.0.0.1', openBrowser: false, keepAlive: false }, deps);
 
-        expect(schedulerStarted).toBe(true);
+        // Entries land on the runtime's adapter, and startServer never starts it —
+        // the ts-infra scheduler plugin owns the single start after this callback.
+        // Only the two built-ins are asserted: startServer reads the real project config
+        // from process.cwd(), so a repo-root run also registers the opt-in history refresh.
+        // Exact full lists are covered by the registerSchedulerEntries unit tests below.
+        expect(registered.map((r) => r.cron).slice(0, 2)).toEqual(['300000', '600000']);
+        expect(lifecycle).toEqual([]);
+        expect(logMessages.some((m) => m.msg === 'Scheduler entries registered')).toBe(true);
 
         const sigint = sigHandlers.SIGINT;
         if (!sigint) throw new Error('SIGINT handler not registered');
@@ -414,10 +472,11 @@ describe('startServer', () => {
         // Await full async shutdown so process.exit mock is still installed.
         await exitCalled;
         expect(serverStopped).toBe(true);
-        expect(schedulerStopped).toBe(true);
+        // Shutdown delegates to appRt.stop(), which owns the single scheduler stop.
+        expect(lifecycle).toEqual([]);
+        expect(stopReasons).toEqual(['shutdown']);
         expect(exitCodes).toEqual([0]);
         expect(logMessages.some((m) => m.msg === 'Shutting down server')).toBe(true);
-        expect(logMessages.some((m) => m.msg === 'Scheduler started')).toBe(true);
     });
 
     test('SIGTERM shutdown path and concurrent double-signal latch', async () => {
@@ -564,21 +623,19 @@ describe('startServer', () => {
                         },
                     }),
                 }) as unknown as ServerContext) as unknown as StartServerDeps['createServerContext'],
-            createScheduler: async () =>
-                ({
-                    start: async () => {
-                        order.push('scheduler.start');
-                    },
-                    stop: async () => {
-                        order.push('scheduler.stop');
-                    },
-                    register: () => {},
-                }) as never,
+            runNodeApplication: runNodeApplicationWith(() => {
+                const rt = fakeRuntime(undefined, { enabled: true, adapter: recordingScheduler(order).adapter });
+                rt.stop = (async () => {
+                    order.push('runtime.stop');
+                }) as ApplicationRuntime['stop'];
+                return rt;
+            }),
         });
 
         await startServer({ port: 5001, host: '127.0.0.1', openBrowser: false, keepAlive: false }, deps);
 
-        expect(order).toEqual(['worker.start', 'scheduler.start']);
+        // Scheduler start/stop are absent: the upstream runtime owns both (0734 R4).
+        expect(order).toEqual(['worker.start']);
         await registeredHandlers['system-events-prune']?.();
         await registeredHandlers.smoke?.();
         expect(pruneCallCount).toBe(10_000);
@@ -589,11 +646,18 @@ describe('startServer', () => {
         expect(registeredHandlers[FEATURE_ACTION_JOB]).toBeDefined();
         await expect(registeredHandlers[FEATURE_ACTION_JOB]?.({})).rejects.toThrow();
         expect(registeredHandlers[HISTORY_REFRESH_JOB]).toBeDefined();
+        // Task 0734: the configured-job handler runs commands in the worker, not
+        // the scheduler tick, so it must be registered alongside the built-ins.
+        expect(registeredHandlers[SCHEDULER_CUSTOM_JOB]).toBeDefined();
+        // The registry hands the whole Job through, so the payload is nested.
+        await expect(registeredHandlers[SCHEDULER_CUSTOM_JOB]?.({ payload: { name: 'x' } })).rejects.toThrow(
+            'scheduler.custom payload for "x" must carry a non-empty command string',
+        );
         const sigint = sigHandlers.SIGINT;
         if (!sigint) throw new Error('SIGINT handler not registered');
         sigint();
         await exitCalled;
-        expect(order).toEqual(['worker.start', 'scheduler.start', 'scheduler.stop', 'worker.stop', 'server.stop']);
+        expect(order).toEqual(['worker.start', 'worker.stop', 'server.stop', 'runtime.stop']);
     });
 
     test('registerSchedulerEntries enqueues built-in prune and smoke jobs and emits scheduler events', async () => {
@@ -689,6 +753,73 @@ describe('startServer', () => {
 
         registerSchedulerEntries(scheduler, ctx, null);
         expect(registered.map((r) => r.cron)).toEqual(['300000', '600000']);
+    });
+
+    test('registerSchedulerEntries leaves built-ins alone for an empty configured jobs list (task 0734)', () => {
+        const registered: Array<{ cron: string }> = [];
+        const scheduler = {
+            register: (cron: string) => {
+                registered.push({ cron });
+            },
+            start: async () => {},
+            stop: async () => {},
+        };
+        const ctx = {
+            jobQueue: async () => ({ enqueue: async () => 'id' }),
+            eventBus: () => ({ emit: async () => {} }),
+        } as unknown as ServerContext;
+
+        registerSchedulerEntries(scheduler, ctx, null, []);
+        expect(registered.map((r) => r.cron)).toEqual(['300000', '600000']);
+    });
+
+    test('registerSchedulerEntries registers configured jobs with exact schedules, names and payloads (task 0734)', async () => {
+        const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+        const enqueued: Array<{ type: string; payload: unknown }> = [];
+        const emitted: Array<{ name: string; payload: unknown }> = [];
+        const scheduler = {
+            register: (cron: string, action: () => Promise<void>) => {
+                registered.push({ cron, action });
+            },
+            start: async () => {},
+            stop: async () => {},
+        };
+        const ctx = {
+            jobQueue: async () => ({
+                enqueue: async (type: string, payload: unknown) => {
+                    enqueued.push({ type, payload });
+                    return `${type}-id`;
+                },
+            }),
+            eventBus: () => ({
+                emit: (name: string, payload: unknown) => {
+                    emitted.push({ name, payload });
+                },
+            }),
+        } as unknown as ServerContext;
+        const jobs: readonly SchedulerJobConfig[] = [
+            { name: 'nightly-import', command: 'bun run load-history', cron: '30 2 * * *' },
+            { name: 'hourly-analyze', command: 'spur history analyze', intervalMinutes: 60 },
+        ];
+
+        registerSchedulerEntries(scheduler, ctx, null, jobs);
+
+        // Cron passes through verbatim; the interval form converts to milliseconds.
+        expect(registered.map((r) => r.cron)).toEqual(['300000', '600000', '30 2 * * *', '3600000']);
+
+        await registered[2]?.action();
+        await registered[3]?.action();
+
+        // The tick only enqueues — the command itself never runs in the scheduler.
+        expect(enqueued).toEqual([
+            { type: SCHEDULER_CUSTOM_JOB, payload: { name: 'nightly-import', command: 'bun run load-history' } },
+            { type: SCHEDULER_CUSTOM_JOB, payload: { name: 'hourly-analyze', command: 'spur history analyze' } },
+        ]);
+        expect(emitted.map((e) => e.name)).toEqual(['scheduler.job.executed', 'scheduler.job.executed']);
+        expect(emitted.map((e) => (e.payload as { name: string }).name)).toEqual([
+            `${SCHEDULER_CUSTOM_JOB}:nightly-import`,
+            `${SCHEDULER_CUSTOM_JOB}:hourly-analyze`,
+        ]);
     });
 
     test('registerSchedulerEntries captures error on failure and re-throws after emitting', async () => {
@@ -1042,21 +1173,17 @@ describe('startServer', () => {
         expect(typeof handleHistoryRefreshJob).toBe('function');
     });
 
-    test('defaultDeps exports standard collaborators and resolves NodeSchedulerAdapter', async () => {
+    test('defaultDeps exports standard collaborators and no scheduler factory (task 0734)', () => {
         expect(typeof defaultDeps.serverBootstrapConfig).toBe('function');
         expect(typeof defaultDeps.runNodeApplication).toBe('function');
         expect(typeof defaultDeps.createApp).toBe('function');
         expect(typeof defaultDeps.createNodeFileSystem).toBe('function');
         expect(typeof defaultDeps.createServerContext).toBe('function');
-        expect(typeof defaultDeps.createScheduler).toBe('function');
         expect(typeof defaultDeps.openUrl).toBe('function');
         expect(typeof defaultDeps.resolveConfigFile).toBe('function');
-
-        const scheduler = await defaultDeps.createScheduler();
-        expect(scheduler).toBeDefined();
-        if (scheduler && typeof scheduler.stop === 'function') {
-            await scheduler.stop();
-        }
+        // The adapter now arrives on the ApplicationRuntime, so serve.ts must not
+        // keep a second construction path that could start a rival scheduler.
+        expect(defaultDeps).not.toHaveProperty('createScheduler');
     });
 });
 
@@ -1091,5 +1218,103 @@ describe('serverBootstrapConfig retention env parsing', () => {
     test('omits retention fields entirely when no env vars are set', () => {
         const config = serverBootstrapConfig({ ...{}, NODE_ENV: 'test' });
         expect(config.events.retention).toEqual({});
+    });
+});
+
+/**
+ * Task 0734 end-to-end: a configured `bootstrap.scheduler.jobs` tick enqueues a
+ * real `scheduler.custom` job, the real queue consumer runs it through the real
+ * handler in a child process, and the resulting lifecycle events land in the
+ * `system_events` ledger. Uses the production wiring (real context, real queue,
+ * real tap) rather than spies, because the claim under test is that the
+ * scheduler only *enqueues* and the queue owns command execution and retries.
+ */
+describe('configured scheduler jobs round-trip through the real queue (task 0734)', () => {
+    test('a successful tick completes and a failing tick retries, both persisted', async () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-0734-'));
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const ctx = createServerContext((await import('./middleware/helpers')).mockRuntime(), {
+            cwd,
+            fs: createNodeFileSystem(cwd),
+            dbUrl: ':memory:',
+            jobQueueEnabled: true,
+            eventsBus: bus,
+        });
+        const db = await ctx.getDb();
+        const dao = new SystemEventDao(db);
+        // scheduler.job.executed and queue.job.completed are diagnostic-tier.
+        const tap = registerSystemEventTap(
+            bus as never,
+            dao,
+            { warn: () => {}, debug: () => {} },
+            {
+                diagnosticEnabled: true,
+            },
+        );
+
+        const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+        const scheduler = {
+            register: (cron: string, action: () => Promise<void>) => {
+                registered.push({ cron, action });
+            },
+            start: async () => {},
+            stop: async () => {},
+        };
+
+        try {
+            registerSchedulerEntries(scheduler, ctx, null, [
+                { name: 'ok-job', command: 'exit 0', intervalMinutes: 5 },
+                { name: 'bad-job', command: 'exit 3', intervalMinutes: 5 },
+            ]);
+            // Built-ins occupy 0 and 1; the configured jobs follow in order.
+            await registered[2]?.action();
+            await registered[3]?.action();
+
+            const consumer = await ctx.queueConsumer();
+            const executor = new NodeProcessExecutor();
+            consumer.register(SCHEDULER_CUSTOM_JOB, (job) => handleSchedulerCustomJob({ cwd, executor }, job));
+            expect(await consumer.processOnce()).toBe(2);
+
+            interface QueueRow {
+                type: string;
+                status: string;
+                attempts: number;
+                payload: string;
+            }
+            const rows = await db.queryAll<QueueRow>(
+                'SELECT type, status, attempts, payload FROM queue_jobs ORDER BY created_at, id',
+            );
+            const byName = new Map(rows.map((r) => [(JSON.parse(r.payload) as { name: string }).name, r] as const));
+            expect(rows.every((r) => r.type === SCHEDULER_CUSTOM_JOB)).toBe(true);
+            expect(byName.get('ok-job')?.status).toBe('completed');
+            // maxRetries defaults to 3, so the first non-zero exit retries rather
+            // than failing outright — the queue owns the attempt policy, not us.
+            expect(byName.get('bad-job')?.status).toBe('pending');
+            expect(byName.get('bad-job')?.attempts).toBe(1);
+
+            await tap.flush();
+            const events = await dao.query({ limit: 100 });
+            // The tap wraps producer detail under `data` (schemaVersion 2 envelope).
+            const data = (row?: { payload_json?: string | null }): Record<string, unknown> =>
+                (JSON.parse(row?.payload_json ?? '{}') as { data?: Record<string, unknown> }).data ?? {};
+            const named = (name: string) => events.filter((e) => e.event_name === name);
+            expect(
+                named('scheduler.job.executed')
+                    .map((e) => data(e).name)
+                    .sort(),
+            ).toEqual([`${SCHEDULER_CUSTOM_JOB}:bad-job`, `${SCHEDULER_CUSTOM_JOB}:ok-job`]);
+            expect(named('queue.job.completed')).toHaveLength(1);
+            const retrying = named('queue.job.retrying');
+            expect(retrying).toHaveLength(1);
+            expect(data(retrying[0])).toMatchObject({
+                type: SCHEDULER_CUSTOM_JOB,
+                attempt: 1,
+                error: 'scheduler job "bad-job" exited 3',
+            });
+        } finally {
+            tap.unsubscribe();
+            db.close();
+            rmSync(cwd, { recursive: true, force: true });
+        }
     });
 });
