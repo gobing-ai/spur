@@ -1,7 +1,7 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import type { ArtifactSelector } from './artifact';
 import type { SessionSpanRow, SessionToolDurationRow, TodoToolCallRow } from './derived';
-import { EFFECTIVE_TOOL_NAME_SQL, HISTORY_BOARD_ACTIVITY_DAYS } from './history-board-rollup';
+import { HISTORY_BOARD_ACTIVITY_DAYS, RESOLVED_TOOL_NAME_SQL } from './tool-name-sql';
 import { applyWatermarkToWhere, type WatermarkQueryOptions } from './watermark';
 
 /**
@@ -1091,12 +1091,6 @@ const BUCKET_SECONDS: Record<HistoryBucket, number> = {
     '4h': 14400,
     '1d': 86400,
 };
-
-const RESOLVED_TOOL_NAME_SQL = `CASE
-    WHEN tc.effective_tool_name IS NOT NULL AND tc.effective_tool_name != '' AND tc.effective_tool_name != 'unknown'
-    THEN tc.effective_tool_name
-    ELSE ${EFFECTIVE_TOOL_NAME_SQL}
-END`;
 
 const HISTORY_SKILL_NAME_SQL = `CASE
     WHEN LOWER(${RESOLVED_TOOL_NAME_SQL}) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)

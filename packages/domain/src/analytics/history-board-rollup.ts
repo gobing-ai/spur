@@ -31,12 +31,17 @@ import {
     writeRollupWatermark,
 } from './rollup-watermark';
 
-// Keep the first row (MIN rowid) per request_id. NOT EXISTS form: only rows carrying a
-// request_id (retries, a tiny fraction of the corpus) pay a correlated lookup, instead of
-// a bloom-filter membership check over every row — same representative, far cheaper scan.
+import { HISTORY_BOARD_ACTIVITY_DAYS, RESOLVED_TOOL_NAME_SQL } from './tool-name-sql';
+
+// Keep the FINAL row (MAX rowid) per request_id. A streaming response re-emits an
+// assistant message while it streams; the final row carries the complete cumulative usage
+// (task 0624 R1), so the representative is MAX rowid — matching forensic-query's
+// MESSAGE_DEDUP. NOT EXISTS form: only rows carrying a request_id (retries, a tiny fraction
+// of the corpus) pay a correlated lookup, instead of a bloom-filter membership check over
+// every row — same representative, far cheaper scan.
 const MESSAGE_DEDUP = `(m.request_id IS NULL OR NOT EXISTS (
     SELECT 1 FROM history_message o
-    WHERE o.request_id = m.request_id AND o.rowid < m.rowid
+    WHERE o.request_id = m.request_id AND o.rowid > m.rowid
 ))`;
 
 /**
@@ -47,71 +52,13 @@ export const ROLLUP_SOURCE_TABLES = ['history_message', 'history_tool_call', 'hi
 
 /**
  * SQL expression resolving the effective tool name for a history_tool_call `tc` row.
- * Recovers missing/empty tool names from JSON `args_raw` payload fields or `call_id` prefixes,
- * defaulting unresolved tools to `'unknown'`.
+ * Re-exported from tool-name-sql so existing importers keep working.
  */
-export const EFFECTIVE_TOOL_NAME_SQL = `CASE
-    WHEN tc.tool_name IS NOT NULL AND TRIM(tc.tool_name) != '' AND tc.tool_name != 'unknown'
-    THEN TRIM(tc.tool_name)
-    WHEN json_valid(tc.args_raw) AND COALESCE(
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.tool') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.tool_name') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.toolName') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.name') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.command') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.cmd') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.action') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.function') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.operation') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.skill') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.skill_name') AS TEXT)), '')
-    ) IS NOT NULL
-    THEN COALESCE(
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.tool') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.tool_name') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.toolName') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.name') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.command') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.cmd') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.action') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.function') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.operation') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.skill') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.skill_name') AS TEXT)), '')
-    )
-    WHEN tc.call_id IS NOT NULL AND (
-        tc.call_id LIKE 'call_bash_%' OR tc.call_id LIKE 'bash_%' OR tc.call_id LIKE 'exec_%'
-    ) THEN 'bash'
-    WHEN tc.call_id IS NOT NULL AND (
-        tc.call_id LIKE 'call_read_%' OR tc.call_id LIKE 'read_%'
-    ) THEN 'read'
-    WHEN tc.call_id IS NOT NULL AND (
-        tc.call_id LIKE 'call_edit_%' OR tc.call_id LIKE 'edit_%'
-    ) THEN 'edit'
-    WHEN tc.call_id IS NOT NULL AND (
-        tc.call_id LIKE 'call_search_%' OR tc.call_id LIKE 'search_%' OR tc.call_id LIKE 'web_search_%'
-    ) THEN 'search'
-    ELSE 'unknown'
-END`;
-
-/**
- * Resolves effective tool name, preferring the persisted column if not 'unknown',
- * falling back to the CASE expression for unmigrated or unpopulated test rows.
- */
-export const RESOLVED_TOOL_NAME_SQL = `CASE
-    WHEN tc.effective_tool_name IS NOT NULL AND tc.effective_tool_name != '' AND tc.effective_tool_name != 'unknown'
-    THEN tc.effective_tool_name
-    ELSE ${EFFECTIVE_TOOL_NAME_SQL}
-END`;
-
-/**
- * Activity window (days) backing the History board Sources tab per-day heatmap grid.
- * Single knob for the window — the board's `historyBoardSourcesFromRollup` /
- * `dailyTokenMatrix` defaults and the app-side heatmap span all read it. Raise to
- * widen the visible activity history; the materialized tables are all-time, so no
- * re-import is needed.
- */
-export const HISTORY_BOARD_ACTIVITY_DAYS = 180;
+export {
+    EFFECTIVE_TOOL_NAME_SQL,
+    HISTORY_BOARD_ACTIVITY_DAYS,
+    RESOLVED_TOOL_NAME_SQL,
+} from './tool-name-sql';
 
 const SKILL_NAME_SQL = `CASE
     WHEN LOWER(${RESOLVED_TOOL_NAME_SQL}) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)

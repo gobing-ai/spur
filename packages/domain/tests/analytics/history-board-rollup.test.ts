@@ -438,7 +438,7 @@ describe('replaceHistoryBoardRollups', () => {
         });
     });
 
-    test('drops re-imported duplicates: only the first row of a request_id group is measured', async () => {
+    test('drops re-imported duplicates: only the final row of a request_id group is measured (task 0624 R1)', async () => {
         const db = await setup();
         await insertMessage(db, {
             recordHash: 'dup-1',
@@ -468,8 +468,10 @@ describe('replaceHistoryBoardRollups', () => {
         const rows = await db.queryAll<{ bucket_start: string; messages: number; fresh_input_tokens: number }>(
             `SELECT bucket_start, messages, fresh_input_tokens FROM history_board_message_5m ORDER BY bucket_start`,
         );
+        // A streaming response re-emits rows while it streams; the FINAL row (MAX rowid) carries
+        // the complete cumulative usage, so dedup keeps dup-2 (999) and drops the partial dup-1 (100).
         expect(rows).toEqual([
-            { bucket_start: '2026-06-01T11:00:00Z', messages: 1, fresh_input_tokens: 100 },
+            { bucket_start: '2026-06-01T11:01:00Z', messages: 1, fresh_input_tokens: 999 },
             { bucket_start: '2026-06-01T11:02:00Z', messages: 1, fresh_input_tokens: 7 },
         ]);
     });

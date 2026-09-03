@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Assert incremental rollups equal a full rebuild"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-03T16:43:04.134Z
-updated_at: "2026-09-03T17:45:46.893Z"
+updated_at: "2026-09-03T22:27:13.689Z"
 feature_id: E91
 priority: P0
 tags: ["history", "test", "correctness"]
@@ -20,11 +20,11 @@ Two structural facts shape what the assertion can claim. First, the twelve rollu
 
 Second, `history_board_rollup_meta` records `refreshed_at` as `new Date().toISOString()` at write time (`packages/domain/src/analytics/history-board-rollup.ts:602`), and 0741 adds `history_board_rollup_watermark` and `history_board_rollup_bucket` whose contents describe how the build ran rather than what it computed. These are bookkeeping, not measurements, and comparing them would fail every run for reasons that have nothing to do with correctness.
 ### Requirements
-- [ ] R1. A corpus is imported in two increments; rollups are built incrementally across both and separately rebuilt in full from scratch.
-- [ ] R2. Every integer measure in every `history_board_*` table is exactly equal between the two builds for a fixed filter matrix.
-- [ ] R3. Every allocated real-valued measure agrees within a tolerance the test states explicitly.
-- [ ] R4. Every dimension key present in one build is present in the other.
-- [ ] R5. The equivalence assertion runs as an automated test, not a manual comparison.
+- [x] R1. A corpus is imported in two increments; rollups are built incrementally across both and separately rebuilt in full from scratch.
+- [x] R2. Every integer measure in every `history_board_*` table is exactly equal between the two builds for a fixed filter matrix.
+- [x] R3. Every allocated real-valued measure agrees within a tolerance the test states explicitly.
+- [x] R4. Every dimension key present in one build is present in the other.
+- [x] R5. The equivalence assertion runs as an automated test, not a manual comparison.
 ### Acceptance Criteria
 ```gherkin
 Feature: History read path materialized-only: incremental rollup ETL, per-table freshness, and precomputed UI aggregates
@@ -101,16 +101,42 @@ Authority: ADR-103, ADR-106; design sections 5 (D3) and 13 (D11).
 6. Wire the test into the standard `bun test` run from inside `packages/domain`. Test intent: the assertion runs in the normal gate, not as a manual step.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+File:line change map and rationale.
+
+- **`packages/domain/tests/analytics/rollup-equivalence.test.ts`** (new) — two-increment fixture corpus (backfill, dedup-excluded row, boundary session) plus `snapshotRollupTables`, `diffRollupSnapshots`, `EQUIVALENCE_EXCLUDED_TABLES`, `ALLOC_TOLERANCE_RATIO`, `EQUIVALENCE_COMPARED_TABLES`. The compared set is derived from `ALL_ROLLUP_TABLES` minus `EQUIVALENCE_EXCLUDED_TABLES` (`rollup_meta`, `rollup_watermark`, `rollup_bucket` — bookkeeping, not measurements), never hand-written. Integer columns compare exactly; `_alloc` columns by `ALLOC_TOLERANCE_RATIO` (relative, reasons documented); `NULL != 0`.
+- **`packages/domain/src/analytics/tool-name-sql.ts`** (new) — extracted `EFFECTIVE_TOOL_NAME_SQL`, `RESOLVED_TOOL_NAME_SQL`, `HISTORY_BOARD_ACTIVITY_DAYS` into a standalone import-free module. Breaks a latent bidirectional value cycle between `forensic-query.ts` and `history-board-rollup.ts` (forensic read `EFFECTIVE_TOOL_NAME_SQL` at module scope while rollup imported analyzers back — TDZ on some load orders). Both files now import the shared constants; `history-board-rollup.ts` re-exports them for backward compatibility. Unifies the two near-identical `RESOLVED_TOOL_NAME_SQL` definitions. See `packages/domain/src/analytics/tool-name-sql.ts:14`.
+- **`history-board-rollup.ts`** — fixed `MESSAGE_DEDUP` to keep the **final** row (MAX rowid) rather than the first (MIN rowid). The bucket path was inconsistent with `forensic-query.ts`'s dedup (task 0624 R1: the final streaming row carries complete cumulative usage). This was exactly the divergence the equivalence test exposed — the incremental (bucket) path and the full-rebuild (raw `messageRollup`) path counted different representative rows, so their aggregates disagreed on a dedup-excluded fixture row. Aligning them makes incremental byte-identical to full. See `packages/domain/src/analytics/history-board-rollup.ts:42`.
+- **`packages/domain/tests/analytics/tool-name-sql.test.ts`** (new) — asserts the shared SQL constants are non-empty and `RESOLVED_TOOL_NAME_SQL` embeds `EFFECTIVE_TOOL_NAME_SQL`.
 
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | rollup-equivalence.test.ts: seedIncrementOne + seedIncrementTwo define a two-increment corpus; the incremental test refreshes after each, while a fresh DB receives the whole corpus and takes the full-rebuild path (refreshHistoryBoardRollupsIncremental first run = rebuildAllRollups). |
+| R2 | MET | diffRollupSnapshots compares integer columns with exact equality across every EQUIVALENCE_COMPARED_TABLES table. Test: 'incremental rollups are byte-identical to a full rebuild' asserts the diff list is empty. |
+| R3 | MET | _alloc columns compare with ALLOC_TOLERANCE_RATIO (1e-9, relative) — the test states the tolerance as a named constant with a documented reason (differing floating-point summation order). |
+| R4 | MET | diffRollupSnapshots reports missing-key and extra-key separately from value differences, checking key sets in both directions before value comparison. A key present in one build and absent from the other is surfaced as a key difference. |
+| R5 | MET | The equivalence assertion runs as `bun test` inside packages/domain (rollup-equivalence.test.ts is in the normal test run; spur-check runs it — 7204 pass, 0 fail). Not a manual comparison. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R4 — Incremental rollups are byte-identical to a full rebuild | MET | test | rollup-equivalence.test.ts: 'incremental rollups are byte-identical to a full rebuild' — two-increment corpus built incrementally vs the same corpus fully rebuilt; diffRollupSnapshots returns [] (integer exact, _alloc by relative tolerance, key sets both directions, NULL != 0). 5 pass, 0 fail. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Findings** and disposition.
 
+| Priority | Dimension | Location | Finding | Disposition |
+|----------|-----------|----------|----------|-------------|
+| P2 | correctness | history-board-rollup.ts MESSAGE_DEDUP | The equivalence test exposed a real divergence: the rollup bucket path kept the FIRST row (MIN rowid) per request_id, while forensic-query's dedup (task 0624 R1) keeps the FINAL completed row (MAX rowid). A dedup-excluded fixture row was counted differently, making incremental ≠ full. | **FIXED** — aligned the rollup MESSAGE_DEDUP to keep MAX rowid, matching the forensic analyzer's intended semantics. |
+| P3 | module cycle | forensic-query.ts ↔ history-board-rollup.ts | Latent bidirectional value cycle: forensic read EFFECTIVE_TOOL_NAME_SQL at module scope while rollup imported analyzers back — TDZ ReferenceError on some load orders (reproduced via a standalone import of history-board-rollup). | **FIXED** — extracted the shared SQL constants into `tool-name-sql.ts` (import-free); both consumers import from it. |
+| P4 | test scope | rollup-equivalence.test.ts | Covers three named hard cases (backfill, dedup-excluded, boundary session) per the Plan. Property-based increment splitting deliberately deferred (spec). | Accepted — matches the task's stated deferred item. |
+
+**Disposition:** APPROVED. The equivalence gate is meaningful (it caught a real dedup divergence). The tool-name-sql extraction is a minimal, import-free refactor that removes a latent crash without changing behavior. Full gates green: domain 1179/0, app 2407/0, spur-check 7204/0, rules pass.
 ### References
 - Parent feature: `docs/features/E91_history-read-path-materialized-only-incremental-rollup-etl-per-table-freshness-and-precomputed-ui-aggregates.md`
 - Design satellite: `docs/design/history-incremental-materialization.md` sections 5 (D3), 13 (D11)
@@ -120,3 +146,6 @@ Authority: ADR-103, ADR-106; design sections 5 (D3) and 13 (D11).
 - Non-deterministic bookkeeping timestamp: `packages/domain/src/analytics/history-board-rollup.ts:602`
 - DAO test conventions and in-memory SQLite: `CLAUDE.md` build-and-verification section
 ### History
+- 2026-09-03T22:26:27.697Z todo → wip (system)
+- 2026-09-03T22:26:58.471Z wip → testing (system)
+- 2026-09-03T22:27:13.689Z testing → done (system)
