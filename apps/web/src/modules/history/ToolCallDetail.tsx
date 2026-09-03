@@ -24,7 +24,7 @@ export const CATEGORY_BG_CLASS: Record<HistoryToolCategory, string> = {
 /**
  * Supported syntax highlighting languages for tool payload values.
  */
-export type SyntaxLanguage = 'json' | 'bash' | 'diff' | 'markdown' | 'text';
+export type SyntaxLanguage = 'json' | 'bash' | 'diff' | 'markdown' | 'xml' | 'text';
 
 /**
  * Config-driven syntax highlighting rule for a tool.
@@ -565,6 +565,329 @@ function highlightGenericJson(jsonStr: string): React.ReactNode {
         );
     }
     return elements;
+}
+
+/**
+ * Highlight XML/HTML text.
+ */
+export const highlightXml = (code: string): React.ReactNode => {
+    const lines = code.split('\n');
+    const elements: React.ReactNode[] = [];
+    let lineIdx = 0;
+
+    for (const line of lines) {
+        const lineKey = `xml-line-${lineIdx++}-${line.slice(0, 16)}`;
+        const tagRegex =
+            /(<!--[\s\S]*?-->|<\/?[a-zA-Z0-9_:-]+(?:(?:\s+[a-zA-Z0-9_:-]+(?:=(?:"[^"]*"|'[^']*'|[^\s>]+))?)*\s*\/?>)|&[a-zA-Z0-9#]+;|[^<&]+|<)/g;
+
+        const tokens: React.ReactNode[] = [];
+        let tokIdx = 0;
+        let match = tagRegex.exec(line);
+
+        while (match !== null) {
+            const tok = match[0];
+            const key = `${lineKey}-tok-${tokIdx++}`;
+
+            if (tok.startsWith('<!--')) {
+                tokens.push(
+                    <span key={key} className="text-base-content/40 italic">
+                        {tok}
+                    </span>,
+                );
+            } else if (tok.startsWith('<') && (tok.endsWith('>') || tok.length > 1)) {
+                const tagMatch = tok.match(/^(<\/?[a-zA-Z0-9_:-]+)([\s\S]*?)(\/?>)$/);
+                if (tagMatch?.[1]) {
+                    const openName = tagMatch[1];
+                    const attrPart = tagMatch[2] ?? '';
+                    const closeBracket = tagMatch[3] ?? '>';
+                    const subTokens: React.ReactNode[] = [];
+                    let subIdx = 0;
+
+                    const isClose = openName.startsWith('</');
+                    const prefix = isClose ? '</' : '<';
+                    const name = openName.slice(prefix.length);
+
+                    subTokens.push(
+                        <span key={`${key}-bracket-1`} className="text-sky-400/60 font-mono">
+                            {prefix}
+                        </span>,
+                        <span key={`${key}-name`} className="text-sky-300 font-semibold font-mono">
+                            {name}
+                        </span>,
+                    );
+
+                    if (attrPart) {
+                        const attrRegex = /(\s+)([a-zA-Z0-9_:-]+)(?:(=)("[^"]*"|'[^']*'|[^\s>]+))?/g;
+                        let attrMatch = attrRegex.exec(attrPart);
+                        let lastIndex = 0;
+
+                        while (attrMatch !== null) {
+                            const [fullAttr, ws, attrName, eq, attrVal] = attrMatch;
+                            if (attrMatch.index > lastIndex) {
+                                subTokens.push(
+                                    <span key={`${key}-ws-${subIdx++}`}>
+                                        {attrPart.slice(lastIndex, attrMatch.index)}
+                                    </span>,
+                                );
+                            }
+                            subTokens.push(
+                                <span key={`${key}-attr-ws-${subIdx++}`}>{ws}</span>,
+                                <span key={`${key}-attr-name-${subIdx++}`} className="text-cyan-300 font-mono">
+                                    {attrName}
+                                </span>,
+                            );
+                            if (eq) {
+                                subTokens.push(
+                                    <span key={`${key}-attr-eq-${subIdx++}`} className="text-base-content/50">
+                                        =
+                                    </span>,
+                                );
+                            }
+                            if (attrVal) {
+                                subTokens.push(
+                                    <span key={`${key}-attr-val-${subIdx++}`} className="text-emerald-300 font-mono">
+                                        {attrVal}
+                                    </span>,
+                                );
+                            }
+                            lastIndex = attrMatch.index + fullAttr.length;
+                            attrMatch = attrRegex.exec(attrPart);
+                        }
+                        if (lastIndex < attrPart.length) {
+                            subTokens.push(
+                                <span key={`${key}-attr-rest-${subIdx++}`}>{attrPart.slice(lastIndex)}</span>,
+                            );
+                        }
+                    }
+
+                    subTokens.push(
+                        <span key={`${key}-bracket-2`} className="text-sky-400/60 font-mono">
+                            {closeBracket}
+                        </span>,
+                    );
+
+                    tokens.push(<span key={key}>{subTokens}</span>);
+                } else {
+                    tokens.push(
+                        <span key={key} className="text-sky-300 font-semibold">
+                            {tok}
+                        </span>,
+                    );
+                }
+            } else if (tok.startsWith('&') && tok.endsWith(';')) {
+                tokens.push(
+                    <span key={key} className="text-amber-300 font-semibold">
+                        {tok}
+                    </span>,
+                );
+            } else {
+                tokens.push(
+                    <span key={key} className="text-slate-100">
+                        {tok}
+                    </span>,
+                );
+            }
+
+            match = tagRegex.exec(line);
+        }
+
+        elements.push(
+            <div key={lineKey} className="leading-5">
+                {tokens.length > 0 ? tokens : ' '}
+            </div>,
+        );
+    }
+
+    return elements;
+};
+
+/**
+ * Highlight Markdown text.
+ */
+export const highlightMarkdown = (code: string): React.ReactNode => {
+    const lines = code.split('\n');
+    const elements: React.ReactNode[] = [];
+    let inFrontmatter = false;
+    let lineIdx = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i] ?? '';
+        const lineKey = `md-line-${lineIdx++}-${line.slice(0, 16)}`;
+        const trimmed = line.trim();
+
+        if (trimmed === '---') {
+            inFrontmatter = i === 0 ? true : !inFrontmatter;
+            elements.push(
+                <div key={lineKey} className="text-purple-400 font-bold leading-5">
+                    {line}
+                </div>,
+            );
+            continue;
+        }
+
+        if (inFrontmatter) {
+            const colonIdx = line.indexOf(':');
+            if (colonIdx > 0) {
+                const keyPart = line.slice(0, colonIdx);
+                const valPart = line.slice(colonIdx + 1);
+                elements.push(
+                    <div key={lineKey} className="leading-5">
+                        <span className="text-cyan-300 font-semibold">{keyPart}</span>
+                        <span className="text-base-content/50">:</span>
+                        <span className="text-emerald-300">{valPart}</span>
+                    </div>,
+                );
+                continue;
+            }
+            elements.push(
+                <div key={lineKey} className="text-slate-300 leading-5">
+                    {line || ' '}
+                </div>,
+            );
+            continue;
+        }
+
+        // Code fences
+        if (trimmed.startsWith('```')) {
+            elements.push(
+                <div key={lineKey} className="text-pink-400 font-mono font-semibold leading-5">
+                    {line}
+                </div>,
+            );
+            continue;
+        }
+
+        // Headings
+        if (trimmed.startsWith('#')) {
+            elements.push(
+                <div key={lineKey} className="text-sky-300 font-bold leading-5">
+                    {line}
+                </div>,
+            );
+            continue;
+        }
+
+        // Blockquotes
+        if (trimmed.startsWith('>')) {
+            elements.push(
+                <div
+                    key={lineKey}
+                    className="text-emerald-300/80 italic pl-1.5 border-l border-emerald-500/40 leading-5"
+                >
+                    {line}
+                </div>,
+            );
+            continue;
+        }
+
+        // Bullet / Numbered list
+        const listMatch = line.match(/^(\s*[-*+]|\s*\d+\.)/);
+        if (listMatch) {
+            elements.push(
+                <div key={lineKey} className="leading-5">
+                    <span className="text-amber-300 font-semibold">{listMatch[0]}</span>
+                    <span className="text-slate-100">{line.slice(listMatch[0].length)}</span>
+                </div>,
+            );
+            continue;
+        }
+
+        // Standard markdown line with inline code / bold / link highlights
+        const inlineParts = line.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g);
+        const spans: React.ReactNode[] = [];
+        let pIdx = 0;
+
+        for (const part of inlineParts) {
+            const key = `${lineKey}-p-${pIdx++}`;
+            if (part.startsWith('`') && part.endsWith('`')) {
+                spans.push(
+                    <span key={key} className="text-emerald-300 bg-white/10 px-1 rounded font-mono">
+                        {part}
+                    </span>,
+                );
+            } else if (part.startsWith('**') && part.endsWith('**')) {
+                spans.push(
+                    <span key={key} className="text-amber-200 font-bold">
+                        {part}
+                    </span>,
+                );
+            } else if (part.startsWith('[') && part.includes('](') && part.endsWith(')')) {
+                spans.push(
+                    <span key={key} className="text-sky-400 underline">
+                        {part}
+                    </span>,
+                );
+            } else {
+                spans.push(
+                    <span key={key} className="text-slate-100">
+                        {part}
+                    </span>,
+                );
+            }
+        }
+
+        elements.push(
+            <div key={lineKey} className="leading-5">
+                {spans.length > 0 ? spans : ' '}
+            </div>,
+        );
+    }
+
+    return elements;
+};
+
+/**
+ * Detect syntax language for a timeline payload per defined rules:
+ * - For bash/Bash/Shell/shell tools -> bash
+ * - Content starts with '<' and ends with '>' -> xml
+ * - Content starts with '{' and ends with '}' -> json
+ * - Content's first line is '---' -> markdown
+ */
+export function detectTimelineSyntaxLanguage(code: string, toolName?: string | null): SyntaxLanguage {
+    if (toolName && /^(bash|shell)$/i.test(toolName.trim())) {
+        return 'bash';
+    }
+
+    const trimmed = code.trim();
+    if (!trimmed) return 'text';
+
+    if (trimmed.startsWith('<') && trimmed.endsWith('>')) {
+        return 'xml';
+    }
+
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        return 'json';
+    }
+
+    const firstLine = trimmed.split('\n')[0]?.trim();
+    if (firstLine === '---') {
+        return 'markdown';
+    }
+
+    return 'text';
+}
+
+/**
+ * Render payload with syntax highlighting for timeline unfolded drawers.
+ */
+export function renderTimelinePayload(content: string, toolName?: string | null): React.ReactNode {
+    if (!content) return null;
+    const lang = detectTimelineSyntaxLanguage(content, toolName);
+
+    switch (lang) {
+        case 'bash':
+            return highlightBash(content);
+        case 'xml':
+            return highlightXml(content);
+        case 'json': {
+            const rule = toolName ? getToolSyntaxRule(toolName) : { defaultLanguage: 'json' as const };
+            return highlightJson(content, rule);
+        }
+        case 'markdown':
+            return highlightMarkdown(content);
+        default:
+            return content;
+    }
 }
 
 /**
