@@ -35,18 +35,6 @@ bootstrap:
     url: .spur/spur.db # ${DATABASE_URL} interpolation supported
   scheduler:
     enabled: false # CLI is run-once; no scheduler
-    # Declarative scheduled commands (task 0734). Only read when
-    # `enabled: true` (i.e. `spur serve`). Each entry ticks on its own
-    # schedule and enqueues a `scheduler.custom` queue job that runs
-    # `command` via `/bin/sh -c` from the project root. Give exactly one of
-    # `intervalMinutes` (1..35791) or `cron` (5 fields, local time).
-    # jobs:
-    #   - name: nightly-import
-    #     command: bun run load-history
-    #     cron: "30 2 * * *"
-    #   - name: hourly-analyze
-    #     command: spur history analyze
-    #     intervalMinutes: 60
 
 # ── Spur app section (validated by spurConfigSchema in
 # @gobing-ai/spur-config) ──
