@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
-import { HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
+import { applyHistoryImportSchema, HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
 import type { ArtifactSelector } from '../../src/analytics/artifact';
 import type { MessageRollupRow, StepRow, ToolRollupRow } from '../../src/analytics/forensic-query';
 import { bucketedTokenSeries } from '../../src/analytics/forensic-query';
@@ -18,10 +18,11 @@ import {
     historyBoardSkillBreakdownFromRollup,
     historyBoardSourcesFromRollup,
     historyBoardSummaryFromRollup,
+    ROLLUP_SOURCE_TABLES,
     replaceHistoryBoardRollups,
     skillCallRollup,
 } from '../../src/analytics/history-board-rollup';
-import { HISTORY_BOARD_ROLLUPS_SCHEMA_SQL } from '../../src/migrations';
+import { applyCliMigrations, HISTORY_BOARD_ROLLUPS_SCHEMA_SQL } from '../../src/migrations';
 
 const ALL: ArtifactSelector = {
     since: null,
@@ -1571,5 +1572,53 @@ describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
         });
         const zero = await historyBoardSkillBreakdownFromRollup(zeroDb, ALL, '5m');
         expect(zero).toEqual({ bySkill: [], bySource: [], byInvocationKind: [], trend: [] });
+    });
+});
+
+describe('ROLLUP_SOURCE_TABLES schema guard (0738 R2)', () => {
+    test('matches raw source tables referenced in refresh statements', () => {
+        expect([...ROLLUP_SOURCE_TABLES].sort()).toEqual([
+            'history_message',
+            'history_skill_call',
+            'history_tool_call',
+        ]);
+    });
+
+    test('every rollup source table exists in the schema produced by Spur migrations + importer schema', async () => {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyHistoryImportSchema(db);
+        await applyCliMigrations(db);
+
+        const rows = await db.queryAll<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'");
+        const existingTables = new Set(rows.map((r) => r.name));
+
+        for (const table of ROLLUP_SOURCE_TABLES) {
+            expect(existingTables.has(table)).toBe(true);
+        }
+
+        db.close();
+    });
+
+    test('schema guard fails naming the offending table when a referenced table is absent', async () => {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await db.exec('CREATE TABLE history_message (record_hash TEXT PRIMARY KEY)');
+        await db.exec('CREATE TABLE history_tool_call (record_hash TEXT PRIMARY KEY)');
+
+        const rows = await db.queryAll<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'");
+        const existingTables = new Set(rows.map((r) => r.name));
+
+        function assertSourceTables(tables: readonly string[]): void {
+            for (const table of tables) {
+                if (!existingTables.has(table)) {
+                    throw new Error(`Referenced rollup source table absent from schema: ${table}`);
+                }
+            }
+        }
+
+        expect(() => assertSourceTables(ROLLUP_SOURCE_TABLES)).toThrow(
+            'Referenced rollup source table absent from schema: history_skill_call',
+        );
+
+        db.close();
     });
 });

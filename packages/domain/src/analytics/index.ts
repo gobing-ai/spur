@@ -126,6 +126,7 @@ export {
     historyBoardSkillBreakdownFromRollup,
     historyBoardSourcesFromRollup,
     historyBoardSummaryFromRollup,
+    ROLLUP_SOURCE_TABLES,
     replaceHistoryBoardRollups,
     skillCallRollup,
 } from './history-board-rollup';

@@ -882,5 +882,41 @@ describe('db migrations', () => {
             adapterA.close();
             adapterB.close();
         });
+
+        test('0738 R5/R13: every migration has next four-digit prefix, matching registry entry, and applies to populated DB without data loss', async () => {
+            for (let i = 0; i < CLI_MIGRATIONS.length; i++) {
+                const id = CLI_MIGRATIONS[i]?.id ?? '';
+                const match = id.match(/^(\d{4})_/);
+                expect(match).not.toBeNull();
+                const num = Number.parseInt(match?.[1] ?? '0', 10);
+                expect(num).toBe(i);
+            }
+
+            const drizzleDir = join(import.meta.dir, '../../../../drizzle');
+            const sqlMigrations = await loadSqlMigrations(drizzleDir);
+            for (const sqlM of sqlMigrations) {
+                const found = CLI_MIGRATIONS.find((m) => m.id === sqlM.id);
+                expect(found).toBeDefined();
+            }
+
+            const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(db, CLI_MIGRATIONS.slice(0, 30));
+
+            await db.run("INSERT INTO runs (id, status, started_at) VALUES ('run-1', 'pending', 100)");
+            await db.run(
+                "INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES ('msg-1', 'planner', 'hi', 100, 100)",
+            );
+
+            const newlyApplied = await applyCliMigrations(db);
+            expect(newlyApplied).toBe(CLI_MIGRATIONS.length - 30);
+
+            const run = await db.queryFirst<{ id: string }>('SELECT id FROM runs WHERE id = ?', 'run-1');
+            expect(run?.id).toBe('run-1');
+
+            const msg = await db.queryFirst<{ id: string }>('SELECT id FROM inbox_messages WHERE id = ?', 'msg-1');
+            expect(msg?.id).toBe('msg-1');
+
+            db.close();
+        });
     });
 });

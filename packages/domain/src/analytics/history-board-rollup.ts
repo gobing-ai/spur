@@ -20,6 +20,12 @@ const MESSAGE_DEDUP = `(m.request_id IS NULL OR NOT EXISTS (
 ))`;
 
 /**
+ * Raw importer-owned source tables read by the rollup refresh path.
+ * Used by schema assertion guards to ensure all referenced sources exist in DDL.
+ */
+export const ROLLUP_SOURCE_TABLES = ['history_message', 'history_tool_call', 'history_skill_call'] as const;
+
+/**
  * SQL expression resolving the effective tool name for a history_tool_call `tc` row.
  * Recovers missing/empty tool names from JSON `args_raw` payload fields or `call_id` prefixes,
  * defaulting unresolved tools to `'unknown'`.
