@@ -207,6 +207,18 @@
         },
         {
             "kind": "feature",
+            "id": "E91",
+            "code": "L4.scenario-unverified",
+            "severity": "warning"
+        },
+        {
+            "kind": "feature",
+            "id": "E92",
+            "code": "L4.scenario-unverified",
+            "severity": "warning"
+        },
+        {
+            "kind": "feature",
             "id": "F",
             "code": "L4.dogfood-missing",
             "severity": "warning"
@@ -911,6 +923,12 @@
             "kind": "feature",
             "id": "K2",
             "code": "L4.scenario-unverified",
+            "severity": "warning"
+        },
+        {
+            "kind": "feature",
+            "id": "L",
+            "code": "L4.orphan-scenarios",
             "severity": "warning"
         },
         {
@@ -1631,6 +1649,36 @@
             "kind": "task",
             "id": "0698",
             "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0738",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0741",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0742",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0743",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0745",
+            "code": "L4.prerequisite-not-done",
             "severity": "warning"
         }
     ]

@@ -1,10 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Skill(rd3:brainstorm)",
-      "Skill(rd3:task-decomposition)",
       "Skill(sp:rule-refine)",
       "Skill(sp:dev-run)",
+
       "WebFetch(domain:hono.dev)",
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:orm.drizzle.team)",
@@ -14,6 +13,8 @@
       "WebFetch(domain:developers.cloudflare.com)",
       "WebFetch(domain:ab.chatgpt.com)",
       "WebFetch(domain:github.com)",
+      "WebFetch(domain:registry.npmjs.org)",
+
       "Bash(bun run:*)",
       "Bash(bun test:*)",
       "Bash(bun add:*)",
@@ -27,22 +28,27 @@
       "Bash(bunx biome:*)",
       "Bash(bunx tsc *)",
       "Bash(bunx lefthook *)",
+      "Bash(bun run *)",
+
       "Bash(npx biome *)",
       "Bash(npx tsc *)",
       "Bash(npm view *)",
       "Bash(echo:*)",
+      "Bash(biome check *)",
+
       "Bash(grep export:*)",
+      "Bash(grep *)",
+      "Bash(rg:*)",
+      "Bash(sg:*)",
+      "Bash(rg *)",
+      "Bash(sg *)",
+
       "Bash(rtk ls *)",
       "Bash(rtk cat *)",
       "Bash(rtk find *)",
       "Bash(rtk grep *)",
       "Bash(rtk wc *)",
-      "Bash(rg:*)",
-      "Bash(sg:*)",
-      "Bash(grep *)",
-      "Bash(biome check *)",
-      "Bash(tasks:*)",
-      "Bash(ftree:*)",
+
       "Bash(spur --version)",
       "Bash(spur rule *)",
       "Bash(spur workflow *)",
@@ -50,13 +56,11 @@
       "Bash(spur task *)",
       "Bash(spur feature *)",
       "Bash(sqlite3 .spur/spur.db *)",
+
       "Read(//tmp/**)",
       "Read(//private/tmp/**)",
       "Edit(//tmp/**)",
-      "Edit(//private/tmp/**)",
-      "WebFetch(domain:registry.npmjs.org)",
-      "Bash(bun run *)",
-      "Bash(python3 -c ' *)"
+      "Edit(//private/tmp/**)"
     ]
   },
   "skillOverrides": {
