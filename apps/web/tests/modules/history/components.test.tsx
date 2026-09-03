@@ -510,7 +510,19 @@ describe('History Board components', () => {
         expect(promptButton?.getAttribute('aria-label')).toBe('Expand full user prompt');
         fireEvent.click(promptButton as HTMLButtonElement);
         const promptDrawerId = promptButton?.getAttribute('aria-controls');
-        const promptDrawer = promptDrawerId ? view.container.querySelector(`#${promptDrawerId}`) : null;
+        let promptDrawer = promptDrawerId ? view.container.querySelector(`#${promptDrawerId}`) : null;
+        expect(promptDrawer?.textContent).toBe('Fix the failing bun test\nand keep coverage green.');
+
+        // Clicking whole card collapses it
+        const userCard = (userRow.querySelector('button[aria-expanded]') ?? promptButton) as HTMLElement;
+        expect(userCard).toBeDefined();
+        fireEvent.click(userCard);
+        promptDrawer = promptDrawerId ? view.container.querySelector(`#${promptDrawerId}`) : null;
+        expect(promptDrawer).toBeNull();
+
+        // Clicking whole card again unfolds it
+        fireEvent.click(userCard);
+        promptDrawer = promptDrawerId ? view.container.querySelector(`#${promptDrawerId}`) : null;
         expect(promptDrawer?.textContent).toBe('Fix the failing bun test\nand keep coverage green.');
 
         // Expand all reveals operation payloads.

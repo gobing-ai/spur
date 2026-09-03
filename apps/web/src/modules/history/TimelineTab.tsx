@@ -399,7 +399,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
     return (
         <div className="flex flex-col gap-6">
             {/* Conversation Panel */}
-            <div className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5 flex flex-col gap-4">
+            <div className="bg-base-200 rounded-xl shadow-xs border border-base-content/10 p-5 flex flex-col gap-4">
                 {/* Header Toolbar */}
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex flex-wrap items-center gap-3">
@@ -411,9 +411,9 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                 type="button"
                                 data-testid="timeline-mode-session"
                                 aria-pressed={mode === 'session'}
-                                className={`px-2.5 py-1 rounded-md transition-colors ${
+                                className={`px-3 py-1 font-bold rounded-md transition-all cursor-pointer ${
                                     mode === 'session'
-                                        ? 'bg-primary text-primary-content font-bold'
+                                        ? 'bg-primary text-primary-content shadow-xs'
                                         : 'text-base-content/70 hover:text-base-content'
                                 }`}
                                 onClick={() => onModeChange?.('session')}
@@ -424,9 +424,9 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                 type="button"
                                 data-testid="timeline-mode-consolidated"
                                 aria-pressed={mode === 'consolidated'}
-                                className={`px-2.5 py-1 rounded-md transition-colors ${
+                                className={`px-3 py-1 font-bold rounded-md transition-all cursor-pointer ${
                                     mode === 'consolidated'
-                                        ? 'bg-primary text-primary-content font-bold'
+                                        ? 'bg-primary text-primary-content shadow-xs'
                                         : 'text-base-content/70 hover:text-base-content'
                                 }`}
                                 onClick={() => onModeChange?.('consolidated')}
@@ -444,7 +444,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                     <select
                                         aria-label="Select Session"
                                         data-testid="timeline-session-select"
-                                        className="px-3 py-1.5 min-h-[44px] text-xs rounded-lg border border-base-content/20 bg-base-300 font-mono text-base-content max-w-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                        className="px-3 py-1.5 min-h-[44px] text-xs rounded-lg border border-base-content/20 bg-base-300 font-mono text-base-content max-w-xs focus:outline-hidden focus:border-primary cursor-pointer"
                                         value={
                                             scope.source && scope.sessionId
                                                 ? sessionKey(scope.source, scope.sessionId)
@@ -492,7 +492,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                         type="button"
                                         aria-label="Previous session"
                                         disabled={!prevSession}
-                                        className="px-3 py-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-xs font-mono rounded-lg border border-base-content/20 bg-base-300 text-base-content/80 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-base-content/10 transition-colors focus-visible:ring-2 focus-visible:ring-primary"
+                                        className="px-3 py-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-xs font-mono rounded-lg border border-base-content/20 bg-base-300 text-base-content/80 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-base-content/10 transition-colors focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
                                         onClick={() =>
                                             prevSession && onSelectSession?.(prevSession.source, prevSession.id)
                                         }
@@ -503,7 +503,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                         type="button"
                                         aria-label="Next session"
                                         disabled={!nextSession}
-                                        className="px-3 py-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-xs font-mono rounded-lg border border-base-content/20 bg-base-300 text-base-content/80 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-base-content/10 transition-colors focus-visible:ring-2 focus-visible:ring-primary"
+                                        className="px-3 py-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-xs font-mono rounded-lg border border-base-content/20 bg-base-300 text-base-content/80 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-base-content/10 transition-colors focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
                                         onClick={() =>
                                             nextSession && onSelectSession?.(nextSession.source, nextSession.id)
                                         }
@@ -534,7 +534,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                             type="text"
                                             value={taskWbsDraft}
                                             onInput={(event) => setTaskWbsDraft(event.currentTarget.value)}
-                                            className="min-h-[44px] w-28 rounded-lg border border-base-content/20 bg-base-300 px-2 text-xs text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                            className="min-h-[44px] w-28 rounded-lg border border-base-content/20 bg-base-300 px-2 text-xs text-base-content focus:outline-hidden focus:border-primary"
                                         />
                                     </label>
                                     <label className="flex flex-col gap-1 text-[10px] font-mono text-base-content/60">
@@ -543,12 +543,12 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                             type="text"
                                             value={runIdDraft}
                                             onInput={(event) => setRunIdDraft(event.currentTarget.value)}
-                                            className="min-h-[44px] w-40 rounded-lg border border-base-content/20 bg-base-300 px-2 text-xs text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                            className="min-h-[44px] w-40 rounded-lg border border-base-content/20 bg-base-300 px-2 text-xs text-base-content focus:outline-hidden focus:border-primary"
                                         />
                                     </label>
                                     <button
                                         type="submit"
-                                        className="min-h-[44px] rounded-lg bg-primary px-3 text-xs font-semibold text-primary-content focus-visible:ring-2 focus-visible:ring-primary"
+                                        className="min-h-[44px] rounded-lg bg-primary px-3 text-xs font-semibold text-primary-content focus-visible:ring-2 focus-visible:ring-primary cursor-pointer hover:bg-primary/90 transition-colors"
                                     >
                                         Apply scope
                                     </button>
@@ -560,7 +560,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                             type="button"
                             aria-pressed={allExpanded}
                             disabled={expandableKeys.length === 0}
-                            className="px-3.5 py-2 min-h-[44px] rounded-lg text-xs font-semibold border border-primary/30 text-primary hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus-visible:ring-2 focus-visible:ring-primary"
+                            className="px-3.5 py-2 min-h-[44px] rounded-lg text-xs font-semibold border border-primary/30 text-primary hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
                             onClick={toggleAll}
                         >
                             {allExpanded ? 'Collapse all' : 'Expand all'}
@@ -606,20 +606,20 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                     data-testid="timeline-metadata-strip"
                     className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-3 pt-3 border-t border-base-content/10 text-xs font-mono"
                 >
-                    <div className="flex flex-col">
+                    <div className="flex flex-col bg-base-300/40 p-2 rounded-lg border border-base-content/5">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">
                             {mode === 'session' ? 'SESSION' : 'SESSIONS'}
                         </span>
                         <span
-                            className="font-semibold truncate"
+                            className="font-semibold truncate text-base-content mt-0.5"
                             title={scope.sessionId ?? `${scope.sessionCount} sessions`}
                         >
                             {scope.sessionId ? shortSessionId(scope.sessionId) : `${scope.sessionCount} total`}
                         </span>
                     </div>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col bg-base-300/40 p-2 rounded-lg border border-base-content/5">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">AGENT</span>
-                        <span className="inline-flex items-center gap-1 font-semibold truncate">
+                        <span className="inline-flex items-center gap-1 font-semibold truncate text-base-content mt-0.5">
                             {scope.source ? (
                                 <>
                                     <AgentIcon id={scope.source} />
@@ -630,36 +630,44 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                             )}
                         </span>
                     </div>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col bg-base-300/40 p-2 rounded-lg border border-base-content/5">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">MODEL</span>
-                        <span className="inline-flex items-center gap-1.5 truncate">
+                        <span className="inline-flex items-center gap-1.5 truncate text-base-content mt-0.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-primary/70 shrink-0" />
                             {scope.model ?? 'multiple'}
                         </span>
                     </div>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col bg-base-300/40 p-2 rounded-lg border border-base-content/5">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">STARTED</span>
-                        <span className="truncate">{fmtUtcDayTime(scope.start)}</span>
+                        <span className="truncate text-base-content/80 mt-0.5">{fmtUtcDayTime(scope.start)}</span>
                     </div>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col bg-base-300/40 p-2 rounded-lg border border-base-content/5">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">DURATION</span>
-                        <span className="font-semibold truncate">{fmtDur(scope.durationMs / 60000)}</span>
+                        <span className="font-semibold truncate text-base-content mt-0.5">
+                            {fmtDur(scope.durationMs / 60000)}
+                        </span>
                     </div>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col bg-base-300/40 p-2 rounded-lg border border-base-content/5">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">TOTAL TOKENS</span>
-                        <span className="font-bold text-primary truncate">{fmtTok(sessionTokenLoad)}</span>
+                        <span className="font-bold text-primary truncate mt-0.5">{fmtTok(sessionTokenLoad)}</span>
                     </div>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col bg-base-300/40 p-2 rounded-lg border border-base-content/5">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">CACHE READ</span>
-                        <span className="font-semibold text-cyan-400 truncate">{sessionCacheReadPct.toFixed(1)}%</span>
+                        <span className="font-semibold text-cyan-400 truncate mt-0.5">
+                            {sessionCacheReadPct.toFixed(1)}%
+                        </span>
                     </div>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col bg-base-300/40 p-2 rounded-lg border border-base-content/5">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">OUTPUT TOKENS</span>
-                        <span className="truncate">{fmtTok(scope.tokens.outputTokens)}</span>
+                        <span className="truncate text-base-content/80 mt-0.5">
+                            {fmtTok(scope.tokens.outputTokens)}
+                        </span>
                     </div>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col bg-base-300/40 p-2 rounded-lg border border-base-content/5">
                         <span className="text-[10px] uppercase tracking-wider text-base-content/60">TOOL CALLS</span>
-                        <span className="truncate">{fmtInt(scope.toolCallCount)}</span>
+                        <span className="truncate text-base-content font-bold mt-0.5">
+                            {fmtInt(scope.toolCallCount)}
+                        </span>
                     </div>
                 </div>
 
@@ -688,7 +696,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
             {/* Continuous Vertical Rail & Chronological Stream */}
             <div
                 data-testid="timeline-rail"
-                className="relative py-2 sm:py-4 before:absolute before:left-2 sm:before:left-[136px] before:top-0 before:bottom-0 before:w-px before:bg-gradient-to-b before:from-transparent before:via-base-content/20 before:to-transparent flex flex-col gap-3"
+                className="relative py-2 sm:py-4 before:absolute before:left-2 sm:before:left-[136px] before:top-0 before:bottom-0 before:w-[2px] before:bg-base-content/20 flex flex-col gap-3"
             >
                 {filteredBlocks.map((block) => {
                     const userEvents = block.events.filter((e) => e.kind === 'user');
@@ -739,14 +747,46 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                         className="relative flex flex-col sm:grid sm:grid-cols-[136px_minmax(0,1fr)] py-1"
                                         data-testid={`timeline-user-event-${block.key}-${ev.seq}`}
                                     >
-                                        {/* Left Column (Desktop UTC Clock & Input Tokens) */}
-                                        <div className="hidden sm:flex flex-col items-end justify-center pr-4 font-mono text-[10.5px] text-base-content/70">
-                                            <span className="font-semibold text-base-content/90">
-                                                {fmtUtcClock(block.timestamp)}
-                                            </span>
-                                            <span className="text-[10px] text-base-content/50">
+                                        {/* Left Column (Desktop Token Load & Duration) */}
+                                        <div
+                                            className="hidden sm:flex flex-col items-end justify-center pr-4 font-mono text-[10.5px] text-base-content/80 select-none"
+                                            title={
+                                                block.timestamp
+                                                    ? `Timestamp: ${fmtUtcClock(block.timestamp)}`
+                                                    : undefined
+                                            }
+                                        >
+                                            <span className="font-semibold text-primary truncate">
                                                 📥 {fmtTok(ev.freshInputTokens)} in
                                             </span>
+                                            {ev.durationSource === 'measured' && ev.durationMs !== null ? (
+                                                <span
+                                                    data-testid={`timeline-step-duration-${block.key}-${ev.seq}`}
+                                                    className={
+                                                        ev.durationMs >= 5_000
+                                                            ? 'font-bold text-amber-400'
+                                                            : 'text-base-content/60'
+                                                    }
+                                                >
+                                                    ⏱ {fmtMs(ev.durationMs)}
+                                                </span>
+                                            ) : ev.durationSource === 'inferred' && ev.durationMs !== null ? (
+                                                <span
+                                                    data-testid={`timeline-step-duration-${block.key}-${ev.seq}`}
+                                                    title="Inferred from next event timestamp within session"
+                                                    className="text-base-content/60 italic"
+                                                >
+                                                    ⏱ ~{fmtMs(ev.durationMs)}
+                                                </span>
+                                            ) : (
+                                                <span
+                                                    data-testid={`timeline-step-duration-${block.key}-${ev.seq}`}
+                                                    title="Unmeasured (gap > 10m or last event)"
+                                                    className="text-base-content/40"
+                                                >
+                                                    ⏱ —
+                                                </span>
+                                            )}
                                         </div>
 
                                         {/* Continuous Rail Node */}
@@ -758,14 +798,16 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
 
                                         {/* Right Column Body (Unified Card, 80% Width Right-Aligned) */}
                                         <div className="pl-6 sm:pl-5 min-w-0 flex justify-end">
-                                            <div className="w-[80%] max-w-none bg-base-100 rounded-lg border border-primary/20 hover:border-primary/40 transition-colors p-2 sm:px-3 sm:py-2 flex flex-col gap-1">
+                                            <div className="w-[80%] max-w-none bg-base-100 rounded-xl border border-primary/20 hover:border-primary/40 hover:bg-base-200/40 transition-all p-2.5 sm:px-3.5 sm:py-2.5 flex flex-col gap-1 shadow-xs relative">
                                                 <div className="flex items-center justify-between gap-2 min-h-[32px]">
                                                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                                                        <UserTokenBadge
-                                                            promptTokens={ev.promptTokens}
-                                                            fullText={telemetryText}
-                                                            tooltipId={tooltipId}
-                                                        />
+                                                        <span className="relative z-10">
+                                                            <UserTokenBadge
+                                                                promptTokens={ev.promptTokens}
+                                                                fullText={telemetryText}
+                                                                tooltipId={tooltipId}
+                                                            />
+                                                        </span>
                                                         <span className="font-mono text-xs font-semibold text-base-content/90 truncate min-w-0">
                                                             {summary}
                                                         </span>
@@ -783,7 +825,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                                 aria-expanded={isExpanded}
                                                                 aria-controls={drawerId}
                                                                 onClick={() => toggleEvent(block.key, ev.seq)}
-                                                                className="p-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center text-base-content/60 hover:text-base-content transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+                                                                className="p-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center text-base-content/60 hover:text-base-content transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary rounded after:absolute after:inset-0 after:rounded-xl after:content-['']"
                                                             >
                                                                 <span
                                                                     className={`text-xs font-mono transition-transform duration-150 ${
@@ -801,7 +843,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                 {isExpanded && hasPayload && (
                                                     <div
                                                         id={drawerId}
-                                                        className="mt-1 p-3 bg-[#0d141f] text-slate-100 rounded-md font-mono text-xs whitespace-pre-wrap overflow-x-auto border border-white/10"
+                                                        className="mt-1 p-3 bg-[#0d141f] text-slate-100 rounded-md font-mono text-xs whitespace-pre-wrap overflow-x-auto border border-white/10 relative z-10"
                                                     >
                                                         {fullText}
                                                     </div>
@@ -828,10 +870,19 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                         className="relative flex flex-col sm:grid sm:grid-cols-[136px_minmax(0,1fr)] py-1 hover:z-30 focus-within:z-30"
                                         data-testid={`timeline-op-event-${block.key}-${ev.seq}`}
                                     >
-                                        {/* Left Gutter: Timestamp & Step Duration */}
-                                        <div className="hidden sm:flex flex-col items-end justify-center pr-4 font-mono text-[10.5px] text-base-content/70">
-                                            <span className="font-semibold text-base-content/90">
-                                                {fmtUtcClock(block.timestamp)}
+                                        {/* Left Gutter: Token Load & Step Duration */}
+                                        <div
+                                            className="hidden sm:flex flex-col items-end justify-center pr-4 font-mono text-[10.5px] text-base-content/80 select-none"
+                                            title={
+                                                block.timestamp
+                                                    ? `Timestamp: ${fmtUtcClock(block.timestamp)}`
+                                                    : undefined
+                                            }
+                                        >
+                                            <span className="font-semibold text-base-content/90 truncate">
+                                                {isAssistant && ev.outputTokens > 0
+                                                    ? `📤 ${fmtTok(ev.outputTokens)} out`
+                                                    : `⚡ ${fmtTok(ev.tokens)} tok`}
                                             </span>
                                             {ev.durationSource === 'measured' && ev.durationMs !== null ? (
                                                 <span
@@ -875,19 +926,21 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                         <div className="pl-6 sm:pl-5 min-w-0 flex justify-start">
                                             {isAssistant ? (
                                                 /* Assistant Message Card */
-                                                <div className="w-[80%] max-w-none bg-base-100 rounded-lg border border-base-content/10 border-l-[3px] border-l-primary/70 transition-colors relative">
-                                                    <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 min-h-[38px]">
+                                                <div className="w-[80%] max-w-none bg-base-100 rounded-xl border border-base-content/10 border-l-[3px] border-l-primary/70 hover:border-base-content/30 hover:bg-base-200/40 transition-all relative shadow-xs">
+                                                    <div className="flex items-center justify-between gap-2 px-3 py-2 min-h-[38px]">
                                                         <div className="flex items-center gap-2 min-w-0 flex-1">
-                                                            <AgentBadge
-                                                                agentId={ev.agent || block.source}
-                                                                model={ev.model || block.model}
-                                                                timestamp={block.timestamp}
-                                                                tooltipId={agentTooltipId}
-                                                                freshInputTokens={ev.freshInputTokens}
-                                                                cacheReadTokens={ev.cacheReadTokens}
-                                                                outputTokens={ev.outputTokens}
-                                                                sessionId={block.sessionId}
-                                                            />
+                                                            <span className="relative z-10">
+                                                                <AgentBadge
+                                                                    agentId={ev.agent || block.source}
+                                                                    model={ev.model || block.model}
+                                                                    timestamp={block.timestamp}
+                                                                    tooltipId={agentTooltipId}
+                                                                    freshInputTokens={ev.freshInputTokens}
+                                                                    cacheReadTokens={ev.cacheReadTokens}
+                                                                    outputTokens={ev.outputTokens}
+                                                                    sessionId={block.sessionId}
+                                                                />
+                                                            </span>
                                                             <span className="font-mono text-xs text-base-content/60 truncate">
                                                                 {ev.model}
                                                             </span>
@@ -909,7 +962,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                                     aria-expanded={isExpanded}
                                                                     aria-controls={drawerId}
                                                                     onClick={() => toggleEvent(block.key, ev.seq)}
-                                                                    className="p-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center text-base-content/60 hover:text-base-content transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+                                                                    className="p-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center text-base-content/60 hover:text-base-content transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary rounded after:absolute after:inset-0 after:rounded-xl after:content-['']"
                                                                 >
                                                                     <span
                                                                         className={`text-xs font-mono transition-transform duration-150 ${
@@ -927,7 +980,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                     {isExpanded && ev.payload && (
                                                         <div
                                                             id={drawerId}
-                                                            className="p-3 bg-[#0d141f] text-slate-100 font-mono text-xs whitespace-pre-wrap overflow-x-auto rounded-b-lg border-t border-base-content/10"
+                                                            className="p-3 bg-[#0d141f] text-slate-100 font-mono text-xs whitespace-pre-wrap overflow-x-auto rounded-b-xl border-t border-base-content/10 relative z-10"
                                                         >
                                                             {ev.payload}
                                                         </div>
@@ -936,57 +989,62 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                             ) : (
                                                 /* Tool Execution Card */
                                                 <div
-                                                    className="w-[80%] max-w-none bg-base-100 rounded-lg border border-base-content/10 border-l-[3px] transition-colors relative"
+                                                    className="w-[80%] max-w-none bg-base-100 rounded-xl border border-base-content/10 border-l-[3px] hover:border-base-content/30 hover:bg-base-200/40 transition-all relative shadow-xs"
                                                     style={{ borderLeftColor: presentation.color }}
                                                 >
                                                     <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 min-h-[38px]">
                                                         {/* Left side: Agent Icon, Tool Tag, Title */}
                                                         <div className="flex items-center gap-2 min-w-0 flex-1">
-                                                            <AgentBadge
-                                                                agentId={ev.agent || block.source}
-                                                                model={ev.model || block.model}
-                                                                timestamp={block.timestamp}
-                                                                tooltipId={agentTooltipId}
-                                                                freshInputTokens={ev.freshInputTokens}
-                                                                cacheReadTokens={ev.cacheReadTokens}
-                                                                outputTokens={ev.outputTokens}
-                                                                sessionId={block.sessionId}
-                                                            />
+                                                            <span className="relative z-10">
+                                                                <AgentBadge
+                                                                    agentId={ev.agent || block.source}
+                                                                    model={ev.model || block.model}
+                                                                    timestamp={block.timestamp}
+                                                                    tooltipId={agentTooltipId}
+                                                                    freshInputTokens={ev.freshInputTokens}
+                                                                    cacheReadTokens={ev.cacheReadTokens}
+                                                                    outputTokens={ev.outputTokens}
+                                                                    sessionId={block.sessionId}
+                                                                />
+                                                            </span>
 
-                                                            <ToolCallTag
-                                                                item={{
-                                                                    toolName: presentation.label,
-                                                                    seq: ev.seq,
-                                                                    status:
-                                                                        ev.exitCode === 0
-                                                                            ? 'ok'
-                                                                            : ev.exitCode !== null
-                                                                              ? 'error'
-                                                                              : 'ok',
-                                                                    durationMs: ev.durationMs,
-                                                                    durationSource: ev.durationSource,
-                                                                    tokens: {
-                                                                        billedTokens: ev.tokens,
-                                                                        freshInputTokens: ev.freshInputTokens,
-                                                                        cacheReadTokens: ev.cacheReadTokens,
-                                                                        outputTokens: ev.outputTokens,
-                                                                        cacheSavedTokens: 0,
-                                                                    },
-                                                                    argsRaw: ev.payload,
-                                                                    sessionId: block.sessionId ?? activeSessionId,
-                                                                    source: ev.agent || block.source,
-                                                                    model: ev.model || block.model,
-                                                                    ts: block.timestamp,
-                                                                    errorText:
-                                                                        ev.exitCode !== null && ev.exitCode !== 0
-                                                                            ? ev.payload || `Exit code ${ev.exitCode}`
-                                                                            : null,
-                                                                }}
-                                                                categoryColor={presentation.color}
-                                                                testId={`timeline-tool-badge-${toolTooltipId}`}
-                                                                tooltipId={toolTooltipId}
-                                                                size="xs"
-                                                            />
+                                                            <span className="relative z-10">
+                                                                <ToolCallTag
+                                                                    item={{
+                                                                        toolName: presentation.label,
+                                                                        seq: ev.seq,
+                                                                        status:
+                                                                            ev.exitCode === 0
+                                                                                ? 'ok'
+                                                                                : ev.exitCode !== null
+                                                                                  ? 'error'
+                                                                                  : 'ok',
+                                                                        durationMs: ev.durationMs,
+                                                                        durationSource: ev.durationSource,
+                                                                        tokens: {
+                                                                            billedTokens: ev.tokens,
+                                                                            freshInputTokens: ev.freshInputTokens,
+                                                                            cacheReadTokens: ev.cacheReadTokens,
+                                                                            outputTokens: ev.outputTokens,
+                                                                            cacheSavedTokens: 0,
+                                                                        },
+                                                                        argsRaw: ev.payload,
+                                                                        sessionId: block.sessionId ?? activeSessionId,
+                                                                        source: ev.agent || block.source,
+                                                                        model: ev.model || block.model,
+                                                                        ts: block.timestamp,
+                                                                        errorText:
+                                                                            ev.exitCode !== null && ev.exitCode !== 0
+                                                                                ? ev.payload ||
+                                                                                  `Exit code ${ev.exitCode}`
+                                                                                : null,
+                                                                    }}
+                                                                    categoryColor={presentation.color}
+                                                                    testId={`timeline-tool-badge-${toolTooltipId}`}
+                                                                    tooltipId={toolTooltipId}
+                                                                    size="xs"
+                                                                />
+                                                            </span>
 
                                                             {ev.title && ev.title.trim().length > 0 ? (
                                                                 <span
@@ -1002,7 +1060,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                         <div className="flex items-center gap-2 shrink-0 font-mono">
                                                             {ev.exitCode !== null && (
                                                                 <span
-                                                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold relative z-10 ${
                                                                         ev.exitCode === 0
                                                                             ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                                                                             : 'bg-error/20 text-error border border-error/30'
@@ -1023,7 +1081,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                                     aria-expanded={isExpanded}
                                                                     aria-controls={drawerId}
                                                                     onClick={() => toggleEvent(block.key, ev.seq)}
-                                                                    className="p-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center text-base-content/60 hover:text-base-content transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+                                                                    className="p-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center text-base-content/60 hover:text-base-content transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary rounded after:absolute after:inset-0 after:rounded-xl after:content-['']"
                                                                 >
                                                                     <span
                                                                         className={`text-xs font-mono transition-transform duration-150 ${
@@ -1042,7 +1100,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                     {isExpanded && ev.payload && (
                                                         <div
                                                             id={drawerId}
-                                                            className="p-3 bg-[#0d141f] text-slate-100 font-mono text-xs whitespace-pre-wrap overflow-x-auto rounded-b-lg border-t border-base-content/10"
+                                                            className="p-3 bg-[#0d141f] text-slate-100 font-mono text-xs whitespace-pre-wrap overflow-x-auto rounded-b-xl border-t border-base-content/10 relative z-10"
                                                         >
                                                             {ev.payload}
                                                         </div>
