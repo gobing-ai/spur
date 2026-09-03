@@ -22,7 +22,7 @@ import {
     replaceHistoryBoardRollups,
     skillCallRollup,
 } from '../../src/analytics/history-board-rollup';
-import { applyCliMigrations, HISTORY_BOARD_ROLLUPS_SCHEMA_SQL } from '../../src/migrations';
+import { applyCliMigrations } from '../../src/migrations';
 
 const ALL: ArtifactSelector = {
     since: null,
@@ -35,12 +35,12 @@ const ALL: ArtifactSelector = {
 
 async function setup(): Promise<DbAdapter> {
     const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
-    for (const statement of `${HISTORY_IMPORT_SCHEMA_SQL};${HISTORY_BOARD_ROLLUPS_SCHEMA_SQL}`
-        .split(';')
+    for (const statement of HISTORY_IMPORT_SCHEMA_SQL.split(';')
         .map((s) => s.trim())
         .filter(Boolean)) {
         await adapter.exec(statement);
     }
+    await applyCliMigrations(adapter);
     return adapter;
 }
 
@@ -135,6 +135,7 @@ function messageRollupRow(partial: Partial<MessageRollupRow> = {}): MessageRollu
         recordsWithUsage: 0,
         assistantDurationMs: 0,
         assistantDurationUnmeasured: 0,
+        assistantDurationSamples: 0,
         ...partial,
     };
 }
@@ -485,13 +486,17 @@ describe('replaceHistoryBoardRollups', () => {
             });
         }
         await replaceHistoryBoardRollups(db, { ...EMPTY_SEED, historyVersion: 'v2:test' });
-        const rows = await db.queryAll<{ tool_name: string; fresh_input_tokens: number; output_tokens: number }>(
-            `SELECT tool_name, fresh_input_tokens, output_tokens FROM history_board_tool_5m ORDER BY tool_name`,
+        const rows = await db.queryAll<{
+            tool_name: string;
+            fresh_input_tokens_alloc: number;
+            output_tokens_alloc: number;
+        }>(
+            `SELECT tool_name, fresh_input_tokens_alloc, output_tokens_alloc FROM history_board_tool_5m ORDER BY tool_name`,
         );
         expect(rows).toHaveLength(4);
         for (const row of rows) {
-            expect(row.fresh_input_tokens).toBe(25); // 100 / 4 tools
-            expect(row.output_tokens).toBe(12.5); // 50 / 4 tools
+            expect(row.fresh_input_tokens_alloc).toBe(25); // 100 / 4 tools
+            expect(row.output_tokens_alloc).toBe(12.5); // 50 / 4 tools
         }
     });
     test('excludes placeholder session ids from session_stats but not from 5m buckets', async () => {
@@ -1619,6 +1624,101 @@ describe('ROLLUP_SOURCE_TABLES schema guard (0738 R2)', () => {
             'Referenced rollup source table absent from schema: history_skill_call',
         );
 
+        db.close();
+    });
+});
+
+describe('measure vector additivity invariant (0740 R4/R6/R7)', () => {
+    async function columnNames(db: DbAdapter, table: string): Promise<string[]> {
+        const rows = await db.queryAll<{ name: string }>(`PRAGMA table_info(${table})`);
+        return rows.map((r) => r.name);
+    }
+
+    test('no aggregate column stores a rate, ratio, percentage, or mean (R6)', async () => {
+        const db = await setup();
+        const ratePattern = /(_rate|_ratio|_pct|_percent|_percentage|_mean|_avg|_average)$/i;
+        for (const table of [
+            'history_daily_stats',
+            'history_board_message_5m',
+            'history_board_tool_5m',
+            'history_board_session_stats',
+            'history_board_model_stats',
+            'history_board_tool_stats',
+            'history_board_source_stats',
+            'history_board_source_daily',
+        ]) {
+            const cols = await columnNames(db, table);
+            for (const col of cols) {
+                expect({ table, col }).not.toMatchObject({ col: expect.stringMatching(ratePattern) });
+            }
+        }
+        db.close();
+    });
+
+    test('every duration sum has a co-located sample count; calls serves the tool grain (R4)', async () => {
+        const db = await setup();
+        for (const table of [
+            'history_daily_stats',
+            'history_board_message_5m',
+            'history_board_tool_5m',
+            'history_board_session_stats',
+            'history_board_model_stats',
+            'history_board_tool_stats',
+        ]) {
+            const cols = await columnNames(db, table);
+            const hasDurationSum = cols.some((c) => c === 'assistant_duration_ms' || c === 'duration_ms');
+            if (!hasDurationSum) continue;
+            const hasSamples = cols.includes('assistant_duration_samples');
+            const hasCalls = cols.includes('calls');
+            expect({ table, hasSamples, hasCalls, cols }).toSatisfy((v) => v.hasSamples || v.hasCalls);
+        }
+        db.close();
+    });
+
+    test('excluded per-row / metadata tables carry no measure-vector columns (R7)', async () => {
+        const db = await setup();
+        for (const table of [
+            'history_board_ranked_steps',
+            'history_board_loop_findings',
+            'history_board_rollup_meta',
+            'history_board_skill_5m',
+        ]) {
+            const cols = await columnNames(db, table);
+            expect(cols.filter((c) => /cache_write_tokens|_alloc|_samples/.test(c))).toStrictEqual([]);
+        }
+        db.close();
+    });
+
+    test('cache_write_tokens is stored on every table carrying token measures (R1)', async () => {
+        const db = await setup();
+        for (const table of [
+            'history_daily_stats',
+            'history_board_message_5m',
+            'history_board_session_stats',
+            'history_board_model_stats',
+            'history_board_source_stats',
+            'history_board_source_daily',
+        ]) {
+            const cols = await columnNames(db, table);
+            expect(cols).toContain('cache_write_tokens');
+        }
+        for (const table of ['history_board_tool_5m', 'history_board_tool_stats']) {
+            const cols = await columnNames(db, table);
+            expect(cols).toContain('cache_write_tokens_alloc');
+        }
+        db.close();
+    });
+
+    test('allocated token columns carry a distinct _alloc name (R5)', async () => {
+        const db = await setup();
+        for (const table of ['history_board_tool_5m', 'history_board_tool_stats']) {
+            const cols = await columnNames(db, table);
+            for (const base of ['fresh_input_tokens', 'cache_read_tokens', 'output_tokens']) {
+                const alloc = `${base}_alloc`;
+                expect(cols).toContain(alloc);
+                expect(cols).not.toContain(base);
+            }
+        }
         db.close();
     });
 });

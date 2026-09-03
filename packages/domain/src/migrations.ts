@@ -872,6 +872,46 @@ UPDATE history_tool_call SET
 WHERE tool_name_alias = 'unknown';
 `;
 
+/**
+ * Migration 0035: Complete measure vector on existing rollup tables.
+ * Adds cache_write_tokens, assistant_duration_samples, and renames allocated
+ * token columns to _alloc names on history_board_tool_5m and history_board_tool_stats.
+ */
+export const HISTORY_MEASURE_VECTOR_SCHEMA_SQL = `
+ALTER TABLE history_daily_stats ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE history_daily_stats ADD COLUMN assistant_duration_samples INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE history_board_message_5m ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE history_board_session_stats ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE history_board_session_stats ADD COLUMN assistant_duration_samples INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE history_board_model_stats ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE history_board_source_stats ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE history_board_source_daily ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE history_board_tool_5m RENAME COLUMN fresh_input_tokens TO fresh_input_tokens_alloc;
+ALTER TABLE history_board_tool_5m RENAME COLUMN cache_read_tokens TO cache_read_tokens_alloc;
+ALTER TABLE history_board_tool_5m RENAME COLUMN output_tokens TO output_tokens_alloc;
+ALTER TABLE history_board_tool_5m ADD COLUMN cache_write_tokens_alloc REAL NOT NULL DEFAULT 0;
+
+DROP TABLE IF EXISTS history_board_tool_stats;
+CREATE TABLE history_board_tool_stats (
+    tool_name                 TEXT NOT NULL,
+    skill_name                TEXT NOT NULL,
+    calls                     INTEGER NOT NULL,
+    errors                    INTEGER NOT NULL,
+    fresh_input_tokens_alloc  REAL NOT NULL DEFAULT 0,
+    cache_read_tokens_alloc   REAL NOT NULL DEFAULT 0,
+    cache_write_tokens_alloc  REAL NOT NULL DEFAULT 0,
+    output_tokens_alloc       REAL NOT NULL DEFAULT 0,
+    duration_ms               INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (tool_name, skill_name)
+);
+`;
+
 export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
     // Renamed from `0001_spur_team_inbox` so the filename carries the
@@ -1003,6 +1043,11 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         // 0739: Persist tool identity at import: effective_tool_name, tool_name_alias, and alias map.
         id: '0034_spur_cli_history_tool_identity',
         sql: HISTORY_TOOL_IDENTITY_SCHEMA_SQL,
+    },
+    {
+        // 0740: Complete measure vector on existing rollup tables and enforce additivity invariant.
+        id: '0035_spur_cli_history_measure_vector',
+        sql: HISTORY_MEASURE_VECTOR_SCHEMA_SQL,
     },
 ];
 
@@ -1189,6 +1234,11 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             migration.id === '0034_spur_cli_history_tool_identity' &&
             !(await tableExists(adapter, 'history_tool_call'));
 
+        const historyMeasureVectorSkip =
+            migration.id === '0035_spur_cli_history_measure_vector' &&
+            (!(await tableExists(adapter, 'history_board_message_5m')) ||
+                (await columnExists(adapter, 'history_board_message_5m', 'cache_write_tokens')));
+
         if (
             shouldApplySql &&
             !sequenceIndexSkip &&
@@ -1203,7 +1253,8 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !callIdSkip &&
             !tsNullableSkip &&
             !queueJobsActiveIndexSkip &&
-            !historyToolIdentitySkip
+            !historyToolIdentitySkip &&
+            !historyMeasureVectorSkip
         ) {
             for (const statement of splitSqlStatements(migration.sql)) {
                 await adapter.exec(statement);

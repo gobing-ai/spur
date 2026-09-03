@@ -34,6 +34,8 @@ export interface MessageRollupRow {
     assistantDurationMs: number | null;
     /** role='assistant' rows whose `duration_ms` was NULL — the assistant-duration unavailable count. */
     assistantDurationUnmeasured: number;
+    /** role='assistant' rows with a positive `duration_ms` — sample count for the mean. */
+    assistantDurationSamples: number;
 }
 
 /** Tool-call aggregate per (source, model, day) — the duration side of the rollup. */
@@ -282,7 +284,8 @@ export async function messageRollup(
                 SUM(cost_usd) AS costUsd,
                 SUM(CASE WHEN input_tokens IS NOT NULL OR output_tokens IS NOT NULL THEN 1 ELSE 0 END) AS recordsWithUsage,
                 SUM(CASE WHEN role = 'assistant' THEN duration_ms END) AS assistantDurationMs,
-                SUM(CASE WHEN role = 'assistant' THEN duration_ms IS NULL END) AS assistantDurationUnmeasured
+                SUM(CASE WHEN role = 'assistant' THEN duration_ms IS NULL END) AS assistantDurationUnmeasured,
+                SUM(CASE WHEN role = 'assistant' AND duration_ms > 0 THEN 1 ELSE 0 END) AS assistantDurationSamples
          FROM selected
          GROUP BY source, model, DATE(ts)`,
         ...params,

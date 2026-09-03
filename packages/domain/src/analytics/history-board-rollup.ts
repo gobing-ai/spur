@@ -327,7 +327,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
         {
             sql: `INSERT INTO history_board_message_5m (
                     bucket_start, session_id, source, model,
-                    fresh_input_tokens, cache_read_tokens, output_tokens,
+                    fresh_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens,
                     messages, assistant_duration_ms, assistant_duration_samples
                 )
                 WITH enriched AS (
@@ -348,6 +348,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                        m.session_id, m.source, m.effective_model AS model,
                        SUM(COALESCE(m.input_tokens, 0)),
                        SUM(COALESCE(m.cache_read_tokens, 0)),
+                       SUM(COALESCE(m.cache_write_tokens, 0)),
                        SUM(COALESCE(m.output_tokens, 0)),
                        COUNT(*),
                        SUM(CASE WHEN m.role = 'assistant' THEN COALESCE(m.duration_ms, 0) ELSE 0 END),
@@ -359,7 +360,8 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
         {
             sql: `INSERT INTO history_board_tool_5m (
                     bucket_start, session_id, source, model, tool_name, skill_name,
-                    fresh_input_tokens, cache_read_tokens, output_tokens, calls, errors, duration_ms
+                    fresh_input_tokens_alloc, cache_read_tokens_alloc, cache_write_tokens_alloc, output_tokens_alloc,
+                    calls, errors, duration_ms
                 )
                 WITH enriched AS (
                     SELECT m.*,
@@ -380,6 +382,11 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                                    OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
                            ) AS resolved_cache_read_tokens,
                            COALESCE(
+                               m.cache_write_tokens,
+                               LAG(CASE WHEN m.role = 'assistant' THEN m.cache_write_tokens END)
+                                   OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
+                           ) AS resolved_cache_write_tokens,
+                           COALESCE(
                                m.output_tokens,
                                LAG(CASE WHEN m.role = 'assistant' THEN m.output_tokens END)
                                    OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
@@ -395,6 +402,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                            ${RESOLVED_TOOL_NAME_SQL} AS tool_name, ${SKILL_NAME_SQL} AS skill_name,
                            COALESCE(m.resolved_input_tokens, 0) AS input_tokens,
                            COALESCE(m.resolved_cache_read_tokens, 0) AS cache_read_tokens,
+                           COALESCE(m.resolved_cache_write_tokens, 0) AS cache_write_tokens,
                            COALESCE(m.resolved_output_tokens, 0) AS output_tokens,
                            tc.status, COALESCE(tc.duration_ms, 0) AS duration_ms,
                            COUNT(*) OVER (PARTITION BY m.record_hash) AS tools_in_message
@@ -404,6 +412,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                 SELECT bucket_start, session_id, source, model, tool_name, skill_name,
                        SUM(CAST(input_tokens AS REAL) / tools_in_message),
                        SUM(CAST(cache_read_tokens AS REAL) / tools_in_message),
+                       SUM(CAST(cache_write_tokens AS REAL) / tools_in_message),
                        SUM(CAST(output_tokens AS REAL) / tools_in_message),
                        COUNT(*), SUM(status = 'error'), SUM(duration_ms)
                 FROM linked
@@ -413,8 +422,8 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
         {
             sql: `INSERT INTO history_board_session_stats (
                     source, session_id, model, started_at, ended_at, messages,
-                    tool_calls, errors, fresh_input_tokens, cache_read_tokens,
-                    output_tokens, assistant_duration_ms, top_tool, state
+                    tool_calls, errors, fresh_input_tokens, cache_read_tokens, cache_write_tokens,
+                    output_tokens, assistant_duration_ms, assistant_duration_samples, top_tool, state
                 )
                 WITH selected AS (
                     SELECT m.rowid AS source_rowid, m.* FROM history_message m
@@ -424,8 +433,10 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                            MIN(ts) AS started_at, MAX(ts) AS ended_at, COUNT(*) AS messages,
                            SUM(COALESCE(input_tokens, 0)) AS fresh_input_tokens,
                            SUM(COALESCE(cache_read_tokens, 0)) AS cache_read_tokens,
+                           SUM(COALESCE(cache_write_tokens, 0)) AS cache_write_tokens,
                            SUM(COALESCE(output_tokens, 0)) AS output_tokens,
-                           SUM(CASE WHEN role = 'assistant' THEN COALESCE(duration_ms, 0) ELSE 0 END) AS assistant_duration_ms
+                           SUM(CASE WHEN role = 'assistant' THEN COALESCE(duration_ms, 0) ELSE 0 END) AS assistant_duration_ms,
+                           SUM(CASE WHEN role = 'assistant' AND duration_ms > 0 THEN 1 ELSE 0 END) AS assistant_duration_samples
                     FROM selected GROUP BY source, session_id
                 ), tool_counts AS (
                     SELECT m.source, m.session_id, COUNT(*) AS tool_calls,
@@ -449,8 +460,8 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                 )
                 SELECT ms.source, ms.session_id, ms.model, ms.started_at, ms.ended_at, ms.messages,
                        COALESCE(tc.tool_calls, 0), COALESCE(tc.errors, 0),
-                       ms.fresh_input_tokens, ms.cache_read_tokens, ms.output_tokens,
-                       ms.assistant_duration_ms, tr.tool_name,
+                       ms.fresh_input_tokens, ms.cache_read_tokens, ms.cache_write_tokens, ms.output_tokens,
+                       ms.assistant_duration_ms, ms.assistant_duration_samples, tr.tool_name,
                        CASE WHEN lm.role IN ('assistant', 'unknown', '')
                                   AND NOT EXISTS (
                                       SELECT 1 FROM history_tool_call open_tc WHERE open_tc.message_hash = lm.record_hash
@@ -465,7 +476,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
         {
             sql: `INSERT INTO history_board_model_stats (
                     model, assistant_duration_ms, assistant_duration_samples,
-                    fresh_input_tokens, cache_read_tokens, output_tokens, tool_calls, errors
+                    fresh_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, tool_calls, errors
                 )
                 WITH messages AS (
                     SELECT model,
@@ -473,6 +484,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                            SUM(assistant_duration_samples) AS assistant_duration_samples,
                            SUM(fresh_input_tokens) AS fresh_input_tokens,
                            SUM(cache_read_tokens) AS cache_read_tokens,
+                           SUM(cache_write_tokens) AS cache_write_tokens,
                            SUM(output_tokens) AS output_tokens
                     FROM history_board_message_5m GROUP BY model
                 ), tools AS (
@@ -480,7 +492,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                     FROM history_board_tool_5m GROUP BY model
                 )
                 SELECT m.model, m.assistant_duration_ms, m.assistant_duration_samples,
-                       m.fresh_input_tokens, m.cache_read_tokens, m.output_tokens,
+                       m.fresh_input_tokens, m.cache_read_tokens, m.cache_write_tokens, m.output_tokens,
                        COALESCE(t.tool_calls, 0), COALESCE(t.errors, 0)
                 FROM messages m LEFT JOIN tools t ON t.model = m.model`,
             params: [],
@@ -488,23 +500,24 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
         {
             sql: `INSERT INTO history_board_tool_stats (
                     tool_name, skill_name, calls, errors,
-                    fresh_input_tokens, cache_read_tokens, output_tokens, duration_ms
+                    fresh_input_tokens_alloc, cache_read_tokens_alloc, cache_write_tokens_alloc, output_tokens_alloc, duration_ms
                 )
                 SELECT tool_name, skill_name, SUM(calls), SUM(errors),
-                       SUM(fresh_input_tokens), SUM(cache_read_tokens), SUM(output_tokens), SUM(duration_ms)
+                       SUM(fresh_input_tokens_alloc), SUM(cache_read_tokens_alloc), SUM(cache_write_tokens_alloc), SUM(output_tokens_alloc), SUM(duration_ms)
                 FROM history_board_tool_5m
                 GROUP BY tool_name, skill_name`,
             params: [],
         },
         {
             sql: `INSERT INTO history_board_source_daily (
-                    source, day, fresh_input_tokens, cache_read_tokens,
+                    source, day, fresh_input_tokens, cache_read_tokens, cache_write_tokens,
                     output_tokens, sessions, tool_calls
                 )
                 WITH messages AS (
                     SELECT source, SUBSTR(bucket_start, 1, 10) AS day,
                            SUM(fresh_input_tokens) AS fresh_input_tokens,
                            SUM(cache_read_tokens) AS cache_read_tokens,
+                           SUM(cache_write_tokens) AS cache_write_tokens,
                            SUM(output_tokens) AS output_tokens,
                            COUNT(DISTINCT CASE
                                WHEN session_id NOT IN ('', 'unknown', 'session') THEN session_id
@@ -514,7 +527,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                     SELECT source, SUBSTR(bucket_start, 1, 10) AS day, SUM(calls) AS tool_calls
                     FROM history_board_tool_5m GROUP BY source, day
                 )
-                SELECT m.source, m.day, m.fresh_input_tokens, m.cache_read_tokens,
+                SELECT m.source, m.day, m.fresh_input_tokens, m.cache_read_tokens, m.cache_write_tokens,
                        m.output_tokens, m.sessions, COALESCE(t.tool_calls, 0)
                 FROM messages m LEFT JOIN tools t ON t.source = m.source AND t.day = m.day`,
             params: [],
@@ -530,18 +543,20 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
         const tools = toolByDay.get(`${row.source}\0${model}\0${day}`);
         operations.push({
             sql: `INSERT INTO history_daily_stats (
-                    source, model, day, fresh_input_tokens, cache_read_tokens, output_tokens,
-                    messages, assistant_duration_ms, tool_calls
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    source, model, day, fresh_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens,
+                    messages, assistant_duration_ms, assistant_duration_samples, tool_calls
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             params: [
                 row.source,
                 model,
                 day,
                 row.inputTokens ?? 0,
                 row.cacheReadTokens ?? 0,
+                row.cacheWriteTokens ?? 0,
                 row.outputTokens ?? 0,
                 row.messages,
                 row.assistantDurationMs ?? 0,
+                row.assistantDurationSamples ?? 0,
                 tools?.toolCalls ?? 0,
             ],
         });
@@ -598,6 +613,9 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                   ), 0),
                   cache_read_tokens = COALESCE((
                       SELECT SUM(d.cache_read_tokens) FROM history_board_source_daily d WHERE d.source = src.source
+                  ), 0),
+                  cache_write_tokens = COALESCE((
+                      SELECT SUM(d.cache_write_tokens) FROM history_board_source_daily d WHERE d.source = src.source
                   ), 0),
                   output_tokens = COALESCE((
                       SELECT SUM(d.output_tokens) FROM history_board_source_daily d WHERE d.source = src.source
@@ -759,11 +777,20 @@ export async function historyBoardSummaryFromRollup(
                 ? 'r.skill_name'
                 : 'r.tool_name';
     const bucketExpr = seriesUsesDaily ? 'r.day' : bucketExpression(bucket, 'r');
-    const tokenSelect = `SUM(r.fresh_input_tokens) AS freshInputTokens,
-                         SUM(r.cache_read_tokens) AS cacheReadTokens,
-                         SUM(r.output_tokens) AS outputTokens`;
+    const tokenSelect = aggregateIsTool
+        ? `SUM(r.fresh_input_tokens_alloc) AS freshInputTokens,
+           SUM(r.cache_read_tokens_alloc) AS cacheReadTokens,
+           SUM(r.output_tokens_alloc) AS outputTokens`
+        : `SUM(r.fresh_input_tokens) AS freshInputTokens,
+           SUM(r.cache_read_tokens) AS cacheReadTokens,
+           SUM(r.output_tokens) AS outputTokens`;
     const callCountCol = seriesIsTool ? 'r.calls' : 'r.messages';
-    const seriesTokenSelect = `${tokenSelect}, SUM(${callCountCol}) AS calls`;
+    const seriesTokenSelect = seriesIsTool
+        ? `SUM(r.fresh_input_tokens_alloc) AS freshInputTokens,
+           SUM(r.cache_read_tokens_alloc) AS cacheReadTokens,
+           SUM(r.output_tokens_alloc) AS outputTokens,
+           SUM(r.calls) AS calls`
+        : `${tokenSelect}, SUM(${callCountCol}) AS calls`;
 
     const toolWhere = buildRollupWhere(sel, 'r', { timestamp: 'bucket_start', toolFields: true });
     const sessionWhere = buildSessionWhere(sel);
@@ -776,6 +803,9 @@ export async function historyBoardSummaryFromRollup(
         (sel.skills?.length ?? 0) === 0;
     const toolTable = allTimeTools ? 'history_board_tool_stats' : 'history_board_tool_5m';
     const toolFilter = allTimeTools ? { where: '', params: [] } : toolWhere;
+    const orderByExpr = aggregateIsTool
+        ? 'SUM(r.fresh_input_tokens_alloc) + SUM(r.output_tokens_alloc)'
+        : 'SUM(r.fresh_input_tokens) + SUM(r.output_tokens)';
     const [buckets, models, sources, sourceModels, tools, skills, sessionCount] = await Promise.all([
         db.queryAll<BucketedTokenRow>(
             `SELECT ${bucketExpr} AS bucketStart, ${seriesKey} AS key, ${seriesTokenSelect}
@@ -786,12 +816,12 @@ export async function historyBoardSummaryFromRollup(
         ),
         db.queryAll<HistoryBoardAggregateRow>(
             `SELECT r.model AS key, ${tokenSelect} FROM ${aggregateTable} r
-             ${aggregateWhere.where} GROUP BY r.model ORDER BY (SUM(r.fresh_input_tokens) + SUM(r.output_tokens)) DESC`,
+             ${aggregateWhere.where} GROUP BY r.model ORDER BY ${orderByExpr} DESC`,
             ...aggregateWhere.params,
         ),
         db.queryAll<HistoryBoardAggregateRow>(
             `SELECT r.source AS key, ${tokenSelect} FROM ${aggregateTable} r
-             ${aggregateWhere.where} GROUP BY r.source ORDER BY (SUM(r.fresh_input_tokens) + SUM(r.output_tokens)) DESC`,
+             ${aggregateWhere.where} GROUP BY r.source ORDER BY ${orderByExpr} DESC`,
             ...aggregateWhere.params,
         ),
         db.queryAll<HistoryBoardSourceModelRow>(
@@ -799,13 +829,13 @@ export async function historyBoardSummaryFromRollup(
              FROM ${aggregateTable} r
              ${aggregateWhere.where}
              GROUP BY r.source, r.model
-             ORDER BY r.source ASC, (SUM(r.fresh_input_tokens) + SUM(r.output_tokens)) DESC`,
+             ORDER BY r.source ASC, ${orderByExpr} DESC`,
             ...aggregateWhere.params,
         ),
         db.queryAll<{ toolName: string; calls: number; errors: number; durationMs: number; billedTokens: number }>(
             `SELECT r.tool_name AS toolName, SUM(r.calls) AS calls, SUM(r.errors) AS errors,
                     SUM(r.duration_ms) AS durationMs,
-                    SUM(r.fresh_input_tokens + r.output_tokens) AS billedTokens
+                    SUM(r.fresh_input_tokens_alloc + r.output_tokens_alloc) AS billedTokens
              FROM ${toolTable} r
              ${toolFilter.where}
              GROUP BY r.tool_name ORDER BY calls DESC`,
@@ -873,9 +903,13 @@ export async function historyBoardBucketsFromRollup(
                 ? 'r.skill_name'
                 : 'r.tool_name';
     const bucketExpr = seriesUsesDaily ? 'r.day' : bucketExpression(bucket, 'r');
-    const tokenSelect = `SUM(r.fresh_input_tokens) AS freshInputTokens,
-                         SUM(r.cache_read_tokens) AS cacheReadTokens,
-                         SUM(r.output_tokens) AS outputTokens`;
+    const tokenSelect = seriesIsTool
+        ? `SUM(r.fresh_input_tokens_alloc) AS freshInputTokens,
+           SUM(r.cache_read_tokens_alloc) AS cacheReadTokens,
+           SUM(r.output_tokens_alloc) AS outputTokens`
+        : `SUM(r.fresh_input_tokens) AS freshInputTokens,
+           SUM(r.cache_read_tokens) AS cacheReadTokens,
+           SUM(r.output_tokens) AS outputTokens`;
     const callCountCol = seriesIsTool ? 'r.calls' : 'r.messages';
     const seriesTokenSelect = `${tokenSelect}, SUM(${callCountCol}) AS calls`;
 
@@ -1062,8 +1096,8 @@ export async function historyBoardModelComparisonFromRollup(
             `SELECT model,
                     CASE WHEN assistant_duration_samples > 0
                          THEN CAST(assistant_duration_ms AS REAL) / assistant_duration_samples ELSE NULL END AS speedMsMean,
-                    CASE WHEN fresh_input_tokens + cache_read_tokens > 0
-                         THEN CAST(cache_read_tokens AS REAL) / (fresh_input_tokens + cache_read_tokens) ELSE 0 END AS cacheRatio,
+                    CASE WHEN fresh_input_tokens + cache_read_tokens + cache_write_tokens > 0
+                         THEN CAST(cache_read_tokens AS REAL) / (fresh_input_tokens + cache_read_tokens + cache_write_tokens) ELSE 0 END AS cacheRatio,
                     CASE WHEN tool_calls > 0 THEN 1.0 - CAST(errors AS REAL) / tool_calls ELSE 1.0 END AS reliability,
                     CASE WHEN fresh_input_tokens + output_tokens > 0
                          THEN CAST(output_tokens AS REAL) / (fresh_input_tokens + output_tokens) ELSE 0 END AS outputRatio
@@ -1080,6 +1114,7 @@ export async function historyBoardModelComparisonFromRollup(
                     SUM(m.assistant_duration_samples) AS duration_samples,
                     SUM(m.fresh_input_tokens) AS fresh,
                     SUM(m.cache_read_tokens) AS cache_read,
+                    SUM(m.cache_write_tokens) AS cache_write,
                     SUM(m.output_tokens) AS output
              FROM history_board_message_5m m ${messages.where} GROUP BY m.model
          ), tool_stats AS (
@@ -1088,7 +1123,7 @@ export async function historyBoardModelComparisonFromRollup(
          )
          SELECT m.model,
                 CASE WHEN m.duration_samples > 0 THEN CAST(m.duration_ms AS REAL) / m.duration_samples ELSE NULL END AS speedMsMean,
-                CASE WHEN m.fresh + m.cache_read > 0 THEN CAST(m.cache_read AS REAL) / (m.fresh + m.cache_read) ELSE 0 END AS cacheRatio,
+                CASE WHEN m.fresh + m.cache_read + m.cache_write > 0 THEN CAST(m.cache_read AS REAL) / (m.fresh + m.cache_read + m.cache_write) ELSE 0 END AS cacheRatio,
                 CASE WHEN COALESCE(t.calls, 0) > 0 THEN 1.0 - CAST(t.errors AS REAL) / t.calls ELSE 1.0 END AS reliability,
                 CASE WHEN m.fresh + m.output > 0 THEN CAST(m.output AS REAL) / (m.fresh + m.output) ELSE 0 END AS outputRatio
          FROM message_stats m LEFT JOIN tool_stats t ON t.model = m.model
@@ -1216,6 +1251,14 @@ export async function historyBoardKpiTrendFromRollup(
         toolFields: table === 'history_board_tool_5m',
     });
     const calls = buildRollupWhere(sel, 't', { timestamp: 'bucket_start', toolFields: true });
+    const isTool = table === 'history_board_tool_5m';
+    const tokenCols = isTool
+        ? `SUM(r.fresh_input_tokens_alloc) AS freshInputTokens,
+           SUM(r.cache_read_tokens_alloc) AS cacheReadTokens,
+           SUM(r.output_tokens_alloc) AS outputTokens`
+        : `SUM(r.fresh_input_tokens) AS freshInputTokens,
+           SUM(r.cache_read_tokens) AS cacheReadTokens,
+           SUM(r.output_tokens) AS outputTokens`;
     const [tokenRows, callRows] = await Promise.all([
         db.queryAll<{
             day: string;
@@ -1225,9 +1268,7 @@ export async function historyBoardKpiTrendFromRollup(
             sessions: number;
         }>(
             `SELECT SUBSTR(r.bucket_start, 1, 10) AS day,
-                    SUM(r.fresh_input_tokens) AS freshInputTokens,
-                    SUM(r.cache_read_tokens) AS cacheReadTokens,
-                    SUM(r.output_tokens) AS outputTokens,
+                    ${tokenCols},
                     COUNT(DISTINCT CASE WHEN r.session_id NOT IN ('', 'unknown', 'session') THEN r.session_id END) AS sessions
              FROM ${table} r ${tokens.where}
              GROUP BY day ORDER BY day ASC`,

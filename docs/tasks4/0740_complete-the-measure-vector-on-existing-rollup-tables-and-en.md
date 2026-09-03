@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Complete the measure vector on existing rollup tables and enforce the additivity invariant"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-03T16:43:04.077Z
-updated_at: "2026-09-03T17:27:03.843Z"
+updated_at: "2026-09-03T21:23:47.774Z"
 feature_id: E91
 priority: P1
 tags: ["history", "rollup", "kpi"]
@@ -29,13 +29,13 @@ The twelve rollup tables (`packages/domain/src/migrations.ts:419-630`) each chos
 
 `history_board_skill_5m` carries only `calls` and no token or duration measures, so R5's `_alloc` rename does not reach it.
 ### Requirements
-- [ ] R1. `cache_write_tokens` is stored as its own measure on the rollup tables that carry token measures, never summed into `cache_read_tokens`.
-- [ ] R2. Cache hit rate is computed as `cache_read / (fresh + cache_read + cache_write)`.
-- [ ] R3. No History response shape changes; `packages/contracts/src/history.ts` stays byte-identical.
-- [ ] R4. Every materialized duration sum has a co-located sample count: `assistant_duration_samples` is added to `history_daily_stats` and `history_board_session_stats`; the tool-grain tables already have `calls`.
-- [ ] R5. Every attributed (allocated) token measure carries an `_alloc` name distinct from its measured counterpart, and no query sums the two together.
-- [ ] R6. No aggregate column stores a rate, ratio, percentage, or mean; each derived variable is computed from the measure vector at read time.
-- [ ] R7. Per-row ranking tables, findings tables, and rollup metadata are unchanged; top-N breakdown tables carry only measures well defined at their grain.
+- [x] R1. `cache_write_tokens` is stored as its own measure on the rollup tables that carry token measures, never summed into `cache_read_tokens`.
+- [x] R2. Cache hit rate is computed as `cache_read / (fresh + cache_read + cache_write)`.
+- [x] R3. No History response shape changes; `packages/contracts/src/history.ts` stays byte-identical.
+- [x] R4. Every materialized duration sum has a co-located sample count: `assistant_duration_samples` is added to `history_daily_stats` and `history_board_session_stats`; the tool-grain tables already have `calls`.
+- [x] R5. Every attributed (allocated) token measure carries an `_alloc` name distinct from its measured counterpart, and no query sums the two together.
+- [x] R6. No aggregate column stores a rate, ratio, percentage, or mean; each derived variable is computed from the measure vector at read time.
+- [x] R7. Per-row ranking tables, findings tables, and rollup metadata are unchanged; top-N breakdown tables carry only measures well defined at their grain.
 ### Acceptance Criteria
 ```gherkin
 Feature: History read path materialized-only: incremental rollup ETL, per-table freshness, and precomputed UI aggregates
@@ -157,16 +157,45 @@ Authority: ADR-106; `docs/design/history-incremental-materialization.md` section
 8. Run the domain and app test suites plus `bun run spur-check`.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+File:line change map.
+
+- **Migration `0035_spur_cli_history_measure_vector`** — new `drizzle/0035_spur_cli_history_measure_vector.sql` + `HISTORY_MEASURE_VECTOR_SCHEMA_SQL` (`packages/domain/src/migrations.ts:880`). Adds `cache_write_tokens` (`INTEGER NOT NULL DEFAULT 0`) to `history_daily_stats`, `history_board_message_5m`, `history_board_session_stats`, `history_board_model_stats`, `history_board_source_stats`, `history_board_source_daily`; adds `assistant_duration_samples` to `history_daily_stats` and `history_board_session_stats`; renames `history_board_tool_5m` `fresh_input_tokens`/`cache_read_tokens`/`output_tokens` → `_alloc` and adds `cache_write_tokens_alloc REAL`; drops + recreates `history_board_tool_stats` with `_alloc` (`REAL`) columns. Idempotency guard `historyMeasureVectorSkip` (`packages/domain/src/migrations.ts:1237`) skips on fresh DBs that already carry `history_board_message_5m.cache_write_tokens`.
+- **`history-board-rollup.ts`** — all derivation statements write `cache_write_tokens` at their own grain and `_alloc` on tool grain: `history_board_message_5m` INSERT (line 328), `history_board_tool_5m` INSERT (line 363), `history_board_session_stats` INSERT (line 425), `history_board_model_stats` INSERT (line 479), `history_board_tool_stats` INSERT (line 503, `_alloc`), `history_board_source_daily` INSERT (line 513), `history_daily_stats` INSERT (line 545), `history_board_source_stats` INSERT + UPDATE (lines 599, 607).
+- **Read-time derivation (R2).** `tokenSelect` / `seriesTokenSelect` split on tool vs non-tool grain (lines 780, using `aggregateIsTool`/`seriesIsTool`); `orderByExpr` likewise (line 806); KPI trend `tokenCols` (line 1255); model-comparison cache ratio computed as `cache_read / (fresh + cache_read + cache_write)` (lines 1100, 1126) — no rate materialized.
+- **`forensic-query.ts`** — `MessageRollupRow.assistantDurationSamples` (line 38) and its SQL aggregate (line 288).
+- **Tests** — `packages/domain/tests/analytics/history-board-rollup.test.ts` setup now runs `applyCliMigrations` so the full measure-vector schema is present; added `measure vector additivity invariant (0740 R4/R6/R7)` block asserting R1/R5/R6/R7 and the R4 sample-count rule; updated the tool-grain truncation test to `_alloc` columns; updated `migrations.test.ts` counts (36 migrations, applied 32/35/27/14). `packages/contracts/src/history.ts` untouched (R3).
 
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | cache_write_tokens is stored as its own measure on every token-measure table — history_daily_stats, history_board_message_5m, history_board_session_stats, history_board_model_stats, history_board_source_stats, history_board_source_daily — and cache_write_tokens_alloc on the two tool-grain tables, via migration 0035 (drizzle/0035_spur_cli_history_measure_vector.sql) and the derivation writes in packages/domain/src/analytics/history-board-rollup.ts (message_5m:328, tool_5m:363, session_stats:425, model_stats:479, tool_stats:503, source_daily:513, daily_stats:545, source_stats:599). Invariant test 'cache_write_tokens is stored on every table carrying token measures (R1)' passes. |
+| R2 | MET | Cache hit rate computed at read time as cache_read / (fresh + cache_read + cache_write) — packages/domain/src/analytics/history-board-rollup.ts:1100 (all-time model_stats path) and :1126 (filtered 5m path). No column stores the rate; the R6 invariant test asserts no rate/ratio/mean column name exists. |
+| R3 | MET | packages/contracts/src/history.ts is byte-identical — no response shape changes. Confirmed by the contract being untouched in the diff (git status shows no contracts changes). |
+| R4 | MET | assistant_duration_samples added to history_daily_stats and history_board_session_stats (migration 0035); message_5m and model_stats already carried it; the two tool-grain tables use calls as the duration sample count. Invariant test 'every duration sum has a co-located sample count; calls serves the tool grain (R4)' passes. |
+| R5 | MET | history_board_tool_5m's three REAL token columns renamed to _alloc and history_board_tool_stats rebuilt with REAL _alloc columns (migration 0035). All readers split on tool vs non-tool grain: history-board-rollup.ts:780 (tokenSelect), :806 (orderByExpr), :1255 (kpi tokenCols). No query sums an _alloc column with a non-_alloc one. Invariant test 'allocated token columns carry a distinct _alloc name (R5)' passes. |
+| R6 | MET | No aggregate column stores a rate/ratio/percentage/mean. Invariant test 'no aggregate column stores a rate, ratio, percentage, or mean (R6)' scans PRAGMA table_info across all eight measure-carrying tables against a rate/ratio/mean name pattern. |
+| R7 | MET | history_board_ranked_steps, history_board_loop_findings, history_board_rollup_meta, and history_board_skill_5m are byte-unchanged. Invariant test 'excluded per-row / metadata tables carry no measure-vector columns (R7)' asserts they carry no cache_write_tokens/_alloc/_samples columns. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R22 — No rate, ratio, or mean is materialized | MET | test | Invariant test 'no aggregate column stores a rate, ratio, percentage, or mean (R6)' + 'every duration sum has a co-located sample count (R4)' — packages/domain/tests/analytics/history-board-rollup.test.ts (measure vector additivity invariant block). 47 pass, 0 fail. |
+| Scenario: R23 — Cache write tokens are measured separately from cache reads | MET | test | cache_write_tokens stored as own measure (migration 0035 + derivation) and cache hit rate computed at read time (history-board-rollup.ts:1100/1126) as cache_read/(fresh+cache_read+cache_write). Invariant tests R1 and R5 pass; contracts/src/history.ts byte-identical (R3). |
+| Scenario: R24 — Allocated token measures are named distinctly from measured ones | MET | test | _alloc rename on tool_5m and tool_stats (migration 0035); readers split on grain (history-board-rollup.ts:780/806/1255). Invariant test 'allocated token columns carry a distinct _alloc name (R5)' passes. |
+| Scenario: R25 — Aggregates that are not KPI surfaces do not carry the vector | MET | test | ranked_steps, loop_findings, rollup_meta, skill_5m remain unchanged. Invariant test 'excluded per-row / metadata tables carry no measure-vector columns (R7)' passes. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed with no findings |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows carry executable test evidence. |
 ### References
 - Parent feature: `docs/features/E91_history-read-path-materialized-only-incremental-rollup-etl-per-table-freshness-and-precomputed-ui-aggregates.md`
 - `docs/00_ADR.md` — ADR-106 (measure vector and additivity invariant)
@@ -177,3 +206,6 @@ Authority: ADR-106; `docs/design/history-incremental-materialization.md` section
 - Current max migration `0031_spur_cli_history_board_tool_stats_columns`; `0032` reserved by task 0748
 - Dependents: task 0741 (must populate every new column per bucket), task 0742 (equivalence test catches unpopulated columns), task 0743 (marts carry the same vector)
 ### History
+- 2026-09-03T21:23:28.250Z todo → wip (system)
+- 2026-09-03T21:23:42.666Z wip → testing (system)
+- 2026-09-03T21:23:47.774Z testing → done (system)
