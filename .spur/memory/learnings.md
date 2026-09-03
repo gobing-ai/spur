@@ -1008,9 +1008,11 @@ Done. Summary:
 - **`kill` failures must not be ignored** and one unverified signal is not cleanup — the bounded TERM→KILL sequence with re-query is the minimum.
 - **Never repair timestamp churn with `git checkout`** — that fixes the symptom, not the no-replay contract.
 - **`+D` over-match is fail-safe** (errs toward removal success), but comment wording must not claim it is CWD-only.
+
 ## 2026-08-29 — feature A6 batch (0703–0712, runall inline driver)
 
 ### 0709 — escalation packets
+
 - Bun's `coverageThreshold` (root bunfig) is enforced **per file**: a new untested helper in `apps/cli/src/commands/workflow.ts` dropped funcs to 88.46% and failed the whole suite with rc=1 and "0 fail" — the only tell is the coverage table. When adding functions to big CLI command files, add/extend a CLI e2e test in the same change.
 - Swallow-style `.catch(() => undefined)` arrows count as uncovered functions; prefer a try/catch inside the helper returning `undefined` (zero extra funcs) over per-call-site arrows.
 - Redaction split: identifiers get length-only `boundId` (SECRET_PATTERN `sk-[a-z0-9_-]{8,` mangles ids like `task-pipeline` → `ta[REDACTED]`); operator free text gets `bounded()` (redact + truncate).
@@ -1019,8 +1021,73 @@ Done. Summary:
 - `diagnostic`-tier events are invisible under default CLI taps (system-event-tap skips them) — a "never silent" failure path needs tier `default` with `metadata-only` payload.
 
 ### Batch driver mechanics
+
 - `git diff --` excludes untracked files — `git add -N` every batch-new source/test file before capturing implement diffs.
 - sqlite `artifacts.run_id` FK → insert the runs row before projecting artifacts; `db.queryAll` is async (always `await`).
 - Pipes eat exit codes under `sh -c`: capture with `>/tmp/f 2>&1; echo rc=$?`.
 - Per-task diffs in a one-branch batch are cumulative overlays (later tasks' diffs include earlier tasks' hunks in shared files) — reviewers must be told this up front to avoid false "commit per task" findings.
 - pi-lens "0 issue(s) must be fixed" banner with zero issues is benign; green CLI gates are authoritative.
+
+## 2026-09-02 — Feature E9 skill-call loading band (0735–0737, runall inline driver)
+
+This batch adds the skill-load data plane end to end: the `history_skill_call` derived table, the importer extraction that populates it, and the Summary-tab skill-load breakdown backed by a materialized rollup. The cross-cutting thread is **cross-repo (ts-libs) upstream work + a published-version release dependency + one migration-index test sweep**.
+
+### 0735 — Add `history_skill_call` derived table
+
+- **The importer (not Spur) owns the schema.** 0735's real work is the frozen `history_skill_call` DDL + `SkillCall` type + DAO typed-column map in `@gobing-ai/ts-llm-jsonl-importer` (the `ts-libs` monorepo). Spur only consumes the published build via the lockstep `@gobing-ai/ts-*` pin bump. Don't look for importer files under the Spur monorepo `packages/` — the source of truth is the sibling repo `~/xprojects/ts-libs`, `packages/llm-jsonl-importer`.
+- **Every `history_*` table must join `HISTORY_RESET_TABLES`.** After bumping the importer pin, the drift-guard test `packages/domain/tests/analytics/history-reset.test.ts` ("table list covers every history_* table the migrations create") fails until the new table is added to `packages/domain/src/analytics/history-reset.ts`. A lockstep bump alone is never "no Spur-side change needed" — the reset registry is Spur-side and must be extended.
+
+### 0736 — Populate `history_skill_call` during import
+
+- **The publish gate is real.** A release exists in two places: the repo commit and the published npm version. ts-libs HEAD `07eae3f` (the extraction) was a **descendant** of the `0.4.53` release commit — so published `0.4.53` did **not** contain the extraction. Consuming a version requires a NEW release from the feature commit, not just a higher number already published.
+- **Partial lockstep releases break type coupling.** The operator published 7/8 `@gobing-ai/ts-*` at 0.4.54, leaving `ts-rule-engine` at 0.4.53. `ts-rule-engine`'s `.d.ts` embed `ts-infra` types and `ts-infra@0.4.54` changed a private `syncHandlers` field — so infra and rule-engine MUST be the same version. Mixed pins (infra@0.4.54 + rule-engine@0.4.53) fail typecheck with "Types have separate declarations of a private property 'syncHandlers'" and two co-resident `ts-infra` copies. The fix is a full lockstep: get `ts-rule-engine@0.4.54` published, pin all 8 identically.
+- **Bun caches the packument.** After a version is published, `bun install` may still fail to resolve it ("No version matching ^x.0 found, but package exists" / "failed to resolve") because the packument cache is stale. Clear it: `rm -rf ~/.bun/install/cache/@gobing-ai@ts-*` then reinstall. `bun pm view` (tarball API) may already see it while the resolver does not.
+
+### 0737 — Summary tab skill-load breakdown + materialized rollup
+
+- **Migration-index tests are a fixed sweep.** Adding a migration (`0032_spur_cli_history_board_skill_5m`) requires updating `packages/domain/tests/dao/migrations.test.ts` in **five** ways: the array `toHaveLength(32→33)`, add the `[32]` id expectation, and the four apply-count assertions (28→29, 31→32, 23→24, 10→11) that assume the old migration count. Miss any and `spur-check` fails with an unrelated-looking "db migrations" failure.
+- **A new rollup joins the reset set AND the migrate sweep.** `history_board_skill_5m` must be added to `HISTORY_RESET_TABLES` too (same rule as 0735).
+- **AC5 stale-rollup → never silent-empty.** `computeSummaryExtras` read the skill rollup unconditionally, so a stale/never-analyzed DB returned "No skill activity" for skill rows that exist — a silent-empty. The design forbids a direct `history_skill_call` scan in the request path, so the approved fix is to **flag freshness** rather than recompute: add `skillBreakdown.fresh: !exact` (the `exact` flag already distinguishes the not-fresh/exact path), and the UI renders a "run history analyze" state when `fresh === false`. This is a contract-shape change → `fresh: z.boolean().default(true)` — so every fixture/producer that constructs `skillBreakdown` must add `fresh` (service, mock, web test fixtures, the stale-path expectation).
+- **Adding a required contract field breaks equality tests.** `history-analysis-service.test.ts` compares pre-refresh (not-fresh, `fresh:false`) vs post-refresh (fresh, `fresh:true`) summaries with `toEqual`; the freshness flag is genuine metadata and legitimately differs. Normalize it in the test (`withoutFresh`) rather than weakening the assertion — the numeric-equality intent is preserved.
+- **Verify-answer schema is the host's to reconcile.** The verify subagent is prone to writing a rich-but-non-canonical answer: 0737's first attempt was canonical (good), but 0735/0736 wrote answers that failed `verify-answer-lint` (duplicate `Verdict:` line; `**Verdict:** PASS` bold form; missing per-requirement R1-R6 rows). The host must reformat into the canonical `Verdict: PASS` line + `| Req | Status | Evidence |` + `| AC | Status | Evidence Type | Evidence |` tables before `spur task verdict --from-answer`, or the deterministic verdict derivation is poisoned.
+
+### Batch-driver mechanics (this run)
+
+- **Bump-then-regen the lockfile.** `bun install --frozen-lockfile` fails after a pin change ("lockfile had changes, but lockfile is frozen"); run `bun install --ignore-scripts` (no frozen) to save the regenerated lockfile.
+- **`bun run spur-check` is ~2 min; probe with `bun run lint` first.** The probe (biome + typecheck) catches format/type drift in seconds; only run the full gate once the probe is green.
+
+### Getting from the run
+
+- **The `skill` dimension and `SkillCall` extraction are strictly additive** — claude native `Skill` tool_use is preserved as a `history_tool_call` row AND emitted as `history_skill_call` (287 rows in the real corpus), so no regression in message/tool-call counts. The ledger invariant holds: `history_message + history_tool_call + history_skill_call == history_import_ledger`.
+## 2026-09-02 — Feature E9 skill-call loading band (0735–0737, runall inline driver)
+
+This batch adds the skill-load data plane end to end: the `history_skill_call` derived table, the importer extraction that populates it, and the Summary-tab skill-load breakdown backed by a materialized rollup. The cross-cutting thread is **cross-repo (ts-libs) upstream work + a published-version release dependency + one migration-index test sweep**.
+
+### 0735 — Add `history_skill_call` derived table
+
+- **The importer (not Spur) owns the schema.** 0735's real work is the frozen `history_skill_call` DDL + `SkillCall` type + DAO typed-column map in `@gobing-ai/ts-llm-jsonl-importer` (the `ts-libs` monorepo). Spur only consumes the published build via the lockstep `@gobing-ai/ts-*` pin bump. Don't look for importer files under the Spur monorepo `packages/` — the source of truth is the sibling repo `~/xprojects/ts-libs`, `packages/llm-jsonl-importer`.
+- **Every `history_*` table must join `HISTORY_RESET_TABLES`.** After bumping the importer pin, the drift-guard test `packages/domain/tests/analytics/history-reset.test.ts` ("table list covers every history_* table the migrations create") fails until the new table is added to `packages/domain/src/analytics/history-reset.ts`. A lockstep bump alone is never "no Spur-side change needed" — the reset registry is Spur-side and must be extended.
+
+### 0736 — Populate `history_skill_call` during import
+
+- **The publish gate is real.** A release exists in two places: the repo commit and the published npm version. ts-libs HEAD `07eae3f` (the extraction) was a **descendant** of the `0.4.53` release commit — so published `0.4.53` did **not** contain the extraction. Consuming a version requires a NEW release from the feature commit, not just a higher number already published.
+- **Partial lockstep releases break type coupling.** The operator published 7/8 `@gobing-ai/ts-*` at 0.4.54, leaving `ts-rule-engine` at 0.4.53. `ts-rule-engine`'s `.d.ts` embed `ts-infra` types and `ts-infra@0.4.54` changed a private `syncHandlers` field — so infra and rule-engine MUST be the same version. Mixed pins (infra@0.4.54 + rule-engine@0.4.53) fail typecheck with "Types have separate declarations of a private property 'syncHandlers'" and two co-resident `ts-infra` copies. The fix is a full lockstep: get `ts-rule-engine@0.4.54` published, pin all 8 identically.
+- **Bun caches the packument.** After a version is published, `bun install` may still fail to resolve it ("No version matching ^x.0 found, but package exists" / "failed to resolve") because the packument cache is stale. Clear it: `rm -rf ~/.bun/install/cache/@gobing-ai@ts-*` then reinstall. `bun pm view` (tarball API) may already see it while the resolver does not.
+
+### 0737 — Summary tab skill-load breakdown + materialized rollup
+
+- **Migration-index tests are a fixed sweep.** Adding a migration (`0032_spur_cli_history_board_skill_5m`) requires updating `packages/domain/tests/dao/migrations.test.ts` in **five** ways: the array `toHaveLength(32→33)`, add the `[32]` id expectation, and the four apply-count assertions (28→29, 31→32, 23→24, 10→11) that assume the old migration count. Miss any and `spur-check` fails with an unrelated-looking "db migrations" failure.
+- **A new rollup joins the reset set AND the migrate sweep.** `history_board_skill_5m` must be added to `HISTORY_RESET_TABLES` too (same rule as 0735).
+- **AC5 stale-rollup → never silent-empty.** `computeSummaryExtras` read the skill rollup unconditionally, so a stale/never-analyzed DB returned "No skill activity" for skill rows that exist — a silent-empty. The design forbids a direct `history_skill_call` scan in the request path, so the approved fix is to **flag freshness** rather than recompute: add `skillBreakdown.fresh: !exact` (the `exact` flag already distinguishes the not-fresh/exact path), and the UI renders a "run history analyze" state when `fresh === false`. This is a contract-shape change → `fresh: z.boolean().default(true)` — so every fixture/producer that constructs `skillBreakdown` must add `fresh` (service, mock, web test fixtures, the stale-path expectation).
+- **Adding a required contract field breaks equality tests.** `history-analysis-service.test.ts` compares pre-refresh (not-fresh, `fresh:false`) vs post-refresh (fresh, `fresh:true`) summaries with `toEqual`; the freshness flag is genuine metadata and legitimately differs. Normalize it in the test (`withoutFresh`) rather than weakening the assertion — the numeric-equality intent is preserved.
+- **Verify-answer schema is the host's to reconcile.** The verify subagent is prone to writing a rich-but-non-canonical answer: 0737's first attempt was canonical (good), but 0735/0736 wrote answers that failed `verify-answer-lint` (duplicate `Verdict:` line; `**Verdict:** PASS` bold form; missing per-requirement R1-R6 rows). The host must reformat into the canonical `Verdict: PASS` line + `| Req | Status | Evidence |` + `| AC | Status | Evidence Type | Evidence |` tables before `spur task verdict --from-answer`, or the deterministic verdict derivation is poisoned.
+
+### Batch-driver mechanics (this run)
+
+- **Bump-then-regen the lockfile.** `bun install --frozen-lockfile` fails after a pin change ("lockfile had changes, but lockfile is frozen"); run `bun install --ignore-scripts` (no frozen) to save the regenerated lockfile.
+- **`bun run spur-check` is ~2 min; probe with `bun run lint` first.** The probe (biome + typecheck) catches format/type drift in seconds; only run the full gate once the probe is green.
+
+### Getting from the run
+
+- **The `skill` dimension and `SkillCall` extraction are strictly additive** — claude native `Skill` tool_use is preserved as a `history_tool_call` row AND emitted as `history_skill_call` (287 rows in the real corpus), so no regression in message/tool-call counts. The ledger invariant holds: `history_message + history_tool_call + history_skill_call == history_import_ledger`.
+

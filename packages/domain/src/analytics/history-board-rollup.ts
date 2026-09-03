@@ -94,6 +94,23 @@ END`;
 
 const HISTORY_BOARD_ROLLUP_VERSION = 2;
 
+/** Materialized skill-call rollup row keyed on (bucket_start, source, skill_name, invocation_kind). */
+export interface HistoryBoardSkill5mRow {
+    bucketStart: string;
+    source: string;
+    skillName: string;
+    invocationKind: string;
+    calls: number;
+}
+
+/** Skill-load breakdown computed from the materialized skill rollup. */
+export interface HistoryBoardSkillBreakdown {
+    bySkill: HistoryBoardSkillRow[];
+    bySource: Array<{ source: string; calls: number }>;
+    byInvocationKind: Array<{ invocationKind: string; calls: number }>;
+    trend: BucketedTokenRow[];
+}
+
 /** Input rows reused from the existing forensic analyzers when rebuilding board rollups. */
 export interface HistoryBoardRollupSeed {
     historyVersion: string;
@@ -104,6 +121,7 @@ export interface HistoryBoardRollupSeed {
     tokenSteps: readonly StepRow[];
     durationSteps: readonly StepRow[];
     cacheWasteSteps: readonly StepRow[];
+    skill5m?: readonly HistoryBoardSkill5mRow[];
 }
 
 /** Numeric token aggregate grouped by one display key. */
@@ -239,6 +257,26 @@ export async function historyBoardHistoryVersion(db: DbAdapter): Promise<string>
     return `v${HISTORY_BOARD_ROLLUP_VERSION}:message:${row?.importedAt ?? ''}:${row?.maxRowId ?? 0}`;
 }
 
+/**
+ * Aggregate `history_skill_call` into the materialized skill rollup seed, bucketing
+ * `started_at` to the board's shared minute floor so the read layer can re-bucket to
+ * any requested interval. All-time (unfiltered): the Summary read layer applies the
+ * window/source filters, matching the other board rollups.
+ */
+export async function skillCallRollup(db: DbAdapter): Promise<HistoryBoardSkill5mRow[]> {
+    return db.queryAll<HistoryBoardSkill5mRow>(
+        `SELECT strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', started_at) / 60 * 60 AS INTEGER), 'unixepoch') AS bucketStart,
+                source,
+                skill_name AS skillName,
+                invocation_kind AS invocationKind,
+                COUNT(*) AS calls
+         FROM history_skill_call
+         WHERE started_at IS NOT NULL
+         GROUP BY bucketStart, source, skillName, invocationKind
+         ORDER BY bucketStart ASC, source ASC`,
+    );
+}
+
 /** True only when the materialized read models cover the latest imported message. */
 export async function historyBoardRollupsFresh(db: DbAdapter): Promise<boolean> {
     const [meta, version] = await Promise.all([
@@ -268,6 +306,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
             'history_board_source_stats',
             'history_board_source_daily',
             'history_board_rollup_meta',
+            'history_board_skill_5m',
         ].map((table) => ({ sql: `DELETE FROM ${table}`, params: [] })),
         {
             sql: `INSERT INTO history_board_message_5m (
@@ -515,6 +554,15 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
     appendRankedSteps(operations, 'duration', seed.durationSteps);
     appendRankedSteps(operations, 'cache-waste', seed.cacheWasteSteps);
 
+    for (const row of seed.skill5m ?? []) {
+        operations.push({
+            sql: `INSERT INTO history_board_skill_5m (
+                    bucket_start, source, skill_name, invocation_kind, calls
+                ) VALUES (?, ?, ?, ?, ?)`,
+            params: [row.bucketStart, row.source, row.skillName, row.invocationKind, row.calls],
+        });
+    }
+
     for (const row of seed.sourceRows) {
         operations.push({
             sql: `INSERT INTO history_board_source_stats (
@@ -751,7 +799,7 @@ export async function historyBoardSummaryFromRollup(
             `SELECT r.skill_name AS skillName, SUM(r.calls) AS calls
              FROM ${toolTable} r
              ${toolFilter.where}${toolFilter.where ? ' AND' : ' WHERE'} r.skill_name <> '' AND r.skill_name <> 'unknown'
-             GROUP BY r.skill_name ORDER BY calls DESC LIMIT 10`,
+             GROUP BY r.skill_name ORDER BY calls DESC, r.skill_name ASC LIMIT 10`,
             ...toolFilter.params,
         ),
         db.queryFirst<{ sessions: number }>(
@@ -1063,6 +1111,70 @@ export async function historyBoardSourcesFromRollup(
         daily,
         databaseBytes,
     };
+}
+
+/**
+ * Skill-load breakdown from the materialized skill rollup — never scans
+ * `history_skill_call`. Counts by skill, source, invocation_kind, plus a bucketed
+ * call-count trend over the selected window, all filtered through the shared selectors.
+ */
+export async function historyBoardSkillBreakdownFromRollup(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    bucket: HistoryBucket,
+): Promise<HistoryBoardSkillBreakdown> {
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+    if (sel.since !== null) {
+        clauses.push(`r.bucket_start >= strftime('%Y-%m-%dT%H:%M:%SZ', ?)`);
+        params.push(sel.since);
+    }
+    if (sel.until !== null) {
+        clauses.push(`r.bucket_start <= strftime('%Y-%m-%dT%H:%M:%SZ', ?)`);
+        params.push(sel.until);
+    }
+    if (sel.sources !== null && sel.sources.length > 0) {
+        clauses.push(`r.source IN (${sel.sources.map(() => '?').join(', ')})`);
+        params.push(...sel.sources);
+    }
+    const validSkills = sel.skills?.filter((s) => s && s.trim() !== '' && s !== 'unknown') ?? [];
+    if (validSkills.length > 0) {
+        clauses.push(`r.skill_name IN (${validSkills.map(() => '?').join(', ')})`);
+        params.push(...validSkills);
+    }
+    // Selector-only predicate (shared by the four grouping queries).
+    const where = clauses.length > 0 ? ` WHERE ${clauses.join(' AND ')}` : '';
+    // bySkill additionally excludes empty / 'unknown' skill names (mirrors the parallel
+    // skill query), so a bogus 'unknown' top-skill is never surfaced (0737 R7).
+    const skillWhere = `${where}${where ? ' AND' : ' WHERE'} r.skill_name <> '' AND r.skill_name <> 'unknown'`;
+    const [bySkill, bySource, byInvocationKind, trend] = await Promise.all([
+        db.queryAll<HistoryBoardSkillRow>(
+            `SELECT r.skill_name AS skillName, SUM(r.calls) AS calls
+             FROM history_board_skill_5m r${skillWhere}
+             GROUP BY r.skill_name ORDER BY calls DESC, r.skill_name ASC LIMIT 10`,
+            ...params,
+        ),
+        db.queryAll<{ source: string; calls: number }>(
+            `SELECT r.source AS source, SUM(r.calls) AS calls
+             FROM history_board_skill_5m r${where}
+             GROUP BY r.source ORDER BY calls DESC, r.source ASC`,
+            ...params,
+        ),
+        db.queryAll<{ invocationKind: string; calls: number }>(
+            `SELECT r.invocation_kind AS invocationKind, SUM(r.calls) AS calls
+             FROM history_board_skill_5m r${where}
+             GROUP BY r.invocation_kind ORDER BY calls DESC, r.invocation_kind ASC`,
+            ...params,
+        ),
+        db.queryAll<BucketedTokenRow>(
+            `SELECT ${bucketExpression(bucket, 'r')} AS bucketStart, r.skill_name AS key,
+                    SUM(r.calls) AS calls, 0 AS freshInputTokens, 0 AS cacheReadTokens, 0 AS outputTokens
+             FROM history_board_skill_5m r${skillWhere}
+             GROUP BY bucketStart, r.skill_name ORDER BY bucketStart ASC`,
+            ...params,
+        ),
+    ]);
+    return { bySkill, bySource, byInvocationKind, trend };
 }
 
 /** Exact SQLite database bytes used as the honest corpus-store size. */

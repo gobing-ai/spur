@@ -4,6 +4,15 @@ import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import { refreshHistoryRollups } from '../../src/services/history-analysis-service';
 import { LiveHistoryBoardService } from '../../src/services/history-board-service';
 
+// The AC5 `skillBreakdown.fresh` flag is genuine rollup-state metadata that differs between the
+// pre-refresh (stale) and post-refresh (fresh) read paths. The numeric-equality intent of the
+// refreshHistoryRollups tests compares the DATA, not the freshness signal, so strip `fresh`.
+function withoutFresh<T extends { skillBreakdown?: { fresh?: boolean } }>(summary: T): T {
+    if (summary.skillBreakdown === undefined) return summary;
+    const { fresh: _fresh, ...rest } = summary.skillBreakdown;
+    return { ...summary, skillBreakdown: rest };
+}
+
 async function setup(): Promise<DbAdapter> {
     const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
     for (const statement of CLI_SCHEMA_SQL.split(';')
@@ -226,7 +235,9 @@ describe('refreshHistoryRollups (task 0629)', () => {
         const first = await refreshHistoryRollups(db);
         expect(first.status).toBe('refreshed');
         expect(await historyBoardRollupsFresh(db)).toBe(true);
-        expect(await service.getSummary({ range: 'all', bucket: '1d', dimension: 'model' })).toEqual(liveSummary);
+        expect(withoutFresh(await service.getSummary({ range: 'all', bucket: '1d', dimension: 'model' }))).toEqual(
+            withoutFresh(liveSummary),
+        );
         const toolSummary = await service.getSummary({
             range: 'all',
             bucket: '1d',
@@ -236,7 +247,9 @@ describe('refreshHistoryRollups (task 0629)', () => {
         expect(toolSummary.kpis.toolCallsCount).toBe(6);
         expect(toolSummary.topTools.map((t) => t.id)).toEqual(['Read']);
         expect(toolSummary.kpis.totalBilledTokens).toBe(90381);
-        expect(await service.getSummary({ range: 'all', bucket: '5m', dimension: 'tool' })).toEqual(liveSubdaySummary);
+        expect(withoutFresh(await service.getSummary({ range: 'all', bucket: '5m', dimension: 'tool' }))).toEqual(
+            withoutFresh(liveSubdaySummary),
+        );
         expect(
             await service.getSessions({
                 filter: { range: 'all' },
@@ -298,7 +311,9 @@ describe('refreshHistoryRollups (task 0629)', () => {
         const staleFallback = await service.getSummary({ range: 'all', bucket: '1d', dimension: 'model' });
         expect(staleFallback.kpis.totalBilledTokens).toBe(liveSummary.kpis.totalBilledTokens + 375);
         expect((await refreshHistoryRollups(db)).status).toBe('refreshed');
-        expect(await service.getSummary({ range: 'all', bucket: '1d', dimension: 'model' })).toEqual(staleFallback);
+        expect(withoutFresh(await service.getSummary({ range: 'all', bucket: '1d', dimension: 'model' }))).toEqual(
+            withoutFresh(staleFallback),
+        );
         expect((await refreshHistoryRollups(db)).status).toBe('unchanged');
     });
 });

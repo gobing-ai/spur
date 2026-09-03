@@ -5,6 +5,7 @@ import type { ArtifactSelector } from '../../src/analytics/artifact';
 import type { MessageRollupRow, StepRow, ToolRollupRow } from '../../src/analytics/forensic-query';
 import { bucketedTokenSeries } from '../../src/analytics/forensic-query';
 import {
+    type HistoryBoardRollupSeed,
     historyBoardDatabaseBytes,
     historyBoardHeavySessionsFromRollup,
     historyBoardHistoryVersion,
@@ -14,9 +15,11 @@ import {
     historyBoardRankedStepsFromRollup,
     historyBoardRollupsFresh,
     historyBoardSessionsFromRollup,
+    historyBoardSkillBreakdownFromRollup,
     historyBoardSourcesFromRollup,
     historyBoardSummaryFromRollup,
     replaceHistoryBoardRollups,
+    skillCallRollup,
 } from '../../src/analytics/history-board-rollup';
 import { HISTORY_BOARD_ROLLUPS_SCHEMA_SQL } from '../../src/migrations';
 
@@ -1281,5 +1284,292 @@ describe('historyBoardKpiTrendFromRollup', () => {
         );
         expect(sess?.top_tool).not.toBeNull();
         expect(['Read', 'bash', 'custom_query']).toContain(sess?.top_tool ?? '');
+    });
+});
+
+interface SkillCall {
+    recordHash: string;
+    source: string;
+    sessionId: string;
+    seq: number;
+    skillName: string;
+    invocationKind: 'user' | 'model';
+    startedAt: string;
+}
+
+async function insertSkillCall(db: DbAdapter, s: SkillCall): Promise<void> {
+    await db.run(
+        `INSERT INTO history_skill_call (record_hash, message_hash, source, source_file, source_line,
+             session_id, seq, skill_name, invocation_kind, status, started_at, imported_at)
+         VALUES (?, ?, ?, 'test.jsonl', 1, ?, ?, ?, ?, 'success', ?, '2026-06-01T00:00:00Z')`,
+        s.recordHash,
+        s.recordHash,
+        s.source,
+        s.sessionId,
+        s.seq,
+        s.skillName,
+        s.invocationKind,
+        s.startedAt,
+    );
+}
+
+describe('history_board_skill_5m / skillCallRollup (task 0737)', () => {
+    test('skillCallRollup buckets started_at to the minute floor and counts per key', async () => {
+        const db = await setup();
+        await insertSkillCall(db, {
+            recordHash: 'sk1',
+            source: 'claude',
+            sessionId: 's1',
+            seq: 1,
+            skillName: 'sp-code-testing',
+            invocationKind: 'model',
+            startedAt: '2026-06-01T09:58:10Z',
+        });
+        await insertSkillCall(db, {
+            recordHash: 'sk2',
+            source: 'claude',
+            sessionId: 's1',
+            seq: 2,
+            skillName: 'sp-code-testing',
+            invocationKind: 'user',
+            startedAt: '2026-06-01T09:58:40Z',
+        });
+        await insertSkillCall(db, {
+            recordHash: 'sk3',
+            source: 'codex',
+            sessionId: 's2',
+            seq: 1,
+            skillName: 'sp-sys-debugging',
+            invocationKind: 'model',
+            startedAt: '2026-06-01T10:05:00Z',
+        });
+        const rows = await skillCallRollup(db);
+        expect(rows).toEqual([
+            {
+                bucketStart: '2026-06-01T09:58:00Z',
+                source: 'claude',
+                skillName: 'sp-code-testing',
+                invocationKind: 'model',
+                calls: 1,
+            },
+            {
+                bucketStart: '2026-06-01T09:58:00Z',
+                source: 'claude',
+                skillName: 'sp-code-testing',
+                invocationKind: 'user',
+                calls: 1,
+            },
+            {
+                bucketStart: '2026-06-01T10:05:00Z',
+                source: 'codex',
+                skillName: 'sp-sys-debugging',
+                invocationKind: 'model',
+                calls: 1,
+            },
+        ]);
+    });
+
+    test('replaceHistoryBoardRollups materializes history_board_skill_5m, and a re-analyze is idempotent', async () => {
+        const db = await setup();
+        const seed: HistoryBoardRollupSeed = {
+            historyVersion: 'v2:test',
+            messageRows: [],
+            toolRows: [],
+            loopRows: [],
+            sourceRows: [],
+            tokenSteps: [],
+            durationSteps: [],
+            cacheWasteSteps: [],
+            skill5m: [
+                {
+                    bucketStart: '2026-06-01T09:58:00Z',
+                    source: 'claude',
+                    skillName: 'sp-code-testing',
+                    invocationKind: 'model',
+                    calls: 2,
+                },
+                {
+                    bucketStart: '2026-06-01T09:58:00Z',
+                    source: 'claude',
+                    skillName: 'sp-code-testing',
+                    invocationKind: 'user',
+                    calls: 1,
+                },
+                {
+                    bucketStart: '2026-06-01T10:05:00Z',
+                    source: 'codex',
+                    skillName: 'sp-sys-debugging',
+                    invocationKind: 'model',
+                    calls: 1,
+                },
+            ],
+        };
+        await replaceHistoryBoardRollups(db, seed);
+        const first = await db.queryAll<{
+            bucket_start: string;
+            source: string;
+            skill_name: string;
+            invocation_kind: string;
+            calls: number;
+        }>('SELECT * FROM history_board_skill_5m ORDER BY bucket_start, source, skill_name, invocation_kind');
+        expect(first).toEqual([
+            {
+                bucket_start: '2026-06-01T09:58:00Z',
+                source: 'claude',
+                skill_name: 'sp-code-testing',
+                invocation_kind: 'model',
+                calls: 2,
+            },
+            {
+                bucket_start: '2026-06-01T09:58:00Z',
+                source: 'claude',
+                skill_name: 'sp-code-testing',
+                invocation_kind: 'user',
+                calls: 1,
+            },
+            {
+                bucket_start: '2026-06-01T10:05:00Z',
+                source: 'codex',
+                skill_name: 'sp-sys-debugging',
+                invocation_kind: 'model',
+                calls: 1,
+            },
+        ]);
+        // Freshness rides the shared meta row (covered by historyBoardRollupsFresh tests).
+
+        // Re-run with the same seed is a full replace, never an append.
+        await replaceHistoryBoardRollups(db, { ...seed, historyVersion: 'v2:test' });
+        const second = await db.queryAll<{ record: number }>('SELECT COUNT(*) AS record FROM history_board_skill_5m');
+        expect(second).toEqual([{ record: 3 }]);
+    });
+
+    test('historyBoardSkillBreakdownFromRollup returns per-skill/source/invocation counts and a trend over the window', async () => {
+        const db = await setup();
+        await replaceHistoryBoardRollups(db, {
+            historyVersion: 'v2:test',
+            messageRows: [],
+            toolRows: [],
+            loopRows: [],
+            sourceRows: [],
+            tokenSteps: [],
+            durationSteps: [],
+            cacheWasteSteps: [],
+            skill5m: [
+                {
+                    bucketStart: '2026-06-01T09:58:00Z',
+                    source: 'claude',
+                    skillName: 'sp-code-testing',
+                    invocationKind: 'model',
+                    calls: 2,
+                },
+                {
+                    bucketStart: '2026-06-01T09:58:00Z',
+                    source: 'claude',
+                    skillName: 'sp-code-testing',
+                    invocationKind: 'user',
+                    calls: 1,
+                },
+                {
+                    bucketStart: '2026-06-01T10:05:00Z',
+                    source: 'codex',
+                    skillName: 'sp-sys-debugging',
+                    invocationKind: 'model',
+                    calls: 1,
+                },
+                {
+                    bucketStart: '2026-06-01T10:05:00Z',
+                    source: 'codex',
+                    skillName: 'unknown',
+                    invocationKind: 'model',
+                    calls: 4,
+                },
+                {
+                    bucketStart: '2026-06-01T10:05:00Z',
+                    source: 'codex',
+                    skillName: '',
+                    invocationKind: 'model',
+                    calls: 2,
+                },
+            ],
+        });
+        const breakdown = await historyBoardSkillBreakdownFromRollup(db, ALL, '5m');
+        // Empty / 'unknown' skill names are excluded from bySkill (mirrors the parallel skill
+        // query); they still count toward bySource / byInvocationKind.
+        expect(breakdown.bySkill).toEqual([
+            { skillName: 'sp-code-testing', calls: 3 },
+            { skillName: 'sp-sys-debugging', calls: 1 },
+        ]);
+        expect(breakdown.bySource).toEqual([
+            { source: 'codex', calls: 7 },
+            { source: 'claude', calls: 3 },
+        ]);
+        expect(breakdown.byInvocationKind).toEqual([
+            { invocationKind: 'model', calls: 9 },
+            { invocationKind: 'user', calls: 1 },
+        ]);
+        // Trend is a 5m re-bucketed call-count series.
+        expect(breakdown.trend).toEqual([
+            {
+                bucketStart: '2026-06-01 09:55:00',
+                key: 'sp-code-testing',
+                calls: 3,
+                freshInputTokens: 0,
+                cacheReadTokens: 0,
+                outputTokens: 0,
+            },
+            {
+                bucketStart: '2026-06-01 10:05:00',
+                key: 'sp-sys-debugging',
+                calls: 1,
+                freshInputTokens: 0,
+                cacheReadTokens: 0,
+                outputTokens: 0,
+            },
+        ]);
+    });
+
+    test('skill breakdown honors the window and source selectors and returns empty when no skill rows', async () => {
+        const db = await setup();
+        await replaceHistoryBoardRollups(db, {
+            historyVersion: 'v2:test',
+            messageRows: [],
+            toolRows: [],
+            loopRows: [],
+            sourceRows: [],
+            tokenSteps: [],
+            durationSteps: [],
+            cacheWasteSteps: [],
+            skill5m: [
+                {
+                    bucketStart: '2026-06-01T09:58:00Z',
+                    source: 'claude',
+                    skillName: 'sp-code-testing',
+                    invocationKind: 'model',
+                    calls: 2,
+                },
+            ],
+        });
+        // Window excludes the seeded bucket.
+        const empty = await historyBoardSkillBreakdownFromRollup(db, { ...ALL, since: '2026-06-02T00:00:00Z' }, '5m');
+        expect(empty.bySkill).toEqual([]);
+        expect(empty.trend).toEqual([]);
+        // Source selector keeps only that agent.
+        const claudeOnly = await historyBoardSkillBreakdownFromRollup(db, { ...ALL, sources: ['claude'] }, '5m');
+        expect(claudeOnly.bySource).toEqual([{ source: 'claude', calls: 2 }]);
+
+        // Zero skill rows never crashes; returns empty arrays.
+        const zeroDb = await setup();
+        await replaceHistoryBoardRollups(zeroDb, {
+            historyVersion: 'v2:test',
+            messageRows: [],
+            toolRows: [],
+            loopRows: [],
+            sourceRows: [],
+            tokenSteps: [],
+            durationSteps: [],
+            cacheWasteSteps: [],
+        });
+        const zero = await historyBoardSkillBreakdownFromRollup(zeroDb, ALL, '5m');
+        expect(zero).toEqual({ bySkill: [], bySource: [], byInvocationKind: [], trend: [] });
     });
 });

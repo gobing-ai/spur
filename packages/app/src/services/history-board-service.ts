@@ -7,6 +7,7 @@ import type {
     HistorySessionItem,
     HistorySessionsInput,
     HistorySessionsResponse,
+    HistorySkillBreakdown,
     HistorySourcesResponse,
     HistorySummaryKpis,
     HistorySummaryResponse,
@@ -50,6 +51,7 @@ import {
     historyBoardRankedStepsFromRollup,
     historyBoardRollupsFresh,
     historyBoardSessionsFromRollup,
+    historyBoardSkillBreakdownFromRollup,
     historyBoardSourcesFromRollup,
     historyBoardSummaryFromRollup,
     historyKpiTrend,
@@ -377,6 +379,7 @@ function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras):
         modelTimeSeries: extras.modelTimeSeries,
         sourceTimeSeries: extras.sourceTimeSeries,
         toolTimeSeries: extras.toolTimeSeries,
+        skillBreakdown: extras.skillBreakdown,
     };
 }
 
@@ -388,6 +391,7 @@ interface SummaryExtras {
     modelTimeSeries?: HistoryTimeSeriesPoint[];
     sourceTimeSeries?: HistoryTimeSeriesPoint[];
     toolTimeSeries?: HistoryTimeSeriesPoint[];
+    skillBreakdown: HistorySkillBreakdown;
 }
 
 /** Trend-selector resolution: end = bounded custom upper bound else current UTC day; start = end - 29d. */
@@ -518,36 +522,38 @@ async function computeSummaryExtras(
     const trendSel = resolveTrendSelector(sel);
     const endDay = trendSel.until.slice(0, 10);
     const previousSel = previousWindowSelector(sel);
-    const [trendRows, previousKpis, modelBuckets, sourceBuckets, toolBuckets, skillBuckets] = await Promise.all([
-        exact ? historyKpiTrend(db, trendSel) : historyBoardKpiTrendFromRollup(db, trendSel),
-        (async () => {
-            if (previousSel === null) return null;
-            if (exact) return await previousExactKpis(db, previousSel);
-            // Bounded previous-window KPIs: fixed daily bucket + model projection keeps the
-            // read on history_daily_stats regardless of the active (possibly sub-day) bucket.
-            return projectPreviousKpis(await historyBoardSummaryFromRollup(db, previousSel, '1d', 'model'));
-        })(),
-        (async () => {
-            if (dimension === 'model' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
-            if (exact) return await bucketedTokenSeries(db, sel, bucket, 'model');
-            return await historyBoardBucketsFromRollup(db, sel, bucket, 'model');
-        })(),
-        (async () => {
-            if (dimension === 'source' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
-            if (exact) return await bucketedTokenSeries(db, sel, bucket, 'source');
-            return await historyBoardBucketsFromRollup(db, sel, bucket, 'source');
-        })(),
-        (async () => {
-            if (dimension === 'tool' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
-            if (exact) return await bucketedTokenSeries(db, sel, bucket, 'tool');
-            return await historyBoardBucketsFromRollup(db, sel, bucket, 'tool');
-        })(),
-        (async () => {
-            if (dimension === 'skill' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
-            if (exact) return await bucketedTokenSeries(db, sel, bucket, 'skill');
-            return await historyBoardBucketsFromRollup(db, sel, bucket, 'skill');
-        })(),
-    ]);
+    const [trendRows, previousKpis, modelBuckets, sourceBuckets, toolBuckets, skillBuckets, skillBreakdownRaw] =
+        await Promise.all([
+            exact ? historyKpiTrend(db, trendSel) : historyBoardKpiTrendFromRollup(db, trendSel),
+            (async () => {
+                if (previousSel === null) return null;
+                if (exact) return await previousExactKpis(db, previousSel);
+                // Bounded previous-window KPIs: fixed daily bucket + model projection keeps the
+                // read on history_daily_stats regardless of the active (possibly sub-day) bucket.
+                return projectPreviousKpis(await historyBoardSummaryFromRollup(db, previousSel, '1d', 'model'));
+            })(),
+            (async () => {
+                if (dimension === 'model' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
+                if (exact) return await bucketedTokenSeries(db, sel, bucket, 'model');
+                return await historyBoardBucketsFromRollup(db, sel, bucket, 'model');
+            })(),
+            (async () => {
+                if (dimension === 'source' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
+                if (exact) return await bucketedTokenSeries(db, sel, bucket, 'source');
+                return await historyBoardBucketsFromRollup(db, sel, bucket, 'source');
+            })(),
+            (async () => {
+                if (dimension === 'tool' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
+                if (exact) return await bucketedTokenSeries(db, sel, bucket, 'tool');
+                return await historyBoardBucketsFromRollup(db, sel, bucket, 'tool');
+            })(),
+            (async () => {
+                if (dimension === 'skill' && activeBuckets && activeBuckets.length > 0) return activeBuckets;
+                if (exact) return await bucketedTokenSeries(db, sel, bucket, 'skill');
+                return await historyBoardBucketsFromRollup(db, sel, bucket, 'skill');
+            })(),
+            (() => historyBoardSkillBreakdownFromRollup(db, sel, bucket))(),
+        ]);
     return {
         kpiTrend: projectKpiTrend(trendRows, endDay),
         previousKpis,
@@ -555,6 +561,16 @@ async function computeSummaryExtras(
         sourceTimeSeries: projectSkillTimeSeries(sourceBuckets),
         toolTimeSeries: projectSkillTimeSeries(toolBuckets),
         skillTimeSeries: projectSkillTimeSeries(skillBuckets),
+        skillBreakdown: {
+            bySkill: skillBreakdownRaw.bySkill,
+            bySource: skillBreakdownRaw.bySource,
+            byInvocationKind: skillBreakdownRaw.byInvocationKind,
+            trend: projectSkillTimeSeries(skillBreakdownRaw.trend),
+            // AC5: the not-fresh (`exact`) path reads a rollup that may not yet be rebuilt
+            // (between import and analyze); surface that explicitly instead of a silent-empty
+            // "no skill activity" for skill rows that exist but are not yet rolled up.
+            fresh: !exact,
+        },
     };
 }
 
@@ -775,6 +791,13 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                 modelTimeSeries: [],
                 sourceTimeSeries: [],
                 toolTimeSeries: [],
+                skillBreakdown: {
+                    bySkill: [],
+                    bySource: [],
+                    byInvocationKind: [],
+                    trend: [],
+                    fresh: true,
+                },
             };
         }
 

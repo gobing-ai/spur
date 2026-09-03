@@ -604,6 +604,18 @@ CREATE INDEX IF NOT EXISTS idx_history_board_tool_5m_bucket_tool
     ON history_board_tool_5m (bucket_start, tool_name);
 CREATE INDEX IF NOT EXISTS idx_history_board_session_source_model_started
     ON history_board_session_stats (source, model, started_at DESC);
+-- Summary (0737 R2): skill-load breakdown, backed by history_skill_call (never scanned at read time).
+CREATE TABLE IF NOT EXISTS history_board_skill_5m (
+    bucket_start    TEXT NOT NULL,
+    source          TEXT NOT NULL,
+    skill_name      TEXT NOT NULL,
+    invocation_kind TEXT NOT NULL,
+    calls           INTEGER NOT NULL,
+    PRIMARY KEY (bucket_start, source, skill_name, invocation_kind)
+);
+CREATE INDEX IF NOT EXISTS idx_history_board_skill_5m_skill_bucket
+    ON history_board_skill_5m (skill_name, bucket_start);
+
 `;
 
 /**
@@ -616,6 +628,25 @@ CREATE INDEX IF NOT EXISTS idx_history_board_session_source_model_started
  * indexes with it). Guarded by `tsNotNullSkip` — fresh databases already get
  * the nullable column from the importer DDL and journal without rebuilding.
  */
+/**
+ * Materialized skill-call rollup (task 0737 R2): the History Summary-tab skill-load
+ * breakdown keyed on (bucket_start, source, skill_name, invocation_kind). Backed by
+ * `history_skill_call` but rebuilt by `spur history analyze`, so Summary reads never scan
+ * the detail table. Freshness rides the shared `history_board_rollup_meta` row.
+ */
+export const HISTORY_BOARD_SKILL_5M_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS history_board_skill_5m (
+    bucket_start    TEXT NOT NULL,
+    source          TEXT NOT NULL,
+    skill_name      TEXT NOT NULL,
+    invocation_kind TEXT NOT NULL,
+    calls           INTEGER NOT NULL,
+    PRIMARY KEY (bucket_start, source, skill_name, invocation_kind)
+);
+CREATE INDEX IF NOT EXISTS idx_history_board_skill_5m_skill_bucket
+    ON history_board_skill_5m (skill_name, bucket_start);
+`;
+
 export const HISTORY_MESSAGE_TS_NULLABLE_SCHEMA_SQL = `
 CREATE TABLE history_message_rebuild (
     record_hash        TEXT PRIMARY KEY,
@@ -903,6 +934,12 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     {
         id: '0031_spur_cli_history_board_tool_stats_columns',
         sql: HISTORY_BOARD_TOOL_STATS_COLUMNS_SCHEMA_SQL,
+    },
+    {
+        // 0737 R2: materialized skill-call rollup backing the History Summary skill-load breakdown.
+        // Freshness rides the shared `history_board_rollup_meta` row; rebuilt by `spur history analyze`.
+        id: '0032_spur_cli_history_board_skill_5m',
+        sql: HISTORY_BOARD_SKILL_5M_SCHEMA_SQL,
     },
 ];
 

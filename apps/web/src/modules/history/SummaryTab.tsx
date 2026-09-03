@@ -352,6 +352,13 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
         );
         const skillsUsed = data?.skillsUsed ?? [];
         const skillTimeSeries = data?.skillTimeSeries ?? [];
+        const skillBreakdown = data?.skillBreakdown ?? {
+            bySkill: [],
+            bySource: [],
+            byInvocationKind: [],
+            trend: [],
+            fresh: true,
+        };
         const modelTimeSeries = data?.modelTimeSeries ?? [];
         const sourceTimeSeries = data?.sourceTimeSeries ?? [];
         const toolTimeSeries = data?.toolTimeSeries ?? [];
@@ -468,6 +475,24 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                     v: b.series,
                 })),
             [skillTimeSeries],
+        );
+        const skillBreakdownTrendBuckets = useMemo(
+            () =>
+                skillBreakdown.trend.map((b) => ({
+                    id: b.bucketStart,
+                    label: fmtBucketLabel(b.bucketStart),
+                    v: b.series,
+                })),
+            [skillBreakdown.trend],
+        );
+        const skillBreakdownSeries = useMemo(
+            () =>
+                skillBreakdown.bySkill.map((s, i) => ({
+                    id: s.skillName,
+                    label: s.skillName,
+                    color: SERIES_COLORS[i % SERIES_COLORS.length] || '#3987e5',
+                })),
+            [skillBreakdown.bySkill],
         );
 
         const {
@@ -972,6 +997,87 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                             </div>
                         )}
                     </div>
+                </div>
+                {/* Skill Load Breakdown */}
+                <div
+                    className="bg-base-200 rounded-xl shadow-sm border border-base-content/10 p-5 flex flex-col gap-4"
+                    data-testid="summary-skill-breakdown"
+                >
+                    <div>
+                        <h4 className="font-bold text-sm mb-1">Skill Load Breakdown</h4>
+                        <p className="text-[11px] text-base-content/60">
+                            Skill invocations by name, agent, and invocation kind over the selected window.
+                        </p>
+                    </div>
+                    {skillBreakdown.fresh === false ? (
+                        <div className="flex flex-col items-center justify-center text-[11px] text-base-content/40 font-mono border border-dashed border-base-content/10 rounded-xl bg-base-100/30 py-6">
+                            <span>Skill rollup not yet built — run history analyze to populate this section.</span>
+                        </div>
+                    ) : skillBreakdown.bySkill.length > 0 ? (
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
+                                <div>
+                                    <h5 className="font-bold text-xs mb-2 text-base-content/60">Top Skills</h5>
+                                    <div className="flex flex-col gap-1.5">
+                                        {skillBreakdown.bySkill.map((s, i) => (
+                                            <div key={s.skillName} className="flex justify-between items-center gap-2">
+                                                <span className="flex items-center gap-1.5">
+                                                    <span
+                                                        className="w-2 h-2 rounded-full shrink-0"
+                                                        style={{
+                                                            background:
+                                                                SERIES_COLORS[i % SERIES_COLORS.length] ?? '#3987e5',
+                                                        }}
+                                                    />
+                                                    {s.skillName}
+                                                </span>
+                                                <span className="font-bold tabular-nums">{fmtInt(s.calls)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <h5 className="font-bold text-xs mb-2 text-base-content/60">By Agent</h5>
+                                    <div className="flex flex-col gap-1.5">
+                                        {skillBreakdown.bySource.map((s) => (
+                                            <div key={s.source} className="flex justify-between items-center gap-2">
+                                                <span>{s.source}</span>
+                                                <span className="font-bold tabular-nums">{fmtInt(s.calls)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <h5 className="font-bold text-xs mb-2 text-base-content/60">By Invocation Kind</h5>
+                                    <div className="flex flex-col gap-1.5">
+                                        {skillBreakdown.byInvocationKind.map((k) => (
+                                            <div
+                                                key={k.invocationKind}
+                                                className="flex justify-between items-center gap-2"
+                                            >
+                                                <span className="capitalize">{k.invocationKind}</span>
+                                                <span className="font-bold tabular-nums">{fmtInt(k.calls)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                            {skillBreakdownTrendBuckets.length > 0 && (
+                                <div>
+                                    <h5 className="font-bold text-xs mb-2 text-base-content/60">Skill Call Trend</h5>
+                                    <StackedAreaChart
+                                        buckets={skillBreakdownTrendBuckets}
+                                        series={skillBreakdownSeries}
+                                        height={150}
+                                    />
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center text-[11px] text-base-content/40 font-mono border border-dashed border-base-content/10 rounded-xl bg-base-100/30 py-6">
+                            <span>No skill activity recorded for this window.</span>
+                        </div>
+                    )}
                 </div>
             </div>
         );
