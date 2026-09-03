@@ -4,7 +4,7 @@ name: "S0c: Repair action options, run-id confinement, nested composition, and d
 status: todo
 template: feature-impl
 created_at: 2026-09-03T20:27:31.022Z
-updated_at: "2026-09-03T21:08:48.298Z"
+updated_at: "2026-09-03T21:15:08.544Z"
 feature_id: D9
 priority: P1
 ac_altitude: task-local
@@ -20,7 +20,7 @@ Four independent defects share the property that a declared control has no effec
 - **F-2** — `feature-dev.yaml` attempts a nested `spur workflow run pr-review.yaml` that the `SPUR_WORKFLOW_RUN_ACTIVE` child guard refuses. The integration-review step has never reached a real decision; `softFail` can hide that it never ran.
 - **ADR-098 escalation noise** — 59 human-inspect escalation packets were emitted across the 65-run dry sweep (`docs/analysis/d8-0730-workflow-cost-attention-measurement.md` §F). An escalation channel that fires on probes is an escalation channel nobody reads.
 
-D8 decision **D1** (accepted at approval, default unchanged) resolves F-2 by replacing the nested spawn with a non-spawning check rather than allowing a guarded nested level — no new nesting, smallest diff.
+D8 decision **D1** (accepted with its default unchanged) resolves F-2 by replacing the nested spawn with a non-spawning check rather than allowing a guarded nested level — no new nesting, smallest diff.
 
 A fifth item is documentation-only: **F-14** — `workflow validate` / dry-run is smoke, not run-readiness evidence. No consumer may cite it as proof a workflow will run.
 ### Requirements

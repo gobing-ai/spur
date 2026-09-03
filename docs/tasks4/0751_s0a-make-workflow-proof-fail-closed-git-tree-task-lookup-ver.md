@@ -4,7 +4,7 @@ name: "S0a: Make workflow proof fail-closed — git-tree, task lookup, verifier 
 status: todo
 template: feature-impl
 created_at: 2026-09-03T20:27:30.404Z
-updated_at: "2026-09-03T21:13:06.257Z"
+updated_at: "2026-09-03T21:15:08.007Z"
 feature_id: D9
 priority: P1
 ac_altitude: task-local
@@ -15,7 +15,7 @@ ac_altitude: task-local
 ### Background
 Four defects in the D8 register (F-5, F-7, F-8, F-9 — `docs/inventory/d8-0729-workflow-contract-inventory.md` §F) let a workflow report a verified PASS on evidence that was never actually captured. They share one property: each fails *open*. A git failure yields an empty fingerprint that still hashes; a missing task spec is swallowed by `|| true; exit 0`; a verifier answer file left by a previous run satisfies a fresh assertion; and `run.artifact`'s `proofBinding` is echoed into result data without ever being checked.
 
-Together these make every downstream number untrustworthy — including the cost-per-verified-PASS denominator D9's later slices depend on. The approved strategy (`docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §3, R3 seam S7) puts them before any routing work for exactly that reason: a proportional gate built on a fail-open proof measures nothing.
+Together these make every downstream number untrustworthy — including the cost-per-verified-PASS denominator D9's later slices depend on. The frozen D8 strategy (`docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §3, R3 seam S7) puts them before any routing work for exactly that reason: a proportional gate built on a fail-open proof measures nothing.
 
 Anchors verified 2026-09-03: `packages/app/src/workflow/proof-input-fingerprint.ts:99-118` returns `''` on all four git failure paths and on the `catch`; `config/workflows/task-pipeline.yaml:345` suppresses the task-path lookup and forces `exit 0`; `packages/app/src/workflow/actions/agent-run.ts:553` asserts `expectFile` presence with no freshness constraint; `packages/app/src/workflow/actions/run-artifact.ts:88-101` spreads `proofBinding` into the result and never validates it.
 ### Requirements

@@ -6,7 +6,7 @@ status: backlog
 priority: P1
 tags: []
 created_at: "2026-09-03T20:25:50.515Z"
-updated_at: "2026-09-03T20:27:09.826Z"
+updated_at: "2026-09-03T21:13:05.937Z"
 ---
 
 # D9: Workflow seam stabilization and proportional gate rollout
@@ -147,8 +147,7 @@ Feature: Workflow seam stabilization and proportional gate rollout
     Given slice S0 has landed
     When the 0730 measurement is re-run against the refreshed database
     Then the run-scoped cost coverage and real terminal run counts are recorded
-    And either the sufficiency bar is met and S3 proceeds
-    Or the bar is not met and the feature closes at the Option B boundary with that verdict recorded
+    And exactly one disposition is recorded: continue to S3, or close at the Option B boundary
 
   Scenario: A proportional route always resolves and never trades the safety floor
     Given a piloted workflow carrying the closed route table
@@ -156,8 +155,7 @@ Feature: Workflow seam stabilization and proportional gate rollout
     Then exactly one route is selected
     And unknown or conflicting evidence selects the safety path
     And a bounded reason is written for the run
-    And no proof-bracket guard, budget fail-closed dispatch, reviewer-independence check, or run-id
-      confinement is bypassed by any route
+    And no proof-bracket guard, budget fail-closed dispatch, reviewer-independence check, or run-id confinement is bypassed by any route
 ```
 ## Tasks
 

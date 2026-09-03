@@ -3,7 +3,7 @@
 **Date:** 2026-09-02
 **Feature:** D8 (proportional workflow upgrade)
 **Task:** 0733 (`synthesize-the-task-ready-workflow-upgrade-strategy`)
-**Status:** PENDING OPERATOR REVIEW — no authority doc, workflow definition, public CLI surface, or baseline was mutated by this plan. All implementation is post-approval.
+**Status:** **APPROVED 2026-09-03** by the operator — Option A accepted, all D1-D8 defaults accepted unchanged (§9.3). The strategy is frozen; implementation is tracked under feature **D9** (slices S0-S5). No authority doc, workflow definition, public CLI surface, or baseline was mutated by this plan itself.
 **Input evidence (authority artifacts, consumed without re-audit):**
 
 - `docs/inventory/d8-0729-workflow-contract-inventory.md` — ADR/gate/baseline/capability audit, defect register §F (F-1…F-14), Decision 8 (corpus regen → ADR-093 waiver), Decision 11 (budgets RED, FIX-not-raise).
@@ -350,7 +350,12 @@ This packet converts the four authority artifacts into a decision surface: one r
 | D7 | Inline-interpreter removal at A3 gate | **remove per-task interpreter when engine covers runall per-task execution** |
 | D8 | Wayfinder/basic retirement timing | **demote now, retire never without operator's explicit delete** |
 
-**Disposition recording:** this packet is PENDING. On approval, the strategy freezes and S0-S5 task creation is unlocked (in slice order). On rejection, D8 stays open with the operator's requested revisions to this packet (the revision surface).
+**Disposition recording:** **APPROVED 2026-09-03** (operator: Robin). Option A adopted. Every D1-D8 default above is accepted as written — no override. The strategy is frozen; S0-S5 implementation task creation is unlocked in slice order under feature **D9**.
+
+Two conditions attached at approval time, both already in the packet, restated here as binding:
+
+1. **Re-measure gate before S3.** 0730 §G's sufficiency rule is still NOT MET at approval. After S0 lands, re-run the 0730 measurement against the refreshed DB. If real terminal runs and run-scoped cost coverage remain thin, the correct stop is **Option B** (S0+S1+S2+S4 only) and S3/S5 are not built. S3 is authorized *conditionally*, not unconditionally.
+2. **Per-slice consent still applies.** This approval covers the strategy and task creation. S1 (corpus/baseline regen + surface inventory), S3 (surrounding workflow routing), and S5 (task-pipeline routing) each keep their own operator sign-off at execution time, per §7.
 
 ---
 

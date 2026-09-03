@@ -153,6 +153,12 @@
         },
         {
             "kind": "feature",
+            "id": "D9",
+            "code": "L4.scenario-unverified",
+            "severity": "warning"
+        },
+        {
+            "kind": "feature",
             "id": "E",
             "code": "L4.dogfood-missing",
             "severity": "warning"
@@ -1221,12 +1227,6 @@
         },
         {
             "kind": "task",
-            "id": "0540",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
             "id": "0547",
             "code": "L3.unchecked-checklist",
             "severity": "warning"
@@ -1593,12 +1593,6 @@
         },
         {
             "kind": "task",
-            "id": "0685",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
             "id": "0688",
             "code": "L4.uncovered-task-scenario",
             "severity": "warning"
@@ -1678,6 +1672,36 @@
         {
             "kind": "task",
             "id": "0745",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0755",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0756",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0757",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0758",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0759",
             "code": "L4.prerequisite-not-done",
             "severity": "warning"
         }

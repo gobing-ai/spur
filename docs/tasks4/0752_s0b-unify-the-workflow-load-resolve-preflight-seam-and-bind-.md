@@ -4,7 +4,7 @@ name: "S0b: Unify the workflow load/resolve/preflight seam and bind resume to th
 status: todo
 template: feature-impl
 created_at: 2026-09-03T20:27:30.732Z
-updated_at: "2026-09-03T21:13:06.554Z"
+updated_at: "2026-09-03T21:15:08.306Z"
 feature_id: D9
 priority: P1
 ac_altitude: task-local
@@ -20,7 +20,7 @@ ac_altitude: task-local
 - **Precedence divergence** — `resolveWorkflowFile` is project-first; `make-lifecycle-adapter.ts:24-34` is bundled-first. The same name resolves to different files depending on the caller.
 - **ADR-099 partial** — resume never reads the checkpoint, so the freshness contract the ADR describes is not enforced on the resume side.
 
-The approved strategy (`docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §3, R3 seams S1/S2/S4/S5) requires one shared seam rather than four per-caller patches, and puts it before any routing work: the proportional pilots depend on pause/resume being safe.
+The frozen D8 strategy (`docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §3, R3 seams S1/S2/S4/S5) requires one shared seam rather than four per-caller patches, and puts it before any routing work: the proportional pilots depend on pause/resume being safe.
 ### Requirements
 - [ ] R1. One shared resolve/preflight seam serves `run`, `continue`, and `validate`. They agree on the same definition, the same schema-validation posture, and the same digest for a given name and cwd.
 - [ ] R2. `spurConfig` is threaded through `makeSvc` so CLI-driven workflow runs resolve their default agent from configuration, matching the non-CLI path.
