@@ -92,6 +92,7 @@ Assumes from 0735: `history_skill_call` table + DAO typed-column entry exist. Le
 7. Real-corpus `spur history import` regression run (history_message/history_tool_call counts unchanged) + `spur task check 0736` — AC6, R6.
 
 ### Solution
+
 Implemented in `@gobing-ai/ts-llm-jsonl-importer` (`gobing-ai/ts-libs` monorepo, `packages/llm-jsonl-importer`), branch `feat/0736-populate-skill-calls` (commit `07eae3f`, released as lockstep 0.4.54). Paths below are external — cited in the frozen `@gobing-ai/ts-llm-jsonl-importer` origin form.
 
 Per-agent skill-load extraction (R1–R6), wired into the importer's split seam:
@@ -114,13 +115,15 @@ Per-agent skill-load extraction (R1–R6), wired into the importer's split seam:
 Design notes: skill-load extraction is a frozen seam in the importer; the DAO/ledger/checkpoint/dry-run path is targetTable-generic, so `history_skill_call` inherits idempotency, ledger dedup, and dry-run behavior automatically (R5). `record_hash` covers the split record only (`message_hash` resolved at write time), so re-imports hash identically.
 
 **Spur consumption.** `@gobing-ai/ts-*` lockstep bumped to 0.4.54 for all eight published packages (0.4.54 published for every `@gobing-ai/ts-*` after `ts-rule-engine@0.4.54` completed the release). `@gobing-ai/ts-llm-jsonl-importer` at 0.4.54 exposes `extractSkillCalls`/`canonicalizeSkillName`/`skillCallEntry` and its `history_skill_call` typed-map + bulk-write fan-out (R1–R6); `bun.lock` regenerated (catalog `package.json:32-39`, deps `package.json:98-105`). The import path in spur reads through the installed importer, so the extraction now runs during `spur history import` (AC6).
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | @gobing-ai/ts-llm-jsonl-importer`src/mappers.ts`line 121 — `extractSkillCalls` dispatches on `context.source` and is wired into all seven custom splits (claudeSplit :620, piSplit :747, ompSplit :883, codexSplit :1199, agySplit :1342, geminiSplit :1436, grokSplit :1834) so each emits `history_skill_call` split entries via `skillCallEntry` (:151); OpenCode native `skill({name})` maps to a `history_skill_call` row (`src/opencode-importer.ts` line 262-290). Live DB (this run): history_skill_call=2,548 (additive). Out-of-scope openclaw/antigravity emit no typed rows (per task scope). |
 | R2 | MET | @gobing-ai/ts-llm-jsonl-importer`src/mappers.ts`lines 191-317 — per-agent detectors per the R2 verified signatures: claude (191 native `Skill` tool_use → model; `caller.type` direct → user), pi (217 user `<skill name= location=>` wrapper, R4-sanctioned L2-only), omp (229 native `Skill` toolCall → model), codex (255 `<skill><name>/<path>` block → user), agy (281 `view_file` "Viewing skill file" → model), gemini (307 L0 harness prefix `/sp-` or `/rd3-` → user), grok (317 `grok_build` `read_file` on SKILL.md → model); opencode native `skill` → model (`opencode-importer.ts`:262). |
 | R3 | MET | @gobing-ai/ts-llm-jsonl-importer`src/mappers.ts`line 91 — `canonicalizeSkillName`: harness dialect `sp-dev-run`→`sp:dev-run`, `rd3-*`→`rd3:*`; unqualified names kept verbatim (exact structural match). Verified on real data: `rd3-dev-fixall`→`rd3:dev-fixall`, `sp:code-*` retained. |
@@ -131,7 +134,9 @@ Design notes: skill-load extraction is a frozen seam in the importer; the DAO/le
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | Scenario: Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | test | @gobing-ai/ts-llm-jsonl-importer`tests/skill-call-import.test.ts` — claude `Skill` tool_use → model row with `skill_name`/`invocation_kind`/`skill_path`/`args_raw` (AC1); pi `<skill name= location=>` → user row with parsed name+path (AC2); per-agent fixture tests claude/pi/omp/codex/agy/gemini/grok/opencode (AC3); prose-only `<skill name=` quote → zero rows (AC4); idempotent re-import + dry-run writes nothing (AC5); AC6 via deterministic live-DB state (post real-corpus import, verified this run) + `spur task check 0736` PASS: history_message=1,766,255 / history_tool_call=488,230 (no regression) / history_skill_call=2,548 (additive) / history_import_ledger=2,257,033 (msg+tool+skill invariant CONSISTENT). This is the raw skill-load capture feeding the E9 skill time series (`history_board_tool_5m`); the sub-50ms getSummary guarantee is held by 0632/0737. |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
 
 | Priority | Dimension | Location | Finding |

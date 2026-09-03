@@ -111,6 +111,7 @@ Handoff: 0736 emits rows by returning `SplitEntry { targetTable: 'history_skill_
 7. `spur task check 0735` — AC5.
 
 ### Solution
+
 **Upstream (`ts-libs`, published `@gobing-ai/ts-*` 0.4.52).** Implemented on branch `feat/0735-history-skill-call` (commit `827e33c`), released as lockstep 0.4.52; Spur consumes the registry build, not a link.
 
 - @gobing-ai/ts-llm-jsonl-importer `src/schema-sql.ts` lines 89-117 — frozen `history_skill_call` DDL + 4 indexes appended to `HISTORY_IMPORT_SCHEMA_SQL`, verbatim from the task's frozen DDL (R1/R2/R3).
@@ -124,13 +125,15 @@ Handoff: 0736 emits rows by returning `SplitEntry { targetTable: 'history_skill_
 - `package.json:36` — catalog pin for the importer moved `^0.4.51 → ^0.4.52`; the other seven `@gobing-ai/ts-*` catalog entries and all eight exact dependency pins bumped in lockstep (`package.json:32-39`, `package.json:98-105`); `bun.lock` regenerated.
 - `packages/domain/src/migrations.ts:4` — already imports `HISTORY_IMPORT_SCHEMA_SQL` from the importer; the import schema is importer-owned (task design), so the lockstep bump alone makes `history_skill_call` land in the Spur DB on next migration. Extraction is 0736; rollups/UI are 0737.
 - `packages/domain/src/analytics/history-reset.ts` — added `history_skill_call` to `HISTORY_RESET_TABLES` (normalized import output group). The reset-table drift guard (`packages/domain/tests/analytics/history-reset.test.ts`, "table list covers every history_* table the migrations create") fails until every migrated `history_*` table is listed; the new upstream table is derived data a full re-import rebuilds, so it belongs in the consciously-listed reset set.
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | @gobing-ai/ts-llm-jsonl-importer `src/schema-sql.ts` line 89 — `CREATE TABLE IF NOT EXISTS history_skill_call` carrying the provenance contract (record_hash PK, message_hash, source, source_file, source_line, session_id, seq, imported_at); consumed build 0.4.54 (registry) |
 | R2 | MET | @gobing-ai/ts-llm-jsonl-importer `src/schema-sql.ts` line 98 — `invocation_kind TEXT NOT NULL CHECK (invocation_kind IN ('user','model'))`; nullable skill_path/args_raw/args_digest/call_id/status/started_at/completed_at; `duration_ms REAL`; consumed 0.4.54 |
 | R3 | MET | @gobing-ai/ts-llm-jsonl-importer `src/schema-sql.ts` lines 109-116 — exactly 4 indexes: idx_history_skill_call_session / skill_name / message_hash / invocation_kind; `tests/schema-sql.test.ts` line 19-26 asserts the frozen 4-index set; `tests/history-skill-call.test.ts` line 92-97 asserts only these 4 via `sqlite_master` |
@@ -141,7 +144,9 @@ Handoff: 0736 emits rows by returning `SplitEntry { targetTable: 'history_skill_
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | Scenario: Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | test | @gobing-ai/ts-llm-jsonl-importer `tests/history-skill-call.test.ts` line 40 (in-memory `applyHistoryImportSchema` creates all 18 columns + exactly 4 indexes), line 116 (typed `SkillCall` DAO round-trip, incl. `history_board_tool_5m`-feeding skill_name/args), line 183 (zero-skill import leaves `history_skill_call` created-but-empty); `tests/schema-sql.test.ts` line 19 (frozen 0735 columns + 4 indexes). This is the raw skill-load capture the E9 skill series (history_board_tool_5m, 0632) is computed from; 0632 holds the sub-50ms getSummary rollup guarantee. |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
 
 | Priority | Dimension | Location | Finding |
