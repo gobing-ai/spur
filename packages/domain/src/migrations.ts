@@ -1,9 +1,10 @@
 import { join } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import { WORKFLOW_ENGINE_SCHEMA_SQL } from '@gobing-ai/ts-dual-workflow-engine';
-import { HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
+import { HISTORY_IMPORT_SCHEMA_SQL, HISTORY_IMPORT_SCHEMA_VERSION } from '@gobing-ai/ts-llm-jsonl-importer';
 import { RULE_ENGINE_SCHEMA_SQL } from '@gobing-ai/ts-rule-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { IMPORTER_SCHEMA_LEDGER_PREFIX } from './analytics/importer-schema-version';
 import { DOMAIN_SCHEMA_SQL, PLANNING_SCHEMA_SQL } from './schema';
 
 /** Embedded CLI migration used when no migration folder is available. */
@@ -941,6 +942,11 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         id: '0032_spur_cli_history_board_skill_5m',
         sql: HISTORY_BOARD_SKILL_5M_SCHEMA_SQL,
     },
+    {
+        // 0748 R2: record the applied importer schema version in the Spur migration ledger.
+        id: '0033_spur_cli_importer_schema_version',
+        sql: `INSERT OR REPLACE INTO "__spur_cli_migrations" (id, applied_at) VALUES ('${IMPORTER_SCHEMA_LEDGER_PREFIX}${HISTORY_IMPORT_SCHEMA_VERSION}', strftime('%s', 'now') * 1000);`,
+    },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -995,6 +1001,11 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             for (const statement of splitSqlStatements(HISTORY_IMPORT_SCHEMA_SQL)) {
                 await adapter.exec(statement);
             }
+            const versionLedgerId = IMPORTER_SCHEMA_LEDGER_PREFIX + HISTORY_IMPORT_SCHEMA_VERSION;
+            await adapter.run('INSERT OR REPLACE INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)', [
+                versionLedgerId,
+                Date.now(),
+            ]);
         }
         if (
             (migration.id === '0024_spur_cli_history_checkpoint_identity' ||
@@ -1182,7 +1193,7 @@ async function tableExists(adapter: DbAdapter, table: string): Promise<boolean> 
     return row != null;
 }
 
-function splitSqlStatements(sql: string): string[] {
+export function splitSqlStatements(sql: string): string[] {
     return sql
         .split(';')
         .map((statement) => statement.trim())

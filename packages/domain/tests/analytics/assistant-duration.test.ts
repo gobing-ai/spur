@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
-import { HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
-import { DERIVED_DURATION_CEILING_MS, deriveAssistantDurations } from '../../src/analytics/assistant-duration';
+import {
+    DERIVED_DURATION_CEILING_MS,
+    deriveAssistantDurations,
+    HISTORY_IMPORT_SCHEMA_SQL,
+} from '@gobing-ai/ts-llm-jsonl-importer';
 
 /**
  * Task 0702 R2 — the ETL fills assistant-step duration the sources never wrote, and says
@@ -17,7 +20,6 @@ async function setup(): Promise<DbAdapter> {
         .filter(Boolean)) {
         await db.exec(statement);
     }
-    await db.exec('ALTER TABLE history_message ADD COLUMN duration_source TEXT');
     return db;
 }
 

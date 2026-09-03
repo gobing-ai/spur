@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
+import { applyHistoryImportSchema } from '@gobing-ai/ts-llm-jsonl-importer';
 import {
     applyCliMigrations,
     CLI_MIGRATION_FILE_MARKER,
@@ -119,7 +120,7 @@ describe('db migrations', () => {
         });
 
         test('has foundation through History Board indexes, rollups, checkpoint identity, the history-refresh single-flight index, and the 0722 task↔session attribution table', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(33);
+            expect(CLI_MIGRATIONS).toHaveLength(34);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -237,9 +238,10 @@ describe('db migrations', () => {
             // 0027's active-unique swap applies: the stub's queue_jobs (from 0004)
             // exists, so the table guard passes. 0028 history_task_session applies
             // (standalone DDL, 0722). 0029 history_tool_call_indexes applies.
-            // 0030 history_board_covering_indexes applies + 0031 tool stats columns.
+            // 0030 history_board_covering_indexes applies + 0031 tool stats columns
+            // + 0032 history_board_skill_5m + 0033 importer_schema_version.
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(29);
+            expect(applied).toBe(30);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -282,8 +284,9 @@ describe('db migrations', () => {
             // + 0675/0678 guarded checkpoint identity columns (0024, 0025)
             // + 0026 duration-source column + 0027 active-unique swap
             // + 0028 history_task_session (0722) + 0029 history_tool_call_indexes
-            // + 0030 history_board_covering_indexes + 0031 tool stats columns.
-            expect(applied).toBe(32);
+            // + 0030 history_board_covering_indexes + 0031 tool stats columns
+            // + 0032 history_board_skill_5m + 0033 importer_schema_version.
+            expect(applied).toBe(33);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -481,8 +484,10 @@ describe('db migrations', () => {
             // + 0028 history_task_session (standalone DDL, applies)
             // + 0029 history_tool_call_indexes (applies)
             // + 0030 history_board_covering_indexes (applies)
-            // + 0031 history_board_tool_stats_columns (applies).
-            expect(await applyCliMigrations(adapter)).toBe(24);
+            // + 0031 history_board_tool_stats_columns (applies)
+            // + 0032 history_board_skill_5m (applies)
+            // + 0033 importer_schema_version (applies).
+            expect(await applyCliMigrations(adapter)).toBe(25);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );
@@ -542,7 +547,7 @@ describe('db migrations', () => {
         test('upgraded DB journaled through 0021 receives 0022-0031 and converges with a fresh DB', async () => {
             const upgraded = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(upgraded, CLI_MIGRATIONS.slice(0, 22));
-            expect(await applyCliMigrations(upgraded)).toBe(11);
+            expect(await applyCliMigrations(upgraded)).toBe(12);
 
             const fresh = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(fresh);
@@ -776,6 +781,106 @@ describe('db migrations', () => {
             expect(taskSession).toBeDefined();
             expect(taskSession?.sql).toContain('history_task_session');
             expect(taskSession?.sql).toContain('PRIMARY KEY (wbs, source, session_id)');
+        });
+    });
+
+    describe('repatriated history schema ownership (task 0747 / ADR-104 / ADR-105)', () => {
+        test('R1: importer schema defines source_size and source_mtime_ms on history_import_checkpoint', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyHistoryImportSchema(adapter);
+
+            const cols = await adapter.queryAll<{ name: string; type: string }>(
+                'PRAGMA table_info(history_import_checkpoint)',
+            );
+            const sizeCol = cols.find((c) => c.name === 'source_size');
+            const mtimeCol = cols.find((c) => c.name === 'source_mtime_ms');
+
+            expect(sizeCol).toBeDefined();
+            expect(sizeCol?.type).toBe('INTEGER');
+            expect(mtimeCol).toBeDefined();
+            expect(mtimeCol?.type).toBe('REAL');
+
+            // Incremental checkpoint write succeeds with file-identity columns
+            await adapter.run(
+                `INSERT INTO history_import_checkpoint (source, source_file, last_imported_line, source_size, source_mtime_ms, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                'claude',
+                'session.jsonl',
+                42,
+                1024,
+                1725000000000.5,
+                '2026-09-03T00:00:00.000Z',
+            );
+            const row = await adapter.queryFirst<{ last_imported_line: number; source_size: number }>(
+                'SELECT last_imported_line, source_size FROM history_import_checkpoint WHERE source = ?',
+                'claude',
+            );
+            expect(row?.last_imported_line).toBe(42);
+            expect(row?.source_size).toBe(1024);
+            adapter.close();
+        });
+
+        test('R2: importer schema defines duration_source on history_message', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyHistoryImportSchema(adapter);
+
+            const cols = await adapter.queryAll<{ name: string; type: string }>('PRAGMA table_info(history_message)');
+            const durSourceCol = cols.find((c) => c.name === 'duration_source');
+            expect(durSourceCol).toBeDefined();
+            expect(durSourceCol?.type).toBe('TEXT');
+            adapter.close();
+        });
+
+        test('R7/R3: migrations 0024, 0025, 0026 remain in ledger and are no-ops on importer-seeded DB', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            // Seed DB with importer schema
+            await applyHistoryImportSchema(adapter);
+
+            // Migrations exist in CLI_MIGRATIONS
+            const m0024 = CLI_MIGRATIONS.find((m) => m.id === '0024_spur_cli_history_checkpoint_identity');
+            const m0025 = CLI_MIGRATIONS.find((m) => m.id === '0025_spur_cli_history_checkpoint_identity_mtime');
+            const m0026 = CLI_MIGRATIONS.find((m) => m.id === '0026_spur_cli_history_message_duration_source');
+
+            expect(m0024).toBeDefined();
+            expect(m0025).toBeDefined();
+            expect(m0026).toBeDefined();
+
+            // Applying all migrations over importer-seeded DB journals all migrations without error
+            const applied = await applyCliMigrations(adapter);
+            expect(applied).toBe(CLI_MIGRATIONS.length);
+
+            // Check that migrations 0024, 0025, 0026 are recorded in __spur_cli_migrations
+            const rows = await adapter.queryAll<{ id: string }>(
+                'SELECT id FROM "__spur_cli_migrations" WHERE id IN (?, ?, ?)',
+                '0024_spur_cli_history_checkpoint_identity',
+                '0025_spur_cli_history_checkpoint_identity_mtime',
+                '0026_spur_cli_history_message_duration_source',
+            );
+            expect(rows).toHaveLength(3);
+            adapter.close();
+        });
+
+        test('R10/R4: upstream importer schema and downstream migrated schema converge on identical columns', async () => {
+            const adapterA = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyHistoryImportSchema(adapterA);
+
+            const adapterB = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyHistoryImportSchema(adapterB);
+            await applyCliMigrations(adapterB);
+
+            const tables = ['history_import_checkpoint', 'history_message', 'history_tool_call', 'history_skill_call'];
+
+            for (const table of tables) {
+                const colsA = await adapterA.queryAll<{ name: string; type: string }>(`PRAGMA table_info(${table})`);
+                const colsB = await adapterB.queryAll<{ name: string; type: string }>(`PRAGMA table_info(${table})`);
+
+                expect(colsA.map((c) => ({ name: c.name, type: c.type }))).toEqual(
+                    colsB.map((c) => ({ name: c.name, type: c.type })),
+                );
+            }
+
+            adapterA.close();
+            adapterB.close();
         });
     });
 });

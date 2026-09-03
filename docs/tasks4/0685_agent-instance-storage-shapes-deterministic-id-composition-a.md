@@ -536,7 +536,7 @@ Task 0685 landed in commit `66e43cee83e9cf0c97c4c3b4529b9d08c33139d1`; the stand
 | R2 | `AGENT_INSTANCES_DDL_DRAFT` freezes the complete unregistered `0026_spur_cli_agent_instances` DDL and indexes beside the registered migration catalog. | `packages/domain/src/migrations.ts:641-667` |
 | R2 | `createFileAgentInstanceStore` projects current specs onto the frozen read shape. | `packages/app/src/services/agent-instance-store.ts:23-57` |
 | R3 | `.spur/agents` generated materializations are ignored while `.gitkeep` remains tracked; hand-authored specs are force-trackable because gitignore cannot inspect YAML tags. | `.gitignore:134-140` |
-| R3 | `agent:` owns the active project-local `team.demo` roster used by the materialization proof. | `.spur/config.yaml:192-211` |
+| R3 | `agent:` owns the active project-local `team.demo` roster used by the materialization proof. | `.spur/config.yaml:45-55` |
 | R4 | `memberLocalId` allocates deterministic, append-stable executor suffixes without colliding with an existing derived base. | `packages/config/src/index.ts:332-380` |
 | R5 | `--role` reopens ADR-075 only as exact-one resolution above the existing identity pin. | `docs/00_ADR.md:1072-1085` |
 | R6 | `resolveRoleTarget` validates the shared vocabulary and rejects zero/multiple matches with explicit counts and candidates. | `packages/app/src/services/agent-instance-store.ts:83-124` |

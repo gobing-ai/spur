@@ -20,12 +20,6 @@ export {
     RANKED_ARTIFACT_KEYS,
     semanticArtifactDigest,
 } from './artifact-digest';
-export {
-    DERIVED_DURATION_CEILING_MS,
-    type DeriveAssistantDurationsResult,
-    DURATION_SOURCE_DERIVED,
-    deriveAssistantDurations,
-} from './assistant-duration';
 export { cacheHitRatio, computeRecordCost, formatRatio, formatSummary } from './costs';
 export {
     type Bottleneck,
@@ -139,7 +133,14 @@ export {
     HISTORY_RESET_TABLES,
     type HistoryResetResult,
     resetHistoryTables,
+    SPUR_OWNED_HISTORY_TABLES,
 } from './history-reset';
+export {
+    checkImporterSchemaVersion,
+    IMPORTER_SCHEMA_LEDGER_PREFIX,
+    type ImporterSchemaVersionDrift,
+    readRecordedImporterSchemaVersion,
+} from './importer-schema-version';
 export { MODEL_PRICING, resolvePricing, UNKNOWN_MODEL_PRICING } from './models';
 export {
     ArtifactNarrowError,

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Source-to-table registry replacing hardcoded table lists, with an ownership conformance test"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-03T16:45:42.330Z
-updated_at: "2026-09-03T17:18:06.539Z"
+updated_at: "2026-09-03T18:44:14.752Z"
 feature_id: E92
 priority: P2
 tags: ["history", "schema", "registry"]
@@ -13,20 +13,25 @@ tags: ["history", "schema", "registry"]
 ## 0749. Source-to-table registry replacing hardcoded table lists, with an ownership conformance test
 
 ### Background
+
 `packages/domain/src/analytics/history-reset.ts:14` declares `HISTORY_RESET_TABLES`, an explicit list of **29** `history_*` tables in four groups: 3 normalized import outputs plus 2 Spur session tables, 10 `history_etl_*` landing tables, 12 derived analytics tables (`history_daily_stats` + 11 `history_board_*`), and 2 importer bookkeeping tables.
 
 **Premise corrected against the current tree (2026-09-03).** This task's original Background said the file "hardcodes ten `history_*` table names" at lines 22-30. That is wrong on both counts, and two further facts change the shape of the work:
 
 1. The list is 29 entries starting at line 14; the ten `history_etl_*` names are one group within it.
 2. The explicit list is **deliberate**, not an oversight. Its docstring: *"Kept explicit (not scraped from `sqlite_master` at runtime) so a reset only ever wipes a consciously listed table; `resetHistoryTables` reports any unlisted `history_*` table it finds instead of deleting it."* `HistoryResetResult.unknown` exists to carry that drift signal. **Runtime discovery over `sqlite_master` is therefore not an acceptable implementation of R1** — it would delete the safety property along with the duplication.
-3. `SOURCE_DEFINITIONS` is **already exported** from the importer barrel (`@gobing-ai/ts-llm-jsonl-importer` `src/index.ts`), and each definition carries `targetTable: \`history_etl_${source}\``. The `history_etl_*` half of the registry can be derived today with no upstream change. What is *not* exported is the typed-table list: `TYPED_TABLE_COLUMNS` is module-private (`src/jsonl-importer-dao.ts` line 21).
+3. `SOURCE_DEFINITIONS` is **already exported** from the importer barrel (`@gobing-ai/ts-llm-jsonl-importer` `src/index.ts`), and each definition carries `targetTable: \`history_etl_${source}\``. The`history_etl_*` half of the registry can be derived today with no upstream change. What is *not* exported is the typed-table list: `TYPED_TABLE_COLUMNS`is module-private (`src/jsonl-importer-dao.ts` line 21).
 4. The 10 hardcoded `history_etl_*` names currently **match** the 10 members of `LlmJsonlSource` exactly. There is no live drift; the hazard is prospective — nothing keeps the two in step, so adding a source upstream silently leaves its landing table behind on the next reset.
 
 More broadly, ADR-105's three-axis ownership rule — table DDL by layer, columns by value producer, indexes by query consumer — is a document. Documents do not fail builds. The eight Spur migrations that touch importer-owned tables (`0024`/`0025`/`0026` ALTER; `0009`/`0020`/`0022`/`0029`/`0030` INDEX) were all written by people who had not read a rule that did not yet exist; the next one will be too.
+
 ### Requirements
-- [ ] R1. The importer exports the source-to-table registry; Spur consumes it instead of a hardcoded table list, and adding a source upstream requires no Spur change for reset to cover its tables.
-- [ ] R2. A conformance test fails when a Spur migration creates a table the ownership rule assigns to the importer, or when a Spur migration adds a column to an importer-owned table without a recorded exception.
+
+- [x] R1. The importer exports the source-to-table registry; Spur consumes it instead of a hardcoded table list, and adding a source upstream requires no Spur change for reset to cover its tables.
+- [x] R2. A conformance test fails when a Spur migration creates a table the ownership rule assigns to the importer, or when a Spur migration adds a column to an importer-owned table without a recorded exception.
+
 ### Acceptance Criteria
+
 ```gherkin
 Feature: History schema DDL ownership repatriation
 
@@ -48,6 +53,7 @@ Feature: History schema DDL ownership repatriation
 
 
 ```
+
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
@@ -67,7 +73,9 @@ Feature: History schema DDL ownership repatriation
 **Why is the exception list only three entries? — Because indexes are permitted by the rule, not by exception.** `0009`/`0020`/`0022`/`0029`/`0030` are `CREATE INDEX` on importer-owned tables, which axis three assigns to Spur; the test permits them unconditionally. Only the three ALTER migrations (`0024`/`0025`/`0026`) need recording, and task 0747 retires them.
 
 **Deferred: extending conformance beyond migrations.** The test is scoped to `CLI_MIGRATIONS` because that is where all eight historical violations occurred. Runtime `db.exec` DDL elsewhere in Spur is not covered. Deferred until a violation appears outside migrations; owner: whoever finds one.
+
 ### Design
+
 **WHAT.** Replace the importer-owned half of `HISTORY_RESET_TABLES` with a registry exported by the importer, keep the Spur-owned half an explicit literal, and add a test that fails when a Spur migration violates ADR-105's ownership axes.
 
 **WHY.** The importer creates its tables — three typed, two bookkeeping, and one `history_etl_*` per source — so only the importer can enumerate them correctly. A copy in Spur is a promise to remember. The conformance test is what turns ADR-105 from prose into a build failure.
@@ -109,7 +117,9 @@ The 29-entry split is exact and checkable: importer-owned = 3 typed (`history_me
 Nothing in E91 or E92 consumes this task's output, and it has no prerequisites: `SOURCE_DEFINITIONS` is already exported, so the upstream change here is additive and independent. It does touch the same importer package as its two siblings in this feature, so if their release has not yet been cut, fold this export into it rather than publishing twice; if it has, cut a release for `IMPORTER_OWNED_TABLES` alone. Either order works.
 
 Authority: ADR-105; `docs/design/history-incremental-materialization.md` section 11 (D9).
+
 ### Plan
+
 1. **R1a (upstream export).** Promote the keys of `TYPED_TABLE_COLUMNS` to an exported `TYPED_HISTORY_TABLES`, assemble `IMPORTER_OWNED_TABLES` from those plus the two bookkeeping tables plus every `SOURCE_DEFINITIONS[*].targetTable`, and export it from the barrel. Test intent: the assembled list must equal the 15 importer-owned names in today's `HISTORY_RESET_TABLES` — a mismatch means the ownership split in the design is wrong, not the test.
 2. **R1b (downstream consume).** Rewrite `history-reset.ts` as `SPUR_OWNED_HISTORY_TABLES` (the 14 literals) plus `IMPORTER_OWNED_TABLES`, delete the importer names from the literal, and keep the docstring's explicit-list rationale and the `unknown` drift reporting intact.
 3. **R1c (no-Spur-change proof).** Add a test that registers an extra source definition upstream and asserts Spur's reset covers its `history_etl_*` table with no edit to Spur code. Test intent: this is the only assertion that distinguishes "consumes a registry" from "copied the registry once".
@@ -117,19 +127,40 @@ Authority: ADR-105; `docs/design/history-incremental-materialization.md` section
 5. **R2a (conformance test).** Add `packages/domain/tests/dao/ownership-conformance.test.ts` parsing `CLI_MIGRATIONS` for `CREATE TABLE` / `ALTER TABLE ... ADD COLUMN` targets, failing on an importer-owned target without a recorded exception, and permitting `CREATE INDEX` unconditionally. Test intent: encode ADR-105 axes one and two as a build failure; axis three is encoded as the index permission.
 6. **R2b (seed exceptions).** Record `0024`, `0025`, `0026` in `OWNERSHIP_EXCEPTIONS`, each with a comment naming task 0747 as what retires it. Assert the list is exactly those three — a fourth entry appearing means someone added a violation.
 7. Run `bun run test` and `bun run spur-check`.
+
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Replaced hardcoded importer tables in history-reset with IMPORTER_OWNED_TABLES registry and added ownership conformance test.
+
+| File | Rationale |
+| --- | --- |
+| `packages/domain/src/analytics/history-reset.ts:37` | Compose reset table list from importer-owned and Spur-owned tables |
+| `packages/domain/tests/dao/ownership-conformance.test.ts:47` | Add ownership conformance tests over migration DDL and table registry |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R6 — Raw landing table names come from the importer, not a hardcoded list | MET | packages/domain/src/analytics/history-reset.ts composes HISTORY_RESET_TABLES from IMPORTER_OWNED_TABLES; packages/domain/tests/dao/ownership-conformance.test.ts verifies 15 importer-owned + 14 spur-owned = 29 tables, regression match, and dynamic upstream source coverage. |
+| R8 — Ownership is enforced, not merely documented | MET | packages/domain/tests/dao/ownership-conformance.test.ts asserts CLI_MIGRATIONS obeys ADR-105: no CREATE TABLE or ALTER TABLE on importer-owned tables without exception; OWNERSHIP_EXCEPTIONS bounded to grandfathered 0024, 0025, 0026; CREATE INDEX permitted unconditionally. |
+
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur-check | — |  |
 
 ### References
+
 - Parent feature: `docs/features/E92_history-schema-ddl-ownership-repatriation.md`
 - `docs/00_ADR.md` — ADR-105 (three-axis ownership rule: table DDL by layer, columns by value producer, indexes by query consumer)
 - `docs/design/history-incremental-materialization.md` — section 11 (D9, DDL authority)
@@ -137,4 +168,9 @@ Authority: ADR-105; `docs/design/history-incremental-materialization.md` section
 - `packages/domain/src/migrations.ts` — `CLI_MIGRATIONS`; the ALTER violations at lines 890-912 (`0024`/`0025`/`0026`) and the permitted index migrations `0009`/`0020`/`0022`/`0029`/`0030`
 - Upstream registry: `@gobing-ai/ts-llm-jsonl-importer` `src/sources.ts` line 155 (`SOURCE_DEFINITIONS`, already exported), `src/jsonl-importer-dao.ts` line 21 (`TYPED_TABLE_COLUMNS`, currently module-private)
 - Sibling: task 0747 (repatriates the three ALTER columns that seed the exception list)
+
 ### History
+
+- 2026-09-03T18:38:59.019Z todo → wip (system)
+- 2026-09-03T18:44:00.445Z wip → testing (system)
+- 2026-09-03T18:44:14.752Z testing → done (system)

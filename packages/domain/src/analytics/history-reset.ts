@@ -1,34 +1,14 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
+import { IMPORTER_OWNED_TABLES } from '@gobing-ai/ts-llm-jsonl-importer';
 
 /**
- * Every `history_*` table: normalized import output, per-source ETL, board rollups,
- * daily stats, and importer bookkeeping (checkpoint/ledger). All of it is derived data
- * that a full re-import rebuilds. Never includes task corpus or run provenance tables
- * (`task_run_links` survives a reset so run-chain attribution re-resolves after
- * re-import).
- *
- * Kept explicit (not scraped from sqlite_master at runtime) so a reset only ever wipes
- * a consciously listed table; {@link resetHistoryTables} reports any unlisted
- * `history_*` table it finds instead of deleting it.
+ * Tables owned by Spur (14 tables): session attribution, daily stats, and History Board rollups.
+ * Kept explicit (axis one of ADR-105: table DDL by layer).
  */
-export const HISTORY_RESET_TABLES: readonly string[] = [
-    // normalized import output
-    'history_message',
-    'history_tool_call',
-    'history_skill_call',
+export const SPUR_OWNED_HISTORY_TABLES: readonly string[] = [
+    // session attribution
     'history_run_session',
     'history_task_session',
-    // per-source ETL raw tables
-    'history_etl_agy',
-    'history_etl_antigravity',
-    'history_etl_claude',
-    'history_etl_codex',
-    'history_etl_gemini',
-    'history_etl_grok',
-    'history_etl_omp',
-    'history_etl_openclaw',
-    'history_etl_opencode',
-    'history_etl_pi',
     // derived analytics
     'history_daily_stats',
     'history_board_loop_findings',
@@ -42,11 +22,21 @@ export const HISTORY_RESET_TABLES: readonly string[] = [
     'history_board_source_stats',
     'history_board_tool_5m',
     'history_board_tool_stats',
-    // importer bookkeeping — without clearing these, an incremental re-import skips
-    // every file whose checkpoint survives.
-    'history_import_checkpoint',
-    'history_import_ledger',
 ];
+
+/**
+ * Every `history_*` table: normalized import output, per-source ETL, board rollups,
+ * daily stats, and importer bookkeeping (checkpoint/ledger). All of it is derived data
+ * that a full re-import rebuilds. Never includes task corpus or run provenance tables
+ * (`task_run_links` survives a reset so run-chain attribution re-resolves after
+ * re-import).
+ *
+ * Sourced from the importer's exported registry (`IMPORTER_OWNED_TABLES`) plus Spur's
+ * explicit list (`SPUR_OWNED_HISTORY_TABLES`). Kept explicit (not scraped from sqlite_master
+ * at runtime) so a reset only ever wipes a consciously listed table; {@link resetHistoryTables}
+ * reports any unlisted `history_*` table it finds instead of deleting it.
+ */
+export const HISTORY_RESET_TABLES: readonly string[] = [...IMPORTER_OWNED_TABLES, ...SPUR_OWNED_HISTORY_TABLES];
 
 /** Result of a {@link resetHistoryTables} run. */
 export interface HistoryResetResult {

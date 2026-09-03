@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Importer schema version: exported constant, ledger record, and mismatch check"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-03T16:45:42.303Z
-updated_at: "2026-09-03T17:17:41.181Z"
+updated_at: "2026-09-03T18:38:19.295Z"
 feature_id: E92
 priority: P1
 tags: ["history", "schema", "guard"]
@@ -13,6 +13,7 @@ tags: ["history", "schema", "guard"]
 ## 0748. Importer schema version: exported constant, ledger record, and mismatch check
 
 ### Background
+
 The importer exports no `SCHEMA_VERSION` or `schemaVersion`. Its barrel (`@gobing-ai/ts-llm-jsonl-importer` `src/index.ts`) exports errors, hashing, the importer entry point, the DAO helpers, mappers, the OpenCode importer, redaction, `HISTORY_IMPORT_SCHEMA_SQL`, and the source registry — and nothing that states which schema a given database was built with. Verified against the current tree on 2026-09-03.
 
 That absence is what made the E91 failure invisible: `node_modules` holds importer `0.4.51` while the root catalog pins `^0.4.54`, and `0.4.51`'s bundled schema SQL contains no `history_skill_call` at all (`grep -c history_skill_call` over its `dist/schema-sql.js` returns `0`). The only symptom was `no such table: history_skill_call` 43.9 seconds into a rollup refresh. A version the database could report would have made the mismatch a one-line diagnosis.
@@ -20,12 +21,16 @@ That absence is what made the E91 failure invisible: `node_modules` holds import
 The mechanism that hides it: `applyHistoryImportSchema` (`@gobing-ai/ts-llm-jsonl-importer` `src/jsonl-importer-dao.ts` line 123) splits `HISTORY_IMPORT_SCHEMA_SQL` on `;` and `exec`s each statement, and every statement is `CREATE TABLE IF NOT EXISTS`. Against an existing database a schema change is a silent no-op — no error, no signal, no drift report. A recorded version is the only way to notice.
 
 Spur's own migration ledger is `__spur_cli_migrations (id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)`, created and driven by `applyCliMigrations` at `packages/domain/src/migrations.ts:966-1010`. It records identity, not payload — which is exactly enough to record a version if the version is part of the id.
+
 ### Requirements
-- [ ] R1. The importer exports a schema version constant that changes whenever its schema changes, and a test fails when the schema changes without a version bump.
-- [ ] R2. Applying the importer schema inside Spur records the applied version in Spur's migration ledger as a versioned step.
-- [ ] R3. A recorded version older than the installed one fails a check with both versions and a remediation, rather than surfacing as a runtime error mid-refresh.
-- [ ] R4. A database whose recorded version is older is detected and reported; it is not silently treated as current.
+
+- [x] R1. The importer exports a schema version constant that changes whenever its schema changes, and a test fails when the schema changes without a version bump.
+- [x] R2. Applying the importer schema inside Spur records the applied version in Spur's migration ledger as a versioned step.
+- [x] R3. A recorded version older than the installed one fails a check with both versions and a remediation, rather than surfacing as a runtime error mid-refresh.
+- [x] R4. A database whose recorded version is older is detected and reported; it is not silently treated as current.
+
 ### Acceptance Criteria
+
 ```gherkin
 Feature: History schema DDL ownership repatriation
 
@@ -63,6 +68,7 @@ Feature: History schema DDL ownership repatriation
 
 
 ```
+
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
@@ -82,7 +88,9 @@ Feature: History schema DDL ownership repatriation
 **Is the E91 failure reproducible as a test case? — Yes.** Importer `0.4.51`'s bundled schema contains no `history_skill_call` (verified: `grep -c` over its `dist/schema-sql.js` returns `0`), so R4's older-version scenario has a real, checked-in instance rather than a synthetic one.
 
 **Deferred: cross-database version reconciliation.** Nothing here handles a database whose recorded version is *newer* than the installed package (a downgrade). It is reported as a mismatch with both versions, which is correct but generic. A downgrade-specific remediation is deferred; owner: whoever first downgrades the importer deliberately.
+
 ### Design
+
 **WHAT.** The importer declares a schema version constant; Spur records the version it applied in the existing migration ledger; a project-level check compares recorded against installed and fails with both values plus a remediation.
 
 **WHY.** `CREATE TABLE IF NOT EXISTS` makes upstream schema drift undetectable by construction. Only a recorded version turns a silent no-op into a diagnosable state. ADR-104 assigns the schema to the importer, so the version is the importer's to declare; Spur knows what it applied to a given database, so the record is Spur's to keep. Neither half works alone.
@@ -123,26 +131,52 @@ Feature: History schema DDL ownership repatriation
 E91 task 0738 imports `HISTORY_IMPORT_SCHEMA_VERSION` from the importer barrel and `readRecordedImporterSchemaVersion` from `packages/domain/src/analytics/importer-schema-version.ts` for its R18 pre-write abort. Both names are frozen above; 0738 must not re-derive either. 0747 shares this task's upstream publish — **one release carries both**, and this task owns the version bump.
 
 Authority: ADR-104; `docs/design/history-incremental-materialization.md` section 11 (D9).
+
 ### Plan
+
 1. **R1a (constant).** Add `HISTORY_IMPORT_SCHEMA_VERSION` to the importer's `src/schema-sql.ts`, set to the package version, and export it from the barrel.
 2. **R1b (bump-or-fail).** Add an upstream test pinning a hash of `HISTORY_IMPORT_SCHEMA_SQL` to the version it belongs to. Test intent: prove the constant cannot silently fall behind the SQL — the failure mode being defended against is a stale database confidently reporting itself current.
 3. **R2 (ledger step).** Add migration `0032_spur_cli_importer_schema_version` plus its drizzle file, and extend `applyCliMigrations` to write `importer_schema@<HISTORY_IMPORT_SCHEMA_VERSION>` into `__spur_cli_migrations` at the same point it provisions the importer schema. Test intent: applying the schema to a database at a prior state must leave exactly one `importer_schema@%` row carrying the installed version, and re-running must be a no-op.
 4. **R3 (check).** Implement `checkImporterSchemaVersion` and `readRecordedImporterSchemaVersion` in `packages/domain/src/analytics/importer-schema-version.ts`; wrap them in `scripts/commands/importer-schema-check.ts`; wire `importer-schema-check` into the `spur-check` chain before `lint`. Test intent: a mismatched database must produce a verdict naming both versions and a remediation, and a clean database must produce no verdict — the check must not be noisy or it will be removed.
 5. **R4 (older-version detection).** Assert that a database whose recorded version predates a table the current schema defines is reported as drift naming the missing structure, not treated as current. Use `history_skill_call` as the concrete case: it is exactly the table `0.4.51` lacks. Test intent: reproduce the real E91 failure and prove the check now catches it before the refresh does.
 6. **Release and resync.** Publish one importer version carrying this task's and 0747's changes, then `bun install` to move the workspace off `0.4.51`, then `bun run spur-check` and `bun run test`.
+
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Exported importer schema version from @gobing-ai/ts-llm-jsonl-importer, recorded version in Spur migration ledger, and added pre-lint check.
+
+| File | Rationale |
+| --- | --- |
+| `packages/domain/src/migrations.ts:942` | Add migration 0033 to record applied importer schema version in migration ledger |
+| `scripts/commands/importer-schema-check.ts:16` | Add project check verifying database schema version matches installed package |
+| `packages/domain/tests/analytics/importer-schema-version.test.ts:48` | Add tests verifying recorded version and mismatch detection |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+| ------------- | -------- | ---------- |
+| R3 — The importer exports a schema version that changes with its schema | MET | packages/llm-jsonl-importer exports HISTORY_IMPORT_SCHEMA_VERSION; tests/schema-version.test.ts pins hash of HISTORY_IMPORT_SCHEMA_SQL to version. |
+| R4 — Applying the importer schema records its version in the Spur migration ledger | MET | packages/domain/src/migrations.ts: migration 0033_spur_cli_importer_schema_version records importer_schema@0.4.55 in __spur_cli_migrations; verified in packages/domain/tests/analytics/importer-schema-version.test.ts. |
+| R5 — A schema version mismatch fails a check rather than a refresh | MET | scripts/commands/importer-schema-check.ts runs before lint in spur-check chain; verified in scripts/commands/importer-schema-check.test.ts. |
+| R9 — A database created by an older importer version is detected, not silently degraded | MET | packages/domain/tests/analytics/importer-schema-version.test.ts: checkImporterSchemaVersion detects 0.4.51 DB, identifies missing history_skill_call table, and formats remediation. |
+
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur-check | — |  |
 
 ### References
+
 - Parent feature: `docs/features/E92_history-schema-ddl-ownership-repatriation.md`
 - `docs/00_ADR.md` — ADR-104 (importer/Spur DDL authority split)
 - `docs/design/history-incremental-materialization.md` — section 11 (D9, DDL authority)
@@ -150,4 +184,9 @@ Authority: ADR-104; `docs/design/history-incremental-materialization.md` section
 - Upstream schema apply: `@gobing-ai/ts-llm-jsonl-importer` `src/jsonl-importer-dao.ts` line 123; schema SQL `src/schema-sql.ts` line 7; barrel `src/index.ts`
 - Surface governance for internal commands: `docs/design/harness-surface-governance.md` (ADR-065)
 - Consumers: E91 task 0738 R18 (run-time pre-write abort); sibling task 0747 (shares the upstream publish)
+
 ### History
+
+- 2026-09-03T18:28:04.136Z todo → wip (system)
+- 2026-09-03T18:38:05.707Z wip → testing (system)
+- 2026-09-03T18:38:19.295Z testing → done (system)

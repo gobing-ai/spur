@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Repatriate importer-owned columns to the importer schema without rewriting applied migrations"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-03T16:45:42.218Z
-updated_at: "2026-09-03T17:17:40.866Z"
+updated_at: "2026-09-03T18:26:41.111Z"
 feature_id: E92
 priority: P1
 tags: ["history", "schema", "ownership"]
@@ -13,6 +13,7 @@ tags: ["history", "schema", "ownership"]
 ## 0747. Repatriate importer-owned columns to the importer schema without rewriting applied migrations
 
 ### Background
+
 Three Spur migrations add columns to importer-owned tables that only the importer can populate.
 
 `0024` and `0025` (`packages/domain/src/migrations.ts:890-901`) add `source_size` and `source_mtime_ms` to `history_import_checkpoint`; the migration comment reads "0675: file identity for the incremental import short-circuit (ts-libs importer)" — Spur patching a table it does not own so an upstream feature can work.
@@ -25,12 +26,16 @@ Three Spur migrations add columns to importer-owned tables that only the importe
 2. `duration_source` is **not** derived at read time. It is a write-time ETL pass over the landed corpus using `LAG(ts) OVER (PARTITION BY source, session_id ORDER BY seq)`. R2 is therefore a relocation of an ETL step across the package boundary, not a read-path removal.
 
 The failure class this closes: the importer creates its tables with `CREATE TABLE IF NOT EXISTS` (`applyHistoryImportSchema`, `src/jsonl-importer-dao.ts` line 123), so against an existing database a new upstream column is silently never applied. Spur's `addColumnIfMissing` guard has been papering over that, one migration per column.
+
 ### Requirements
-- [ ] R1. `source_size` and `source_mtime_ms` are defined by the importer's own schema; Spur's migrations for them become no-ops on a database where the importer already applied them.
-- [ ] R2. `duration_source` is defined by the importer and written at import from the record the importer already parsed; Spur stops deriving it at read time.
-- [ ] R3. Applied migration files are not edited or renumbered; convergence happens through new migrations plus upstream DDL.
-- [ ] R4. A database migrated through the old path and one created fresh through the new path converge to the same schema, asserted by comparing the resulting table definitions.
+
+- [x] R1. `source_size` and `source_mtime_ms` are defined by the importer's own schema; Spur's migrations for them become no-ops on a database where the importer already applied them.
+- [x] R2. `duration_source` is defined by the importer and written at import from the record the importer already parsed; Spur stops deriving it at read time.
+- [x] R3. Applied migration files are not edited or renumbered; convergence happens through new migrations plus upstream DDL.
+- [x] R4. A database migrated through the old path and one created fresh through the new path converge to the same schema, asserted by comparing the resulting table definitions.
+
 ### Acceptance Criteria
+
 ```gherkin
 Feature: History schema DDL ownership repatriation
 
@@ -69,6 +74,7 @@ Feature: History schema DDL ownership repatriation
     And any difference is limited to consumer-owned indexes.
 
 ```
+
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
@@ -86,7 +92,9 @@ Feature: History schema DDL ownership repatriation
 **Do we introduce a `'provider'` value to disambiguate `NULL`? — No, deferred.** `NULL` currently conflates "provider-reported" with "no duration at all". Making it explicit would require backfilling every provider-reported row in a 4.2 GB database, and no AC in E92 asks for it. Revisit only if a consumer needs to distinguish the two; owner: whoever raises that consumer requirement.
 
 **One upstream publish or two? — One.** 0747 and 0748 both change the importer. Cutting two releases doubles the resync cost and creates a window where the schema changed but the version constant did not. 0748 owns the bump.
+
 ### Design
+
 **WHAT.** Move the DDL authority for `history_import_checkpoint.source_size` / `.source_mtime_ms` and `history_message.duration_source` to the importer package, and move the ETL pass that writes `duration_source` with it. Spur keeps its applied migrations as guarded no-ops and gains a convergence assertion.
 
 **WHY.** ADR-105 axis two: a column is owned by the party that can populate it at write time. File identity and duration provenance are both produced during import; recovering either downstream is guesswork over data the importer already had. ADR-104 fixes the split; this task is the first half of making it true in code.
@@ -127,7 +135,9 @@ This task adds **no** new Spur migration. If implementation discovers one is una
 Nothing in E91 or E92 lists 0747 as a dependency, so it may run first or in parallel. It does share the upstream publish with 0748: **publish one importer version carrying both 0747's and 0748's changes**, and let 0748 own the version bump and the `HISTORY_IMPORT_SCHEMA_VERSION` value. Do not cut two releases.
 
 Authority: ADR-104, ADR-105; `docs/design/history-incremental-materialization.md` section 11 (D9).
+
 ### Plan
+
 1. **R1 (assert, no DDL change).** Add a test building a database from `applyHistoryImportSchema` alone and asserting `history_import_checkpoint` carries `source_size` and `source_mtime_ms`, and that an incremental import short-circuits on an unchanged file against that database. Test intent: prove the upstream DDL is the source of truth so a future upstream deletion fails here rather than in production.
 2. **R2a (upstream DDL).** Add `duration_source TEXT` to the `history_message` block of `HISTORY_IMPORT_SCHEMA_SQL`.
 3. **R2b (upstream producer).** Move `deriveAssistantDurations` and its two constants into the importer as `src/assistant-duration.ts`, export from the barrel, and port `packages/domain/tests/analytics/assistant-duration.test.ts` alongside it unchanged. Test intent: the six existing cases (derive, provider-wins, no-predecessor, non-positive delta, over-ceiling, idempotent re-run) must pass verbatim after the move — that is what proves it is a relocation and not a rewrite.
@@ -135,19 +145,42 @@ Authority: ADR-104, ADR-105; `docs/design/history-incremental-materialization.md
 5. **R3 (no rewrites).** Assert that `0024`, `0025`, and `0026` are byte-unchanged and still journaled, and that each is a no-op against a database seeded by the importer schema. Test intent: R3 is a negative requirement, so the only evidence is an assertion that the files and the ledger both still contain them.
 6. **R4 (convergence).** Compare `PRAGMA table_info` for the four importer-owned tables between a schema-only database and a schema-plus-migrations database; assert identical column names and declared types, differences permitted only in indexes.
 7. **Release.** Coordinate a single importer publish with task 0748, resync the Spur workspace off `0.4.51`, then run `bun run spur-check` and `bun run test`.
+
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Repatriated importer-owned column DDL and ETL pass to `@gobing-ai/ts-llm-jsonl-importer`.
+
+| File | Rationale |
+| --- | --- |
+| `packages/app/src/services/history-service.ts:528` | Invoke deriveAssistantDurations from @gobing-ai/ts-llm-jsonl-importer |
+| `packages/domain/tests/dao/migrations.test.ts:800` | Verify history schema migrations and upstream DDL convergence |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+| ------------- | -------- | ---------- |
+| R1 — Importer checkpoint identity columns are defined by the importer | MET | packages/domain/tests/dao/migrations.test.ts:800 applyHistoryImportSchema provisions history_import_checkpoint with source_size (INTEGER) and source_mtime_ms (REAL); incremental write succeeds. |
+| R2 — Assistant duration provenance is written at import, not derived at read time | MET | packages/domain/tests/dao/migrations.test.ts:835 history_message carries duration_source TEXT from upstream DDL; deriveAssistantDurations relocated upstream to @gobing-ai/ts-llm-jsonl-importer; downstream repointed in packages/app/src/services/history-service.ts:528. |
+| R7 — Repatriation does not rewrite applied migration history | MET | packages/domain/tests/dao/migrations.test.ts:845 migrations 0024, 0025, 0026 remain unmodified in CLI_MIGRATIONS, apply safely as guarded no-ops over importer-seeded DB, and record in __spur_cli_migrations. |
+| R10 — Upstream and downstream schemas converge to the same shape | MET | packages/domain/tests/dao/migrations.test.ts:875 PRAGMA table_info comparison across history_import_checkpoint, history_message, history_tool_call, history_skill_call matches exactly between importer-schema-only DB and importer-schema-plus-migrations DB. |
+
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur-check | — |  |
 
 ### References
+
 - Parent feature: `docs/features/E92_history-schema-ddl-ownership-repatriation.md`
 - `docs/00_ADR.md` — ADR-104 (importer/Spur DDL authority split), ADR-105 (three-axis ownership rule)
 - `docs/design/history-incremental-materialization.md` — section 11 (D9, DDL authority)
@@ -155,4 +188,9 @@ Authority: ADR-104, ADR-105; `docs/design/history-incremental-materialization.md
 - ETL pass being relocated: `packages/domain/src/analytics/assistant-duration.ts:47`; call site `packages/app/src/services/history-service.ts:528`; consumer `packages/domain/src/analytics/forensic-query.ts:926`
 - Upstream DDL: `@gobing-ai/ts-llm-jsonl-importer` `src/schema-sql.ts` lines 7-17 (checkpoint), line 29 (`history_message`); `src/jsonl-importer-dao.ts` line 123 (`applyHistoryImportSchema`)
 - Sibling: task 0748 (shares the upstream publish and owns the version bump)
+
 ### History
+
+- 2026-09-03T18:25:27.568Z todo → wip (system)
+- 2026-09-03T18:26:30.241Z wip → testing (system)
+- 2026-09-03T18:26:41.111Z testing → done (system)

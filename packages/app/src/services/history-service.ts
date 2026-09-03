@@ -29,7 +29,6 @@ import {
     countToolCallsSince,
     type DriftRow,
     dataWindow,
-    deriveAssistantDurations,
     derivedWarnings,
     drift,
     emptyAttributionSummary,
@@ -69,6 +68,7 @@ import {
     topStepsByTokens,
 } from '@gobing-ai/spur-domain';
 import {
+    deriveAssistantDurations,
     getSourceDefinition,
     type ImportIssue,
     type ImportMode,
