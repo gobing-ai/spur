@@ -618,6 +618,7 @@ export {
     extractFeatureProofData,
     extractTaskProofData,
     type FeatureProofData,
+    ProofCaptureError,
     ProofInputFingerprint,
     type TaskProofData,
 } from './workflow/proof-input-fingerprint';

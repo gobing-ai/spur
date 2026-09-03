@@ -176,6 +176,61 @@ describe('task-pipeline review independence (task 0710)', () => {
     });
 });
 
+describe('task-path lookup fails closed (task 0751 R2)', () => {
+    const resolveShell = (): { shell?: { options?: { command?: string } }; command: string } => {
+        const test = DEF.states.find((st) => st.id === 'test');
+        const shell = test?.onEnter?.find(
+            (a) => a.kind === 'shell' && String(a.options?.command ?? '').includes('-taskpath.txt'),
+        );
+        return { shell, command: String(shell?.options?.command ?? '') };
+    };
+
+    test('the lookup is not suppressed: no `|| true`, no forced `exit 0`, no stderr suppression', () => {
+        const { command } = resolveShell();
+        expect(command).toContain('task path $wbs --json');
+        expect(command).not.toContain('--json 2>/dev/null');
+        expect(command).not.toContain('|| true');
+        expect(command).not.toContain('; exit 0');
+        expect(command).not.toContain(';exit 0');
+    });
+
+    test('an empty resolved task path exits non-zero with a message naming the failure', () => {
+        const { command } = resolveShell();
+        expect(command).toContain('-z "$task_path"');
+        expect(command).toContain('exit 1');
+        expect(command).toContain('did not resolve');
+    });
+
+    test('the done-state verdict artifact declares the enforced proof binding (0751 R4)', () => {
+        const done = DEF.states.find((st) => st.id === 'done');
+        const artifact = done?.onEnter?.find((a) => a.kind === 'run.artifact');
+        expect(artifact).toBeDefined();
+        expect(artifact?.options?.proofBinding).toBe('current');
+    });
+
+    test('behavioral: an unresolved task path fails the rendered command', () => {
+        const { execSync } = require('node:child_process') as typeof import('node:child_process');
+        const { mkdtempSync, rmSync, writeFileSync, chmodSync } = require('node:fs') as typeof import('node:fs');
+        const { tmpdir } = require('node:os') as typeof import('node:os');
+        const joinPath = require('node:path') as typeof import('node:path');
+
+        const { command } = resolveShell();
+        const dir = mkdtempSync(joinPath.join(tmpdir(), 't0751-taskpath-'));
+        try {
+            mkdirRecursive(joinPath.join(dir, '.spur', 'run'));
+            // Emit the same JSON shape `spur task path --json` does when the task
+            // cannot be resolved: no path field, so jq drains to `empty`.
+            const emit = joinPath.join(dir, 'emit.sh');
+            writeFileSync(emit, "#!/bin/sh\nprintf '{}'\n");
+            chmodSync(emit, 0o755);
+            const rendered = command.replaceAll('$spurBin', emit).replaceAll('$wbs', 't9001');
+            expect(() => execSync(rendered, { cwd: dir, stdio: 'pipe' })).toThrow();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
 function mkdirRecursive(path: string): void {
     const { mkdirSync } = require('node:fs') as typeof import('node:fs');
     mkdirSync(path, { recursive: true });

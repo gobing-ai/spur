@@ -538,14 +538,58 @@ describe('AgentRunActionRunner expectFile', () => {
     // R6-S2a: expectFile catches "agent exited 0 but didn't produce the expected
     // artifact" — the silent-success defect where the agent claims success but the
     // side-effect file (verdict, report, etc.) is missing.
-    test('non-capture: exit-0 + expectFile exists → ok:true', async () => {
+    test('non-capture: exit-0 + expectFile produced by this run → ok:true (stale file replaced)', async () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
         const file = join(dir, 'output.txt');
-        writeFileSync(file, 'done');
-        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        // 0751 R3: a stale file from a PRIOR run is deleted before dispatch; the service's
+        // effect writes the fresh artifact DURING dispatch, so presence after exit is
+        // proof of production by this run.
+        writeFileSync(file, 'stale-from-previous-run');
+        const svc = svcWithEffect(() => writeFileSync(file, 'fresh-from-this-run'));
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute({ role: 'coder', input: 'build', expectFile: file }, makeCtx());
         expect(result.ok).toBe(true);
+        expect(readFileSync(file, 'utf8')).toBe('fresh-from-this-run');
+    });
+
+    test('0751 R3: a stale expectFile left by a prior run cannot satisfy a fresh assertion', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const file = join(dir, 'verdict.txt');
+        writeFileSync(file, 'stale-from-previous-run');
+        // Agent exits 0 WITHOUT writing the file — the stale file must not count as produced.
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { role: 'coder', input: 'verify', expectFile: 'verdict.txt', cwd: dir },
+            makeCtx(),
+        );
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('exited 0 but expected file is absent');
+        expect(result.error).toContain('verdict.txt');
+        // The stale artifact was consumed by the delete-before-invoke, not left on disk.
+        expect(existsSync(file)).toBe(false);
+    });
+
+    test('0751 R3: expectFile target is absent at dispatch time (delete happens before spawn)', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const file = join(dir, 'verdict.txt');
+        writeFileSync(file, 'stale-from-previous-run');
+        let existedAtDispatch: boolean | undefined;
+        // One service doing both: observe dispatch-time state, then produce the file.
+        const svc: AgentService = {
+            runTraced: async () => {
+                existedAtDispatch = existsSync(file);
+                writeFileSync(file, 'fresh-from-this-run');
+                return { exitCode: 0, stdout: '', invocation: invocation() };
+            },
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { role: 'coder', input: 'verify', expectFile: 'verdict.txt', cwd: dir },
+            makeCtx(),
+        );
+        expect(result.ok).toBe(true);
+        expect(existedAtDispatch).toBe(false);
     });
 
     test('non-capture: exit-0 + expectFile absent → ok:false with clear error', async () => {
@@ -561,14 +605,12 @@ describe('AgentRunActionRunner expectFile', () => {
         expect(result.error).toContain('missing.txt');
     });
 
-    test('capture: exit-0 + expectFile exists → ok:true', async () => {
+    test('capture: exit-0 + expectFile produced by this run → ok:true', async () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
         const file = join(dir, 'verdict.json');
-        writeFileSync(file, '{"verdict":"PASS"}');
-        const svc = svcWithRunTraced({
-            exitCode: 0,
+        writeFileSync(file, '{"verdict":"STALE"}');
+        const svc = svcWithEffect(() => writeFileSync(file, '{"verdict":"PASS"}'), {
             stdout: 'verified',
-            invocation: invocation(),
         });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute(
@@ -630,15 +672,16 @@ describe('AgentRunActionRunner expectFile', () => {
     test('relative expectFile appends the absolute path to the dispatched input', async () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
         const seen: Array<string | undefined> = [];
+        // The service produces the file during dispatch (0751 R3: a pre-seeded file
+        // would be deleted before spawn, so production must happen inside the run).
         const svc = {
             runTraced: async (input: string | undefined) => {
                 seen.push(input);
+                writeFileSync(join(dir, 'artifact.json'), '{}');
                 return { exitCode: 0, stdout: '', invocation: invocation() };
             },
         } as unknown as AgentService;
         const runner = new AgentRunActionRunner(svc);
-        // expectFile still verifies the file post-exit; satisfy it so the run is ok.
-        writeFileSync(join(dir, 'artifact.json'), '{}');
         const result = await runner.execute(
             { role: 'coder', input: 'write it', expectFile: 'artifact.json', cwd: dir },
             makeCtx(),
@@ -698,11 +741,10 @@ describe('AgentRunActionRunner expectFile', () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
         const answerPath = join(dir, 'answer.txt');
         const artifactPath = join(dir, 'artifact.txt');
-        writeFileSync(artifactPath, 'built');
-        const svc = svcWithRunTraced({
-            exitCode: 0,
+        // 0751 R3: the expectFile must be produced by THIS run — the service writes
+        // it during dispatch rather than the fixture pre-seeding it.
+        const svc = svcWithEffect(() => writeFileSync(artifactPath, 'built'), {
             stdout: 'build complete',
-            invocation: invocation(),
         });
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute(

@@ -80,7 +80,15 @@ describe('RunArtifactActionRunner', () => {
                 proofBinding: 'current',
                 requireExisting: true,
             },
-            { runId: 'run-123', stateOrNodeId: 's1', workdir, vars: {}, env: {} },
+            // 0751 R4: a declared 'current' binding only holds when the run carries a
+            // well-formed proof digest — the happy path must seed one.
+            {
+                runId: 'run-123',
+                stateOrNodeId: 's1',
+                workdir,
+                vars: { proofDigest: `sha256:${'a'.repeat(64)}` },
+                env: {},
+            },
         );
 
         expect(res.ok).toBe(true);
@@ -95,5 +103,96 @@ describe('RunArtifactActionRunner', () => {
         expect(rows[0]?.path).toContain('verdict.json');
 
         db.close();
+    });
+});
+
+// Task 0751 R4: proofBinding used to be decorative — echoed into result data without ever being
+// checked, so an artifact could claim a proof binding that did not hold and still reach the ledger
+// (ADR-071 proof-chain symmetry). Enforcement lives at the write, BEFORE dao.record, so a failed
+// binding never persists an artifact record.
+describe('RunArtifactActionRunner proofBinding enforcement (task 0751 R4)', () => {
+    const GOOD = `sha256:${'a'.repeat(64)}`;
+
+    async function setup() {
+        const workdir = join(tmpdir(), `test-art-bind-${crypto.randomUUID()}`);
+        const fs = createNodeFileSystem(workdir);
+        await fs.ensureDir(join(workdir, '.spur', 'run'));
+        const artifactPath = '.spur/run/verdict.json';
+        await fs.writeFile(join(workdir, artifactPath), '{"verdict":"PASS"}');
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        // artifacts.run_id has an FK on runs.id — open the run row the records attach to.
+        await adapter.run(
+            "INSERT INTO runs (id, status, started_at, created_at, updated_at) VALUES ('run-bind', 'running', '2026-09-03T00:00:00.000Z', 1000, 1000)",
+        );
+        const dao = new ArtifactDao(adapter);
+        return { workdir, fs, artifactPath, dao, adapter };
+    }
+
+    const ctxWith = (workdir: string, vars: Record<string, string>) => ({
+        runId: 'run-bind',
+        stateOrNodeId: 's1',
+        workdir,
+        vars,
+        env: {},
+    });
+
+    test("declared 'current' without any proof digest rejects and persists NO ledger row", async () => {
+        const { workdir, artifactPath, dao, adapter } = await setup();
+        const runner = new RunArtifactActionRunner(undefined, createNodeFileSystem(), dao);
+        const res = await runner.execute(
+            { path: artifactPath, artifactKind: 'verify-verdict', proofBinding: 'current' },
+            ctxWith(workdir, {}),
+        );
+        expect(res.ok).toBe(false);
+        expect(res.error).toContain('proofBinding "current" does not hold');
+        expect(await dao.artifactsByRunId('run-bind')).toHaveLength(0);
+        adapter.close();
+    });
+
+    test('malformed proof digest rejects the binding', async () => {
+        const { workdir, artifactPath, dao, adapter } = await setup();
+        const runner = new RunArtifactActionRunner(undefined, createNodeFileSystem(), dao);
+        for (const bad of ['not-a-digest', `sha256:${'zz'.repeat(32)}`, '']) {
+            const res = await runner.execute(
+                { path: artifactPath, artifactKind: 'verify-verdict', proofBinding: 'current' },
+                ctxWith(workdir, { proofDigest: bad }),
+            );
+            expect(res.ok).toBe(false);
+        }
+        expect(await dao.artifactsByRunId('run-bind')).toHaveLength(0);
+        adapter.close();
+    });
+
+    test("a well-formed proofDigestNow (preferred) or proofDigest satisfies the 'current' binding", async () => {
+        const { workdir, artifactPath, dao, adapter } = await setup();
+        const runner = new RunArtifactActionRunner(undefined, createNodeFileSystem(), dao);
+        const okNow = await runner.execute(
+            { path: artifactPath, artifactKind: 'verify-verdict', proofBinding: 'current' },
+            ctxWith(workdir, { proofDigestNow: GOOD, proofDigest: 'garbage' }),
+        );
+        expect(okNow.ok).toBe(true);
+        adapter.close();
+    });
+
+    test('an unknown binding value is rejected, not silently accepted', async () => {
+        const { workdir, artifactPath, dao, adapter } = await setup();
+        const runner = new RunArtifactActionRunner(undefined, createNodeFileSystem(), dao);
+        const res = await runner.execute(
+            { path: artifactPath, artifactKind: 'verify-verdict', proofBinding: 'best-effort' },
+            ctxWith(workdir, { proofDigest: GOOD }),
+        );
+        expect(res.ok).toBe(false);
+        expect(res.error).toContain('unsupported proofBinding');
+        expect(await dao.artifactsByRunId('run-bind')).toHaveLength(0);
+        adapter.close();
+    });
+
+    test('no proofBinding declared: behavior unchanged (digest not required)', async () => {
+        const { workdir, artifactPath, dao, adapter } = await setup();
+        const runner = new RunArtifactActionRunner(undefined, createNodeFileSystem(), dao);
+        const res = await runner.execute({ path: artifactPath, artifactKind: 'verify-verdict' }, ctxWith(workdir, {}));
+        expect(res.ok).toBe(true);
+        adapter.close();
     });
 });

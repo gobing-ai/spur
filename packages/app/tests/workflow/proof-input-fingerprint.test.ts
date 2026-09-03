@@ -4,6 +4,7 @@ import {
     createGitAlternateTree,
     extractFeatureProofData,
     extractTaskProofData,
+    ProofCaptureError,
     ProofInputFingerprint,
 } from '../../src/workflow/proof-input-fingerprint';
 
@@ -199,5 +200,80 @@ describe('git-tree component is live, not silently empty', () => {
             await rm(probe, { force: true });
         }
         expect(await ProofInputFingerprint.compute()).toBe(before);
+    });
+});
+
+// Task 0751 R1: the git-tree capture used to answer `''` on every failure path (read-tree, add,
+// write-tree, thrown git error), and `computeProofInputFingerprint` hashed that empty string into a
+// valid-looking digest — proof capture failed OPEN. The contract is now total into the error
+// channel: every git failure is a distinguishable ProofCaptureError and no digest is derived.
+describe('git-tree capture fails closed (task 0751 R1)', () => {
+    const failingExecutor = (failedStep: string, exitCode = 1) =>
+        ({
+            run: async (opts: { args: string[] }) => {
+                if (opts.args[0] === failedStep) {
+                    return {
+                        exitCode,
+                        stdout: '',
+                        stderr: 'fatal: simulated git failure',
+                        command: 'git',
+                        args: opts.args,
+                        durationMs: 0,
+                    };
+                }
+                return {
+                    exitCode: 0,
+                    stdout: 'tree-sha-ok\n',
+                    stderr: '',
+                    command: 'git',
+                    args: opts.args,
+                    durationMs: 0,
+                };
+            },
+        }) as unknown as import('@gobing-ai/ts-runtime').ProcessExecutor;
+
+    const throwingExecutor = {
+        run: async () => {
+            throw new Error('git binary vanished');
+        },
+    } as unknown as import('@gobing-ai/ts-runtime').ProcessExecutor;
+
+    test('read-tree failure rejects createGitAlternateTree with ProofCaptureError (no empty sentinel)', async () => {
+        expect(createGitAlternateTree(process.cwd(), undefined, failingExecutor('read-tree'))).rejects.toBeInstanceOf(
+            ProofCaptureError,
+        );
+    });
+
+    test('add failure carries the git stderr in the rejection', async () => {
+        const err = await createGitAlternateTree(process.cwd(), undefined, failingExecutor('add')).catch((e) => e);
+        expect(err).toBeInstanceOf(ProofCaptureError);
+        expect((err as ProofCaptureError).message).toContain('git add');
+        expect((err as ProofCaptureError).stderr).toContain('simulated git failure');
+    });
+
+    test('write-tree failure rejects with ProofCaptureError', async () => {
+        const err = await createGitAlternateTree(process.cwd(), undefined, failingExecutor('write-tree')).catch(
+            (e) => e,
+        );
+        expect(err).toBeInstanceOf(ProofCaptureError);
+        expect((err as ProofCaptureError).message).toContain('git write-tree');
+    });
+
+    test('a thrown git error converts to ProofCaptureError, not an empty string', async () => {
+        const err = await createGitAlternateTree(process.cwd(), undefined, throwingExecutor).catch((e) => e);
+        expect(err).toBeInstanceOf(ProofCaptureError);
+        expect((err as ProofCaptureError).message).toContain('git binary vanished');
+    });
+
+    test('computeProofInputFingerprint rejects on git failure — no digest is derived from a failed capture', async () => {
+        let rejected: unknown;
+        try {
+            await ProofInputFingerprint.compute({
+                processExecutor: failingExecutor('read-tree'),
+            });
+        } catch (error) {
+            rejected = error;
+        }
+        expect(rejected).toBeInstanceOf(ProofCaptureError);
     });
 });

@@ -80,7 +80,9 @@ export interface AgentRunAgentConfig {
  * - `expectFile` (string): post-exit verification — after a successful (exit-0)
  *   agent run, assert the file exists. If absent, downgrade to `ok:false` with a
  *   clear error. Catches "agent exited 0 but didn't produce the expected artifact"
- *   defects (R6-S2a). Relative paths resolve against `cwd`.
+ *   defects (R6-S2a). Relative paths resolve against `cwd`. The target is deleted
+ *   before dispatch (task 0751 R3): a file left by a prior run can never satisfy
+ *   the assertion — only an artifact produced by the current run can.
  * - `requireDiff` (boolean): post-exit verification — after a successful (exit-0)
  *   agent run, fail the step unless the working tree has non-corpus changes
  *   (untracked/staged/unstaged, docs/tasks3|docs/features excluded). Catches the
@@ -326,6 +328,27 @@ export class AgentRunActionRunner implements ActionRunner {
         }
         if (Object.keys(requiresCapabilities.requires).length > 0) {
             flags.requiresCapabilities = JSON.stringify(requiresCapabilities.requires);
+        }
+
+        // R3 (task 0751): delete-before-invoke. A verifier answer file left by a PRIOR run must
+        // not satisfy this run's expectFile assertion - stat/mtime comparison is racy on coarse
+        // filesystem timestamps, so the target is removed before dispatch instead. Presence after
+        // exit-0 is then proof THIS run produced it. A caller that legitimately needs an existing
+        // file preserved needs a different action, not an expectFile. Deletion failure fails the
+        // step before dispatch rather than risking a stale satisfy.
+        if (expectFile !== undefined) {
+            const target = isAbsolute(expectFile) ? expectFile : join(cwd, expectFile);
+            const fs = createNodeFileSystem(cwd);
+            if (await fs.exists(target)) {
+                try {
+                    await fs.deleteFile(target);
+                } catch (error) {
+                    return {
+                        ok: false,
+                        error: `agent.run: expectFile ${expectFile} exists from a previous run and could not be removed before dispatch: ${(error as Error).message}`,
+                    };
+                }
+            }
         }
 
         // 0689: an expectFile/answerFile prompt that names a RELATIVE path lets a

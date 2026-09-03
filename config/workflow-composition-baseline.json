@@ -250,7 +250,7 @@
                 },
                 "test:onEnter:0": {
                     "kind": "shell",
-                    "invocation": "$spurBin task path $wbs --json 2>/dev/null | jq -r \".path // .filePath // empty\" > \".spur/run/$wbs-taskpath.txt\" || true; sed -n \"s/^priority:[[:space:]]*//p\" \"$(cat \".spur/run/$wbs-taskpath.txt\" 2>/dev/null)\" 2>/dev/null | head -1 | tr -d \"[:space:]\" | tr \"[:lower:]\" \"[:upper:]\" > \".spur/run/$wbs-priority.txt\"; exit 0"
+                    "invocation": "mkdir -p .spur/run; $spurBin task path $wbs --json | jq -r \".path // .filePath // empty\" > \".spur/run/$wbs-taskpath.txt\"; task_path=\"$(cat \".spur/run/$wbs-taskpath.txt\")\"; if [ -z \"$task_path\" ]; then echo \"fail-closed proof chain (0751 R2): task path for $wbs did not resolve - the task spec cannot be folded into the proof digest\" >&2; exit 1; fi; sed -n \"s/^priority:[[:space:]]*//p\" \"$task_path\" | head -1 | tr -d \"[:space:]\" | tr \"[:lower:]\" \"[:upper:]\" > \".spur/run/$wbs-priority.txt\""
                 },
                 "test:onEnter:1": {
                     "kind": "file.read.into-var"

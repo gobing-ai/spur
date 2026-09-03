@@ -85,6 +85,10 @@ case "$1:$2" in
     printf '{"wbs":"%s","verdict":"%s","requirements":[],"checks":[]}\n' "$3" "\${VERDICT:-PASS}" > ".spur/run/$3-verdict.json" ;;
   task:show)
     printf '%s\n' '{"frontmatter":{"feature_id":null}}' ;;
+  task:path)
+    # 0751 R2: the fail-closed task lookup needs a resolvable spec. FIXTURE_TASK_SPEC
+    # is seeded by runInlineSmoke; unset -> empty path -> the pipeline step must fail.
+    printf '{"path":"%s"}\n' "$FIXTURE_TASK_SPEC" ;;
   task:update|task:record)
     exit 0 ;;
 esac
@@ -109,10 +113,22 @@ function resolveSessionId(cwd: string): string {
 // ISO-8601 UTC stamp prefix — bare local-clock forms are prohibited.
 const isoStamp = (): string => `${new Date().toISOString()} `;
 
-function runInlineSmoke(options: { verdict?: 'PASS' | 'FAIL'; failCheckAt?: number } = {}): SmokeResult {
+function runInlineSmoke(
+    options: { verdict?: 'PASS' | 'FAIL'; failCheckAt?: number; unresolvableTask?: boolean } = {},
+): SmokeResult {
     const cwd = mkdtempSync(join(tmpdir(), 'spur-0503-inline-'));
     mkdirSync(join(cwd, '.spur/context'), { recursive: true });
     writeFileSync(join(cwd, '.spur/context/.session.json'), '{"session_id":"codex-fixture-session"}\n');
+    // 0751 R2: the task-path lookup is fail-closed, so the smoke must seed a resolvable
+    // task spec (frontmatter mirrors a real task file, incl. the `priority:` line the
+    // lookup extracts). `unresolvableTask` opts out to exercise the fail-closed path.
+    const taskSpecPath = 'fixture-0503-task.md';
+    if (options.unresolvableTask !== true) {
+        writeFileSync(
+            join(cwd, taskSpecPath),
+            '---\nschema_version: 1\nwbs: fixture-0503\ntitle: "0503 inline smoke fixture task"\npriority: P1\n---\n# fixture task spec\n',
+        );
+    }
     const spurBin = makeFakeSpur(cwd);
     const vars: Record<string, string> = {
         ...PIPELINE.vars,
@@ -127,6 +143,7 @@ function runInlineSmoke(options: { verdict?: 'PASS' | 'FAIL'; failCheckAt?: numb
         CHECK_COUNTER: join(cwd, 'check-counter'),
         VERDICT: options.verdict ?? 'PASS',
         FAIL_CHECK_AT: options.failCheckAt === undefined ? '' : String(options.failCheckAt),
+        FIXTURE_TASK_SPEC: options.unresolvableTask === true ? '' : taskSpecPath,
     };
     const runId = 'inline-smoke-run';
     const logPath = join(cwd, `.spur/run/${runId}.log`);
@@ -261,6 +278,20 @@ describe('0503 interactive inline pipeline driver smoke', () => {
         // `failed` without reaching `record`.
         expect(result.hostStages).toEqual(['implement', 'review', 'verify', 'test-fix', 'test-fix']);
         expect(result.log).not.toContain('Pipeline complete');
+    });
+
+    test('0751 R2 fail-closed: an unresolved task path fails the test-state lookup step', () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-0503-inline-failclosed-'));
+        mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+        const spurBin = makeFakeSpur(cwd);
+        const lookup = PIPELINE.states.find((state) => state.id === 'test')?.onEnter?.[0];
+        expect(lookup?.kind).toBe('shell');
+        const command = expand(lookup?.options?.command ?? '', { ...PIPELINE.vars, wbs: 'fixture-0503', spurBin });
+        // No fixture task seeded (FIXTURE_TASK_SPEC empty) -> the lookup must fail the
+        // step instead of degrading the proof to whole-tree-only.
+        expect(runShell(command, cwd, { wbs: 'fixture-0503', spurBin, FIXTURE_TASK_SPEC: '' })).not.toBe(0);
+        // The priority var is never materialized from a failed lookup.
+        expect(Bun.file(join(cwd, '.spur/run/fixture-0503-priority.txt')).exists()).resolves.toBe(false);
     });
 
     test('the record-to-done task-check guard blocks a failed structural check', () => {

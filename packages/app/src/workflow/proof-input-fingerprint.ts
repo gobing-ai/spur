@@ -57,6 +57,21 @@ export interface ComputeProofInputOptions {
 }
 
 /**
+ * Raised when the isolated git-tree capture fails (read-tree, add, write-tree non-zero, or any
+ * thrown git error). Carries the git stderr so the caller can name the failure instead of hashing
+ * an empty tree (task 0751 R1 - the capture must fail closed, never yield a sentinel digest input).
+ */
+export class ProofCaptureError extends Error {
+    constructor(
+        message: string,
+        readonly stderr?: string,
+    ) {
+        super(message);
+        this.name = 'ProofCaptureError';
+    }
+}
+
+/**
  * Corpus paths excluded from the git-tree half of the digest. Task/feature files are TRACKED, so
  * they must be excluded here and folded in separately as normalized spec content — otherwise every
  * pipeline section write would change the digest.
@@ -78,7 +93,8 @@ const DEFAULT_EXCLUDE_GLOBS = ['docs/tasks*', 'docs/features*'];
  * @param excludeGlobs - Globs to exclude from tree object.
  * @param executor - ProcessExecutor instance.
  * @param fs - FileSystem instance.
- * @returns Git tree SHA-1 hash or empty string on error.
+ * @returns Git tree SHA-1 hash.
+ * @throws ProofCaptureError when any git step fails - never an empty-string sentinel.
  */
 export async function createGitAlternateTree(
     cwd: string,
@@ -96,17 +112,21 @@ export async function createGitAlternateTree(
         const common = { cwd, env, forceBuffered: true, rejectOnError: false } as const;
 
         const read = await executor.run({ command: 'git', args: ['read-tree', 'HEAD'], ...common });
-        if (read.exitCode !== 0) return '';
+        if (read.exitCode !== 0)
+            throw new ProofCaptureError(`git read-tree HEAD failed with exit code ${read.exitCode}`, read.stderr);
 
         const excludes = excludeGlobs.map((glob) => `:(exclude)${glob}`);
         const add = await executor.run({ command: 'git', args: ['add', '-A', '--', '.', ...excludes], ...common });
-        if (add.exitCode !== 0) return '';
+        if (add.exitCode !== 0)
+            throw new ProofCaptureError(`git add -A failed with exit code ${add.exitCode}`, add.stderr);
 
         const tree = await executor.run({ command: 'git', args: ['write-tree'], ...common });
-        if (tree.exitCode !== 0) return '';
+        if (tree.exitCode !== 0)
+            throw new ProofCaptureError(`git write-tree failed with exit code ${tree.exitCode}`, tree.stderr);
         return tree.stdout.trim();
-    } catch {
-        return '';
+    } catch (error) {
+        if (error instanceof ProofCaptureError) throw error;
+        throw new ProofCaptureError(`git alternate-tree capture threw: ${(error as Error).message}`);
     } finally {
         if (await fs.exists(indexFile)) {
             try {
@@ -195,6 +215,8 @@ export function extractFeatureProofData(content: string): FeatureProofData {
  *
  * @param options - Fingerprint options including optional task/feature contents and custom excludes.
  * @returns Composite SHA-256 fingerprint string (`sha256:<hex>`).
+ * @throws ProofCaptureError when the git-tree half cannot be captured - no digest is derived from a
+ * failed capture (task 0751 R1: an empty string no longer doubles as both "no tree" and "failed").
  */
 export async function computeProofInputFingerprint(options: ComputeProofInputOptions = {}): Promise<string> {
     const cwd = options.cwd ?? process.cwd();
