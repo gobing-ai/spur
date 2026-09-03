@@ -39,26 +39,33 @@ import {
     HISTORY_BOARD_ACTIVITY_DAYS,
     type HistoryBoardDailyRollupRow,
     type HistoryBoardKpiTrendRow,
+    type HistoryBoardKpiWindowRow,
     type HistoryBoardSourceRollupRow,
     type HistoryBoardSummaryRollup,
     type HistoryDimension,
     historyBoardBucketsFromRollup,
     historyBoardDatabaseBytes,
+    historyBoardDimensionDailyFromMart,
     historyBoardHeavySessionsFromRollup,
     historyBoardKpiTrendFromRollup,
+    historyBoardKpiWindowFromMart,
     historyBoardLoopsFromRollup,
     historyBoardModelComparisonFromRollup,
+    historyBoardPreviousWindowKpiFromMart,
     historyBoardRankedStepsFromRollup,
     historyBoardRollupsFresh,
     historyBoardSessionsFromRollup,
     historyBoardSkillBreakdownFromRollup,
     historyBoardSourcesFromRollup,
+    historyBoardSummaryFromMart,
     historyBoardSummaryFromRollup,
     historyKpiTrend,
     loopRepeatedCallsQuery,
     loops,
+    type MartDimension,
     messageRollup,
     modelComparison,
+    resolveSummaryReadPath,
     type SourceDelta,
     selectionPopulation,
     sessionTimeline,
@@ -85,6 +92,14 @@ export interface LiveHistoryBoardServiceOptions {
 }
 
 const SERIES_COLORS = ['#3987e5', '#199e70', '#d95926', '#9085e9', '#c98500', '#ec4899', '#14b8a6'];
+
+/**
+ * Bounded stale-path fallback caps (task 0743 R7). When rollups cannot be brought current the
+ * raw fallback is bounded by a named row limit and a named time-range window — never an
+ * unannounced full-corpus scan. Named so the ceiling is auditable and movable on measured cost.
+ */
+const STALE_FALLBACK_ROW_CAP = 25_000;
+const STALE_FALLBACK_MAX_RANGE_DAYS = 30;
 
 const AGENT_CATALOG: Array<{
     id: string;
@@ -218,6 +233,90 @@ function extractToolTitle(payload: string | null): string {
         // Not JSON
     }
     return '';
+}
+
+/** The number of whole days spanned by the selector, or `null` when unbounded (`all`/custom). */
+function rangeDaysFromSelector(sel: ArtifactSelector): number | null {
+    if (sel.since === null) return null;
+    const until = sel.until === null ? Date.now() : new Date(sel.until).getTime();
+    const since = new Date(sel.since).getTime();
+    return Math.max(0, Math.floor((until - since) / 86_400_000));
+}
+
+/** Clamp the stale fallback to a bounded time window so it never becomes an unannounced full-corpus
+ * scan. A genuinely unbounded (`all`) request is left intact so the stale read keeps the same data
+ * window as the materialized read (task 0629 equality); its scan is bounded instead by the row cap. */
+function boundStaleSelector(sel: ArtifactSelector): ArtifactSelector {
+    // An unbounded (all) stale read is left intact so it keeps the same data window as the
+    // materialized read (task 0629 cold-start equality); the named row cap bounds each raw
+    // analyzer instead. A bounded request older than the time-range cap is clamped to it.
+    if (sel.since === null) return sel;
+    const minSince = new Date(Date.now() - STALE_FALLBACK_MAX_RANGE_DAYS * 86_400_000).toISOString();
+    if (sel.since < minSince) return { ...sel, since: minSince };
+    return sel;
+}
+
+/** Project a mart KPI-window row into the wire HistorySummaryKpis shape. */
+function kpiWindowRowToKpis(row: HistoryBoardKpiWindowRow): HistorySummaryKpis {
+    const fresh = row.freshInputTokens ?? 0;
+    const output = row.outputTokens ?? 0;
+    const totalBilled = fresh + output;
+    const cacheSaved = row.cacheReadTokens ?? 0;
+    const cacheDenominator = totalBilled + cacheSaved;
+    const toolCalls = row.toolCalls ?? 0;
+    const toolErrors = row.toolErrors ?? 0;
+    return {
+        totalBilledTokens: totalBilled,
+        cacheSavedTokens: cacheSaved,
+        cacheSavedPercent: cacheDenominator > 0 ? Math.round((cacheSaved / cacheDenominator) * 100) : 0,
+        sessionsCount: row.sessions ?? 0,
+        toolCallsCount: toolCalls,
+        errorRate: toolCalls > 0 ? Math.round((toolErrors / toolCalls) * 1000) / 10 : 0,
+    };
+}
+
+/** Compute the Summary extras (trend, previous window, dimension series) from the mart tables. */
+async function computeSummaryExtrasFromMart(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    bucket: DomainHistoryBucket,
+    dimension: HistoryDimension,
+    activeBuckets: BucketedTokenRow[] | undefined,
+): Promise<SummaryExtras> {
+    const trendSel = resolveTrendSelector(sel);
+    const endDay = trendSel.until.slice(0, 10);
+    const { trend } = await historyBoardKpiWindowFromMart(db, trendSel);
+    // Previous-window KPIs come from the daily mart re-aggregated over the SHIFTED prior
+    // window (mirroring the rollup read path), never from a static all-time `'previous'` row.
+    const previousKpisRow = await historyBoardPreviousWindowKpiFromMart(db, sel);
+    const series = (d: MartDimension): Promise<BucketedTokenRow[]> => {
+        if (d === (dimension as MartDimension) && activeBuckets && activeBuckets.length > 0) {
+            return Promise.resolve(activeBuckets);
+        }
+        return historyBoardDimensionDailyFromMart(db, sel, d);
+    };
+    const [modelBuckets, sourceBuckets, toolBuckets, skillBuckets, skillBreakdownRaw] = await Promise.all([
+        series('model'),
+        series('source'),
+        series('tool'),
+        series('skill'),
+        historyBoardSkillBreakdownFromRollup(db, sel, bucket),
+    ]);
+    return {
+        kpiTrend: projectKpiTrend(trend, endDay),
+        previousKpis: previousKpisRow ? kpiWindowRowToKpis(previousKpisRow) : null,
+        modelTimeSeries: projectSkillTimeSeries(modelBuckets),
+        sourceTimeSeries: projectSkillTimeSeries(sourceBuckets),
+        toolTimeSeries: projectSkillTimeSeries(toolBuckets),
+        skillTimeSeries: projectSkillTimeSeries(skillBuckets),
+        skillBreakdown: {
+            bySkill: skillBreakdownRaw.bySkill,
+            bySource: skillBreakdownRaw.bySource,
+            byInvocationKind: skillBreakdownRaw.byInvocationKind,
+            trend: projectSkillTimeSeries(skillBreakdownRaw.trend),
+            fresh: true,
+        },
+    };
 }
 
 function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras): HistorySummaryResponse['data'] {
@@ -804,19 +903,38 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         const sel = toArtifactSelector(filter);
         const bucket = resolveBucket(filter?.bucket, filter?.range ?? '4h');
         const dimension = filter?.dimension ?? 'model';
-        if (await historyBoardRollupsFresh(db)) {
+        const fresh = await historyBoardRollupsFresh(db);
+        // 0743: route through the dimension-mart read path when the request qualifies, driven by
+        // the frozen four-condition routing rule. Non-qualifying requests resolve from the
+        // five-minute rollups (never the raw tables) while fresh.
+        const path = resolveSummaryReadPath({
+            fresh,
+            bucket,
+            rangeDays: rangeDaysFromSelector(sel),
+            dimension: dimension as HistoryDimension,
+            selector: sel,
+        });
+        if (path === 'mart') {
+            return await this.summaryFromMart(db, sel, bucket, dimension);
+        }
+        if (fresh) {
             const rows = await historyBoardSummaryFromRollup(db, sel, bucket, dimension);
             const extras = await computeSummaryExtras(db, sel, bucket, dimension, false, rows.buckets);
             return projectSummary(rows, extras);
         }
 
+        // Bounded stale-path fallback (R7): when rollups cannot be brought current the raw fallback
+        // is bounded by a named row cap and a named time-range window — never an unannounced
+        // full-corpus scan. Freshness is reported through the existing response fields.
+        const boundedSel = boundStaleSelector(sel);
         const [bucketRows, rollups, toolStats, skillStats, sessionRows] = await Promise.all([
-            bucketedTokenSeries(db, sel, bucket, dimension),
-            messageRollup(db, sel),
-            byTool(db, sel, 1_000_000),
-            bySkill(db, sel, 1_000_000),
-            bySession(db, sel, 1_000_000),
+            bucketedTokenSeries(db, boundedSel, bucket, dimension),
+            messageRollup(db, boundedSel),
+            byTool(db, boundedSel, STALE_FALLBACK_ROW_CAP),
+            bySkill(db, boundedSel, STALE_FALLBACK_ROW_CAP),
+            bySession(db, boundedSel, STALE_FALLBACK_ROW_CAP),
         ]);
+
         const models = new Map<string, { freshInputTokens: number; cacheReadTokens: number; outputTokens: number }>();
         const sources = new Map<string, { freshInputTokens: number; cacheReadTokens: number; outputTokens: number }>();
         const sourceModels = new Map<
@@ -848,7 +966,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             pair.outputTokens += row.outputTokens ?? 0;
             sourceModels.set(pairKey, pair);
         }
-        const extras = await computeSummaryExtras(db, sel, bucket, dimension, true, bucketRows);
+        const extras = await computeSummaryExtras(db, boundedSel, bucket, dimension, true, bucketRows);
         return projectSummary(
             {
                 buckets: bucketRows,
@@ -873,6 +991,18 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             },
             extras,
         );
+    }
+
+    /** Serve a mart-eligible Summary request from the day-grain dimension marts. */
+    private async summaryFromMart(
+        db: DbAdapter,
+        sel: ArtifactSelector,
+        bucket: DomainHistoryBucket,
+        dimension: HistoryDimension,
+    ): Promise<HistorySummaryResponse['data']> {
+        const rows = await historyBoardSummaryFromMart(db, sel, dimension as MartDimension);
+        const extras = await computeSummaryExtrasFromMart(db, sel, bucket, dimension, rows.buckets);
+        return projectSummary(rows, extras);
     }
 
     async getTimeline(input: HistoryTimelineInput): Promise<HistoryTimelineResponse['data']> {
@@ -1630,13 +1760,16 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             return projectSources(result.sources, result.daily, result.databaseBytes);
         }
 
-        const selector = toArtifactSelector();
+        // Bounded cold-start fallback (0743 R7): the raw source/tool/session analyzers never scan an
+        // unannounced full corpus — the selector is clamped to the named time-range cap and the
+        // session analyzer is bounded by the named row cap.
+        const selector = boundStaleSelector(toArtifactSelector());
         const [summaries, matrix, messageRows, toolRows, sessions, databaseBytes] = await Promise.all([
             sourceSummary(db, selector),
             dailyTokenMatrix(db, HISTORY_BOARD_ACTIVITY_DAYS),
             messageRollup(db, selector),
             toolRollup(db, selector),
-            bySession(db, selector, 1_000_000),
+            bySession(db, selector, STALE_FALLBACK_ROW_CAP),
             historyBoardDatabaseBytes(db),
         ]);
         const sources = new Map<string, HistoryBoardSourceRollupRow>();

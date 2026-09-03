@@ -97,6 +97,22 @@ export {
     topStepsByTokens,
 } from './forensic-query';
 export {
+    deriveDimensionMarts,
+    deriveDimensionMartsOps,
+    type HistoryBoardDimensionDailyRow,
+    type HistoryBoardKpiWindowRow,
+    historyBoardDimensionDailyFromMart,
+    historyBoardKpiWindowFromMart,
+    historyBoardKpiWindowRowsFromMart,
+    historyBoardPreviousWindowKpiFromMart,
+    historyBoardSummaryFromMart,
+    MART_DIMENSIONS,
+    MART_MIN_RANGE_DAYS,
+    type MartDimension,
+    resolveSummaryReadPath,
+    type SummaryReadPath,
+} from './history-board-marts';
+export {
     HISTORY_BOARD_ACTIVITY_DAYS,
     type HistoryBoardAggregateRow,
     type HistoryBoardDailyRollupRow,

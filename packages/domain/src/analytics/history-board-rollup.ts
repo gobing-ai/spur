@@ -20,6 +20,7 @@ import {
     topStepsByDuration,
     topStepsByTokens,
 } from './forensic-query';
+import { deriveDimensionMarts, deriveDimensionMartsOps } from './history-board-marts';
 import {
     ALL_ROLLUP_TABLES,
     BUCKETED_ROLLUP_TABLES,
@@ -30,7 +31,6 @@ import {
     rollupTableFreshness,
     writeRollupWatermark,
 } from './rollup-watermark';
-
 import { HISTORY_BOARD_ACTIVITY_DAYS, RESOLVED_TOOL_NAME_SQL } from './tool-name-sql';
 
 // Keep the FINAL row (MAX rowid) per request_id. A streaming response re-emits an
@@ -610,6 +610,9 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
     await db.batch(operations);
     // Record the refresh watermark per table so freshness reads off the importer cursor (task 0741).
     await writeAllWatermarks(db, await newestImportedAt(db));
+    // 0743: derive the day-grain dimension marts for every materialized day after the cold-start
+    // full rebuild so the Summary read path can serve qualifying requests from the mart.
+    await deriveDimensionMarts(db, await allMaterializedDays(db));
 }
 
 function appendRankedSteps(operations: DbBatchOp[], kind: string, rows: readonly StepRow[]): void {
@@ -1859,6 +1862,10 @@ export async function refreshHistoryBoardRollupsIncremental(db: DbAdapter): Prom
                     params: [table, b],
                 });
             }
+            // 0743: derive the day-grain dimension marts for this bucket's day INSIDE the same
+            // per-bucket transaction. A reader never observes the five-minute rollups and the
+            // daily mart disagreeing, because both land in the same atomic batch.
+            ops.push(...deriveDimensionMartsOps([day]));
             // Advance ONLY the bucket-level watermarks in the transaction. Advancing every
             // table here would make an interruption between the bucket loop and the post-pass
             // unrecoverable: the post-pass tables would already be marked clean (R7).

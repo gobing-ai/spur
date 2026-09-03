@@ -120,7 +120,7 @@ describe('db migrations', () => {
         });
 
         test('has foundation through History Board indexes, rollups, checkpoint identity, the history-refresh single-flight index, and the 0722 task↔session attribution table', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(37);
+            expect(CLI_MIGRATIONS).toHaveLength(38);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -171,6 +171,8 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[35]?.id).toBe('0035_spur_cli_history_measure_vector');
             // 0741: incremental rollup refresh watermark, bucket range, and imported_at index.
             expect(CLI_MIGRATIONS[36]?.id).toBe('0036_spur_cli_history_rollup_watermark');
+            // 0743: dimension marts and KPI-window tables.
+            expect(CLI_MIGRATIONS[37]?.id).toBe('0037_spur_cli_history_dimension_marts');
         });
 
         test('run-pid migration adds a pid column to runs', () => {
@@ -250,7 +252,7 @@ describe('db migrations', () => {
             // + 0032 history_board_skill_5m + 0033 importer_schema_version
             // + 0034 history_tool_identity.
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(33);
+            expect(applied).toBe(34);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -296,7 +298,7 @@ describe('db migrations', () => {
             // + 0030 history_board_covering_indexes + 0031 tool stats columns
             // + 0032 history_board_skill_5m + 0033 importer_schema_version
             // + 0034 history_tool_identity + 0035 history_measure_vector + 0036 rollup watermark.
-            expect(applied).toBe(36);
+            expect(applied).toBe(37);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -498,7 +500,7 @@ describe('db migrations', () => {
             // + 0032 history_board_skill_5m (applies)
             // + 0033 importer_schema_version (applies)
             // + 0034 history_tool_identity (applies).
-            expect(await applyCliMigrations(adapter)).toBe(28);
+            expect(await applyCliMigrations(adapter)).toBe(29);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );
@@ -558,7 +560,7 @@ describe('db migrations', () => {
         test('upgraded DB journaled through 0021 receives 0022-0036 and converges with a fresh DB', async () => {
             const upgraded = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(upgraded, CLI_MIGRATIONS.slice(0, 22));
-            expect(await applyCliMigrations(upgraded)).toBe(15);
+            expect(await applyCliMigrations(upgraded)).toBe(16);
 
             const fresh = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(fresh);

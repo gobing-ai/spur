@@ -24,6 +24,8 @@ export const SPUR_OWNED_HISTORY_TABLES: readonly string[] = [
     'history_board_skill_5m',
     'history_board_source_daily',
     'history_board_source_stats',
+    'history_board_dimension_daily',
+    'history_board_kpi_window',
     'history_board_tool_5m',
     'history_board_tool_stats',
 ];

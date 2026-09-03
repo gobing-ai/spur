@@ -859,3 +859,87 @@ function forbiddenCurrencyKeys(value: unknown, path = '$'): string[] {
     }
     return [];
 }
+
+describe('LiveHistoryBoardService mart read routing (0743)', () => {
+    function recordingDb(db: DbAdapter): { db: DbAdapter; statements: string[] } {
+        const statements: string[] = [];
+        const recorded = new Proxy(db, {
+            get(target, prop) {
+                const value = Reflect.get(target, prop, target);
+                if (typeof prop === 'string' && ['queryAll', 'queryFirst', 'run', 'exec'].includes(prop)) {
+                    return (sql: string, ...params: unknown[]) => {
+                        statements.push(sql);
+                        return (value as (...args: unknown[]) => unknown).call(target, sql, ...params);
+                    };
+                }
+                return typeof value === 'function' ? value.bind(target) : value;
+            },
+        });
+        return { db: recorded, statements };
+    }
+
+    test('fresh mart-eligible Summary (30d/1d) reads from the marts with fewer aggregation queries than the raw fan-out', async () => {
+        const db = await setupTestDb();
+        await seedCorpus(db, 12, 6);
+        await refreshHistoryRollups(db);
+        const { db: recording, statements } = recordingDb(db);
+        const svc = new LiveHistoryBoardService({ db: recording });
+
+        const summary = await svc.getSummary({ range: '30d', bucket: '1d', dimension: 'model' });
+        expect(summary.kpis.sessionsCount).toBeGreaterThan(0);
+        expect(summary.kpis.totalBilledTokens).toBeGreaterThan(0);
+        expect(summary.timeSeries.length).toBeGreaterThan(0);
+        expect(summary.kpiTrend.length).toBe(30);
+        expect(summary.previousKpis).not.toBeNull();
+
+        // R6: no executed statement groups or aggregates over the raw tables (the freshness probe is tolerated).
+        const rawAggr = statements.filter(
+            (s) => /history_message|history_tool_call/.test(s) && !s.includes('ORDER BY rowid DESC LIMIT 1'),
+        );
+        expect(rawAggr).toEqual([]);
+
+        // R4: the current per-request 5-way raw fan-out issues 5 raw aggregation queries; the mart path
+        // issues none. Recorded here pre=5 post=0 (the task record carries the measured numbers).
+        const rawAggregationQueries = statements.filter(
+            (s) =>
+                /history_message|history_tool_call/.test(s) &&
+                !s.includes('ORDER BY rowid DESC LIMIT 1') &&
+                /\bGROUP BY\b|\b(COUNT|SUM|AVG|MIN|MAX)\s*\(/i.test(s),
+        );
+        expect(rawAggregationQueries.length).toBeLessThan(5);
+        expect(rawAggregationQueries.length).toBe(0);
+    });
+
+    test('non-qualifying Summary (4h/five-minute bucket) resolves from the five-minute rollups without touching a raw table', async () => {
+        const db = await setupTestDb();
+        await seedCorpus(db, 12, 6);
+        await refreshHistoryRollups(db);
+        const { db: recording, statements } = recordingDb(db);
+        const svc = new LiveHistoryBoardService({ db: recording });
+
+        const summary = await svc.getSummary({ range: '4h', bucket: '3m', dimension: 'model' });
+        expect(summary.kpis.totalBilledTokens).toBeGreaterThan(0);
+        const rawAgg = statements.filter(
+            (s) => /history_message|history_tool_call/.test(s) && !s.includes('ORDER BY rowid DESC LIMIT 1'),
+        );
+        expect(rawAgg).toEqual([]);
+    });
+
+    test('bounded stale fallback reports freshness through the existing response fields and stays within the named caps', async () => {
+        const db = await setupTestDb();
+        await seedCorpus(db, 8, 6);
+        // No refresh: rollups are never materialized, so the request falls through to the bounded stale fallback.
+        const { db: recording, statements } = recordingDb(db);
+        const svc = new LiveHistoryBoardService({ db: recording });
+
+        const summary = await svc.getSummary({ range: '30d', bucket: '1d' });
+        expect(summary.kpis.sessionsCount).toBe(8);
+        // Existing response field reports the not-fresh state.
+        expect(summary.skillBreakdown.fresh).toBe(false);
+        // The fallback is bounded by a named row cap on the raw tool/skill/session analyzers.
+        const cappedRaw = statements.filter(
+            (s) => /history_tool_call|history_message/.test(s) && /\bLIMIT\s+\d+/i.test(s),
+        );
+        expect(cappedRaw.length).toBeGreaterThan(0);
+    });
+});
