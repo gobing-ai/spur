@@ -10,7 +10,7 @@ import { importerSchemaCheck } from './importer-schema-check';
 describe('importer-schema-check (0748 R3/R5)', () => {
     test('returns 0 when database file does not exist', async () => {
         const nonExistent = join(tmpdir(), `nonexistent-db-${Date.now()}.db`);
-        const code = await importerSchemaCheck(nonExistent);
+        const code = await importerSchemaCheck(nonExistent, { quiet: true });
         expect(code).toBe(0);
     });
 
@@ -35,7 +35,7 @@ describe('importer-schema-check (0748 R3/R5)', () => {
         ]);
         db.close();
 
-        const code = await importerSchemaCheck(dbPath);
+        const code = await importerSchemaCheck(dbPath, { quiet: true });
         expect(code).toBe(0);
 
         await rm(dir, { recursive: true });
@@ -57,7 +57,7 @@ describe('importer-schema-check (0748 R3/R5)', () => {
         ]);
         db.close();
 
-        const code = await importerSchemaCheck(dbPath);
+        const code = await importerSchemaCheck(dbPath, { quiet: true });
         expect(code).toBe(1);
 
         await rm(dir, { recursive: true });
