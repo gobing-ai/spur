@@ -4,7 +4,7 @@ name: "Importer schema version: exported constant, ledger record, and mismatch c
 status: done
 template: feature-impl
 created_at: 2026-09-03T16:45:42.303Z
-updated_at: "2026-09-03T18:38:19.295Z"
+updated_at: "2026-09-03T20:05:57.235Z"
 feature_id: E92
 priority: P1
 tags: ["history", "schema", "guard"]
@@ -152,20 +152,24 @@ Exported importer schema version from @gobing-ai/ts-llm-jsonl-importer, recorded
 | `packages/domain/tests/analytics/importer-schema-version.test.ts:48` | Add tests verifying recorded version and mismatch detection |
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R3 — The importer exports a schema version that changes with its schema | MET | packages/llm-jsonl-importer exports HISTORY_IMPORT_SCHEMA_VERSION; tests/schema-version.test.ts pins hash of HISTORY_IMPORT_SCHEMA_SQL to version. |
-| R4 — Applying the importer schema records its version in the Spur migration ledger | MET | packages/domain/src/migrations.ts: migration 0033_spur_cli_importer_schema_version records importer_schema@0.4.55 in __spur_cli_migrations; verified in packages/domain/tests/analytics/importer-schema-version.test.ts. |
-| R5 — A schema version mismatch fails a check rather than a refresh | MET | scripts/commands/importer-schema-check.ts runs before lint in spur-check chain; verified in scripts/commands/importer-schema-check.test.ts. |
-| R9 — A database created by an older importer version is detected, not silently degraded | MET | packages/domain/tests/analytics/importer-schema-version.test.ts: checkImporterSchemaVersion detects 0.4.51 DB, identifies missing history_skill_call table, and formats remediation. |
+|-------------|--------|----------|
+| R3 | MET | Barrel exports `HISTORY_IMPORT_SCHEMA_VERSION`: @gobing-ai/ts-llm-jsonl-importer `src/index.ts` — re-export from `schema-sql`; installed 0.4.55. Bump-or-fail hash-pin test passes fresh this run: @gobing-ai/ts-llm-jsonl-importer `tests/schema-version.test.ts` — 3 pass, 0 fail. |
+| R4 | MET | `packages/domain/src/migrations.ts:947` — migration `0033_spur_cli_importer_schema_version` inserts `importer_schema@<HISTORY_IMPORT_SCHEMA_VERSION>` into `__spur_cli_migrations`; `:1004` re-writes it in the `applyCliMigrations` provisioning path so no import creates history tables without recording the version. Test `applying migrations records importer_schema version in migration ledger` at `packages/domain/tests/analytics/importer-schema-version.test.ts:119` — suite ran fresh: 8 pass, 0 fail. |
+| R5 | MET | `scripts/commands/importer-schema-check.ts` wired into the `spur-check` chain before `lint` (`package.json:80`); live golden path run this turn: `bun run importer-schema-check` → `importer-schema-check OK — recorded version matches installed version.`, exit 0. Mismatch formatting covered by `scripts/commands/importer-schema-check.test.ts` — 3 pass, 0 fail (fresh). |
+| R9 | MET | `packages/domain/tests/analytics/importer-schema-version.test.ts:79` — test `R4/R5/R9: detects database created with older importer version and reports missing tables` reproduces the real E91 0.4.51 case (`history_skill_call` absent) and asserts drift names the missing structure plus remediation; suite ran fresh: 8 pass, 0 fail. |
 
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R3 — The importer exports a schema version that changes with its schema | MET | test | @gobing-ai/ts-llm-jsonl-importer `tests/schema-version.test.ts` — 3 pass, 0 fail (fresh); barrel export at @gobing-ai/ts-llm-jsonl-importer `src/index.ts` |
+| Scenario: R4 — Applying the importer schema records its version in the Spur migration ledger | MET | test | `packages/domain/tests/analytics/importer-schema-version.test.ts:119` — 8 pass, 0 fail (fresh); writer at `packages/domain/src/migrations.ts:947` and `:1004` |
+| Scenario: R5 — A schema version mismatch fails a check rather than a refresh | MET | command | `bun run importer-schema-check` → exit 0, `recorded version matches installed version` (fresh this turn); chain position before `lint` at `package.json:80`; mismatch paths in `scripts/commands/importer-schema-check.test.ts` — 3 pass, 0 fail |
+| Scenario: R9 — A database created by an older importer version is detected, not silently degraded | MET | test | `packages/domain/tests/analytics/importer-schema-version.test.ts:79` — 8 pass, 0 fail (fresh) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 <!-- spur:record-review -->
 
@@ -173,8 +177,8 @@ Exported importer schema version from @gobing-ai/ts-llm-jsonl-importer, recorded
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur-check | — |  |
-
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 
 - Parent feature: `docs/features/E92_history-schema-ddl-ownership-repatriation.md`

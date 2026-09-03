@@ -4,7 +4,7 @@ name: "Source-to-table registry replacing hardcoded table lists, with an ownersh
 status: done
 template: feature-impl
 created_at: 2026-09-03T16:45:42.330Z
-updated_at: "2026-09-03T18:44:14.752Z"
+updated_at: "2026-09-03T20:05:57.590Z"
 feature_id: E92
 priority: P2
 tags: ["history", "schema", "registry"]
@@ -138,18 +138,20 @@ Replaced hardcoded importer tables in history-reset with IMPORTER_OWNED_TABLES r
 | `packages/domain/tests/dao/ownership-conformance.test.ts:47` | Add ownership conformance tests over migration DDL and table registry |
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R6 — Raw landing table names come from the importer, not a hardcoded list | MET | packages/domain/src/analytics/history-reset.ts composes HISTORY_RESET_TABLES from IMPORTER_OWNED_TABLES; packages/domain/tests/dao/ownership-conformance.test.ts verifies 15 importer-owned + 14 spur-owned = 29 tables, regression match, and dynamic upstream source coverage. |
-| R8 — Ownership is enforced, not merely documented | MET | packages/domain/tests/dao/ownership-conformance.test.ts asserts CLI_MIGRATIONS obeys ADR-105: no CREATE TABLE or ALTER TABLE on importer-owned tables without exception; OWNERSHIP_EXCEPTIONS bounded to grandfathered 0024, 0025, 0026; CREATE INDEX permitted unconditionally. |
+| R6 | MET | `packages/domain/src/analytics/history-reset.ts:37` — `HISTORY_RESET_TABLES = [...IMPORTER_OWNED_TABLES, ...SPUR_OWNED_HISTORY_TABLES]`; registry exported from the importer barrel: @gobing-ai/ts-llm-jsonl-importer `src/index.ts` — `IMPORTER_OWNED_TABLES` and `TYPED_HISTORY_TABLES`; installed 0.4.55. No-Spur-change proof: test `R1c: upstream-added source landing table automatically covered without Spur edit` at `packages/domain/tests/dao/ownership-conformance.test.ts:158`; regression tests `:116` (29 = 15 importer + 14 Spur) and `:122` (exact names). Suite ran fresh: 7 pass, 0 fail. |
+| R8 | MET | `packages/domain/tests/dao/ownership-conformance.test.ts:55` — fails on any `CLI_MIGRATIONS` CREATE TABLE / ALTER TABLE ADD COLUMN targeting an importer-owned table without a recorded exception; `:46` bounds `OWNERSHIP_EXCEPTIONS` to exactly the 3 grandfathered migrations (`0024`/`0025`/`0026`, retired by 0747); `:97` permits CREATE INDEX unconditionally (axis three). Suite ran fresh: 7 pass, 0 fail. |
 
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R6 — Raw landing table names come from the importer, not a hardcoded list | MET | test | `packages/domain/tests/dao/ownership-conformance.test.ts:158` (R1c no-Spur-edit coverage), `:116`, `:122` — 7 pass, 0 fail (fresh); composition at `packages/domain/src/analytics/history-reset.ts:37` |
+| Scenario: R8 — Ownership is enforced, not merely documented | MET | test | `packages/domain/tests/dao/ownership-conformance.test.ts:55` (violation fails), `:46` (exceptions = 3), `:97` (indexes permitted) — 7 pass, 0 fail (fresh) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 <!-- spur:record-review -->
 
@@ -157,8 +159,8 @@ Replaced hardcoded importer tables in history-reset with IMPORTER_OWNED_TABLES r
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur-check | — |  |
-
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 
 - Parent feature: `docs/features/E92_history-schema-ddl-ownership-repatriation.md`

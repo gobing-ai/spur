@@ -4,7 +4,7 @@ name: "Repatriate importer-owned columns to the importer schema without rewritin
 status: done
 template: feature-impl
 created_at: 2026-09-03T16:45:42.218Z
-updated_at: "2026-09-03T18:26:41.111Z"
+updated_at: "2026-09-03T19:53:04.121Z"
 feature_id: E92
 priority: P1
 tags: ["history", "schema", "ownership"]
@@ -156,20 +156,24 @@ Repatriated importer-owned column DDL and ETL pass to `@gobing-ai/ts-llm-jsonl-i
 | `packages/domain/tests/dao/migrations.test.ts:800` | Verify history schema migrations and upstream DDL convergence |
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 — Importer checkpoint identity columns are defined by the importer | MET | packages/domain/tests/dao/migrations.test.ts:800 applyHistoryImportSchema provisions history_import_checkpoint with source_size (INTEGER) and source_mtime_ms (REAL); incremental write succeeds. |
-| R2 — Assistant duration provenance is written at import, not derived at read time | MET | packages/domain/tests/dao/migrations.test.ts:835 history_message carries duration_source TEXT from upstream DDL; deriveAssistantDurations relocated upstream to @gobing-ai/ts-llm-jsonl-importer; downstream repointed in packages/app/src/services/history-service.ts:528. |
-| R7 — Repatriation does not rewrite applied migration history | MET | packages/domain/tests/dao/migrations.test.ts:845 migrations 0024, 0025, 0026 remain unmodified in CLI_MIGRATIONS, apply safely as guarded no-ops over importer-seeded DB, and record in __spur_cli_migrations. |
-| R10 — Upstream and downstream schemas converge to the same shape | MET | packages/domain/tests/dao/migrations.test.ts:875 PRAGMA table_info comparison across history_import_checkpoint, history_message, history_tool_call, history_skill_call matches exactly between importer-schema-only DB and importer-schema-plus-migrations DB. |
+|-------------|--------|----------|
+| R1 | MET | `packages/domain/tests/dao/migrations.test.ts:788` — builds a DB from `applyHistoryImportSchema` alone, asserts `history_import_checkpoint.source_size` (INTEGER) and `.source_mtime_ms` (REAL), and writes/reads an incremental checkpoint row; ran fresh this run (`cd packages/domain && bun test tests/dao/migrations.test.ts` → 53 pass, 0 fail). |
+| R2 | MET | `packages/domain/tests/dao/migrations.test.ts:823` — `history_message.duration_source TEXT` comes from importer DDL. Producer relocated upstream: Spur copy `packages/domain/src/analytics/assistant-duration.ts` deleted, `packages/app/src/services/history-service.ts:71` imports `deriveAssistantDurations` from `@gobing-ai/ts-llm-jsonl-importer` and `:528` invokes it; installed importer 0.4.55 dist carries `assistant-duration.js` and the barrel export. Ported suite passes fresh this run: @gobing-ai/ts-llm-jsonl-importer `tests/assistant-duration.test.ts` — 6 pass, 0 fail. No read path recomputes provenance (`packages/domain/src/analytics/forensic-query.ts:926` still reads the column byte-identically). |
+| R7 | MET | `packages/domain/tests/dao/migrations.test.ts:834` — `0024`/`0025`/`0026` remain defined in `CLI_MIGRATIONS` unmodified, apply as guarded no-ops over an importer-seeded DB, and are journaled in `__spur_cli_migrations`; no column dropped, duplicated, or re-typed (convergence test at :863). |
+| R10 | MET | `packages/domain/tests/dao/migrations.test.ts:863` — `PRAGMA table_info` compared across `history_import_checkpoint`, `history_message`, `history_tool_call`, `history_skill_call` between importer-schema-only and importer-schema-plus-CLI-migrations DBs; column names and declared types match exactly. |
 
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Importer checkpoint identity columns are defined by the importer | MET | test | `packages/domain/tests/dao/migrations.test.ts:788` — fresh run 53 pass, 0 fail |
+| Scenario: R2 — Assistant duration provenance is written at import, not derived at read time | MET | test | `packages/domain/tests/dao/migrations.test.ts:823` + @gobing-ai/ts-llm-jsonl-importer `tests/assistant-duration.test.ts` — 6 pass, 0 fail (fresh) |
+| Scenario: R7 — Repatriation does not rewrite applied migration history | MET | test | `packages/domain/tests/dao/migrations.test.ts:834` — fresh run 53 pass, 0 fail |
+| Scenario: R10 — Upstream and downstream schemas converge to the same shape | MET | test | `packages/domain/tests/dao/migrations.test.ts:863` — fresh run 53 pass, 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 <!-- spur:record-review -->
 
@@ -177,8 +181,8 @@ Repatriated importer-owned column DDL and ETL pass to `@gobing-ai/ts-llm-jsonl-i
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur-check | — |  |
-
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 
 - Parent feature: `docs/features/E92_history-schema-ddl-ownership-repatriation.md`
