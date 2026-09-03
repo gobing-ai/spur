@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { AgentIcon } from './AgentIcon';
 import { fmtDur, fmtInt, fmtMs, fmtTok } from './charts';
 import TimelineScrubber from './TimelineScrubber';
-import { ToolCallTag } from './ToolCallDetail';
+import { renderTimelinePayload, ToolCallTag } from './ToolCallDetail';
 
 export interface TimelineTabProps {
     data?: HistoryTimelineResponse['data'];
@@ -845,7 +845,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                         id={drawerId}
                                                         className="mt-1 p-3 bg-[#0d141f] text-slate-100 rounded-md font-mono text-xs whitespace-pre-wrap overflow-x-auto border border-white/10 relative z-10"
                                                     >
-                                                        {fullText}
+                                                        {renderTimelinePayload(fullText)}
                                                     </div>
                                                 )}
                                             </div>
@@ -982,7 +982,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                             id={drawerId}
                                                             className="p-3 bg-[#0d141f] text-slate-100 font-mono text-xs whitespace-pre-wrap overflow-x-auto rounded-b-xl border-t border-base-content/10 relative z-10"
                                                         >
-                                                            {ev.payload}
+                                                            {renderTimelinePayload(ev.payload, ev.toolName)}
                                                         </div>
                                                     )}
                                                 </div>
@@ -1102,7 +1102,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                                                             id={drawerId}
                                                             className="p-3 bg-[#0d141f] text-slate-100 font-mono text-xs whitespace-pre-wrap overflow-x-auto rounded-b-xl border-t border-base-content/10 relative z-10"
                                                         >
-                                                            {ev.payload}
+                                                            {renderTimelinePayload(ev.payload, presentation.label)}
                                                         </div>
                                                     )}
                                                 </div>

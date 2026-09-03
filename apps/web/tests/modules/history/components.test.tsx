@@ -15,6 +15,7 @@ import SessionsTab from '../../../src/modules/history/SessionsTab';
 import SourcesTab from '../../../src/modules/history/SourcesTab';
 import SummaryTab from '../../../src/modules/history/SummaryTab';
 import TimelineTab from '../../../src/modules/history/TimelineTab';
+import { detectTimelineSyntaxLanguage, renderTimelinePayload } from '../../../src/modules/history/ToolCallDetail';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 beforeAll(registerHappyDom);
@@ -1377,5 +1378,45 @@ describe('History Board components', () => {
             target: { value: JSON.stringify(['agy', 'shared']) },
         });
         expect(selected).toEqual({ source: 'agy', id: 'shared' });
+    });
+
+    test('Timeline payload syntax highlighting detects bash, XML, JSON, and Markdown accurately', () => {
+        // 1. Bash / Shell detection
+        expect(detectTimelineSyntaxLanguage('git commit -m "feat: hello"', 'bash')).toBe('bash');
+        expect(detectTimelineSyntaxLanguage('bun test --coverage', 'Bash')).toBe('bash');
+        expect(detectTimelineSyntaxLanguage('echo "test" | grep t', 'Shell')).toBe('bash');
+        expect(detectTimelineSyntaxLanguage('ls -la', 'shell')).toBe('bash');
+
+        // 2. XML detection (< ... >)
+        expect(detectTimelineSyntaxLanguage('<system_prompt>Be concise</system_prompt>')).toBe('xml');
+        expect(detectTimelineSyntaxLanguage('   <antigravity_thought>\nreasoning\n</antigravity_thought>   ')).toBe(
+            'xml',
+        );
+
+        // 3. JSON detection ({ ... })
+        expect(detectTimelineSyntaxLanguage('{"command": "bun test", "exitCode": 0}')).toBe('json');
+        expect(detectTimelineSyntaxLanguage('   {\n  "target": "apps/web"\n}   ')).toBe('json');
+
+        // 4. Markdown detection (first line is ---)
+        expect(detectTimelineSyntaxLanguage('---\ntitle: Feature Plan\n---\n# Overview')).toBe('markdown');
+        expect(detectTimelineSyntaxLanguage('   ---\nlayout: post\n---   ')).toBe('markdown');
+
+        // 5. Plain text fallback
+        expect(detectTimelineSyntaxLanguage('Just a normal conversational line.')).toBe('text');
+
+        // 6. Renders highlighted JSX tree without errors
+        const bashNode = render(<div>{renderTimelinePayload('git commit -m "init"', 'bash')}</div>);
+        expect(bashNode.container.textContent).toContain('git');
+
+        const xmlNode = render(<div>{renderTimelinePayload('<root status="active">Hello</root>')}</div>);
+        expect(xmlNode.container.textContent).toContain('root');
+        expect(xmlNode.container.textContent).toContain('Hello');
+
+        const jsonNode = render(<div>{renderTimelinePayload('{"enabled": true, "count": 10}')}</div>);
+        expect(jsonNode.container.textContent).toContain('enabled');
+
+        const mdNode = render(<div>{renderTimelinePayload('---\nauthor: Robin\n---\n# Header')}</div>);
+        expect(mdNode.container.textContent).toContain('author');
+        expect(mdNode.container.textContent).toContain('Header');
     });
 });
