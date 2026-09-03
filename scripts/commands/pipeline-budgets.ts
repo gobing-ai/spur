@@ -254,3 +254,7 @@ export async function checkPipelineBudgets(argv: string[]): Promise<number> {
     );
     return failures === 0 ? 0 : 1;
 }
+
+if (import.meta.main) {
+    process.exit(await checkPipelineBudgets(process.argv.slice(2)));
+}

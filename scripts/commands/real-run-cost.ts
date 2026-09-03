@@ -316,3 +316,7 @@ export async function realRunCost(argv: string[]): Promise<number> {
     }
     return 0;
 }
+
+if (import.meta.main) {
+    process.exit(await realRunCost(process.argv.slice(2)));
+}
