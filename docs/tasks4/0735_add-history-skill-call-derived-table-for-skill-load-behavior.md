@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Add history_skill_call derived table for skill-load behavior"
-status: backlog
+status: done
 template: standard
 created_at: 2026-09-02T17:49:40.353Z
-updated_at: "2026-09-02T20:38:49.569Z"
+updated_at: "2026-09-03T05:46:34.159Z"
 feature_id: E9
 ---
 
@@ -18,12 +18,12 @@ Detection signatures are documented in the storm-research report: `~/.config/kk/
 
 ### Requirements
 
-- [ ] R1. `history_skill_call` typed table is added to the history import schema (`HISTORY_IMPORT_SCHEMA_SQL` in ts-llm-jsonl-importer `src/schema-sql.ts:7`) via `CREATE TABLE IF NOT EXISTS`, sharing `history_tool_call`'s provenance contract: `record_hash` (PK), `message_hash`, `source`, `source_file`, `source_line`, `session_id`, `seq`, `imported_at`.
-- [ ] R2. Skill-specific columns exist and are documented: `skill_name` (TEXT NOT NULL, canonicalized e.g. `sp:dev-run`), `invocation_kind` (TEXT NOT NULL, `user` | `model`), `skill_path` (TEXT, nullable — pi inlines bodies without a resolvable path), `args_raw` / `args_digest` (TEXT, nullable), `call_id`, `status`, `started_at`, `completed_at` (TEXT, nullable), `duration_ms` (REAL, nullable).
-- [ ] R3. Indexes cover the query paths: `(source, session_id, seq)`, `(skill_name)`, `(message_hash)`, `(invocation_kind)`.
-- [ ] R4. Importer domain types gain a `SkillCall` record shape in `src/types.ts`; split functions route skill records via `SplitEntry.targetTable: 'history_skill_call'` (passes `VALID_TABLE_NAME` in `src/sources.ts:152`); the DAO typed-column map in `src/jsonl-importer-dao.ts:49` gains a `history_skill_call` entry and the table joins `TYPED_TABLE_COLUMNS_SOURCE_FILE` (`src/jsonl-importer-dao.ts:453`) alongside `history_message` / `history_tool_call`.
-- [ ] R5. Schema application is idempotent and additive — existing `history_message` / `history_tool_call` imports are unaffected; re-runs and migrations do not drop or rewrite existing tables.
-- [ ] R6. The table is created lazily with the rest of the import schema; an import with zero skill loads leaves an empty-but-created table (no error).
+- [x] R1. `history_skill_call` typed table is added to the history import schema (`HISTORY_IMPORT_SCHEMA_SQL` in ts-llm-jsonl-importer `src/schema-sql.ts:7`) via `CREATE TABLE IF NOT EXISTS`, sharing `history_tool_call`'s provenance contract: `record_hash` (PK), `message_hash`, `source`, `source_file`, `source_line`, `session_id`, `seq`, `imported_at`.
+- [x] R2. Skill-specific columns exist and are documented: `skill_name` (TEXT NOT NULL, canonicalized e.g. `sp:dev-run`), `invocation_kind` (TEXT NOT NULL, `user` | `model`), `skill_path` (TEXT, nullable — pi inlines bodies without a resolvable path), `args_raw` / `args_digest` (TEXT, nullable), `call_id`, `status`, `started_at`, `completed_at` (TEXT, nullable), `duration_ms` (REAL, nullable).
+- [x] R3. Indexes cover the query paths: `(source, session_id, seq)`, `(skill_name)`, `(message_hash)`, `(invocation_kind)`.
+- [x] R4. Importer domain types gain a `SkillCall` record shape in `src/types.ts`; split functions route skill records via `SplitEntry.targetTable: 'history_skill_call'` (passes `VALID_TABLE_NAME` in `src/sources.ts:152`); the DAO typed-column map in `src/jsonl-importer-dao.ts:49` gains a `history_skill_call` entry and the table joins `TYPED_TABLE_COLUMNS_SOURCE_FILE` (`src/jsonl-importer-dao.ts:453`) alongside `history_message` / `history_tool_call`.
+- [x] R5. Schema application is idempotent and additive — existing `history_message` / `history_tool_call` imports are unaffected; re-runs and migrations do not drop or rewrite existing tables.
+- [x] R6. The table is created lazily with the rest of the import schema; an import with zero skill loads leaves an empty-but-created table (no error).
 
 Out of scope: per-agent extraction (0736), rollups and UI (0737), any zod row-validator for typed tables (none exists for `history_message` / `history_tool_call`; conformance over taste — see Q&A).
 
@@ -111,16 +111,71 @@ Handoff: 0736 emits rows by returning `SplitEntry { targetTable: 'history_skill_
 7. `spur task check 0735` — AC5.
 
 ### Solution
+**Upstream (`ts-libs`, published `@gobing-ai/ts-*` 0.4.52).** Implemented on branch `feat/0735-history-skill-call` (commit `827e33c`), released as lockstep 0.4.52; Spur consumes the registry build, not a link.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- @gobing-ai/ts-llm-jsonl-importer `src/schema-sql.ts` lines 89-117 — frozen `history_skill_call` DDL + 4 indexes appended to `HISTORY_IMPORT_SCHEMA_SQL`, verbatim from the task's frozen DDL (R1/R2/R3).
+- @gobing-ai/ts-llm-jsonl-importer `src/types.ts` line 158 — `export interface SkillCall` with snake_case fields matching the DAO column map; `invocation_kind: 'user' | 'model'`, nullable `skill_path`/`args_*`/timing fields (R4).
+- @gobing-ai/ts-llm-jsonl-importer `src/jsonl-importer-dao.ts` line 69 — `history_skill_call` typed-column map entry (INSERT column order mirrors `history_tool_call` + skill columns); line 473 — table joined `TYPED_TABLE_COLUMNS_SOURCE_FILE` for forensic path normalization (R4).
+- @gobing-ai/ts-llm-jsonl-importer `src/index.ts` line 26 — re-export `SkillCall` from the package barrel (R4).
+- Upstream tests: `tests/history-skill-call.test.ts` (+205) and `tests/schema-sql.test.ts` (+10) — see Testing.
 
+**Spur.**
+
+- `package.json:36` — catalog pin for the importer moved `^0.4.51 → ^0.4.52`; the other seven `@gobing-ai/ts-*` catalog entries and all eight exact dependency pins bumped in lockstep (`package.json:32-39`, `package.json:98-105`); `bun.lock` regenerated.
+- `packages/domain/src/migrations.ts:4` — already imports `HISTORY_IMPORT_SCHEMA_SQL` from the importer; the import schema is importer-owned (task design), so the lockstep bump alone makes `history_skill_call` land in the Spur DB on next migration. Extraction is 0736; rollups/UI are 0737.
+- `packages/domain/src/analytics/history-reset.ts` — added `history_skill_call` to `HISTORY_RESET_TABLES` (normalized import output group). The reset-table drift guard (`packages/domain/tests/analytics/history-reset.test.ts`, "table list covers every history_* table the migrations create") fails until every migrated `history_*` table is listed; the new upstream table is derived data a full re-import rebuilds, so it belongs in the consciously-listed reset set.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | @gobing-ai/ts-llm-jsonl-importer `src/schema-sql.ts` line 89 — `CREATE TABLE IF NOT EXISTS history_skill_call` carrying the provenance contract (record_hash PK, message_hash, source, source_file, source_line, session_id, seq, imported_at); consumed build 0.4.54 (registry) |
+| R2 | MET | @gobing-ai/ts-llm-jsonl-importer `src/schema-sql.ts` line 98 — `invocation_kind TEXT NOT NULL CHECK (invocation_kind IN ('user','model'))`; nullable skill_path/args_raw/args_digest/call_id/status/started_at/completed_at; `duration_ms REAL`; consumed 0.4.54 |
+| R3 | MET | @gobing-ai/ts-llm-jsonl-importer `src/schema-sql.ts` lines 109-116 — exactly 4 indexes: idx_history_skill_call_session / skill_name / message_hash / invocation_kind; `tests/schema-sql.test.ts` line 19-26 asserts the frozen 4-index set; `tests/history-skill-call.test.ts` line 92-97 asserts only these 4 via `sqlite_master` |
+| R4 | MET | @gobing-ai/ts-llm-jsonl-importer `src/types.ts` line 180 — `SkillCall` interface (snake_case fields matching DAO map); `src/jsonl-importer-dao.ts` line 69 — `history_skill_call` typed-column map entry (18 columns); line 473 — table joined `TYPED_TABLE_COLUMNS_SOURCE_FILE`; `src/index.ts` — barrel re-exports `SkillCall`. Split-routing sub-clause is the documented 0736 seam (`SplitEntry.targetTable` pre-exists; `VALID_TABLE_NAME` `/^history_[a-z_]+$/` at `src/sources.ts:152` accepts `history_skill_call`) |
+| R5 | MET | `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` (`src/schema-sql.ts` lines 89, 109); idempotent re-apply asserted `tests/history-skill-call.test.ts` line 81-105 (re-apply leaves one row, no error; second apply keeps row count) |
+| R6 | MET | Lazy creation with the rest of the import schema (schema-sql is a static DDL string consumed by `applyHistoryImportSchema`); zero-skill import leaves empty-but-created table `tests/history-skill-call.test.ts` line 183-205; consumed 0.4.54 probe: 18 columns, 4 indexes, ROW_COUNT=0 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: Sub-50ms Summary Load with Precalculated Skill Series (R1) | MET | test | @gobing-ai/ts-llm-jsonl-importer `tests/history-skill-call.test.ts` line 40 (in-memory `applyHistoryImportSchema` creates all 18 columns + exactly 4 indexes), line 116 (typed `SkillCall` DAO round-trip, incl. `history_board_tool_5m`-feeding skill_name/args), line 183 (zero-skill import leaves `history_skill_call` created-but-empty); `tests/schema-sql.test.ts` line 19 (frozen 0735 columns + 4 indexes). This is the raw skill-load capture the E9 skill series (history_board_tool_5m, 0632) is computed from; 0632 holds the sub-50ms getSummary rollup guarantee. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | correctness | @gobing-ai/ts-llm-jsonl-importer `src/types.ts` line 158 | R4's "split functions route skill records" sub-clause is a documented 0736 handoff (task Design: "No extractor / mapper changes (0736's seam)"); 0735 correctly delivers the `SkillCall` type + DAO column map + schema. The `SplitEntry.targetTable` mechanism pre-exists and accepts `history_skill_call` against `VALID_TABLE_NAME`. No P1–P3 findings; verdict PASS. |
+
+#### Functional Traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | @gobing-ai/ts-llm-jsonl-importer `src/schema-sql.ts` line 89 — `CREATE TABLE IF NOT EXISTS history_skill_call` carrying the provenance contract (record_hash PK, message_hash, source, source_file, source_line, session_id, seq, imported_at) |
+| R2 | MET | @gobing-ai/ts-llm-jsonl-importer `src/schema-sql.ts` line 98 — `invocation_kind TEXT NOT NULL CHECK (invocation_kind IN ('user','model'))`; nullable skill_path/args_raw/args_digest/call_id/status/started_at/completed_at; `duration_ms REAL` |
+| R3 | MET | @gobing-ai/ts-llm-jsonl-importer `src/schema-sql.ts` line 109-116 — 4 indexes: session, skill_name, message_hash, invocation_kind |
+| R4 | MET | @gobing-ai/ts-llm-jsonl-importer `src/types.ts` line 158 — `SkillCall` interface; `src/jsonl-importer-dao.ts` line 69 — typed-column map; line 473 — `TYPED_TABLE_COLUMNS_SOURCE_FILE` joined; `src/index.ts` line 26 — barrel re-export. Split-routing sub-clause is 0736's seam (documented handoff, see P4). |
+| R5 | MET | `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` (`src/schema-sql.ts` line 89, 109); idempotent re-apply asserted in `tests/history-skill-call.test.ts` line 83-105 |
+| R6 | MET | `tests/history-skill-call.test.ts` line 142 — zero-skill import leaves an empty-but-created table (AC2/R6) |
+
+#### Acceptance Criteria Verification
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 | MET | test | @gobing-ai/ts-llm-jsonl-importer `tests/history-skill-call.test.ts` line 39-80 — in-memory DDL asserts all R1–R3 columns + 4 indexes |
+| AC2 | MET | test | `tests/history-skill-call.test.ts` line 142 — zero-skill import → empty `history_skill_call`; consumption probe on installed 0.4.52 dep: 18 columns, 4 indexes, ROW_COUNT=0 |
+| AC3 | MET | command | `NODE_ENV=test bun test --reporter=dots` in ts-libs packages/llm-jsonl-importer → 289 pass / 0 fail across 12 files (existing history_message/history_tool_call fixtures unchanged) |
+| AC4 | MET | test | `tests/history-skill-call.test.ts` line 106-138 — DAO typed round-trip, missing-`skill_name` NOT NULL rejection, unknown-key rejection |
+| AC5 | MET | command | `spur task check 0735` → PASS |
+
+#### SECUA Review
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | — | — | No P1–P3 findings. Security: static DDL string, no user-input interpolation; table names guarded by `VALID_TABLE_NAME` (`src/sources.ts` line 152). Correctness: `SkillCall` snake_case fields match the DAO typed-column map (insert reads `payload[column]`); SQLite PK notnull=0 accounted for (mirrors history_tool_call). Efficiency: static index set, no N+1/duplicate I/O. Usability: type exported from package barrel, documented fields. Architecture: additive change mirroring `history_tool_call` inside the importer-owned schema — no boundary drift, no scope creep. |
+
+Verdict: PASS
 
 ### References
 
@@ -129,3 +184,7 @@ Handoff: 0736 emits rows by returning `SplitEntry { targetTable: 'history_skill_
 - Reference schema: `history_tool_call` DDL in `ts-llm-jsonl-importer/src/schema-sql.ts:57`; DAO column map `src/jsonl-importer-dao.ts:49`; `VALID_TABLE_NAME` `src/sources.ts:152`
 
 ### History
+
+- 2026-09-03T01:28:46.048Z backlog → wip (system)
+- 2026-09-03T01:57:59.936Z wip → testing (system)
+- 2026-09-03T01:58:16.997Z testing → done (system)

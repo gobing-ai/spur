@@ -284,6 +284,14 @@ describe('historyContract', () => {
                         series: { 'sp-dev-run': 12 },
                     },
                 ],
+                skillBreakdown: {
+                    bySkill: [{ skillName: 'sp-dev-run', calls: 12 }],
+                    bySource: [{ source: 'claude', calls: 12 }],
+                    byInvocationKind: [{ invocationKind: 'model', calls: 12 }],
+                    trend: [
+                        { bucketStart: '2026-08-20T00:00:00.000Z', cacheHitRatio: 85, series: { 'sp-dev-run': 12 } },
+                    ],
+                },
             },
         });
         expect(parsed.ok).toBe(true);
@@ -316,6 +324,7 @@ describe('historyContract', () => {
                 kpiTrend: [],
                 previousKpis: null,
                 skillTimeSeries: [],
+                skillBreakdown: { bySkill: [], bySource: [], byInvocationKind: [], trend: [] },
             },
         }).data;
 
@@ -345,6 +354,7 @@ describe('historyContract', () => {
             kpiTrend: [],
             previousKpis: null,
             skillTimeSeries: [],
+            skillBreakdown: { bySkill: [], bySource: [], byInvocationKind: [], trend: [] },
         };
         expect(historySummaryResponseSchema.parse({ ok: true, data }).data.previousKpis).toBeNull();
         expect(() =>

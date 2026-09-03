@@ -157,6 +157,7 @@ covers the source-local `bun run apps/cli/src/index.ts task …` spelling). The 
 ### 2.4 Tool Arguments Extraction, Ingestion Diagnostics, and Field Provenance
 
 Tool execution arguments (`args_raw`, `args_digest`, `call_id`) are ingested per tool call into `history_tool_call`. For full source JSONL mapping matrices, root-cause taxonomy of missing payloads (`args_raw IS NULL`), the 5-step diagnostic recovery procedure, and config-driven frontend syntax highlighting rules, refer to the companion satellite:
+
 - **Satellite SSOT:** [`docs/design/history-importer-arguments-provenance.md`](history-importer-arguments-provenance.md)
 
 ## 3. Materialization Plane (`spur history analyze`)
@@ -175,6 +176,7 @@ graph LR
         DAILY[history_daily_stats]
         M5M[history_board_message_5m]
         T5M[history_board_tool_5m]
+        SKILL[history_board_skill_5m]
         SESS[history_board_session_stats]
         MOD[history_board_model_stats]
         TOOL[history_board_tool_stats]
@@ -184,7 +186,7 @@ graph LR
         SRCD[history_board_source_daily]
     end
 
-    M & T --> META & DAILY & M5M & T5M & SESS & MOD & TOOL & LOOP & RANK & SRC & SRCD
+    M & T --> META & DAILY & M5M & T5M & SKILL & SESS & MOD & TOOL & LOOP & RANK & SRC & SRCD
 ```
 
 ### 3.1 Materialized Table Catalog & Purpose
@@ -194,7 +196,8 @@ graph LR
 | `history_board_rollup_meta` | 1 | `id = 1` | Stores `history_version` hash and `refreshed_at` timestamp for instant freshness check. |
 | `history_daily_stats` | (per source/model/day; no recorded count) | `(source, model, day)` | Daily token breakdown for Summary Tab and period delta comparisons. |
 | `history_board_message_5m` | (no recorded count) | `(bucket_start, session_id, source, model)` | High-resolution sub-day time series for dynamic bucket aggregation (5m, 10m, 30m, 1h, 4h, 1d). |
-| `history_board_tool_5m` | 60,218 (measured, task 0632) | `(bucket_start, session_id, source, model, tool, skill)` | Precalculated tool and skill temporal token attribution. |
+| `history_board_tool_5m` | 60,218 (measured, task 0632) | `(bucket_start, session_id, source, model, tool, skill)` | Precalculated tool and skill temporal token attribution.
+| `history_board_skill_5m` | (no recorded count) | `(bucket_start, source, skill_name, invocation_kind)` | Precalculated skill-load call counts for the Summary tab skill-load breakdown (0737); rebuilt by `skillCallRollup` via `replaceHistoryBoardRollups`. | |
 | `history_board_session_stats` | (no recorded count) | `(source, session_id)` | Pre-aggregated session records (started, duration, tokens, messages, top tool, state) for Sessions Tab & Timeline roster. |
 | `history_board_model_stats` | (no recorded count) | `(model)` | All-time model comparison metrics (speed, cache hit %, error rate, output ratio). |
 | `history_board_tool_stats` | (no recorded count) | `(tool_name, skill_name)` | All-time tool and skill call counts and error aggregates for Summary Tab. |

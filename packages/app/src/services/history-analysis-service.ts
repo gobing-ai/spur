@@ -8,6 +8,7 @@ import {
     messageRollup,
     replaceHistoryBoardRollups,
     type StepRow,
+    skillCallRollup,
     sourceSummary,
     toolRollup,
     topCacheWasteSteps,
@@ -46,7 +47,7 @@ export async function refreshHistoryRollups(db: DbAdapter): Promise<HistoryRollu
     }
 
     const historyVersion = await historyBoardHistoryVersion(db);
-    const [messageRows, toolRows, loopRows, sourceRows, tokenSteps, durationSteps, waste, cacheWasteSteps] =
+    const [messageRows, toolRows, loopRows, sourceRows, tokenSteps, durationSteps, waste, cacheWasteSteps, skillRows] =
         await Promise.all([
             messageRollup(db, ALL_HISTORY),
             toolRollup(db, ALL_HISTORY),
@@ -56,6 +57,7 @@ export async function refreshHistoryRollups(db: DbAdapter): Promise<HistoryRollu
             topStepsByDuration(db, ALL_HISTORY, RANK_DEPTH),
             cacheWasteAggregate(db, ALL_HISTORY),
             topCacheWasteSteps(db, ALL_HISTORY, RANK_DEPTH),
+            skillCallRollup(db),
         ]);
 
     await replaceHistoryBoardRollups(db, {
@@ -67,6 +69,7 @@ export async function refreshHistoryRollups(db: DbAdapter): Promise<HistoryRollu
         tokenSteps: tokenSteps as readonly StepRow[],
         durationSteps: durationSteps as readonly StepRow[],
         cacheWasteSteps,
+        skill5m: skillRows,
     });
     return { status: 'refreshed', historyVersion, cacheWasteSteps: waste?.steps ?? 0 };
 }

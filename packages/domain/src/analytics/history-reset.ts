@@ -15,6 +15,7 @@ export const HISTORY_RESET_TABLES: readonly string[] = [
     // normalized import output
     'history_message',
     'history_tool_call',
+    'history_skill_call',
     'history_run_session',
     'history_task_session',
     // per-source ETL raw tables
@@ -36,6 +37,7 @@ export const HISTORY_RESET_TABLES: readonly string[] = [
     'history_board_ranked_steps',
     'history_board_rollup_meta',
     'history_board_session_stats',
+    'history_board_skill_5m',
     'history_board_source_daily',
     'history_board_source_stats',
     'history_board_tool_5m',

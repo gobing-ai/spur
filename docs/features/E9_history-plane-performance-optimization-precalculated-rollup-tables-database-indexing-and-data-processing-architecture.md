@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E9"
 name: "History plane performance optimization: precalculated rollup tables, database indexing, and data processing architecture"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-22T22:51:52.560Z"
-updated_at: "2026-09-02T20:22:22.565Z"
+updated_at: "2026-09-03T04:55:15.924Z"
 ---
 
 # E9: History plane performance optimization: precalculated rollup tables, database indexing, and data processing architecture
@@ -67,9 +67,9 @@ Feature: History plane performance optimization: precalculated rollup tables, da
 | 0631 | Database indexing and schema optimization for History data plane | done |
 | 0632 | Eliminate raw scan fallback in getSummary by routing skill time series and previous period queries to precalculated rollups | done |
 | 0633 | Automated rollup materialization and latency regression tests for History data plane | done |
-| 0735 | Add history_skill_call derived table for skill-load behavior | backlog |
-| 0736 | Populate history_skill_call during LLM history import with per-agent skill-load extraction | backlog |
-| 0737 | History module Summary tab skill-load breakdown with materialized rollup | backlog |
+| 0735 | Add history_skill_call derived table for skill-load behavior | done |
+| 0736 | Populate history_skill_call during LLM history import with per-agent skill-load extraction | done |
+| 0737 | History module Summary tab skill-load breakdown with materialized rollup | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -79,3 +79,5 @@ Feature: History plane performance optimization: precalculated rollup tables, da
 - 2026-08-23T00:20:50.753Z active → verifying (system)
 - 2026-08-23T00:20:50.976Z verifying → done (system)
 - 2026-09-02T20:22:22.565Z done → active (system)
+- 2026-09-03T04:55:15.639Z active → verifying (system)
+- 2026-09-03T04:55:15.924Z verifying → done (system)

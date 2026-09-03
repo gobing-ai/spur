@@ -62,6 +62,13 @@ const summary: HistorySummaryResponse['data'] = {
     kpiTrend: [],
     previousKpis: null,
     skillTimeSeries: [],
+    skillBreakdown: {
+        bySkill: [{ skillName: 'sp-dev-verify', calls: 1 }],
+        bySource: [{ source: 'codex', calls: 1 }],
+        byInvocationKind: [{ invocationKind: 'model', calls: 1 }],
+        trend: [{ bucketStart: '2026-08-21', cacheHitRatio: 0, series: { 'sp-dev-verify': 1 } }],
+        fresh: true,
+    },
 };
 
 const sources: HistorySourcesResponse['data'] = {
@@ -331,6 +338,28 @@ describe('History Board components', () => {
         expect(view.getByTestId('summary-block-source')).toBeDefined();
         expect(view.getByTestId('summary-block-tool')).toBeDefined();
         expect(view.getByTestId('summary-block-skill')).toBeDefined();
+    });
+
+    test('Summary renders the skill-load breakdown section with counts and empty state', () => {
+        const view = render(<SummaryTab data={summary} />);
+        const section = view.getByTestId('summary-skill-breakdown');
+        expect(section).toBeDefined();
+        expect(section.textContent).toContain('Skill Load Breakdown');
+        expect(section.textContent).toContain('sp-dev-verify');
+        // Invocation kind label renders (the capitalize class is a CSS transform).
+        expect(section.textContent).toContain('model');
+
+        // Empty state: no skill rows renders a hint, never a crash.
+        const { rerender } = view;
+        rerender(
+            <SummaryTab
+                data={{
+                    ...summary,
+                    skillBreakdown: { bySkill: [], bySource: [], byInvocationKind: [], trend: [], fresh: true },
+                }}
+            />,
+        );
+        expect(view.getByText('No skill activity recorded for this window.')).toBeDefined();
     });
 
     test('Sources renders vector agent icons, telemetry tooltip, and queued import state', async () => {

@@ -637,6 +637,13 @@ export class MockHistoryBoardService implements HistoryBoardService {
             modelTimeSeries,
             sourceTimeSeries,
             toolTimeSeries,
+            skillBreakdown: {
+                bySkill: skillsUsed.map((s) => ({ skillName: s.id, calls: s.count })),
+                bySource: [],
+                byInvocationKind: [],
+                trend: [],
+                fresh: true,
+            },
         };
     }
 

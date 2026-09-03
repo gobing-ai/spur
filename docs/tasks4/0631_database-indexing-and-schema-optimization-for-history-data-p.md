@@ -4,7 +4,7 @@ name: "Database indexing and schema optimization for History data plane"
 status: done
 template: feature-impl
 created_at: 2026-08-22T22:52:26.674Z
-updated_at: "2026-08-24T20:43:26.689Z"
+updated_at: "2026-09-03T05:23:14.081Z"
 feature_id: E9
 ---
 
@@ -106,15 +106,15 @@ No ADR is required: this extends the existing SQLite migration/read-plane mechan
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL` defines the three required raw-plane indexes at `packages/domain/src/migrations.ts:348`; the targeted migration suite verifies their exact names and order. |
-| Targeted SQLite Index Coverage for History Query Paths (R2) | MET | `idx_history_board_session_source_started` implements the retained `(source, started_at DESC)` access path at `packages/domain/src/migrations.ts:359`; the targeted suite verifies all three rollup/session indexes with `PRAGMA index_xinfo`. |
-| R3 | MET | Migration 0022 is registered at `packages/domain/src/migrations.ts:701`; the source-local byte check reports the embedded SQL and `drizzle/0022_spur_cli_history_performance_indexes.sql` are identical at 672 bytes; every statement is `CREATE INDEX IF NOT EXISTS`. No legacy-reference or `CLI_SCHEMA_SQL` change exists. |
-| R4 | MET | `packages/domain/tests/dao/migrations.test.ts:527` covers idempotent DDL, the 23-entry sequence, fresh/upgraded convergence, exact order/direction, and six representative `EXPLAIN QUERY PLAN` selections. Fresh targeted run: 47 pass, 0 fail, 180 assertions, 100% coverage. |
-| R5 | MET | `packages/domain/tests/dao/migrations.test.ts:585` proves the checkpoint PK already covers the source lookup, the freshness aggregate has no distinct selective path, and the rejected index is absent. |
+| R1 | MET | `packages/domain/src/migrations.ts:380` — `HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL` defines the three raw-plane indexes: `idx_history_message_source_ts (source, ts)`, `idx_history_message_model_ts (model, ts)`, `idx_history_tool_call_session_id_seq (session_id, seq)`; idempotent-DDL + frozen-order assertions `packages/domain/tests/dao/migrations.test.ts:494,519-521`. |
+| R2 | MET | `packages/domain/src/migrations.ts:384-395` — rollup indexes `idx_history_board_message_5m_bucket_model (bucket_start, model)`, `idx_history_board_tool_5m_bucket_skill (bucket_start, skill_name)`, and `idx_history_board_session_source_started (source, started_at DESC)` (DESC bit via `index_xinfo`); EXPLAIN plan selections `migrations.test.ts:587-617`. |
+| R3 | MET | `CLI_MIGRATIONS[22]` = `0022_spur_cli_history_performance_indexes` at `packages/domain/src/migrations.ts:882-883`; top-level mirror `drizzle/0022_spur_cli_history_performance_indexes.sql` byte-identical (672 bytes, verified this run); every statement is `CREATE INDEX IF NOT EXISTS` (`migrations.test.ts:494`); no `CLI_SCHEMA_SQL`/`drizzle/_legacy_reference/` change. |
+| R4 | MET | `packages/domain/tests/dao/migrations.test.ts:501,542,561,619` — fresh-DB six-index order/direction, 0021→0022 upgraded-vs-fresh convergence, second-apply idempotence (journals 0), per-index `EXPLAIN QUERY PLAN` selection, R5 rejection. Fresh run: 49 pass / 0 fail / 205 expect() / 100% migration coverage. |
+| R5 | MET | `packages/domain/tests/dao/migrations.test.ts:619` — `history_import_checkpoint(source, updated_at)` rejected: PK `(source, source_file)` covers the source lookup, freshness aggregate has no selective predicate, index absent. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Targeted SQLite Index Coverage for History Query Paths (R2) | MET | test | Fresh and 0021-upgraded databases converge; a second apply journals zero migrations; `PRAGMA index_xinfo` fixes all six column orders/directions; every representative plan selects its retained index. Targeted migration suite: 47/47 pass. |
+| Scenario: Targeted SQLite Index Coverage for History Query Paths (R2) | MET | test | `packages/domain/tests/dao/migrations.test.ts:501` (fresh DB gains six indexes with frozen order/direction + second-apply idempotence), `:561` (EXPLAIN QUERY PLAN selects each retained index), `:542` (fresh vs 0021-upgraded schema convergence). Fresh run 49/49 pass. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 **Reviewed:** 2026-08-22 · Dimensions: functional, security, efficiency, correctness, usability, architecture · **Verdict: PASS**

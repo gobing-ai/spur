@@ -122,6 +122,20 @@ export const historySkillItemSchema = z.object({
 /** Inferred type for HistorySkillItem. */
 export type HistorySkillItem = z.infer<typeof historySkillItemSchema>;
 
+/** Skill-load breakdown (counts by skill, source, invocation kind, plus a bucketed trend). */
+export const historySkillBreakdownSchema = z.object({
+    bySkill: z.array(z.object({ skillName: z.string(), calls: z.number() })),
+    bySource: z.array(z.object({ source: z.string(), calls: z.number() })),
+    byInvocationKind: z.array(z.object({ invocationKind: z.string(), calls: z.number() })),
+    trend: z.array(historyTimeSeriesPointSchema),
+    // True when the breakdown is read from a fresh board rollup; false means the rollup was
+    // not yet rebuilt (between import and analyze) so the UI must not render a silent-empty
+    // "no skill activity" for data that exists but has not been rolled up (AC5).
+    fresh: z.boolean().default(true),
+});
+/** Inferred type for HistorySkillBreakdown. */
+export type HistorySkillBreakdown = z.infer<typeof historySkillBreakdownSchema>;
+
 /** Cache efficiency breakdown per source item schema. */
 export const historySourceCacheEfficiencyItemSchema = z.object({
     source: z.string(),
@@ -185,6 +199,7 @@ export const historySummaryResponseDataSchema = z.object({
     topSources: z.array(historyTopItemSchema),
     topTools: z.array(historyTopToolSchema),
     skillsUsed: z.array(historySkillItemSchema),
+    skillBreakdown: historySkillBreakdownSchema,
     cacheEfficiency: historyCacheEfficiencySchema,
     kpiTrend: z.array(historyKpiTrendPointSchema),
     previousKpis: historySummaryKpisSchema.nullable(),

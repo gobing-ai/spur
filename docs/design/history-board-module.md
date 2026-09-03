@@ -156,6 +156,7 @@ Endpoints:
 | `kpiTrend` | 30 daily `HistoryKpiTrendPoint` rows for KPI sparklines and cache-hit trend |
 | `previousKpis` | `HistorySummaryKpis \| null`; null only when no bounded comparison window exists |
 | `skillTimeSeries` | Bucketed `HistoryTimeSeriesPoint[]` projected on the skill dimension |
+| `skillBreakdown` | `HistorySkillBreakdown` — skill-load split by skill (`bySkill`), source (`bySource`), invocation kind (`byInvocationKind`), plus a bucket trend; carries `fresh: boolean` (true when read from a fresh rollup; false in the stale/not-yet-analyzed path so the UI never renders silent-empty — 0737). |
 
 `history.getSources().overview.lastImportedAt` is a nullable ISO timestamp used by the global live-status chip.
 

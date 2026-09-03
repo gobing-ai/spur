@@ -113,6 +113,8 @@ export {
     type HistoryBoardRollupSeed,
     type HistoryBoardSessionPage,
     type HistoryBoardSessionRollupRow,
+    type HistoryBoardSkill5mRow,
+    type HistoryBoardSkillBreakdown,
     type HistoryBoardSkillRow,
     type HistoryBoardSourceModelRow,
     type HistoryBoardSourceRollupRow,
@@ -127,9 +129,11 @@ export {
     historyBoardRankedStepsFromRollup,
     historyBoardRollupsFresh,
     historyBoardSessionsFromRollup,
+    historyBoardSkillBreakdownFromRollup,
     historyBoardSourcesFromRollup,
     historyBoardSummaryFromRollup,
     replaceHistoryBoardRollups,
+    skillCallRollup,
 } from './history-board-rollup';
 export {
     HISTORY_RESET_TABLES,

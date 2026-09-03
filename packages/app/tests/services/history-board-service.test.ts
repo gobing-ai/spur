@@ -726,6 +726,92 @@ describe('LiveHistoryBoardService', () => {
         expect(res.scope.tokens.billedTokens).toBeCloseTo(502, 6);
     });
 
+    test('getSummary skillBreakdown reads history_board_skill_5m, not history_skill_call (task 0737 AC3)', async () => {
+        const db = await setupTestDb();
+        // Seed one corpus row so the rollups are non-empty, then seed skill_call rows.
+        await db.run(
+            `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq, turn_index,
+                 role, record_type, disposition, ts, model, input_tokens, output_tokens, cache_read_tokens,
+                 provenance, duration_ms, imported_at)
+             VALUES ('sb-msg-1', 'claude', 'test.jsonl', 1, 'sb-sess', 1, 1, 'assistant', 'message', 'ok',
+                     '2026-06-01T09:58:10Z', 'claude-opus-4.6', 100, 50, 300, 'agent', 100, '2026-06-01T00:00:00Z')`,
+        );
+        const skillTs = '2026-06-01T09:58:10Z';
+        await db.run(
+            `INSERT INTO history_skill_call (record_hash, message_hash, source, source_file, source_line,
+                 session_id, seq, skill_name, invocation_kind, status, started_at, imported_at)
+             VALUES ('sb-sk-1', 'sb-msg-1', 'claude', 'test.jsonl', 1, 'sb-sess', 1, 'sp-code-testing', 'model',
+                     'success', ?, '2026-06-01T00:00:00Z')`,
+            skillTs,
+        );
+        await db.run(
+            `INSERT INTO history_skill_call (record_hash, message_hash, source, source_file, source_line,
+                 session_id, seq, skill_name, invocation_kind, status, started_at, imported_at)
+             VALUES ('sb-sk-2', 'sb-msg-1', 'claude', 'test.jsonl', 1, 'sb-sess', 2, 'sp-code-testing', 'user',
+                     'success', '2026-06-01T10:05:00Z', '2026-06-01T00:00:00Z')`,
+        );
+        await refreshHistoryRollups(db);
+
+        const queries: string[] = [];
+        const recording: DbAdapter = new Proxy(db, {
+            get(target, prop) {
+                const value = Reflect.get(target, prop, target);
+                if (typeof prop === 'string' && ['queryAll', 'queryFirst', 'run', 'exec'].includes(prop)) {
+                    return (sql: string, ...params: unknown[]) => {
+                        queries.push(sql);
+                        return (value as (...args: unknown[]) => unknown).call(target, sql, ...params);
+                    };
+                }
+                return typeof value === 'function' ? value.bind(target) : value;
+            },
+        });
+        const svc = new LiveHistoryBoardService({ db: recording });
+        const summary = await svc.getSummary({ range: 'all', bucket: '5m' });
+
+        // The detail table is never scanned in the request path; only history_board_skill_5m is.
+        expect(queries.filter((sql) => /FROM history_skill_call/.test(sql))).toEqual([]);
+        expect(queries.some((sql) => /FROM history_board_skill_5m/.test(sql))).toBe(true);
+
+        // Correct per-key counts for a seeded fixture (AC1).
+        expect(summary.skillBreakdown.bySkill).toEqual([{ skillName: 'sp-code-testing', calls: 2 }]);
+        expect(summary.skillBreakdown.bySource).toEqual([{ source: 'claude', calls: 2 }]);
+        expect(summary.skillBreakdown.byInvocationKind).toEqual([
+            { invocationKind: 'model', calls: 1 },
+            { invocationKind: 'user', calls: 1 },
+        ]);
+        // Trend is a 5m re-bucketed call-count series over the window.
+        expect(summary.skillBreakdown.trend.length).toBeGreaterThan(0);
+        expect(summary.skillBreakdown.trend.every((p) => Object.keys(p.series).includes('sp-code-testing'))).toBe(true);
+    });
+
+    test('getSummary skillBreakdown is empty (no crash) when the rollup has zero skill rows (task 0737 AC4)', async () => {
+        const db = await setupTestDb();
+        await seedCorpus(db, 4, 4); // messages/tool calls only, never any history_skill_call rows
+        await refreshHistoryRollups(db);
+        const svc = new LiveHistoryBoardService({ db });
+        const summary = await svc.getSummary({ range: '30d', bucket: '1d' });
+        expect(summary.skillBreakdown).toEqual({
+            bySkill: [],
+            bySource: [],
+            byInvocationKind: [],
+            trend: [],
+            fresh: true,
+        });
+    });
+
+    test('getSummary flags skillBreakdown as not-fresh on a stale/never-analyzed rollup (task 0737 AC5)', async () => {
+        const db = await setupTestDb();
+        // Seed skill-call rows into history_skill_call but DO NOT refresh the rollup, so
+        // historyBoardRollupsFresh is false and the exact (not-fresh) path runs.
+        await seedCorpus(db, 4, 4);
+        await seedSkillCalls(db);
+        const svc = new LiveHistoryBoardService({ db });
+        const summary = await svc.getSummary({ range: '30d', bucket: '1d' });
+        // Not silent-empty: the stale rollup is explicitly flagged so the UI can render the
+        // "run history analyze" state instead of "no skill activity" (AC5).
+        expect(summary.skillBreakdown.fresh).toBe(false);
+    });
+
     test('getToolSequence handles empty db cleanly', async () => {
         const service = new LiveHistoryBoardService({});
         const res = await service.getToolSequence({ mode: 'consolidated' });
