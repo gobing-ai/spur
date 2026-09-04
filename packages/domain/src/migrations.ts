@@ -1182,7 +1182,19 @@ async function allMigrationsJournaled(adapter: DbAdapter, migrations: CliMigrati
         `SELECT COUNT(*) AS n FROM "__spur_cli_migrations" WHERE id IN (${placeholders})`,
         ...migrations.map((m) => m.id),
     );
-    return (row?.n ?? 0) === migrations.length;
+    if ((row?.n ?? 0) !== migrations.length) return false;
+
+    // Fast-path: if migration 0033 is part of the suite, ensure the installed importer version is journaled.
+    const has0033 = migrations.some((m) => m.id === '0033_spur_cli_importer_schema_version');
+    if (has0033) {
+        const currentVersionRow = await adapter.queryFirst<{ id: string }>(
+            'SELECT id FROM "__spur_cli_migrations" WHERE id = ?',
+            IMPORTER_SCHEMA_LEDGER_PREFIX + HISTORY_IMPORT_SCHEMA_VERSION,
+        );
+        if (!currentVersionRow) return false;
+    }
+
+    return true;
 }
 
 /** Apply CLI-owned migrations with an isolated journal table. */
@@ -1248,12 +1260,15 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             migration.id === '0034_spur_cli_history_tool_identity' &&
             (await tableExists(adapter, 'history_tool_call'))
         ) {
-            for (const column of ['effective_tool_name', 'tool_name_alias']) {
-                if (!(await columnExists(adapter, 'history_tool_call', column))) {
-                    await adapter.exec(
-                        `ALTER TABLE history_tool_call ADD COLUMN ${column} TEXT NOT NULL DEFAULT 'unknown'`,
-                    );
-                }
+            if (!(await columnExists(adapter, 'history_tool_call', 'effective_tool_name'))) {
+                await adapter.exec(
+                    "ALTER TABLE history_tool_call ADD COLUMN effective_tool_name TEXT NOT NULL DEFAULT 'unknown'",
+                );
+            }
+            if (!(await columnExists(adapter, 'history_tool_call', 'tool_name_alias'))) {
+                await adapter.exec(
+                    "ALTER TABLE history_tool_call ADD COLUMN tool_name_alias TEXT NOT NULL DEFAULT 'unknown'",
+                );
             }
         }
 
@@ -1413,6 +1428,30 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
         );
         applied += 1;
     }
+
+    // 0748: sync importer schema and record the current version if migration 0033 is part of the suite
+    // and the recorded importer version is behind the installed package.
+    const has0033 = migrations.some((m) => m.id === '0033_spur_cli_importer_schema_version');
+    if (has0033) {
+        const currentVersionLedgerId = IMPORTER_SCHEMA_LEDGER_PREFIX + HISTORY_IMPORT_SCHEMA_VERSION;
+        const recordedCurrent = await adapter.queryFirst<{ id: string }>(
+            'SELECT id FROM "__spur_cli_migrations" WHERE id = ?',
+            currentVersionLedgerId,
+        );
+        if (!recordedCurrent) {
+            for (const statement of splitSqlStatements(HISTORY_IMPORT_SCHEMA_SQL)) {
+                if (statement.startsWith('CREATE TABLE')) {
+                    await adapter.exec(statement);
+                }
+            }
+            await adapter.run('INSERT OR REPLACE INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)', [
+                currentVersionLedgerId,
+                Date.now(),
+            ]);
+            applied += 1;
+        }
+    }
+
     return applied;
 }
 
