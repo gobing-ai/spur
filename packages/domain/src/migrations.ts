@@ -1010,6 +1010,32 @@ CREATE TABLE IF NOT EXISTS spur_retention_meta (
 );
 `;
 
+/**
+ * Bounded rollup derivations candidate-set narrowing (task 0763, R4/R8).
+ *
+ * Adds the two columns the bounded derivation reads to scope its candidate set,
+ * plus the index that bounds the per-source file scan:
+ * - `idx_history_message_source_file` on `history_message (source, source_file)`
+ *   lets the candidate query walk one source's files without a full table scan.
+ * - `history_board_source_daily.raw_messages` and `.last_imported_at` back import
+ *   coverage. They are deliberately RAW counts — no dedup, no turn watermark —
+ *   because coverage must reflect what was imported, not what survived analysis
+ *   filters; the derived (deduped) figures live in the existing token columns.
+ *
+ * `raw_messages` and `last_imported_at` are added together, so `raw_messages` is
+ * the representative guard column for `addColumnIfMissing` (the
+ * `system_events.sequence` precedent): fresh databases create neither column, so
+ * the ALTERs run; a database that already applied 0039 skips the re-add. The
+ * index is `CREATE INDEX IF NOT EXISTS` and is always safe to re-run.
+ */
+export const BOUNDED_ROLLUP_DERIVATIONS_SCHEMA_SQL = `
+CREATE INDEX IF NOT EXISTS idx_history_message_source_file
+    ON history_message (source, source_file);
+
+ALTER TABLE history_board_source_daily ADD COLUMN raw_messages INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE history_board_source_daily ADD COLUMN last_imported_at TEXT;
+`;
+
 export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
     // Renamed from `0001_spur_team_inbox` so the filename carries the
@@ -1163,6 +1189,14 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         // 0746: Retention compaction run-marker table (CREATE TABLE IF NOT EXISTS).
         id: '0038_spur_cli_retention_compaction_meta',
         sql: RETENTION_COMPACTION_META_SCHEMA_SQL,
+    },
+    {
+        // 0763 (R4/R8): bounded rollup derivations candidate-set narrowing — one
+        // index plus two raw coverage columns on history_board_source_daily. The
+        // two columns are added together, so `raw_messages` guards idempotency.
+        id: '0039_spur_cli_bounded_rollup_derivations',
+        sql: BOUNDED_ROLLUP_DERIVATIONS_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'history_board_source_daily', column: 'raw_messages' },
     },
 ];
 
@@ -1395,6 +1429,17 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
                 !(await tableExists(adapter, 'history_message')) ||
                 !(await columnExists(adapter, 'history_message', 'imported_at')));
 
+        // Migration 0039 adds idx_history_message_source_file plus two columns on
+        // history_board_source_daily. The index requires history_message.source_file,
+        // which legacy/foundation-only DBs lack (the 0012/0015 shape), and the ALTERs
+        // require the board table — journal without executing when either prerequisite
+        // is absent; fresh DBs create both columns and the index here.
+        const boundedRollupDerivationsSkip =
+            migration.id === '0039_spur_cli_bounded_rollup_derivations' &&
+            (!(await tableExists(adapter, 'history_message')) ||
+                !(await columnExists(adapter, 'history_message', 'source_file')) ||
+                !(await tableExists(adapter, 'history_board_source_daily')));
+
         if (
             shouldApplySql &&
             !sequenceIndexSkip &&
@@ -1411,7 +1456,8 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !queueJobsActiveIndexSkip &&
             !historyToolIdentitySkip &&
             !historyMeasureVectorSkip &&
-            !historyRollupWatermarkSkip
+            !historyRollupWatermarkSkip &&
+            !boundedRollupDerivationsSkip
         ) {
             for (const statement of splitSqlStatements(migration.sql)) {
                 await adapter.exec(statement);
