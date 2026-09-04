@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "S5: Migrate task-pipeline to proportional gates, last"
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-09-03T20:27:39.778Z
-updated_at: "2026-09-03T21:08:49.890Z"
+updated_at: "2026-09-04T03:44:13.165Z"
 feature_id: D9
 dependencies: ["0758"]
 ac_altitude: task-local
@@ -127,3 +127,4 @@ Feature: task-pipeline proportional migration
 - Surface: `config/workflows/task-pipeline.yaml`
 - Depends on: 0758 (and transitively 0751, 0757).
 ### History
+- 2026-09-04T03:44:13.165Z todo → wip (system)

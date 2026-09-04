@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "S3: Pilot the proportional route table on wrapup-pipeline and task-lifecycle with run-bound cost evidence"
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-09-03T20:27:39.492Z
-updated_at: "2026-09-03T21:13:35.497Z"
+updated_at: "2026-09-04T03:44:12.933Z"
 feature_id: D9
 dependencies: ["0754", "0757", "0751"]
 priority: P1
@@ -150,3 +150,4 @@ Feature: Proportional routing on the surrounding pilots
 - New ADR: 103 (proportional-gate contract)
 - Depends on: 0757 (gate), 0754. Gates: 0759.
 ### History
+- 2026-09-04T03:44:12.933Z todo → wip (system)
