@@ -1,5 +1,15 @@
 # Externally driven FSM (requestTransition) — not an auto-running pipeline.
 #
+# [CRITICAL] One transition per (from, to) pair. `requestTransition` selects with
+# `transitions.find(t => t.from === … && t.to === …)` and denies on that single
+# transition's guard — it never falls through to a sibling with the same pair
+# (dual-workflow-engine/src/service.ts requestTransition). Guard-paired siblings
+# (e.g. a `mode = fast` fast path beside a `mode != fast` safety path) are only
+# valid in auto-run pipelines, where `firstPassingTransition` evaluates every
+# outbound edge. Adding a sibling here blocks the forward path outright: task 0758
+# did exactly that and denied every wip→testing and testing→done write until it
+# was reverted.
+#
 # Reliability (aligned with task-pipeline / ADR-043 — lifecycle-only contract):
 #   - Hard shell guards only at wip→testing and testing→done
 #     (no soft probe needed: requestTransition fails closed when guard shell is non-zero)
@@ -36,8 +46,6 @@ terminalStates:
 vars:
   spurBin: "spur"
   wbs: "0000"
-  mode: ""
-  __runId: ""
 
 states:
   - id: backlog
@@ -46,64 +54,13 @@ states:
     description: Triaged and ready to start.
   - id: wip
     description: Actively being worked on.
-    onEnter:
-      - kind: shell
-        options:
-          command: >-
-            mkdir -p .spur/run .spur/memory &&
-            RUN_ID="$__runId" &&
-            if [ -z "$RUN_ID" ]; then RUN_ID="lifecycle-$wbs"; fi &&
-            if [ "$mode" = "fast" ]; then
-              echo "fast:evidence complete+consistent" > ".spur/run/$RUN_ID-route-reason.txt";
-            elif [ -z "$mode" ]; then
-              echo "safety:standard verification" > ".spur/run/$RUN_ID-route-reason.txt";
-            else
-              echo "safety:unrecognized mode ($mode)" > ".spur/run/$RUN_ID-route-reason.txt";
-            fi &&
-            printf '%s %s wip %s\n' "$RUN_ID" "$wbs" "$(cat ".spur/run/$RUN_ID-route-reason.txt")"
-            >> .spur/memory/lifecycle-routes.log &&
-            exit 0
   - id: testing
     description: Implementation complete; under test/verification.
-    onEnter:
-      - kind: shell
-        options:
-          command: >-
-            mkdir -p .spur/run .spur/memory &&
-            RUN_ID="$__runId" &&
-            if [ -z "$RUN_ID" ]; then RUN_ID="lifecycle-$wbs"; fi &&
-            if [ "$mode" = "fast" ]; then
-              echo "fast:evidence complete+consistent" > ".spur/run/$RUN_ID-route-reason.txt";
-            elif [ -z "$mode" ]; then
-              echo "safety:standard verification" > ".spur/run/$RUN_ID-route-reason.txt";
-            else
-              echo "safety:unrecognized mode ($mode)" > ".spur/run/$RUN_ID-route-reason.txt";
-            fi &&
-            printf '%s %s testing %s\n' "$RUN_ID" "$wbs" "$(cat ".spur/run/$RUN_ID-route-reason.txt")"
-            >> .spur/memory/lifecycle-routes.log &&
-            exit 0
   - id: blocked
     description: Impediment; work suspended.
   - id: done
     description: >
       Completed. Re-enterable (reopen with warning + mandatory History entry).
-    onEnter:
-      - kind: shell
-        options:
-          command: >-
-            mkdir -p .spur/run .spur/memory &&
-            RUN_ID="$__runId" &&
-            if [ -z "$RUN_ID" ]; then RUN_ID="lifecycle-$wbs"; fi &&
-            if [ "$mode" = "fast" ]; then
-              echo "fast:evidence complete+consistent" > ".spur/run/$RUN_ID-route-reason.txt";
-            elif [ -z "$mode" ]; then
-              echo "safety:standard verification" > ".spur/run/$RUN_ID-route-reason.txt";
-            else
-              echo "safety:unrecognized mode ($mode)" > ".spur/run/$RUN_ID-route-reason.txt";
-            fi &&
-            printf '%s %s done %s\n' "$RUN_ID" "$wbs" "$(cat ".spur/run/$RUN_ID-route-reason.txt")"
-            >> .spur/memory/lifecycle-routes.log &&
-            exit 0
   - id: cancelled
     description: Terminal — abandoned.
 
@@ -121,32 +78,18 @@ transitions:
       kind: always
   - from: wip
     to: testing
-    description: Implementation complete (proportional fast path)
+    description: Implementation complete; enter testing
     guard:
       kind: shell
       options:
-        command: 'test "$mode" = fast && $spurBin task check $wbs --as testing'
-  - from: wip
-    to: testing
-    description: Implementation complete (proportional safety path)
-    guard:
-      kind: shell
-      options:
-        command: 'test "$mode" != fast && $spurBin task check $wbs --as testing'
+        command: '$spurBin task check $wbs --as testing'
   - from: testing
     to: done
-    description: Testing passed (proportional fast path)
+    description: Testing passed; mark done
     guard:
       kind: shell
       options:
-        command: 'test "$mode" = fast && $spurBin task check $wbs --as done'
-  - from: testing
-    to: done
-    description: Testing passed (proportional safety path)
-    guard:
-      kind: shell
-      options:
-        command: 'test "$mode" != fast && $spurBin task check $wbs --as done'
+        command: '$spurBin task check $wbs --as done'
 
   # Reopen: done → wip (warned, mandatory History entry)
   - from: done

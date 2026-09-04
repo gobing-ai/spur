@@ -609,20 +609,7 @@
             "definition": "config/workflows/task-lifecycle.yaml",
             "terminalStates": ["cancelled"],
             "modelQueries": [],
-            "actions": {
-                "wip:onEnter:0": {
-                    "kind": "shell",
-                    "invocation": "mkdir -p .spur/run .spur/memory && RUN_ID=\"$__runId\" && if [ -z \"$RUN_ID\" ]; then RUN_ID=\"lifecycle-$wbs\"; fi && if [ \"$mode\" = \"fast\" ]; then\n  echo \"fast:evidence complete+consistent\" > \".spur/run/$RUN_ID-route-reason.txt\";\nelif [ -z \"$mode\" ]; then\n  echo \"safety:standard verification\" > \".spur/run/$RUN_ID-route-reason.txt\";\nelse\n  echo \"safety:unrecognized mode ($mode)\" > \".spur/run/$RUN_ID-route-reason.txt\";\nfi && printf '%s %s wip %s\\n' \"$RUN_ID\" \"$wbs\" \"$(cat \".spur/run/$RUN_ID-route-reason.txt\")\" >> .spur/memory/lifecycle-routes.log && exit 0"
-                },
-                "testing:onEnter:0": {
-                    "kind": "shell",
-                    "invocation": "mkdir -p .spur/run .spur/memory && RUN_ID=\"$__runId\" && if [ -z \"$RUN_ID\" ]; then RUN_ID=\"lifecycle-$wbs\"; fi && if [ \"$mode\" = \"fast\" ]; then\n  echo \"fast:evidence complete+consistent\" > \".spur/run/$RUN_ID-route-reason.txt\";\nelif [ -z \"$mode\" ]; then\n  echo \"safety:standard verification\" > \".spur/run/$RUN_ID-route-reason.txt\";\nelse\n  echo \"safety:unrecognized mode ($mode)\" > \".spur/run/$RUN_ID-route-reason.txt\";\nfi && printf '%s %s testing %s\\n' \"$RUN_ID\" \"$wbs\" \"$(cat \".spur/run/$RUN_ID-route-reason.txt\")\" >> .spur/memory/lifecycle-routes.log && exit 0"
-                },
-                "done:onEnter:0": {
-                    "kind": "shell",
-                    "invocation": "mkdir -p .spur/run .spur/memory && RUN_ID=\"$__runId\" && if [ -z \"$RUN_ID\" ]; then RUN_ID=\"lifecycle-$wbs\"; fi && if [ \"$mode\" = \"fast\" ]; then\n  echo \"fast:evidence complete+consistent\" > \".spur/run/$RUN_ID-route-reason.txt\";\nelif [ -z \"$mode\" ]; then\n  echo \"safety:standard verification\" > \".spur/run/$RUN_ID-route-reason.txt\";\nelse\n  echo \"safety:unrecognized mode ($mode)\" > \".spur/run/$RUN_ID-route-reason.txt\";\nfi && printf '%s %s done %s\\n' \"$RUN_ID\" \"$wbs\" \"$(cat \".spur/run/$RUN_ID-route-reason.txt\")\" >> .spur/memory/lifecycle-routes.log && exit 0"
-                }
-            }
+            "actions": {}
         }
     }
 }

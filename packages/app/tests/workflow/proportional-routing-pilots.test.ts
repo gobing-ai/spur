@@ -1,15 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadWorkflowDefFromText } from '@gobing-ai/ts-dual-workflow-engine';
-import {
-    evaluateLifecycleRoute,
-    evaluateWrapupRoute,
-    type RouteInput,
-    safetyFloorHolds,
-} from '../../../../config/proportional-route-table';
+import { evaluateWrapupRoute, type RouteInput, safetyFloorHolds } from '../../../../config/proportional-route-table';
 import { computeDefinitionDigest } from '../../src/workflow/composition-baseline';
 
 const REPO_ROOT = join(import.meta.dir, '../../../../');
@@ -107,44 +102,10 @@ describe('proportional routing pilots (task 0758)', () => {
         });
     });
 
-    describe('task-lifecycle closed route table & safety floor (R1, R2, R3)', () => {
-        const lifecyclePath = join(WORKFLOWS_DIR, 'task-lifecycle.yaml');
-        const lifecycleText = readFileSync(lifecyclePath, 'utf8');
-        const lifecycleDef = loadWorkflowDefFromText(lifecycleText, lifecyclePath) as unknown as WorkflowYaml;
-
-        test('declares mode and __runId in vars', () => {
-            expect(lifecycleDef.vars?.mode).toBe('');
-            expect(lifecycleDef.vars?.__runId).toBe('');
-        });
-
-        test('both fast and safety transitions preserve safety floor checks (R3)', () => {
-            // wip -> testing transitions
-            const wipTesting = lifecycleDef.transitions.filter(
-                (t: TransitionDef) => t.from === 'wip' && t.to === 'testing',
-            );
-            expect(wipTesting).toHaveLength(2);
-            for (const t of wipTesting) {
-                const cmd = String(t.guard?.options?.command ?? '');
-                expect(cmd).toContain('$spurBin task check $wbs --as testing');
-            }
-
-            // testing -> done transitions
-            const testingDone = lifecycleDef.transitions.filter(
-                (t: TransitionDef) => t.from === 'testing' && t.to === 'done',
-            );
-            expect(testingDone).toHaveLength(2);
-            for (const t of testingDone) {
-                const cmd = String(t.guard?.options?.command ?? '');
-                expect(cmd).toContain('$spurBin task check $wbs --as done');
-            }
-        });
-
-        test('evaluateLifecycleRoute routes to fast or safety', () => {
-            expect(evaluateLifecycleRoute({ mode: 'fast' }).route).toBe('fast');
-            expect(evaluateLifecycleRoute({}).route).toBe('safety');
-            expect(evaluateLifecycleRoute({ mode: 'unknown' }).route).toBe('safety');
-        });
-
+    describe('safety floor (R2, R3)', () => {
+        // task-lifecycle's proportional edges were reverted (0758): `requestTransition`
+        // resolves one transition per (from, to) pair, so a guard-paired fast/safety split
+        // denied every forward hop. The safety floor itself is route-table-level and stands.
         test('safetyFloorHolds enforces immutable invariants', () => {
             const valid: RouteInput = {
                 runId: 'r1',
@@ -230,11 +191,6 @@ describe('route reason writers are run-attributed (0758 R4/R5)', () => {
         readFileSync(join(WORKFLOWS_DIR, 'wrapup-pipeline.yaml'), 'utf8'),
         join(WORKFLOWS_DIR, 'wrapup-pipeline.yaml'),
     ) as unknown as WorkflowYaml;
-    const lifecycleDef = loadWorkflowDefFromText(
-        readFileSync(join(WORKFLOWS_DIR, 'task-lifecycle.yaml'), 'utf8'),
-        join(WORKFLOWS_DIR, 'task-lifecycle.yaml'),
-    ) as unknown as WorkflowYaml;
-
     test('wrapup-pipeline writes the reason under the run id and attributes the log line', () => {
         const { cwd } = runWriter(shellOf(wrapupDef, 'task-resolve'), {
             __runId: 'run_alpha',
@@ -272,31 +228,5 @@ describe('route reason writers are run-attributed (0758 R4/R5)', () => {
             'run_one fast:evidence complete+consistent',
             'run_two safety:conflicting evidence',
         ]);
-    });
-
-    test.each([
-        'wip',
-        'testing',
-        'done',
-    ])('task-lifecycle %s stamps the run id and the state it routed into', (state) => {
-        const { cwd } = runWriter(shellOf(lifecycleDef, state), {
-            __runId: 'run_fsm',
-            mode: '',
-            wbs: '0758',
-        });
-        expect(readFileSync(join(cwd, '.spur/run/run_fsm-route-reason.txt'), 'utf8').trim()).toBe(
-            'safety:standard verification',
-        );
-        expect(readFileSync(join(cwd, '.spur/memory/lifecycle-routes.log'), 'utf8').trim()).toBe(
-            `run_fsm 0758 ${state} safety:standard verification`,
-        );
-    });
-
-    test('a driver-less invocation still writes a named artifact, never a bare filename', () => {
-        const { cwd } = runWriter(shellOf(lifecycleDef, 'wip'), { __runId: '', mode: 'fast', wbs: '0758' });
-        expect(readFileSync(join(cwd, '.spur/run/lifecycle-0758-route-reason.txt'), 'utf8').trim()).toBe(
-            'fast:evidence complete+consistent',
-        );
-        expect(existsSync(join(cwd, '.spur/run/-route-reason.txt'))).toBe(false);
     });
 });

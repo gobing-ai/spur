@@ -4,7 +4,7 @@ name: "S3: Pilot the proportional route table on wrapup-pipeline and task-lifecy
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:39.492Z
-updated_at: "2026-09-04T21:01:30.686Z"
+updated_at: "2026-09-04T22:11:49.495Z"
 feature_id: D9
 dependencies: ["0754", "0757", "0751"]
 priority: P1
@@ -140,10 +140,10 @@ Feature: Proportional routing on the surrounding pilots
 
 | Change | File:line |
 | --- | --- |
-| Route table functions + predicates | `config/proportional-route-table.ts:36` (frozen table), `:58` (wrapup), `:118` (lifecycle), `:171` (safety floor) |
+| Route table functions + predicates | `config/proportional-route-table.ts:36` (frozen table), `:58` (wrapup), `:171` (safety floor) — the lifecycle evaluator was removed with the revert |
 | Route table unit tests | `packages/app/tests/workflow/proportional-route-table.test.ts` (6 tests) |
 | wrapup-pipeline proportional routing | `config/workflows/wrapup-pipeline.yaml:64-65` (vars), `:110` (route-reason writer), `:294` (first `task-resolve` edge) |
-| task-lifecycle proportional routing | `config/workflows/task-lifecycle.yaml:39-40` (vars), `:50`/`:69`/`:91` (route-reason writers), `:126`/`:133`/`:140`/`:147` (fast/safety guards) |
+| task-lifecycle proportional routing | **reverted 2026-09-04** (History) — the fast/safety edge split denied every forward hop through `requestTransition` and the route writers never ran |
 | Proportional routing pilot test suite | `packages/app/tests/workflow/proportional-routing-pilots.test.ts` (16 tests) |
 | ADR-107 proportional routing contract | `docs/00_ADR.md:2201` |
 
@@ -184,6 +184,8 @@ The coverage conjunct does not. `bun scripts/spur-dev.ts real-run-cost --workflo
 **R9 — ADR recorded as ADR-107.** `docs/00_ADR.md:2201` records **ADR-107: Proportional Workflow Routing on Surrounding Pilots** (Accepted, 2026-09-04, Feature D9, Task 0758) with the closed-route-table decision, the safety-floor invariant, the bounded reason contract, and per-workflow revertability. ADR-103 was reserved at planning time but consumed by E91 before this task wrote its entry; the requirement text and References now name 107.
 
 **Contract-artifact status.** `config/proportional-route-table.ts` is the closed route table ADR-107 names, but `rg -n "proportional-route-table" --glob '!node_modules' --glob '!*.test.ts'` matches only `config/task-pipeline-proportional-migration-plan.md`, `docs/00_ADR.md`, and this task file. No production code imports it; the routing that actually executes is the shell chain in the two YAML files. The table and the shell chain are therefore two copies of one contract kept in sync only by review — acceptable while the pilots are dormant, and the first thing to reconcile if the reopening condition is ever met.
+
+**Revert note (2026-09-04, operator decision).** The task-lifecycle half of this pilot was reverted; the wrapup-pipeline half stays. The `requestTransition` path resolves a single transition per `(from, to)` pair (`service.ts:269` `.find` + no fallthrough), so 0758's fast-first/safety-second sibling edges denied every `wip→testing` and `testing→done` write under the default `mode: ""` — a live regression, not an inert pilot — and the lifecycle `onEnter` route writers never executed at all (`onEnter` runs only in the auto-run loop). Regression cover landed in `packages/app/tests/workflow/lifecycle-adapter.test.ts`; full reasoning in the History entry.
 ### Testing
 **Pipeline verify results**
 
@@ -243,3 +245,57 @@ The coverage conjunct does not. `bun scripts/spur-dev.ts real-run-cost --workflo
 - 2026-09-04T03:44:12.933Z todo → wip (system)
 - 2026-09-04T16:11:47.244Z wip → testing (system)
 - 2026-09-04T16:11:47.671Z testing → done (system)
+
+- 2026-09-04 — **task-lifecycle pilot half reverted** (operator decision). The four
+  proportional `wip→testing` / `testing→done` edges and the three route-reason `onEnter`
+  writers were removed from `config/workflows/task-lifecycle.yaml`; `mode` / `__runId` vars
+  and `evaluateLifecycleRoute` went with them. The wrapup-pipeline half is unchanged and
+  still live.
+  **Why:** the split was a live regression, not inert. `requestTransition` resolves ONE
+  transition per `(from, to)` pair — `transitions.find(...)` in
+  `dual-workflow-engine/src/service.ts:269` — then denies on that transition's guard with no
+  fallthrough to a sibling. The fast edge was declared first, its guard is
+  `test "$mode" = fast && …`, and `LifecycleAdapter.bindGuardVar`
+  (`packages/app/src/workflow/lifecycle-adapter.ts:265-269`) binds only `wbs`/`spurBin`, so
+  `mode` reached the guard as `""`. Every forward FSM hop denied, and
+  `planning-write-service.ts:435-441` turns that denial into a `GuardDeniedError` that aborts
+  the status write. Measured with `spurBin: 'true'` against the pre-revert YAML: `allowed =
+  false`, `exitCode 1` — the guard command itself could not fail, only `test "$mode" = fast`
+  could. The auto-run loop is unaffected (`state-machine.ts:205-224` `firstPassingTransition`
+  evaluates every outbound edge), which is why the same pattern is sound in wrapup-pipeline
+  and task-pipeline (0759, left in place) and unsound only here.
+  **Dead half:** `onEnter` actions run only in the auto-run loop, so the three lifecycle route
+  writers never executed — `.spur/memory/lifecycle-routes.log` was never created, while
+  `wrapup-routes.log` has real lines. The change was breaking and inert at once.
+  **Regression cover:** `packages/app/tests/workflow/lifecycle-adapter.test.ts` gained
+  `allows wip → testing when the guard shell succeeds` (every prior assertion on these two
+  hops expected a denial, which is why the suite stayed green) and
+  `every (from, to) pair in the lifecycle graph is declared exactly once`.
+  Reopening condition unchanged; the diff is recoverable from `c84fcd61a`.
+
+- 2026-09-04 — **task-lifecycle pilot half reverted** (operator decision). The four
+  proportional `wip→testing` / `testing→done` edges and the three route-reason `onEnter`
+  writers were removed from `config/workflows/task-lifecycle.yaml`; `mode` / `__runId` vars
+  and `evaluateLifecycleRoute` went with them. The wrapup-pipeline half is unchanged and
+  still live.
+  **Why:** the split was a live regression, not inert. `requestTransition` resolves ONE
+  transition per `(from, to)` pair — `transitions.find(...)` in
+  `dual-workflow-engine/src/service.ts:269` — then denies on that transition's guard with no
+  fallthrough to a sibling. The fast edge was declared first, its guard is
+  `test "$mode" = fast && …`, and `LifecycleAdapter.bindGuardVar`
+  (`packages/app/src/workflow/lifecycle-adapter.ts:265-269`) binds only `wbs`/`spurBin`, so
+  `mode` reached the guard as `""`. Every forward FSM hop denied, and
+  `planning-write-service.ts:435-441` turns that denial into a `GuardDeniedError` that aborts
+  the status write. Measured with `spurBin: 'true'` against the pre-revert YAML: `allowed =
+  false`, `exitCode 1` — the guard command itself could not fail, only `test "$mode" = fast`
+  could. The auto-run loop is unaffected (`state-machine.ts:205-224` `firstPassingTransition`
+  evaluates every outbound edge), which is why the same pattern is sound in wrapup-pipeline
+  and task-pipeline (0759, left in place) and unsound only here.
+  **Dead half:** `onEnter` actions run only in the auto-run loop, so the three lifecycle route
+  writers never executed — `.spur/memory/lifecycle-routes.log` was never created, while
+  `wrapup-routes.log` has real lines. The change was breaking and inert at once.
+  **Regression cover:** `packages/app/tests/workflow/lifecycle-adapter.test.ts` gained
+  `allows wip → testing when the guard shell succeeds` (every prior assertion on these two
+  hops expected a denial, which is why the suite stayed green) and
+  `every (from, to) pair in the lifecycle graph is declared exactly once`.
+  Reopening condition unchanged; the diff is recoverable from `c84fcd61a`.

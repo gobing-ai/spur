@@ -19,7 +19,7 @@ const makeRef = (wbs: string): EntityRef => ({
     folder: '/tasks',
 });
 
-async function makeAdapter(): Promise<{ adapter: LifecycleAdapter; db: DbAdapter }> {
+async function makeAdapter(spurBin = 'spur'): Promise<{ adapter: LifecycleAdapter; db: DbAdapter }> {
     const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
     await applyCliMigrations(db);
     const opts: LifecycleAdapterOptions = {
@@ -28,7 +28,7 @@ async function makeAdapter(): Promise<{ adapter: LifecycleAdapter; db: DbAdapter
         taskRunLinkDao: (adapter) => new TaskRunLinkDao(adapter),
         workflowPath: WORKFLOW_PATH,
         cwd: process.cwd(),
-        spurBin: 'spur',
+        spurBin,
     };
     return { adapter: new LifecycleAdapter(opts), db };
 }
@@ -72,6 +72,34 @@ describe('LifecycleAdapter (engine integration)', () => {
         if (result.allowed) throw new Error('expected guard denial');
         expect(result.report ?? '').toMatch(/guard/i);
         db.close();
+    });
+
+    test('R2: allows wip → testing when the guard shell succeeds', async () => {
+        // Regression guard for task 0758. Every other wip→testing / testing→done assertion in
+        // this file expects a *denial*, so the suite stayed green while the FSM denied both
+        // forward hops outright: 0758 added a `mode = fast` sibling ahead of the safety edge,
+        // and `requestTransition` resolves ONE transition per (from, to) pair — the first
+        // `.find` match — then denies on its guard with no fallthrough. `spurBin: 'true'`
+        // makes the guard shell exit 0, so this asserts transition selection and guard
+        // plumbing alone, independent of corpus state. Re-add a guard-paired sibling and this
+        // fails: the fast edge's `test "$mode" = fast` cannot pass under the default vars.
+        const { adapter, db } = await makeAdapter('true');
+        const result = await adapter.requestTransition(makeRef('0011'), 'wip', 'testing');
+        expect(result.allowed).toBe(true);
+        expect(result.from).toBe('wip');
+        expect(result.to).toBe('testing');
+        db.close();
+    });
+
+    test('R2: every (from, to) pair in the lifecycle graph is declared exactly once', async () => {
+        // The structural half of the same rule — it covers testing→done and every future edge
+        // without paying for that hop's provenance and Review L3 gates.
+        const { parse } = await import('yaml');
+        const def = parse(await Bun.file(WORKFLOW_PATH).text()) as {
+            transitions: { from: string; to: string }[];
+        };
+        const pairs = def.transitions.map((t) => `${t.from} → ${t.to}`);
+        expect(pairs.filter((pair, i) => pairs.indexOf(pair) !== i)).toEqual([]);
     });
 
     test('R1+R4: create-or-attach binds run task:<wbs> and writes one lifecycle link', async () => {

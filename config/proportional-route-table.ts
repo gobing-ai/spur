@@ -113,24 +113,6 @@ export function evaluateWrapupRoute(input: { tasks?: unknown[] | string; mode?: 
 }
 
 /**
- * Evaluate route for task-lifecycle over (mode).
- */
-export function evaluateLifecycleRoute(input: { mode?: string }): RouteEvaluation {
-    if (input.mode === 'fast') {
-        return {
-            route: 'fast',
-            predicateId: 'fast-complete',
-            reason: 'fast:evidence complete+consistent',
-        };
-    }
-    return {
-        route: 'safety',
-        predicateId: 'safety-default',
-        reason: 'safety:standard verification',
-    };
-}
-
-/**
  * Generic evaluateRoute resolving to safety or fast based on input.
  */
 export function evaluateRoute(input: RouteInput): RouteEvaluation {

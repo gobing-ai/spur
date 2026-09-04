@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import {
-    evaluateLifecycleRoute,
     evaluateRoute,
     evaluateWrapupRoute,
     ROUTE_TABLE,
@@ -73,19 +72,6 @@ describe('proportional route table (task 0758)', () => {
             route: 'safety',
             predicateId: 'safety-default',
             reason: 'safety:unrecognized evidence (mode=random)',
-        });
-    });
-
-    test('evaluateLifecycleRoute routes to fast or safety based on mode', () => {
-        expect(evaluateLifecycleRoute({ mode: 'fast' })).toEqual({
-            route: 'fast',
-            predicateId: 'fast-complete',
-            reason: 'fast:evidence complete+consistent',
-        });
-        expect(evaluateLifecycleRoute({})).toEqual({
-            route: 'safety',
-            predicateId: 'safety-default',
-            reason: 'safety:standard verification',
         });
     });
 

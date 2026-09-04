@@ -6,7 +6,7 @@ status: verifying
 priority: P1
 tags: []
 created_at: "2026-09-03T20:25:50.515Z"
-updated_at: "2026-09-04T21:14:49.860Z"
+updated_at: "2026-09-04T22:12:32.383Z"
 ---
 
 # D9: Workflow seam stabilization and proportional gate rollout
@@ -258,19 +258,27 @@ Corroboration: the 25 `history_run_session` links resolve to 10 distinct runs ac
 (`history-anatomy` 9, `wrapup-pipeline` 1). Neither pilot has a cost population to divide by.
 
 **0757's first pass recorded "Option A continues" by evaluating one conjunct and assuming the other.
-That disposition is withdrawn.** S3 (0758) and S5 (0759) had already been built on it. They are not
-reverted — deleting shipped, tested code is the operator's call — but they are **inert**: the
-proportional fast path is reached only at `mode = "fast"`, all three pilots declare `mode: ""` as
-their default, and no production caller passes `fast` (the only `mode: 'fast'` sites in the repo are
-tests and fixtures). Every real run takes the safety path, exactly as before the pilots landed.
+That disposition is withdrawn.** S3 (0758) and S5 (0759) had already been built on it. 0759 is
+**inert** and left dormant: the proportional fast path is reached only at `mode = "fast"`, the
+pipeline declares `mode: ""` as its default, and no production caller passes `fast`. 0758's
+task-lifecycle half turned out to be **not inert but breaking** — the fast/safety sibling edges
+denied every `wip→testing` and `testing→done` write through `requestTransition` (which resolves a
+single transition per `(from, to)` pair, `service.ts:269`, no fallthrough) — and was reverted by
+operator decision on 2026-09-04. The wrapup-pipeline half stays: the auto-run loop's
+`firstPassingTransition` evaluates every outbound edge, so guard-paired siblings are sound there.
 
 **Reopening condition.** Activate the fast path for a pilot only when a re-run of the 0757
 measurement shows that pilot at **≥80% `mappedRuns` / `terminalRuns`** and ≥5 real terminal runs.
 That requires run-scoped session attribution for `task-lifecycle` and `task-pipeline`, which is
 currently zero. Until then the routing stays unreferenced.
 
-**Open operator decision.** Whether to keep 0758/0759 dormant as-is, or revert the pilots to restore
-the pre-S3 shape, is not decided here. Dormancy is the status quo recorded above.
+**Operator decision (2026-09-04, resolved).** 0758's task-lifecycle half was reverted — it was a
+live regression (every forward lifecycle hop denied) and its route writers were dead code
+(`onEnter` never runs through `requestTransition`; `lifecycle-routes.log` was never created, unlike
+the live `wrapup-routes.log`). 0759 stays dormant as-is: genuinely inert, and its FAIL verdict
+already records the unmet coverage requirements. Regression cover added in
+`packages/app/tests/workflow/lifecycle-adapter.test.ts` (allow-when-guard-succeeds +
+one-edge-per-pair invariant). Details in task 0758 History.
 ### Batch verify outcome (D9, all tasks)
 
 Final recorded verdicts across the feature: **0750/0751/0752/0753/0755/0756/0760 PASS · 0754 PARTIAL · 0757 PARTIAL · 0758 FAIL · 0759 FAIL**. The two FAILs and the two PARTIALs are the honest record of the Option B boundary above, not unfinished repair work:
