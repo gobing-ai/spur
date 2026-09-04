@@ -49,6 +49,17 @@ describe('isolated eval project', () => {
         expect(status.exitCode).toBe(0);
         expect(status.stdout.toString()).toContain('tests/fixtures/pipeline-eval/scratch/');
     });
+
+    test('removeEvalRun is idempotent: a vanished worktree does not throw and the temp parent is still removed', async () => {
+        const run = await createEvalRun();
+        // Simulate the process-kill/partial-cleanup case: the worktree dir is already gone (stale
+        // registration) but the temp parent survives. removeEvalRun must prune the stale ref and
+        // still remove the temp parent, never throwing (cleanup runs from finally/afterAll and must
+        // not abort the primary outcome).
+        Bun.spawnSync(['git', 'worktree', 'remove', '--force', run.projectDir]);
+        await expect(removeEvalRun(run)).resolves.toBeUndefined();
+        await expect(stat(run.tempParent)).rejects.toThrow();
+    });
 });
 
 describe('diffSnapshot', () => {
