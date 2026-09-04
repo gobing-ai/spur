@@ -120,10 +120,19 @@ const MEASURE_COLS =
 /** The mart INSERT column list: the ADR-106 vector plus the tool-error count the top-tools projection needs. */
 const MART_INSERT_COLS = `${MEASURE_COLS}, errors`;
 
-/** The five-minute table a mart dimension is derived from. */
-const MSG_DAY_PRED = 'SUBSTR(m.bucket_start, 1, 10) = ?';
-const TOOL_DAY_PRED = 'SUBSTR(t.bucket_start, 1, 10) = ?';
-const SKILL_DAY_PRED = 'SUBSTR(s.bucket_start, 1, 10) = ?';
+/**
+ * Day predicate over a five-minute table's `bucket_start` (0741 R8).
+ *
+ * Written as a half-open range rather than `SUBSTR(bucket_start, 1, 10) = ?` so the existing
+ * `(bucket_start, …)` indexes apply: the SUBSTR form is not sargable, and because the refresh
+ * engine embeds these ops in *every* per-bucket transaction, it turned each mart derivation into
+ * a full scan of the five-minute tables — the delta refresh then grew with total corpus size,
+ * which is exactly what R8 forbids. Bind the day twice; `DATE(?, '+1 day')` closes the range.
+ * Rows with an empty `bucket_start` (NULL `ts`) fall outside the range, as under SUBSTR.
+ */
+const MSG_DAY_PRED = "(m.bucket_start >= ? AND m.bucket_start < DATE(?, '+1 day'))";
+const TOOL_DAY_PRED = "(t.bucket_start >= ? AND t.bucket_start < DATE(?, '+1 day'))";
+const SKILL_DAY_PRED = "(s.bucket_start >= ? AND s.bucket_start < DATE(?, '+1 day'))";
 
 /**
  * SQL ops that derive the day-grain mart rows for the given days. Import-free of the refresh
@@ -169,7 +178,7 @@ export function deriveDimensionMartsOps(days: readonly string[]): DbBatchOp[] {
                        msg.fresh_input_tokens, msg.cache_read_tokens, msg.cache_write_tokens,
                        msg.output_tokens, msg.duration_ms, msg.duration_samples, COALESCE(tools.errors, 0)
                 FROM msg LEFT JOIN tools ON tools.model = msg.model`,
-            params: [day, day, day],
+            params: [day, day, day, day, day],
         });
         // source: message_5m fresh/cache/output/messages + tool_5m tool_calls + skill_5m skill_calls.
         // duration_ms / duration_samples are not applicable at source grain -> NULL.
@@ -203,7 +212,7 @@ export function deriveDimensionMartsOps(days: readonly string[]): DbBatchOp[] {
                        msg.cache_write_tokens, msg.output_tokens, NULL, NULL, COALESCE(tools.errors, 0)
                 FROM msg LEFT JOIN tools ON tools.source = msg.source
                          LEFT JOIN skills ON skills.source = msg.source`,
-            params: [day, day, day, day],
+            params: [day, day, day, day, day, day, day],
         });
         // tool: tool_calls / fresh(_alloc) / cache(_alloc) / output(_alloc) / duration from tool_5m.
         // skill_calls is not applicable at tool grain -> NULL; messages is not derivable -> NULL.
@@ -218,7 +227,7 @@ export function deriveDimensionMartsOps(days: readonly string[]): DbBatchOp[] {
                 FROM history_board_tool_5m t
                 WHERE ${TOOL_DAY_PRED}
                 GROUP BY t.tool_name`,
-            params: [day, day],
+            params: [day, day, day],
         });
         // skill: tool_5m rows whose skill_name is a real skill. tool_calls is not applicable at
         // skill grain -> NULL; messages is not derivable -> NULL.
@@ -233,7 +242,7 @@ export function deriveDimensionMartsOps(days: readonly string[]): DbBatchOp[] {
                 FROM history_board_tool_5m t
                 WHERE ${TOOL_DAY_PRED} AND t.skill_name IS NOT NULL AND TRIM(t.skill_name) <> '' AND t.skill_name <> 'unknown'
                 GROUP BY t.skill_name`,
-            params: [day, day],
+            params: [day, day, day],
         });
     }
     // KPI window: current + previous aggregate windows for the trend range key. Re-derived from the
