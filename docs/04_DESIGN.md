@@ -960,7 +960,7 @@ The coverage table adds `Last imported` / `Parse err` / `Validation err`, marks 
 warning instead of a code-only list. `narrowArtifact` re-slice (`report --top`) lowers
 `appliedTop` to `min(requested, existing)` and leaves the population counts untouched.
 
-**Verified-outcome projection (task 0712):** `HistoryArtifact.verifiedOutcome?`
+**Verified-outcome projection (ADR-100, task 0712):** `HistoryArtifact.verifiedOutcome?`
 (`VerifiedOutcomeStat`, additive, no schema bump; absent on pre-0712 artifacts and whenever no
 task locator is configured — absence means unknown, never zero). The app derivation
 (`packages/app/src/services/verified-outcome.ts`) gathers per-task evidence — `task_run_links`
@@ -2448,7 +2448,9 @@ and the step-reporter renders it on the action line (`role=<id>`). An `agent:` p
 routing permanently (0536 R2): the role declares the *reason*, so removing the pin later routes
 correctly instead of falling to the default role.
 
-**Capability attestation (ADR-102, task 0706).** A `agent.run` step may declare
+#### Agent capability attestation
+
+**Capability attestation (ADR-094 principle / ADR-102 contract, task 0706).** A `agent.run` step may declare
 `requiresCapabilities` — a partial map over the closed axis vocabulary
 `fsRead|fsWrite|networkEgress|processSpawn|externalMutationApproval` to a minimum level
 `available|enforced` (`EXECUTION_CAPABILITY_*`, `packages/config/src/index.ts`). Executors attest
@@ -2464,7 +2466,7 @@ never a capability signal. Satisfied gates record a bounded, redacted per-axis e
 workflows attest the two unattended tree-mutating stages (`implement`, `test-fix` in
 `task-pipeline.yaml`); observe-only stages stay undeclared.
 
-**Usage propagation and hard budgets (task 0707, R1–R7).** Agent usage is a normalized optional
+**Usage propagation and hard budgets (ADR-095, task 0707, R1–R7).** Agent usage is a normalized optional
 contract (`NormalizedAgentUsage`, `packages/app/src/services/agent-usage.ts`): `availability:
 'measured'|'unavailable'` with typed token/cost fields only when actually reported — unavailable
 stays unavailable with a reason and is **never** coerced to zero. The contract reads ONLY typed
@@ -2481,7 +2483,7 @@ a cap that cannot be evaluated because usage is unavailable fails closed as `bud
 (R5) — never silently passed, never estimated from public price tables (R8). Actions that declare no
 budget dispatch unchanged; failed dispatches keep their existing diagnostics (R7).
 
-**Fail-closed operational trip wires (task 0708, R1–R8).** High-risk operational signals at
+**Fail-closed operational trip wires (ADR-096, task 0708, R1–R8).** High-risk operational signals at
 workflow/action safe boundaries are evaluated against a **closed, deterministic catalog**
 (`packages/app/src/workflow/tripwire.ts`): `retry-exhausted`, `hard-budget`, `capability-denied`,
 `proof-invalidated`, `output-drop` — each versioned, with a fixed `response` (`fail` for all but
@@ -2504,7 +2506,7 @@ semantics. Deterministic fail-closed evaluation means an unknown signal id fails
 rather than silently passing, and drift between emitters and the catalog is caught by unit tests
 pinning the closed catalog and the event map (R8).
 
-**Fresh-context review independence (task 0710, R1–R8).** `agent.run` accepts `freshSession: true`
+**Fresh-context review independence (ADR-097, task 0710, R1–R8).** `agent.run` accepts `freshSession: true`
 (R1): the action bypasses every inherited session knob (`__agentSessionDir`, `__agentSessionId`, the
 `__agentSession` latch), dispatches into a per-node `fresh-<node>` session directory with no session
 id, and publishes **only** routing evidence on success — never its own session identity — so a
@@ -2524,6 +2526,37 @@ configuration remedy (`roles.reviewer` tier override or an explicit pin) — nev
 Composition (R8): the live pipeline itself is checked — a proof-chain test fails if review/verify
 re-pin an executor, lose `freshSession: true`, or drift from `compareExecutorWith: implement`, and
 the composition baseline digest regenerates with every pipeline change.
+
+**Escalation packets (ADR-098, task 0709, R1–R3).** A blocked or failed run emits exactly ONE
+versioned escalation packet — a pure, deterministic projection over evidence that already exists
+(`packages/app/src/workflow/escalation-packet.ts`). The packet carries `schemaVersion` (1), a stable
+`fingerprint` (sha256 over run id + trigger + gate + evidence refs, so the same failure re-projects
+to the same id), the trigger (`tripwire` | `terminal-failure`), and one unresolved operator decision
+drawn from a closed vocabulary: `retry`, `revise_requirements`, `grant_capability`, `raise_budget`,
+`inspect_failure`. The trip-wire policy → decision mapping is a closed catalog keyed on the ADR-096
+gate ids; an unknown gate falls to `inspect_failure`. Evidence enters as **references only** — task,
+run, proof, artifact, budget, capability, and event ids — never copied logs or payloads, and every
+string field is bounded and redacted. JSON is the source of truth; Markdown is an optional render.
+The sink (`packages/app/src/observability/escalation-packet-sink.ts`) writes the artifact under
+`.spur/run/` plus one artifacts-table row, and gates emission on `isDryRunProbe(runId)` so a dry
+probe never writes a packet (0753 R4) — an escalation channel that fires on probes is one nobody
+reads. No new persistence plane is introduced.
+
+**Checkpoint and indexed-context freshness (ADR-099, task 0711, R1–R5).** A session checkpoint is an
+**advisory** resume projection under `.spur/memory/sessions/`; task/feature files and persisted
+workflow state stay authoritative. `packages/app/src/workflow/checkpoint-contract.ts` fixes the
+metadata contract at `CHECKPOINT_SCHEMA_VERSION = 1`: `sessionId`, `workflow`, `runId`, `taskWbs`,
+`featureId`, `phase`, `status`, `lastGate`, `sourceCommit`, `digest`, `generatedAt`, `updatedAt`,
+`nextAction`, and `artifacts[]` — the freshness fields the Session Checkpoint Convention documented
+but writers never emitted. `parseCheckpointMetadata` returns `null` for any structurally invalid
+file (missing or short frontmatter, missing required field, wrong schema version); callers must
+report-and-ignore, never silently trust (R3). `TERMINAL_CHECKPOINT_STATUSES`
+(`done`/`failed`/`cancelled`/`skipped`) bound cleanup: `WorkflowService.cleanCheckpoints` deletes
+only expired, unreferenced, regenerable state inside its own confined owner path, and never a file
+it cannot prove is a terminal checkpoint (R5). The plugin's
+`plugins/sp/scripts/stage-registry-adapter.ts` keeps a self-contained lean copy of this semantics —
+it installs into foreign repos and cannot import workspace packages — and a parity test pins the two
+together.
 
 **Verifier-owned verify answer file (task 0726, R3).** The verify step's `agent.run` declares
 `expectFile` instead of `answerFile`: the verifier writes `.spur/run/<wbs>-verify-answer.txt` itself
