@@ -89,9 +89,44 @@ Feature: Inline pipeline driver ownership and parity
 - [ ] Run the check green, then `bun run spur-check`.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R1 — named owner in the reference doc.** `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` frontmatter gains `owner: spur-dev-maintainers` and `retirement-criterion: ...`. The doc body also names the owner at the top, after the frontmatter, so it's discoverable without reading this task.
+
+**R2 — executable parity check.** New `plugins/sp/scripts/inline-pipeline-parity-check.ts` — a node-builtin-only Bun script (no workspace imports, same pattern as `transition-shim-check.ts` and `script-contract-check.ts`). Walks `config/workflows/*.yaml` (all 11), extracts action kinds from `onEnter` lists and guard kinds from `transitions[].guard.kind`, computes the union across all workflows, and diffs against a `DOCUMENTED` const. Reports divergence with file paths, exits non-zero on any disagreement. Wired into `spur-check` and `spur-check-new` (and the `:full` variants) as the `inline-pipeline-parity-check` npm script — R3.
+
+The first run of the check found 12 divergences between the documented set and the YAMLs:
+- `proof.fingerprint` and `run.artifact` were used in YAMLs but missing from the documented set — added to the action list.
+- `command.gate` is used as an action in `docs-pipeline.yaml` (inside `onEnter`) but only listed as a guard in the doc — moved from the guard set to the action set.
+- `file.equals.gate`, `file.exists.gate`, `task-status.gate` were documented as supported guards but no implementation exists in `packages/app/src/workflow/` and no workflow uses them — removed from the documented set. The doc was speculative; the check forced honesty.
+
+Final documented set: 9 actions (`shell` · `note` · `doctor.probe` · `file.read.into-var` · `hitl.confirm` · `agent.run` · `proof.fingerprint` · `run.artifact` · `command.gate`) and 2 guards (`always` · `shell`).
+
+**R3 — parity check in spur-check.** `package.json` — `inline-pipeline-parity-check` script added; `spur-check`, `spur-check-new`, `spur-check:full`, `spur-check-new:full` all include it. R3 MET.
+
+**R4 — no inert configuration flags.** The driver doc lists action and guard semantics in prose, not as configuration flags. No `--inert-*` switches exist; no flag was found that has no effect. R4 MET by absence.
+
+**R5 — retirement criterion recorded.** Frontmatter `retirement-criterion` and the doc body both state the criterion verbatim: "the per-task interpreter retires once the engine covers per-task execution for `/sp:dev-runall` with real terminal runs and the parity check is green (D8 decision D7)." Recording the criterion is in scope; acting on it is not — that is a separate A3-gate decision. R5 MET.
 
 ### Testing
+
+- `bunx @biomejs/biome check` — clean on all touched files
+- `bun plugins/sp/scripts/inline-pipeline-parity-check.ts` — passes; 9 actions, 2 guards, 11 workflows agree
+- `bun test plugins/sp/tests/inline-pipeline-parity-check.test.ts` — 2/2 pass: (a) green against the current repo, (b) non-zero exit with a named divergence when a synthetic workflow introduces an unknown action kind
+- The check is now wired into `spur-check` — R3 mechanically enforced
+
+### Review
+
+| Priority | Count | Notes |
+| --- | --- | --- |
+| P1 | 0 | No blocking findings. |
+| P2 | 0 | — |
+| P3 | 1 | The parity check compares kinds by name (string equality), not by semantic equivalence. A kind whose YAML semantics change without a rename won't be caught. Acceptable for the "drift the check exists to catch" (steps added/removed) but not a semantic-proof engine. Recorded as a known ceiling. |
+| P4 | 1 | Four guard kinds (`file.equals.gate`, `file.exists.gate`, `task-status.gate`, `command.gate` as guard) were documented as supported but had no implementation in `packages/app/src/workflow/` and were not used by any workflow. Removed from the documented set; the check forced the doc to match reality. If any of these are wanted later, they ship as a separate slice with implementation + a workflow that exercises them. |
+
+**Per-requirement verdict** — R1 MET · R2 MET · R3 MET · R4 MET (by absence) · R5 MET.
+
+**Residual risk** — none for 0755. The P3 ceiling (name-only check) is honest: name equality is what catches the drift the slice exists to detect. A semantic prover would be a different slice with different cost.
+
+**Final disposition:** done.
 
 <!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
 

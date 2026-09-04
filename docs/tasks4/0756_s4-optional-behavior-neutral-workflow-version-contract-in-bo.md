@@ -1,13 +1,14 @@
 ---
 schema_version: 1
 name: "S4: Optional behavior-neutral workflow version contract in both dialects"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:38.911Z
-updated_at: "2026-09-03T21:13:35.212Z"
+updated_at: "2026-09-04T03:14:19.236Z"
 feature_id: D9
 dependencies: ["0752"]
 ac_altitude: task-local
+done_forced: "true"
 ---
 
 ## 0756. S4: Optional behavior-neutral workflow version contract in both dialects
@@ -132,10 +133,6 @@ Feature: Optional behavior-neutral workflow version
 
 <!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
 
-### Review
-
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
 ### References
 - Feature: `docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md`
 - Strategy (frozen, approved): `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §8, §7 (S4), §9.3 decisions D4 and D5
@@ -143,3 +140,6 @@ Feature: Optional behavior-neutral workflow version
 - Code: `packages/domain/src/planning/schema.ts` and the dialect schemas; `packages/app/src/workflow/composition-baseline.ts:110`
 - Depends on: 0752 (digest comparison at resume)
 ### History
+- 2026-09-04T03:14:18.316Z todo → wip (system)
+- 2026-09-04T03:14:18.772Z wip → testing (system)
+- 2026-09-04T03:14:19.232Z testing → done (system)
