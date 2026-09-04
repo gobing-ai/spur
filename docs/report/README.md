@@ -5,6 +5,7 @@ Working-layer evidence and forensic reports. These documents inform decisions bu
 
 | Date | Report | Purpose |
 | --- | --- | --- |
+| 2026-09-03 | [E91 History Tab Latency — Baseline and No-Regression Protocol Record](2026-09-03-E91-history-tab-latency-baseline.md) | E91 latency reference baseline, measurement protocol, and PARTIAL residual risk for the History six-tab no-regression gate |
 | 2026-08-28 | [Harness Engineering Playbook vs Spur](2026-08-28-harness-engineering-playbook-vs-spur.md) | Architecture and implementation comparison; prioritized refinement input |
 | 2026-08-14 | [E6 Batch Execution — Forensic Report](2026-08-14-E6-batch-forensic-report.md) | E6 run/session and cost-path execution forensics |
 | 2026-08-14 | [E5 Batch Execution — Forensic Report](2026-08-14-E5-batch-forensic-report.md) | E5 batch execution forensics |
