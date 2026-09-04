@@ -2448,7 +2448,7 @@ and the step-reporter renders it on the action line (`role=<id>`). An `agent:` p
 routing permanently (0536 R2): the role declares the *reason*, so removing the pin later routes
 correctly instead of falling to the default role.
 
-**Capability attestation (ADR-101, task 0706).** A `agent.run` step may declare
+**Capability attestation (ADR-102, task 0706).** A `agent.run` step may declare
 `requiresCapabilities` — a partial map over the closed axis vocabulary
 `fsRead|fsWrite|networkEgress|processSpawn|externalMutationApproval` to a minimum level
 `available|enforced` (`EXECUTION_CAPABILITY_*`, `packages/config/src/index.ts`). Executors attest

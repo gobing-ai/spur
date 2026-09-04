@@ -1355,10 +1355,10 @@ resolved debt but cannot silently accept new debt. Missing or expired governance
 closed once the ADR-093 enforcement lands. Until then, the current corpus snapshot is legacy debt;
 ADR-090/092 describe its present behavior, not permission to keep it indefinitely.
 
-## 24. Production Autonomy Contracts (accepted design — ADR-094–100; not yet built)
+## 24. Production Autonomy Contracts (built — ADR-094–100, tasks 0703–0712)
 
-These controls extend existing owners; they add no agent runtime, workflow engine, event bus,
-analytics store, or memory authority:
+These controls are **built and live** as of tasks 0703-0712 (ADR-094-100). They extend existing owners;
+they add no agent runtime, workflow engine, event bus, analytics store, or memory authority:
 
 ```text
 agent.run requirement
