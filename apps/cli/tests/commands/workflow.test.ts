@@ -228,7 +228,7 @@ describe('workflow command (main)', () => {
         const exitCode = await main(['workflow', 'validate', workflowFile], { output, cwd: dir, dbUrl: ':memory:' });
 
         expect(exitCode).toBe(0);
-        expect(output.messages).toEqual(['workflow valid: cli-test-flow']);
+        expect(output.messages).toEqual(['workflow valid: cli-test-flow (unversioned)']);
         await rm(dir, { recursive: true, force: true });
     });
 

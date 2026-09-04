@@ -3,15 +3,8 @@
     "workflows": {
         "docs-pipeline": {
             "definition": "config/workflows/docs-pipeline.yaml",
-            "terminalStates": [
-                "done",
-                "failed",
-                "cancelled"
-            ],
-            "modelQueries": [
-                "draft",
-                "verify"
-            ],
+            "terminalStates": ["done", "failed", "cancelled"],
+            "modelQueries": ["draft", "verify"],
             "actions": {
                 "precheck:onEnter:0": {
                     "kind": "command.gate"
@@ -82,18 +75,8 @@
         },
         "idea-pipeline": {
             "definition": "config/workflows/idea-pipeline.yaml",
-            "terminalStates": [
-                "handoff",
-                "cancelled",
-                "failed"
-            ],
-            "modelQueries": [
-                "discovery",
-                "feature-create",
-                "ac-generate",
-                "system-design",
-                "decompose"
-            ],
+            "terminalStates": ["handoff", "cancelled", "failed"],
+            "modelQueries": ["discovery", "feature-create", "ac-generate", "system-design", "decompose"],
             "actions": {
                 "start:onEnter:0": {
                     "kind": "note"
@@ -198,17 +181,8 @@
         },
         "task-pipeline": {
             "definition": "config/workflows/task-pipeline.yaml",
-            "terminalStates": [
-                "done",
-                "failed",
-                "cancelled"
-            ],
-            "modelQueries": [
-                "implement",
-                "test-fix",
-                "review",
-                "verify"
-            ],
+            "terminalStates": ["done", "failed", "cancelled"],
+            "modelQueries": ["implement", "test-fix", "review", "verify"],
             "actions": {
                 "precheck:onEnter:0": {
                     "kind": "shell",
@@ -331,13 +305,8 @@
         },
         "wrapup-pipeline": {
             "definition": "config/workflows/wrapup-pipeline.yaml",
-            "terminalStates": [
-                "done",
-                "skipped"
-            ],
-            "modelQueries": [
-                "doc-sync"
-            ],
+            "terminalStates": ["done", "skipped"],
+            "modelQueries": ["doc-sync"],
             "actions": {
                 "start:onEnter:0": {
                     "kind": "note"
@@ -375,11 +344,7 @@
         },
         "pr-review": {
             "definition": "config/workflows/pr-review.yaml",
-            "terminalStates": [
-                "done",
-                "pending",
-                "failed"
-            ],
+            "terminalStates": ["done", "pending", "failed"],
             "modelQueries": [],
             "actions": {
                 "preflight:onEnter:0": {
@@ -418,13 +383,8 @@
         },
         "basic": {
             "definition": "config/workflows/basic.yaml",
-            "terminalStates": [
-                "done",
-                "failed"
-            ],
-            "modelQueries": [
-                "fix"
-            ],
+            "terminalStates": ["done", "failed"],
+            "modelQueries": ["fix"],
             "actions": {
                 "implement:onEnter:0": {
                     "kind": "note"
@@ -449,16 +409,8 @@
         },
         "feature-dev": {
             "definition": "config/workflows/feature-dev.yaml",
-            "terminalStates": [
-                "done",
-                "failed"
-            ],
-            "modelQueries": [
-                "brainstorm",
-                "plan",
-                "execute-tasks-auto",
-                "execute-tasks"
-            ],
+            "terminalStates": ["done", "failed"],
+            "modelQueries": ["brainstorm", "plan", "execute-tasks-auto", "execute-tasks"],
             "actions": {
                 "precheck:onEnter:0": {
                     "kind": "shell",
@@ -498,15 +450,8 @@
         },
         "wayfinder-resolution": {
             "definition": "config/workflows/wayfinder-resolution.yaml",
-            "terminalStates": [
-                "done",
-                "failed",
-                "cancelled"
-            ],
-            "modelQueries": [
-                "investigate",
-                "verify"
-            ],
+            "terminalStates": ["done", "failed", "cancelled"],
+            "modelQueries": ["investigate", "verify"],
             "actions": {
                 "precheck:onEnter:0": {
                     "kind": "shell",
