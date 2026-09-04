@@ -1237,6 +1237,25 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             ]);
             continue;
         }
+        // Migration 0034 indexes and backfills history_tool_call.effective_tool_name /
+        // tool_name_alias, but no importer DDL creates them (HISTORY_IMPORT_SCHEMA_SQL
+        // through 0.4.55 has neither column), so every DB carrying the table needs them
+        // provisioned first. SQLite has no ADD COLUMN IF NOT EXISTS and the migration body
+        // spans several statements, so `addColumnIfMissing` (one column, all-or-nothing)
+        // cannot express it — guard per column here. Table-absent DBs fall through to
+        // historyToolIdentitySkip below. 'unknown' matches the body's backfill predicate.
+        if (
+            migration.id === '0034_spur_cli_history_tool_identity' &&
+            (await tableExists(adapter, 'history_tool_call'))
+        ) {
+            for (const column of ['effective_tool_name', 'tool_name_alias']) {
+                if (!(await columnExists(adapter, 'history_tool_call', column))) {
+                    await adapter.exec(
+                        `ALTER TABLE history_tool_call ADD COLUMN ${column} TEXT NOT NULL DEFAULT 'unknown'`,
+                    );
+                }
+            }
+        }
 
         const addColumnGuard = migration.addColumnIfMissing;
         const shouldApplySql =

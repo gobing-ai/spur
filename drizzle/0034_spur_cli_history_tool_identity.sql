@@ -1,5 +1,7 @@
 -- 0739: Persist effective_tool_name and tool_name_alias on history_tool_call,
 -- create history_tool_alias_map, supporting indexes, and backfill existing rows.
+-- The two columns are provisioned by applyCliMigrations' guarded pre-step (no importer
+-- DDL creates them, and SQLite has no ADD COLUMN IF NOT EXISTS) before this body runs.
 
 CREATE TABLE IF NOT EXISTS history_tool_alias_map (
     source TEXT NOT NULL,
