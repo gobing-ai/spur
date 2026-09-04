@@ -278,7 +278,7 @@
                 },
                 "verify:onEnter:4": {
                     "kind": "shell",
-                    "invocation": "V=\".spur/run/$wbs-verdict.json\"; if [ -f \"$V\" ] && [ -n \"$proofDigest\" ]; then\n  jq --arg d \"$proofDigest\" --arg r \"$__runId\" --arg g \"$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)\"\n  '. + {proof: {digest: $d, runId: $r, capturePoint: \"quality-gate-entry\", stages: {\n    qualityGate: {status: $g, digest: $d},\n    review: {status: \"completed\", digest: $d},\n    verification: {status: .verdict, digest: $d}}}}\n    | .checks += [{name: \"proof-input-digest\", status: \"pass\", evidence: $d}]'\n  \"$V\" > \"$V.tmp\" && mv \"$V.tmp\" \"$V\";\nfi; exit 0"
+                    "invocation": "V=\".spur/run/$wbs-verdict.json\"; if [ -f \"$V\" ] && [ -n \"$proofDigest\" ]; then\n  jq --arg d \"$proofDigest\" --arg r \"$__runId\" --arg dd \"$__definitionDigest\" --arg g \"$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)\"\n  '. + {proof: {digest: $d, runId: $r, definitionDigest: $dd, capturePoint: \"quality-gate-entry\", stages: {\n    qualityGate: {status: $g, digest: $d},\n    review: {status: \"completed\", digest: $d},\n    verification: {status: .verdict, digest: $d}}}}\n    | .checks += [{name: \"proof-input-digest\", status: \"pass\", evidence: $d}]'\n  \"$V\" > \"$V.tmp\" && mv \"$V.tmp\" \"$V\";\nfi; exit 0"
                 },
                 "record:onEnter:0": {
                     "kind": "proof.fingerprint"

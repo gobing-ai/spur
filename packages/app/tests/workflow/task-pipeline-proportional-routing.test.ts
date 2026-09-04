@@ -38,6 +38,28 @@ describe('task-pipeline proportional routing (task 0759, S5)', () => {
         expect(def.vars?.__runId).toBe('');
     });
 
+    test('R5: declares __definitionDigest and binds the verdict proof to the run and its definition', () => {
+        // 0759 R5's second half: the record is bound to the certifying run AND its definition
+        // digest. The pipeline declares the var, stamps it into the proof block, and the
+        // verify → record guard fails closed unless the proof carries the injected values.
+        expect(def.vars?.__definitionDigest).toBe('');
+
+        const verify = def.states.find((s) => s.id === 'verify');
+        const writer = verify?.onEnter?.find(
+            (a) => a.kind === 'shell' && String(a.options?.command ?? '').includes('proof: {digest'),
+        );
+        const writerCmd = String(writer?.options?.command ?? '');
+        expect(writerCmd).toContain('__definitionDigest');
+        expect(writerCmd).toContain('definitionDigest: $dd');
+
+        const toRecord = def.transitions.find((t) => t.from === 'verify' && t.to === 'record');
+        const recordCmd = String(toRecord?.guard?.options?.command ?? '');
+        expect(recordCmd).toContain('.proof.runId // ""');
+        expect(recordCmd).toContain('.proof.definitionDigest // ""');
+        expect(recordCmd).toContain('$__runId');
+        expect(recordCmd).toContain('$__definitionDigest');
+    });
+
     test('R1/R4: precheck evaluates closed route table and writes bounded reason', () => {
         const precheck = def.states.find((s) => s.id === 'precheck');
         expect(precheck).toBeDefined();

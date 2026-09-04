@@ -119,20 +119,23 @@ describe('deriveVerifiedOutcome (app derivation smoke)', () => {
  */
 async function makeBindingEnv(
     verdict: Record<string, unknown>,
-    runs: readonly { id: string; status: string }[],
+    runs: readonly { id: string; status: string; definitionDigest?: string }[],
 ): Promise<{ db: DbAdapter; cwd: string; fs: FileSystem }> {
     const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
     await applyCliMigrations(db);
     const cwd = mkdtempSync(join(tmpdir(), 'vo-bind-'));
     let n = 0;
     for (const run of runs) {
+        const metadata =
+            run.definitionDigest !== undefined ? JSON.stringify({ definitionDigest: run.definitionDigest }) : '{}';
         db.run(
             `INSERT INTO runs (id, workflow_name, mode, status, agent, started_at, completed_at, metadata_json)
-             VALUES (?, 'task-pipeline', 'auto', ?, NULL, ?, ?, '{}')`,
+             VALUES (?, 'task-pipeline', 'auto', ?, NULL, ?, ?, ?)`,
             run.id,
             run.status,
             '2026-08-29T10:00:00.000Z',
             '2026-08-29T11:00:00.000Z',
+            metadata,
         );
         n += 1;
         db.run(
@@ -179,6 +182,68 @@ describe('verdict proof binding (0730 §B)', () => {
             { id: 'run_probe', status: 'running' },
             { id: 'run_other', status: 'done' },
         ]);
+        const stat = await deriveVerifiedOutcome({ db, cwd, locator: stubLocator(cwd), fs }, {});
+        expect(stat?.verifiedResults).toBe(1);
+        db.close();
+    });
+
+    test('R5: a bound verdict whose definition digest matches the run is verified', async () => {
+        const { db, cwd, fs } = await makeBindingEnv(
+            {
+                wbs: '0701',
+                verdict: 'PASS',
+                proof: { digest: 'sha256:abc', runId: 'run_cert', definitionDigest: 'sha256:def' },
+            },
+            [{ id: 'run_cert', status: 'done', definitionDigest: 'sha256:def' }],
+        );
+        const stat = await deriveVerifiedOutcome({ db, cwd, locator: stubLocator(cwd), fs }, {});
+        expect(stat?.verifiedResults).toBe(1);
+        expect(stat?.excludedReasons.certifyingRunFailed).toBe(0);
+        db.close();
+    });
+
+    test('R5: a bound verdict whose definition digest differs from the run is not verified', async () => {
+        // The record names run_cert as certifying AND pins a definition digest, but the run row
+        // carries a different one — e.g. the definition was edited between run and record, or a
+        // stale-definition resume. The proof must not certify silently (0759 R5).
+        const { db, cwd, fs } = await makeBindingEnv(
+            {
+                wbs: '0701',
+                verdict: 'PASS',
+                proof: { digest: 'sha256:abc', runId: 'run_cert', definitionDigest: 'sha256:def' },
+            },
+            [{ id: 'run_cert', status: 'done', definitionDigest: 'sha256:other' }],
+        );
+        const stat = await deriveVerifiedOutcome({ db, cwd, locator: stubLocator(cwd), fs }, {});
+        expect(stat?.verifiedResults).toBe(0);
+        expect(stat?.excludedReasons.certifyingRunFailed).toBe(1);
+        db.close();
+    });
+
+    test('R5: a bound verdict whose run carries no definition digest is not verified', async () => {
+        // The run predates the digest stamp (task 0603) or the stamp was lost — the binding
+        // cannot be confirmed, so the strict reading fails closed rather than assume a match.
+        const { db, cwd, fs } = await makeBindingEnv(
+            {
+                wbs: '0701',
+                verdict: 'PASS',
+                proof: { digest: 'sha256:abc', runId: 'run_cert', definitionDigest: 'sha256:def' },
+            },
+            [{ id: 'run_cert', status: 'done' }],
+        );
+        const stat = await deriveVerifiedOutcome({ db, cwd, locator: stubLocator(cwd), fs }, {});
+        expect(stat?.verifiedResults).toBe(0);
+        expect(stat?.excludedReasons.certifyingRunFailed).toBe(1);
+        db.close();
+    });
+
+    test('R5: a run-bound verdict without a definition digest is not digest-checked', async () => {
+        // Older bound artifacts predate the digest stamp — they keep the runId-only binding and
+        // are not retroactively excluded (0759 R5 is additive, not a back-compat break).
+        const { db, cwd, fs } = await makeBindingEnv(
+            { wbs: '0701', verdict: 'PASS', proof: { digest: 'sha256:abc', runId: 'run_cert' } },
+            [{ id: 'run_cert', status: 'done', definitionDigest: 'sha256:anything' }],
+        );
         const stat = await deriveVerifiedOutcome({ db, cwd, locator: stubLocator(cwd), fs }, {});
         expect(stat?.verifiedResults).toBe(1);
         db.close();

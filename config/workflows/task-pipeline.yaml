@@ -51,6 +51,7 @@ vars:
   profile: "standard"
   mode: ""
   __runId: ""
+  __definitionDigest: ""
   # PATH-independent spur invocation for shell guards/actions. The CLI overrides this
   # at run start (resolveSpurBin); the literal default is a safe fallback so direct/dry
   # runs and `workflow validate` resolve the template. (See AGENTS.md / ADR-026.)
@@ -625,6 +626,10 @@ states:
       # the SAME digest value (prose asserting proof validity is insufficient). `runId` closes
       # 0730 §B.2 (task 0757 R4): without it the verified-outcome fold has to accept ANY linked
       # run as certifying, so a dry-run probe linked to the same wbs reads as proof of completion.
+      # `definitionDigest` closes 0759 R5: the record binds to the certifying run AND the exact
+      # workflow definition it executed — a stale-definition resume or a definition edited
+      # between run and record cannot certify silently. `__definitionDigest` is injected at run
+      # start (workflow-service.ts) and equals the digest stamped on the run row (task 0603).
       # Also keeps the flat
       # `proof-input-digest` check row for consumers that read `checks[]`. Soft action + hard
       # guard: a missing/malformed stamp fails the `verify → record` guard below, not this step.
@@ -633,8 +638,8 @@ states:
           command: >-
             V=".spur/run/$wbs-verdict.json";
             if [ -f "$V" ] && [ -n "$proofDigest" ]; then
-              jq --arg d "$proofDigest" --arg r "$__runId" --arg g "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)"
-              '. + {proof: {digest: $d, runId: $r, capturePoint: "quality-gate-entry", stages: {
+              jq --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" --arg g "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)"
+              '. + {proof: {digest: $d, runId: $r, definitionDigest: $dd, capturePoint: "quality-gate-entry", stages: {
                 qualityGate: {status: $g, digest: $d},
                 review: {status: "completed", digest: $d},
                 verification: {status: .verdict, digest: $d}}}}
@@ -917,7 +922,9 @@ transitions:
           test "$(jq -r '.proof.digest // ""' "$V" 2>/dev/null)" = "$proofDigest" &&
           test "$(jq -r '.proof.stages.qualityGate.digest // ""' "$V" 2>/dev/null)" = "$proofDigest" &&
           test "$(jq -r '.proof.stages.review.digest // ""' "$V" 2>/dev/null)" = "$proofDigest" &&
-          test "$(jq -r '.proof.stages.verification.digest // ""' "$V" 2>/dev/null)" = "$proofDigest"
+          test "$(jq -r '.proof.stages.verification.digest // ""' "$V" 2>/dev/null)" = "$proofDigest" &&
+          test "$(jq -r '.proof.runId // ""' "$V" 2>/dev/null)" = "$__runId" &&
+          test "$(jq -r '.proof.definitionDigest // ""' "$V" 2>/dev/null)" = "$__definitionDigest"
   - from: verify
     to: test-fix
     description: >-

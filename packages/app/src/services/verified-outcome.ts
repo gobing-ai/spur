@@ -57,12 +57,26 @@ interface LinkedRun {
     status: string | null;
     startedAt: string | null;
     completedAt: string | null;
+    /** Definition digest stamped on the run row at creation (task 0603), when present. */
+    definitionDigest: string | null;
 }
 
 /** Window bounds (ISO strings or null sides), passed through to the fold. */
 export interface VerifiedOutcomeWindow {
     since?: string | null;
     until?: string | null;
+}
+
+/** Extract the definition digest stamped on a run row (task 0603), or null when absent/unparseable. */
+function readRunDefinitionDigest(metadataJson: string): string | null {
+    try {
+        const meta = JSON.parse(metadataJson) as { definitionDigest?: unknown };
+        return typeof meta.definitionDigest === 'string' && meta.definitionDigest.length > 0
+            ? meta.definitionDigest
+            : null;
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -80,6 +94,7 @@ export async function deriveVerifiedOutcome(
         status: string | null;
         started_at: string | null;
         completed_at: string | null;
+        metadata_json: string;
     }>;
     try {
         // DAO plane (no raw SQL in app): window-bounded runs, then their task links.
@@ -101,6 +116,7 @@ export async function deriveVerifiedOutcome(
                     status: run.status,
                     started_at: run.started_at,
                     completed_at: run.completed_at,
+                    metadata_json: run.metadata_json,
                 });
             }
         }
@@ -121,6 +137,7 @@ export async function deriveVerifiedOutcome(
                 status: row.status,
                 startedAt: row.started_at,
                 completedAt: row.completed_at,
+                definitionDigest: readRunDefinitionDigest(row.metadata_json),
             });
         }
         byWbs.set(row.wbs, runs);
@@ -184,13 +201,15 @@ async function deriveTaskInput(
     let proofDigestPresent = false;
     // The run the verdict names as its certifying run, when it names one (0730 §B.2).
     let boundRunId: string | null = null;
+    // The workflow-definition digest the verdict binds to, when it names one (0759 R5).
+    let boundDefinitionDigest: string | null = null;
     let measuredTokens: number | null = null;
     try {
         const verdictRaw = await deps.fs.readFile(`${deps.cwd}/.spur/run/${wbs}-verdict.json`);
         const verdict = JSON.parse(verdictRaw) as {
             verdict?: unknown;
             proofDigest?: unknown;
-            proof?: { digest?: unknown; runId?: unknown };
+            proof?: { digest?: unknown; runId?: unknown; definitionDigest?: unknown };
         };
         verdictPresent = typeof verdict.verdict === 'string';
         passVerdict = verdict.verdict === 'PASS';
@@ -203,18 +222,29 @@ async function deriveTaskInput(
         if (typeof verdict.proof?.runId === 'string' && verdict.proof.runId.length > 0) {
             boundRunId = verdict.proof.runId;
         }
+        if (typeof verdict.proof?.definitionDigest === 'string' && verdict.proof.definitionDigest.length > 0) {
+            boundDefinitionDigest = verdict.proof.definitionDigest;
+        }
     } catch {
         // No verdict artifact — fold routes to missing/synthetic buckets.
     }
 
-    // 0730 §B.2: when the verdict names its certifying run, that exact run must have completed.
-    // Without the binding the fold has to accept ANY linked run, and live `task_run_links` rows
-    // show dry-run probes and driver labels linked to the same wbs — so an unbound verdict's
-    // "certifying run" is an assumption, not evidence. Unbound artifacts keep the permissive
-    // reading (they predate the stamp); bound ones are checked against the run they name.
+    // 0730 §B.2 + 0759 R5: when the verdict names its certifying run, that exact run must have
+    // completed; when it also names a definition digest, the bound run must carry the SAME
+    // digest — otherwise the proof could certify one workflow definition while the run executed
+    // another (a stale-definition resume or a definition edited between run and record). Unbound
+    // artifacts (no runId) keep the permissive reading; a runId-bound verdict without a
+    // definitionDigest is not digest-checked (the pipeline only stamps the digest alongside the
+    // runId, and older bound artifacts predate it).
     const certifyingRunCompleted =
         boundRunId !== null
-            ? linkedRuns.some((r) => r.runId === boundRunId && runCompleted(r))
+            ? linkedRuns.some(
+                  (r) =>
+                      r.runId === boundRunId &&
+                      runCompleted(r) &&
+                      (boundDefinitionDigest === null ||
+                          (r.definitionDigest !== null && r.definitionDigest === boundDefinitionDigest)),
+              )
             : linkedRuns.some(runCompleted);
 
     if (passVerdict) {

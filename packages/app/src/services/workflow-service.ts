@@ -632,6 +632,13 @@ export class WorkflowAppService {
             ...resolveDefaultAgentVar(this.ctx.spurConfig ?? null, opts.vars, (m) => warnings.push(m)),
             ...(opts.vars ?? {}),
             __runId: runId,
+            // 0759 R5: inject the canonical definition digest on the same seam as __runId so a
+            // pipeline can stamp it into its verdict proof block — verified-outcome then binds
+            // the record to the certifying run AND its exact definition (a stale-definition
+            // resume or a definition edited between run and record cannot certify silently).
+            // The run row already carries the same digest (createEngineService stamps it via
+            // withDefinitionDigestRecording); computing it here keeps the two identical.
+            __definitionDigest: computeDefinitionDigest(workflow),
         };
         // Pre-load with embedded-schema options so `run` resolves `$schema` through
         // the same map as `validate` (task 0431 R1/R4). `svc.runFile` would call
