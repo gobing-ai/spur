@@ -31,6 +31,7 @@ import {
     rollupTableFreshness,
     writeRollupWatermark,
 } from './rollup-watermark';
+import { ALIASED_TOOL_NAME_SQL, applyToolAliases } from './tool-alias';
 import { HISTORY_BOARD_ACTIVITY_DAYS, RESOLVED_TOOL_NAME_SQL } from './tool-name-sql';
 
 // Keep the FINAL row (MAX rowid) per request_id. A streaming response re-emits an
@@ -279,6 +280,9 @@ export async function historyBoardRollupsFresh(db: DbAdapter): Promise<boolean> 
  * inside SQLite; bounded daily/loop/ranking rows come from the existing analyzers.
  */
 export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoardRollupSeed): Promise<void> {
+    // A mapping added since the last refresh only takes effect once the alias column is
+    // recomputed from it (0739 R7) — the tool mart below groups on that column.
+    await applyToolAliases(db);
     const operations: DbBatchOp[] = [
         ...[
             'history_daily_stats',
@@ -369,7 +373,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                                ''
                            ) AS bucket_start,
                            m.session_id, m.source, m.effective_model AS model,
-                           ${RESOLVED_TOOL_NAME_SQL} AS tool_name, ${SKILL_NAME_SQL} AS skill_name,
+                           ${ALIASED_TOOL_NAME_SQL} AS tool_name, ${SKILL_NAME_SQL} AS skill_name,
                            COALESCE(m.resolved_input_tokens, 0) AS input_tokens,
                            COALESCE(m.resolved_cache_read_tokens, 0) AS cache_read_tokens,
                            COALESCE(m.resolved_cache_write_tokens, 0) AS cache_write_tokens,
@@ -1444,7 +1448,7 @@ function tool5mBucketOps(bucket: string): DbBatchOp[] {
                                ''
                            ) AS bucket_start,
                            m.session_id, m.source, m.effective_model AS model,
-                           ${RESOLVED_TOOL_NAME_SQL} AS tool_name, ${SKILL_NAME_SQL} AS skill_name,
+                           ${ALIASED_TOOL_NAME_SQL} AS tool_name, ${SKILL_NAME_SQL} AS skill_name,
                            COALESCE(m.resolved_input_tokens, 0) AS input_tokens,
                            COALESCE(m.resolved_cache_read_tokens, 0) AS cache_read_tokens,
                            COALESCE(m.resolved_cache_write_tokens, 0) AS cache_write_tokens,
@@ -1814,6 +1818,7 @@ async function postPassLags(db: DbAdapter, bucketWatermark: string): Promise<boo
  * the bucketed deltas land; their watermarks advance last (R7).
  */
 export async function refreshHistoryBoardRollupsIncremental(db: DbAdapter): Promise<void> {
+    await applyToolAliases(db);
     const watermarks = await readRollupWatermarks(db);
     const messageWm = watermarks.get('history_board_message_5m');
     const needsRebuild = messageWm === undefined || messageWm.definitionVersion !== ROLLUP_DEFINITION_VERSION;

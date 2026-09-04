@@ -286,9 +286,14 @@ eight different names, so any "which tool dominates" answer is really "which age
   `effective_tool_name`** — identity by default, so nothing changes behaviorally on day one.
 - Indexed for grouping; the rollups gain the alias so breakdowns can group by it without touching
   facts.
-- One resolution seam — `resolveToolAlias(source, effectiveToolName) → alias` — with a single
-  mapping table that starts effectively empty and falls through to identity. Fine-tuning later means
-  adding entries plus a backfill, not changing query code.
+- One resolution seam — `packages/domain/src/analytics/tool-alias.ts` — with a single mapping table
+  that starts effectively empty and falls through to identity. Fine-tuning later means adding
+  entries plus a refresh, not changing query code. The seam is a write/read/select triple rather
+  than a scalar function, because resolution has to happen in SQL where the grouping happens:
+  `applyToolAliases(db)` recomputes `tool_name_alias` from the map before every rollup refresh,
+  `ALIASED_TOOL_NAME_SQL` reads the persisted result in the rollup inserts, and
+  `toolSelectionSql(tc, placeholders)` lets a drill-down match a selection that named either the
+  alias or the effective name.
 - Backfill migration sets `tool_name_alias = effective_tool_name` for the existing corpus.
 
 **Explicitly not decided here:** the alias vocabulary itself (`shell` vs `bash` vs `exec` as the

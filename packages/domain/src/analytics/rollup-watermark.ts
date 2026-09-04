@@ -17,7 +17,9 @@ import type { DbAdapter } from '@gobing-ai/ts-db';
  * rebuilt rather than extended from the existing watermark (R6 / R27). A
  * derivation-SQL change without a bump fails the pinned-value test.
  */
-export const ROLLUP_DEFINITION_VERSION = 'v1';
+// v2 (0739 R7): history_board_tool_5m.tool_name groups by the persisted alias, so marts
+// materialized under v1 must rebuild rather than extend from their v1 watermark.
+export const ROLLUP_DEFINITION_VERSION = 'v2';
 
 /** A table with no watermark row reports this sentinel state (empty watermark → stale). */
 export const EMPTY_ROLLUP_WATERMARK: RollupWatermarkState = {

@@ -1,6 +1,7 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import type { ArtifactSelector } from './artifact';
 import type { SessionSpanRow, SessionToolDurationRow, TodoToolCallRow } from './derived';
+import { toolSelectionSql } from './tool-alias';
 import { HISTORY_BOARD_ACTIVITY_DAYS, RESOLVED_TOOL_NAME_SQL } from './tool-name-sql';
 import { applyWatermarkToWhere, type WatermarkQueryOptions } from './watermark';
 
@@ -168,9 +169,9 @@ export function buildMessageWhereClauses(
             const placeholders = validTools.map(() => '?').join(', ');
             clauses.push(
                 'EXISTS (SELECT 1 FROM ' +
-                    `history_tool_call tc_filt WHERE tc_filt.message_hash = ${alias}.record_hash AND COALESCE(NULLIF(NULLIF(tc_filt.effective_tool_name, 'unknown'), ''), tc_filt.tool_name) IN (${placeholders}))`,
+                    `history_tool_call tc_filt WHERE tc_filt.message_hash = ${alias}.record_hash AND ${toolSelectionSql('tc_filt', placeholders)})`,
             );
-            params.push(...validTools);
+            params.push(...validTools, ...validTools);
         }
     }
     if (sel.skills != null && sel.skills.length > 0) {
@@ -2118,10 +2119,8 @@ export async function toolSequenceQuery(
 
     if (filters.toolNames && filters.toolNames.length > 0) {
         const placeholders = filters.toolNames.map(() => '?').join(', ');
-        clauses.push(
-            `COALESCE(NULLIF(NULLIF(tc.effective_tool_name, 'unknown'), ''), tc.tool_name) IN (${placeholders})`,
-        );
-        params.push(...filters.toolNames);
+        clauses.push(toolSelectionSql('tc', placeholders));
+        params.push(...filters.toolNames, ...filters.toolNames);
     }
 
     if (filters.status && filters.status !== 'all') {

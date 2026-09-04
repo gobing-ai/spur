@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Persist tool identity at import: effective_tool_name, tool_name_alias, and the alias resolution seam"
-status: wip
+status: testing
 template: feature-impl
 created_at: 2026-09-03T16:43:04.048Z
-updated_at: "2026-09-04T03:32:54.802Z"
+updated_at: "2026-09-04T04:03:41.336Z"
 feature_id: E91
 priority: P1
 tags: ["history", "etl", "tool-identity"]
@@ -266,7 +266,65 @@ Each entry cites the first changed line per file (`file:line`).
 
 Verified against the local build: `packages/domain/tests/dao/migrations.test.ts` 54/0, including R10/R4 schema convergence. Blocked on publishing 0.4.56 and bumping the spur-new catalog pin.
 
-**R4/R7 remain open** — the alias seam still needs a production caller before this task can return to `done`.
+**R4/R7 remain open** — superseded by the remediation below.
+
+---
+
+**R4/R7 remediation 2026-09-04 — the seam now has production callers.**
+
+`packages/domain/src/analytics/tool-alias.ts` was rewritten from three dead exports
+(`resolveToolAlias` / `loadToolAliasMap` / `resolveToolAliasFromDb`, imported only by their own
+test) into the three halves the requirements actually name:
+
+| Export | Role | Production caller |
+| --- | --- | --- |
+| `applyToolAliases(db)` | **writes** `tool_name_alias = COALESCE(map lookup, effective_tool_name)` | `replaceHistoryBoardRollups` (`history-board-rollup.ts:285`), `refreshHistoryBoardRollupsIncremental` (`:1821`) |
+| `ALIASED_TOOL_NAME_SQL` | **reads** the persisted alias, falling back to `RESOLVED_TOOL_NAME_SQL` | both `history_board_tool_5m` inserts (`:376`, `:1451`) |
+| `toolSelectionSql(tc, ph)` | **selects** on alias OR effective name | `buildMessageWhere` tool filter (`forensic-query.ts:171`), `toolSequenceQuery` filter (`:2119`) |
+
+- **R4 MET.** Resolution exists in exactly one place. `applyToolAliases` is the only writer of
+  `tool_name_alias` outside migration 0034's one-time backfill; `ALIASED_TOOL_NAME_SQL` is the only
+  reader. The map lookup falls through to `effective_tool_name` via `COALESCE`, so an absent entry
+  is identity by construction rather than by a second code path.
+- **R7 MET.** The alias is recomputed from the map on every refresh, never accumulated, so adding a
+  mapping regroups on the next refresh and removing one restores identity. The seam never writes
+  `effective_tool_name`; forensic `byTool` and the session top-tool sites stay on
+  `RESOLVED_TOOL_NAME_SQL`, so effective-grouped breakdowns are unchanged (R20 clause 3).
+- **R6 preserved.** With an empty `history_tool_alias_map` every alias equals its effective name, so
+  the alias-grouped breakdown is identical to the effective-grouped one.
+- **R2 round-trip closed under a non-empty map.** The board's tool dimension now labels rows with
+  the alias while forensic `byTool` still labels them with the effective name; a drill-down
+  filtering on only one of the two would reproduce the exact Summary-vs-Tool-Using mismatch R2
+  exists to fix. `toolSelectionSql` accepts either.
+- **`ROLLUP_DEFINITION_VERSION` bumped `v1` → `v2`** (`rollup-watermark.ts:20`) —
+  `history_board_tool_5m.tool_name` changed derivation, so marts materialized under v1 rebuild
+  rather than extend from a v1 watermark.
+
+Evidence: `packages/domain/tests/analytics/tool-alias.test.ts` rewritten against the new seam
+(4 tests: empty map → identity; a mapping regroups the alias breakdown while the effective
+breakdown and the `effective_tool_name` column are unchanged; removing a mapping restores identity;
+a selection matches whether it names an alias or an effective name). `packages/domain` analytics
+suite 392/0; full domain suite 1211/1 — the single failure is the known R10/R4 convergence
+assertion at `packages/domain/tests/dao/migrations.test.ts:897`, which stays red until
+`@gobing-ai/ts-llm-jsonl-importer` 0.4.56 is published and the catalog pin moves off `^0.4.55`.
+Biome clean on all six touched files.
+
+**R1 remains blocked (operator-gated), so this task holds at `testing`, not `done`.** The upstream
+0.4.56 change is written and verified against a local build but is uncommitted and unpublished in
+`/Users/robin/xprojects/ts-libs`. Remaining chain, in order:
+
+1. `cd /Users/robin/xprojects/ts-libs && git add -A packages/llm-jsonl-importer && git commit`
+   — lefthook's `format` step cannot spawn under this session's sandbox (fails in 0.00 s with
+   "operation not permitted"); `bun run format` standalone is clean, so this needs an operator
+   shell. `--no-verify` was not used.
+2. `bun scripts/builder.ts bump-version 0.4.56` (requires a clean tree).
+3. Publish 0.4.56.
+4. Bump the `spur-new` catalog pin `^0.4.55` → `^0.4.56`, then re-run
+   `packages/domain/tests/dao/migrations.test.ts`.
+
+**Confidence: HIGH** for R2/R4/R6/R7 — every claim above is a code path in this tree with a passing
+test behind it. **HIGH** for R1 being blocked — verified by the failing convergence assertion
+against the installed 0.4.55 dist.
 
 ### References
 
@@ -285,3 +343,4 @@ Verified against the local build: `packages/domain/tests/dao/migrations.test.ts`
 - 2026-09-03T20:39:25.271Z wip → testing (system)
 - 2026-09-03T20:39:36.840Z testing → done (system)
 - 2026-09-04T03:32:30.622Z done → wip (system)
+- 2026-09-04T04:03:41.336Z wip → testing (system)
