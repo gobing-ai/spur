@@ -25,11 +25,15 @@
             "decision": null
         },
         "docs-pipeline": {
-            "modelQueries": 1,
+            "modelQueries": 2,
             "wallClockMs": null,
             "tokenCostUsd": null,
-            "source": "No fixture (0607 option a) and only dry/short runs recorded in history (max 1s, n=4) — wall-clock budget unenforced until a real docs-pipeline run exists. Query budget 1 is enforced.",
-            "decision": null
+            "source": "No fixture (0607 option a) and only dry/short runs recorded in history (max 1s, n=4) — wall-clock budget unenforced until a real docs-pipeline run exists. Query budget 2 matches the live SSOT list ['draft','verify'] in config/workflow-composition-baseline.json (added by task 0704; 0607 R3 recorded 1, which is stale against the SSOT). 0754 R6: FIX, not raise — the value was wrong against the SSOT, the workflow's declared query count did not change.",
+            "decision": {
+                "date": "2026-09-03",
+                "wbs": "0754",
+                "note": "align docs-pipeline.modelQueries to the live baseline SSOT ['draft','verify']; not a measured-cost raise — the workflow's declared query count was already 2 (added by 0704); the budget was the stale side, not the workflow. Per D8 Decision 11."
+            }
         },
         "pr-review": {
             "modelQueries": 0,

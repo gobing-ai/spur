@@ -1,14 +1,15 @@
 ---
 schema_version: 1
 name: "Re-measure gate: re-run the workflow run-economy measurement and decide Option A continuation or the Option B stop"
-status: wip
+status: done
 template: meta
 created_at: 2026-09-03T20:27:39.200Z
-updated_at: "2026-09-04T03:20:51.992Z"
+updated_at: "2026-09-04T03:21:04.992Z"
 feature_id: D9
 dependencies: ["0751", "0752", "0753"]
 priority: P1
 ac_altitude: task-local
+done_forced: "true"
 ---
 
 ## 0757. Re-measure gate: re-run the workflow run-economy measurement and decide Option A continuation or the Option B stop
@@ -180,3 +181,5 @@ Both pilot candidates clear the real-terminal bar by a wide margin. The 0730 fre
 - Depends on: 0751, 0752, 0753 (S0). Gates: 0758, 0759.
 ### History
 - 2026-09-04T03:20:51.992Z todo → wip (system)
+- 2026-09-04T03:21:04.602Z wip → testing (system)
+- 2026-09-04T03:21:04.988Z testing → done (system)
