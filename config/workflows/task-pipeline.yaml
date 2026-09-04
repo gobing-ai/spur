@@ -24,7 +24,7 @@
 #
 # Seeded by `spur init`. agent.run inputs are pure slash commands (ADR-043).
 
-"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+"$schema": "../../apps/cli/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: task-pipeline
 description: "Standard task pipeline: precheck → implement → quality-gate (test/fix/recheck) → review → approve → verify → record → done"
@@ -49,6 +49,8 @@ failureStates:
 vars:
   wbs: "0000"
   profile: "standard"
+  mode: ""
+  __runId: ""
   # PATH-independent spur invocation for shell guards/actions. The CLI overrides this
   # at run start (resolveSpurBin); the literal default is a safe fallback so direct/dry
   # runs and `workflow validate` resolve the template. (See AGENTS.md / ADR-026.)
@@ -148,6 +150,24 @@ states:
       Fast deterministic task readiness and size checks. Failures route to the
       `failed` terminal state (not a raw lifecycle abort mid-enter).
     onEnter:
+      # Proportional route table evaluation (0759 R1/R4).
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run .spur/memory &&
+            if [ "$mode" = "fast" ]; then
+              echo "fast:evidence complete+consistent" > ".spur/run/$wbs-route-reason.txt";
+            elif [ -z "$mode" ]; then
+              echo "safety:standard verification" > ".spur/run/$wbs-route-reason.txt";
+            elif [ "$mode" = "unknown" ]; then
+              echo "safety:unknown evidence quality" > ".spur/run/$wbs-route-reason.txt";
+            elif [ "$mode" = "conflict" ]; then
+              echo "safety:conflicting evidence" > ".spur/run/$wbs-route-reason.txt";
+            else
+              echo "safety:unrecognized evidence (mode=$mode)" > ".spur/run/$wbs-route-reason.txt";
+            fi &&
+            cat ".spur/run/$wbs-route-reason.txt" >> .spur/memory/task-pipeline-routes.log &&
+            exit 0
       # R6 (0487): pre-launch hygiene WARNING (never a block) — starting a task on
       # a tree already dirty with another task's implementation is how 0485's diff
       # got swept into 0486's run. Corpus dirs are excluded: the pipeline writes
@@ -754,12 +774,19 @@ transitions:
       kind: always
   # Soft probe branching (declaration order: PASS first, then FAIL, then defense).
   - from: test
-    to: review
-    description: Quality gate already green — one gate run only; skip fixall/recheck.
+    to: verify
+    description: Quality gate already green and mode is fast — proportional fast path bypasses review.
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = PASS && test "$mode" = fast'
+  - from: test
+    to: review
+    description: Quality gate already green and safety mode — proceed to review.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = PASS && test "$mode" != fast'
   - from: test
     to: test-fix
     description: Quality gate red — start bounded fixall loop.
@@ -780,12 +807,19 @@ transitions:
       kind: always
   # Recheck branching (PASS first; under-max FAIL → fixall again; exhausted → failed).
   - from: test-recheck
-    to: review
-    description: Quality gate green after fixall — proceed to review.
+    to: verify
+    description: Quality gate green after fixall and mode is fast — proportional fast path bypasses review.
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = PASS && test "$mode" = fast'
+  - from: test-recheck
+    to: review
+    description: Quality gate green after fixall and safety mode — proceed to review.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = PASS && test "$mode" != fast'
   - from: test-recheck
     to: test-fix
     description: Still red and under qualityGateMaxFixAttempts — another fixall hop.

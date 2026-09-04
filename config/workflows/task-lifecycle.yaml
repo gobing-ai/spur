@@ -1,9 +1,10 @@
 # Externally driven FSM (requestTransition) — not an auto-running pipeline.
 #
 # Reliability (aligned with task-pipeline / ADR-043 — lifecycle-only contract):
-#   - Hard shell guards only at wip→testing and testing→done (no soft probe needed:
-#     requestTransition fails closed when the guard shell is non-zero)
-#   - CLI done verdict guard is a second layer (0292) covering --no-lifecycle paths
+#   - Hard shell guards only at wip→testing and testing→done
+#     (no soft probe needed: requestTransition fails closed when guard shell is non-zero)
+#   - CLI done verdict guard is a second layer (0292) covering --no-lifecycle
+#     paths
 #   - No agent.run nodes (by design — pure status graph)
 #   - cancelled is the sole terminal; done is re-enterable (reopen → wip)
 "$schema": "../../apps/cli/schemas/state-machine-workflow.schema.json"
@@ -21,14 +22,14 @@ description: >
   auto-advance).
 
   Two-layer done gate (task 0292): this workflow's testing→done guard
-  (`spur task check --as done`, F92 R3 — target-aware) is the FIRST gate. The CLI verdict guard
-  (`packages/app/src/services/done-transition-guard.ts`) is the SECOND gate,
-  invoked by `apps/cli/src/commands/task.ts` for every `spur task update <wbs>
-  done` call — it reads `.spur/run/<wbs>-verdict.json` and blocks non-PASS
-  verdicts unless `--force-done --reason "<why>"` is supplied. The CLI gate
-  covers the `--no-lifecycle` and adapter-unavailable paths that bypass this
-  workflow. Overrides are recorded via the `done_forced` / `done_reason`
-  frontmatter fields.
+  (`spur task check --as done`, F92 R3 — target-aware) is the FIRST gate.
+  The CLI verdict guard (`packages/app/src/services/done-transition-guard.ts`)
+  is the SECOND gate, invoked by `apps/cli/src/commands/task.ts` for every
+  `spur task update <wbs> done` call — it reads `.spur/run/<wbs>-verdict.json`
+  and blocks non-PASS verdicts unless `--force-done --reason "<why>"` is
+  supplied. The CLI gate covers the `--no-lifecycle` and adapter-unavailable
+  paths that bypass this workflow. Overrides are recorded via the `done_forced`
+  / `done_reason` frontmatter fields.
 initialState: backlog
 terminalStates:
   - cancelled
@@ -82,7 +83,8 @@ states:
   - id: blocked
     description: Impediment; work suspended.
   - id: done
-    description: Completed. Re-enterable (reopen with warning + mandatory History entry).
+    description: >
+      Completed. Re-enterable (reopen with warning + mandatory History entry).
     onEnter:
       - kind: shell
         options:
