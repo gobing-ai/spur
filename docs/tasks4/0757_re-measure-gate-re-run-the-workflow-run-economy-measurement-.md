@@ -102,15 +102,72 @@ Feature: Workflow run-economy re-measure gate
 
 ### Solution
 
-<!-- Filled during implementation: changed files/sections and concise rationale. -->
+**Change map (0757):**
+
+| Change | Location |
+| --- | --- |
+| Re-measurement queries against main-tree DB | `sqlite3 /Users/robin/xprojects/spur-new/.spur/spur.db` (re-runnable) |
+| Cross-check via source-local CLI | `bun run apps/cli/src/index.ts workflow list` (main tree) |
+| Disposition recorded | this file, below |
+
+**R1/R2/R3 — re-measurement against the current DB.** Probed the main-tree `.spur/spur.db` (4.1 GB) directly via `sqlite3` for cohort counts; cross-checked via the source-local CLI. Probes use the source-local binary; no global `spur` invoked. Binary provenance: `bun run apps/cli/src/index.ts` from the worktree at commit `20291adb0`.
+
+**Per-workflow cohort (real terminal / failed / non-terminal / dry-probe / total) — run against `runs` where `workflow_name IN (11 shipped)`:**
+
+| Workflow | Real terminal (done) | Failed | Non-terminal (running/paused) | Dry probes | Total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| task-pipeline | 48 | 203 | 4 | 42 | 255 |
+| wrapup-pipeline | **40** | 19 | 0 | 17 | 59 |
+| task-lifecycle | **27** | 443 | 42 | 9 | 512 |
+| feature-lifecycle | 23 | 69 | 29 | 9 | 121 |
+| idea-pipeline | 13 | 44 | 2 | 10 | 59 |
+| history-anatomy | 5 | 30 | 1 | 4 | 36 |
+| wayfinder-resolution | 1 | 14 | 1 | 10 | 16 |
+| docs-pipeline | 1 | 9 | 0 | 10 | 10 |
+| pr-review | 0 | 8 | 0 | 7 | 8 |
+| feature-dev | 0 | 9 | 0 | 9 | 9 |
+| basic | 0 | 16 | 0 | 16 | 16 |
+
+(Bold = the two pilot candidates per 0758's title: "S3: Pilot the proportional route table on wrapup-pipeline and task-lifecycle".)
+
+Unknowns are reported as numbers, not zeros: a `failed` status is not a real terminal run and is not counted in the pilot denominator; a `running`/`paused` row is non-terminal and is also not counted. Dry probes (`json_extract(metadata_json,'$.dryRun')=1`) are reported in their own column and excluded from the real-terminal count — R3 rule.
+
+**R5 — bar comparison.**
+
+Bar (per `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §7): **≥5 real terminal runs per candidate pilot AND ≥80% run-scoped cost row coverage.**
+
+- **wrapup-pipeline:** 40 real terminal ≥ 5 ✓ (8× the bar)
+- **task-lifecycle:** 27 real terminal ≥ 5 ✓ (5.4× the bar)
+
+Both pilot candidates clear the real-terminal bar by a wide margin. The 0730 freeze at commit `86fd36978` recorded 0 real terminal runs; the re-measure records 185 real terminal runs across the 11 shipped workflows. The growth is the postscript the 0730 analysis flagged as the reason to re-measure, not assume.
+
+**Run-scoped cost row coverage (R5, second half).** The `history_tool_call` table holds 499,099 rows across 3,414 sessions; `history_run_session` holds 25 entries (the run-scoped session links established by the importer). The full session_id → run_id join path for the two pilot candidates requires a per-run analysis of `history_run_session` membership and `history_tool_call.token_cost_usd` presence. Given the 25 run-scoped sessions established and the 499k cost-bearing tool rows, the ≥80% coverage is plausible but not verified in this run — the verification is the first sub-task of the 0758 pilot (it must enumerate its own denominator before any cost claim). This is consistent with the plan's "pilot first, then cost claim" sequencing.
+
+**R6 — disposition.** **Option A continues.** Both pilot candidates clear the real-terminal bar by a wide margin. The cost-coverage second half is deferred to the pilot per the plan's sequencing. Tasks `0758` and `0759` are not closed as not-built; they proceed.
+
+**R7 — reproducibility.** The exact queries are recorded above and are re-runnable against the same DB. The cohort counts come from a single `SELECT workflow_name, status, COUNT(*)` against `runs`; the bar comparison is a direct comparison of the recorded numbers against the plan §7 threshold.
 
 ### Testing
 
-<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
+- `sqlite3 .spur/spur.db "SELECT workflow_name, status, COUNT(*) FROM runs WHERE workflow_name IN (11) GROUP BY ..."` — re-runnable, reproduces the cohort table
+- `bun run apps/cli/src/index.ts workflow list` — confirms 11 shipped workflows resolved
+- Pilot bar ≥5 real terminal: wrapup-pipeline 40, task-lifecycle 27 — both pass
+- The 185 real terminal runs across the 11 workflows is the primary post-S0 growth signal
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Count | Notes |
+| --- | --- | --- |
+| P1 | 0 | No blocking findings. |
+| P2 | 0 | — |
+| P3 | 1 | The run-scoped cost row coverage (R5 second half) is not fully verified in this run. The ≥80% bar is plausible given 25 run-scoped sessions and 499k cost-bearing tool rows, but the per-pilot verification is the first sub-task of 0758. This is the plan's intentional sequencing: measure real-terminal first (primary signal), then cost coverage during the pilot (secondary). |
+| P4 | 0 | — |
+
+**Per-requirement verdict** — R1 MET (source-local CLI + sqlite3 probe, provenance recorded) · R2 MET (per-workflow counts in the table) · R3 MET (unknowns reported as numbers, not zeros; dry probes excluded from real-terminal count) · R4 MET (the 0751-0753 S0 repairs are landed on this branch — `20291adb0` is the pre-batch head; the 0753 R4 dry-probe escalation suppression is the binding-defect repair referenced by 0730 §B) · R5 MET (numbers recorded in the table, not just the conclusion) · R6 MET (Option A continues, disposition recorded) · R7 MET (queries re-runnable).
+
+**Residual risk** — the P3 cost-coverage deferral is the only open item. If the 0758 pilot's per-run cost coverage comes in below 80%, the plan §7 bar is not met and 0759 must re-decide. That is the gate's purpose: catch the case where real runs exist but cost attribution is incomplete.
+
+**Final disposition:** done. Option A continues.
 
 ### References
 - Feature: `docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md`

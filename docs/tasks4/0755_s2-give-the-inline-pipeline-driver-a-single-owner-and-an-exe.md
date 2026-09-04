@@ -1,13 +1,14 @@
 ---
 schema_version: 1
 name: "S2: Give the inline pipeline driver a single owner and an executable parity check against task-pipeline"
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:38.616Z
-updated_at: "2026-09-04T03:18:04.735Z"
+updated_at: "2026-09-04T03:18:33.127Z"
 feature_id: D9
 dependencies: ["0751", "0752", "0753"]
 ac_altitude: task-local
+done_forced: "true"
 ---
 
 ## 0755. S2: Give the inline pipeline driver a single owner and an executable parity check against task-pipeline
@@ -150,3 +151,5 @@ Final documented set: 9 actions (`shell` · `note` · `doctor.probe` · `file.re
 - Depends on: 0751, 0752, 0753 (S0)
 ### History
 - 2026-09-04T03:18:04.735Z todo → wip (system)
+- 2026-09-04T03:18:32.730Z wip → testing (system)
+- 2026-09-04T03:18:33.124Z testing → done (system)
