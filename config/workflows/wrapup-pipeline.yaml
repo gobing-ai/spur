@@ -1,10 +1,16 @@
-# Wrap-up pipeline — post-execution wrap-up for one task or a batch (design §wrapup-pipeline).
+# Wrap-up pipeline — post-execution wrap-up for one task or a batch (design
+# §wrapup-pipeline).
 #
-# Orchestration is configuration (ADR-022 / §3.2): this is YAML over the existing
-# dual-workflow engine — zero new engine code. The pipeline NEVER mutates task status —
-# wrap-up consumes completed tasks and produces learning/metrics/doc artifacts only.
-# Feature transitions go through `spur feature update` so the feature-lifecycle guards
-# apply identically. Branch cleanup is an irreversible HITL gate — it always pauses,
+# Orchestration is configuration (ADR-022 / §3.2): this is YAML over the
+# existing
+# dual-workflow engine — zero new engine code. The pipeline NEVER mutates task
+# status —
+# wrap-up consumes completed tasks and produces learning/metrics/doc artifacts
+# only.
+# Feature transitions go through `spur feature update` so the feature-lifecycle
+# guards
+# apply identically. Branch cleanup is an irreversible HITL gate — it always
+# pauses,
 # even under --auto (Iron Law #6: irreversible action -> surface to human).
 #
 # Shape: start -> task-resolve -> doc-sync -> metrics-record
@@ -14,24 +20,29 @@
 #        (task-resolve with empty list short-circuits to `skipped`).
 #
 # Vars (passed as a JSON object via `--vars`):
-#   tasks    — JSON array of WBS strings, passed as a JSON-encoded STRING value (the CLI
-#              rejects non-string --vars values), e.g. --vars '{"tasks":"[\"0167\"]"}'
+# tasks    — JSON array of WBS strings, passed as a JSON-encoded STRING value
+# (the CLI
+# rejects non-string --vars values), e.g. --vars '{"tasks":"[\"0167\"]"}'
 #   feature  — feature id to advance through legal lifecycle edges (optional)
 #   profile  — set --vars '{"profile":"auto"}' to skip objective confirmations
-#   merge    — set --vars '{"merge":"true"}' to run branch cleanup (irreversible HITL)
+# merge    — set --vars '{"merge":"true"}' to run branch cleanup (irreversible
+# HITL)
 #   spurBin  — PATH-independent spur invocation (overridden by CLI at run start)
 #   agent    — agent for agent.run steps (default: omp)
 #
 # Reliability (aligned with task-pipeline / ADR-043):
-#   - Prefer pure slash commands when a command exists; free-form inputs remain only
+# - Prefer pure slash commands when a command exists; free-form inputs remain
+# only
 #     where capture artifacts (answerFile) have no dedicated slash surface yet.
 #   - doc-sync / metrics-record use expectFile + soft append (empty capture
-#     does not abort wrap-up after prior steps already landed). The doc-sync hop is a
-#     single model query that both repairs doc drift (sp:doc-evolve) and captures
+# does not abort wrap-up after prior steps already landed). The doc-sync hop is
+# a
+# single model query that both repairs doc drift (sp:doc-evolve) and captures
 #     working learnings (task 0607 R2 — one query answers both; count 2 -> 1).
-#   - feature-transition is a soft shell (always exit 0) so a blocked feature sync
+# - feature-transition is a soft shell (always exit 0) so a blocked feature sync
 #     does not abort wrap-up after learnings/metrics already landed.
-#   - branch-cleanup HITL is exhaustive (yes/no/cancel → done; missing answer defense).
+# - branch-cleanup HITL is exhaustive (yes/no/cancel → done; missing answer
+# defense).
 #   - Wrap-up never mutates task status (consumes completed work only).
 
 "$schema": "../../apps/cli/schemas/state-machine-workflow.schema.json"
@@ -54,15 +65,18 @@ vars:
   mode: ""
   stepTimeoutMs: "1800000"
   # Corpus-aware quality gate for the feature-transition hop (R1, task 0625).
-  # The per-task gate (`spur-check`) deliberately excludes corpus-check — the only
+  # The per-task gate (`spur-check`) deliberately excludes corpus-check — the
+  # only
   # sweep that observes feature-level findings — so a transition that arms one
   # would go green. This gate is therefore the CORPUS SWEEP ALONE (~29 s), not
   # `spur-check-new`: every task in the feature already paid a full `spur-check`
   # in its own pipeline, and the states that run before this hop (`doc-sync`,
   # `metrics-record`) write only markdown and task sections, which Biome skips
-  # (`ignoreUnknown: true`). Re-running the ~105 s per-task gate here re-verifies
+  # (`ignoreUnknown: true`). Re-running the ~105 s per-task gate here
+  # re-verifies
   # unchanged code and measures nothing new. Soft by design: the gate reports
-  # PASS/FAIL and lets the operator decide; it never hard-fails the wrap-up shell.
+  # PASS/FAIL and lets the operator decide; it never hard-fails the wrap-up
+  # shell.
   # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (same surface as
   # task-pipeline's qualityGateCmd). Never interpolate untrusted input into it.
   featureGateCmd: "bun run corpus-check"
@@ -132,7 +146,8 @@ states:
             rules; do not write task/feature corpus. THEN extract working learnings from tasks ${vars.tasks} —
             conventions, errors fixed, patterns, gotchas, grouped by date and task WBS — as raw markdown
             (no fences) and END your final message with that markdown (it is captured to .spur/run/wrapup-learnings.md).
-          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
+          # Declared Layer-1 role (0538 R2): routing reason beside the agent:
+          # pin.
           role: coder
           answerFile: .spur/run/wrapup-learnings.md
           expectFile: .spur/run/wrapup-learnings.md
@@ -184,12 +199,18 @@ states:
       enters this state when vars.feature is set) and fails loud (dogfood 2026-08-15,
       feature I3: a silent exit 0 made the wrap look complete with no transition).
     onEnter:
-      # Genuinely soft: the terminating `exit 0` must be reached on BOTH branches, so
-      # the sync is chained with `;` — with `&&` a non-zero sync skipped `exit 0` and
-      # aborted the run at this state, discarding the learnings/metrics that already
-      # landed and never reaching branch-cleanup/done (the exact failure the state
-      # description promises against). `feature-sync-bounded.ts` is a Spur-monorepo
-      # path (`spur init` does not scaffold `plugins/sp/`), so seeded projects fall
+      # Genuinely soft: the terminating `exit 0` must be reached on BOTH
+      # branches, so
+      # the sync is chained with `;` — with `&&` a non-zero sync skipped `exit
+      # 0` and
+      # aborted the run at this state, discarding the learnings/metrics that
+      # already
+      # landed and never reaching branch-cleanup/done (the exact failure the
+      # state
+      # description promises against). `feature-sync-bounded.ts` is a
+      # Spur-monorepo
+      # path (`spur init` does not scaffold `plugins/sp/`), so seeded projects
+      # fall
       # back to the plain `spur feature sync` verb.
       # R1 (0625): a feature transition that changed state may have armed a
       # feature-level finding the per-task fast gate (spur-check) never sees.
@@ -247,7 +268,8 @@ states:
       - kind: note
         options:
           message: "Wrap-up pipeline complete for tasks: ${vars.tasks}. Learnings at .spur/memory/learnings.md, metrics at .spur/memory/wrapup-metrics.jsonl."
-      # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
+      # Checkpoint write: record session state for resume (Phase 4, task 0171
+      # R3)
       - kind: shell
         options:
           command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: wrapup-pipeline done tasks=$tasks ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/wrapup-checkpoint.md'
@@ -299,7 +321,8 @@ transitions:
       kind: always
 
   # ── metrics-record: conditional routing based on feature and merge ──
-  # Declaration order matters: feature-transition is tried first (if feature is set),
+  # Declaration order matters: feature-transition is tried first (if feature is
+  # set),
   # then branch-cleanup (if merge=true but no feature), then done (neither).
   - from: metrics-record
     to: feature-transition
@@ -340,7 +363,8 @@ transitions:
         command: 'test "$merge" != true'
 
   # ── branch-cleanup: HITL exhaustive routing (yes / no / cancel → done) ──
-  # No irreversible git op is wired yet; confirmation is recorded, then wrap completes.
+  # No irreversible git op is wired yet; confirmation is recorded, then wrap
+  # completes.
   - from: branch-cleanup
     to: done
     description: Branch cleanup HITL answered — wrap-up complete.
