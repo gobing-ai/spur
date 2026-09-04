@@ -393,60 +393,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                 GROUP BY bucket_start, session_id, source, model, tool_name, skill_name`,
             params: [],
         },
-        {
-            sql: `INSERT INTO history_board_session_stats (
-                    source, session_id, model, started_at, ended_at, messages,
-                    tool_calls, errors, fresh_input_tokens, cache_read_tokens, cache_write_tokens,
-                    output_tokens, assistant_duration_ms, assistant_duration_samples, top_tool, state
-                )
-                WITH selected AS (
-                    SELECT m.rowid AS source_rowid, m.* FROM history_message m
-                    WHERE ${MESSAGE_DEDUP} AND m.session_id NOT IN ('', 'unknown', 'session')
-                ), message_stats AS (
-                    SELECT source, session_id, COALESCE(MAX(model), 'unknown') AS model,
-                           MIN(ts) AS started_at, MAX(ts) AS ended_at, COUNT(*) AS messages,
-                           SUM(COALESCE(input_tokens, 0)) AS fresh_input_tokens,
-                           SUM(COALESCE(cache_read_tokens, 0)) AS cache_read_tokens,
-                           SUM(COALESCE(cache_write_tokens, 0)) AS cache_write_tokens,
-                           SUM(COALESCE(output_tokens, 0)) AS output_tokens,
-                           SUM(CASE WHEN role = 'assistant' THEN COALESCE(duration_ms, 0) ELSE 0 END) AS assistant_duration_ms,
-                           SUM(CASE WHEN role = 'assistant' AND duration_ms > 0 THEN 1 ELSE 0 END) AS assistant_duration_samples
-                    FROM selected GROUP BY source, session_id
-                ), tool_counts AS (
-                    SELECT m.source, m.session_id, COUNT(*) AS tool_calls,
-                           SUM(tc.status = 'error') AS errors
-                    FROM selected m JOIN history_tool_call tc ON tc.message_hash = m.record_hash
-                    GROUP BY m.source, m.session_id
-                ), tool_ranks AS (
-                    SELECT source, session_id, tool_name,
-                           ROW_NUMBER() OVER (PARTITION BY source, session_id ORDER BY (tool_name != 'unknown') DESC, calls DESC, tool_name ASC) AS rank
-                    FROM (
-                        SELECT m.source, m.session_id, ${RESOLVED_TOOL_NAME_SQL} AS tool_name, COUNT(*) AS calls
-                        FROM selected m JOIN history_tool_call tc ON tc.message_hash = m.record_hash
-                        GROUP BY m.source, m.session_id, ${RESOLVED_TOOL_NAME_SQL}
-                    )
-                ), last_messages AS (
-                    SELECT source, session_id, record_hash, role,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY source, session_id ORDER BY seq DESC, source_rowid DESC
-                           ) AS rank
-                    FROM selected WHERE disposition != 'meta'
-                )
-                SELECT ms.source, ms.session_id, ms.model, ms.started_at, ms.ended_at, ms.messages,
-                       COALESCE(tc.tool_calls, 0), COALESCE(tc.errors, 0),
-                       ms.fresh_input_tokens, ms.cache_read_tokens, ms.cache_write_tokens, ms.output_tokens,
-                       ms.assistant_duration_ms, ms.assistant_duration_samples, tr.tool_name,
-                       CASE WHEN lm.role IN ('assistant', 'unknown', '')
-                                  AND NOT EXISTS (
-                                      SELECT 1 FROM history_tool_call open_tc WHERE open_tc.message_hash = lm.record_hash
-                                  )
-                            THEN 'complete' ELSE 'in-progress' END
-                FROM message_stats ms
-                LEFT JOIN tool_counts tc ON tc.source = ms.source AND tc.session_id = ms.session_id
-                LEFT JOIN tool_ranks tr ON tr.source = ms.source AND tr.session_id = ms.session_id AND tr.rank = 1
-                LEFT JOIN last_messages lm ON lm.source = ms.source AND lm.session_id = ms.session_id AND lm.rank = 1`,
-            params: [],
-        },
+        ...sessionStatsOps(null),
         {
             sql: `INSERT INTO history_board_model_stats (
                     model, assistant_duration_ms, assistant_duration_samples,
@@ -1296,6 +1243,19 @@ const MSG_BUCKET_5M_SQL = `strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', m.
 /** 5-minute bucket expression over `history_skill_call.started_at`. */
 const SKILL_BUCKET_5M_SQL = `strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', started_at) / 60 * 60 AS INTEGER), 'unixepoch')`;
 
+/**
+ * Sargable pre-filter selecting the rows a bucket can contain (0741 R8).
+ *
+ * The bucket expressions above wrap `ts` in `strftime`, so an equality against them cannot use
+ * `idx_history_message_ts` — every per-bucket derivation degraded to a full scan of the largest
+ * table, once per bucket, which made the delta refresh grow with total corpus size. This range
+ * narrows the scan to the bucket's own minute; the exact bucket equality stays as the residual
+ * filter, so the selected set is unchanged. Binds the bucket twice, before that equality.
+ */
+function bucketWindow(column: string): string {
+    return `${column} >= ? AND ${column} < strftime('%Y-%m-%dT%H:%M:%SZ', ?, '+60 seconds')`;
+}
+
 /** Newest `imported_at` across the whole corpus. */
 async function newestImportedAt(db: DbAdapter): Promise<string> {
     const row = await db.queryFirst<{ newest: string | null }>(
@@ -1323,7 +1283,7 @@ interface AffectedBucketRange {
  */
 async function affectedBucketsWithRange(db: DbAdapter, watermark: string): Promise<AffectedBucketRange[]> {
     const rows = await db.queryAll<{ bucketStart: string; minImportedAt: string; maxImportedAt: string }>(
-        `SELECT ${MSG_BUCKET_5M_SQL} AS bucketStart,
+        `SELECT COALESCE(${MSG_BUCKET_5M_SQL}, '') AS bucketStart,
                 MIN(m.imported_at) AS minImportedAt,
                 MAX(m.imported_at) AS maxImportedAt
          FROM history_message m
@@ -1347,6 +1307,26 @@ function minStr(left: string, right: string): string {
     return left < right ? left : right;
 }
 
+/**
+ * Bucket key for messages whose `ts` is NULL (a supported state — see the ts-nullable
+ * migration). The full rebuild coalesces the bucket expression to `''`, so the incremental
+ * path must use the same key or it would rebuild a bucket the full rebuild never produced.
+ */
+const NULL_TS_BUCKET = '';
+
+/**
+ * Predicate + params selecting one bucket's `history_message` rows (alias `m`).
+ *
+ * `MSG_BUCKET_5M_SQL` evaluates to NULL for a NULL `ts`, so the sentinel bucket cannot be
+ * expressed as an equality against it and selects `m.ts IS NULL` instead. Shared by the
+ * message and tool derivations so an incrementally rebuilt bucket holds exactly the rows the
+ * full rebuild would put there.
+ */
+function messageBucketFilter(bucket: string): { sql: string; params: string[] } {
+    if (bucket === NULL_TS_BUCKET) return { sql: 'm.ts IS NULL', params: [] };
+    return { sql: `${bucketWindow('m.ts')} AND ${MSG_BUCKET_5M_SQL} = ?`, params: [bucket, bucket, bucket] };
+}
+
 function bucketDay(bucket: string): string {
     return bucket.slice(0, 10);
 }
@@ -1365,6 +1345,7 @@ function watermarkUpsertOp(tableName: string, watermark: string, definitionVersi
 }
 
 function message5mBucketOps(bucket: string): DbBatchOp[] {
+    const filter = messageBucketFilter(bucket);
     return [
         { sql: 'DELETE FROM history_board_message_5m WHERE bucket_start = ?', params: [bucket] },
         {
@@ -1382,7 +1363,7 @@ function message5mBucketOps(bucket: string): DbBatchOp[] {
                                'unknown'
                            ) AS effective_model
                     FROM history_message m
-                    WHERE ${MESSAGE_DEDUP} AND ${MSG_BUCKET_5M_SQL} = ?
+                    WHERE ${MESSAGE_DEDUP} AND ${filter.sql}
                 )
                 SELECT COALESCE(
                            strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', m.ts) / 60 * 60 AS INTEGER), 'unixepoch'),
@@ -1398,12 +1379,13 @@ function message5mBucketOps(bucket: string): DbBatchOp[] {
                        SUM(CASE WHEN m.role = 'assistant' AND m.duration_ms > 0 THEN 1 ELSE 0 END)
                 FROM enriched m
                 GROUP BY bucket_start, m.session_id, m.source, m.effective_model`,
-            params: [bucket],
+            params: filter.params,
         },
     ];
 }
 
 function tool5mBucketOps(bucket: string): DbBatchOp[] {
+    const filter = messageBucketFilter(bucket);
     return [
         { sql: 'DELETE FROM history_board_tool_5m WHERE bucket_start = ?', params: [bucket] },
         {
@@ -1441,7 +1423,7 @@ function tool5mBucketOps(bucket: string): DbBatchOp[] {
                                    OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
                            ) AS resolved_output_tokens
                     FROM history_message m
-                    WHERE ${MESSAGE_DEDUP} AND ${MSG_BUCKET_5M_SQL} = ?
+                    WHERE ${MESSAGE_DEDUP} AND ${filter.sql}
                 ), linked AS (
                     SELECT COALESCE(
                                strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', m.ts) / 60 * 60 AS INTEGER), 'unixepoch'),
@@ -1466,7 +1448,7 @@ function tool5mBucketOps(bucket: string): DbBatchOp[] {
                        COUNT(*), SUM(status = 'error'), SUM(duration_ms)
                 FROM linked
                 GROUP BY bucket_start, session_id, source, model, tool_name, skill_name`,
-            params: [bucket],
+            params: filter.params,
         },
     ];
 }
@@ -1478,9 +1460,9 @@ function skill5mBucketOps(bucket: string): DbBatchOp[] {
             sql: `INSERT INTO history_board_skill_5m (bucket_start, source, skill_name, invocation_kind, calls)
                   SELECT ${SKILL_BUCKET_5M_SQL} AS bucket_start, source, skill_name, invocation_kind, COUNT(*) AS calls
                   FROM history_skill_call
-                  WHERE started_at IS NOT NULL AND ${SKILL_BUCKET_5M_SQL} = ?
+                  WHERE started_at IS NOT NULL AND ${bucketWindow('started_at')} AND ${SKILL_BUCKET_5M_SQL} = ?
                   GROUP BY bucket_start, source, skill_name, invocation_kind`,
-            params: [bucket],
+            params: [bucket, bucket, bucket],
         },
     ];
 }
@@ -1555,7 +1537,85 @@ async function recomputeDailyAndSourceDaily(db: DbAdapter, days: string[]): Prom
 }
 
 /** Re-derive the keyed-aggregate class after the bucketed deltas land. */
-async function recomputeKeyedAggregates(db: DbAdapter): Promise<void> {
+/**
+ * DELETE + re-derive ops for `history_board_session_stats`, the one keyed aggregate that must
+ * read raw `history_message` — `state` and `top_tool` need per-message `seq`, `role`, and
+ * `disposition`, which the 5-minute buckets have already aggregated away.
+ *
+ * `scope` narrows the rebuild to a session set. Every CTE below groups or partitions by
+ * session, so a scoped run produces byte-identical rows for those sessions and touches no
+ * other — which is what keeps an incremental refresh proportional to its delta instead of to
+ * the corpus. `null` rebuilds every session (full rebuild, or a delta too wide to scope).
+ */
+function sessionStatsOps(scope: string[] | null): DbBatchOp[] {
+    const scopeIn = scope === null ? '' : `(${scope.map(() => '?').join(', ')})`;
+    return [
+        {
+            sql:
+                scope === null
+                    ? 'DELETE FROM history_board_session_stats'
+                    : `DELETE FROM history_board_session_stats WHERE session_id IN ${scopeIn}`,
+            params: scope ?? [],
+        },
+        {
+            sql: `INSERT INTO history_board_session_stats (
+                source, session_id, model, started_at, ended_at, messages,
+                tool_calls, errors, fresh_input_tokens, cache_read_tokens, cache_write_tokens,
+                output_tokens, assistant_duration_ms, assistant_duration_samples, top_tool, state
+            )
+            WITH selected AS (
+                SELECT m.rowid AS source_rowid, m.* FROM history_message m
+                WHERE ${MESSAGE_DEDUP} AND m.session_id NOT IN ('', 'unknown', 'session')
+                      ${scope === null ? '' : `AND m.session_id IN ${scopeIn}`}
+            ), message_stats AS (
+                SELECT source, session_id, COALESCE(MAX(model), 'unknown') AS model,
+                       MIN(ts) AS started_at, MAX(ts) AS ended_at, COUNT(*) AS messages,
+                       SUM(COALESCE(input_tokens, 0)) AS fresh_input_tokens,
+                       SUM(COALESCE(cache_read_tokens, 0)) AS cache_read_tokens,
+                       SUM(COALESCE(cache_write_tokens, 0)) AS cache_write_tokens,
+                       SUM(COALESCE(output_tokens, 0)) AS output_tokens,
+                       SUM(CASE WHEN role = 'assistant' THEN COALESCE(duration_ms, 0) ELSE 0 END) AS assistant_duration_ms,
+                       SUM(CASE WHEN role = 'assistant' AND duration_ms > 0 THEN 1 ELSE 0 END) AS assistant_duration_samples
+                FROM selected GROUP BY source, session_id
+            ), tool_counts AS (
+                SELECT m.source, m.session_id, COUNT(*) AS tool_calls,
+                       SUM(tc.status = 'error') AS errors
+                FROM selected m JOIN history_tool_call tc ON tc.message_hash = m.record_hash
+                GROUP BY m.source, m.session_id
+            ), tool_ranks AS (
+                SELECT source, session_id, tool_name,
+                       ROW_NUMBER() OVER (PARTITION BY source, session_id ORDER BY (tool_name != 'unknown') DESC, calls DESC, tool_name ASC) AS rank
+                FROM (
+                    SELECT m.source, m.session_id, ${RESOLVED_TOOL_NAME_SQL} AS tool_name, COUNT(*) AS calls
+                    FROM selected m JOIN history_tool_call tc ON tc.message_hash = m.record_hash
+                    GROUP BY m.source, m.session_id, ${RESOLVED_TOOL_NAME_SQL}
+                )
+            ), last_messages AS (
+                SELECT source, session_id, record_hash, role,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY source, session_id ORDER BY seq DESC, source_rowid DESC
+                       ) AS rank
+                FROM selected WHERE disposition != 'meta'
+            )
+            SELECT ms.source, ms.session_id, ms.model, ms.started_at, ms.ended_at, ms.messages,
+                   COALESCE(tc.tool_calls, 0), COALESCE(tc.errors, 0),
+                   ms.fresh_input_tokens, ms.cache_read_tokens, ms.cache_write_tokens, ms.output_tokens,
+                   ms.assistant_duration_ms, ms.assistant_duration_samples, tr.tool_name,
+                   CASE WHEN lm.role IN ('assistant', 'unknown', '')
+                              AND NOT EXISTS (
+                                  SELECT 1 FROM history_tool_call open_tc WHERE open_tc.message_hash = lm.record_hash
+                              )
+                        THEN 'complete' ELSE 'in-progress' END
+            FROM message_stats ms
+            LEFT JOIN tool_counts tc ON tc.source = ms.source AND tc.session_id = ms.session_id
+            LEFT JOIN tool_ranks tr ON tr.source = ms.source AND tr.session_id = ms.session_id AND tr.rank = 1
+            LEFT JOIN last_messages lm ON lm.source = ms.source AND lm.session_id = ms.session_id AND lm.rank = 1`,
+            params: scope ?? [],
+        },
+    ];
+}
+
+async function recomputeKeyedAggregates(db: DbAdapter, sessionScope: string[] | null): Promise<void> {
     // model_stats and tool_stats derive purely from the bucketed tables (cheap, correct).
     await db.batch([
         { sql: 'DELETE FROM history_board_model_stats', params: [] },
@@ -1597,64 +1657,7 @@ async function recomputeKeyedAggregates(db: DbAdapter): Promise<void> {
         },
     ]);
 
-    // session_stats derives from raw history_message (the existing derivation); recompute in full.
-    await db.batch([
-        { sql: 'DELETE FROM history_board_session_stats', params: [] },
-        {
-            sql: `INSERT INTO history_board_session_stats (
-                    source, session_id, model, started_at, ended_at, messages,
-                    tool_calls, errors, fresh_input_tokens, cache_read_tokens, cache_write_tokens,
-                    output_tokens, assistant_duration_ms, assistant_duration_samples, top_tool, state
-                )
-                WITH selected AS (
-                    SELECT m.rowid AS source_rowid, m.* FROM history_message m
-                    WHERE ${MESSAGE_DEDUP} AND m.session_id NOT IN ('', 'unknown', 'session')
-                ), message_stats AS (
-                    SELECT source, session_id, COALESCE(MAX(model), 'unknown') AS model,
-                           MIN(ts) AS started_at, MAX(ts) AS ended_at, COUNT(*) AS messages,
-                           SUM(COALESCE(input_tokens, 0)) AS fresh_input_tokens,
-                           SUM(COALESCE(cache_read_tokens, 0)) AS cache_read_tokens,
-                           SUM(COALESCE(cache_write_tokens, 0)) AS cache_write_tokens,
-                           SUM(COALESCE(output_tokens, 0)) AS output_tokens,
-                           SUM(CASE WHEN role = 'assistant' THEN COALESCE(duration_ms, 0) ELSE 0 END) AS assistant_duration_ms,
-                           SUM(CASE WHEN role = 'assistant' AND duration_ms > 0 THEN 1 ELSE 0 END) AS assistant_duration_samples
-                    FROM selected GROUP BY source, session_id
-                ), tool_counts AS (
-                    SELECT m.source, m.session_id, COUNT(*) AS tool_calls,
-                           SUM(tc.status = 'error') AS errors
-                    FROM selected m JOIN history_tool_call tc ON tc.message_hash = m.record_hash
-                    GROUP BY m.source, m.session_id
-                ), tool_ranks AS (
-                    SELECT source, session_id, tool_name,
-                           ROW_NUMBER() OVER (PARTITION BY source, session_id ORDER BY (tool_name != 'unknown') DESC, calls DESC, tool_name ASC) AS rank
-                    FROM (
-                        SELECT m.source, m.session_id, ${RESOLVED_TOOL_NAME_SQL} AS tool_name, COUNT(*) AS calls
-                        FROM selected m JOIN history_tool_call tc ON tc.message_hash = m.record_hash
-                        GROUP BY m.source, m.session_id, ${RESOLVED_TOOL_NAME_SQL}
-                    )
-                ), last_messages AS (
-                    SELECT source, session_id, record_hash, role,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY source, session_id ORDER BY seq DESC, source_rowid DESC
-                           ) AS rank
-                    FROM selected WHERE disposition != 'meta'
-                )
-                SELECT ms.source, ms.session_id, ms.model, ms.started_at, ms.ended_at, ms.messages,
-                       COALESCE(tc.tool_calls, 0), COALESCE(tc.errors, 0),
-                       ms.fresh_input_tokens, ms.cache_read_tokens, ms.cache_write_tokens, ms.output_tokens,
-                       ms.assistant_duration_ms, ms.assistant_duration_samples, tr.tool_name,
-                       CASE WHEN lm.role IN ('assistant', 'unknown', '')
-                                  AND NOT EXISTS (
-                                      SELECT 1 FROM history_tool_call open_tc WHERE open_tc.message_hash = lm.record_hash
-                                  )
-                            THEN 'complete' ELSE 'in-progress' END
-                FROM message_stats ms
-                LEFT JOIN tool_counts tc ON tc.source = ms.source AND tc.session_id = ms.session_id
-                LEFT JOIN tool_ranks tr ON tr.source = ms.source AND tr.session_id = ms.session_id AND tr.rank = 1
-                LEFT JOIN last_messages lm ON lm.source = ms.source AND lm.session_id = ms.session_id AND lm.rank = 1`,
-            params: [],
-        },
-    ]);
+    await db.batch(sessionStatsOps(sessionScope));
 
     // source_stats: import metadata from sourceSummary, plus the derived enrich update.
     const sourceRows = await sourceSummary(db, ALL_HISTORY);
@@ -1789,6 +1792,31 @@ const POST_WATERMARK_TABLES = [
 ] as const;
 
 /** All days currently materialized in the bucketed message table — post-pass recovery scope. */
+/**
+ * The sessions a delta can have changed: those owning a row imported at or after `watermark`.
+ * `null` means "rebuild every session" and is returned when the delta is too wide for a scoped
+ * rebuild to be worth it.
+ *
+ * Deliberately not `SELECT DISTINCT`: with a DISTINCT, SQLite satisfies the uniqueness from
+ * `idx_history_message_session_id_seq` and full-scans the table (3.5 s on a 1.8M-row corpus)
+ * instead of range-scanning `idx_history_message_imported_at` (1.4 ms). Deduplicating the
+ * delta's own rows here keeps the query a watermark range scan, which is the whole point.
+ */
+const SESSION_SCOPE_LIMIT = 1000;
+const DELTA_ROW_SCAN_LIMIT = 200_000;
+
+async function deltaSessionScope(db: DbAdapter, watermark: string): Promise<string[] | null> {
+    const rows = await db.queryAll<{ sessionId: string }>(
+        `SELECT session_id AS sessionId FROM history_message
+         WHERE imported_at >= ? AND session_id NOT IN ('', 'unknown', 'session')
+         LIMIT ${DELTA_ROW_SCAN_LIMIT + 1}`,
+        watermark,
+    );
+    if (rows.length > DELTA_ROW_SCAN_LIMIT) return null;
+    const sessions = [...new Set(rows.map((r) => r.sessionId))];
+    return sessions.length > SESSION_SCOPE_LIMIT ? null : sessions;
+}
+
 async function allMaterializedDays(db: DbAdapter): Promise<string[]> {
     const rows = await db.queryAll<{ day: string }>(
         'SELECT DISTINCT SUBSTR(bucket_start, 1, 10) AS day FROM history_board_message_5m',
@@ -1895,7 +1923,10 @@ export async function refreshHistoryBoardRollupsIncremental(db: DbAdapter): Prom
     const days =
         affected.length > 0 ? [...new Set(affected.map((a) => bucketDay(a.bucket)))] : await allMaterializedDays(db);
     await recomputeDailyAndSourceDaily(db, days);
-    await recomputeKeyedAggregates(db);
+    await recomputeKeyedAggregates(
+        db,
+        affected.length > 0 ? await deltaSessionScope(db, messageWm.importedAtWatermark) : null,
+    );
     await recomputeGlobalRanked(db);
 
     // The post-pass tables are now consistent — advance their watermarks last.

@@ -180,7 +180,7 @@ interface Msg {
     recordHash: string;
     sessionId: string;
     seq: number;
-    ts: string;
+    ts: string | null;
     model?: string | null;
     input?: number | null;
     cacheRead?: number | null;
@@ -539,6 +539,80 @@ describe('equivalence helper contracts (0742)', () => {
             '2026-06-01T09:57:30Z',
         );
         expect(incrSum).toStrictEqual(fullSum);
+        incrDb.close();
+        fullDb.close();
+    });
+});
+
+/**
+ * A message with no timestamp is a supported state (history_message.ts is nullable), and real
+ * corpora carry them. The full rebuild coalesces such a row's 5m bucket to `''`; the incremental
+ * engine used to derive a NULL bucket key from the same expression, which crashed the refresh
+ * before it ever compared. Both halves of that contract are asserted here.
+ */
+describe('NULL-ts messages (0741 R8)', () => {
+    async function seedNullTs(db: DbAdapter): Promise<void> {
+        await insertMessage(db, {
+            recordHash: 'nullts-a1',
+            sessionId: 'eq-null',
+            seq: 1,
+            ts: null,
+            model: 'gpt-5',
+            input: 11,
+            cacheRead: 3,
+            cacheWrite: 1,
+            output: 7,
+            durationMs: 250,
+            importedAt: '2026-06-01T07:00:00Z',
+        });
+        await insertToolCall(db, {
+            recordHash: 'nullts-t1',
+            messageHash: 'nullts-a1',
+            sessionId: 'eq-null',
+            seq: 1,
+            toolName: 'Read',
+            status: 'success',
+            durationMs: 90,
+        });
+    }
+
+    test('a NULL-ts message arriving after the watermark refreshes incrementally', async () => {
+        const db = await setup();
+        await seedIncrementOne(db);
+        await refreshHistoryBoardRollupsIncremental(db);
+        await seedNullTs(db);
+        await refreshHistoryBoardRollupsIncremental(db);
+
+        const bucket = await db.queryFirst<{ n: number; t: number; msgs: number }>(
+            `SELECT COUNT(*) AS n, SUM(fresh_input_tokens) AS t, SUM(messages) AS msgs
+             FROM history_board_message_5m WHERE bucket_start = ''`,
+        );
+        expect(bucket?.n).toBe(1);
+        expect(bucket?.t).toBe(11);
+        expect(bucket?.msgs).toBe(1);
+        const tools = await db.queryFirst<{ calls: number }>(
+            "SELECT SUM(calls) AS calls FROM history_board_tool_5m WHERE bucket_start = ''",
+        );
+        expect(tools?.calls).toBe(1);
+        db.close();
+    });
+
+    test('incremental and full rebuild agree with NULL-ts rows present', async () => {
+        const incrDb = await setup();
+        await seedIncrementOne(incrDb);
+        await refreshHistoryBoardRollupsIncremental(incrDb);
+        await seedIncrementTwo(incrDb);
+        await seedNullTs(incrDb);
+        await refreshHistoryBoardRollupsIncremental(incrDb);
+
+        const fullDb = await setup();
+        await seedIncrementOne(fullDb);
+        await seedIncrementTwo(fullDb);
+        await seedNullTs(fullDb);
+        await refreshHistoryBoardRollupsIncremental(fullDb);
+
+        const differences = diffRollupSnapshots(await snapshotRollupTables(incrDb), await snapshotRollupTables(fullDb));
+        expect(differences).toStrictEqual([]);
         incrDb.close();
         fullDb.close();
     });
