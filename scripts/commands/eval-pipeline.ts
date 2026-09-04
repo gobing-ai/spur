@@ -283,12 +283,15 @@ export async function removeEvalRun(run: EvalRun): Promise<void> {
     const removed = git(['worktree', 'remove', '--force', run.projectDir]);
     if (removed.exitCode !== 0) {
         // Stale registration (gitdir already missing) or a still-open tree: prune the stale ref
-        // so it does not wedge future `worktree add`/`list`, and note the failure instead of
-        // aborting cleanup.
+        // so it does not wedge future `worktree add`/`list`.
         git(['worktree', 'prune']);
-        process.stderr.write(
-            `eval-pipeline: worktree cleanup failed (continuing with temp removal): ${removed.stderr || removed.stdout}\n`,
-        );
+        // Directory already gone is the idempotent path — stay silent. A surviving directory is
+        // a genuinely-unremovable worktree and worth a stderr note instead of a throw.
+        if (existsSync(run.projectDir)) {
+            process.stderr.write(
+                `eval-pipeline: worktree cleanup failed (continuing with temp removal): ${removed.stderr || removed.stdout}\n`,
+            );
+        }
     }
     await rm(run.tempParent, { recursive: true, force: true });
 }
