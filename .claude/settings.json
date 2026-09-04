@@ -19,6 +19,7 @@
         "~/tools/dot_files/config/pi",
         "~/tools/dot_files/config/grok",
         "~/tools/dot_files/config/codex",
+        "~/.bun",
         "~/.pi",
         "~/.grok",
         "~/.gemini",
