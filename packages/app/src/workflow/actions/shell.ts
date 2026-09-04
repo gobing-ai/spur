@@ -1,6 +1,7 @@
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import type { ProcessExecutor } from '@gobing-ai/ts-runtime';
 import { bounded, type WorkflowActionOutputEvent, type WorkflowObservabilityBus } from '../observability';
+import { childProcessEnv } from './child-env';
 
 const KIND = 'shell';
 
@@ -55,10 +56,7 @@ export class StreamingShellActionRunner implements ActionRunner {
         // as data — it cannot become code in the action's subprocess. Embedding var values into
         // the command string (engine template pre-resolution) is the bug this replaces; the
         // engine still pre-resolves `${vars.*}` in any option, so shell commands must use `$NAME`.
-        const env: Record<string, string> = {};
-        for (const [key, value] of Object.entries({ ...process.env, ...context.vars })) {
-            if (value !== undefined) env[key] = value;
-        }
+        const env = childProcessEnv(context.vars);
         const pipe = this.processExecutor.runStreaming({
             command: spawn.command,
             args: spawn.args,

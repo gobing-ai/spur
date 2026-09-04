@@ -7,6 +7,7 @@ import {
     type ProcessExecutor,
 } from '@gobing-ai/ts-runtime';
 import { splitLaunchCommand } from '../split-launch-command';
+import { childProcessEnv } from './child-env';
 
 const KIND = 'command.gate';
 
@@ -133,10 +134,7 @@ export class CommandGateActionRunner implements ActionRunner {
         const retryOn = Array.isArray(retry.on) ? retry.on : [];
         const timeoutMs = typeof options.timeoutMs === 'number' ? options.timeoutMs : undefined;
 
-        const env: Record<string, string> = {};
-        for (const [k, v] of Object.entries({ ...process.env, ...context.vars })) {
-            if (v !== undefined) env[k] = v;
-        }
+        const env = childProcessEnv(context.vars);
 
         await this.fileSystem.ensureDir(allowedDir);
 

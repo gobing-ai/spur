@@ -8,6 +8,7 @@
 // The side-effect import below forces ts-db into the static graph.
 // `spur-dev.ts build-cli` patches the variable specifier in ts-runtime's
 // dist to a string literal at build time so it resolves at runtime.
+import './sanitize-env';
 import '@gobing-ai/ts-db';
 import { Command } from '@commander-js/extra-typings';
 import type { SpurAppConfig, SpurConfig } from '@gobing-ai/spur-config';
