@@ -1250,11 +1250,12 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             continue;
         }
         // Migration 0034 indexes and backfills history_tool_call.effective_tool_name /
-        // tool_name_alias, but no importer DDL creates them (HISTORY_IMPORT_SCHEMA_SQL
-        // through 0.4.55 has neither column), so every DB carrying the table needs them
-        // provisioned first. SQLite has no ADD COLUMN IF NOT EXISTS and the migration body
-        // spans several statements, so `addColumnIfMissing` (one column, all-or-nothing)
-        // cannot express it — guard per column here. Table-absent DBs fall through to
+        // tool_name_alias. HISTORY_IMPORT_SCHEMA_SQL declares both from 0.4.56 on, so a
+        // fresh database arrives with them and these guards are no-ops; a database created
+        // by 0.4.55 or earlier has neither, and still needs them provisioned before the
+        // migration body runs. SQLite has no ADD COLUMN IF NOT EXISTS and the body spans
+        // several statements, so `addColumnIfMissing` (one column, all-or-nothing) cannot
+        // express it — guard per column here. Table-absent DBs fall through to
         // historyToolIdentitySkip below. 'unknown' matches the body's backfill predicate.
         if (
             migration.id === '0034_spur_cli_history_tool_identity' &&
