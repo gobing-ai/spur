@@ -4,7 +4,7 @@ name: "S0c: Repair action options, run-id confinement, nested composition, and d
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:31.022Z
-updated_at: "2026-09-04T01:47:42.508Z"
+updated_at: "2026-09-04T16:56:19.397Z"
 feature_id: D9
 priority: P1
 ac_altitude: task-local
@@ -25,12 +25,12 @@ D8 decision **D1** (accepted with its default unchanged) resolves F-2 by replaci
 
 A fifth item is documentation-only: **F-14** — `workflow validate` / dry-run is smoke, not run-readiness evidence. No consumer may cite it as proof a workflow will run.
 ### Requirements
-- [ ] R1. A `command.gate` timeout is enforced: the option reaches the executor under the name the executor's contract declares, and a command exceeding the deadline is terminated and does not report PASS.
-- [ ] R2. Run IDs are validated at the CLI entry point before any path is constructed. A run ID containing a path separator, a traversal segment, or an absolute path is rejected with a named error.
-- [ ] R3. `feature-dev`'s integration review reaches a real decision without spawning a nested workflow run (D8 decision D1): the nested `spur workflow run` is replaced with a non-spawning check.
-- [ ] R4. Dry-run probes emit no human-inspect escalation packet. Escalation emission distinguishes a probe from a real blocked or failed run.
-- [ ] R5. No consumer or document cites `workflow validate` or a dry run as run-readiness evidence (F-14); where one does, it is corrected to describe smoke coverage.
-- [ ] R6. Each of R1-R4 has a regression test that fails against the pre-repair code.
+- [x] R1. A `command.gate` timeout is enforced: the option reaches the executor under the name the executor's contract declares, and a command exceeding the deadline is terminated and does not report PASS.
+- [x] R2. Run IDs are validated at the CLI entry point before any path is constructed. A run ID containing a path separator, a traversal segment, or an absolute path is rejected with a named error.
+- [x] R3. `feature-dev`'s integration review reaches a real decision without spawning a nested workflow run (D8 decision D1): the nested `spur workflow run` is replaced with a non-spawning check.
+- [x] R4. Dry-run probes emit no human-inspect escalation packet. Escalation emission distinguishes a probe from a real blocked or failed run.
+- [x] R5. No consumer or document cites `workflow validate` or a dry run as run-readiness evidence (F-14); where one does, it is corrected to describe smoke coverage.
+- [x] R6. Each of R1-R4 has a regression test that fails against the pre-repair code.
 ### Acceptance Criteria
 ```gherkin
 Feature: Effective workflow action options, confinement, and composition
@@ -117,14 +117,27 @@ Feature: Effective workflow action options, confinement, and composition
 `docs/04_DESIGN.md` already requires "non-dry-run" for live evidence (`:2370`). `docs/inventory/d8-0729-workflow-contract-inventory.md:112` and `docs/inventory/d8-0731-workflow-fit-classification.md:27` already label dry-run/validate as smoke. Frozen plans `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` already record "remove as evidence (smoke only)". No active design doc asserts the claim. Historical task citations in `docs/tasks2/`/`docs/tasks4/` describe what prior tasks did at the time and are records, not active policy — they stand.
 
 ### Testing
+**Pipeline verify results**
 
-- `bunx @biomejs/biome check` — clean across all 7 touched files
-- `bunx tsc --noEmit` (packages/app) — clean
-- `bun test packages/app/tests/workflow/actions/command-gate.test.ts` — 10/10 pass (includes the new `declared timeout reaches the executor under timeout and a hung command does not report PASS`)
-- `bun test packages/app/tests/workflow/feature-dev-definition.test.ts` — 6/6 pass (non-spawning integration review; softFail gone; blocking-edge order preserved)
-- `bun test packages/app/tests/observability/escalation-packet-sink.test.ts --test-name-pattern parseDryRunProbeMetadata` — 8/8 pass (R4 R6: true on `dryRun:true`, false on missing/string/number/false/empty/malformed)
-- `bun test apps/cli/tests/commands/workflow.test.ts --test-name-pattern "run-id|InvalidRunId|validateRunId"` — 2 R6 unit tests pass; the broader 101 failures in this file are a pre-existing `applyCliMigrations` bug ("no such column: effective_tool_name" in the history migration), unrelated to 0753 — they reproduce on `main` and block integration-style CLI tests across the codebase, not just 0753's surface. Tracked separately as an env blocker; 0753 R2 R6 unit coverage is complete via `validateRunId`.
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/workflow/actions/command-gate.ts:155` — `...(timeoutMs !== undefined ? { timeout: timeoutMs } : {})` spreads under the executor's declared `timeout`; sibling sweep clean (`http-request.ts:233` already used `timeout`, `agent-run.ts:275` forwards a CLI flag, not ProcessOptions) |
+| R2 | MET | `apps/cli/src/commands/workflow.ts:129-136` `InvalidRunIdError` (code `INVALID_RUN_ID`), `:151` `validateRunId`, wired at both parse sites `:487` and `:591` before any path construction |
+| R3 | MET | `config/workflows/feature-dev.yaml:161-175` shell action invokes `pr-reviewing.ts request` directly (no nested `spur workflow run`), writes PASS/FAIL to a status file; `softFail` removed; `:255` blocking edge consumes the FAIL when `requireCleanReview=true` |
+| R4 | MET | `packages/app/src/observability/escalation-packet-sink.ts:47` `parseDryRunProbeMetadata`, `:269` `isDryRunProbe`, gated at both emission handlers `:98` (tripwire.fired) and `:105` (run.finalized) |
+| R5 | MET | doc scan: `docs/inventory/d8-0729-workflow-contract-inventory.md:112` and `docs/inventory/d8-0731-workflow-fit-classification.md:27` label dry-run/validate as smoke; no active design surface asserts run-readiness |
+| R6 | MET | `packages/app/tests/workflow/actions/command-gate.test.ts:181` (deadline fires, no PASS); `apps/cli/tests/commands/workflow.test.ts:905,924` (validateRunId reject/accept); `packages/app/tests/workflow/feature-dev-definition.test.ts` (non-spawning review); `packages/app/tests/observability/escalation-packet-sink.test.ts` (probe metadata) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — A command gate timeout actually fires | MET | test | `packages/app/tests/workflow/actions/command-gate.test.ts:181` — 30/30 pass in the 3-file run this turn |
+| Scenario: R2 — Run IDs cannot escape their confinement directory | MET | test | `apps/cli/tests/commands/workflow.test.ts:905` — rejects separator/traversal/absolute/shell-meta before path construction |
+| Scenario: R3 — feature-dev's integration review reaches a real decision | MET | test | `packages/app/tests/workflow/feature-dev-definition.test.ts` — non-spawning invocation, softFail absent, blocking-edge order preserved |
+| Scenario: R4 — Dry probes emit no human-inspect escalation | MET | test | `packages/app/tests/observability/escalation-packet-sink.test.ts` — `parseDryRunProbeMetadata` true on `dryRun:true`, false on missing/malformed |
+| Scenario: R5 — Dry-run is described as smoke, not run-readiness | MET | command | `rg -n -i "(workflow validate |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 
 | Priority | Count | Notes |
