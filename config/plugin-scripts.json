@@ -37,6 +37,10 @@
             "twin": "history-anatomy-cache.mjs"
         },
         {
+            "rel": "inline-pipeline-parity-check.ts",
+            "contract": "repo-only"
+        },
+        {
             "rel": "pr-reviewing.ts",
             "contract": "standard",
             "twin": "pr-reviewing.mjs"

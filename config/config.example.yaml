@@ -3,7 +3,7 @@
 # (never overwritten).
 # Copy / adapt into a project as `.spur/config.yaml`.
 
-$schema: "@gobing-ai/spur/schemas/spur-config.schema.json"
+$schema: "../../apps/cli/schemas/spur-config.schema.json"
 # Config schema version (string). Current recommended: "1.2".
 # "1" remains accepted; there is no hard migrator yet. Prefer "1.1" for
 # new projects so editors and operators know the file targets the ADR-033
