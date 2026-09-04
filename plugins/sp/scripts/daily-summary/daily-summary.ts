@@ -369,7 +369,6 @@ export async function getSpurHistoryHealth(
                 const cleanTool = lp.toolName.replace(/[^a-zA-Z0-9_-]/g, '_');
                 const key = `repetition:${cleanTool}:${lp.argsDigest.slice(0, 16)}`;
                 const title = `Break execution loop in ${lp.toolName} (${lp.repeats} repeats)`;
-                const body = `Finding: ${key}\\nObserved ${lp.repeats} redundant invocations in session ${lp.sessionId} (steps #${lp.fromSeq ?? 1}→#${lp.toSeq ?? lp.repeats}). Wasted tokens: ~${lp.wastedTokens}.`;
                 const command = `spur task create "<title>" --feature <id> && spur task update <wbs> --section Plan --from-file <path>`;
                 remediationProposals.push({ key, title, command });
             }
@@ -377,7 +376,6 @@ export async function getSpurHistoryHealth(
             if (toolCalls > 0 && errorRatePct > 10) {
                 const key = 'reliability:tooling:high-error-rate';
                 const title = `Investigate high tool error rate (${errorRatePct.toFixed(1)}%)`;
-                const body = `Finding: ${key}\\nObserved ${toolErrors} errors across ${toolCalls} tool calls (${errorRatePct.toFixed(1)}% error rate) on ${date}.`;
                 const command = `spur task create "<title>" --feature <id> && spur task update <wbs> --section Plan --from-file <path>`;
                 remediationProposals.push({ key, title, command });
             }

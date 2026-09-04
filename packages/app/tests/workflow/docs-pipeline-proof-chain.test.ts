@@ -49,6 +49,7 @@ describe('docs-pipeline task-path lookup fails closed (task 0760 R1/R2)', () => 
         const fingerprints = verify?.onEnter?.filter((a) => a.kind === 'proof.fingerprint') ?? [];
         expect(fingerprints.length).toBeGreaterThanOrEqual(1);
         for (const fp of fingerprints) {
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
             expect(fp.options?.taskFile).toBe('${vars.taskSpecPath}');
         }
     });
