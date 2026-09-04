@@ -10,6 +10,7 @@ import {
     ESCALATION_PACKET_KIND,
     EscalationPacketSink,
     type EscalationTaskLocator,
+    parseDryRunProbeMetadata,
 } from '../../src/observability/escalation-packet-sink';
 import type {
     WorkflowObservabilityBus,
@@ -253,5 +254,49 @@ describe('EscalationPacketSink', () => {
         const packet = await enriched.readPacket('run-42');
         expect(packet?.identity).toEqual({ wbs: '0709', task: 'Render escalation packets', feature: 'A6' });
         rmSync(cwd, { recursive: true, force: true });
+    });
+});
+
+/**
+ * 0753 R4 / R6 — dry-run probe detection. Regression test for the pure
+ * helper that decides whether a run's metadata_json represents a dry probe
+ * (the precondition for suppressing escalation packet emission). Runs
+ * without the DAO/migration stack so it stays green even when
+ * `applyCliMigrations` regresses (it currently does — pre-existing bug
+ * unrelated to 0753).
+ */
+describe('parseDryRunProbeMetadata (0753 R4 / R6)', () => {
+    test('returns true when metadata.dryRun is exactly true', () => {
+        expect(parseDryRunProbeMetadata('{"dryRun": true}')).toBe(true);
+    });
+
+    test('returns true when dryRun is nested under other keys', () => {
+        expect(parseDryRunProbeMetadata('{"dryRun":true,"other":"stuff"}')).toBe(true);
+    });
+
+    test('returns false when dryRun is missing', () => {
+        expect(parseDryRunProbeMetadata('{"workflow":"x"}')).toBe(false);
+    });
+
+    test('returns false when dryRun is the string "true" (not the boolean)', () => {
+        expect(parseDryRunProbeMetadata('{"dryRun":"true"}')).toBe(false);
+    });
+
+    test('returns false when dryRun is the number 1 (truthy but not boolean true)', () => {
+        expect(parseDryRunProbeMetadata('{"dryRun":1}')).toBe(false);
+    });
+
+    test('returns false when dryRun is false', () => {
+        expect(parseDryRunProbeMetadata('{"dryRun":false}')).toBe(false);
+    });
+
+    test('returns false on empty metadata', () => {
+        expect(parseDryRunProbeMetadata('')).toBe(false);
+    });
+
+    test('returns false on malformed JSON (safe default — never silently escalate)', () => {
+        expect(parseDryRunProbeMetadata('{not-json')).toBe(false);
+        expect(parseDryRunProbeMetadata('null')).toBe(false);
+        expect(parseDryRunProbeMetadata('[]')).toBe(false);
     });
 });

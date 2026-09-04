@@ -143,29 +143,36 @@ states:
 
   - id: integration-review
     description: >
-      Advisory integration review (D5-P, feature R11). Runs `config/workflows/pr-review.yaml`
-      ONCE for this feature/branch HEAD, after the local gates and before wrap merge/cleanup.
-      Current-HEAD dedup stays inside pr-review (`mode: full`), so a re-entry on the same HEAD
-      is a no-op there rather than a second quota spend here.
+      Advisory integration review (D5-P, feature R11). Spends one Codex review
+      on the current HEAD after the local gates and before wrap merge/cleanup.
 
-      The gate is `softFail: true`, so `pending`, a wait timeout, a missing pr-review
-      definition, or an unavailable review quota records FAIL and still reaches `done`.
-      Only `requireCleanReview=true` turns that FAIL into a blocking edge. Findings are
-      collected by pr-review itself and re-enter the affected local gates on the next run.
+      D8 decision D1 (0753 R3): the nested `spur workflow run pr-review.yaml`
+      was refused by the SPUR_WORKFLOW_RUN_ACTIVE child guard and the refusal
+      was masked by `softFail: true`. The non-spawning replacement invokes
+      `pr-reviewing.ts request` directly — the same per-HEAD dedupe-or-request
+      logic `config/workflows/pr-review.yaml` uses internally — and writes its
+      own PASS/FAIL status. `ALREADY_REVIEWED` / `ALREADY_REQUESTED` / `REQUESTED`
+      all count as PASS (review is initiated for this HEAD); only a request
+      error counts as FAIL. `softFail` is gone: a real failure now records FAIL
+      loudly. `requireCleanReview=true` still turns that FAIL into a blocking edge.
     onEnter:
-      - kind: command.gate
+      - kind: shell
         options:
-          id: feature-integration-review
-          executable: "${vars.spurBin}"
-          args:
-            - workflow
-            - run
-            - .spur/workflows/pr-review.yaml
-            - --vars
-            - '{"mode":"full","baseBranch":"${vars.baseBranch}"}'
-          resultFile: .spur/run/${vars.__runId}-integration-review.status
-          softFail: true
-          timeoutMs: 1800000
+          command: >-
+            mkdir -p .spur/run &&
+            STATUS_FILE=".spur/run/$__runId-integration-review.status" &&
+            REQUEST_JSON=".spur/run/$__runId-integration-review.json" &&
+            PR_REQUEST_STATUS=".spur/run/$__runId-integration-review-pr-request.status" &&
+            set +e &&
+            bun "$(superskill script path sp pr-reviewing.ts)" request --base "$baseBranch" --json
+            --status-file "$PR_REQUEST_STATUS" > "$REQUEST_JSON" 2>&1;
+            rc=$?; set -e &&
+            if [ "$rc" -eq 0 ]; then
+              printf 'PASS\n' > "$STATUS_FILE";
+            else
+              printf 'FAIL\n' > "$STATUS_FILE";
+            fi &&
+            exit 0
       - kind: note
         options:
           message: "Integration review for feature ${vars.featureId} recorded at .spur/run/${vars.__runId}-integration-review.status (advisory unless requireCleanReview=true)."

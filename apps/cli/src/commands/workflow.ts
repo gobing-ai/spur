@@ -119,6 +119,50 @@ function asyncRegisterTimeoutMs(): number {
 }
 
 /**
+ * Named error for run IDs that escape their confinement directory
+ * (0753 R2 / F-6: `apps/cli/src/commands/workflow.ts` previously handed
+ * `options.runId` straight to path construction). Validation rejects
+ * the input at the CLI parse boundary rather than sanitizing — a silently
+ * rewritten ID breaks the correlation between the operator's typed value
+ * and the directory that appears.
+ */
+export class InvalidRunIdError extends Error {
+    readonly code = 'INVALID_RUN_ID';
+    constructor(
+        message: string,
+        public readonly runId: string,
+    ) {
+        super(message);
+        this.name = 'InvalidRunIdError';
+    }
+}
+
+/**
+ * Validate a CLI-supplied run ID at the boundary, once. Rejects any input
+ * that would let the ID escape its `.spur/run/<id>...` confinement: path
+ * separators (`/`, `\`), traversal segments (anything containing `.`),
+ * absolute paths (`/foo`, `C:\\foo`), and shell metacharacters. The
+ * accepted shape — alphanumerics and dashes — is exactly the shape the
+ * generated UUIDs already use; the engine never needs anything richer.
+ *
+ * Empty / undefined input is allowed and lets the caller mint a UUID —
+ * not every invocation must supply `--run-id`.
+ */
+export function validateRunId(runId: string | undefined): string {
+    if (runId === undefined || runId === '') return '';
+    // UUID-like shape: alphanumerics + dashes only. This rejects path
+    // separators, traversal segments (anything containing `.`), absolute
+    // paths (`/foo`, `C:\foo`), and shell metas, without enumerating them.
+    if (!/^[A-Za-z0-9-]+$/.test(runId)) {
+        throw new InvalidRunIdError(
+            `run ID must contain only alphanumerics and dashes (got ${JSON.stringify(runId)})`,
+            runId,
+        );
+    }
+    return runId;
+}
+
+/**
  * Wait up to `timeoutMs` for the async worker to register `runId`, returning true
  * once `spur workflow trace <runId>` resolves. The nohup + `&` wrapper in
  * `spawnAsyncWorkflowWorker` makes a dead-on-arrival worker invisible on every
@@ -422,7 +466,23 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             // `spur workflow cancel` SIGTERMs the negated pid to reach the worker +
             // the agent.run grandchild it spawns.
             if (options.async) {
-                const runId = options.runId || crypto.randomUUID();
+                let runId: string;
+                try {
+                    runId = validateRunId(options.runId) || crypto.randomUUID();
+                } catch (error) {
+                    if (error instanceof InvalidRunIdError) {
+                        writeJsonError(context.output, options, error.message, 'VALIDATION_FAILED');
+                    } else {
+                        writeJsonError(
+                            context.output,
+                            options,
+                            error instanceof Error ? error.message : String(error),
+                            'VALIDATION_FAILED',
+                        );
+                    }
+                    context.setExitCode(1);
+                    return;
+                }
                 const spurParts = resolveSpurBin().split(' ');
                 const spurBin = spurParts[0] ?? process.execPath;
                 const spurArgs = spurParts.slice(1);
@@ -505,12 +565,34 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             // spurBin is a default, overridable only if a caller deliberately sets it).
             const vars = { spurBin: resolveSpurBin(), ...parseVars(options.vars) };
 
+            // Validate --run-id BEFORE any path is constructed (0753 R2 / F-6).
+            // A run ID containing a path separator, traversal segment, absolute
+            // path, or shell metacharacter must be rejected at parse time, not
+            // rewritten — a silent rewrite breaks correlation with the operator's
+            // typed value. An empty input is allowed; the caller mints a UUID.
+            let runId: string;
+            try {
+                runId = validateRunId(options.runId) || crypto.randomUUID();
+            } catch (error) {
+                if (error instanceof InvalidRunIdError) {
+                    writeJsonError(context.output, options, error.message, 'VALIDATION_FAILED');
+                } else {
+                    writeJsonError(
+                        context.output,
+                        options,
+                        error instanceof Error ? error.message : String(error),
+                        'VALIDATION_FAILED',
+                    );
+                }
+                context.setExitCode(1);
+                return;
+            }
+
             // Observability: always build a CLI-local bus so engine + adapter events
             // reach the system_events ledger (task 0370). Human progress / --trace-file
             // / --steer reuse the same bus; under --json the progress handlers stay off
             // so machine output remains byte-identical. commander negates --no-plan to
             // options.plan=false.
-            const runId = options.runId || crypto.randomUUID();
             const humanProgress = !json && !quiet && !silent;
             const bus: WorkflowObservabilityBus = new EventBus();
             // SAFETY: the same EventBus serves as both the workflow observability bus and the system-event

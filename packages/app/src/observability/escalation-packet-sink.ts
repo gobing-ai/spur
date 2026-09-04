@@ -35,6 +35,25 @@ import { bounded } from '../workflow/observability';
 /** Artifact kind recorded for escalation packets. */
 export const ESCALATION_PACKET_KIND = 'escalation-packet';
 
+/**
+ * Pure helper: parse a run row's `metadata_json` blob and return true when it
+ * represents a dry-run probe (`metadata.dryRun === true`). Exported for direct
+ * unit testing — 0753 R4 / R6 regression test runs without the DAO stack.
+ *
+ * Defensive contract: empty input, missing `dryRun`, non-boolean `dryRun`, and
+ * malformed JSON all degrade to `false` (the safe default — a probe that
+ * cannot be identified must not silently escalate).
+ */
+export function parseDryRunProbeMetadata(metadataJson: string): boolean {
+    if (metadataJson === '') return false;
+    try {
+        const metadata = JSON.parse(metadataJson) as Record<string, unknown>;
+        return metadata.dryRun === true;
+    } catch {
+        return false;
+    }
+}
+
 /** Structural locator dependency: resolve a task file path from a wbs. */
 export interface EscalationTaskLocator {
     findByWbs(wbs: string): Promise<{ filePath: string } | null>;
@@ -70,11 +89,22 @@ export class EscalationPacketSink {
         this.links = new TaskRunLinkDao(options.db);
         this.runs = new RunDao(options.db);
         options.bus.on('workflow.tripwire.fired', (event) => {
-            this.reserveAndDispatch(event.runId, () => this.onTripwire(event));
+            // 0753 R4: dry-run probes emit no human-inspect escalation packet.
+            // The escalation channel that fires on probes is an escalation channel
+            // nobody reads (59 packets across the 65-run dry sweep — d8 cost-attention
+            // measurement). A real blocked/failed run still emits one; the gate is
+            // probe-only and lives here, not downstream (no silent filtering).
+            this.reserveAndDispatch(event.runId, async () => {
+                if (await this.isDryRunProbe(event.runId)) return true;
+                return this.onTripwire(event);
+            });
         });
         options.bus.on('workflow.run.finalized', (event) => {
             if (event.status === 'failed') {
-                this.reserveAndDispatch(event.runId, () => this.onFinalized(event));
+                this.reserveAndDispatch(event.runId, async () => {
+                    if (await this.isDryRunProbe(event.runId)) return true;
+                    return this.onFinalized(event);
+                });
             }
         });
     }
@@ -225,6 +255,24 @@ export class EscalationPacketSink {
             };
         } catch {
             return { wbs };
+        }
+    }
+
+    /**
+     * Read the run row's metadata and return true when the run is a dry-run probe
+     * (`WorkflowAppService.run` stamps `dryRun: true` into `metadata_json` for
+     * probes — see workflow-service.ts). A probe is informational and must
+     * never produce a human-inspect escalation packet; a real blocked/failed
+     * run still produces one. The check is best-effort: a missing or malformed
+     * metadata row degrades to "not a probe" (the safe default).
+     */
+    private async isDryRunProbe(runId: string): Promise<boolean> {
+        try {
+            const row = await this.runs.traceRowById(runId);
+            if (row === undefined || row.metadata_json === '') return false;
+            return parseDryRunProbeMetadata(row.metadata_json);
+        } catch {
+            return false;
         }
     }
 

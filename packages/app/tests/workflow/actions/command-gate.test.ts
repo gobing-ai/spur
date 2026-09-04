@@ -171,4 +171,63 @@ describe('CommandGateActionRunner', () => {
         const content = await fs.readFile(join(workdir, resultFile));
         expect(content.trim()).toBe('FAIL');
     });
+
+    // R6 / 0753 R1: A declared timeout must reach the executor under the contract's name
+    // (`timeout`) and actually fire. The pre-repair code spread `timeoutMs` into
+    // `ProcessOptions`, but the executor contract declares `timeout`
+    // (`@gobing-ai/ts-runtime/dist/process-executor.d.ts:58`), so the option was silently
+    // dropped and a hung gate ran unbounded. Assert both: the option reaches the executor
+    // under the correct key, and a process that exceeds the deadline does not record PASS.
+    test('declared timeout reaches the executor under `timeout` and a hung command does not report PASS', async () => {
+        const workdir = join(tmpdir(), `test-gate-timeout-${crypto.randomUUID()}`);
+        const fs = createNodeFileSystem(workdir);
+        await fs.ensureDir(join(workdir, '.spur', 'run'));
+
+        const calls: Array<{ command: string; args?: string[]; timeout?: number; timeoutMs?: number }> = [];
+        // Simulate the deadline firing: a real execa run would resolve with
+        // { exitCode: null, signal: 'SIGTERM', durationMs: timeout } after `timeout` ms.
+        const executor = {
+            run: async (opts: { command: string; args?: string[]; timeout?: number; timeoutMs?: number }) => {
+                calls.push({
+                    command: opts.command,
+                    args: opts.args,
+                    timeout: opts.timeout,
+                    timeoutMs: opts.timeoutMs,
+                });
+                return {
+                    stdout: '',
+                    stderr: 'killed by signal SIGTERM',
+                    exitCode: null,
+                    signal: 'SIGTERM',
+                    durationMs: opts.timeout ?? 0,
+                };
+            },
+            // biome-ignore lint/suspicious/noExplicitAny: minimal ProcessExecutor stub for timeout assertion
+        } as any;
+
+        const runner = new CommandGateActionRunner(executor, fs);
+        const resultFile = '.spur/run/timeout.status';
+        const res = await runner.execute(
+            {
+                id: 'test-gate-timeout',
+                executable: 'bun',
+                args: ['-e', 'await new Promise(() => {})'],
+                resultFile,
+                timeoutMs: 50,
+                retry: { maxAttempts: 1, delayMs: 0, on: [] },
+            },
+            { runId: 'r1', stateOrNodeId: 's1', workdir, vars: {}, env: {} },
+        );
+
+        // The executor must receive the timeout under `timeout` (the contract name),
+        // never `timeoutMs` (the pre-repair bug).
+        expect(calls).toHaveLength(1);
+        expect(calls[0]?.timeout).toBe(50);
+        expect(calls[0]?.timeoutMs).toBeUndefined();
+        // The hung gate never reaches PASS — it records FAIL and fails the action.
+        expect(res.ok).toBe(false);
+        const failData = res.data as { status?: string } | undefined;
+        expect(failData?.status).toBe('FAIL');
+        expect((await fs.readFile(join(workdir, resultFile))).trim()).toBe('FAIL');
+    });
 });

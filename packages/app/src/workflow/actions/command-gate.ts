@@ -154,7 +154,7 @@ export class CommandGateActionRunner implements ActionRunner {
                 env,
                 forceBuffered: true,
                 rejectOnError: false,
-                ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+                ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
             });
 
             lastStdout = res.stdout;

@@ -22,7 +22,9 @@ import {
     followTrace,
     formatActionCost,
     formatTraceTimeline,
+    InvalidRunIdError,
     submitSteeringLine,
+    validateRunId,
     waitForRunRegistration,
 } from '../../src/commands/workflow';
 import { main } from '../../src/index';
@@ -894,6 +896,101 @@ failureStates:
             dbUrl: ':memory:',
         });
         expect(exitCode).toBe(1);
+    });
+
+    // R6 / 0753 R2: validateRunId must reject run IDs that escape their
+    // `.spur/run/<id>...` confinement. The pre-repair CLI handed
+    // `options.runId` straight to path construction at `workflow.ts:424` and
+    // `:512` (F-6). Assert the named error class plus every escape vector.
+    test('validateRunId rejects path-separator / traversal / absolute / shell-meta IDs (R6)', () => {
+        const cases = [
+            'foo/bar', // unix separator
+            'foo\\bar', // windows separator
+            '..', // literal traversal
+            '../etc/passwd', // traversal from outside
+            'foo/../bar', // embedded traversal
+            '/etc/passwd', // unix absolute
+            'C:\\foo', // windows absolute
+            'foo bar', // shell metacharacter (space)
+            'foo;rm', // shell metacharacter (semicolon)
+            'foo`bar`', // shell metacharacter (backtick)
+            '.', // dot-only (traversal adjacent)
+        ];
+        for (const id of cases) {
+            expect(() => validateRunId(id)).toThrow(InvalidRunIdError);
+        }
+    });
+
+    test('validateRunId accepts UUID-like and dash-aliased IDs (R6)', () => {
+        const ok = [
+            'run-1',
+            'a1b2c3d4-e5f6-7890-abcd-ef1234567890', // canonical UUID
+            'cli-fail-term-1',
+            'esc-1',
+            'retain-log-run',
+        ];
+        for (const id of ok) {
+            expect(validateRunId(id)).toBe(id);
+        }
+        // Empty / undefined input lets the caller mint a UUID; not invalid.
+        expect(validateRunId(undefined)).toBe('');
+        expect(validateRunId('')).toBe('');
+    });
+
+    test('run subcommand rejects a path-separator --run-id and never constructs a path from it', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'wf.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+
+        // Path-separator: must be rejected at the CLI boundary, exit non-zero,
+        // and produce no run log under `.spur/run/`.
+        const exitCode = await main(['workflow', 'run', '--run-id', 'foo/bar', workflowFile], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(1);
+        // No path artifact was constructed from the rejected ID.
+        expect(await exists(join(dir, '.spur', 'run', 'foo'))).toBe(false);
+        expect(await exists(join(dir, '.spur', 'run', 'bar'))).toBe(false);
+        // The error surfaces to the operator (R2 AC: a named error, not silent).
+        const lastError = output.errors[output.errors.length - 1] ?? '';
+        expect(lastError).toContain('run ID must contain only alphanumerics and dashes');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('run subcommand rejects a traversal-segment --run-id (R6)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'wf.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+
+        const exitCode = await main(['workflow', 'run', '--run-id', '..', workflowFile], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(1);
+        // No `.spur/run/..` path was constructed (and the parent `.spur/run` was
+        // not created either — validation rejects before any path operation).
+        expect(await exists(join(dir, '.spur'))).toBe(false);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('run subcommand rejects an absolute-path --run-id (R6)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'wf.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+
+        const exitCode = await main(['workflow', 'run', '--run-id', '/etc/passwd', workflowFile], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(1);
+        await rm(dir, { recursive: true, force: true });
     });
 
     test('run subcommand rejects a non-string --vars value with exit 1', async () => {

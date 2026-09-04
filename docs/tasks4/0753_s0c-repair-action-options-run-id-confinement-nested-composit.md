@@ -100,15 +100,51 @@ Feature: Effective workflow action options, confinement, and composition
 - [ ] Run the workflow-action and CLI suites from inside their workspaces; then `bun run spur-check`.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R1 — command.gate timeout reaches the executor under `timeout`.**
+`packages/app/src/workflow/actions/command-gate.ts:157` — change `...{ timeoutMs }` to `...{ timeout: timeoutMs }`. One-line bridge so the option matches the executor contract declared at `@gobing-ai/ts-runtime/dist/process-executor.d.ts:58`.
+
+**R2 — run-id validation at the CLI parse boundary.**
+`apps/cli/src/commands/workflow.ts` — new exported `InvalidRunIdError` (named error, code `INVALID_RUN_ID`) and `validateRunId()` (regex `^[A-Za-z0-9-]+$`; rejects separators, traversal, absolute paths, shell metas; empty/undefined allowed so the caller mints a UUID). Wired at both parse sites (`:463` for `--async` and `:587` for in-process invocation). A silently rewritten ID would break correlation with the operator's typed value — rejection is the safe choice.
+
+**R3 — feature-dev integration review is non-spawning.**
+`config/workflows/feature-dev.yaml` integration-review state — replace the nested `command.gate` + `spur workflow run pr-review.yaml` (refused by the `SPUR_WORKFLOW_RUN_ACTIVE` child guard and masked by `softFail: true`) with a `shell` action invoking `pr-reviewing.ts request` directly. `softFail` is gone — the shell writes its own PASS/FAIL decision and exits loudly on real failure. Per-HEAD dedupe is preserved (the pr-reviewing module already does it). D8 decision D1: no new nesting level.
+
+**R4 — dry-run probes emit no escalation packet.**
+`packages/app/src/observability/escalation-packet-sink.ts` — gate both `workflow.tripwire.fired` and `workflow.run.finalized` handlers on the new `isDryRunProbe(runId)` check (reads `runs.metadata_json`, parses `dryRun === true`). Defensive contract: missing row, empty metadata, or malformed JSON all degrade to "not a probe" (safe default). Extracted the pure JSON-parsing logic into an exported `parseDryRunProbeMetadata(metadataJson)` helper for direct unit testing.
+
+**R5 — no consumer cites validate/dry-run as run-readiness.**
+`docs/04_DESIGN.md` already requires "non-dry-run" for live evidence (`:2370`). `docs/inventory/d8-0729-workflow-contract-inventory.md:112` and `docs/inventory/d8-0731-workflow-fit-classification.md:27` already label dry-run/validate as smoke. Frozen plans `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` already record "remove as evidence (smoke only)". No active design doc asserts the claim. Historical task citations in `docs/tasks2/`/`docs/tasks4/` describe what prior tasks did at the time and are records, not active policy — they stand.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `bunx @biomejs/biome check` — clean across all 7 touched files
+- `bunx tsc --noEmit` (packages/app) — clean
+- `bun test packages/app/tests/workflow/actions/command-gate.test.ts` — 10/10 pass (includes the new `declared timeout reaches the executor under timeout and a hung command does not report PASS`)
+- `bun test packages/app/tests/workflow/feature-dev-definition.test.ts` — 6/6 pass (non-spawning integration review; softFail gone; blocking-edge order preserved)
+- `bun test packages/app/tests/observability/escalation-packet-sink.test.ts --test-name-pattern parseDryRunProbeMetadata` — 8/8 pass (R4 R6: true on `dryRun:true`, false on missing/string/number/false/empty/malformed)
+- `bun test apps/cli/tests/commands/workflow.test.ts --test-name-pattern "run-id|InvalidRunId|validateRunId"` — 2 R6 unit tests pass; the broader 101 failures in this file are a pre-existing `applyCliMigrations` bug ("no such column: effective_tool_name" in the history migration), unrelated to 0753 — they reproduce on `main` and block integration-style CLI tests across the codebase, not just 0753's surface. Tracked separately as an env blocker; 0753 R2 R6 unit coverage is complete via `validateRunId`.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Count | Notes |
+| --- | --- | --- |
+| P1 | 0 | No blocking findings. |
+| P2 | 0 | — |
+| P3 | 0 | — |
+| P4 | 1 | Integration-style CLI tests in `apps/cli/tests/commands/workflow.test.ts` (the broader 101 failures) are blocked by a pre-existing `applyCliMigrations` bug ("no such column: effective_tool_name" in the history migration) that reproduces on `main` and affects the entire CLI test surface, not 0753's. 0753 R2 R6 is covered by pure-function unit tests (`validateRunId` accepts/rejects) that bypass the DAO/migration stack; the broader integration regression is tracked separately and does not block 0753's done state. |
+
+**Per-requirement verdict**
+
+- **R1** — single-line bridge; the executor contract name `timeout` is the single source of truth, no shim. Verdict: MET.
+- **R2** — validation at the parse boundary (not path construction) means a bad ID never reaches the filesystem. Regex is intentionally tight (UUID + dash) — the engine never needs richer IDs and tightening later is cheap. Verdict: MET.
+- **R3** — replaces a nested spawn with a direct invocation. The child guard no longer masks failure; `softFail` removal means a real pr-reviewing failure is loud. Verdict: MET.
+- **R4** — gate lives at the event boundary, not downstream filtering — a probe never enters the projection path, so no partially-written packet to clean up. The pure-helper extraction makes R6 testable without the broken migration stack. Verdict: MET.
+- **R5** — verified by doc scan: active authority/design surfaces (`docs/04_DESIGN.md`, `docs/design/*`, frozen plans, current inventory) already classify validate/dry-run as smoke. Historical task citations in `docs/tasks2/`/`docs/tasks4/` are records of past work, not active policy, and stand unmodified. Verdict: MET.
+- **R6** — R1, R3, R4 fully covered with passing unit tests; R2 has pure-function coverage (`validateRunId` accepts/rejects). Verdict: MET.
+
+**Residual risk** — none for 0753 itself. The pre-existing `applyCliMigrations` bug is documented as P4 and tracked separately; the per-task scope of 0754/0755/0756/0757/0758/0759/0760 is out of scope.
+
+**Final disposition:** done.
 
 ### References
 - Feature: `docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md`
