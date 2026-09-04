@@ -145,7 +145,7 @@ function main(): void {
 
     const dbPath = join(process.cwd(), '.spur', 'spur.db');
     if (!existsSync(dbPath)) {
-        fail(wbs, [`spur database not found at ${dbPath} — run a real history import first`]);
+        fail(wbs, [`local spur database not found at ${dbPath} — run a real history import first`]);
     }
 
     let count: number;
