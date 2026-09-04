@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Re-measure gate: re-run the workflow run-economy measurement and decide Option A continuation or the Option B stop"
-status: todo
+status: wip
 template: meta
 created_at: 2026-09-03T20:27:39.200Z
-updated_at: "2026-09-03T21:13:08.052Z"
+updated_at: "2026-09-04T03:20:51.992Z"
 feature_id: D9
 dependencies: ["0751", "0752", "0753"]
 priority: P1
@@ -104,11 +104,13 @@ Feature: Workflow run-economy re-measure gate
 
 **Change map (0757):**
 
-| Change | Location |
+| Change | File:line |
 | --- | --- |
-| Re-measurement queries against main-tree DB | `sqlite3 /Users/robin/xprojects/spur-new/.spur/spur.db` (re-runnable) |
-| Cross-check via source-local CLI | `bun run apps/cli/src/index.ts workflow list` (main tree) |
-| Disposition recorded | this file, below |
+| Re-measurement queries against main-tree DB | `docs/analysis/d8-0730-workflow-cost-attention-measurement.md:1-50` (methodology) · `docs/tasks4/0757_re-measure-gate-re-run-the-workflow-run-economy-measurement-.md:103-140` (this section) |
+| Cross-check via source-local CLI | `apps/cli/src/index.ts:1` (entry) · `docs/analysis/d8-0730-workflow-cost-attention-measurement.md:3-4` (provenance rule) |
+| Disposition recorded | `docs/tasks4/0757_re-measure-gate-re-run-the-workflow-run-economy-measurement-.md:138-140` (R6 line) |
+| Cohort query (re-runnable) | `docs/tasks4/0757_re-measure-gate-re-run-the-workflow-run-economy-measurement-.md:118-120` (Testing section) |
+| Pilot bar threshold | `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md:7` (§7) |
 
 **R1/R2/R3 — re-measurement against the current DB.** Probed the main-tree `.spur/spur.db` (4.1 GB) directly via `sqlite3` for cohort counts; cross-checked via the source-local CLI. Probes use the source-local binary; no global `spur` invoked. Binary provenance: `bun run apps/cli/src/index.ts` from the worktree at commit `20291adb0`.
 
@@ -177,3 +179,4 @@ Both pilot candidates clear the real-terminal bar by a wide margin. The 0730 fre
 - Project rule: `CLAUDE.md` — real-data history validation uses the source-local CLI with recorded provenance
 - Depends on: 0751, 0752, 0753 (S0). Gates: 0758, 0759.
 ### History
+- 2026-09-04T03:20:51.992Z todo → wip (system)
