@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Persist tool identity at import: effective_tool_name, tool_name_alias, and the alias resolution seam"
-status: testing
+status: done
 template: feature-impl
 created_at: 2026-09-03T16:43:04.048Z
-updated_at: "2026-09-04T04:03:41.336Z"
+updated_at: "2026-09-04T06:02:38.811Z"
 feature_id: E91
 priority: P1
 tags: ["history", "etl", "tool-identity"]
@@ -309,23 +309,75 @@ assertion at `packages/domain/tests/dao/migrations.test.ts:897`, which stays red
 `@gobing-ai/ts-llm-jsonl-importer` 0.4.56 is published and the catalog pin moves off `^0.4.55`.
 Biome clean on all six touched files.
 
-**R1 remains blocked (operator-gated), so this task holds at `testing`, not `done`.** The upstream
-0.4.56 change is written and verified against a local build but is uncommitted and unpublished in
-`/Users/robin/xprojects/ts-libs`. Remaining chain, in order:
+**R1 was blocked (operator-gated) at the time of the entry above; it is now closed — see the final entry.**
 
-1. `cd /Users/robin/xprojects/ts-libs && git add -A packages/llm-jsonl-importer && git commit`
-   — lefthook's `format` step cannot spawn under this session's sandbox (fails in 0.00 s with
-   "operation not permitted"); `bun run format` standalone is clean, so this needs an operator
-   shell. `--no-verify` was not used.
-2. `bun scripts/builder.ts bump-version 0.4.56` (requires a clean tree).
-3. Publish 0.4.56.
-4. Bump the `spur-new` catalog pin `^0.4.55` → `^0.4.56`, then re-run
-   `packages/domain/tests/dao/migrations.test.ts`.
+---
 
-**Confidence: HIGH** for R2/R4/R6/R7 — every claim above is a code path in this tree with a passing
-test behind it. **HIGH** for R1 being blocked — verified by the failing convergence assertion
-against the installed 0.4.55 dist.
+**R1 closed 2026-09-04 — `@gobing-ai/ts-llm-jsonl-importer` 0.4.56 released and consumed.**
 
+Catalog pin moved to `^0.4.56` (`package.json:36`) and installed from the registry — not a
+`bun link` shadow. Resolution verified: `node_modules/@gobing-ai/ts-llm-jsonl-importer` →
+`node_modules/.bun/@gobing-ai+ts-llm-jsonl-importer@0.4.56+f66f1d7f0d37c145/`, and the published
+`dist/schema-sql.js:88-89` declares both columns.
+
+**R1 evidence — a real import into a clean database, not a fixture.** Two production transcripts
+(claude 726 tool calls, codex 830) imported through the source-local CLI into a scratch project:
+
+```
+provenance: { binary: apps/cli/src/index.ts, importer: 0.4.56 }
+PRAGMA table_info(history_tool_call) → … 18:effective_tool_name 19:tool_name_alias
+n=1556  unknown effective=0  unknown alias=0  alias==effective=1556
+effective: exec=828 (codex)  Bash=688 (claude)  Edit=14  Write=11  Read=7  …
+```
+
+Zero `'unknown'` residue on a database that never ran migration 0034's backfill — the importer wrote
+every value at insert time, which is what R1 asks and what the previous FAIL verdict found missing.
+The columns landed at PRAGMA positions 18/19, the same positions a database that gained them through
+Spur's guarded ALTER reports, so R10/R4 convergence holds by construction (
+`packages/domain/tests/dao/migrations.test.ts` 54/0, including the convergence assertion that was
+red until the publish).
+
+**R6/R7/R20 proven end-to-end on that same real corpus**, through the production path
+(`refreshHistoryRollups` → `replaceHistoryBoardRollups`), not the unit seam:
+
+| Stage | `history_board_tool_5m` (alias-grouped) | `history_tool_call.effective_tool_name` (facts) |
+| --- | --- | --- |
+| Empty map | `exec=828  Bash=658  Edit=14  Write=11 …` | `exec=828  Bash=688  Edit=14  Write=11 …` |
+| `claude/Bash → shell`, `codex/exec → shell` | **`shell=1486`**  `Edit=14  Write=11 …` | `exec=828  Bash=688  Edit=14  Write=11 …` (unchanged) |
+| Mapping deleted | `exec=828  Bash=658  Edit=14  Write=11 …` (restored) | unchanged |
+
+1486 = 828 + 658: two agents' shell tools collapse into one row (R7/R20 clause 1) while every
+`effective_tool_name` fact is byte-identical across all three stages (R20 clauses 2 and 3), and the
+empty-map board equals the pre-alias board (R6). Removing the mapping restores the split exactly,
+because the alias is recomputed from the map rather than accumulated. The `Bash 658 vs 688` gap is
+present identically in all three stages and predates this task (board buckets require a message
+join); it is orthogonal to aliasing.
+
+**Verdict: PASS. R1–R7 all MET.**
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | **MET** | Fresh import, 1556/1556 populated, 0 `'unknown'`; PRAGMA 18/19; importer 0.4.56 from registry |
+| R2 | **MET** | `toolSelectionSql` at `forensic-query.ts:171`, `:2119`; `tool-alias.test.ts` test 4 |
+| R3 | **MET** | `dist/schema-sql.js:89` `tool_name_alias TEXT NOT NULL DEFAULT 'unknown'`; alias==effective on all 1556 fresh rows |
+| R4 | **MET** | Single seam in `tool-alias.ts`; `rg tool_name_alias` over `packages`/`apps` shows no second writer or reader |
+| R5 | **MET** | Migration 0034 + the guarded per-column pre-step (`migrations.ts:1241`); `migrations.test.ts` 54/0 |
+| R6 | **MET** | Empty-map board equals the effective-grouped board on 1556 real rows |
+| R7 | **MET** | `shell=1486` regroup with facts unchanged and exact restore on delete (table above) |
+
+Gates: `bun run test` **7314 pass / 0 fail**; `bun run lint` clean; `bun run spur-check` green
+(rule preset `recommended-post-check`, 2/2).
+
+**Confidence: HIGH** on every row — each is a command run in this session against real data or a
+passing assertion in the tree, not a synthesis.
+
+**Cleanup.** Stale global `bun link` registrations still point at local ts-libs sources:
+`~/.bun/install/global/node_modules/@gobing-ai/ts-ai-runner` and `…/ts-llm-jsonl-importer`. They do
+**not** shadow this repo (verified above: resolution is the registry `.bun` store), but they would
+shadow any project that runs `bun link` on those names. Removal is blocked by the session sandbox
+("Operation not permitted" on `~/.bun`); the operator can clear them with
+`rm ~/.bun/install/global/node_modules/@gobing-ai/ts-{ai-runner,llm-jsonl-importer}`. The `spur`
+and `superskill` global links are intentional and were left in place.
 ### References
 
 - Parent feature: `docs/features/E91_history-read-path-materialized-only-incremental-rollup-etl-per-table-freshness-and-precomputed-ui-aggregates.md`
@@ -344,3 +396,4 @@ against the installed 0.4.55 dist.
 - 2026-09-03T20:39:36.840Z testing → done (system)
 - 2026-09-04T03:32:30.622Z done → wip (system)
 - 2026-09-04T04:03:41.336Z wip → testing (system)
+- 2026-09-04T06:02:38.811Z testing → done (system)

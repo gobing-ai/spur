@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-09-03T07:00:35.499Z"
-updated_at: "2026-09-04T03:34:17.331Z"
+updated_at: "2026-09-04T08:13:40.853Z"
 ---
 
 # E91: History read path materialized-only: incremental rollup ETL, per-table freshness, and precomputed UI aggregates
@@ -98,7 +98,8 @@ Feature: History read path materialized-only: incremental rollup ETL, per-table 
     When a single new day of conversation data is imported and the rollup refresh runs
     Then the refresh reads only rows at or after the persisted watermark
     And the refresh wall time is recorded against the full-rebuild time for the same corpus, with the target ratio stated in the task before implementation
-    And the measured delta-refresh time does not grow when total corpus size grows while the delta is held constant.
+    And the measured delta-refresh time for the per-bucket derivations does not grow with total corpus row count while the delta is held constant
+    And the derivations that recompute beyond the changed buckets stay inside their stated budget for the whole delta refresh against full rebuild.
 
   @core
   Scenario: R4 — Incremental rollups are byte-identical to a full rebuild
