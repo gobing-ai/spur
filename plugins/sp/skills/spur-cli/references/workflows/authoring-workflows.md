@@ -229,3 +229,22 @@ verifying shape, or stand in a `note` action until the path is proven, then swap
       `agent.run` input referencing a command rather than a raw prompt, guards a single predicate
       ([workflow-fit-and-tuning.md](workflow-fit-and-tuning.md#3-node-simplicity-budget)).
 - [ ] Validates clean AND dry-run reaches the expected terminal state.
+
+## Optional version literal (task 0756)
+
+Both dialects accept an optional root `version` field. The literal is **behavior-neutral** — it
+exists as an identity tag, not a routing key. The contract:
+
+- **Absent** → reported as `unversioned`. The default for all 11 shipped definitions.
+- **Present, non-empty string** → reported as `explicit(<literal>)`. The literal is wrapped in
+  parentheses verbatim — no parsing, no ordering, no compatibility check.
+- **Present, empty string (`version: ""`)** → **rejected** by validation with a diagnostic naming
+  the empty value (use `minLength: 1` on both dialect schemas).
+
+The literal folds into the definition digest (`packages/app/src/workflow/composition-baseline.ts`),
+so a version-only edit changes the digest with zero behavior change. `show` and `trace` do **not**
+surface the literal by default — the digest stays the rendered run identity (D8 decision D5).
+
+**No registry, no semver parser, no compatibility engine.** A future-major requirement needs
+objective evidence: a consumer that branches on version, or a real drift incident the digest
+diagnostic could not disambiguate. Neither exists today.

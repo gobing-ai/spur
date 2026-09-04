@@ -163,6 +163,20 @@ export function validateRunId(runId: string | undefined): string {
 }
 
 /**
+ * Format a workflow definition's optional `version` field for the validate
+ * command output (0756 R2). The literal is treated as opaque — not parsed,
+ * ordered, or compared for compatibility. Absent field → `unversioned`;
+ * present non-empty literal → `explicit(<literal>)`. The literal is
+ * wrapped in parentheses verbatim so non-semver strings surface unchanged.
+ */
+export function formatWorkflowVersion(version: unknown): string {
+    if (version === undefined || version === null) return 'unversioned';
+    if (typeof version !== 'string') return 'unversioned';
+    if (version === '') return 'unversioned';
+    return `explicit(${version})`;
+}
+
+/**
  * Wait up to `timeoutMs` for the async worker to register `runId`, returning true
  * once `spur workflow trace <runId>` resolves. The nohup + `&` wrapper in
  * `spawnAsyncWorkflowWorker` makes a dead-on-arrival worker invisible on every
@@ -347,7 +361,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             if (options.json) {
                 context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
             } else if (result.valid) {
-                context.output.write(`workflow valid: ${result.workflow.name}`);
+                context.output.write(
+                    `workflow valid: ${result.workflow.name} (${formatWorkflowVersion(result.workflow.version)})`,
+                );
                 const c = result.composition;
                 if (c && (c.findings.length > 0 || c.suppressed > 0)) {
                     for (const f of c.findings) {

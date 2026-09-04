@@ -17,7 +17,9 @@
             "minLength": 1
         },
         "version": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "description": "Optional behavior-neutral identity tag (0756). Absent = unversioned; present = a non-empty opaque literal surfaced as explicit(<literal>). Not parsed, ordered, or compatibility-checked; no registry."
         },
         "description": {
             "type": "string"

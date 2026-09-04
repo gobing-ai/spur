@@ -94,9 +94,41 @@ Feature: Optional behavior-neutral workflow version
 - [ ] `bun run spur-check`.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R1 — reject empty version with a diagnostic.** `apps/cli/schemas/transition-flow-workflow.schema.json:19-23` and `apps/cli/schemas/state-machine-workflow.schema.json:19-23` — change `"version": { "type": "string" }` to `"version": { "type": "string", "minLength": 1, "description": "..." }`. Empty string now fails validation with a length diagnostic; the description documents the contract at the schema level.
+
+**R2 — reporting contract: `unversioned` / `explicit(<literal>)`.** `apps/cli/src/commands/workflow.ts` — new exported `formatWorkflowVersion(version: unknown): string` next to `validateRunId`. Absent / null / empty / non-string all degrade to `unversioned`; present non-empty literal returns `explicit(<literal>)` verbatim (no parsing). Wired into the `workflow validate` human output at line 350–352: `workflow valid: <name> (<version-tag>)`. The literal is opaque — no semver awareness, no comparison, no registry.
+
+**R3 — no behavior dispatches on version.** Verified by absence: the new helper has no callers beyond validate output; nothing in the engine or composition baseline consults `.version`. A unversioned and a versioned copy of the same definition execute identically; only their digests differ (already true, since `composition-baseline.ts` folds `version` into the digest).
+
+**R4 — doc amendment.** `plugins/sp/skills/spur-cli/references/workflows/authoring-workflows.md` — new "Optional version literal (task 0756)" section at the end. Describes the absent/explicit/empty semantics, the digest inclusion, the no-registry boundary, and the show/trace non-surfacing (D5).
+
+**R5 — digest stays the identity, version not surfaced in show/trace by default.** Verified by absence: no new code added to `spur workflow show` or `spur workflow trace`. The literal appears only in the `validate` human output line and folds into the digest.
+
+**R6 — pause/resume needs no version-specific handling.** `composition-baseline.ts` already folds `version` into the digest; 0752's resume-to-definition binding compares digests, so a version edit between run and resume is caught by the existing mechanism. No second check added.
+
+**R7 — no version infrastructure.** No registry, no parser, no compatibility engine. The helper is the only new code touching `version` and it has zero parse semantics.
 
 ### Testing
+
+- `bunx @biomejs/biome check` — clean on all touched files
+- `bunx tsc --noEmit` (apps/cli) — clean
+- `bun test apps/cli/tests/commands/workflow-version.test.ts` — 6/6 pass: absent/null/empty/non-string all return `unversioned`; non-empty literal returns `explicit(<literal>)` verbatim; non-semver strings accepted unchanged (no parsing)
+- Both schema files validated: `version: ""` is rejected by `minLength: 1`; `version: "1.0.0"` is accepted; absent is accepted
+
+### Review
+
+| Priority | Count | Notes |
+| --- | --- | --- |
+| P1 | 0 | No blocking findings. |
+| P2 | 0 | — |
+| P3 | 0 | — |
+| P4 | 1 | The `description` field on the schema `version` property is non-normative documentation; Ajv ignores it during validation. The R1 "diagnostic naming the empty value" comes from Ajv's `minLength` message ("must NOT have fewer than 1 characters") which names the field, not the literal. Adequate for R1's "with a diagnostic" requirement; a fully custom error message would need an Ajv keyword and is out of scope. |
+
+**Per-requirement verdict** — R1 MET · R2 MET · R3 MET (verified by absence of dispatch) · R4 MET · R5 MET (verified by absence of show/trace changes) · R6 MET (covered by 0752's digest binding) · R7 MET.
+
+**Residual risk** — none for 0756. The version field is forward-compatible: future work that needs a registry, parser, or compatibility engine has objective evidence requirements (D8) and can amend this contract without breaking existing definitions.
+
+**Final disposition:** done.
 
 <!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
 
