@@ -119,6 +119,7 @@ export const SHARED_OPTIONS = {
     forceFeatureReopen: ['--force', 'Force applying reopen proposals without confirmation'] as const,
     forceInitRecreate: ['--force', 'Recreate files that already exist'] as const,
     forceWorkflowClean: ['--force', 'Clean ALL non-terminal runs regardless of age (overrides --older-than)'] as const,
+    forceWorkflowContinue: ['--force', 'Proceed with resume even if workflow definition drift is detected'] as const,
     strictFeature: ['--strict', 'Elevate warnings to failures'] as const,
     strictTaskAll: ['--strict', 'Elevate ALL warnings to failures'] as const,
     strictTaskPath: ['--strict', 'Match only the exact corpus path (no basename-WBS fallback)'] as const,

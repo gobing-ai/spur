@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LifecycleProfile } from '@gobing-ai/spur-app';
-import { LifecycleAdapter, TASK_LIFECYCLE_PROFILE } from '@gobing-ai/spur-app';
+import { LifecycleAdapter, resolveWorkflowFile, TASK_LIFECYCLE_PROFILE } from '@gobing-ai/spur-app';
 import * as configModule from '@gobing-ai/spur-config/loader';
 import { createCliContext } from '../../src/context';
 import type { CommandOutput } from '../../src/output';
@@ -47,18 +47,46 @@ describe('makeLifecycleAdapter', () => {
         expect(result).toBeUndefined();
     });
 
-    test('constructs workflowPath from config root and profile.workflowName', (): void => {
+    test('resolves workflowPath from bundled tree when project copy is absent', (): void => {
         const configRoot = configModule.bundledConfigRoot();
         expect(configRoot).not.toBeNull();
 
-        const spy = spyOn(fs, 'existsSync').mockReturnValue(true);
+        const bundledTarget = join(configRoot as string, 'workflows', 'task-lifecycle.yaml');
+        const spy = spyOn(fs, 'existsSync').mockImplementation((p) => p === bundledTarget);
         spies.push(spy);
 
         const ctx = createCliContext({ output: nullOutput() });
-        makeLifecycleAdapter(ctx, TASK_LIFECYCLE_PROFILE);
+        const result = makeLifecycleAdapter(ctx, TASK_LIFECYCLE_PROFILE);
 
-        const checkedPath = spy.mock.calls[0]?.[0];
-        expect(checkedPath).toBe(join(configRoot as string, 'workflows', 'task-lifecycle.yaml'));
+        expect(result).toBeInstanceOf(LifecycleAdapter);
+    });
+
+    test('R4 — a project definition wins on every surface including the lifecycle adapter', (): void => {
+        const configRoot = configModule.bundledConfigRoot();
+        expect(configRoot).not.toBeNull();
+
+        const testProjectDir = join(import.meta.dir, '..', `.tmp-r4-test-${Date.now()}`);
+        const projectWorkflowsDir = join(testProjectDir, '.spur', 'workflows');
+        mkdirSync(projectWorkflowsDir, { recursive: true });
+        const projectFile = join(projectWorkflowsDir, 'task-lifecycle.yaml');
+        writeFileSync(
+            projectFile,
+            'kind: state-machine\nname: task-lifecycle\ninitialState: backlog\nstates: []\ntransitions: []\n',
+        );
+
+        try {
+            const ctx = createCliContext({ output: nullOutput(), cwd: testProjectDir });
+            const resolvedFile = resolveWorkflowFile(testProjectDir, 'task-lifecycle');
+            expect(resolvedFile.path).toBe(projectFile);
+            if (resolvedFile.path !== null) {
+                expect(resolvedFile.source).toBe('project');
+            }
+
+            const adapter = makeLifecycleAdapter(ctx, TASK_LIFECYCLE_PROFILE);
+            expect(adapter).toBeInstanceOf(LifecycleAdapter);
+        } finally {
+            rmSync(testProjectDir, { recursive: true, force: true });
+        }
     });
 
     test('returns a LifecycleAdapter instance when config root and workflow exist', (): void => {

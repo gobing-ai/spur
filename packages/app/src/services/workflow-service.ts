@@ -2,7 +2,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { AGENT_ROLE_NAMES, type SpurConfig } from '@gobing-ai/spur-config';
-import { bundledConfigRoot, resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
+import { resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import {
     type ActionCostAttribution,
@@ -46,12 +46,18 @@ import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-requ
 import { registerSpurBuiltins } from '../workflow/builtins';
 import {
     type CheckpointMetadata,
+    checkpointStaleness,
     isTerminalCheckpointStatus,
     parseCheckpointMetadata,
 } from '../workflow/checkpoint-contract';
 import { computeDefinitionDigest, type WorkflowCompositionBaseline } from '../workflow/composition-baseline';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import type { WorkflowSteeringController } from '../workflow/steering';
+import {
+    type ResolvedWorkflowDefinition,
+    resolveWorkflowDefinition,
+    resolveWorkflowFile,
+} from '../workflow/workflow-resolver';
 import type { AgentService } from './agent-service';
 import { bridgeEventBus, withWorkflowIdentity } from './event-bridge';
 import type { RuleService } from './rule-service';
@@ -63,18 +69,6 @@ import {
 
 /** Workflow name that triggers a pipeline run-link (matches the shipped `workflows/task-pipeline.yaml`). */
 const TASK_PIPELINE_WORKFLOW = 'task-pipeline';
-
-/**
- * Sentinel manifest prefix for embedded-schema resolution (mirrors the config loader's
- * mechanism). ts-runtime resolves a bare package `$schema` ref by resolving
- * `<pkg>/package.json` then joining the schema subpath; returning this sentinel as the
- * manifest path makes the joined path start with the prefix, which the embedded reader
- * recognizes. The NUL byte guarantees it never collides with a real filesystem path.
- */
-const EMBEDDED_SCHEMA_PREFIX = '\0embedded-spur';
-
-/** The package whose `$schema` package-specifier refs resolve to the embedded map. */
-const SPUR_SCHEMA_MANIFEST = '@gobing-ai/spur/package.json';
 
 /** Link kind for pipeline runs in `task_run_links` (additive to `kind='lifecycle'`). */
 const PIPELINE_LINK_KIND = 'pipeline';
@@ -205,7 +199,7 @@ function withDefinitionDigestRecording(
 
 /** Result of a workflow validate operation. */
 export type WorkflowValidateResult =
-    | { ok: true; valid: true; workflow: WorkflowDef; composition?: CompositionAdvisory }
+    | { ok: true; valid: true; workflow: WorkflowDef; digest?: string; composition?: CompositionAdvisory }
     | { ok: false; valid: false; file: string; errors: string[] };
 
 /** Warn-only composition advisory for a validated workflow (0614). */
@@ -487,61 +481,38 @@ export class WorkflowAppService {
         this.ctx = ctx;
     }
 
-    /**
-     * Build the embedded-schema injection for {@link loadWorkflowDef}, or `undefined`
-     * when no embedded schemas are configured (dev/runtime path: ts-runtime resolves the
-     * `$schema` ref from `node_modules`).
-     *
-     * When present, a `$schema: "@gobing-ai/spur/schemas/<name>.schema.json"` ref is
-     * served from the embedded map: the resolver maps the package manifest specifier to a
-     * sentinel path, and the file system returns the embedded schema text for any read
-     * under that sentinel. This makes validate independent of `node_modules` resolution —
-     * essential in a `--compile` binary and when the cwd is outside the package tree.
-     */
-    private embeddedSchemaOptions():
-        | { resolve: (s: string) => string; fileSystem: { readFile(p: string): Promise<string> } }
-        | undefined {
-        const embedded = this.ctx.embeddedSchemas?.();
-        if (embedded === undefined) return undefined;
-        const nodeFs = createNodeFileSystem();
-        return {
-            resolve: (specifier: string) =>
-                specifier === SPUR_SCHEMA_MANIFEST ? `${EMBEDDED_SCHEMA_PREFIX}/package.json` : specifier,
-            fileSystem: {
-                readFile: async (path: string) => {
-                    if (!path.startsWith(EMBEDDED_SCHEMA_PREFIX)) return nodeFs.readFile(path);
-                    const subpath = path.slice(EMBEDDED_SCHEMA_PREFIX.length + 1);
-                    const text = embedded.get(subpath);
-                    if (text === undefined) throw new Error(`No embedded schema registered for "${subpath}".`);
-                    return text;
-                },
-            },
-        };
-    }
-
     /** Validate a workflow YAML file. Returns a structured result instead of throwing. */
     async validate(file: string, opts: { validateSchema?: boolean } = {}): Promise<WorkflowValidateResult> {
-        const resolved = resolveWorkflowFile(this.ctx.cwd, file);
-        if (resolved.path === null) {
-            const [probedProject, probedBundled] = resolved.probed;
+        let resolved: ResolvedWorkflowDefinition;
+        try {
+            resolved = await resolveWorkflowDefinition(this.ctx.cwd, file, {
+                validateSchema: opts.validateSchema !== false,
+                embeddedSchemas: this.ctx.embeddedSchemas?.(),
+            });
+        } catch (error) {
+            const probeMatch = resolveWorkflowFile(this.ctx.cwd, file);
+            if (probeMatch.path === null) {
+                const [probedProject, probedBundled] = probeMatch.probed;
+                return {
+                    ok: false,
+                    valid: false,
+                    file,
+                    errors: [
+                        `File not found: ${probedProject}${probedBundled !== null ? ` (bundled: ${probedBundled})` : ''}`,
+                    ],
+                };
+            }
             return {
                 ok: false,
                 valid: false,
                 file,
-                errors: [
-                    `File not found: ${probedProject}${probedBundled !== null ? ` (bundled: ${probedBundled})` : ''}`,
-                ],
+                errors: [error instanceof Error ? error.message : String(error)],
             };
         }
         const absolute = resolved.path;
+        const workflow = resolved.workflow;
 
         try {
-            const embedded = this.embeddedSchemaOptions();
-            const workflow = await loadWorkflowDef(absolute, {
-                validateSchema: opts.validateSchema !== false,
-                ...(embedded !== undefined ? embedded : {}),
-            });
-
             // Post-schema shell syntax validation (R3, task 0453): walk the def for
             // shell-kind actions and guards, run `sh -n` on each command.
             const shellErrors: string[] = [];
@@ -597,7 +568,7 @@ export class WorkflowAppService {
             // default host is enough for the import + shape check (no builtins/DB).
             await this.loadWorkflowExtensions(createDefaultWorkflowEngineHost(), workflow, absolute);
 
-            return { ok: true, valid: true, workflow, composition };
+            return { ok: true, valid: true, workflow, digest: resolved.digest, composition };
         } catch (error) {
             return {
                 ok: false,
@@ -627,19 +598,12 @@ export class WorkflowAppService {
         // Explicit `validateSchema: true` matches `validate()` so the two verbs cannot
         // diverge on whether schema validation is on (task 0431 R4/R5). Loaded first
         // so YAML-declared extensions can be registered on the host (0533 R1).
-        const resolved = resolveWorkflowFile(this.ctx.cwd, file);
-        if (resolved.path === null) {
-            const [probedProject, probedBundled] = resolved.probed;
-            throw new Error(
-                `Workflow not found: ${probedProject}${probedBundled !== null ? ` (bundled: ${probedBundled})` : ''}`,
-            );
-        }
-        const absolute = resolved.path;
-        const embedded = this.embeddedSchemaOptions();
-        const workflow = await loadWorkflowDef(absolute, {
+        const resolved = await resolveWorkflowDefinition(this.ctx.cwd, file, {
             validateSchema: true,
-            ...(embedded !== undefined ? embedded : {}),
+            embeddedSchemas: this.ctx.embeddedSchemas?.(),
         });
+        const absolute = resolved.path;
+        const workflow = resolved.workflow;
         const svc = await this.createEngineService({
             recordSelfPid: opts.recordSelfPid === true,
             events: eventsBus,
@@ -1006,7 +970,12 @@ export class WorkflowAppService {
      */
     async continuePaused(
         runId: string,
-        opts?: { hitlAnswer?: 'yes' | 'no' | 'cancel'; hitlVar?: string },
+        opts?: {
+            hitlAnswer?: 'yes' | 'no' | 'cancel';
+            hitlVar?: string;
+            allowDigestMismatch?: boolean;
+            force?: boolean;
+        },
     ): Promise<WorkflowRunResult> {
         // Same dual-bus wiring as run() (task 0370): adapter verb-form events via
         // observabilityBus inside createEngineService, engine-native names via the
@@ -1018,12 +987,48 @@ export class WorkflowAppService {
         if (row?.status !== 'paused') {
             throw new Error(`Run "${runId}" is not paused (or does not exist) - nothing to continue.`);
         }
-        const resolved = await this.resolveWorkflowDefByName(row.workflow_name);
-        if (resolved === null) {
+
+        // R5: Resume validates checkpoint freshness on the resume side (ADR-099).
+        await this.validateResumeCheckpointFreshness(runId, row);
+
+        // R1/R4: Shared resolve seam (project-first, validateSchema: true).
+        let resolved: ResolvedWorkflowDefinition;
+        try {
+            resolved = await resolveWorkflowDefinition(this.ctx.cwd, row.workflow_name, {
+                validateSchema: true,
+                embeddedSchemas: this.ctx.embeddedSchemas?.(),
+            });
+        } catch {
             throw new Error(
                 `Cannot resume run "${runId}": workflow definition "${row.workflow_name}" not found in the workflow search paths.`,
             );
         }
+
+        // R3: Compare persisted definitionDigest against re-resolved definition.
+        let rawMeta: Record<string, unknown> = {};
+        try {
+            rawMeta = JSON.parse(row.metadata_json || '{}');
+        } catch {
+            rawMeta = {};
+        }
+        const persistedDigest = typeof rawMeta.definitionDigest === 'string' ? rawMeta.definitionDigest : null;
+        if (persistedDigest !== null && persistedDigest !== resolved.digest) {
+            if (opts?.allowDigestMismatch !== true && opts?.force !== true) {
+                const prompt = `Workflow definition drift detected for run "${runId}": launched with ${persistedDigest}, currently ${resolved.digest}. Continue with modified definition?`;
+                const answer = await this.ctx.hitlResponder().respond({
+                    kind: 'confirm',
+                    prompt,
+                    runId,
+                    node: 'continue',
+                });
+                if (answer.value !== 'yes') {
+                    throw new Error(
+                        `Cannot resume run "${runId}": workflow definition drift detected (launched with ${persistedDigest}, currently ${resolved.digest}). Resume refused.`,
+                    );
+                }
+            }
+        }
+
         const svc = await this.createEngineService({
             events: eventsBus,
             extensions: { workflow: resolved.workflow, file: resolved.path },
@@ -1063,23 +1068,70 @@ export class WorkflowAppService {
         await new RunDao(db).stampFailureReason(runId, result.reason);
     }
 
-    /** Resolve a workflow definition + its source file by `name`, scanning the search paths. */
-    private async resolveWorkflowDefByName(name: string): Promise<{ workflow: WorkflowDef; path: string } | null> {
-        const listing = await this.list();
-        const entry = listing.entries.find((e) => e.name === name && e.valid);
-        if (entry === undefined) return null;
-        // `entry.path` is display-relative to its layer root; re-resolve from the layer.
-        for (const layer of listing.layers) {
-            const abs = resolve(layer.path, entry.path);
-            if (await fileExists(abs)) {
-                try {
-                    return { workflow: await loadWorkflowDef(abs, { validateSchema: false }), path: abs };
-                } catch {
-                    // try the next layer
+    /**
+     * Validate checkpoint freshness on resume (task 0752 / R5 / ADR-099).
+     * Refuses resume if an associated session checkpoint is stale or does not reflect the current run state.
+     */
+    private async validateResumeCheckpointFreshness(
+        runId: string,
+        row: { id: string; workflow_name: string; status: string; metadata_json?: string },
+    ): Promise<void> {
+        const sessionsDir = join(this.ctx.cwd, '.spur', 'memory', 'sessions');
+        const fs = createNodeFileSystem();
+        let entries: string[];
+        try {
+            entries = (await fs.readDir(sessionsDir)).filter((name) => name.endsWith('.md'));
+        } catch {
+            return;
+        }
+
+        let rawMeta: Record<string, unknown> = {};
+        try {
+            rawMeta = JSON.parse(row.metadata_json || '{}');
+        } catch {
+            rawMeta = {};
+        }
+        const wbs = typeof rawMeta.wbs === 'string' ? rawMeta.wbs : undefined;
+
+        for (const name of entries) {
+            const filePath = join(sessionsDir, name);
+            let raw: string;
+            try {
+                raw = await fs.readFile(filePath);
+            } catch {
+                continue;
+            }
+            const meta = parseCheckpointMetadata(raw);
+            if (meta === null) {
+                if (raw.includes(`run_id: "${runId}"`) || raw.includes(`run_id: ${runId}`)) {
+                    throw new Error(
+                        `Cannot resume run "${runId}": checkpoint is stale (malformed: not canonical checkpoint metadata).`,
+                    );
+                }
+                continue;
+            }
+
+            const isForThisRun =
+                meta.runId === runId ||
+                (wbs !== undefined && meta.taskWbs === wbs && (meta.runId === '' || meta.runId === runId));
+
+            if (isForThisRun) {
+                if (meta.workflow !== '' && meta.workflow !== row.workflow_name) {
+                    throw new Error(
+                        `Cannot resume run "${runId}": checkpoint is stale (workflow-mismatch: checkpoint workflow "${meta.workflow}" != "${row.workflow_name}").`,
+                    );
+                }
+                if (meta.status !== '' && meta.status !== row.status) {
+                    throw new Error(
+                        `Cannot resume run "${runId}": checkpoint is stale (status-mismatch: checkpoint status "${meta.status}" does not match run status "${row.status}").`,
+                    );
+                }
+                const staleness = checkpointStaleness(meta);
+                if (staleness.stale) {
+                    throw new Error(`Cannot resume run "${runId}": checkpoint is stale (${staleness.reason}).`);
                 }
             }
         }
-        return null;
     }
 
     /**
@@ -1669,45 +1721,13 @@ async function fileExists(path: string): Promise<boolean> {
     return await fs.exists(path);
 }
 
-/**
- * Result of {@link resolveWorkflowFile}: either a resolved path with its source
- * layer, or a not-found pair of probed absolute paths. `probed[1]` is `null` when
- * `bundledConfigRoot()` returned `null` (the compiled-binary case).
- */
-export type ResolveWorkflowFileResult =
-    | { path: string; source: 'project' | 'bundled' }
-    | { path: null; probed: [string, string | null] };
-
-/**
- * Resolve a workflow path: literal (cwd-relative) first, then the bundled tree.
- *
- * The `workflow run` / `validate` / `show` CLI surfaces all call with the same
- * two-tier rule (task 0648): an existing project path always wins; when it does
- * not exist the command falls back to the bundled config tree (the same tree
- * `bundledConfigRoot()` resolves for rules and templates). The bundled lookup is
- * `join(bundledConfigRoot(), 'workflows', basename(file))` — callers pass
- * `.spur/workflows/task-pipeline.yaml` and the bundled tree is flat under
- * `workflows/`.
- *
- * Returns the not-found probe pair rather than throwing so the caller owns the
- * error message and R3's "name both probed paths" is testable without capturing
- * stderr. `probed[1]` is `null` when `bundledConfigRoot()` is `null`.
- */
-export function resolveWorkflowFile(cwd: string, file: string): ResolveWorkflowFileResult {
-    const projectPath = resolve(cwd, file);
-    if (existsSync(projectPath)) {
-        return { path: projectPath, source: 'project' };
-    }
-    const bundledRoot = bundledConfigRoot();
-    if (bundledRoot !== null) {
-        const bundledPath = join(bundledRoot, 'workflows', basename(file));
-        if (existsSync(bundledPath)) {
-            return { path: bundledPath, source: 'bundled' };
-        }
-        return { path: null, probed: [projectPath, bundledPath] };
-    }
-    return { path: null, probed: [projectPath, null] };
-}
+export {
+    type ResolvedWorkflowDefinition,
+    type ResolveWorkflowDefinitionOptions,
+    type ResolveWorkflowFileResult,
+    resolveWorkflowDefinition,
+    resolveWorkflowFile,
+} from '../workflow/workflow-resolver';
 
 /**
  * Resolve the `agent` / `implementAgent` run vars from `.spur/config.yaml`

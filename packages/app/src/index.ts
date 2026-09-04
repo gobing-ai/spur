@@ -519,7 +519,11 @@ export type {
     WorkflowValidateResult,
 } from './services/workflow-service';
 export {
+    type ResolvedWorkflowDefinition,
+    type ResolveWorkflowDefinitionOptions,
+    type ResolveWorkflowFileResult,
     resolveOutputLogConfig,
+    resolveWorkflowDefinition,
     resolveWorkflowFile,
     resolveWorkflowLogRetentionDays,
     WorkflowAppService,

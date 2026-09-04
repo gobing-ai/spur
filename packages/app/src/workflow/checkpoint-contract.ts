@@ -76,13 +76,17 @@ export function parseCheckpointMetadata(raw: string): CheckpointMetadata | null 
             .replace(/^"|"$/g, '');
         if (key === 'artifacts') {
             inArtifacts = true;
-            if (value !== '')
-                artifacts.push(
-                    ...value
-                        .split(',')
-                        .map((p) => p.trim().replace(/^"|"$/g, ''))
-                        .filter((p) => p !== ''),
-                );
+            if (value !== '' && value !== '[]') {
+                const unwrapped = value.replace(/^\[|\]$/g, '');
+                if (unwrapped.trim() !== '') {
+                    artifacts.push(
+                        ...unwrapped
+                            .split(',')
+                            .map((p) => p.trim().replace(/^"|"$/g, ''))
+                            .filter((p) => p !== ''),
+                    );
+                }
+            }
             continue;
         }
         scalars.set(key, value);

@@ -1,14 +1,9 @@
-import { resolve } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import { ActionRunDao, ArtifactDao, RunDao, TransitionRunDao } from '@gobing-ai/spur-domain';
-import {
-    type ActionDef,
-    loadWorkflowDef,
-    type StateMachineWorkflowDef,
-    type WorkflowDef,
-} from '@gobing-ai/ts-dual-workflow-engine';
-import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
+import type { ActionDef, StateMachineWorkflowDef, WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
+import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { computeDefinitionDigest } from './composition-baseline';
+import { resolveWorkflowDefinition } from './workflow-resolver';
 
 /**
  * Pure read-only projection representing the structured execution progress of a workflow run.
@@ -169,7 +164,6 @@ export async function projectWorkflowProgress(
     options: ProjectWorkflowProgressOptions,
 ): Promise<WorkflowProgressProjection> {
     const projectRoot = options.projectRoot ?? process.cwd();
-    const fs = options.fileSystem ?? createNodeFileSystem();
     const projectedAt = new Date().toISOString();
     const diagnostics: WorkflowProgressDiagnostic[] = [];
 
@@ -246,20 +240,11 @@ export async function projectWorkflowProgress(
     const workflowName = runRow.workflow_name || 'unknown';
 
     if (!workflowDef && workflowName !== 'unknown') {
-        const candidatePaths = [
-            resolve(projectRoot, `.spur/workflows/${workflowName}.yaml`),
-            resolve(projectRoot, `.spur/workflows/${workflowName}-pipeline.yaml`),
-            resolve(projectRoot, `${workflowName}.yaml`),
-        ];
-        for (const p of candidatePaths) {
-            if (await fs.exists(p)) {
-                try {
-                    workflowDef = await loadWorkflowDef(p, { validateSchema: false });
-                    break;
-                } catch {
-                    // try next
-                }
-            }
+        try {
+            const resolved = await resolveWorkflowDefinition(projectRoot, workflowName, { validateSchema: true });
+            workflowDef = resolved.workflow;
+        } catch {
+            // fall through to definition-unavailable diagnostic
         }
     }
 

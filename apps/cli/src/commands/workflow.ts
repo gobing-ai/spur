@@ -257,6 +257,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         const dispatchBus = bus as unknown as SystemEventBus | undefined;
         return new WorkflowAppService({
             cwd: context.cwd,
+            spurConfig: context.spurConfig ?? null,
             secretValues: configuredSecretValues(context.env),
             warn: (message) => context.output.error(`Warning: ${message}`),
             getDb: () => context.getDb(),
@@ -693,6 +694,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .description('Resume a paused (HITL) workflow run. Omit run-id to resume the most recent paused run.')
         .argument('[run-id]', 'Run ID to resume (default: the most recent paused run)')
         .option('--yes', 'Skip the CLI resume confirmation (does not set the persisted HITL answer)')
+        .option(...SHARED_OPTIONS.forceWorkflowContinue)
         .option(
             '--answer <yes|no|cancel>',
             'Inject a HITL gate answer before guard re-evaluation (0433). Does not imply --yes.',
@@ -760,7 +762,8 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     }
                 }
                 const result = await svc.continuePaused(targetId, {
-                    ...(hitlAnswer !== undefined ? { hitlAnswer } : {}),
+                    hitlAnswer,
+                    force: options.force === true ? true : undefined,
                 });
                 context.output.write(
                     json

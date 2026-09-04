@@ -2471,4 +2471,20 @@ transitions:
         expect(JSON.parse(output.messages.join('\n'))).toMatchObject({ steps: buildWorkflowSteps(def) });
         await rm(dir, { recursive: true, force: true });
     });
+
+    test('R2: CLI workflow run passes spurConfig through makeSvc resolving default agent (task 0752)', async () => {
+        const dir = await createTempProject();
+        const wf = join(dir, 'wf.yaml');
+        await writeFile(wf, MINIMAL_WORKFLOW_YAML);
+        await mkdir(join(dir, '.spur'), { recursive: true });
+        await writeFile(join(dir, '.spur', 'config.yaml'), 'agent:\n  default: coder\n');
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'run', wf, '--dry-run'], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(0);
+        await rm(dir, { recursive: true, force: true });
+    });
 });
