@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D9"
 name: "Workflow seam stabilization and proportional gate rollout"
-status: active
+status: verifying
 priority: P1
 tags: []
 created_at: "2026-09-03T20:25:50.515Z"
-updated_at: "2026-09-03T22:54:31.541Z"
+updated_at: "2026-09-04T16:18:42.736Z"
 ---
 
 # D9: Workflow seam stabilization and proportional gate rollout
@@ -245,3 +245,4 @@ Option A/B "affected ADRs" summary lines under-report the §6 matrix by two ADRs
 ## History
 
 - 2026-09-03T22:54:31.541Z backlog → active (system)
+- 2026-09-04T16:18:42.736Z active → verifying (system)
