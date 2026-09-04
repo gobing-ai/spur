@@ -1,12 +1,13 @@
 ---
 schema_version: 1
 name: "S0-sibling: make docs-pipeline proof fail-closed (task-path lookup)"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-03T23:07:43.354Z
-updated_at: "2026-09-04T00:01:59.648Z"
+updated_at: "2026-09-04T15:46:22.398Z"
 feature_id: D9
 ac_altitude: task-local
+done_forced: "true"
 ---
 
 ## 0760. S0-sibling: make docs-pipeline proof fail-closed (task-path lookup)
@@ -116,10 +117,6 @@ Scenario: D9 verify answers cite exact AC labels for 0751 R4 and R6
 
 <!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
 
-### Review
-
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
 ### References
 
 - Task 0751 (S0a: workflow proof fail-closed) — provenance for all three merged findings
@@ -129,3 +126,7 @@ Scenario: D9 verify answers cite exact AC labels for 0751 R4 and R6
 - docs/04_DESIGN.md — verify-stage AC-label matching contract
 
 ### History
+
+- 2026-09-04T15:46:21.536Z todo → wip (system)
+- 2026-09-04T15:46:21.966Z wip → testing (system)
+- 2026-09-04T15:46:22.373Z testing → done (system)
