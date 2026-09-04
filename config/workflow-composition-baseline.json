@@ -1,24 +1,17 @@
 {
     "schemaVersion": 1,
-    "proofInputs": {
-        "repository": {
-            "excludeConfiguredCorpusFolders": true
-        },
-        "taskFields": ["wbs", "name", "feature_id", "depends_on"],
-        "taskSections": ["Background", "Requirements", "Acceptance Criteria", "Design", "Plan"],
-        "featureFields": ["id", "name"],
-        "featureSections": ["Goal", "Scope", "Acceptance Criteria"]
-    },
     "workflows": {
         "docs-pipeline": {
             "definition": "config/workflows/docs-pipeline.yaml",
-            "boundary": "docs-evolution",
-            "disposition": "keep",
-            "callers": ["sp:spur-dev", "/sp:dev-run"],
-            "artifacts": ["docs-precheck", "docs-verdict"],
-            "failurePolicy": "fail-closed",
-            "terminalStates": ["done", "failed", "cancelled"],
-            "modelQueries": ["draft", "verify"],
+            "terminalStates": [
+                "done",
+                "failed",
+                "cancelled"
+            ],
+            "modelQueries": [
+                "draft",
+                "verify"
+            ],
             "actions": {
                 "precheck:onEnter:0": {
                     "kind": "command.gate"
@@ -57,7 +50,7 @@
                 },
                 "verify:onEnter:0": {
                     "kind": "shell",
-                    "invocation": "$spurBin task path $wbs --json 2>/dev/null | jq -r \".path // .filePath // empty\" > \".spur/run/$wbs-docs-taskpath.txt\" || true; exit 0"
+                    "invocation": "set -e; task_path=\"$($spurBin task path $wbs --json | jq -r '.path // .filePath // empty')\"; if [ -z \"$task_path\" ]; then echo \"docs-pipeline: task path did not resolve for wbs $wbs\" >&2; exit 1; fi; printf '%s' \"$task_path\" > \".spur/run/$wbs-docs-taskpath.txt\""
                 },
                 "verify:onEnter:1": {
                     "kind": "file.read.into-var"
@@ -85,25 +78,22 @@
                     "kind": "proof.fingerprint",
                     "invocation": "/sp:dev-verify ${vars.wbs} --auto --fix none --focus all"
                 }
-            },
-            "digest": "sha256:2794f4f926ecfcd69c0265214f9fcd69ab84cdd3ed53409a8af77a700fd635cc"
+            }
         },
         "idea-pipeline": {
             "definition": "config/workflows/idea-pipeline.yaml",
-            "boundary": "idea-decomposition",
-            "disposition": "keep",
-            "callers": ["sp:spur-dev", "/sp:dev-idea"],
-            "artifacts": [
-                "idea-eval-report",
-                "idea-needs-design",
-                "idea-design-review",
-                "idea-task-batch",
-                "idea-task-order",
-                "idea-handoff"
+            "terminalStates": [
+                "handoff",
+                "cancelled",
+                "failed"
             ],
-            "failurePolicy": "fail-closed",
-            "terminalStates": ["handoff", "cancelled", "failed"],
-            "modelQueries": ["discovery", "feature-create", "ac-generate", "system-design", "decompose"],
+            "modelQueries": [
+                "discovery",
+                "feature-create",
+                "ac-generate",
+                "system-design",
+                "decompose"
+            ],
             "actions": {
                 "start:onEnter:0": {
                     "kind": "note"
@@ -204,18 +194,21 @@
                     "kind": "shell",
                     "invocation": "mkdir -p .spur/memory/sessions && echo \"checkpoint: idea-pipeline handoff feature=$featureId ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > .spur/memory/sessions/idea-checkpoint.md"
                 }
-            },
-            "digest": "sha256:acc878217ffc7e31d31600b59d5b240588a079638d2eb0caff8c7a78524220b9"
+            }
         },
         "task-pipeline": {
             "definition": "config/workflows/task-pipeline.yaml",
-            "boundary": "task-execution",
-            "disposition": "canonical",
-            "callers": ["sp:spur-dev", "sp:super-planner"],
-            "artifacts": ["verify-answer", "verify-verdict", "testing-section", "review-section"],
-            "failurePolicy": "fail-closed",
-            "terminalStates": ["done", "failed", "cancelled"],
-            "modelQueries": ["implement", "test-fix", "review", "verify"],
+            "terminalStates": [
+                "done",
+                "failed",
+                "cancelled"
+            ],
+            "modelQueries": [
+                "implement",
+                "test-fix",
+                "review",
+                "verify"
+            ],
             "actions": {
                 "precheck:onEnter:0": {
                     "kind": "shell",
@@ -334,18 +327,17 @@
                     "kind": "shell",
                     "invocation": "mkdir -p .spur/memory/sessions; CP_TS=\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"; CP_COMMIT=\"$(git rev-parse HEAD 2>/dev/null || echo unknown)\"; CP_DIGEST=\"$(cut -d= -f2 .spur/run/$wbs-proofdigest.txt 2>/dev/null || echo '')\"; CP_RUN=\"$SPUR_RUN_ID\"; [ -z \"$CP_RUN\" ] && CP_RUN=\"$RUN_ID\"; printf '%s\\n' '---' 'schema_version: 1' \"session_id: $(date -u +%Y-%m-%d)-$wbs\" 'workflow: task-pipeline' \"run_id: $CP_RUN\" \"task_wbs: $wbs\" 'feature_id: \"\"' 'phase: done' 'status: done' 'last_gate: record' \"source_commit: $CP_COMMIT\" \"digest: $CP_DIGEST\" \"generated_at: $CP_TS\" \"updated_at: $CP_TS\" \"next_action: none - task $wbs complete (terminal; advisory only)\" 'artifacts:' '  - .spur/run/$wbs-verdict.json' '  - .spur/run/$wbs-test-gate.log' '---' '' '## Session Notes' '' \"Terminal checkpoint for task $wbs (task-pipeline done).\" 'Advisory only; the task file is authoritative.' > .spur/memory/sessions/$wbs-checkpoint.md; exit 0"
                 }
-            },
-            "digest": "sha256:455fcf48f685809780187b7345562f3d377c5aa66d2fa3130c078b168bebf436"
+            }
         },
         "wrapup-pipeline": {
             "definition": "config/workflows/wrapup-pipeline.yaml",
-            "boundary": "task-wrapup",
-            "disposition": "keep",
-            "callers": ["sp:spur-dev", "/sp:dev-wrap", "/sp:dev-wrapall"],
-            "artifacts": ["wrapup-learnings", "wrapup-metrics"],
-            "failurePolicy": "fail-closed",
-            "terminalStates": ["done", "skipped"],
-            "modelQueries": ["doc-sync"],
+            "terminalStates": [
+                "done",
+                "skipped"
+            ],
+            "modelQueries": [
+                "doc-sync"
+            ],
             "actions": {
                 "start:onEnter:0": {
                     "kind": "note"
@@ -379,26 +371,15 @@
                     "kind": "shell",
                     "invocation": "mkdir -p .spur/memory/sessions && echo \"checkpoint: wrapup-pipeline done tasks=$tasks ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > .spur/memory/sessions/wrapup-checkpoint.md"
                 }
-            },
-            "digest": "sha256:390621dd339709682065e8954f2d1b49a195111c8372ec83e094fe7e2e35927f"
+            }
         },
         "pr-review": {
             "definition": "config/workflows/pr-review.yaml",
-            "boundary": "pr-review",
-            "disposition": "keep",
-            "callers": ["sp:spur-dev", "/sp:dev-pr-review"],
-            "artifacts": [
-                "pr-context",
-                "pr-hygiene",
-                "pr-push",
-                "pr",
-                "pr-request",
-                "pr-wait",
-                "pr-findings",
-                "pr-status"
+            "terminalStates": [
+                "done",
+                "pending",
+                "failed"
             ],
-            "failurePolicy": "fail-closed",
-            "terminalStates": ["done", "pending", "failed"],
             "modelQueries": [],
             "actions": {
                 "preflight:onEnter:0": {
@@ -433,18 +414,17 @@
                     "kind": "shell",
                     "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$__runId-pr-collect.status\" && set +e && SINCE=\"$(bun -e 'const fs=require(\"node:fs\");const value=JSON.parse(fs.readFileSync(process.argv[1],\"utf8\")).requestedAt;process.stdout.write(value ?? \"\")' \".spur/run/$__runId-pr-request.json\")\" && REQUEST_HEAD=\"$(bun -e 'const fs=require(\"node:fs\");const value=JSON.parse(fs.readFileSync(process.argv[1],\"utf8\")).head;process.stdout.write(value ?? \"\")' \".spur/run/$__runId-pr-request.json\")\" && bun \"$(superskill script path sp pr-reviewing.ts)\" collect --since \"$SINCE\" --head \"$REQUEST_HEAD\" --json --status-file \"$STATUS_FILE\" > \".spur/run/$__runId-pr-findings.json\"; collect_rc=$?; bun \"$(superskill script path sp pr-reviewing.ts)\" status --since \"$SINCE\" --head \"$REQUEST_HEAD\" --json > \".spur/run/$__runId-pr-status.json\"; status_rc=$?; set -e && if [ \"$collect_rc\" -ne 0 ] || [ \"$status_rc\" -ne 0 ]; then printf 'FAIL\\n' > \"$STATUS_FILE\"; fi && if [ ! -f \"$STATUS_FILE\" ]; then printf 'FAIL\\n' > \"$STATUS_FILE\"; fi && { cat \".spur/run/$__runId-pr-findings.json\" 2>/dev/null || true; } && exit 0"
                 }
-            },
-            "digest": "sha256:eb3f51877647f25907ed6b660b79e4d22b3c7462ceccacc4fc251eb31bac06f0"
+            }
         },
         "basic": {
             "definition": "config/workflows/basic.yaml",
-            "boundary": "generic-execution",
-            "disposition": "keep",
-            "callers": ["spur workflow run"],
-            "artifacts": ["fix-attempt-counter", "gate-status"],
-            "failurePolicy": "fail-closed",
-            "terminalStates": ["done", "failed"],
-            "modelQueries": ["fix"],
+            "terminalStates": [
+                "done",
+                "failed"
+            ],
+            "modelQueries": [
+                "fix"
+            ],
             "actions": {
                 "implement:onEnter:0": {
                     "kind": "note"
@@ -465,18 +445,20 @@
                     "kind": "agent.run",
                     "invocation": "/sp:dev-fixall \"${vars.qualityGateCmd}\""
                 }
-            },
-            "digest": "sha256:fb8ab828b9527f225368d20b08e3fc7ca4b92e6e22642a57868da193d5ebef2c"
+            }
         },
         "feature-dev": {
             "definition": "config/workflows/feature-dev.yaml",
-            "boundary": "feature-umbrella",
-            "disposition": "keep",
-            "callers": ["/sp:dev-runall --feature"],
-            "artifacts": ["feature-checkpoint"],
-            "failurePolicy": "fail-closed",
-            "terminalStates": ["done", "failed"],
-            "modelQueries": ["brainstorm", "plan", "execute-tasks-auto", "execute-tasks"],
+            "terminalStates": [
+                "done",
+                "failed"
+            ],
+            "modelQueries": [
+                "brainstorm",
+                "plan",
+                "execute-tasks-auto",
+                "execute-tasks"
+            ],
             "actions": {
                 "precheck:onEnter:0": {
                     "kind": "shell",
@@ -502,7 +484,8 @@
                     "invocation": "/sp:dev-runall --feature ${vars.featureId}"
                 },
                 "integration-review:onEnter:0": {
-                    "kind": "command.gate"
+                    "kind": "shell",
+                    "invocation": "mkdir -p .spur/run && STATUS_FILE=\".spur/run/$__runId-integration-review.status\" && REQUEST_JSON=\".spur/run/$__runId-integration-review.json\" && PR_REQUEST_STATUS=\".spur/run/$__runId-integration-review-pr-request.status\" && set +e && bun \"$(superskill script path sp pr-reviewing.ts)\" request --base \"$baseBranch\" --json --status-file \"$PR_REQUEST_STATUS\" > \"$REQUEST_JSON\" 2>&1; rc=$?; set -e && if [ \"$rc\" -eq 0 ]; then\n  printf 'PASS\\n' > \"$STATUS_FILE\";\nelse\n  printf 'FAIL\\n' > \"$STATUS_FILE\";\nfi && exit 0"
                 },
                 "integration-review:onEnter:1": {
                     "kind": "note"
@@ -511,18 +494,19 @@
                     "kind": "shell",
                     "invocation": "mkdir -p .spur/memory/sessions && echo \"checkpoint: feature-dev done featureId=$featureId ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > .spur/memory/sessions/$featureId-checkpoint.md"
                 }
-            },
-            "digest": "sha256:e1fa6b86cb7bcad0f927cf73336996ee8ce0088b6685cebba8c8849e26029529"
+            }
         },
         "wayfinder-resolution": {
             "definition": "config/workflows/wayfinder-resolution.yaml",
-            "boundary": "wayfinder-resolution",
-            "disposition": "keep",
-            "callers": ["spur workflow run"],
-            "artifacts": ["wayfinder-report", "resolution-status"],
-            "failurePolicy": "fail-closed",
-            "terminalStates": ["done", "failed", "cancelled"],
-            "modelQueries": ["investigate", "verify"],
+            "terminalStates": [
+                "done",
+                "failed",
+                "cancelled"
+            ],
+            "modelQueries": [
+                "investigate",
+                "verify"
+            ],
             "actions": {
                 "precheck:onEnter:0": {
                     "kind": "shell",
@@ -569,8 +553,7 @@
                 "done:onEnter:0": {
                     "kind": "note"
                 }
-            },
-            "digest": "sha256:ef75f70a09b67ea5905ac68aba7c3eec2b805530312ca3173fa4b8ee7275059e"
+            }
         }
     }
 }

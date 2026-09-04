@@ -2199,3 +2199,21 @@ unchanged (ADR-103, E91/R11).
 
 **Detail:** `docs/design/history-incremental-materialization.md` §12 (D10); feature E91 R21–R25.
 
+
+## Amendments (task 0754, D8 Decision 8 closure)
+
+Each ADR below is amended to reflect work that shipped between the original acceptance and the 0754
+sweep. The amendment note records the concrete change; the ADR's body is unchanged. The 0754 verify
+stage cites these notes (not the original body) when scoring authority/derived-doc drift.
+
+| ADR | Amendment (0754) |
+| --- | --- |
+| 051 | Mechanical placement check widened: `scripts/commands/` and the package.json composition entrypoints (`regen-corpus-baseline`, `regen-composition-baseline`) are now covered alongside the plugins/sp script surface. See `scripts/commands/composition-entrypoint-check.ts`. |
+| 069 | The composition baseline advisories were re-baselined against the current snapshot (R4); the gate stays advisory per the original decision. No advisory count change in policy; the new snapshot just re-anchors the warning threshold. |
+| 071 | Proof-chain repairs from task 0751 (workflow-proof fail-closed) are recorded as the first concrete application of this ADR. The same shape applies to docs-pipeline per task 0760 R1. |
+| 093 | Corpus baseline migrated to the waiver fields this ADR mandates — owner, review date, removal criterion — closing D8 Decision 8. The new fields are present in the regenerated snapshot. |
+| 094 | Refines to: ADR-102 (the concrete contract below). The principle is "host enforces capability attestation"; the contract is the typed-args boundary and the dispatch-side denylist. Neither supersedes the other; ADR-102 refines ADR-094's principle into an executable contract. |
+| 098 | Dry-probe exclusion: escalation packets no longer fire on dry-run probes (task 0753 R4). The escalation channel that fires on probes is one nobody reads; the fix gates emission at the event boundary, not downstream filtering. |
+| 099 | Resume-side freshness: the digest comparison introduced by task 0752 catches a version or definition edit between run and resume. This ADR's freshness contract is now exercised by the engine, not just documented. |
+| 100 | Verified-outcome binding: the prove-digest stamped into `.spur/run/<wbs>-verdict.json` binds the certifying run to its verdict (task 0751 R4). The `proofBinding: current` guard refuses missing or stale binding. |
+| 102 | Docs anchor: the capability-attestation section in `docs/04_DESIGN.md:2451` is now labeled with this ADR (was mislabeled as ADR-101 — a history-refresh ADR — and corrected in 0754 R2). |
