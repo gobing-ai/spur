@@ -1,7 +1,7 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import type { ArtifactSelector } from './artifact';
 import type { SessionSpanRow, SessionToolDurationRow, TodoToolCallRow } from './derived';
-import { EFFECTIVE_TOOL_NAME_SQL, HISTORY_BOARD_ACTIVITY_DAYS } from './history-board-rollup';
+import { HISTORY_BOARD_ACTIVITY_DAYS, RESOLVED_TOOL_NAME_SQL } from './tool-name-sql';
 import { applyWatermarkToWhere, type WatermarkQueryOptions } from './watermark';
 
 /**
@@ -34,6 +34,8 @@ export interface MessageRollupRow {
     assistantDurationMs: number | null;
     /** role='assistant' rows whose `duration_ms` was NULL — the assistant-duration unavailable count. */
     assistantDurationUnmeasured: number;
+    /** role='assistant' rows with a positive `duration_ms` — sample count for the mean. */
+    assistantDurationSamples: number;
 }
 
 /** Tool-call aggregate per (source, model, day) — the duration side of the rollup. */
@@ -166,7 +168,7 @@ export function buildMessageWhereClauses(
             const placeholders = validTools.map(() => '?').join(', ');
             clauses.push(
                 'EXISTS (SELECT 1 FROM ' +
-                    `history_tool_call tc_filt WHERE tc_filt.message_hash = ${alias}.record_hash AND ${EFFECTIVE_TOOL_NAME_SQL.replace(/tc\./g, 'tc_filt.')} IN (${placeholders}))`,
+                    `history_tool_call tc_filt WHERE tc_filt.message_hash = ${alias}.record_hash AND COALESCE(NULLIF(NULLIF(tc_filt.effective_tool_name, 'unknown'), ''), tc_filt.tool_name) IN (${placeholders}))`,
             );
             params.push(...validTools);
         }
@@ -282,7 +284,8 @@ export async function messageRollup(
                 SUM(cost_usd) AS costUsd,
                 SUM(CASE WHEN input_tokens IS NOT NULL OR output_tokens IS NOT NULL THEN 1 ELSE 0 END) AS recordsWithUsage,
                 SUM(CASE WHEN role = 'assistant' THEN duration_ms END) AS assistantDurationMs,
-                SUM(CASE WHEN role = 'assistant' THEN duration_ms IS NULL END) AS assistantDurationUnmeasured
+                SUM(CASE WHEN role = 'assistant' THEN duration_ms IS NULL END) AS assistantDurationUnmeasured,
+                SUM(CASE WHEN role = 'assistant' AND duration_ms > 0 THEN 1 ELSE 0 END) AS assistantDurationSamples
          FROM selected
          GROUP BY source, model, DATE(ts)`,
         ...params,
@@ -332,13 +335,13 @@ export async function byTool(
              ${wm.where}
          ),
          filtered_tools AS (
-             SELECT tc.tool_name, tc.args_raw, tc.call_id, tc.status, tc.duration_ms, tc.result_bytes,
+             SELECT tc.tool_name, tc.effective_tool_name, tc.args_raw, tc.call_id, tc.status, tc.duration_ms, tc.result_bytes,
                     fm.input_tokens, fm.output_tokens,
                     COUNT(*) OVER (PARTITION BY tc.message_hash) AS links
              FROM filtered_messages fm
              CROSS JOIN history_tool_call tc ON tc.message_hash = fm.record_hash
          )
-         SELECT ${EFFECTIVE_TOOL_NAME_SQL} AS toolName,
+         SELECT ${RESOLVED_TOOL_NAME_SQL} AS toolName,
                 COUNT(*) AS calls,
                 SUM(tc.status = 'error') AS errors,
                 SUM(tc.duration_ms) AS durationMsTotal,
@@ -348,7 +351,7 @@ export async function byTool(
                 SUM(tc.result_bytes) AS resultBytes,
                 ROUND(SUM(CAST(COALESCE(tc.input_tokens, 0) + COALESCE(tc.output_tokens, 0) AS REAL) / tc.links)) AS billedTokens
          FROM filtered_tools tc
-         GROUP BY ${EFFECTIVE_TOOL_NAME_SQL}
+         GROUP BY ${RESOLVED_TOOL_NAME_SQL}
          ORDER BY durationMsTotal DESC
          LIMIT ?`,
         ...params,
@@ -480,11 +483,11 @@ export async function bySession(
              ${wm.where}${wm.where === '' ? 'WHERE' : ' AND'} m.session_id IN (${sessionIds.map(() => '?').join(',')})
          )
          SELECT fm.session_id AS sessionId, fm.source AS source,
-                ${EFFECTIVE_TOOL_NAME_SQL} AS toolName,
+                ${RESOLVED_TOOL_NAME_SQL} AS toolName,
                 COUNT(*) AS cnt
          FROM filtered_messages fm
          CROSS JOIN history_tool_call tc ON tc.message_hash = fm.record_hash
-         GROUP BY fm.session_id, fm.source, ${EFFECTIVE_TOOL_NAME_SQL}`,
+         GROUP BY fm.session_id, fm.source, ${RESOLVED_TOOL_NAME_SQL}`,
                   ...params,
                   ...wm.params,
                   ...sessionIds,
@@ -544,6 +547,243 @@ export async function bySession(
             state: msg.state,
         };
     });
+}
+
+/**
+ * Session sort key → SQL `ORDER BY` expression over the `/history/sessions` fallback
+ * session-aggregate columns. Keys and meanings MUST stay in step with the materialized
+ * path's `SESSION_ORDER_COLUMNS` in `history-board-rollup.ts` (enforced by a parity
+ * test): a key that sorts one way on the rollup path and another way on the stale
+ * fallback path is a user-visible inconsistency that appears only when rollups go stale.
+ * Every ordering appends `session_id ASC` as a total tiebreak in the caller's query.
+ */
+export const SESSION_SORT_COLUMNS: Record<string, string> = {
+    start: 'ms.started_at',
+    duration: 'ms.assistant_duration_ms',
+    messages: 'ms.messages',
+    toolCalls: 'ms.tool_calls',
+    billedTokens: '(ms.input_tokens + ms.output_tokens)',
+    cacheRead: 'ms.cache_read_tokens',
+    freshInput: 'ms.input_tokens',
+};
+
+/** Input to a paged session-listing read. `sortBy` is validated to the seven keys (unknown → `start`). */
+export interface SessionPageInput {
+    sortBy: string;
+    sortDir: 'asc' | 'desc';
+    limit: number;
+    offset: number;
+}
+
+/** Paged session-listing result: the page rows plus the unpaged total. */
+export interface SessionPage {
+    items: SessionRow[];
+    total: number;
+}
+
+/** Message-side per-session aggregate row produced by {@link bySessionPage} before tool-count enrichment. */
+interface SessionMessageStatRow {
+    sessionId: string;
+    source: string;
+    model: string | null;
+    startedAt: string | null;
+    endedAt: string | null;
+    messages: number;
+    tokens: number;
+    inputTokens: number;
+    cacheReadTokens: number;
+    outputTokens: number;
+    costUsd: number | null;
+    assistantDurationMs: number;
+    assistantDurationUnmeasured: number;
+    state: 'complete' | 'in-progress';
+}
+
+/** Flat (session, tool) count row from the tool-count enrichment. */
+interface SessionToolCountRow {
+    sessionId: string;
+    source: string;
+    toolName: string;
+    cnt: number;
+}
+
+/** Merge per-(session, tool) counts into `SessionRow` (same topTool tie-break as `bySession`). */
+function mergeSessionToolCounts(msgRows: SessionMessageStatRow[], toolRows: SessionToolCountRow[]): SessionRow[] {
+    const toolMap = new Map<string, Map<string, number>>();
+    for (const row of toolRows) {
+        const key = `${row.sessionId}\0${row.source}`;
+        let tools = toolMap.get(key);
+        if (!tools) {
+            tools = new Map();
+            toolMap.set(key, tools);
+        }
+        tools.set(row.toolName, (tools.get(row.toolName) ?? 0) + row.cnt);
+    }
+    return msgRows.map((msg) => {
+        const key = `${msg.sessionId}\0${msg.source}`;
+        const tools = toolMap.get(key);
+        let toolCalls = 0;
+        let topTool: string | null = null;
+        let maxCount = -1;
+        if (tools) {
+            for (const [name, count] of tools) {
+                toolCalls += count;
+                if (
+                    topTool === null ||
+                    (topTool === 'unknown' && name !== 'unknown') ||
+                    (name !== 'unknown' && count > maxCount) ||
+                    (name !== 'unknown' && count === maxCount && name < topTool) ||
+                    (topTool === 'unknown' && count > maxCount)
+                ) {
+                    maxCount = count;
+                    topTool = name;
+                }
+            }
+        }
+        return {
+            sessionId: msg.sessionId,
+            source: msg.source,
+            model: msg.model,
+            startedAt: msg.startedAt,
+            endedAt: msg.endedAt,
+            messages: msg.messages,
+            toolCalls,
+            topTool,
+            tokens: msg.tokens,
+            inputTokens: msg.inputTokens,
+            cacheReadTokens: msg.cacheReadTokens,
+            outputTokens: msg.outputTokens,
+            costUsd: msg.costUsd,
+            assistantDurationMs: msg.assistantDurationMs,
+            assistantDurationUnmeasured: msg.assistantDurationUnmeasured,
+            state: msg.state,
+        };
+    });
+}
+
+/**
+ * Paged session listing on the raw (stale-fallback) read path — task 0744.
+ *
+ * Ordering, `LIMIT ? OFFSET ?`, and the unpaged total are all the database's work: the
+ * rows a query returns ARE the page, so a caller must never sort or slice in JS after
+ * calling this. Ordering carries a `session_id ASC` total tiebreak, matching the
+ * materialized path, so equal-value rows are assigned to exactly one page. The total is a
+ * separate `COUNT(*)` over the same `WHERE` (never the page length).
+ *
+ * The returned `SessionRow` shape and tool-count enrichment match {@link bySession}
+ * exactly, and each ordering maps to the same meanings as the materialized path
+ * (`SESSION_ORDER_COLUMNS`); an unrecognised `sortBy` falls back to `start`.
+ */
+export async function bySessionPage(
+    db: DbAdapter,
+    sel: ArtifactSelector,
+    input: SessionPageInput,
+    opts?: WatermarkQueryOptions,
+): Promise<SessionPage> {
+    const { where, params } = buildMessageWhere(sel);
+    const wm = applyWatermarkToWhere(where, opts?.watermark);
+    const sessionWhere =
+        wm.where === ''
+            ? "WHERE m.session_id NOT IN ('', 'unknown', 'session')"
+            : `${wm.where} AND m.session_id NOT IN ('', 'unknown', 'session')`;
+
+    const orderColumn = SESSION_SORT_COLUMNS[input.sortBy] ?? SESSION_SORT_COLUMNS.start;
+    const dir = input.sortDir.toUpperCase();
+
+    const msgRows = await db.queryAll<SessionMessageStatRow>(
+        `WITH filtered AS (
+             SELECT m.record_hash, m.ts, m.input_tokens, m.cache_read_tokens, m.output_tokens,
+                    m.session_id, m.source, m.model, m.cost_usd, m.role, m.duration_ms,
+                    m.rowid AS source_rowid, m.seq, m.disposition,
+                    ROW_NUMBER() OVER (PARTITION BY m.request_id ORDER BY m.rowid DESC) AS rn,
+                    m.request_id
+             FROM history_message m
+             ${sessionWhere}
+         ),
+         selected AS (
+             SELECT * FROM filtered WHERE request_id IS NULL OR rn = 1
+         ),
+         message_stats AS (
+             SELECT m.source, m.session_id,
+                    COALESCE(
+                        m.model,
+                        MAX(CASE WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model END)
+                            OVER (PARTITION BY m.source, m.session_id),
+                        'unknown'
+                    ) AS model,
+                    MIN(m.ts) AS started_at, MAX(m.ts) AS ended_at, COUNT(*) AS messages,
+                    SUM(COALESCE(m.input_tokens, 0) + COALESCE(m.output_tokens, 0)) AS tokens,
+                    SUM(COALESCE(m.input_tokens, 0)) AS input_tokens,
+                    SUM(COALESCE(m.cache_read_tokens, 0)) AS cache_read_tokens,
+                    SUM(COALESCE(m.output_tokens, 0)) AS output_tokens,
+                    SUM(m.cost_usd) AS cost_usd,
+                    SUM(CASE WHEN m.role = 'assistant' THEN COALESCE(m.duration_ms, 0) ELSE 0 END) AS assistant_duration_ms,
+                    SUM(CASE WHEN m.role = 'assistant' AND m.duration_ms IS NULL THEN 1 ELSE 0 END) AS assistant_duration_unmeasured,
+                    COALESCE(tc_counts.cnt, 0) AS tool_calls
+             FROM selected m
+             LEFT JOIN (
+                 SELECT c.source, c.session_id, COUNT(*) AS cnt
+                 FROM filtered c
+                 CROSS JOIN history_tool_call tc_c ON tc_c.message_hash = c.record_hash
+                 GROUP BY c.source, c.session_id
+             ) tc_counts ON tc_counts.source = m.source AND tc_counts.session_id = m.session_id
+             GROUP BY m.source, m.session_id
+         ),
+         last_messages AS (
+             SELECT source, session_id, record_hash, role,
+                    ROW_NUMBER() OVER (PARTITION BY source, session_id ORDER BY seq DESC, source_rowid DESC) AS rank
+             FROM selected WHERE disposition != 'meta'
+         )
+         SELECT ms.session_id AS sessionId, ms.source AS source, ms.model AS model,
+                ms.started_at AS startedAt, ms.ended_at AS endedAt, ms.messages AS messages,
+                ms.tokens AS tokens,
+                ms.input_tokens AS inputTokens, ms.cache_read_tokens AS cacheReadTokens,
+                ms.output_tokens AS outputTokens, ms.cost_usd AS costUsd,
+                ms.assistant_duration_ms AS assistantDurationMs,
+                ms.assistant_duration_unmeasured AS assistantDurationUnmeasured,
+                CASE WHEN COALESCE(lm.role, 'unknown') IN ('assistant', 'unknown', '')
+                          AND NOT EXISTS (SELECT 1 FROM history_tool_call open_tc WHERE open_tc.message_hash = lm.record_hash)
+                     THEN 'complete' ELSE 'in-progress' END AS state
+         FROM message_stats ms
+         LEFT JOIN last_messages lm ON lm.source = ms.source AND lm.session_id = ms.session_id AND lm.rank = 1
+         ORDER BY ${orderColumn} ${dir}, ms.session_id ASC
+         LIMIT ? OFFSET ?`,
+        ...params,
+        ...wm.params,
+        input.limit,
+        input.offset,
+    );
+
+    const totalRow = await db.queryFirst<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM (SELECT m.source, m.session_id FROM history_message m ${sessionWhere} GROUP BY m.source, m.session_id)`,
+        ...params,
+        ...wm.params,
+    );
+
+    if (msgRows.length === 0) return { items: [], total: totalRow?.n ?? 0 };
+
+    const sessionIds = Array.from(new Set(msgRows.map((m) => m.sessionId)));
+    const toolRows = await db.queryAll<SessionToolCountRow>(
+        `WITH filtered_messages AS (
+             SELECT m.record_hash, m.session_id, m.source
+             FROM history_message m
+             ${wm.where}${wm.where === '' ? 'WHERE' : ' AND'} m.session_id IN (${sessionIds.map(() => '?').join(',')})
+         )
+         SELECT fm.session_id AS sessionId, fm.source AS source,
+                ${RESOLVED_TOOL_NAME_SQL} AS toolName,
+                COUNT(*) AS cnt
+         FROM filtered_messages fm
+         CROSS JOIN history_tool_call tc ON tc.message_hash = fm.record_hash
+         GROUP BY fm.session_id, fm.source, ${RESOLVED_TOOL_NAME_SQL}`,
+        ...params,
+        ...wm.params,
+        ...sessionIds,
+    );
+
+    return {
+        items: mergeSessionToolCounts(msgRows, toolRows),
+        total: totalRow?.n ?? 0,
+    };
 }
 
 /**
@@ -1090,7 +1330,7 @@ const BUCKET_SECONDS: Record<HistoryBucket, number> = {
 };
 
 const HISTORY_SKILL_NAME_SQL = `CASE
-    WHEN LOWER(${EFFECTIVE_TOOL_NAME_SQL}) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)
+    WHEN LOWER(${RESOLVED_TOOL_NAME_SQL}) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)
     THEN COALESCE(
         CAST(json_extract(tc.args_raw, '$.skill') AS TEXT),
         CAST(json_extract(tc.args_raw, '$.skill_name') AS TEXT),
@@ -1126,7 +1366,7 @@ export async function bucketedTokenSeries(
         // Allocation is canonical: a message's tokens divide across ALL linked tool calls,
         // and skill rows are selected only after that division — matching how
         // history_board_tool_5m was materialized so fresh and stale results stay equal.
-        const keyExpr = dim === 'tool' ? EFFECTIVE_TOOL_NAME_SQL : HISTORY_SKILL_NAME_SQL;
+        const keyExpr = dim === 'tool' ? RESOLVED_TOOL_NAME_SQL : HISTORY_SKILL_NAME_SQL;
         const outerFilter = dim === 'skill' ? "WHERE key <> '' AND key <> 'unknown'" : '';
         return db.queryAll<BucketedTokenRow>(
             `WITH filtered AS (
@@ -1817,6 +2057,7 @@ export interface ToolSequenceRow {
     toolSeq: number;
     ts: string | null;
     toolName: string;
+    effectiveToolName?: string;
     status: string;
     durationMs: number | null;
     resultBytes: number | null;
@@ -1877,7 +2118,9 @@ export async function toolSequenceQuery(
 
     if (filters.toolNames && filters.toolNames.length > 0) {
         const placeholders = filters.toolNames.map(() => '?').join(', ');
-        clauses.push(`tc.tool_name IN (${placeholders})`);
+        clauses.push(
+            `COALESCE(NULLIF(NULLIF(tc.effective_tool_name, 'unknown'), ''), tc.tool_name) IN (${placeholders})`,
+        );
         params.push(...filters.toolNames);
     }
 
@@ -1889,9 +2132,9 @@ export async function toolSequenceQuery(
     if (filters.search && filters.search.trim().length > 0) {
         const searchPattern = `%${escapeLike(filters.search.trim())}%`;
         clauses.push(
-            "(tc.args_raw LIKE ? ESCAPE '!' OR tc.error_text LIKE ? ESCAPE '!' OR tc.tool_name LIKE ? ESCAPE '!')",
+            "(tc.args_raw LIKE ? ESCAPE '!' OR tc.error_text LIKE ? ESCAPE '!' OR tc.effective_tool_name LIKE ? ESCAPE '!' OR tc.tool_name LIKE ? ESCAPE '!')",
         );
-        params.push(searchPattern, searchPattern, searchPattern);
+        params.push(searchPattern, searchPattern, searchPattern, searchPattern);
     }
 
     const whereCombined = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
@@ -1903,6 +2146,7 @@ export async function toolSequenceQuery(
         `SELECT tc.seq AS toolSeq,
                 COALESCE(tc.started_at, m.ts) AS ts,
                 tc.tool_name AS toolName,
+                tc.effective_tool_name AS effectiveToolName,
                 tc.status AS status,
                 tc.duration_ms AS durationMs,
                 tc.result_bytes AS resultBytes,

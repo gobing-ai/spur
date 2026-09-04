@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { applyCliMigrations, CLI_SCHEMA_SQL, historyBoardRollupsFresh } from '@gobing-ai/spur-domain';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
-import { refreshHistoryRollups } from '../../src/services/history-analysis-service';
+import { HistorySchemaVersionMismatchError, refreshHistoryRollups } from '../../src/services/history-analysis-service';
 import { LiveHistoryBoardService } from '../../src/services/history-board-service';
 
 // The AC5 `skillBreakdown.fresh` flag is genuine rollup-state metadata that differs between the
@@ -315,5 +315,89 @@ describe('refreshHistoryRollups (task 0629)', () => {
             withoutFresh(staleFallback),
         );
         expect((await refreshHistoryRollups(db)).status).toBe('unchanged');
+    });
+});
+
+describe('refreshHistoryRollups trust gate and version abort (0738 R1/R4/R18)', () => {
+    test('completes against schema writing history_version and non-zero history_board_skill_5m (R1)', async () => {
+        const db = await setup();
+        await seed(db);
+        await db.run(
+            `INSERT INTO history_skill_call (
+                record_hash, message_hash, source, source_file, source_line, session_id, seq,
+                skill_name, invocation_kind, started_at, imported_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            'sc-1',
+            'm1',
+            'claude',
+            'claude.jsonl',
+            1,
+            's1',
+            1,
+            'sp-dev-run',
+            'model',
+            '2026-08-21T10:00:00Z',
+            '2026-08-21T12:00:00Z',
+        );
+
+        const result = await refreshHistoryRollups(db);
+        expect(result.status).toBe('refreshed');
+
+        const meta = await db.queryFirst<{ history_version: string }>(
+            'SELECT history_version FROM history_board_rollup_meta WHERE id = 1',
+        );
+        expect(meta?.history_version).toBe(result.historyVersion);
+
+        const skillCount = await db.queryFirst<{ count: number }>(
+            'SELECT COUNT(*) AS count FROM history_board_skill_5m',
+        );
+        expect(skillCount?.count).toBeGreaterThan(0);
+        db.close();
+    });
+
+    test('aborts before writing any rollup row on importer schema version mismatch (R4/R18)', async () => {
+        const db = await setup();
+        await seed(db);
+
+        // Record a mismatched version in __spur_cli_migrations
+        await db.run(
+            `UPDATE "__spur_cli_migrations" SET id = 'importer_schema@0.4.51' WHERE id LIKE 'importer_schema@%'`,
+        );
+
+        // Seed an initial rollup state
+        await db.run(
+            `INSERT OR REPLACE INTO history_board_rollup_meta (id, history_version, refreshed_at) VALUES (1, 'v-initial', '2026-08-21T00:00:00Z')`,
+        );
+        await db.run(
+            `INSERT INTO history_board_message_5m (bucket_start, session_id, source, model, fresh_input_tokens, cache_read_tokens, output_tokens, messages, assistant_duration_ms, assistant_duration_samples) VALUES ('2026-08-21T10:00:00Z', 's1', 'claude', 'gpt-5', 100, 50, 20, 1, 100, 1)`,
+        );
+
+        let caughtError: HistorySchemaVersionMismatchError | null = null;
+        try {
+            await refreshHistoryRollups(db);
+        } catch (e) {
+            if (e instanceof HistorySchemaVersionMismatchError) {
+                caughtError = e;
+            }
+        }
+
+        expect(caughtError).not.toBeNull();
+        expect(caughtError?.recorded).toBe('0.4.51');
+        expect(caughtError?.installed).toBeDefined();
+        expect(caughtError?.remediation).toContain('bun install');
+        expect(caughtError?.message).toContain('0.4.51');
+
+        // Rollup tables must be untouched and readable
+        const meta = await db.queryFirst<{ history_version: string }>(
+            'SELECT history_version FROM history_board_rollup_meta WHERE id = 1',
+        );
+        expect(meta?.history_version).toBe('v-initial');
+
+        const messageCount = await db.queryFirst<{ count: number }>(
+            'SELECT COUNT(*) AS count FROM history_board_message_5m',
+        );
+        expect(messageCount?.count).toBe(1);
+
+        db.close();
     });
 });

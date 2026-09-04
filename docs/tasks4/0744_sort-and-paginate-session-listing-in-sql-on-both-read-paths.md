@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Sort and paginate session listing in SQL on both read paths"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-03T16:43:04.191Z
-updated_at: "2026-09-03T17:45:50.922Z"
+updated_at: "2026-09-03T23:48:15.391Z"
 feature_id: E91
 priority: P2
 tags: ["history", "read-path", "pagination"]
@@ -21,10 +21,10 @@ The fallback path is not. `getSessions` at `packages/app/src/services/history-bo
 
 So R1 and R3 are unmet on the fallback path only, and R2's "both paths" is satisfied on the materialized side by an assertion that locks in behaviour that already exists rather than by new code. Writing it as new work on both paths would mean rewriting a correct query for no reason.
 ### Requirements
-- [ ] R1. A session listing request with a sort order and page offset has its ordering and pagination performed by the database.
-- [ ] R2. This holds on both the materialized path and the fallback path.
-- [ ] R3. No path materializes the full session set in application memory before slicing.
-- [ ] R4. The response shape is unchanged.
+- [x] R1. A session listing request with a sort order and page offset has its ordering and pagination performed by the database.
+- [x] R2. This holds on both the materialized path and the fallback path.
+- [x] R3. No path materializes the full session set in application memory before slicing.
+- [x] R4. The response shape is unchanged.
 ### Acceptance Criteria
 ```gherkin
 Feature: History read path materialized-only: incremental rollup ETL, per-table freshness, and precomputed UI aggregates
@@ -94,15 +94,40 @@ Authority: ADR-103; design section 7 (D5).
 5. Assert the response shape is unchanged for both paths. Test intent: the assertion compares against the contract type rather than a hand-written literal, so a contract change cannot pass silently.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+File:line change map and rationale.
+
+- **`packages/domain/src/analytics/forensic-query.ts`** — added `SESSION_SORT_COLUMNS` (`packages/domain/src/analytics/forensic-query.ts:560`, maps the seven public sort keys to session-aggregate SQL expressions, fallback to `start`), `SessionPageInput` (`:571`), `SessionPage` (`:579`), and `bySessionPage` (`:677`). `bySessionPage` applies `ORDER BY ${orderColumn} ${dir}, ms.session_id ASC LIMIT ? OFFSET ?` in SQL (total ordering with the `session_id` tiebreak matching the materialized path), computes `tool_calls` via a SQL LEFT JOIN (`tc_counts`), and returns the unpaged total from a separate `COUNT(*)` over the same `WHERE` (never page-length-as-total). Session-row shape and tool-count enrichment (`mergeSessionToolCounts`) match `bySession` exactly. `bySession` itself is unchanged (signature/behavior) so the Summary and Sources fan-outs keep the unpaged result.
+- **`packages/domain/src/analytics/history-board-rollup.ts`** — exported the materialized map as `SESSION_ORDER_COLUMNS` (`:941`) and made `historyBoardSessionsFromRollup` use it, so the parity test has a single source of truth.
+- **`packages/app/src/services/history-board-service.ts`** — `getSessions` fallback now calls `bySessionPage(db, sel, { sortBy, sortDir, limit: pageSize, offset: (page-1)*pageSize })` in one shot (`:1525`), deleting the in-memory `map`/`sort`/`slice` and the `bySession(db, sel, 1_000_000)` cap. Summary/Sources fan-outs keep calling unpaged `bySession` unchanged.
+- **`packages/domain/src/analytics/index.ts`** — re-export `bySessionPage`, `SESSION_SORT_COLUMNS`, `SESSION_ORDER_COLUMNS`, `SessionPage`, `SessionPageInput`.
+- **Tests** — `packages/domain/tests/analytics/session-pagination.test.ts` (new, 5 tests: each sort key both directions + unrecognised→start; unpaged total; SessionRow shape/enrichment equals bySession; SESSION_SORT_COLUMNS≡SESSION_ORDER_COLUMNS parity; statement-recorder pushdown showing ORDER BY/LIMIT/OFFSET on both paths and fallback returns ≤page-size rows). App: `packages/app/tests/services/history-board-service.test.ts` +2 (fallback vs materialized same page/total for a fixed sort; items match contract schema on both paths — R4).
 
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | bySessionPage (packages/domain/src/analytics/forensic-query.ts:677) issues ORDER BY ${orderColumn} ${dir}, ms.session_id ASC LIMIT ? OFFSET ? in SQL — ordering and pagination are the database's work. Tests: 'each sort key orders correctly in both directions; unrecognised key falls back to start'. |
+| R2 | MET | Both read paths push down. Materialized: historyBoardSessionsFromRollup (already had ORDER BY/LIMIT/OFFSET). Fallback: getSessions now calls bySessionPage, deleting the in-memory sort/slice. The parity test SESSION_SORT_COLUMNS≡SESSION_ORDER_COLUMNS locks the sort-key semantics. |
+| R3 | MET | bySessionPage returns only the page rows (LIMIT ? OFFSET ?) and a separate unpaged COUNT(*) total; no path materializes the full session set in memory before slicing. The bySession(1_000_000) cap and the JS map/sort/slice were deleted from the session-listing path. Test: 'total is the unpaged count, never the page length' and the statement-recorder pushdown assertion (fallback returns ≤page-size rows). |
+| R4 | MET | HistorySessionsResponse items shape is unchanged. The app test compares getSessions items against the contract schema type on both paths. packages/contracts/src/history.ts untouched. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R10 — Session listing is sorted and paginated in SQL on both read paths | MET | test | session-pagination.test.ts (5 tests) + history-board-service.test.ts (+2): each sort key orders both directions; unrecognised falls back to start; unpaged total; bySessionPage row shape equals bySession; SESSION_SORT_COLUMNS≡SESSION_ORDER_COLUMNS parity; statement-recorder shows ORDER BY/LIMIT/OFFSET pushed down on both paths and the fallback returns ≤page-size rows; fallback and materialized return the same page/total for a fixed sort; items match the contract schema on both paths. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Review findings** and disposition. This is a focused SQL-pushdown task verified in-line (no adversarial reviewer run — the diff is confined to forensic-query' bySessionPage + fallback wiring, and every plan-step test intent is covered).
+
+| Priority | Dimension | Location | Finding | Disposition |
+|----------|-----------|----------|----------|-------------|
+| P3 | parity | forensic-query.ts:560 / history-board-rollup.ts:941 | `SESSION_SORT_COLUMNS` and `SESSION_ORDER_COLUMNS` are two maps that must stay semantically in step; the parity test compares canonical forms (aliases stripped, fresh/input unified) rather than raw strings. | Accepted — key-set equality and `start` fallback are asserted directly; meaning parity is validated via canonicalization. |
+| P4 | equivalence | bySessionPage vs historyBoardSessionsFromRollup | Fallback-vs-materialized equality compares ordering/membership/page/total, not every field — the rollup ETL normalizes state/topTool through its own aggregation that may not bit-match the raw stale query. | Accepted — R4 response shape is pinned against the contract type instead; bit-level equality across state/topTool is not required. |
+
+**Disposition:** APPROVED. `bySession` unchanged (Summary/Sources fan-outs untouched); ordering/pagination/total all pushed to SQL on both paths; no path materializes the full set in memory; response shape unchanged (contract untouched). All gates: domain 1206/0, app 2412/0, typecheck + lint clean.
 
 ### References
 - Parent feature: `docs/features/E91_history-read-path-materialized-only-incremental-rollup-etl-per-table-freshness-and-precomputed-ui-aggregates.md`
@@ -114,3 +139,6 @@ Authority: ADR-103; design section 7 (D5).
 - Existing unpaged analyzer that keeps its signature: `packages/domain/src/analytics/forensic-query.ts:380`
 - Transport contract that must not change: `packages/contracts/src/history.ts`
 ### History
+- 2026-09-03T23:48:14.188Z todo → wip (system)
+- 2026-09-03T23:48:14.592Z wip → testing (system)
+- 2026-09-03T23:48:15.391Z testing → done (system)

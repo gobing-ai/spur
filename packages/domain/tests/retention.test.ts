@@ -157,6 +157,14 @@ describe('data retention (0622 R8)', () => {
     test('a fresh database purges nothing and reports zero counts', async () => {
         const db = await createMigratedDb({ url: ':memory:' });
         const result = await runRetention(db, '/nonexistent-cwd', NOW);
-        expect(result).toEqual({ ruleEvalRuns: 0, queueJobs: 0, ledgerRows: 0, backupFiles: 0 });
+        // The four backups/rows purges reclaim nothing on a fresh DB.
+        expect(result.ruleEvalRuns).toBe(0);
+        expect(result.queueJobs).toBe(0);
+        expect(result.ledgerRows).toBe(0);
+        expect(result.backupFiles).toBe(0);
+        // Compaction may run or skip depending on dbstat availability; it must never crash the
+        // pass (best-effort) and must report a consistent before/after size.
+        expect(typeof result.compaction.ran).toBe('boolean');
+        expect(result.compaction.bytesBefore).toBe(result.compaction.bytesAfter);
     });
 });

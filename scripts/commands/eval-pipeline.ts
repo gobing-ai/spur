@@ -264,11 +264,31 @@ export async function createEvalRun(): Promise<EvalRun> {
     }
 }
 
-/** Remove the worktree and its private mutable state. */
+/**
+ * Remove the worktree and its private mutable state. Best-effort and idempotent.
+ *
+ * Cleanup runs from `finally` / `afterAll`, which must not throw away the primary outcome.
+ * Two robustness properties matter (leftover worktrees from a killed/busy run were observed):
+ * - A non-zero `git worktree remove` exit (busy file, stale process, already-gone dir) must not
+ *   skip the temp-parent removal — the temp dir is what leaks if it does. Prune stale
+ *   registrations (`git worktree prune`) as a fallback so a vanished worktree never wedges.
+ * - The temp parent is removed unconditionally after the git attempt; it is never left behind
+ *   by a throw.
+ *
+ * A genuinely-unremovable worktree (e.g. an admin dir a process still holds) is surfaced as a
+ * warning on stderr rather than thrown, so cleanup still reaches the temp parent and the caller
+ * sees both the primary result and the cleanup note.
+ */
 export async function removeEvalRun(run: EvalRun): Promise<void> {
     const removed = git(['worktree', 'remove', '--force', run.projectDir]);
     if (removed.exitCode !== 0) {
-        throw new Error(`eval-pipeline: worktree cleanup failed: ${removed.stderr || removed.stdout}`);
+        // Stale registration (gitdir already missing) or a still-open tree: prune the stale ref
+        // so it does not wedge future `worktree add`/`list`, and note the failure instead of
+        // aborting cleanup.
+        git(['worktree', 'prune']);
+        process.stderr.write(
+            `eval-pipeline: worktree cleanup failed (continuing with temp removal): ${removed.stderr || removed.stdout}\n`,
+        );
     }
     await rm(run.tempParent, { recursive: true, force: true });
 }

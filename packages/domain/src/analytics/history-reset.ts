@@ -9,6 +9,8 @@ export const SPUR_OWNED_HISTORY_TABLES: readonly string[] = [
     // session attribution
     'history_run_session',
     'history_task_session',
+    // tool alias mapping
+    'history_tool_alias_map',
     // derived analytics
     'history_daily_stats',
     'history_board_loop_findings',
@@ -16,10 +18,14 @@ export const SPUR_OWNED_HISTORY_TABLES: readonly string[] = [
     'history_board_model_stats',
     'history_board_ranked_steps',
     'history_board_rollup_meta',
+    'history_board_rollup_watermark',
+    'history_board_rollup_bucket',
     'history_board_session_stats',
     'history_board_skill_5m',
     'history_board_source_daily',
     'history_board_source_stats',
+    'history_board_dimension_daily',
+    'history_board_kpi_window',
     'history_board_tool_5m',
     'history_board_tool_stats',
 ];

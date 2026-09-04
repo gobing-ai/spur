@@ -15,10 +15,12 @@ import {
     sourceSummary,
     stepSupport,
     toolRollup,
+    toolSequenceQuery,
     topCacheWasteSteps,
     topStepsByDuration,
     topStepsByTokens,
 } from '../../src/analytics/forensic-query';
+import { applyCliMigrations, CLI_MIGRATIONS } from '../../src/migrations';
 
 const SESSION: ArtifactSelector = {
     since: null,
@@ -46,23 +48,9 @@ async function setup(): Promise<DbAdapter> {
         .filter(Boolean)) {
         await adapter.exec(statement);
     }
-    await adapter.exec(`CREATE TABLE history_run_session (
-        run_id TEXT NOT NULL, source TEXT NOT NULL, session_id TEXT, exactness TEXT NOT NULL,
-        mechanism TEXT NOT NULL, resolved_at TEXT NOT NULL
-    )`);
-    await adapter.exec('CREATE INDEX idx_history_run_session_run ON history_run_session (run_id)');
-    await adapter.exec(
-        'CREATE INDEX idx_history_run_session_source_session ON history_run_session (source, session_id)',
-    );
-    await adapter.exec(`CREATE TABLE task_run_links (
+    await applyCliMigrations(adapter);
+    await adapter.exec(`CREATE TABLE IF NOT EXISTS task_run_links (
         id TEXT PRIMARY KEY, wbs TEXT NOT NULL, run_id TEXT NOT NULL, kind TEXT NOT NULL, created_at TEXT NOT NULL
-    )`);
-    // Direct task↔session authority (0028_spur_cli_history_task_session, task 0722).
-    await adapter.exec(`CREATE TABLE history_task_session (
-        wbs TEXT NOT NULL, source TEXT NOT NULL, session_id TEXT NOT NULL,
-        exactness TEXT NOT NULL, mechanism TEXT NOT NULL, evidence_kind TEXT NOT NULL,
-        evidence_ref TEXT, resolved_at TEXT NOT NULL,
-        PRIMARY KEY (wbs, source, session_id)
     )`);
     return adapter;
 }
@@ -122,6 +110,7 @@ interface ToolCall {
     session_id: string;
     seq: number;
     tool_name: string;
+    effective_tool_name?: string;
     args_digest: string | null;
     status: string;
     duration_ms: number | null;
@@ -131,8 +120,8 @@ interface ToolCall {
 async function insertToolCall(db: DbAdapter, t: ToolCall): Promise<void> {
     await db.run(
         `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line,
-             session_id, seq, tool_name, args_digest, status, duration_ms, result_bytes, imported_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+             session_id, seq, tool_name, effective_tool_name, tool_name_alias, args_digest, status, duration_ms, result_bytes, imported_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         t.record_hash,
         t.message_hash,
         'claude',
@@ -141,6 +130,8 @@ async function insertToolCall(db: DbAdapter, t: ToolCall): Promise<void> {
         t.session_id,
         t.seq,
         t.tool_name,
+        t.effective_tool_name ?? (t.tool_name || 'unknown'),
+        t.effective_tool_name ?? (t.tool_name || 'unknown'),
         t.args_digest,
         t.status,
         t.duration_ms,
@@ -803,6 +794,59 @@ describe('task 0581 — per-step rankings and cache waste (R2-bounded)', () => {
         expect(glm?.stepsWithUsage).toBe(0);
         expect(glm?.stepsWithDuration).toBe(0);
         expect(glm?.stepsWithCacheRead).toBe(0);
+        db.close();
+    });
+});
+
+describe('persisted tool identity (0739 R1/R2/R5/R6/R7)', () => {
+    test('toolSequenceQuery filters on effective_tool_name, resolving tools extracted from wrappers (R2/R9)', async () => {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+
+        await db.run(
+            `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq, role, record_type, disposition, ts, model, input_tokens, output_tokens, cache_read_tokens, provenance, imported_at)
+             VALUES ('m-1', 'codex', 'codex.jsonl', 1, 's-1', 1, 'assistant', 'message', 'ok', '2026-08-21T10:00:00Z', 'gpt-5', 100, 50, 0, 'agent', '2026-08-21T12:00:00Z')`,
+        );
+
+        await db.run(
+            `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line, session_id, seq, tool_name, call_id, effective_tool_name, tool_name_alias, status, imported_at)
+             VALUES ('tc-1', 'm-1', 'codex', 'codex.jsonl', 1, 's-1', 1, '', 'call_bash_abc', 'bash', 'bash', 'success', '2026-08-21T12:00:00Z')`,
+        );
+
+        const seq = await toolSequenceQuery(
+            db,
+            { mode: 'consolidated', sel: { ...SESSION, sessionId: 's-1' } },
+            { toolNames: ['bash'] },
+        );
+        expect(seq.rows).toHaveLength(1);
+        expect(seq.rows[0]?.messageHash).toBe('m-1');
+        expect(seq.rows[0]?.effectiveToolName).toBe('bash');
+
+        db.close();
+    });
+
+    test('0034 backfills effective_tool_name and tool_name_alias for pre-existing rows (R5)', async () => {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db, CLI_MIGRATIONS.slice(0, 34));
+
+        await db.run(
+            `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq, role, record_type, disposition, ts, model, provenance, imported_at)
+             VALUES ('m-2', 'claude', 'claude.jsonl', 1, 's-2', 1, 'assistant', 'message', 'ok', '2026-08-21T10:00:00Z', 'gpt-5', 'agent', '2026-08-21T12:00:00Z')`,
+        );
+        await db.run(
+            `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line, session_id, seq, tool_name, call_id, status, imported_at)
+             VALUES ('tc-2', 'm-2', 'claude', 'claude.jsonl', 1, 's-2', 1, 'Bash', 'call_1', 'success', '2026-08-21T12:00:00Z')`,
+        );
+
+        await applyCliMigrations(db);
+
+        const row = await db.queryFirst<{ effective_tool_name: string; tool_name_alias: string }>(
+            'SELECT effective_tool_name, tool_name_alias FROM history_tool_call WHERE record_hash = ?',
+            'tc-2',
+        );
+        expect(row?.effective_tool_name).toBe('Bash');
+        expect(row?.tool_name_alias).toBe('Bash');
+
         db.close();
     });
 });

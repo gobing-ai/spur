@@ -656,7 +656,13 @@ describe('history command', () => {
             artifact: makeArtifact(),
             pruned: [],
             coverage: { refreshed: ['claude'], skipped: [], window: { since: null, until: null } },
-            retained: { ruleEvalRuns: 0, queueJobs: 0, ledgerRows: 0, backupFiles: 0 },
+            retained: {
+                ruleEvalRuns: 0,
+                queueJobs: 0,
+                ledgerRows: 0,
+                backupFiles: 0,
+                compaction: { ran: false, skippedReason: 'empty-db', bytesBefore: 0, bytesAfter: 0 },
+            },
         });
         const cwd = makeTmpCwd();
         process.env[HISTORY_REFRESH_CONTEXT_ENV] = JSON.stringify({
@@ -807,7 +813,13 @@ describe('history command', () => {
             artifact: makeArtifact(),
             pruned: [],
             coverage: { refreshed: ['claude'], skipped: ['gemini'], window: { since: null, until: null } },
-            retained: { ruleEvalRuns: 0, queueJobs: 0, ledgerRows: 0, backupFiles: 0 },
+            retained: {
+                ruleEvalRuns: 0,
+                queueJobs: 0,
+                ledgerRows: 0,
+                backupFiles: 0,
+                compaction: { ran: false, skippedReason: 'empty-db', bytesBefore: 0, bytesAfter: 0 },
+            },
         });
 
         try {
@@ -852,7 +864,13 @@ describe('history command', () => {
             artifact: makeArtifact(),
             pruned: [],
             coverage: { refreshed: ['claude'], skipped: ['gemini'], window: { since: null, until: null } },
-            retained: { ruleEvalRuns: 0, queueJobs: 0, ledgerRows: 0, backupFiles: 0 },
+            retained: {
+                ruleEvalRuns: 0,
+                queueJobs: 0,
+                ledgerRows: 0,
+                backupFiles: 0,
+                compaction: { ran: false, skippedReason: 'empty-db', bytesBefore: 0, bytesAfter: 0 },
+            },
         });
 
         try {

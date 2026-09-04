@@ -820,6 +820,196 @@ ALTER TABLE history_board_tool_stats ADD COLUMN output_tokens INTEGER NOT NULL D
 ALTER TABLE history_board_tool_stats ADD COLUMN duration_ms INTEGER NOT NULL DEFAULT 0;
 `;
 
+/**
+ * Migration 0034: Persist effective_tool_name and tool_name_alias on history_tool_call,
+ * create history_tool_alias_map, supporting indexes, and backfill existing rows.
+ */
+export const HISTORY_TOOL_IDENTITY_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS history_tool_alias_map (
+    source TEXT NOT NULL,
+    effective_tool_name TEXT NOT NULL,
+    alias TEXT NOT NULL,
+    PRIMARY KEY (source, effective_tool_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_history_tool_call_effective_tool_name
+ON history_tool_call (effective_tool_name);
+
+CREATE INDEX IF NOT EXISTS idx_history_tool_call_alias
+ON history_tool_call (tool_name_alias);
+
+UPDATE history_tool_call SET
+    effective_tool_name = CASE
+        WHEN tool_name IS NOT NULL AND TRIM(tool_name) != '' AND tool_name != 'unknown'
+        THEN TRIM(tool_name)
+        WHEN json_valid(args_raw) AND COALESCE(
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.tool') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.tool_name') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.toolName') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.name') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.command') AS TEXT)), '')
+        ) IS NOT NULL
+        THEN COALESCE(
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.tool') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.tool_name') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.toolName') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.name') AS TEXT)), ''),
+            NULLIF(TRIM(CAST(json_extract(args_raw, '$.command') AS TEXT)), '')
+        )
+        WHEN call_id LIKE 'call_bash_%' THEN 'bash'
+        WHEN call_id LIKE 'call_read_%' THEN 'read'
+        WHEN call_id LIKE 'call_edit_%' THEN 'edit'
+        WHEN call_id LIKE 'call_write_%' THEN 'write'
+        WHEN call_id LIKE 'call_grep_%' THEN 'grep'
+        WHEN call_id LIKE 'call_find_%' THEN 'find'
+        WHEN call_id LIKE 'call_ls_%' THEN 'ls'
+        ELSE 'unknown'
+    END
+WHERE effective_tool_name = 'unknown';
+
+UPDATE history_tool_call SET
+    tool_name_alias = effective_tool_name
+WHERE tool_name_alias = 'unknown';
+`;
+
+/**
+ * Migration 0035: Complete measure vector on existing rollup tables.
+ * Adds cache_write_tokens, assistant_duration_samples, and renames allocated
+ * token columns to _alloc names on history_board_tool_5m and history_board_tool_stats.
+ */
+export const HISTORY_MEASURE_VECTOR_SCHEMA_SQL = `
+ALTER TABLE history_daily_stats ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE history_daily_stats ADD COLUMN assistant_duration_samples INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE history_board_message_5m ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE history_board_session_stats ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE history_board_session_stats ADD COLUMN assistant_duration_samples INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE history_board_model_stats ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE history_board_source_stats ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE history_board_source_daily ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE history_board_tool_5m RENAME COLUMN fresh_input_tokens TO fresh_input_tokens_alloc;
+ALTER TABLE history_board_tool_5m RENAME COLUMN cache_read_tokens TO cache_read_tokens_alloc;
+ALTER TABLE history_board_tool_5m RENAME COLUMN output_tokens TO output_tokens_alloc;
+ALTER TABLE history_board_tool_5m ADD COLUMN cache_write_tokens_alloc REAL NOT NULL DEFAULT 0;
+
+DROP TABLE IF EXISTS history_board_tool_stats;
+CREATE TABLE history_board_tool_stats (
+    tool_name                 TEXT NOT NULL,
+    skill_name                TEXT NOT NULL,
+    calls                     INTEGER NOT NULL,
+    errors                    INTEGER NOT NULL,
+    fresh_input_tokens_alloc  REAL NOT NULL DEFAULT 0,
+    cache_read_tokens_alloc   REAL NOT NULL DEFAULT 0,
+    cache_write_tokens_alloc  REAL NOT NULL DEFAULT 0,
+    output_tokens_alloc       REAL NOT NULL DEFAULT 0,
+    duration_ms               INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (tool_name, skill_name)
+);
+`;
+
+/**
+ * Migration 0036: Incremental rollup refresh watermark (task 0741).
+ * Per-table refresh watermark over `imported_at`, the materialized bucket range,
+ * and the index that makes the watermark predicate range-scan instead of
+ * scanning the whole `history_message` table. All statements are idempotent
+ * (`CREATE TABLE / INDEX IF NOT EXISTS`), so the migration applies cleanly on a
+ * database that already has it.
+ */
+export const HISTORY_ROLLUP_WATERMARK_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS history_board_rollup_watermark (
+    table_name            TEXT PRIMARY KEY,
+    imported_at_watermark TEXT NOT NULL,
+    definition_version    TEXT NOT NULL,
+    updated_at            TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS history_board_rollup_bucket (
+    table_name   TEXT NOT NULL,
+    bucket_start TEXT NOT NULL,
+    PRIMARY KEY (table_name, bucket_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_history_message_imported_at
+    ON history_message (imported_at);
+`;
+
+/**
+ * Migration 0037: Dimension marts (task 0743).
+ * Two day-grain mart tables carrying the ADR-106 nine-measure additive vector for the
+ * four materialized Summary dimensions. Every measure column is nullable for exactly one
+ * reason: ADR-106 records a measure that is not well defined at a dimension as NULL, never
+ * as a zero that would be indistinguishable from a measured absence of activity.
+ *
+ *   - tool  dimension: skill_calls is not applicable -> NULL
+ *   - skill dimension: tool_calls is not applicable -> NULL
+ *   - source dimension: duration_ms / duration_samples are not applicable -> NULL
+ *
+ * `history_board_kpi_window` stores the current and previous aggregate window KPIs for a
+ * named range window. All statements are idempotent (CREATE TABLE IF NOT EXISTS).
+ */
+export const HISTORY_DIMENSION_MARTS_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS history_board_dimension_daily (
+    dimension           TEXT NOT NULL,
+    dimension_key       TEXT NOT NULL,
+    day                 TEXT NOT NULL,
+    -- ADR-106 nine-member additive measure vector. NULLABLE, never a NOT NULL column with a
+    -- zero default: a not-applicable measure is stored as NULL.
+    messages            INTEGER,
+    tool_calls          INTEGER,
+    skill_calls         INTEGER,
+    fresh_input_tokens  REAL,
+    cache_read_tokens   REAL,
+    cache_write_tokens  REAL,
+    output_tokens       REAL,
+    duration_ms         INTEGER,
+    duration_samples    INTEGER,
+    -- Per-(dimension, key, day) tool-error count (not part of the ADR-106 additive vector but
+    -- needed by the top-tools error-rate projection. NULLABLE like every other scalar.
+    errors              INTEGER,
+    PRIMARY KEY (dimension, dimension_key, day)
+);
+
+CREATE TABLE IF NOT EXISTS history_board_kpi_window (
+    range_key           TEXT NOT NULL,
+    window_kind         TEXT NOT NULL CHECK (window_kind IN ('current', 'previous')),
+    -- ADR-106 nine-member additive measure vector, plus the non-additive totals the KPI
+    -- projection needs (sessions and tool_errors are counts, never summed as means).
+    messages            INTEGER,
+    tool_calls          INTEGER,
+    skill_calls         INTEGER,
+    fresh_input_tokens  REAL,
+    cache_read_tokens   REAL,
+    cache_write_tokens  REAL,
+    output_tokens       REAL,
+    duration_ms         INTEGER,
+    duration_samples    INTEGER,
+    sessions            INTEGER,
+    tool_errors         INTEGER,
+    PRIMARY KEY (range_key, window_kind)
+);
+
+CREATE INDEX IF NOT EXISTS idx_history_board_dimension_daily_day
+    ON history_board_dimension_daily (dimension, day);
+`;
+
+/**
+ * Migration 0038: Retention compaction run-marker (task 0746).
+ * A tiny KV table recording when the DB compaction last ran, so the daily pipeline can gate
+ * compaction on a minimum interval without re-reading the file mtime. Idempotent.
+ */
+export const RETENTION_COMPACTION_META_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS spur_retention_meta (
+    kind    TEXT NOT NULL,
+    ran_at  INTEGER NOT NULL,
+    PRIMARY KEY (kind)
+);
+`;
+
 export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
     // Renamed from `0001_spur_team_inbox` so the filename carries the
@@ -946,6 +1136,33 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         // 0748 R2: record the applied importer schema version in the Spur migration ledger.
         id: '0033_spur_cli_importer_schema_version',
         sql: `INSERT OR REPLACE INTO "__spur_cli_migrations" (id, applied_at) VALUES ('${IMPORTER_SCHEMA_LEDGER_PREFIX}${HISTORY_IMPORT_SCHEMA_VERSION}', strftime('%s', 'now') * 1000);`,
+    },
+    {
+        // 0739: Persist tool identity at import: effective_tool_name, tool_name_alias, and alias map.
+        id: '0034_spur_cli_history_tool_identity',
+        sql: HISTORY_TOOL_IDENTITY_SCHEMA_SQL,
+    },
+    {
+        // 0740: Complete measure vector on existing rollup tables and enforce additivity invariant.
+        id: '0035_spur_cli_history_measure_vector',
+        sql: HISTORY_MEASURE_VECTOR_SCHEMA_SQL,
+    },
+    {
+        // 0741: Incremental rollup refresh watermark, materialized bucket range, and
+        // the history_message(imported_at) index. Idempotent CREATE TABLE/INDEX IF NOT EXISTS.
+        id: '0036_spur_cli_history_rollup_watermark',
+        sql: HISTORY_ROLLUP_WATERMARK_SCHEMA_SQL,
+    },
+    {
+        // 0743: Dimension marts — day-grain Summary series and KPI-window table.
+        // All statements idempotent (CREATE TABLE/INDEX IF NOT EXISTS).
+        id: '0037_spur_cli_history_dimension_marts',
+        sql: HISTORY_DIMENSION_MARTS_SCHEMA_SQL,
+    },
+    {
+        // 0746: Retention compaction run-marker table (CREATE TABLE IF NOT EXISTS).
+        id: '0038_spur_cli_retention_compaction_meta',
+        sql: RETENTION_COMPACTION_META_SCHEMA_SQL,
     },
 ];
 
@@ -1127,6 +1344,22 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
         const queueJobsActiveIndexSkip =
             migration.id === '0027_spur_cli_history_refresh_active_unique' &&
             !(await tableExists(adapter, 'queue_jobs'));
+
+        const historyToolIdentitySkip =
+            migration.id === '0034_spur_cli_history_tool_identity' &&
+            !(await tableExists(adapter, 'history_tool_call'));
+
+        const historyMeasureVectorSkip =
+            migration.id === '0035_spur_cli_history_measure_vector' &&
+            (!(await tableExists(adapter, 'history_board_message_5m')) ||
+                (await columnExists(adapter, 'history_board_message_5m', 'cache_write_tokens')));
+
+        const historyRollupWatermarkSkip =
+            migration.id === '0036_spur_cli_history_rollup_watermark' &&
+            ((await tableExists(adapter, 'history_board_rollup_watermark')) ||
+                !(await tableExists(adapter, 'history_message')) ||
+                !(await columnExists(adapter, 'history_message', 'imported_at')));
+
         if (
             shouldApplySql &&
             !sequenceIndexSkip &&
@@ -1140,11 +1373,19 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !historyBoardToolStatsColumnsSkip &&
             !callIdSkip &&
             !tsNullableSkip &&
-            !queueJobsActiveIndexSkip
+            !queueJobsActiveIndexSkip &&
+            !historyToolIdentitySkip &&
+            !historyMeasureVectorSkip &&
+            !historyRollupWatermarkSkip
         ) {
             for (const statement of splitSqlStatements(migration.sql)) {
                 await adapter.exec(statement);
             }
+        }
+        if (historyToolIdentitySkip && !(await tableExists(adapter, 'history_tool_alias_map'))) {
+            await adapter.exec(
+                'CREATE TABLE IF NOT EXISTS history_tool_alias_map (source TEXT NOT NULL, effective_tool_name TEXT NOT NULL, alias TEXT NOT NULL, PRIMARY KEY (source, effective_tool_name));',
+            );
         }
         await adapter.run(
             'INSERT INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)',

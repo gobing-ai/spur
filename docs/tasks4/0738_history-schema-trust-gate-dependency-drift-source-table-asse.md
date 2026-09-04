@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "History schema trust gate: dependency drift, source-table assertion, and version-mismatch abort"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-03T16:43:03.962Z
-updated_at: "2026-09-03T17:27:15.159Z"
+updated_at: "2026-09-03T20:23:19.900Z"
 feature_id: E91
 priority: P1
 tags: ["history", "schema", "guard"]
@@ -20,11 +20,11 @@ The E91 investigation found `refreshHistoryRollups` (`packages/app/src/services/
 
 Nothing in the project check could see this. The importer exports no schema version, and Spur's migration ledger (`__spur_cli_migrations`, `packages/domain/src/migrations.ts:966`) records nothing about the importer schema it depends on. This task makes the failure impossible to reach silently: the refresh must be able to vouch for the schema it is about to write against, before it writes anything.
 ### Requirements
-- [ ] R1. Resync the workspace to the lockfile and verify `refreshHistoryRollups` completes without a `no such table` error, writing a new `history_board_rollup_meta` version and a non-zero `history_board_skill_5m` row count.
-- [ ] R2. A schema guard in the test suite asserts every table name read by the rollup refresh path exists in the schema produced by applying both the Spur migrations and the importer schema, failing with the offending table name.
-- [ ] R3. A dependency drift guard in `spur-check` compares every installed `@gobing-ai/ts-*` version against its locked version and fails naming each mismatch.
-- [ ] R4. A rollup refresh requested against a database whose recorded importer schema version does not match the installed package aborts before writing any rollup row, naming recorded version, installed version, and remediation, leaving existing rollups readable and unmodified.
-- [ ] R5. A migration-ordering test asserts every migration this feature introduces uses the next four-digit prefix and has a corresponding domain registry entry, and that applying the set to a populated database succeeds without data loss.
+- [x] R1. Resync the workspace to the lockfile and verify `refreshHistoryRollups` completes without a `no such table` error, writing a new `history_board_rollup_meta` version and a non-zero `history_board_skill_5m` row count.
+- [x] R2. A schema guard in the test suite asserts every table name read by the rollup refresh path exists in the schema produced by applying both the Spur migrations and the importer schema, failing with the offending table name.
+- [x] R3. A dependency drift guard in `spur-check` compares every installed `@gobing-ai/ts-*` version against its locked version and fails naming each mismatch.
+- [x] R4. A rollup refresh requested against a database whose recorded importer schema version does not match the installed package aborts before writing any rollup row, naming recorded version, installed version, and remediation, leaving existing rollups readable and unmodified.
+- [x] R5. A migration-ordering test asserts every migration this feature introduces uses the next four-digit prefix and has a corresponding domain registry entry, and that applying the set to a populated database succeeds without data loss.
 ### Acceptance Criteria
 ```gherkin
 Feature: History read path materialized-only: incremental rollup ETL, per-table freshness, and precomputed UI aggregates
@@ -148,17 +148,53 @@ Authority: ADR-103 (D1), ADR-104, ADR-105; `docs/design/history-incremental-mate
 6. **R5 (migration ordering).** Assert every migration this feature introduces uses the next four-digit prefix, has a matching `drizzle/<id>.sql` and an identically-named `CLI_MIGRATIONS` entry, and that applying the set to a populated database preserves row counts on every pre-existing table.
 7. Run `bun run spur-check` and the domain + app test suites.
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/services/history-analysis-service.ts:4` |
+| `packages/app/src/services/history-analysis-service.ts:41` |
+| `packages/app/src/services/history-analysis-service.ts:63` |
+| `packages/app/tests/services/history-analysis-service.test.ts:320` |
+| `packages/app/tests/services/history-analysis-service.test.ts:4` |
+| `packages/domain/src/analytics/history-board-rollup.ts:22` |
+| `packages/domain/src/analytics/index.ts:129` |
+| `packages/domain/tests/analytics/history-board-rollup.test.ts:1577` |
+| `packages/domain/tests/analytics/history-board-rollup.test.ts:21` |
+| `packages/domain/tests/analytics/history-board-rollup.test.ts:25` |
+| `packages/domain/tests/analytics/history-board-rollup.test.ts:3` |
+| `packages/domain/tests/dao/migrations.test.ts:885` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/tests/services/history-analysis-service.test.ts:316 — test 'completes against schema writing history_version and non-zero history_board_skill_5m (R1)' verifies refreshHistoryRollups completes without missing-table error and populates history_board_skill_5m; suite ran fresh: 3 pass, 0 fail. |
+| R2 | MET | packages/domain/src/analytics/history-board-rollup.ts:28 — exports ROLLUP_SOURCE_TABLES; packages/domain/tests/analytics/history-board-rollup.test.ts:1571 — schema guard asserts each table exists in combined schema and fails naming absent table; suite ran fresh: 42 pass, 0 fail. |
+| R3 | MET | scripts/commands/dependency-drift-check.ts wired into spur-check before lint (package.json:80); golden path run: 'bun scripts/commands/dependency-drift-check.ts' -> exit 0; scripts/commands/dependency-drift-check.test.ts -> 2 pass, 0 fail. |
+| R4 | MET | packages/app/src/services/history-analysis-service.ts:46 — HistorySchemaVersionMismatchError thrown before any write when recorded importer schema version drifts; packages/app/tests/services/history-analysis-service.test.ts:349 — asserts abort fires before writes and pre-existing rollups remain untouched. |
+| R5 | MET | packages/domain/tests/dao/migrations.test.ts:887 — test '0738 R5/R13: every migration has next four-digit prefix, matching registry entry, and applies to populated DB without data loss' passed fresh: 54 pass, 0 fail. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Rollup refresh completes against the locked importer schema | MET | test | packages/app/tests/services/history-analysis-service.test.ts:316 — 3 pass, 0 fail (fresh) |
+| Scenario: R2 — Every rollup source table is asserted against the importer-applied schema | MET | test | packages/domain/tests/analytics/history-board-rollup.test.ts:1571 — 42 pass, 0 fail (fresh) |
+| Scenario: R13 — Schema changes ship as ordered migrations | MET | test | packages/domain/tests/dao/migrations.test.ts:887 — 54 pass, 0 fail (fresh) |
+| Scenario: R17 — Installed workspace dependencies match the lockfile at check time | MET | command | bun scripts/commands/dependency-drift-check.ts -> exit 0, 'all @gobing-ai/ts-* packages match locked versions' (fresh); wired into spur-check (package.json:80) |
+| Scenario: R18 — Rollup refresh refuses to run against a schema it cannot vouch for | MET | test | packages/app/tests/services/history-analysis-service.test.ts:349 — 3 pass, 0 fail (fresh) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - Parent feature: `docs/features/E91_history-read-path-materialized-only-incremental-rollup-etl-per-table-freshness-and-precomputed-ui-aggregates.md`
 - `docs/00_ADR.md` — ADR-103 (D1, materialized-only read path), ADR-104 (DDL authority split), ADR-105 (three-axis ownership)
@@ -169,3 +205,6 @@ Authority: ADR-103 (D1), ADR-104, ADR-105; `docs/design/history-incremental-mate
 - Surface governance for internal commands: `docs/design/harness-surface-governance.md` (ADR-065)
 - Prerequisite: task 0748 (exports `HISTORY_IMPORT_SCHEMA_VERSION` and `readRecordedImporterSchemaVersion`)
 ### History
+- 2026-09-03T20:17:24.508Z todo → wip (system)
+- 2026-09-03T20:23:02.753Z wip → testing (system)
+- 2026-09-03T20:23:19.900Z testing → done (system)

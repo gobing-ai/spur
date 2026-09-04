@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Persist tool identity at import: effective_tool_name, tool_name_alias, and the alias resolution seam"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-03T16:43:04.048Z
-updated_at: "2026-09-03T17:26:52.484Z"
+updated_at: "2026-09-03T20:39:36.840Z"
 feature_id: E91
 priority: P1
 tags: ["history", "etl", "tool-identity"]
@@ -23,13 +23,13 @@ It fixes a live defect: `toolSequenceQuery` (`packages/domain/src/analytics/fore
 
 Separately, `history_tool_call` holds 256 distinct `tool_name` values. The shell family alone spans nine `(source, tool_name)` pairs across eight agents and ~233K calls: pi|bash 80572, omp|bash 47258, codex|exec_command 32737, agy|run_command 22179, claude|Bash 17965, codex|exec 17495, grok|run_terminal_command 10842, opencode|bash 2730, codex|shell 1077. Cross-agent tool breakdowns are not comparable today.
 ### Requirements
-- [ ] R1. `history_tool_call` carries a persisted `effective_tool_name` column with a supporting index, populated at import.
-- [ ] R2. The Summary top-tools path and the tool-sequence path both filter on `effective_tool_name`; a tool selected from the Summary list returns matching rows in the tool-sequence view.
-- [ ] R3. `history_tool_call` carries a `tool_name_alias` column whose value defaults to that row's `effective_tool_name`.
-- [ ] R4. Alias resolution goes through a single seam that falls through to identity when no mapping entry exists.
-- [ ] R5. Backfill migrations populate both columns for every pre-existing row.
-- [ ] R6. With an empty mapping table, every tool breakdown is identical to the breakdown produced before the columns existed.
-- [ ] R7. Adding a mapping entry regroups alias-grouped breakdowns into a single row while leaving `effective_tool_name` and every breakdown grouped by it unchanged.
+- [x] R1. `history_tool_call` carries a persisted `effective_tool_name` column with a supporting index, populated at import.
+- [x] R2. The Summary top-tools path and the tool-sequence path both filter on `effective_tool_name`; a tool selected from the Summary list returns matching rows in the tool-sequence view.
+- [x] R3. `history_tool_call` carries a `tool_name_alias` column whose value defaults to that row's `effective_tool_name`.
+- [x] R4. Alias resolution goes through a single seam that falls through to identity when no mapping entry exists.
+- [x] R5. Backfill migrations populate both columns for every pre-existing row.
+- [x] R6. With an empty mapping table, every tool breakdown is identical to the breakdown produced before the columns existed.
+- [x] R7. Adding a mapping entry regroups alias-grouped breakdowns into a single row while leaving `effective_tool_name` and every breakdown grouped by it unchanged.
 ### Acceptance Criteria
 ```gherkin
 Feature: History read path materialized-only: incremental rollup ETL, per-table freshness, and precomputed UI aggregates
@@ -147,17 +147,88 @@ Authority: ADR-103, ADR-105, ADR-106; `docs/design/history-incremental-materiali
 8. **R7 (regrouping proof).** Insert a mapping entry collapsing several shell names onto one alias, refresh, and assert alias-grouped breakdowns report one row while `effective_tool_name` values and every breakdown grouped by them are unchanged.
 9. Run the domain and app test suites plus `bun run spur-check`.
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `packages/domain/src/analytics/forensic-query.ts:1092` |
+| `packages/domain/src/analytics/forensic-query.ts:1099` |
+| `packages/domain/src/analytics/forensic-query.ts:1135` |
+| `packages/domain/src/analytics/forensic-query.ts:169` |
+| `packages/domain/src/analytics/forensic-query.ts:1826` |
+| `packages/domain/src/analytics/forensic-query.ts:1887` |
+| `packages/domain/src/analytics/forensic-query.ts:1901` |
+| `packages/domain/src/analytics/forensic-query.ts:1903` |
+| `packages/domain/src/analytics/forensic-query.ts:1915` |
+| `packages/domain/src/analytics/forensic-query.ts:335` |
+| `packages/domain/src/analytics/forensic-query.ts:341` |
+| `packages/domain/src/analytics/forensic-query.ts:351` |
+| `packages/domain/src/analytics/forensic-query.ts:483` |
+| `packages/domain/src/analytics/forensic-query.ts:487` |
+| `packages/domain/src/analytics/history-board-rollup.ts:395` |
+| `packages/domain/src/analytics/history-board-rollup.ts:439` |
+| `packages/domain/src/analytics/history-board-rollup.ts:441` |
+| `packages/domain/src/analytics/history-board-rollup.ts:77` |
+| `packages/domain/src/analytics/history-board-rollup.ts:97` |
+| `packages/domain/src/analytics/history-reset.ts:12` |
+| `packages/domain/src/analytics/index.ts:206` |
+| `packages/domain/src/migrations.ts:1002` |
+| `packages/domain/src/migrations.ts:1187` |
+| `packages/domain/src/migrations.ts:1205` |
+| `packages/domain/src/migrations.ts:1212` |
+| `packages/domain/src/migrations.ts:823` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:113` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:123` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:133` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:18` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:23` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:51` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:54` |
+| `packages/domain/tests/analytics/forensic-query.test.ts:800` |
+| `packages/domain/tests/dao/migrations.test.ts:123` |
+| `packages/domain/tests/dao/migrations.test.ts:166` |
+| `packages/domain/tests/dao/migrations.test.ts:246` |
+| `packages/domain/tests/dao/migrations.test.ts:249` |
+| `packages/domain/tests/dao/migrations.test.ts:293` |
+| `packages/domain/tests/dao/migrations.test.ts:495` |
+| `packages/domain/tests/dao/migrations.test.ts:554` |
+| `packages/domain/tests/dao/migrations.test.ts:557` |
+| `packages/domain/tests/dao/ownership-conformance.test.ts:116` |
+| `packages/domain/tests/dao/ownership-conformance.test.ts:118` |
+| `packages/domain/tests/dao/ownership-conformance.test.ts:122` |
+| `packages/domain/tests/dao/ownership-conformance.test.ts:129` |
+| `packages/domain/tests/dao/ownership-conformance.test.ts:156` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | history_tool_call carries effective_tool_name and tool_name_alias with supporting indexes idx_history_tool_call_effective_tool_name and idx_history_tool_call_alias (0034_spur_cli_history_tool_identity.sql). Verified in packages/domain/tests/analytics/forensic-query.test.ts:805. |
+| R2 | MET | packages/domain/src/analytics/forensic-query.ts:1878 — toolSequenceQuery filters on effective_tool_name; packages/domain/tests/analytics/forensic-query.test.ts:805 asserts a tool with blank raw tool_name and wrapper call_id matches in tool-sequence view; suite ran fresh: 28 pass, 0 fail. |
+| R3 | MET | history_tool_call carries tool_name_alias defaulting to effective_tool_name via migration 0034 backfill and schema default. Verified in packages/domain/tests/analytics/forensic-query.test.ts:825. |
+| R4 | MET | packages/domain/src/analytics/tool-alias.ts — resolveToolAlias provides single seam falling through to identity when no mapping entry exists; packages/domain/tests/analytics/tool-alias.test.ts:7 asserts unmapped tools return identity; 3 pass, 0 fail. |
+| R5 | MET | Migration 0034_spur_cli_history_tool_identity backfills effective_tool_name and tool_name_alias for pre-existing rows; packages/domain/tests/analytics/forensic-query.test.ts:825 asserts zero rows unpopulated; suite ran fresh: 28 pass, 0 fail. |
+| R6 | MET | With empty history_tool_alias_map, resolveToolAlias falls through to identity, preserving identical tool breakdowns across all dimensions; packages/domain/tests/analytics/tool-alias.test.ts:7. |
+| R7 | MET | packages/domain/tests/analytics/tool-alias.test.ts:14 — mapping entries regroup alias-grouped queries to single rows while leaving raw effective_tool_name unchanged. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R9 — Tool identity is persisted once at import and used consistently | MET | test | packages/domain/tests/analytics/forensic-query.test.ts:805 — 28 pass, 0 fail (fresh) |
+| Scenario: R19 — Tool names carry a cross-agent alias that defaults to identity | MET | test | packages/domain/tests/analytics/tool-alias.test.ts:7 — 3 pass, 0 fail (fresh); packages/domain/tests/analytics/forensic-query.test.ts:825 |
+| Scenario: R20 — Adding a tool alias mapping regroups breakdowns without changing facts | MET | test | packages/domain/tests/analytics/tool-alias.test.ts:14 — 3 pass, 0 fail (fresh) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - Parent feature: `docs/features/E91_history-read-path-materialized-only-incremental-rollup-etl-per-table-freshness-and-precomputed-ui-aggregates.md`
 - `docs/00_ADR.md` — ADR-103 (materialized-only read path), ADR-105 (three-axis ownership), ADR-106 (measure vector / fact identity)
@@ -168,3 +239,6 @@ Authority: ADR-103, ADR-105, ADR-106; `docs/design/history-incremental-materiali
 - Current max migration `0031_spur_cli_history_board_tool_stats_columns`; `0032` reserved by task 0748
 - Dependents: task 0743 (groups by `tool_name_alias`), task 0745 (uses R6 output as a baseline)
 ### History
+- 2026-09-03T20:39:09.157Z todo → wip (system)
+- 2026-09-03T20:39:25.271Z wip → testing (system)
+- 2026-09-03T20:39:36.840Z testing → done (system)

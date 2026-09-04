@@ -45,6 +45,7 @@ export {
     bucketedTokenSeries,
     buildMessageWhere,
     bySession,
+    bySessionPage,
     bySkill,
     byTool,
     type CacheWasteAggregateRow,
@@ -67,6 +68,9 @@ export {
     type ModelComparisonRow,
     messageRollup,
     modelComparison,
+    SESSION_SORT_COLUMNS,
+    type SessionPage,
+    type SessionPageInput,
     type SessionRow,
     type SkillStatRow,
     type SourceDelta,
@@ -97,6 +101,22 @@ export {
     topStepsByTokens,
 } from './forensic-query';
 export {
+    deriveDimensionMarts,
+    deriveDimensionMartsOps,
+    type HistoryBoardDimensionDailyRow,
+    type HistoryBoardKpiWindowRow,
+    historyBoardDimensionDailyFromMart,
+    historyBoardKpiWindowFromMart,
+    historyBoardKpiWindowRowsFromMart,
+    historyBoardPreviousWindowKpiFromMart,
+    historyBoardSummaryFromMart,
+    MART_DIMENSIONS,
+    MART_MIN_RANGE_DAYS,
+    type MartDimension,
+    resolveSummaryReadPath,
+    type SummaryReadPath,
+} from './history-board-marts';
+export {
     HISTORY_BOARD_ACTIVITY_DAYS,
     type HistoryBoardAggregateRow,
     type HistoryBoardDailyRollupRow,
@@ -126,7 +146,11 @@ export {
     historyBoardSkillBreakdownFromRollup,
     historyBoardSourcesFromRollup,
     historyBoardSummaryFromRollup,
+    ROLLUP_DEFINITION_VERSION,
+    ROLLUP_SOURCE_TABLES,
+    refreshHistoryBoardRollupsIncremental,
     replaceHistoryBoardRollups,
+    SESSION_ORDER_COLUMNS,
     skillCallRollup,
 } from './history-board-rollup';
 export {
@@ -181,6 +205,18 @@ export {
     roleTokenSummary,
 } from './role-tokens';
 export {
+    ALL_ROLLUP_TABLES,
+    BUCKETED_ROLLUP_TABLES,
+    EMPTY_ROLLUP_WATERMARK,
+    GLOBAL_RANKED_ROLLUP_TABLES,
+    KEYED_ROLLUP_TABLES,
+    type RollupTableFreshness,
+    type RollupWatermarkState,
+    readRollupWatermarks,
+    rollupTableFreshness,
+    writeRollupWatermark,
+} from './rollup-watermark';
+export {
     type ActionCost,
     type ActionCostAttribution,
     type ActionRunCostRow,
@@ -202,6 +238,11 @@ export {
     loadAttributionEvidence,
     type TaskAttributionSummary,
 } from './task-attribution';
+export {
+    loadToolAliasMap,
+    resolveToolAlias,
+    resolveToolAliasFromDb,
+} from './tool-alias';
 export type { AnalyticsSummary, ClaudeUsagePayload, CostRecord, ModelPricing, TokenTotals } from './types';
 export {
     type CostCoverageStat,

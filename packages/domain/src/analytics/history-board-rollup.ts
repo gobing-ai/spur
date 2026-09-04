@@ -10,75 +10,58 @@ import type {
     StepRow,
     ToolRollupRow,
 } from './forensic-query';
+import {
+    cacheWasteAggregate,
+    loops,
+    messageRollup,
+    sourceSummary,
+    toolRollup,
+    topCacheWasteSteps,
+    topStepsByDuration,
+    topStepsByTokens,
+} from './forensic-query';
+import { deriveDimensionMarts, deriveDimensionMartsOps } from './history-board-marts';
+import {
+    ALL_ROLLUP_TABLES,
+    BUCKETED_ROLLUP_TABLES,
+    GLOBAL_RANKED_ROLLUP_TABLES,
+    KEYED_ROLLUP_TABLES,
+    ROLLUP_DEFINITION_VERSION,
+    readRollupWatermarks,
+    rollupTableFreshness,
+    writeRollupWatermark,
+} from './rollup-watermark';
+import { HISTORY_BOARD_ACTIVITY_DAYS, RESOLVED_TOOL_NAME_SQL } from './tool-name-sql';
 
-// Keep the first row (MIN rowid) per request_id. NOT EXISTS form: only rows carrying a
-// request_id (retries, a tiny fraction of the corpus) pay a correlated lookup, instead of
-// a bloom-filter membership check over every row — same representative, far cheaper scan.
+// Keep the FINAL row (MAX rowid) per request_id. A streaming response re-emits an
+// assistant message while it streams; the final row carries the complete cumulative usage
+// (task 0624 R1), so the representative is MAX rowid — matching forensic-query's
+// MESSAGE_DEDUP. NOT EXISTS form: only rows carrying a request_id (retries, a tiny fraction
+// of the corpus) pay a correlated lookup, instead of a bloom-filter membership check over
+// every row — same representative, far cheaper scan.
 const MESSAGE_DEDUP = `(m.request_id IS NULL OR NOT EXISTS (
     SELECT 1 FROM history_message o
-    WHERE o.request_id = m.request_id AND o.rowid < m.rowid
+    WHERE o.request_id = m.request_id AND o.rowid > m.rowid
 ))`;
 
 /**
- * SQL expression resolving the effective tool name for a history_tool_call `tc` row.
- * Recovers missing/empty tool names from JSON `args_raw` payload fields or `call_id` prefixes,
- * defaulting unresolved tools to `'unknown'`.
+ * Raw importer-owned source tables read by the rollup refresh path.
+ * Used by schema assertion guards to ensure all referenced sources exist in DDL.
  */
-export const EFFECTIVE_TOOL_NAME_SQL = `CASE
-    WHEN tc.tool_name IS NOT NULL AND TRIM(tc.tool_name) != '' AND tc.tool_name != 'unknown'
-    THEN TRIM(tc.tool_name)
-    WHEN json_valid(tc.args_raw) AND COALESCE(
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.tool') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.tool_name') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.toolName') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.name') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.command') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.cmd') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.action') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.function') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.operation') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.skill') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.skill_name') AS TEXT)), '')
-    ) IS NOT NULL
-    THEN COALESCE(
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.tool') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.tool_name') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.toolName') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.name') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.command') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.cmd') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.action') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.function') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.operation') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.skill') AS TEXT)), ''),
-        NULLIF(TRIM(CAST(json_extract(tc.args_raw, '$.skill_name') AS TEXT)), '')
-    )
-    WHEN tc.call_id IS NOT NULL AND (
-        tc.call_id LIKE 'call_bash_%' OR tc.call_id LIKE 'bash_%' OR tc.call_id LIKE 'exec_%'
-    ) THEN 'bash'
-    WHEN tc.call_id IS NOT NULL AND (
-        tc.call_id LIKE 'call_read_%' OR tc.call_id LIKE 'read_%'
-    ) THEN 'read'
-    WHEN tc.call_id IS NOT NULL AND (
-        tc.call_id LIKE 'call_edit_%' OR tc.call_id LIKE 'edit_%'
-    ) THEN 'edit'
-    WHEN tc.call_id IS NOT NULL AND (
-        tc.call_id LIKE 'call_search_%' OR tc.call_id LIKE 'search_%' OR tc.call_id LIKE 'web_search_%'
-    ) THEN 'search'
-    ELSE 'unknown'
-END`;
+export const ROLLUP_SOURCE_TABLES = ['history_message', 'history_tool_call', 'history_skill_call'] as const;
 
 /**
- * Activity window (days) backing the History board Sources tab per-day heatmap grid.
- * Single knob for the window — the board's `historyBoardSourcesFromRollup` /
- * `dailyTokenMatrix` defaults and the app-side heatmap span all read it. Raise to
- * widen the visible activity history; the materialized tables are all-time, so no
- * re-import is needed.
+ * SQL expression resolving the effective tool name for a history_tool_call `tc` row.
+ * Re-exported from tool-name-sql so existing importers keep working.
  */
-export const HISTORY_BOARD_ACTIVITY_DAYS = 180;
+export {
+    EFFECTIVE_TOOL_NAME_SQL,
+    HISTORY_BOARD_ACTIVITY_DAYS,
+    RESOLVED_TOOL_NAME_SQL,
+} from './tool-name-sql';
 
 const SKILL_NAME_SQL = `CASE
-    WHEN LOWER(${EFFECTIVE_TOOL_NAME_SQL}) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)
+    WHEN LOWER(${RESOLVED_TOOL_NAME_SQL}) IN ('skill', 'use_skill', 'invoke_skill', 'slashcommand', 'slash_command', 'run_skill', 'call_skill', 'execute_skill') AND json_valid(tc.args_raw)
     THEN COALESCE(
         CAST(json_extract(tc.args_raw, '$.skill') AS TEXT),
         CAST(json_extract(tc.args_raw, '$.skill_name') AS TEXT),
@@ -277,15 +260,18 @@ export async function skillCallRollup(db: DbAdapter): Promise<HistoryBoardSkill5
     );
 }
 
-/** True only when the materialized read models cover the latest imported message. */
+/**
+ * True only when every rollup table's watermark covers the latest imported row
+ * and its definition version matches {@link ROLLUP_DEFINITION_VERSION}. Reduced
+ * to a single boolean from {@link rollupTableFreshness}; `history_board_rollup_meta`
+ * remains for compatibility but is no longer the freshness authority (task 0741).
+ */
 export async function historyBoardRollupsFresh(db: DbAdapter): Promise<boolean> {
-    const [meta, version] = await Promise.all([
-        db.queryFirst<{ historyVersion: string }>(
-            'SELECT history_version AS historyVersion FROM history_board_rollup_meta WHERE id = 1',
-        ),
-        historyBoardHistoryVersion(db),
-    ]);
-    return meta != null && meta.historyVersion === version;
+    const freshness = await rollupTableFreshness(db);
+    for (const verdict of freshness.values()) {
+        if (!verdict.fresh) return false;
+    }
+    return true;
 }
 
 /**
@@ -311,7 +297,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
         {
             sql: `INSERT INTO history_board_message_5m (
                     bucket_start, session_id, source, model,
-                    fresh_input_tokens, cache_read_tokens, output_tokens,
+                    fresh_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens,
                     messages, assistant_duration_ms, assistant_duration_samples
                 )
                 WITH enriched AS (
@@ -332,6 +318,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                        m.session_id, m.source, m.effective_model AS model,
                        SUM(COALESCE(m.input_tokens, 0)),
                        SUM(COALESCE(m.cache_read_tokens, 0)),
+                       SUM(COALESCE(m.cache_write_tokens, 0)),
                        SUM(COALESCE(m.output_tokens, 0)),
                        COUNT(*),
                        SUM(CASE WHEN m.role = 'assistant' THEN COALESCE(m.duration_ms, 0) ELSE 0 END),
@@ -343,7 +330,8 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
         {
             sql: `INSERT INTO history_board_tool_5m (
                     bucket_start, session_id, source, model, tool_name, skill_name,
-                    fresh_input_tokens, cache_read_tokens, output_tokens, calls, errors, duration_ms
+                    fresh_input_tokens_alloc, cache_read_tokens_alloc, cache_write_tokens_alloc, output_tokens_alloc,
+                    calls, errors, duration_ms
                 )
                 WITH enriched AS (
                     SELECT m.*,
@@ -364,6 +352,11 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                                    OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
                            ) AS resolved_cache_read_tokens,
                            COALESCE(
+                               m.cache_write_tokens,
+                               LAG(CASE WHEN m.role = 'assistant' THEN m.cache_write_tokens END)
+                                   OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
+                           ) AS resolved_cache_write_tokens,
+                           COALESCE(
                                m.output_tokens,
                                LAG(CASE WHEN m.role = 'assistant' THEN m.output_tokens END)
                                    OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
@@ -376,9 +369,10 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                                ''
                            ) AS bucket_start,
                            m.session_id, m.source, m.effective_model AS model,
-                           ${EFFECTIVE_TOOL_NAME_SQL} AS tool_name, ${SKILL_NAME_SQL} AS skill_name,
+                           ${RESOLVED_TOOL_NAME_SQL} AS tool_name, ${SKILL_NAME_SQL} AS skill_name,
                            COALESCE(m.resolved_input_tokens, 0) AS input_tokens,
                            COALESCE(m.resolved_cache_read_tokens, 0) AS cache_read_tokens,
+                           COALESCE(m.resolved_cache_write_tokens, 0) AS cache_write_tokens,
                            COALESCE(m.resolved_output_tokens, 0) AS output_tokens,
                            tc.status, COALESCE(tc.duration_ms, 0) AS duration_ms,
                            COUNT(*) OVER (PARTITION BY m.record_hash) AS tools_in_message
@@ -388,6 +382,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                 SELECT bucket_start, session_id, source, model, tool_name, skill_name,
                        SUM(CAST(input_tokens AS REAL) / tools_in_message),
                        SUM(CAST(cache_read_tokens AS REAL) / tools_in_message),
+                       SUM(CAST(cache_write_tokens AS REAL) / tools_in_message),
                        SUM(CAST(output_tokens AS REAL) / tools_in_message),
                        COUNT(*), SUM(status = 'error'), SUM(duration_ms)
                 FROM linked
@@ -397,8 +392,8 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
         {
             sql: `INSERT INTO history_board_session_stats (
                     source, session_id, model, started_at, ended_at, messages,
-                    tool_calls, errors, fresh_input_tokens, cache_read_tokens,
-                    output_tokens, assistant_duration_ms, top_tool, state
+                    tool_calls, errors, fresh_input_tokens, cache_read_tokens, cache_write_tokens,
+                    output_tokens, assistant_duration_ms, assistant_duration_samples, top_tool, state
                 )
                 WITH selected AS (
                     SELECT m.rowid AS source_rowid, m.* FROM history_message m
@@ -408,8 +403,10 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                            MIN(ts) AS started_at, MAX(ts) AS ended_at, COUNT(*) AS messages,
                            SUM(COALESCE(input_tokens, 0)) AS fresh_input_tokens,
                            SUM(COALESCE(cache_read_tokens, 0)) AS cache_read_tokens,
+                           SUM(COALESCE(cache_write_tokens, 0)) AS cache_write_tokens,
                            SUM(COALESCE(output_tokens, 0)) AS output_tokens,
-                           SUM(CASE WHEN role = 'assistant' THEN COALESCE(duration_ms, 0) ELSE 0 END) AS assistant_duration_ms
+                           SUM(CASE WHEN role = 'assistant' THEN COALESCE(duration_ms, 0) ELSE 0 END) AS assistant_duration_ms,
+                           SUM(CASE WHEN role = 'assistant' AND duration_ms > 0 THEN 1 ELSE 0 END) AS assistant_duration_samples
                     FROM selected GROUP BY source, session_id
                 ), tool_counts AS (
                     SELECT m.source, m.session_id, COUNT(*) AS tool_calls,
@@ -420,9 +417,9 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                     SELECT source, session_id, tool_name,
                            ROW_NUMBER() OVER (PARTITION BY source, session_id ORDER BY (tool_name != 'unknown') DESC, calls DESC, tool_name ASC) AS rank
                     FROM (
-                        SELECT m.source, m.session_id, ${EFFECTIVE_TOOL_NAME_SQL} AS tool_name, COUNT(*) AS calls
+                        SELECT m.source, m.session_id, ${RESOLVED_TOOL_NAME_SQL} AS tool_name, COUNT(*) AS calls
                         FROM selected m JOIN history_tool_call tc ON tc.message_hash = m.record_hash
-                        GROUP BY m.source, m.session_id, ${EFFECTIVE_TOOL_NAME_SQL}
+                        GROUP BY m.source, m.session_id, ${RESOLVED_TOOL_NAME_SQL}
                     )
                 ), last_messages AS (
                     SELECT source, session_id, record_hash, role,
@@ -433,8 +430,8 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                 )
                 SELECT ms.source, ms.session_id, ms.model, ms.started_at, ms.ended_at, ms.messages,
                        COALESCE(tc.tool_calls, 0), COALESCE(tc.errors, 0),
-                       ms.fresh_input_tokens, ms.cache_read_tokens, ms.output_tokens,
-                       ms.assistant_duration_ms, tr.tool_name,
+                       ms.fresh_input_tokens, ms.cache_read_tokens, ms.cache_write_tokens, ms.output_tokens,
+                       ms.assistant_duration_ms, ms.assistant_duration_samples, tr.tool_name,
                        CASE WHEN lm.role IN ('assistant', 'unknown', '')
                                   AND NOT EXISTS (
                                       SELECT 1 FROM history_tool_call open_tc WHERE open_tc.message_hash = lm.record_hash
@@ -449,7 +446,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
         {
             sql: `INSERT INTO history_board_model_stats (
                     model, assistant_duration_ms, assistant_duration_samples,
-                    fresh_input_tokens, cache_read_tokens, output_tokens, tool_calls, errors
+                    fresh_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, tool_calls, errors
                 )
                 WITH messages AS (
                     SELECT model,
@@ -457,6 +454,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                            SUM(assistant_duration_samples) AS assistant_duration_samples,
                            SUM(fresh_input_tokens) AS fresh_input_tokens,
                            SUM(cache_read_tokens) AS cache_read_tokens,
+                           SUM(cache_write_tokens) AS cache_write_tokens,
                            SUM(output_tokens) AS output_tokens
                     FROM history_board_message_5m GROUP BY model
                 ), tools AS (
@@ -464,7 +462,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                     FROM history_board_tool_5m GROUP BY model
                 )
                 SELECT m.model, m.assistant_duration_ms, m.assistant_duration_samples,
-                       m.fresh_input_tokens, m.cache_read_tokens, m.output_tokens,
+                       m.fresh_input_tokens, m.cache_read_tokens, m.cache_write_tokens, m.output_tokens,
                        COALESCE(t.tool_calls, 0), COALESCE(t.errors, 0)
                 FROM messages m LEFT JOIN tools t ON t.model = m.model`,
             params: [],
@@ -472,23 +470,24 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
         {
             sql: `INSERT INTO history_board_tool_stats (
                     tool_name, skill_name, calls, errors,
-                    fresh_input_tokens, cache_read_tokens, output_tokens, duration_ms
+                    fresh_input_tokens_alloc, cache_read_tokens_alloc, cache_write_tokens_alloc, output_tokens_alloc, duration_ms
                 )
                 SELECT tool_name, skill_name, SUM(calls), SUM(errors),
-                       SUM(fresh_input_tokens), SUM(cache_read_tokens), SUM(output_tokens), SUM(duration_ms)
+                       SUM(fresh_input_tokens_alloc), SUM(cache_read_tokens_alloc), SUM(cache_write_tokens_alloc), SUM(output_tokens_alloc), SUM(duration_ms)
                 FROM history_board_tool_5m
                 GROUP BY tool_name, skill_name`,
             params: [],
         },
         {
             sql: `INSERT INTO history_board_source_daily (
-                    source, day, fresh_input_tokens, cache_read_tokens,
+                    source, day, fresh_input_tokens, cache_read_tokens, cache_write_tokens,
                     output_tokens, sessions, tool_calls
                 )
                 WITH messages AS (
                     SELECT source, SUBSTR(bucket_start, 1, 10) AS day,
                            SUM(fresh_input_tokens) AS fresh_input_tokens,
                            SUM(cache_read_tokens) AS cache_read_tokens,
+                           SUM(cache_write_tokens) AS cache_write_tokens,
                            SUM(output_tokens) AS output_tokens,
                            COUNT(DISTINCT CASE
                                WHEN session_id NOT IN ('', 'unknown', 'session') THEN session_id
@@ -498,7 +497,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                     SELECT source, SUBSTR(bucket_start, 1, 10) AS day, SUM(calls) AS tool_calls
                     FROM history_board_tool_5m GROUP BY source, day
                 )
-                SELECT m.source, m.day, m.fresh_input_tokens, m.cache_read_tokens,
+                SELECT m.source, m.day, m.fresh_input_tokens, m.cache_read_tokens, m.cache_write_tokens,
                        m.output_tokens, m.sessions, COALESCE(t.tool_calls, 0)
                 FROM messages m LEFT JOIN tools t ON t.source = m.source AND t.day = m.day`,
             params: [],
@@ -514,18 +513,20 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
         const tools = toolByDay.get(`${row.source}\0${model}\0${day}`);
         operations.push({
             sql: `INSERT INTO history_daily_stats (
-                    source, model, day, fresh_input_tokens, cache_read_tokens, output_tokens,
-                    messages, assistant_duration_ms, tool_calls
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    source, model, day, fresh_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens,
+                    messages, assistant_duration_ms, assistant_duration_samples, tool_calls
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             params: [
                 row.source,
                 model,
                 day,
                 row.inputTokens ?? 0,
                 row.cacheReadTokens ?? 0,
+                row.cacheWriteTokens ?? 0,
                 row.outputTokens ?? 0,
                 row.messages,
                 row.assistantDurationMs ?? 0,
+                row.assistantDurationSamples ?? 0,
                 tools?.toolCalls ?? 0,
             ],
         });
@@ -583,6 +584,9 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                   cache_read_tokens = COALESCE((
                       SELECT SUM(d.cache_read_tokens) FROM history_board_source_daily d WHERE d.source = src.source
                   ), 0),
+                  cache_write_tokens = COALESCE((
+                      SELECT SUM(d.cache_write_tokens) FROM history_board_source_daily d WHERE d.source = src.source
+                  ), 0),
                   output_tokens = COALESCE((
                       SELECT SUM(d.output_tokens) FROM history_board_source_daily d WHERE d.source = src.source
                   ), 0),
@@ -604,6 +608,11 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
         params: [seed.historyVersion || 'v2:initial', new Date().toISOString()],
     });
     await db.batch(operations);
+    // Record the refresh watermark per table so freshness reads off the importer cursor (task 0741).
+    await writeAllWatermarks(db, await newestImportedAt(db));
+    // 0743: derive the day-grain dimension marts for every materialized day after the cold-start
+    // full rebuild so the Summary read path can serve qualifying requests from the mart.
+    await deriveDimensionMarts(db, await allMaterializedDays(db));
 }
 
 function appendRankedSteps(operations: DbBatchOp[], kind: string, rows: readonly StepRow[]): void {
@@ -743,11 +752,20 @@ export async function historyBoardSummaryFromRollup(
                 ? 'r.skill_name'
                 : 'r.tool_name';
     const bucketExpr = seriesUsesDaily ? 'r.day' : bucketExpression(bucket, 'r');
-    const tokenSelect = `SUM(r.fresh_input_tokens) AS freshInputTokens,
-                         SUM(r.cache_read_tokens) AS cacheReadTokens,
-                         SUM(r.output_tokens) AS outputTokens`;
+    const tokenSelect = aggregateIsTool
+        ? `SUM(r.fresh_input_tokens_alloc) AS freshInputTokens,
+           SUM(r.cache_read_tokens_alloc) AS cacheReadTokens,
+           SUM(r.output_tokens_alloc) AS outputTokens`
+        : `SUM(r.fresh_input_tokens) AS freshInputTokens,
+           SUM(r.cache_read_tokens) AS cacheReadTokens,
+           SUM(r.output_tokens) AS outputTokens`;
     const callCountCol = seriesIsTool ? 'r.calls' : 'r.messages';
-    const seriesTokenSelect = `${tokenSelect}, SUM(${callCountCol}) AS calls`;
+    const seriesTokenSelect = seriesIsTool
+        ? `SUM(r.fresh_input_tokens_alloc) AS freshInputTokens,
+           SUM(r.cache_read_tokens_alloc) AS cacheReadTokens,
+           SUM(r.output_tokens_alloc) AS outputTokens,
+           SUM(r.calls) AS calls`
+        : `${tokenSelect}, SUM(${callCountCol}) AS calls`;
 
     const toolWhere = buildRollupWhere(sel, 'r', { timestamp: 'bucket_start', toolFields: true });
     const sessionWhere = buildSessionWhere(sel);
@@ -760,6 +778,9 @@ export async function historyBoardSummaryFromRollup(
         (sel.skills?.length ?? 0) === 0;
     const toolTable = allTimeTools ? 'history_board_tool_stats' : 'history_board_tool_5m';
     const toolFilter = allTimeTools ? { where: '', params: [] } : toolWhere;
+    const orderByExpr = aggregateIsTool
+        ? 'SUM(r.fresh_input_tokens_alloc) + SUM(r.output_tokens_alloc)'
+        : 'SUM(r.fresh_input_tokens) + SUM(r.output_tokens)';
     const [buckets, models, sources, sourceModels, tools, skills, sessionCount] = await Promise.all([
         db.queryAll<BucketedTokenRow>(
             `SELECT ${bucketExpr} AS bucketStart, ${seriesKey} AS key, ${seriesTokenSelect}
@@ -770,12 +791,12 @@ export async function historyBoardSummaryFromRollup(
         ),
         db.queryAll<HistoryBoardAggregateRow>(
             `SELECT r.model AS key, ${tokenSelect} FROM ${aggregateTable} r
-             ${aggregateWhere.where} GROUP BY r.model ORDER BY (SUM(r.fresh_input_tokens) + SUM(r.output_tokens)) DESC`,
+             ${aggregateWhere.where} GROUP BY r.model ORDER BY ${orderByExpr} DESC`,
             ...aggregateWhere.params,
         ),
         db.queryAll<HistoryBoardAggregateRow>(
             `SELECT r.source AS key, ${tokenSelect} FROM ${aggregateTable} r
-             ${aggregateWhere.where} GROUP BY r.source ORDER BY (SUM(r.fresh_input_tokens) + SUM(r.output_tokens)) DESC`,
+             ${aggregateWhere.where} GROUP BY r.source ORDER BY ${orderByExpr} DESC`,
             ...aggregateWhere.params,
         ),
         db.queryAll<HistoryBoardSourceModelRow>(
@@ -783,13 +804,13 @@ export async function historyBoardSummaryFromRollup(
              FROM ${aggregateTable} r
              ${aggregateWhere.where}
              GROUP BY r.source, r.model
-             ORDER BY r.source ASC, (SUM(r.fresh_input_tokens) + SUM(r.output_tokens)) DESC`,
+             ORDER BY r.source ASC, ${orderByExpr} DESC`,
             ...aggregateWhere.params,
         ),
         db.queryAll<{ toolName: string; calls: number; errors: number; durationMs: number; billedTokens: number }>(
             `SELECT r.tool_name AS toolName, SUM(r.calls) AS calls, SUM(r.errors) AS errors,
                     SUM(r.duration_ms) AS durationMs,
-                    SUM(r.fresh_input_tokens + r.output_tokens) AS billedTokens
+                    SUM(r.fresh_input_tokens_alloc + r.output_tokens_alloc) AS billedTokens
              FROM ${toolTable} r
              ${toolFilter.where}
              GROUP BY r.tool_name ORDER BY calls DESC`,
@@ -857,9 +878,13 @@ export async function historyBoardBucketsFromRollup(
                 ? 'r.skill_name'
                 : 'r.tool_name';
     const bucketExpr = seriesUsesDaily ? 'r.day' : bucketExpression(bucket, 'r');
-    const tokenSelect = `SUM(r.fresh_input_tokens) AS freshInputTokens,
-                         SUM(r.cache_read_tokens) AS cacheReadTokens,
-                         SUM(r.output_tokens) AS outputTokens`;
+    const tokenSelect = seriesIsTool
+        ? `SUM(r.fresh_input_tokens_alloc) AS freshInputTokens,
+           SUM(r.cache_read_tokens_alloc) AS cacheReadTokens,
+           SUM(r.output_tokens_alloc) AS outputTokens`
+        : `SUM(r.fresh_input_tokens) AS freshInputTokens,
+           SUM(r.cache_read_tokens) AS cacheReadTokens,
+           SUM(r.output_tokens) AS outputTokens`;
     const callCountCol = seriesIsTool ? 'r.calls' : 'r.messages';
     const seriesTokenSelect = `${tokenSelect}, SUM(${callCountCol}) AS calls`;
 
@@ -906,6 +931,23 @@ function buildSessionWhere(sel: ArtifactSelector, alias = 's'): WhereSpec {
     return { where: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '', params };
 }
 
+/**
+ * Materialized Sessions-table sort key → SQL `ORDER BY` expression. This is the parity
+ * source for `SESSION_SORT_COLUMNS` in `forensic-query.ts`: a sort key added here without
+ * the fallback map (or vice versa) is caught by a test, because a key that sorts one way
+ * on the rollup path and another way on the stale fallback path is a user-visible
+ * inconsistency that appears only when rollups go stale.
+ */
+export const SESSION_ORDER_COLUMNS: Record<string, string> = {
+    start: 's.started_at',
+    duration: 's.assistant_duration_ms',
+    messages: 's.messages',
+    toolCalls: 's.tool_calls',
+    billedTokens: '(s.fresh_input_tokens + s.output_tokens)',
+    cacheRead: 's.cache_read_tokens',
+    freshInput: 's.fresh_input_tokens',
+};
+
 /** Read and paginate the materialized Sessions table with exact supported sorting. */
 export async function historyBoardSessionsFromRollup(
     db: DbAdapter,
@@ -913,16 +955,7 @@ export async function historyBoardSessionsFromRollup(
     input: { page: number; pageSize: number; sortBy: string; sortDir: 'asc' | 'desc' },
 ): Promise<HistoryBoardSessionPage> {
     const spec = buildSessionWhere(sel);
-    const orderColumns: Record<string, string> = {
-        start: 's.started_at',
-        duration: 's.assistant_duration_ms',
-        messages: 's.messages',
-        toolCalls: 's.tool_calls',
-        billedTokens: '(s.fresh_input_tokens + s.output_tokens)',
-        cacheRead: 's.cache_read_tokens',
-        freshInput: 's.fresh_input_tokens',
-    };
-    const order = orderColumns[input.sortBy] ?? orderColumns.start;
+    const order = SESSION_ORDER_COLUMNS[input.sortBy] ?? SESSION_ORDER_COLUMNS.start;
     const offset = (input.page - 1) * input.pageSize;
     const [items, total] = await Promise.all([
         db.queryAll<HistoryBoardSessionRollupRow>(
@@ -1046,8 +1079,8 @@ export async function historyBoardModelComparisonFromRollup(
             `SELECT model,
                     CASE WHEN assistant_duration_samples > 0
                          THEN CAST(assistant_duration_ms AS REAL) / assistant_duration_samples ELSE NULL END AS speedMsMean,
-                    CASE WHEN fresh_input_tokens + cache_read_tokens > 0
-                         THEN CAST(cache_read_tokens AS REAL) / (fresh_input_tokens + cache_read_tokens) ELSE 0 END AS cacheRatio,
+                    CASE WHEN fresh_input_tokens + cache_read_tokens + cache_write_tokens > 0
+                         THEN CAST(cache_read_tokens AS REAL) / (fresh_input_tokens + cache_read_tokens + cache_write_tokens) ELSE 0 END AS cacheRatio,
                     CASE WHEN tool_calls > 0 THEN 1.0 - CAST(errors AS REAL) / tool_calls ELSE 1.0 END AS reliability,
                     CASE WHEN fresh_input_tokens + output_tokens > 0
                          THEN CAST(output_tokens AS REAL) / (fresh_input_tokens + output_tokens) ELSE 0 END AS outputRatio
@@ -1064,6 +1097,7 @@ export async function historyBoardModelComparisonFromRollup(
                     SUM(m.assistant_duration_samples) AS duration_samples,
                     SUM(m.fresh_input_tokens) AS fresh,
                     SUM(m.cache_read_tokens) AS cache_read,
+                    SUM(m.cache_write_tokens) AS cache_write,
                     SUM(m.output_tokens) AS output
              FROM history_board_message_5m m ${messages.where} GROUP BY m.model
          ), tool_stats AS (
@@ -1072,7 +1106,7 @@ export async function historyBoardModelComparisonFromRollup(
          )
          SELECT m.model,
                 CASE WHEN m.duration_samples > 0 THEN CAST(m.duration_ms AS REAL) / m.duration_samples ELSE NULL END AS speedMsMean,
-                CASE WHEN m.fresh + m.cache_read > 0 THEN CAST(m.cache_read AS REAL) / (m.fresh + m.cache_read) ELSE 0 END AS cacheRatio,
+                CASE WHEN m.fresh + m.cache_read + m.cache_write > 0 THEN CAST(m.cache_read AS REAL) / (m.fresh + m.cache_read + m.cache_write) ELSE 0 END AS cacheRatio,
                 CASE WHEN COALESCE(t.calls, 0) > 0 THEN 1.0 - CAST(t.errors AS REAL) / t.calls ELSE 1.0 END AS reliability,
                 CASE WHEN m.fresh + m.output > 0 THEN CAST(m.output AS REAL) / (m.fresh + m.output) ELSE 0 END AS outputRatio
          FROM message_stats m LEFT JOIN tool_stats t ON t.model = m.model
@@ -1200,6 +1234,14 @@ export async function historyBoardKpiTrendFromRollup(
         toolFields: table === 'history_board_tool_5m',
     });
     const calls = buildRollupWhere(sel, 't', { timestamp: 'bucket_start', toolFields: true });
+    const isTool = table === 'history_board_tool_5m';
+    const tokenCols = isTool
+        ? `SUM(r.fresh_input_tokens_alloc) AS freshInputTokens,
+           SUM(r.cache_read_tokens_alloc) AS cacheReadTokens,
+           SUM(r.output_tokens_alloc) AS outputTokens`
+        : `SUM(r.fresh_input_tokens) AS freshInputTokens,
+           SUM(r.cache_read_tokens) AS cacheReadTokens,
+           SUM(r.output_tokens) AS outputTokens`;
     const [tokenRows, callRows] = await Promise.all([
         db.queryAll<{
             day: string;
@@ -1209,9 +1251,7 @@ export async function historyBoardKpiTrendFromRollup(
             sessions: number;
         }>(
             `SELECT SUBSTR(r.bucket_start, 1, 10) AS day,
-                    SUM(r.fresh_input_tokens) AS freshInputTokens,
-                    SUM(r.cache_read_tokens) AS cacheReadTokens,
-                    SUM(r.output_tokens) AS outputTokens,
+                    ${tokenCols},
                     COUNT(DISTINCT CASE WHEN r.session_id NOT IN ('', 'unknown', 'session') THEN r.session_id END) AS sessions
              FROM ${table} r ${tokens.where}
              GROUP BY day ORDER BY day ASC`,
@@ -1227,3 +1267,640 @@ export async function historyBoardKpiTrendFromRollup(
     const callsByDay = new Map(callRows.map((row) => [row.day, row.toolCalls]));
     return tokenRows.map((row) => ({ ...row, toolCalls: callsByDay.get(row.day) ?? 0 }));
 }
+
+// ---------------------------------------------------------------------------
+// Incremental rollup refresh engine (task 0741)
+// ---------------------------------------------------------------------------
+
+/** Selector covering the whole corpus — used by the incremental rebuild fallback. */
+const ALL_HISTORY: ArtifactSelector = {
+    since: null,
+    until: null,
+    sources: null,
+    models: null,
+    tools: null,
+    skills: null,
+    sessionId: null,
+    runId: null,
+    taskWbs: null,
+};
+
+const RANK_DEPTH = 1000;
+
+/** 5-minute bucket expression over `history_message` alias `m`. */
+const MSG_BUCKET_5M_SQL = `strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', m.ts) / 60 * 60 AS INTEGER), 'unixepoch')`;
+/** 5-minute bucket expression over `history_skill_call.started_at`. */
+const SKILL_BUCKET_5M_SQL = `strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', started_at) / 60 * 60 AS INTEGER), 'unixepoch')`;
+
+/** Newest `imported_at` across the whole corpus. */
+async function newestImportedAt(db: DbAdapter): Promise<string> {
+    const row = await db.queryFirst<{ newest: string | null }>(
+        'SELECT MAX(imported_at) AS newest FROM history_message',
+    );
+    return row?.newest ?? '';
+}
+
+/** The distinct buckets touched by rows imported at or after `watermark`, ascending. */
+/** Per-bucket imported_at range over the affected set, ascending by bucket_start. */
+interface AffectedBucketRange {
+    bucket: string;
+    minImportedAt: string;
+    maxImportedAt: string;
+}
+
+/**
+ * The distinct buckets touched by rows at/after `watermark`, each with the min and max
+ * `imported_at` of its rows, ascending by bucket_start.
+ *
+ * A single query groups by the shared 5m bucket expression so the incremental unit is the
+ * bucket, and the range lets {@link refreshHistoryBoardRollupsIncremental} keep the
+ * watermark from leaping past an unprocessed sibling bucket's rows (backfilled
+ * `imported_at` need not increase monotonically with `bucket_start` — R7).
+ */
+async function affectedBucketsWithRange(db: DbAdapter, watermark: string): Promise<AffectedBucketRange[]> {
+    const rows = await db.queryAll<{ bucketStart: string; minImportedAt: string; maxImportedAt: string }>(
+        `SELECT ${MSG_BUCKET_5M_SQL} AS bucketStart,
+                MIN(m.imported_at) AS minImportedAt,
+                MAX(m.imported_at) AS maxImportedAt
+         FROM history_message m
+         WHERE m.imported_at >= ?
+         GROUP BY bucketStart
+         ORDER BY bucketStart ASC`,
+        watermark,
+    );
+    return rows.map((row) => ({
+        bucket: row.bucketStart,
+        minImportedAt: row.minImportedAt,
+        maxImportedAt: row.maxImportedAt,
+    }));
+}
+
+function maxStr(left: string, right: string): string {
+    return left > right ? left : right;
+}
+
+function minStr(left: string, right: string): string {
+    return left < right ? left : right;
+}
+
+function bucketDay(bucket: string): string {
+    return bucket.slice(0, 10);
+}
+
+/** UPSERT op for the per-table watermark — used inside the bucket transaction (R7). */
+function watermarkUpsertOp(tableName: string, watermark: string, definitionVersion: string): DbBatchOp {
+    return {
+        sql: `INSERT INTO history_board_rollup_watermark (table_name, imported_at_watermark, definition_version, updated_at)
+              VALUES (?, ?, ?, ?)
+              ON CONFLICT(table_name) DO UPDATE SET
+                  imported_at_watermark = excluded.imported_at_watermark,
+                  definition_version = excluded.definition_version,
+                  updated_at = excluded.updated_at`,
+        params: [tableName, watermark, definitionVersion, new Date().toISOString()],
+    };
+}
+
+function message5mBucketOps(bucket: string): DbBatchOp[] {
+    return [
+        { sql: 'DELETE FROM history_board_message_5m WHERE bucket_start = ?', params: [bucket] },
+        {
+            sql: `INSERT INTO history_board_message_5m (
+                    bucket_start, session_id, source, model,
+                    fresh_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens,
+                    messages, assistant_duration_ms, assistant_duration_samples
+                )
+                WITH enriched AS (
+                    SELECT m.*,
+                           COALESCE(
+                               m.model,
+                               MAX(CASE WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model END)
+                                   OVER (PARTITION BY m.source, m.session_id),
+                               'unknown'
+                           ) AS effective_model
+                    FROM history_message m
+                    WHERE ${MESSAGE_DEDUP} AND ${MSG_BUCKET_5M_SQL} = ?
+                )
+                SELECT COALESCE(
+                           strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', m.ts) / 60 * 60 AS INTEGER), 'unixepoch'),
+                           ''
+                       ) AS bucket_start,
+                       m.session_id, m.source, m.effective_model AS model,
+                       SUM(COALESCE(m.input_tokens, 0)),
+                       SUM(COALESCE(m.cache_read_tokens, 0)),
+                       SUM(COALESCE(m.cache_write_tokens, 0)),
+                       SUM(COALESCE(m.output_tokens, 0)),
+                       COUNT(*),
+                       SUM(CASE WHEN m.role = 'assistant' THEN COALESCE(m.duration_ms, 0) ELSE 0 END),
+                       SUM(CASE WHEN m.role = 'assistant' AND m.duration_ms > 0 THEN 1 ELSE 0 END)
+                FROM enriched m
+                GROUP BY bucket_start, m.session_id, m.source, m.effective_model`,
+            params: [bucket],
+        },
+    ];
+}
+
+function tool5mBucketOps(bucket: string): DbBatchOp[] {
+    return [
+        { sql: 'DELETE FROM history_board_tool_5m WHERE bucket_start = ?', params: [bucket] },
+        {
+            sql: `INSERT INTO history_board_tool_5m (
+                    bucket_start, session_id, source, model, tool_name, skill_name,
+                    fresh_input_tokens_alloc, cache_read_tokens_alloc, cache_write_tokens_alloc, output_tokens_alloc,
+                    calls, errors, duration_ms
+                )
+                WITH enriched AS (
+                    SELECT m.*,
+                           COALESCE(
+                               m.model,
+                               MAX(CASE WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model END)
+                                   OVER (PARTITION BY m.source, m.session_id),
+                               'unknown'
+                           ) AS effective_model,
+                           COALESCE(
+                               m.input_tokens,
+                               LAG(CASE WHEN m.role = 'assistant' THEN m.input_tokens END)
+                                   OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
+                           ) AS resolved_input_tokens,
+                           COALESCE(
+                               m.cache_read_tokens,
+                               LAG(CASE WHEN m.role = 'assistant' THEN m.cache_read_tokens END)
+                                   OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
+                           ) AS resolved_cache_read_tokens,
+                           COALESCE(
+                               m.cache_write_tokens,
+                               LAG(CASE WHEN m.role = 'assistant' THEN m.cache_write_tokens END)
+                                   OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
+                           ) AS resolved_cache_write_tokens,
+                           COALESCE(
+                               m.output_tokens,
+                               LAG(CASE WHEN m.role = 'assistant' THEN m.output_tokens END)
+                                   OVER (PARTITION BY m.source, m.session_id ORDER BY m.seq, m.rowid)
+                           ) AS resolved_output_tokens
+                    FROM history_message m
+                    WHERE ${MESSAGE_DEDUP} AND ${MSG_BUCKET_5M_SQL} = ?
+                ), linked AS (
+                    SELECT COALESCE(
+                               strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', m.ts) / 60 * 60 AS INTEGER), 'unixepoch'),
+                               ''
+                           ) AS bucket_start,
+                           m.session_id, m.source, m.effective_model AS model,
+                           ${RESOLVED_TOOL_NAME_SQL} AS tool_name, ${SKILL_NAME_SQL} AS skill_name,
+                           COALESCE(m.resolved_input_tokens, 0) AS input_tokens,
+                           COALESCE(m.resolved_cache_read_tokens, 0) AS cache_read_tokens,
+                           COALESCE(m.resolved_cache_write_tokens, 0) AS cache_write_tokens,
+                           COALESCE(m.resolved_output_tokens, 0) AS output_tokens,
+                           tc.status, COALESCE(tc.duration_ms, 0) AS duration_ms,
+                           COUNT(*) OVER (PARTITION BY m.record_hash) AS tools_in_message
+                    FROM enriched m
+                    JOIN history_tool_call tc ON tc.message_hash = m.record_hash
+                )
+                SELECT bucket_start, session_id, source, model, tool_name, skill_name,
+                       SUM(CAST(input_tokens AS REAL) / tools_in_message),
+                       SUM(CAST(cache_read_tokens AS REAL) / tools_in_message),
+                       SUM(CAST(cache_write_tokens AS REAL) / tools_in_message),
+                       SUM(CAST(output_tokens AS REAL) / tools_in_message),
+                       COUNT(*), SUM(status = 'error'), SUM(duration_ms)
+                FROM linked
+                GROUP BY bucket_start, session_id, source, model, tool_name, skill_name`,
+            params: [bucket],
+        },
+    ];
+}
+
+function skill5mBucketOps(bucket: string): DbBatchOp[] {
+    return [
+        { sql: 'DELETE FROM history_board_skill_5m WHERE bucket_start = ?', params: [bucket] },
+        {
+            sql: `INSERT INTO history_board_skill_5m (bucket_start, source, skill_name, invocation_kind, calls)
+                  SELECT ${SKILL_BUCKET_5M_SQL} AS bucket_start, source, skill_name, invocation_kind, COUNT(*) AS calls
+                  FROM history_skill_call
+                  WHERE started_at IS NOT NULL AND ${SKILL_BUCKET_5M_SQL} = ?
+                  GROUP BY bucket_start, source, skill_name, invocation_kind`,
+            params: [bucket],
+        },
+    ];
+}
+
+/** Re-derive daily and source-daily for the affected days from the updated bucketed tables. */
+async function recomputeDailyAndSourceDaily(db: DbAdapter, days: string[]): Promise<void> {
+    if (days.length === 0) return;
+    const placeholders = days.map(() => '?').join(', ');
+    await db.batch([
+        ...days.map((day) => ({ sql: 'DELETE FROM history_daily_stats WHERE day = ?', params: [day] })),
+        {
+            sql: `INSERT INTO history_daily_stats (
+                    source, model, day, fresh_input_tokens, cache_read_tokens, cache_write_tokens,
+                    output_tokens, messages, assistant_duration_ms, assistant_duration_samples, tool_calls
+                )
+                WITH messages AS (
+                    SELECT source, model, SUBSTR(bucket_start, 1, 10) AS day,
+                           SUM(fresh_input_tokens) AS fresh_input_tokens,
+                           SUM(cache_read_tokens) AS cache_read_tokens,
+                           SUM(cache_write_tokens) AS cache_write_tokens,
+                           SUM(output_tokens) AS output_tokens,
+                           SUM(messages) AS messages,
+                           SUM(assistant_duration_ms) AS assistant_duration_ms,
+                           SUM(assistant_duration_samples) AS assistant_duration_samples
+                    FROM history_board_message_5m
+                    WHERE SUBSTR(bucket_start, 1, 10) IN (${placeholders})
+                    GROUP BY source, model, day
+                ), tools AS (
+                    SELECT source, model, SUBSTR(bucket_start, 1, 10) AS day, SUM(calls) AS tool_calls
+                    FROM history_board_tool_5m
+                    WHERE SUBSTR(bucket_start, 1, 10) IN (${placeholders})
+                    GROUP BY source, model, day
+                )
+                SELECT m.source, m.model, m.day, m.fresh_input_tokens, m.cache_read_tokens, m.cache_write_tokens,
+                       m.output_tokens, m.messages, m.assistant_duration_ms, m.assistant_duration_samples,
+                       COALESCE(t.tool_calls, 0)
+                FROM messages m LEFT JOIN tools t ON t.source = m.source AND t.model = m.model AND t.day = m.day`,
+            params: [...days, ...days],
+        },
+        ...days.map((day) => ({
+            sql: 'DELETE FROM history_board_source_daily WHERE day = ?',
+            params: [day],
+        })),
+        {
+            sql: `INSERT INTO history_board_source_daily (
+                    source, day, fresh_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, sessions, tool_calls
+                )
+                WITH messages AS (
+                    SELECT source, SUBSTR(bucket_start, 1, 10) AS day,
+                           SUM(fresh_input_tokens) AS fresh_input_tokens,
+                           SUM(cache_read_tokens) AS cache_read_tokens,
+                           SUM(cache_write_tokens) AS cache_write_tokens,
+                           SUM(output_tokens) AS output_tokens,
+                           COUNT(DISTINCT CASE
+                               WHEN session_id NOT IN ('', 'unknown', 'session') THEN session_id
+                           END) AS sessions
+                    FROM history_board_message_5m
+                    WHERE SUBSTR(bucket_start, 1, 10) IN (${placeholders})
+                    GROUP BY source, day
+                ), tools AS (
+                    SELECT source, SUBSTR(bucket_start, 1, 10) AS day, SUM(calls) AS tool_calls
+                    FROM history_board_tool_5m
+                    WHERE SUBSTR(bucket_start, 1, 10) IN (${placeholders})
+                    GROUP BY source, day
+                )
+                SELECT m.source, m.day, m.fresh_input_tokens, m.cache_read_tokens, m.cache_write_tokens,
+                       m.output_tokens, m.sessions, COALESCE(t.tool_calls, 0)
+                FROM messages m LEFT JOIN tools t ON t.source = m.source AND t.day = m.day`,
+            params: [...days, ...days],
+        },
+    ]);
+}
+
+/** Re-derive the keyed-aggregate class after the bucketed deltas land. */
+async function recomputeKeyedAggregates(db: DbAdapter): Promise<void> {
+    // model_stats and tool_stats derive purely from the bucketed tables (cheap, correct).
+    await db.batch([
+        { sql: 'DELETE FROM history_board_model_stats', params: [] },
+        {
+            sql: `INSERT INTO history_board_model_stats (
+                    model, assistant_duration_ms, assistant_duration_samples,
+                    fresh_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, tool_calls, errors
+                )
+                WITH messages AS (
+                    SELECT model,
+                           SUM(assistant_duration_ms) AS assistant_duration_ms,
+                           SUM(assistant_duration_samples) AS assistant_duration_samples,
+                           SUM(fresh_input_tokens) AS fresh_input_tokens,
+                           SUM(cache_read_tokens) AS cache_read_tokens,
+                           SUM(cache_write_tokens) AS cache_write_tokens,
+                           SUM(output_tokens) AS output_tokens
+                    FROM history_board_message_5m GROUP BY model
+                ), tools AS (
+                    SELECT model, SUM(calls) AS tool_calls, SUM(errors) AS errors
+                    FROM history_board_tool_5m GROUP BY model
+                )
+                SELECT m.model, m.assistant_duration_ms, m.assistant_duration_samples,
+                       m.fresh_input_tokens, m.cache_read_tokens, m.cache_write_tokens, m.output_tokens,
+                       COALESCE(t.tool_calls, 0), COALESCE(t.errors, 0)
+                FROM messages m LEFT JOIN tools t ON t.model = m.model`,
+            params: [],
+        },
+        { sql: 'DELETE FROM history_board_tool_stats', params: [] },
+        {
+            sql: `INSERT INTO history_board_tool_stats (
+                    tool_name, skill_name, calls, errors,
+                    fresh_input_tokens_alloc, cache_read_tokens_alloc, cache_write_tokens_alloc, output_tokens_alloc, duration_ms
+                )
+                SELECT tool_name, skill_name, SUM(calls), SUM(errors),
+                       SUM(fresh_input_tokens_alloc), SUM(cache_read_tokens_alloc), SUM(cache_write_tokens_alloc), SUM(output_tokens_alloc), SUM(duration_ms)
+                FROM history_board_tool_5m
+                GROUP BY tool_name, skill_name`,
+            params: [],
+        },
+    ]);
+
+    // session_stats derives from raw history_message (the existing derivation); recompute in full.
+    await db.batch([
+        { sql: 'DELETE FROM history_board_session_stats', params: [] },
+        {
+            sql: `INSERT INTO history_board_session_stats (
+                    source, session_id, model, started_at, ended_at, messages,
+                    tool_calls, errors, fresh_input_tokens, cache_read_tokens, cache_write_tokens,
+                    output_tokens, assistant_duration_ms, assistant_duration_samples, top_tool, state
+                )
+                WITH selected AS (
+                    SELECT m.rowid AS source_rowid, m.* FROM history_message m
+                    WHERE ${MESSAGE_DEDUP} AND m.session_id NOT IN ('', 'unknown', 'session')
+                ), message_stats AS (
+                    SELECT source, session_id, COALESCE(MAX(model), 'unknown') AS model,
+                           MIN(ts) AS started_at, MAX(ts) AS ended_at, COUNT(*) AS messages,
+                           SUM(COALESCE(input_tokens, 0)) AS fresh_input_tokens,
+                           SUM(COALESCE(cache_read_tokens, 0)) AS cache_read_tokens,
+                           SUM(COALESCE(cache_write_tokens, 0)) AS cache_write_tokens,
+                           SUM(COALESCE(output_tokens, 0)) AS output_tokens,
+                           SUM(CASE WHEN role = 'assistant' THEN COALESCE(duration_ms, 0) ELSE 0 END) AS assistant_duration_ms,
+                           SUM(CASE WHEN role = 'assistant' AND duration_ms > 0 THEN 1 ELSE 0 END) AS assistant_duration_samples
+                    FROM selected GROUP BY source, session_id
+                ), tool_counts AS (
+                    SELECT m.source, m.session_id, COUNT(*) AS tool_calls,
+                           SUM(tc.status = 'error') AS errors
+                    FROM selected m JOIN history_tool_call tc ON tc.message_hash = m.record_hash
+                    GROUP BY m.source, m.session_id
+                ), tool_ranks AS (
+                    SELECT source, session_id, tool_name,
+                           ROW_NUMBER() OVER (PARTITION BY source, session_id ORDER BY (tool_name != 'unknown') DESC, calls DESC, tool_name ASC) AS rank
+                    FROM (
+                        SELECT m.source, m.session_id, ${RESOLVED_TOOL_NAME_SQL} AS tool_name, COUNT(*) AS calls
+                        FROM selected m JOIN history_tool_call tc ON tc.message_hash = m.record_hash
+                        GROUP BY m.source, m.session_id, ${RESOLVED_TOOL_NAME_SQL}
+                    )
+                ), last_messages AS (
+                    SELECT source, session_id, record_hash, role,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY source, session_id ORDER BY seq DESC, source_rowid DESC
+                           ) AS rank
+                    FROM selected WHERE disposition != 'meta'
+                )
+                SELECT ms.source, ms.session_id, ms.model, ms.started_at, ms.ended_at, ms.messages,
+                       COALESCE(tc.tool_calls, 0), COALESCE(tc.errors, 0),
+                       ms.fresh_input_tokens, ms.cache_read_tokens, ms.cache_write_tokens, ms.output_tokens,
+                       ms.assistant_duration_ms, ms.assistant_duration_samples, tr.tool_name,
+                       CASE WHEN lm.role IN ('assistant', 'unknown', '')
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM history_tool_call open_tc WHERE open_tc.message_hash = lm.record_hash
+                                  )
+                            THEN 'complete' ELSE 'in-progress' END
+                FROM message_stats ms
+                LEFT JOIN tool_counts tc ON tc.source = ms.source AND tc.session_id = ms.session_id
+                LEFT JOIN tool_ranks tr ON tr.source = ms.source AND tr.session_id = ms.session_id AND tr.rank = 1
+                LEFT JOIN last_messages lm ON lm.source = ms.source AND lm.session_id = ms.session_id AND lm.rank = 1`,
+            params: [],
+        },
+    ]);
+
+    // source_stats: import metadata from sourceSummary, plus the derived enrich update.
+    const sourceRows = await sourceSummary(db, ALL_HISTORY);
+    const ops: DbBatchOp[] = [{ sql: 'DELETE FROM history_board_source_stats', params: [] }];
+    for (const row of sourceRows) {
+        ops.push({
+            sql: `INSERT INTO history_board_source_stats (source, files, messages, last_imported_at)
+                  VALUES (?, ?, ?, ?)`,
+            params: [row.source, row.files, row.messages, row.lastImportedAt],
+        });
+    }
+    ops.push({
+        sql: `UPDATE history_board_source_stats AS src
+              SET sessions = COALESCE((SELECT COUNT(*) FROM history_board_session_stats s WHERE s.source = src.source), 0),
+                  fresh_input_tokens = COALESCE((SELECT SUM(d.fresh_input_tokens) FROM history_board_source_daily d WHERE d.source = src.source), 0),
+                  cache_read_tokens = COALESCE((SELECT SUM(d.cache_read_tokens) FROM history_board_source_daily d WHERE d.source = src.source), 0),
+                  cache_write_tokens = COALESCE((SELECT SUM(d.cache_write_tokens) FROM history_board_source_daily d WHERE d.source = src.source), 0),
+                  output_tokens = COALESCE((SELECT SUM(d.output_tokens) FROM history_board_source_daily d WHERE d.source = src.source), 0),
+                  tool_calls = COALESCE((SELECT SUM(d.tool_calls) FROM history_board_source_daily d WHERE d.source = src.source), 0),
+                  first_date = (SELECT MIN(s.started_at) FROM history_board_session_stats s WHERE s.source = src.source),
+                  last_date = (SELECT MAX(s.ended_at) FROM history_board_session_stats s WHERE s.source = src.source)`,
+        params: [],
+    });
+    await db.batch(ops);
+}
+
+/** Global-ranked class: recompute loop findings and ranked steps in full when any bucket changed. */
+async function recomputeGlobalRanked(db: DbAdapter): Promise<void> {
+    const [loopRows, tokenSteps, durationSteps, cacheWasteSteps] = await Promise.all([
+        loops(db, ALL_HISTORY),
+        topStepsByTokens(db, ALL_HISTORY, RANK_DEPTH),
+        topStepsByDuration(db, ALL_HISTORY, RANK_DEPTH),
+        topCacheWasteSteps(db, ALL_HISTORY, RANK_DEPTH),
+    ]);
+    const ops: DbBatchOp[] = [
+        { sql: 'DELETE FROM history_board_loop_findings', params: [] },
+        { sql: 'DELETE FROM history_board_ranked_steps', params: [] },
+    ];
+    for (const row of loopRows) {
+        ops.push({
+            sql: `INSERT INTO history_board_loop_findings (
+                    source, session_id, model, started_at, tool_name, args_digest, repeats, first_seq, last_seq
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            params: [
+                row.source,
+                row.sessionId,
+                row.model,
+                row.startedAt,
+                row.toolName,
+                row.argsDigest,
+                row.repeats,
+                row.firstSeq,
+                row.lastSeq,
+            ],
+        });
+    }
+    appendRankedSteps(ops, 'tokens', tokenSteps);
+    appendRankedSteps(ops, 'duration', durationSteps);
+    appendRankedSteps(ops, 'cache-waste', cacheWasteSteps);
+    await db.batch(ops);
+}
+
+/** Write the watermark forwarded from `imported_at` for every rollup table. */
+async function writeAllWatermarks(db: DbAdapter, watermark: string): Promise<void> {
+    for (const table of ALL_ROLLUP_TABLES) {
+        await writeRollupWatermark(db, table, {
+            importedAtWatermark: watermark,
+            definitionVersion: ROLLUP_DEFINITION_VERSION,
+        });
+    }
+}
+
+/** Full-rebuild fallback (no watermark, or a definition-version mismatch). */
+async function rebuildAllRollups(db: DbAdapter): Promise<void> {
+    const historyVersion = await historyBoardHistoryVersion(db);
+    const [messageRows, toolRows, loopRows, sourceRows, tokenSteps, durationSteps, waste, cacheWasteSteps, skillRows] =
+        await Promise.all([
+            messageRollup(db, ALL_HISTORY),
+            toolRollup(db, ALL_HISTORY),
+            loops(db, ALL_HISTORY),
+            sourceSummary(db, ALL_HISTORY),
+            topStepsByTokens(db, ALL_HISTORY, RANK_DEPTH),
+            topStepsByDuration(db, ALL_HISTORY, RANK_DEPTH),
+            cacheWasteAggregate(db, ALL_HISTORY),
+            topCacheWasteSteps(db, ALL_HISTORY, RANK_DEPTH),
+            skillCallRollup(db),
+        ]);
+    await replaceHistoryBoardRollups(db, {
+        historyVersion,
+        messageRows,
+        toolRows,
+        loopRows,
+        sourceRows,
+        tokenSteps,
+        durationSteps,
+        cacheWasteSteps,
+        skill5m: skillRows,
+    });
+    void waste;
+    await writeAllWatermarks(db, await newestImportedAt(db));
+}
+
+/**
+ * Incrementally refresh the History Board rollups.
+ *
+ * A separate engine added BESIDE {@link replaceHistoryBoardRollups} (the full-rebuild
+ * path, kept for R6/R7 fallback). The incremental unit is the 5-minute bucket derived
+ * from the imported rows' `bucket_start`, never from `MAX(ts)` or "the last N hours":
+ * imports can backfill old `ts` values, so the bucket set must come from the rows
+ * themselves (R2).
+ *
+ * - Bucketed class: one transaction per bucket, ascending `bucket_start`, deleting then
+ *   re-deriving that bucket with `MESSAGE_DEDUP` preserved (R4/R5).
+ * - The watermark advances inside each per-bucket transaction (R7): an interrupted run
+ *   leaves a contiguous materialized prefix and the next run reprocesses the remainder.
+ * - Keyed-aggregate and global-ranked classes are recomputed after the delta lands; the
+ *   global-ranked ones are bounded top-N sets recomputed in full (no incremental path).
+ */
+/** Tables whose watermark advances inside the per-bucket transaction (R7 bucket recovery). */
+const BUCKET_LEVEL_WATERMARK_TABLES = [
+    'history_board_message_5m',
+    'history_board_tool_5m',
+    'history_board_skill_5m',
+] as const;
+
+/** Tables whose watermark advances only after the post-pass completes (recovery on interruption). */
+const POST_WATERMARK_TABLES = [
+    ...KEYED_ROLLUP_TABLES,
+    ...GLOBAL_RANKED_ROLLUP_TABLES,
+    'history_daily_stats',
+    'history_board_source_daily',
+] as const;
+
+/** All days currently materialized in the bucketed message table — post-pass recovery scope. */
+async function allMaterializedDays(db: DbAdapter): Promise<string[]> {
+    const rows = await db.queryAll<{ day: string }>(
+        'SELECT DISTINCT SUBSTR(bucket_start, 1, 10) AS day FROM history_board_message_5m',
+    );
+    return rows.map((row) => row.day);
+}
+
+/** True when any post-pass table's watermark lags the bucket-level watermark (interrupted post-pass). */
+async function postPassLags(db: DbAdapter, bucketWatermark: string): Promise<boolean> {
+    const watermarks = await readRollupWatermarks(db);
+    for (const table of POST_WATERMARK_TABLES) {
+        if ((watermarks.get(table)?.importedAtWatermark ?? '') < bucketWatermark) return true;
+    }
+    return false;
+}
+
+/**
+ * Incrementally refresh the History board rollup tables.
+ *
+ * Reads `imported_at_watermark` and `definition_version` per table. When the stored
+ * definition version differs from {@link ROLLUP_DEFINITION_VERSION} the whole corpus is
+ * rebuilt (definition changes invalidate every stored bucket). Otherwise the affected
+ * buckets are derived from the imported rows' `bucket_start` (never from `MAX(ts)`) and
+ * each is rebuilt in its own transaction with the watermark advanced inside it, so an
+ * interruption leaves a contiguous materialized prefix and the next run reprocesses the
+ * uncommitted range. The keyed-aggregate and global-ranked classes are recomputed after
+ * the bucketed deltas land; their watermarks advance last (R7).
+ */
+export async function refreshHistoryBoardRollupsIncremental(db: DbAdapter): Promise<void> {
+    const watermarks = await readRollupWatermarks(db);
+    const messageWm = watermarks.get('history_board_message_5m');
+    const needsRebuild = messageWm === undefined || messageWm.definitionVersion !== ROLLUP_DEFINITION_VERSION;
+
+    if (needsRebuild) {
+        await rebuildAllRollups(db);
+        return;
+    }
+
+    const affected = await affectedBucketsWithRange(db, messageWm.importedAtWatermark);
+    let advanced = messageWm.importedAtWatermark;
+
+    if (affected.length > 0) {
+        // A bucket whose rows all sit at the watermark is already materialized (the prior
+        // run advanced the watermark to include them); only buckets with a genuinely new
+        // row (maxImportedAt > watermark) can raise `advanced` and must be respected as
+        // blockers. suffixMin[i+1] = the minimum imported_at among NEW buckets not yet
+        // processed — the watermark may advance only up to that boundary, so an interrupted
+        // run never leaps past a still-unprocessed bucket whose rows were backfilled to an
+        // earlier imported_at than a processed sibling's max (R7).
+        const newMask = affected.map((a) => a.maxImportedAt > messageWm.importedAtWatermark);
+        const suffixMin: string[] = new Array(affected.length + 1).fill('');
+        for (let i = affected.length - 1; i >= 0; i--) {
+            const bucket = affected[i];
+            const next = suffixMin[i + 1];
+            if (bucket === undefined || next === undefined) continue;
+            suffixMin[i] = !newMask[i] ? next : next === '' ? bucket.minImportedAt : minStr(bucket.minImportedAt, next);
+        }
+        for (let i = 0; i < affected.length; i++) {
+            const bucket = affected[i];
+            if (bucket === undefined) continue;
+            // Boundary buckets (rows == watermark) were already materialized; advancing past
+            // them is harmless and keeps a clean run from re-selecting them forever. New
+            // buckets are clamped to the next unprocessed NEW bucket's minimum.
+            const nextMin = suffixMin[i + 1] ?? '';
+            const safeAdvance = !newMask[i]
+                ? bucket.maxImportedAt
+                : nextMin === ''
+                  ? bucket.maxImportedAt
+                  : minStr(bucket.maxImportedAt, nextMin);
+            advanced = maxStr(safeAdvance, advanced);
+            const ops: DbBatchOp[] = [
+                ...message5mBucketOps(bucket.bucket),
+                ...tool5mBucketOps(bucket.bucket),
+                ...skill5mBucketOps(bucket.bucket),
+            ];
+            const day = bucketDay(bucket.bucket);
+            for (const table of BUCKETED_ROLLUP_TABLES) {
+                const b =
+                    table === 'history_daily_stats' || table === 'history_board_source_daily' ? day : bucket.bucket;
+                ops.push({
+                    sql: `INSERT INTO history_board_rollup_bucket (table_name, bucket_start) VALUES (?, ?)
+                          ON CONFLICT(table_name, bucket_start) DO NOTHING`,
+                    params: [table, b],
+                });
+            }
+            // 0743: derive the day-grain dimension marts for this bucket's day INSIDE the same
+            // per-bucket transaction. A reader never observes the five-minute rollups and the
+            // daily mart disagreeing, because both land in the same atomic batch.
+            ops.push(...deriveDimensionMartsOps([day]));
+            // Advance ONLY the bucket-level watermarks in the transaction. Advancing every
+            // table here would make an interruption between the bucket loop and the post-pass
+            // unrecoverable: the post-pass tables would already be marked clean (R7).
+            for (const table of BUCKET_LEVEL_WATERMARK_TABLES) {
+                ops.push(watermarkUpsertOp(table, advanced, ROLLUP_DEFINITION_VERSION));
+            }
+            await db.batch(ops);
+        }
+    }
+
+    // Nothing new and no interrupted post-pass pending → fully consistent.
+    if (affected.length === 0 && !(await postPassLags(db, advanced))) return;
+
+    const days =
+        affected.length > 0 ? [...new Set(affected.map((a) => bucketDay(a.bucket)))] : await allMaterializedDays(db);
+    await recomputeDailyAndSourceDaily(db, days);
+    await recomputeKeyedAggregates(db);
+    await recomputeGlobalRanked(db);
+
+    // The post-pass tables are now consistent — advance their watermarks last.
+    for (const table of POST_WATERMARK_TABLES) {
+        await writeRollupWatermark(db, table, {
+            importedAtWatermark: advanced,
+            definitionVersion: ROLLUP_DEFINITION_VERSION,
+        });
+    }
+}
+
+// Re-export from here so ROLLUP_DEFINITION_VERSION is reachable at the frozen location.
+export { ROLLUP_DEFINITION_VERSION } from './rollup-watermark';
