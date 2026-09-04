@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "S2: Give the inline pipeline driver a single owner and an executable parity check against task-pipeline"
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-09-03T20:27:38.616Z
-updated_at: "2026-09-03T21:13:34.939Z"
+updated_at: "2026-09-04T03:18:04.735Z"
 feature_id: D9
 dependencies: ["0751", "0752", "0753"]
 ac_altitude: task-local
@@ -89,7 +89,18 @@ Feature: Inline pipeline driver ownership and parity
 - [ ] Run the check green, then `bun run spur-check`.
 ### Solution
 
-**R1 — named owner in the reference doc.** `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` frontmatter gains `owner: spur-dev-maintainers` and `retirement-criterion: ...`. The doc body also names the owner at the top, after the frontmatter, so it's discoverable without reading this task.
+**Change map (0755):**
+
+| Change | File:line |
+| --- | --- |
+| Frontmatter `owner` + `retirement-criterion` | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:1-10` |
+| Owner + retirement criterion in doc body | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:14-16` |
+| Documented action/guard set | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:24-28` |
+| Parity check script | `plugins/sp/scripts/inline-pipeline-parity-check.ts:1-180` |
+| Parity check test | `plugins/sp/tests/inline-pipeline-parity-check.test.ts:1-60` |
+| spur-check wiring | `package.json:80-94` |
+
+**R1 — named owner in the reference doc.** `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:1-10` frontmatter gains `owner: spur-dev-maintainers` and `retirement-criterion: ...`. The doc body also names the owner at the top, after the frontmatter, so it's discoverable without reading this task.
 
 **R2 — executable parity check.** New `plugins/sp/scripts/inline-pipeline-parity-check.ts` — a node-builtin-only Bun script (no workspace imports, same pattern as `transition-shim-check.ts` and `script-contract-check.ts`). Walks `config/workflows/*.yaml` (all 11), extracts action kinds from `onEnter` lists and guard kinds from `transitions[].guard.kind`, computes the union across all workflows, and diffs against a `DOCUMENTED` const. Reports divergence with file paths, exits non-zero on any disagreement. Wired into `spur-check` and `spur-check-new` (and the `:full` variants) as the `inline-pipeline-parity-check` npm script — R3.
 
@@ -130,10 +141,6 @@ Final documented set: 9 actions (`shell` · `note` · `doctor.probe` · `file.re
 
 <!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
 
-### Review
-
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
 ### References
 - Feature: `docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md`
 - Strategy (frozen, approved): `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §5.2, §7 (S2), §9.3 decisions D3 and D7
@@ -142,3 +149,4 @@ Final documented set: 9 actions (`shell` · `note` · `doctor.probe` · `file.re
 - Surfaces: `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`; `config/workflows/task-pipeline.yaml`
 - Depends on: 0751, 0752, 0753 (S0)
 ### History
+- 2026-09-04T03:18:04.735Z todo → wip (system)
