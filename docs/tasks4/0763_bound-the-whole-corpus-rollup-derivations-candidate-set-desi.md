@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Bound the whole-corpus rollup derivations: candidate-set design for loop findings and ranked steps, and a covering index for source summary"
-status: backlog
+status: todo
 template: standard
 created_at: 2026-09-04T08:14:01.724Z
-updated_at: "2026-09-04T16:29:24.942Z"
+updated_at: "2026-09-04T16:44:43.779Z"
 feature_id: E91
 ac_altitude: task-local
 ---
@@ -422,3 +422,4 @@ alongside it rather than as current.
 - `packages/domain/tests/analytics/rollup-definition-version.test.ts` — the digest pin that a derivation change trips.
 - `docs/report/2026-09-03-E91-history-tab-latency-baseline.md` — corpus and refresh-cost context.
 ### History
+- 2026-09-04T16:44:43.779Z backlog → todo (system)
