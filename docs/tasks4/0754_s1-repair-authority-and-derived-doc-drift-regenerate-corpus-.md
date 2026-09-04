@@ -1,13 +1,14 @@
 ---
 schema_version: 1
 name: "S1: Repair authority and derived-doc drift, regenerate corpus/composition baselines, fix the docs-pipeline budget"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:38.266Z
-updated_at: "2026-09-03T21:13:28.261Z"
+updated_at: "2026-09-04T03:35:53.535Z"
 feature_id: D9
 priority: P1
 ac_altitude: task-local
+done_forced: "true"
 ---
 
 ## 0754. S1: Repair authority and derived-doc drift, regenerate corpus/composition baselines, fix the docs-pipeline budget
@@ -189,3 +190,6 @@ Feature: Authority, derived-doc, and baseline repair
 - Artifacts: `config/workflow-composition-baseline.json`, `config/corpus-baseline.json`, `config/pipeline-budgets.json`, `config/plugin-scripts.json`, `package.json`
 - Derived docs: `docs/03_ARCHITECTURE.md:1358`, `docs/04_DESIGN.md`, `docs/design/workflow-composition-contract.md`, `docs/design/workflow-observability.md`, `docs/design/harness-surface-governance.md`
 ### History
+- 2026-09-04T03:35:51.949Z todo → wip (system)
+- 2026-09-04T03:35:52.793Z wip → testing (system)
+- 2026-09-04T03:35:53.524Z testing → done (system)
