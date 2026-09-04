@@ -135,15 +135,50 @@ Feature: Authority, derived-doc, and baseline repair
 - [ ] R9: `bun run spur-check`, `bun run corpus-check`, `git status --short`.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Change map (0754):**
+
+| Change | File:line |
+| --- | --- |
+| Pipeline budget correction | `config/pipeline-budgets.json:51-63` (docs-pipeline.modelQueries 1→2, D8 Decision 11) |
+| Composition entrypoint check | `scripts/commands/composition-entrypoint-check.ts:1-110` (new) |
+| regen-corpus-baseline npm entry | `package.json:91` |
+| spur-check wiring | `package.json:80-94` (composition-entrypoint-check added) |
+| Architecture §24 header | `docs/03_ARCHITECTURE.md:1358` ("built" not "not yet built") |
+| Design capability-attestation label | `docs/04_DESIGN.md:2451` (ADR-101→ADR-102) |
+| ADR amendments section | `docs/00_ADR.md:2086-2098` (consolidated, 8 ADRs) |
+| Composition baseline regen | `config/workflow-composition-baseline.json` (6 inert fields dropped, 11 workflows covered) |
+| Corpus baseline regen | `config/corpus-baseline.json` (299 entries from 869 observed findings) |
+| Corpus waiver fields | `config/corpus-baseline.json:1-6` (owner, review_date, removal_criterion per ADR-093) |
+
+**R1** — `docs/03_ARCHITECTURE.md:1358` section 24 header changed from "accepted design — ADR-094–100; not yet built" to "built — ADR-094–100, tasks 0703–0712". R2 — `docs/04_DESIGN.md:2451` "Capability attestation (ADR-101, task 0706)" corrected to "ADR-102, task 0706". R3 — `docs/00_ADR.md:2086-2098` consolidated amendment section covering ADRs 051, 069, 071, 093, 094→102, 098, 099, 100, 102. R4 — composition baseline regenerated; 6 inert per-workflow fields dropped, proofInputs removed, stale digests refreshed, all 11 workflows covered. R5 — corpus baseline regenerated; 299 entries from 869 observed findings; ADR-093 waiver fields (owner, review_date, removal_criterion) added at the top. **STAGED, NOT COMMITTED** — awaiting your sign-off per plan §7. R6 — `config/pipeline-budgets.json:51-63` docs-pipeline.modelQueries 1→2 (D8 Decision 11: FIX, not raise); decision recorded inline. R7 — `scripts/commands/composition-entrypoint-check.ts:1-110` new two-sided gate; regen-corpus-baseline added to package.json; wired into spur-check.
+
+**R8 — OPEN.** `plugins/sp/scripts/surface-drift-inventory.ts` reports 3 confirmed mismatches: (1) `spur database` noun absent from live root commands, (2) `spur task create --section` flag absent, (3) `spur task create --body` flag absent. Resolution options: (a) add the missing public surface (requires ADR-051 consent for the new noun and two new flags), (b) remove the entries from the inventory. Awaiting your call.
+
+**R9 — PENDING.** Full project check needs R8 to close first.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `bunx @biomejs/biome check` — clean on all touched files
+- `bun scripts/commands/regen-composition-baseline.ts` — R4 verified, 51 facts re-accepted
+- `bun scripts/commands/regen-corpus-baseline.ts` — R5 verified, 299 entries from 869 observed findings
+- `bun scripts/commands/composition-entrypoint-check.ts` — R7 verified, 2 composition entrypoints wired
+- `bun plugins/sp/scripts/surface-drift-inventory.ts` — R8 3 mismatches identified (not yet resolved)
+- `bun test plugins/sp/tests/inline-pipeline-parity-check.test.ts` — 2/2 pass (from 0755)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Count | Notes |
+| --- | --- | --- |
+| P1 | 0 | No blocking findings. |
+| P2 | 1 | R8 is incomplete — the 3 surface mismatches need a decision (add public surface vs remove inventory entries) before R9 can verify. |
+| P3 | 0 | — |
+| P4 | 1 | R5's waiver is a 4-month window starting 2026-09-03. If the 299 entries aren't worked down by 2026-12-01, the waiver needs renewal or escalation. |
+
+**Per-requirement verdict** — R1 MET · R2 MET · R3 MET · R4 MET · R5 MET (staged, not committed) · R6 MET · R7 MET · R8 OPEN (3 mismatches identified, resolution pending) · R9 PENDING (R8 must close first).
+
+**Residual risk** — R8 is the only open implementation item. Adding `spur database` is an ADR-051 consent event for a new public noun; adding `--section`/`--body` to `spur task create` is consent for two new public flags. Both paths are tractable but require explicit operator consent per the ADR-051 gate — same shape as the R5/R8 consent pause you chose at the start of 0754.
+
+**Final disposition:** WIP — R1-R7 done; R5 staged; R8 needs your decision; R9 pending R8.
 
 ### References
 - Feature: `docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md`
