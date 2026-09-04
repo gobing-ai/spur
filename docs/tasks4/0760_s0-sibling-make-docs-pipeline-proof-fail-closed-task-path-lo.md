@@ -4,7 +4,7 @@ name: "S0-sibling: make docs-pipeline proof fail-closed (task-path lookup)"
 status: done
 template: feature-impl
 created_at: 2026-09-03T23:07:43.354Z
-updated_at: "2026-09-04T15:46:22.398Z"
+updated_at: "2026-09-04T21:12:07.352Z"
 feature_id: D9
 ac_altitude: task-local
 done_forced: "true"
@@ -35,11 +35,11 @@ reviewable unit.
 
 ### Requirements
 
-- [ ] R1. `config/workflows/docs-pipeline.yaml:145` task-path lookup is de-suppressed the same way task-pipeline was in 0751 R2: drop `2>/dev/null`, drop `|| true`, drop the forced `exit 0`; an empty resolved path exits non-zero naming the unresolved task. The resolved `taskSpecPath` folds into the docs-pipeline proof digest via `taskFile:` (docs-pipeline.yaml:155, :191), so a silent miss degrades proof to tree-only.
-- [ ] R2. Regression pin mirrors `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:179-237` for docs-pipeline.
-- [ ] R3. No new bypass introduced (0751 R6 semantics).
-- [ ] R4. `packages/app/tests/workflow/proof-input-fingerprint.test.ts:241-244`: the first R1 regression assertion `expect(createGitAlternateTree(...)).rejects.toBeInstanceOf(...)` gains `await` (sibling tests use the awaited `.catch(e => e)` pattern); after the fix the test still fails against pre-0751 code, so the git-failure path stays exercised.
-- [ ] R5. Feature D9 acceptance criteria (`docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md`) gain gherkin scenarios covering proofBinding enforcement (0751 R4) and no-new-bypass (0751 R6); scenario titles match the verify-stage AC-label matching contract (exact label = scenario title text), so future verify answer files cite exact AC labels instead of a companion table.
+- [x] R1. `config/workflows/docs-pipeline.yaml:145` task-path lookup is de-suppressed the same way task-pipeline was in 0751 R2: drop `2>/dev/null`, drop `|| true`, drop the forced `exit 0`; an empty resolved path exits non-zero naming the unresolved task. The resolved `taskSpecPath` folds into the docs-pipeline proof digest via `taskFile:` (docs-pipeline.yaml:155, :191), so a silent miss degrades proof to tree-only.
+- [x] R2. Regression pin mirrors `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:179-237` for docs-pipeline.
+- [x] R3. No new bypass introduced (0751 R6 semantics).
+- [x] R4. `packages/app/tests/workflow/proof-input-fingerprint.test.ts:241-244`: the first R1 regression assertion `expect(createGitAlternateTree(...)).rejects.toBeInstanceOf(...)` gains `await` (sibling tests use the awaited `.catch(e => e)` pattern); after the fix the test still fails against pre-0751 code, so the git-failure path stays exercised.
+- [x] R5. Feature D9 acceptance criteria (`docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md`) gain gherkin scenarios covering proofBinding enforcement (0751 R4) and no-new-bypass (0751 R6); scenario titles match the verify-stage AC-label matching contract (exact label = scenario title text), so future verify answer files cite exact AC labels instead of a companion table.
 
 ### Acceptance Criteria
 
@@ -61,6 +61,11 @@ Scenario: D9 verify answers cite exact AC labels for 0751 R4 and R6
   Then exact-label matching resolves each citation to a scenario title
 ```
 
+<!-- DD-09 coverage: this task's scenarios sit at task-local altitude, so their titles do not
+     mimic the feature's. The `covers:` alias below names the D9 ship-contract scenario this
+     task's R1 actually satisfies (0700 R3). -->
+
+- [x] AC-D9a. (covers: A missing task spec fails the docs-pipeline proof step too) R1 — the docs-pipeline task-path capture step exits non-zero naming the unresolved wbs and produces no tree-only proof digest.
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
@@ -93,13 +98,25 @@ Scenario: D9 verify answers cite exact AC labels for 0751 R4 and R6
 **R5 — D9 feature AC gains gherkin scenarios.** `docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md` — three new scenarios: "A missing task spec fails the docs-pipeline proof step too" (R1 docs-sibling), "The done-state verdict artifact declares the enforced proof binding" (0751 R4), and "No new bypass is introduced in the pipeline composition" (0751 R6). Titles match the verify-stage AC-label matching contract so future verify answer files cite exact AC labels.
 
 ### Testing
+**Pipeline verify results**
 
-- `bunx @biomejs/biome check` — clean on all touched files
-- `bunx tsc --noEmit` (packages/app) — clean
-- `bun test packages/app/tests/workflow/docs-pipeline-proof-chain.test.ts` — 4/4 pass (R2)
-- `bun test packages/app/tests/workflow/proof-input-fingerprint.test.ts --test-name-pattern "read-tree failure"` — 1/1 pass (R4)
-- Pre-existing R1 and R2 tests in `task-pipeline-proof-chain.test.ts` still pass (unchanged surface)
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `config/workflows/docs-pipeline.yaml:143-156` replaces the suppressed one-liner with a fail-closed block: `set -e`, `task_path="$($spurBin task path $wbs --json \| jq -r '.path // .filePath // empty')"`, and `if [ -z "$task_path" ]; then echo "docs-pipeline: task path did not resolve for wbs $wbs" >&2; exit 1; fi`. No `2>/dev/null`, no `\|\| true`, no forced `exit 0`. The resolved path is written to `.spur/run/$wbs-docs-taskpath.txt`, read into `taskSpecPath` via `file.read.into-var` at `:157-159`, and folded into the digest by both `proof.fingerprint` actions (`taskFile: ${vars.taskSpecPath}` at `:165` and `:201`), so an unresolved wbs can no longer silently degrade the proof to tree-only. `cd packages/app && bun test tests/workflow/docs-pipeline-proof-chain.test.ts` → 4 pass / 0 fail. |
+| R2 | MET | `packages/app/tests/workflow/docs-pipeline-proof-chain.test.ts` is the docs-pipeline mirror of `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:179-237`, with four pins: the structural suppression scan (`:32-38`), the empty-path non-zero exit (`:40-45`), the `taskFile:` digest folding (`:47-55`), and a behavioral test (`:57-81`) that renders the command against a stub `emit.sh` returning `{}` and asserts `execSync` throws. `cd packages/app && bun test tests/workflow/docs-pipeline-proof-chain.test.ts` → 4 pass / 0 fail, 11 expect(). |
+| R3 | MET | The change removes a bypass rather than adding one, and the removal is pinned: `packages/app/tests/workflow/docs-pipeline-proof-chain.test.ts:32-38` asserts the rendered command contains no `--json 2>/dev/null`, no `\|\| true`, and no trailing `; exit 0`. The pre-existing task-pipeline surface is unchanged — `cd packages/app && bun test tests/workflow/task-pipeline-proof-chain.test.ts` → 12 pass / 0 fail. `bun run spur-check` runs the `sp-runtime-path` and composition gates over the same tree with no suppression. |
+| R4 | MET | `packages/app/tests/workflow/proof-input-fingerprint.test.ts:241-250` now uses the sibling awaited pattern — `const err = await createGitAlternateTree(process.cwd(), undefined, failingExecutor('read-tree')).catch((e) => e); expect(err).toBeInstanceOf(ProofCaptureError);` — matching the immediately following `add failure` test at `:253-258`. `cd packages/app && bun test tests/workflow/proof-input-fingerprint.test.ts` → 11 pass / 0 fail. Non-vacuity proven by mutation: a temporary probe replacing the rejecting call with a stub resolving to the pre-0751 `''` sentinel fails the same assertion with `Expected constructor: [class ProofCaptureError extends Error] / Received value: ""` (probe removed after the run). |
+| R5 | MET | `docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md:117` "A missing task spec fails the docs-pipeline proof step too", `:123` "The done-state verdict artifact declares the enforced proof binding" (0751 R4 proofBinding enforcement), and `:129` "No new bypass is introduced in the pipeline composition" (0751 R6). `spur feature check D9 --json` echoes all three titles back verbatim, which is exact-label resolution demonstrated by the gate itself. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| docs-pipeline proof fails closed on unresolved task path | MET | test | `cd packages/app && bun test tests/workflow/docs-pipeline-proof-chain.test.ts` → 4 pass / 0 fail. The behavioral pin at `:57-81` renders the real command against a stub resolving to `{}` and asserts `execSync` throws; the structural pins assert the non-zero exit names the unresolved wbs and that `taskSpecPath` still folds into the digest, so no tree-only proof is produced. |
+| the R1 git-failure rejection assertion cannot pass vacuously | MET | test | Mutation probe: a temporary test importing `ProofCaptureError` from `packages/app/src/workflow/proof-input-fingerprint` and applying the repaired assertion to `async () => ''` (the pre-0751 sentinel) → `0 pass / 1 fail`, `Expected constructor: [class ProofCaptureError extends Error] / Received value: ""`. The awaited form therefore fails against sentinel-returning code, which the prior un-awaited `expect(...).rejects` form would not have. Against the current code `cd packages/app && bun test tests/workflow/proof-input-fingerprint.test.ts --test-name-pattern "read-tree failure"` → 1 pass / 0 fail. Probe deleted after the run. |
+| D9 verify answers cite exact AC labels for 0751 R4 and R6 | MET | command | `spur feature check D9 --json \| jq -r '.[0].findings[].message'` returns the three scenario titles verbatim — "A missing task spec fails the docs-pipeline proof step too", "The done-state verdict artifact declares the enforced proof binding", "No new bypass is introduced in the pipeline composition" — matching `docs/features/D9_…md:117,123,129` character for character, so exact-label matching resolves each citation to a scenario title. |
+| A missing task spec fails the docs-pipeline proof step too | MET | test | (D9 ship-contract alias of this task's R1; see task AC checklist `AC-D9a`.) `cd packages/app && bun test tests/workflow/docs-pipeline-proof-chain.test.ts` -> 4 pass / 0 fail. The behavioral pin at `:57-81` renders the real command against a stub resolving to `{}` and asserts `execSync` throws; the structural pins assert the non-zero exit names the unresolved wbs and that `taskSpecPath` still folds into the digest, so no tree-only proof digest is produced. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 
 | Priority | Count | Notes |

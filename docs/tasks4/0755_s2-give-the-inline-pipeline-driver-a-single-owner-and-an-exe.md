@@ -4,7 +4,7 @@ name: "S2: Give the inline pipeline driver a single owner and an executable pari
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:38.616Z
-updated_at: "2026-09-04T03:18:33.127Z"
+updated_at: "2026-09-04T18:30:38.052Z"
 feature_id: D9
 dependencies: ["0751", "0752", "0753"]
 ac_altitude: task-local
@@ -20,11 +20,11 @@ That asymmetry is why D8 decision **D3** kept the inline driver rather than remo
 
 This slice buys the cheap half of the decision: a single named owner and an executable parity check. Removal stays on the table at the A3 gate (decision **D7**: remove the per-task interpreter once the engine covers `/sp:dev-runall`'s per-task execution with real terminal runs and the parity check is green; the batch orchestration wrapper may remain).
 ### Requirements
-- [ ] R1. The inline pipeline driver has one named owner recorded in its reference document; the ownership is discoverable without reading this task.
-- [ ] R2. An executable parity check compares the inline driver's action and guard set against `task-pipeline.yaml`'s resolved actions and fails on any element present in one and absent in the other.
-- [ ] R3. The parity check runs in `spur-check` alongside the other mechanical surface checks.
-- [ ] R4. The driver exposes no configuration flag that has no effect; any inert flag found during the audit is removed or wired.
-- [ ] R5. The removal criterion is recorded with the driver: the per-task interpreter retires once the engine covers per-task execution for `/sp:dev-runall` with real terminal runs and the parity check is green (D8 decision D7). Recording the criterion is part of this task; acting on it is not.
+- [x] R1. The inline pipeline driver has one named owner recorded in its reference document; the ownership is discoverable without reading this task.
+- [x] R2. An executable parity check compares the inline driver's action and guard set against `task-pipeline.yaml`'s resolved actions and fails on any element present in one and absent in the other.
+- [x] R3. The parity check runs in `spur-check` alongside the other mechanical surface checks.
+- [x] R4. The driver exposes no configuration flag that has no effect; any inert flag found during the audit is removed or wired.
+- [x] R5. The removal criterion is recorded with the driver: the per-task interpreter retires once the engine covers per-task execution for `/sp:dev-runall` with real terminal runs and the parity check is green (D8 decision D7). Recording the criterion is part of this task; acting on it is not.
 ### Acceptance Criteria
 ```gherkin
 Feature: Inline pipeline driver ownership and parity
@@ -119,12 +119,27 @@ Final documented set: 9 actions (`shell` · `note` · `doctor.probe` · `file.re
 **R5 — retirement criterion recorded.** Frontmatter `retirement-criterion` and the doc body both state the criterion verbatim: "the per-task interpreter retires once the engine covers per-task execution for `/sp:dev-runall` with real terminal runs and the parity check is green (D8 decision D7)." Recording the criterion is in scope; acting on it is not — that is a separate A3-gate decision. R5 MET.
 
 ### Testing
+**Pipeline verify results**
 
-- `bunx @biomejs/biome check` — clean on all touched files
-- `bun plugins/sp/scripts/inline-pipeline-parity-check.ts` — passes; 9 actions, 2 guards, 11 workflows agree
-- `bun test plugins/sp/tests/inline-pipeline-parity-check.test.ts` — 2/2 pass: (a) green against the current repo, (b) non-zero exit with a named divergence when a synthetic workflow introduces an unknown action kind
-- The check is now wired into `spur-check` — R3 mechanically enforced
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` frontmatter carries `owner: spur-dev-maintainers`, and body line 14 repeats it in prose ("**Owner:** `spur-dev-maintainers` (per task 0755 R1)"). Both are in the reference document itself, so the ownership is discoverable without reading task 0755. |
+| R2 | MET | `plugins/sp/scripts/inline-pipeline-parity-check.ts` loads every `config/workflows/*.yaml` through the real workflow loader and diffs the resolved action/guard union against the driver doc's declared set at `inline-pipeline-driver.md:18-26`. `bun test ./plugins/sp/tests/inline-pipeline-parity-check.test.ts` → 2 pass / 0 fail / 7 expect(); the two tests at `:18` and `:26` assert the pass direction and the named-divergence failure direction respectively. |
+| R3 | MET | `package.json:95` declares `inline-pipeline-parity-check`; it is invoked in the `spur-check` chain at `:80`, `spur-check-new` at `:81`, `spur-check:full` at `:86`, and `spur-check-new:full` at `:87`. Live run: `bun run inline-pipeline-parity-check` → `inline-pipeline-parity-check: ok (9 actions, 2 guards agree across 11 workflows)`, exit 0. |
+| R4 | MET | Audit of every flag the driver documents (`--agent`, `--as`, `--auto`, `--format`, `--json`, `--mode`, `--no-lifecycle`, `--run-id`, `--solution-from-diff`, `--source`, `--transition`, `--vars`): eleven resolve to a declared CLI option (`shared-options.ts:47,52,65,67`; `task.ts:351,988,989,1181`; `workflow.ts:251,1018`; `index.ts:73`), and `--auto` resolves to the `profile=auto` HITL auto-skip behaviour the driver itself specifies at `inline-pipeline-driver.md:96`. No documented flag is inert, so nothing had to be removed or wired. |
+| R5 | MET | The retirement criterion lives with the driver in two places: the frontmatter `retirement-criterion` key and body line 16, both stating the D8 decision D7 condition (per-task interpreter retires once the engine covers per-task execution for `/sp:dev-runall` with real terminal runs and the parity check is green) and naming `plugins/sp/scripts/inline-pipeline-parity-check.ts` as the green-check surface. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R2 — The parity check catches a divergence in either direction | MET | test | `bun test ./plugins/sp/tests/inline-pipeline-parity-check.test.ts` → 2 pass / 0 fail. The test at `:26` ("exits non-zero with a named divergence when the documented set disagrees with a workflow") perturbs the documented set and asserts both a non-zero exit and that the divergent element is named in the output. |
+| R2 — The parity check passes when the two agree | MET | test | Same run; the test at `:18` ("passes against the current repo: documented set matches the union across all 11 workflows") asserts a clean pass with no element suppressed. |
+| R3 — Divergence cannot reach a commit unnoticed | MET | command | `bun run inline-pipeline-parity-check` → `ok (9 actions, 2 guards agree across 11 workflows)`, exit 0; the script is a link in the `spur-check` chain at `package.json:80` (and `:81`, `:86`, `:87`), so it executes on every project check. |
+| R4 [non-core] — The driver declares no inert configuration | MET | manual-review | Each of the twelve documented flags traced to a behaviour this run: eleven to a declared CLI option (`apps/cli/src/commands/shared-options.ts:47,52,65,67`, `task.ts:351,988,989,1181`, `workflow.ts:251,1018`, `index.ts:73`) and `--auto` to the `profile=auto` HITL auto-skip at `inline-pipeline-driver.md:96`. Zero inert flags found. |
+| R5 [docs-only] — The retirement condition is written down where the driver lives | MET | static-ref | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` frontmatter (`owner`, `retirement-criterion`) plus body lines 14 and 16; reading the reference alone yields both the owner and the removal condition. |
+| The inline driver cannot silently diverge from the engine pipeline | MET | test | `bun test ./plugins/sp/tests/inline-pipeline-parity-check.test.ts` → 2 pass / 0 fail / 7 expect(); the check reports any action or guard present in one side and absent in the other as a failure, and the check runs inside `spur-check`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 
 | Priority | Count | Notes |

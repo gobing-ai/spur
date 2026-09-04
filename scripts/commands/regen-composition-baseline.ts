@@ -30,7 +30,7 @@
  *   --check  report drift and exit 1 without writing (CI-style probe)
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadWorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import {
@@ -45,6 +45,19 @@ const checkOnly = process.argv.includes('--check');
 
 const baseline = JSON.parse(readFileSync(baselinePath, 'utf8')) as WorkflowCompositionBaseline;
 const changes: string[] = [];
+
+// The docstring promises an untracked workflow file is *reported* and left alone. Nothing
+// enumerated the directory, so three workflows sat outside the two-sided gate unnoticed until
+// task 0754 R4 counted them. Report them here; adopting one stays a human decision (seed the
+// entry, then re-run) so a new workflow never enters the gate by accident.
+const trackedDefinitions = new Set(Object.values(baseline.workflows).map((e) => e.definition));
+const untracked = readdirSync(resolve(root, 'config/workflows'))
+    .filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
+    .map((f) => `config/workflows/${f}`)
+    .filter((rel) => !trackedDefinitions.has(rel));
+for (const rel of untracked) {
+    console.warn(`regen-composition-baseline: untracked workflow (outside the composition gate): ${rel}`);
+}
 
 for (const [name, entry] of Object.entries(baseline.workflows)) {
     const def = await loadWorkflowDef(resolve(root, entry.definition), { validateSchema: false });

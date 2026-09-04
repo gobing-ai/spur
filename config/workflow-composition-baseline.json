@@ -205,7 +205,7 @@
                 },
                 "precheck:onEnter:5": {
                     "kind": "shell",
-                    "invocation": "mkdir -p .spur/run .spur/memory && if [ \"$mode\" = \"fast\" ]; then\n  echo \"fast:evidence complete+consistent\" > \".spur/run/$wbs-route-reason.txt\";\nelif [ -z \"$mode\" ]; then\n  echo \"safety:standard verification\" > \".spur/run/$wbs-route-reason.txt\";\nelif [ \"$mode\" = \"unknown\" ]; then\n  echo \"safety:unknown evidence quality\" > \".spur/run/$wbs-route-reason.txt\";\nelif [ \"$mode\" = \"conflict\" ]; then\n  echo \"safety:conflicting evidence\" > \".spur/run/$wbs-route-reason.txt\";\nelse\n  echo \"safety:unrecognized evidence (mode=$mode)\" > \".spur/run/$wbs-route-reason.txt\";\nfi && cat \".spur/run/$wbs-route-reason.txt\" >> .spur/memory/task-pipeline-routes.log && exit 0"
+                    "invocation": "mkdir -p .spur/run .spur/memory && RUN_ID=\"$__runId\" && if [ -z \"$RUN_ID\" ]; then RUN_ID=\"pipeline-$wbs\"; fi && REASON_FILE=\".spur/run/$RUN_ID-route-reason.txt\" && if [ \"$mode\" = \"fast\" ]; then\n  echo \"fast:evidence complete+consistent\" > \"$REASON_FILE\";\nelif [ -z \"$mode\" ]; then\n  echo \"safety:standard verification\" > \"$REASON_FILE\";\nelif [ \"$mode\" = \"unknown\" ]; then\n  echo \"safety:unknown evidence quality\" > \"$REASON_FILE\";\nelif [ \"$mode\" = \"conflict\" ]; then\n  echo \"safety:conflicting evidence\" > \"$REASON_FILE\";\nelse\n  echo \"safety:unrecognized evidence (mode=$mode)\" > \"$REASON_FILE\";\nfi && printf '%s %s %s\\n' \"$RUN_ID\" \"$wbs\" \"$(cat \"$REASON_FILE\")\" >> .spur/memory/task-pipeline-routes.log && exit 0"
                 },
                 "implement:onEnter:0": {
                     "kind": "agent.run",
@@ -278,7 +278,7 @@
                 },
                 "verify:onEnter:4": {
                     "kind": "shell",
-                    "invocation": "V=\".spur/run/$wbs-verdict.json\"; if [ -f \"$V\" ] && [ -n \"$proofDigest\" ]; then\n  jq --arg d \"$proofDigest\" --arg g \"$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)\"\n  '. + {proof: {digest: $d, capturePoint: \"quality-gate-entry\", stages: {\n    qualityGate: {status: $g, digest: $d},\n    review: {status: \"completed\", digest: $d},\n    verification: {status: .verdict, digest: $d}}}}\n    | .checks += [{name: \"proof-input-digest\", status: \"pass\", evidence: $d}]'\n  \"$V\" > \"$V.tmp\" && mv \"$V.tmp\" \"$V\";\nfi; exit 0"
+                    "invocation": "V=\".spur/run/$wbs-verdict.json\"; if [ -f \"$V\" ] && [ -n \"$proofDigest\" ]; then\n  jq --arg d \"$proofDigest\" --arg r \"$__runId\" --arg g \"$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)\"\n  '. + {proof: {digest: $d, runId: $r, capturePoint: \"quality-gate-entry\", stages: {\n    qualityGate: {status: $g, digest: $d},\n    review: {status: \"completed\", digest: $d},\n    verification: {status: .verdict, digest: $d}}}}\n    | .checks += [{name: \"proof-input-digest\", status: \"pass\", evidence: $d}]'\n  \"$V\" > \"$V.tmp\" && mv \"$V.tmp\" \"$V\";\nfi; exit 0"
                 },
                 "record:onEnter:0": {
                     "kind": "proof.fingerprint"
@@ -320,7 +320,7 @@
                 },
                 "task-resolve:onEnter:1": {
                     "kind": "shell",
-                    "invocation": "mkdir -p .spur/run .spur/memory && RUN_ID=\"$__runId\" && if [ -z \"$RUN_ID\" ]; then RUN_ID=\"wrapup\"; fi && REASON_FILE=\".spur/run/$RUN_ID-route-reason.txt\" && if [ \"$(echo \"$tasks\" | jq length 2>/dev/null || echo 0)\" -eq 0 ]; then\n  echo \"skipped:empty task list\" > \"$REASON_FILE\";\nelif [ \"$mode\" = \"fast\" ]; then\n  echo \"fast:evidence complete+consistent\" > \"$REASON_FILE\";\nelif [ -z \"$mode\" ]; then\n  echo \"safety:missing evidence (mode empty)\" > \"$REASON_FILE\";\nelif [ \"$mode\" = \"unknown\" ]; then\n  echo \"safety:unknown evidence quality\" > \"$REASON_FILE\";\nelif [ \"$mode\" = \"conflict\" ]; then\n  echo \"safety:conflicting evidence\" > \"$REASON_FILE\";\nelse\n  echo \"safety:unrecognized evidence (mode=$mode)\" > \"$REASON_FILE\";\nfi && cp \"$REASON_FILE\" .spur/run/wrapup-route-reason.txt && cat \"$REASON_FILE\" >> .spur/memory/wrapup-routes.log && exit 0"
+                    "invocation": "mkdir -p .spur/run .spur/memory && RUN_ID=\"$__runId\" && if [ -z \"$RUN_ID\" ]; then RUN_ID=\"wrapup\"; fi && REASON_FILE=\".spur/run/$RUN_ID-route-reason.txt\" && if [ \"$(echo \"$tasks\" | jq length 2>/dev/null || echo 0)\" -eq 0 ]; then\n  echo \"skipped:empty task list\" > \"$REASON_FILE\";\nelif [ \"$mode\" = \"fast\" ]; then\n  echo \"fast:evidence complete+consistent\" > \"$REASON_FILE\";\nelif [ -z \"$mode\" ]; then\n  echo \"safety:missing evidence (mode empty)\" > \"$REASON_FILE\";\nelif [ \"$mode\" = \"unknown\" ]; then\n  echo \"safety:unknown evidence quality\" > \"$REASON_FILE\";\nelif [ \"$mode\" = \"conflict\" ]; then\n  echo \"safety:conflicting evidence\" > \"$REASON_FILE\";\nelse\n  echo \"safety:unrecognized evidence (mode=$mode)\" > \"$REASON_FILE\";\nfi && printf '%s %s\\n' \"$RUN_ID\" \"$(cat \"$REASON_FILE\")\" >> .spur/memory/wrapup-routes.log && exit 0"
                 },
                 "doc-sync:onEnter:0": {
                     "kind": "agent.run",
@@ -505,6 +505,122 @@
                 },
                 "done:onEnter:0": {
                     "kind": "note"
+                }
+            }
+        },
+        "feature-lifecycle": {
+            "definition": "config/workflows/feature-lifecycle.yaml",
+            "terminalStates": ["cancelled"],
+            "modelQueries": [],
+            "actions": {}
+        },
+        "history-anatomy": {
+            "definition": "config/workflows/history-anatomy.yaml",
+            "terminalStates": ["published", "failed"],
+            "modelQueries": ["resolve-scope", "enrich", "validate", "correct"],
+            "actions": {
+                "start:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": "mkdir -p .spur/run; if [ -z \"$__runId\" ]; then __runId=$(uuidgen | tr 'A-Z' 'a-z' | cut -c1-8); fi; echo \"$__runId\" > .spur/run/history-anatomy-run.id"
+                },
+                "resolve-scope:onEnter:0": {
+                    "kind": "agent.run",
+                    "invocation": "Validate the mode arguments per sp:history-anatomy references/modes.md and write the normalized selector to .spur/run/${vars.__runId}-selector.json. mode=${vars.mode} date=${vars.date} since=${vars.since} until=${vars.until} focus=${vars.focus}. Reject conflicting arguments, naming the offending one; a rejection marks the run failed."
+                },
+                "resolve-paths:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": "h=$(superskill script path sp history-anatomy-cache.mjs); node \"$h\" paths --helper \"$h\" --report-dir \"$reportDir\" --date \"$date\" --output \"$output\" --mode \"$mode\" --since \"$since\" --until \"$until\" --out .spur/run/$__runId-paths.txt"
+                },
+                "analyze:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": "mkdir -p .spur/run; . .spur/run/$__runId-paths.txt; $spurBin history analyze --out .spur/run/$__runId-history-anatomy-current.json --since \"$HA_SINCE\" --until \"$HA_UNTIL\" --json"
+                },
+                "analyze:onEnter:1": {
+                    "kind": "shell",
+                    "invocation": ". .spur/run/$__runId-paths.txt; $spurBin history analyze --out .spur/run/$__runId-history-anatomy-baseline.json --since \"$HA_BASELINE_SINCE\" --until \"$HA_BASELINE_UNTIL\" --json 2>/dev/null || true"
+                },
+                "cache-probe:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": ". .spur/run/$__runId-paths.txt; node \"$HA_HELPER\" probe --artifact .spur/run/$__runId-history-anatomy-current.json --baseline .spur/run/$__runId-history-anatomy-baseline.json --target \"$HA_TARGET\" --mode \"$mode\" --date \"$HA_DATE\" --recompute \"$recompute\" --executor \"$agent\" --skill-dir \"$HA_SKILL\" --contract \"$HA_SKILL/references/report-contract.md\" --workflow \"$workflowFile\" --contract-version \"$contractVersion\" --run-id \"$__runId\" --out .spur/run/$__runId-provenance.json > .spur/run/$__runId-cache-disposition.txt"
+                },
+                "render:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": "mkdir -p .spur/run; $spurBin history report .spur/run/$__runId-history-anatomy-current.json --mode forensics > .spur/run/$__runId-history-anatomy-current.md; $spurBin history report .spur/run/$__runId-history-anatomy-baseline.json --mode forensics > .spur/run/$__runId-history-anatomy-baseline.md || true"
+                },
+                "enrich:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": "git status --porcelain > .spur/run/$__runId-baseline-enrich.txt || true"
+                },
+                "enrich:onEnter:1": {
+                    "kind": "agent.run",
+                    "invocation": "Run sp:history-anatomy enrich: given .spur/run/${vars.__runId}-history-anatomy-current.json and -baseline.json, author the model half of the report (Baseline comparison, Findings, Recurrence ledger, Remediation options, Performance analysis, Workflow/process improvements, Positive patterns) to .spur/run/${vars.__runId}-candidate.md per references/report-contract.md. This operation never launches a workflow."
+                },
+                "enrich:onEnter:2": {
+                    "kind": "shell",
+                    "invocation": "node \"$(superskill script path sp history-anatomy-cache.mjs)\" assert-clean --baseline .spur/run/$__runId-baseline-enrich.txt --expect .spur/run/$__runId-candidate.md"
+                },
+                "structure-gate:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": "node \"$(superskill script path sp history-anatomy-cache.mjs)\" check \\\n  .spur/run/$__runId-candidate.md > .spur/run/$__runId-structure-gate.txt 2>&1 || true"
+                },
+                "validate:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": "git status --porcelain > .spur/run/$__runId-baseline-validate.txt || true"
+                },
+                "validate:onEnter:1": {
+                    "kind": "agent.run",
+                    "invocation": "Run sp:history-anatomy validate: independently check .spur/run/${vars.__runId}-candidate.md against the two artifacts per references/operations.md; write Verdict: PASS or FAIL to .spur/run/${vars.__runId}-validation.txt. This operation never launches a workflow."
+                },
+                "validate:onEnter:2": {
+                    "kind": "shell",
+                    "invocation": "node \"$(superskill script path sp history-anatomy-cache.mjs)\" assert-clean --baseline .spur/run/$__runId-baseline-validate.txt --expect .spur/run/$__runId-validation.txt"
+                },
+                "correct:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": "n=$(cat .spur/run/$__runId-correction-count 2>/dev/null || echo 0) && printf '%s\\n' \"$((n + 1))\" > .spur/run/$__runId-correction-count"
+                },
+                "correct:onEnter:1": {
+                    "kind": "shell",
+                    "invocation": "git status --porcelain > .spur/run/$__runId-baseline-correct.txt || true"
+                },
+                "correct:onEnter:2": {
+                    "kind": "agent.run",
+                    "invocation": "Repair .spur/run/${vars.__runId}-candidate.md in place. Read its structure-gate findings, optional validation notes, references/report-contract.md, and the references/operations.md validate rubric; fix every violation. Use a backticked `.md`/`.ts`/`.json` path or a `path:line` anchor, never `current #/...`; remove placeholders and empty rows; restore the twelve-section order; ensure every problem and positive finding carries the full field set; verify every quantitative claim (counts, durations, percentages, distributions) and every current/baseline full-digest match against .spur/run/${vars.__runId}-history-anatomy-current.json and -baseline.json. Overwrite only the candidate; never launch a workflow."
+                },
+                "correct:onEnter:3": {
+                    "kind": "shell",
+                    "invocation": "node \"$(superskill script path sp history-anatomy-cache.mjs)\" assert-clean --baseline .spur/run/$__runId-baseline-correct.txt --expect .spur/run/$__runId-candidate.md"
+                },
+                "refresh-provenance:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": ". .spur/run/$__runId-paths.txt; node \"$HA_HELPER\" refresh --report \"$HA_TARGET\" --out .spur/run/$__runId-publishable.md --disposition hit"
+                },
+                "stamp:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": ". .spur/run/$__runId-paths.txt; node \"$HA_HELPER\" stamp --candidate .spur/run/$__runId-candidate.md --provenance .spur/run/$__runId-provenance.json --out .spur/run/$__runId-publishable.md"
+                },
+                "publish:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": ". .spur/run/$__runId-paths.txt; mkdir -p \"$(dirname \"$HA_TARGET\")\"; node \"$HA_HELPER\" publish .spur/run/$__runId-publishable.md \"$HA_TARGET\""
+                }
+            }
+        },
+        "task-lifecycle": {
+            "definition": "config/workflows/task-lifecycle.yaml",
+            "terminalStates": ["cancelled"],
+            "modelQueries": [],
+            "actions": {
+                "wip:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": "mkdir -p .spur/run .spur/memory && RUN_ID=\"$__runId\" && if [ -z \"$RUN_ID\" ]; then RUN_ID=\"lifecycle-$wbs\"; fi && if [ \"$mode\" = \"fast\" ]; then\n  echo \"fast:evidence complete+consistent\" > \".spur/run/$RUN_ID-route-reason.txt\";\nelif [ -z \"$mode\" ]; then\n  echo \"safety:standard verification\" > \".spur/run/$RUN_ID-route-reason.txt\";\nelse\n  echo \"safety:unrecognized mode ($mode)\" > \".spur/run/$RUN_ID-route-reason.txt\";\nfi && printf '%s %s wip %s\\n' \"$RUN_ID\" \"$wbs\" \"$(cat \".spur/run/$RUN_ID-route-reason.txt\")\" >> .spur/memory/lifecycle-routes.log && exit 0"
+                },
+                "testing:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": "mkdir -p .spur/run .spur/memory && RUN_ID=\"$__runId\" && if [ -z \"$RUN_ID\" ]; then RUN_ID=\"lifecycle-$wbs\"; fi && if [ \"$mode\" = \"fast\" ]; then\n  echo \"fast:evidence complete+consistent\" > \".spur/run/$RUN_ID-route-reason.txt\";\nelif [ -z \"$mode\" ]; then\n  echo \"safety:standard verification\" > \".spur/run/$RUN_ID-route-reason.txt\";\nelse\n  echo \"safety:unrecognized mode ($mode)\" > \".spur/run/$RUN_ID-route-reason.txt\";\nfi && printf '%s %s testing %s\\n' \"$RUN_ID\" \"$wbs\" \"$(cat \".spur/run/$RUN_ID-route-reason.txt\")\" >> .spur/memory/lifecycle-routes.log && exit 0"
+                },
+                "done:onEnter:0": {
+                    "kind": "shell",
+                    "invocation": "mkdir -p .spur/run .spur/memory && RUN_ID=\"$__runId\" && if [ -z \"$RUN_ID\" ]; then RUN_ID=\"lifecycle-$wbs\"; fi && if [ \"$mode\" = \"fast\" ]; then\n  echo \"fast:evidence complete+consistent\" > \".spur/run/$RUN_ID-route-reason.txt\";\nelif [ -z \"$mode\" ]; then\n  echo \"safety:standard verification\" > \".spur/run/$RUN_ID-route-reason.txt\";\nelse\n  echo \"safety:unrecognized mode ($mode)\" > \".spur/run/$RUN_ID-route-reason.txt\";\nfi && printf '%s %s done %s\\n' \"$RUN_ID\" \"$wbs\" \"$(cat \".spur/run/$RUN_ID-route-reason.txt\")\" >> .spur/memory/lifecycle-routes.log && exit 0"
                 }
             }
         }

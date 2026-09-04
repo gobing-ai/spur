@@ -2,7 +2,7 @@
 name: inline-pipeline-driver
 description: "Interactive host-session interpreter for Spur state-machine pipelines: execute the existing FSM without a workflow agent subprocess while preserving actions, guards, artifacts, and provenance."
 owner: spur-dev-maintainers
-retirement-criterion: "The per-task interpreter retires once the engine covers per-task execution for /sp:dev-runall with real terminal runs and the parity check (apps/cli/src/scripts/check-inline-pipeline-parity.ts) is green (D8 decision D7). Batch orchestration wrapper may remain."
+retirement-criterion: "The per-task interpreter retires once the engine covers per-task execution for /sp:dev-runall with real terminal runs and the parity check (plugins/sp/scripts/inline-pipeline-parity-check.ts) is green (D8 decision D7). Batch orchestration wrapper may remain."
 see_also:
   - spur-dev
   - execution-workflow
@@ -13,13 +13,13 @@ see_also:
 
 **Owner:** `spur-dev-maintainers` (per task 0755 R1). Reach the named owner via the frontmatter; no need to read the originating task.
 
-**Retirement criterion (0755 R5, D8 decision D7):** the per-task interpreter retires once the engine covers per-task execution for `/sp:dev-runall` with real terminal runs **and** the parity check (this doc's documented action/guard set ≡ `.spur/workflows/task-pipeline.yaml`'s resolved action/guard set) is green. Recording the criterion is part of this task; acting on it is not — that is a separate A3-gate decision.
+**Retirement criterion (0755 R5, D8 decision D7):** the per-task interpreter retires once the engine covers per-task execution for `/sp:dev-runall` with real terminal runs **and** the parity check (this doc's documented action/guard set ≡ the resolved action/guard set of every `.spur/workflows/*.yaml`) is green. Recording the criterion is part of this task; acting on it is not — that is a separate A3-gate decision.
 
 ## Supported action and guard set (0755 R2 parity contract)
 
 The action and guard kinds this driver implements. The parity check
-(`apps/cli/src/scripts/check-inline-pipeline-parity.ts`) compares this set against
-`.spur/workflows/task-pipeline.yaml`'s resolved actions and guards; any element present
+(`plugins/sp/scripts/inline-pipeline-parity-check.ts`) compares this set against
+the resolved actions and guards of every `.spur/workflows/*.yaml`; any element present
 in one and absent in the other fails the check. Add a new kind here when the driver
 implements it; remove the entry when the corresponding kind is dropped from the YAML.
 
@@ -27,7 +27,7 @@ implements it; remove the entry when the corresponding kind is dropped from the 
 
 **Guards (transitions):** `always` · `shell`
 
-# Inline Pipeline Driver
+## What this driver is
 
 This driver is the interactive control-inversion path granted by ADR-047. It applies when an
 interactive `/sp:dev-run --mode full`, sequential `/sp:dev-runall`, `/sp:dev-idea`, or

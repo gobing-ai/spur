@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadWorkflowDefFromText } from '@gobing-ai/ts-dual-workflow-engine';
 import {
@@ -54,7 +56,12 @@ describe('proportional routing pilots (task 0758)', () => {
             expect(cmd).toContain('safety:unknown evidence quality');
             expect(cmd).toContain('safety:conflicting evidence');
             expect(cmd).toContain('skipped:empty task list');
-            expect(cmd).toContain('wrapup-route-reason.txt');
+            // 0758 R3/R5: the reason artifact is run-scoped. The earlier fixed-path copy
+            // (`.spur/run/wrapup-route-reason.txt`) had no reader and was overwritten by whichever
+            // run finished last, so a claim read from it belonged to no particular run.
+            expect(cmd).toContain('REASON_FILE=".spur/run/$RUN_ID-route-reason.txt"');
+            expect(cmd).not.toContain('.spur/run/wrapup-route-reason.txt');
+            expect(cmd).toContain('mkdir -p .spur/run .spur/memory');
         });
 
         test('transitions form a closed, mutually exhaustive table over (tasks, mode)', () => {
@@ -193,5 +200,103 @@ describe('proportional routing pilots (task 0758)', () => {
             expect(wrapupRaw).toContain('name: wrapup-pipeline');
             expect(lifecycleRaw).toContain('name: task-lifecycle');
         });
+    });
+});
+
+/**
+ * 0758 R4/R5 executable check. The route writers were previously asserted only by reading the
+ * YAML string, which is how three real defects stayed green: wrapup-pipeline copied its reason to
+ * a fixed `.spur/run/wrapup-route-reason.txt` every run overwrote, task-lifecycle's three
+ * onEnter blocks appended bare reason strings that named neither the run nor the state, and one
+ * live artifact landed under the literal filename `${vars.__runId}-route-reason.txt`. R5 requires
+ * route facts be provable from run-bound evidence rather than scraped from a log, so this runs the
+ * writers the engine actually executes and checks the artifact each one leaves behind.
+ */
+describe('route reason writers are run-attributed (0758 R4/R5)', () => {
+    const shellOf = (def: WorkflowYaml, stateId: string): string => {
+        const state = def.states.find((s: StateDef) => s.id === stateId);
+        const action = state?.onEnter?.find((a) => a.kind === 'shell');
+        return String(action?.options?.command ?? '');
+    };
+
+    const runWriter = (command: string, vars: Record<string, string>): { cwd: string } => {
+        const cwd = mkdtempSync(join(tmpdir(), 'route-writer-'));
+        const res = spawnSync('sh', ['-c', command], { cwd, env: { ...process.env, ...vars } });
+        expect(res.status).toBe(0);
+        return { cwd };
+    };
+
+    const wrapupDef = loadWorkflowDefFromText(
+        readFileSync(join(WORKFLOWS_DIR, 'wrapup-pipeline.yaml'), 'utf8'),
+        join(WORKFLOWS_DIR, 'wrapup-pipeline.yaml'),
+    ) as unknown as WorkflowYaml;
+    const lifecycleDef = loadWorkflowDefFromText(
+        readFileSync(join(WORKFLOWS_DIR, 'task-lifecycle.yaml'), 'utf8'),
+        join(WORKFLOWS_DIR, 'task-lifecycle.yaml'),
+    ) as unknown as WorkflowYaml;
+
+    test('wrapup-pipeline writes the reason under the run id and attributes the log line', () => {
+        const { cwd } = runWriter(shellOf(wrapupDef, 'task-resolve'), {
+            __runId: 'run_alpha',
+            mode: 'unknown',
+            tasks: '["0001"]',
+        });
+        expect(readFileSync(join(cwd, '.spur/run/run_alpha-route-reason.txt'), 'utf8').trim()).toBe(
+            'safety:unknown evidence quality',
+        );
+        expect(readFileSync(join(cwd, '.spur/memory/wrapup-routes.log'), 'utf8').trim()).toBe(
+            'run_alpha safety:unknown evidence quality',
+        );
+    });
+
+    test('a second wrapup run does not overwrite the first run route claim', () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'route-writer-'));
+        const cmd = shellOf(wrapupDef, 'task-resolve');
+        for (const [id, mode] of [
+            ['run_one', 'fast'],
+            ['run_two', 'conflict'],
+        ]) {
+            const res = spawnSync('sh', ['-c', cmd], {
+                cwd,
+                env: { ...process.env, __runId: id, mode, tasks: '["0001"]' },
+            });
+            expect(res.status).toBe(0);
+        }
+        expect(readFileSync(join(cwd, '.spur/run/run_one-route-reason.txt'), 'utf8').trim()).toBe(
+            'fast:evidence complete+consistent',
+        );
+        expect(readFileSync(join(cwd, '.spur/run/run_two-route-reason.txt'), 'utf8').trim()).toBe(
+            'safety:conflicting evidence',
+        );
+        expect(readFileSync(join(cwd, '.spur/memory/wrapup-routes.log'), 'utf8').trimEnd().split('\n')).toEqual([
+            'run_one fast:evidence complete+consistent',
+            'run_two safety:conflicting evidence',
+        ]);
+    });
+
+    test.each([
+        'wip',
+        'testing',
+        'done',
+    ])('task-lifecycle %s stamps the run id and the state it routed into', (state) => {
+        const { cwd } = runWriter(shellOf(lifecycleDef, state), {
+            __runId: 'run_fsm',
+            mode: '',
+            wbs: '0758',
+        });
+        expect(readFileSync(join(cwd, '.spur/run/run_fsm-route-reason.txt'), 'utf8').trim()).toBe(
+            'safety:standard verification',
+        );
+        expect(readFileSync(join(cwd, '.spur/memory/lifecycle-routes.log'), 'utf8').trim()).toBe(
+            `run_fsm 0758 ${state} safety:standard verification`,
+        );
+    });
+
+    test('a driver-less invocation still writes a named artifact, never a bare filename', () => {
+        const { cwd } = runWriter(shellOf(lifecycleDef, 'wip'), { __runId: '', mode: 'fast', wbs: '0758' });
+        expect(readFileSync(join(cwd, '.spur/run/lifecycle-0758-route-reason.txt'), 'utf8').trim()).toBe(
+            'fast:evidence complete+consistent',
+        );
+        expect(existsSync(join(cwd, '.spur/run/-route-reason.txt'))).toBe(false);
     });
 });

@@ -238,8 +238,12 @@ exists as an identity tag, not a routing key. The contract:
 - **Absent** → reported as `unversioned`. The default for all 11 shipped definitions.
 - **Present, non-empty string** → reported as `explicit(<literal>)`. The literal is wrapped in
   parentheses verbatim — no parsing, no ordering, no compatibility check.
-- **Present, empty string (`version: ""`)** → **rejected** by validation with a diagnostic naming
-  the empty value (use `minLength: 1` on both dialect schemas).
+- **Present, empty string (`version: ""`)** → **rejected** with a diagnostic naming the empty
+  value. The rejection lives in the resolve/preflight seam
+  (`packages/app/src/workflow/workflow-resolver.ts`), not in the dialect JSON schemas: those carry
+  `minLength: 1` for editors and Ajv consumers, but the load path validates against the engine's
+  Zod schema, which has no minimum. Move the check upstream once
+  `@gobing-ai/ts-dual-workflow-engine` ships `z.string().min(1)` on the root version.
 
 The literal folds into the definition digest (`packages/app/src/workflow/composition-baseline.ts`),
 so a version-only edit changes the digest with zero behavior change. `show` and `trace` do **not**

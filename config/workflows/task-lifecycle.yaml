@@ -60,7 +60,8 @@ states:
             else
               echo "safety:unrecognized mode ($mode)" > ".spur/run/$RUN_ID-route-reason.txt";
             fi &&
-            cat ".spur/run/$RUN_ID-route-reason.txt" >> .spur/memory/lifecycle-routes.log &&
+            printf '%s %s wip %s\n' "$RUN_ID" "$wbs" "$(cat ".spur/run/$RUN_ID-route-reason.txt")"
+            >> .spur/memory/lifecycle-routes.log &&
             exit 0
   - id: testing
     description: Implementation complete; under test/verification.
@@ -78,7 +79,8 @@ states:
             else
               echo "safety:unrecognized mode ($mode)" > ".spur/run/$RUN_ID-route-reason.txt";
             fi &&
-            cat ".spur/run/$RUN_ID-route-reason.txt" >> .spur/memory/lifecycle-routes.log &&
+            printf '%s %s testing %s\n' "$RUN_ID" "$wbs" "$(cat ".spur/run/$RUN_ID-route-reason.txt")"
+            >> .spur/memory/lifecycle-routes.log &&
             exit 0
   - id: blocked
     description: Impediment; work suspended.
@@ -99,7 +101,8 @@ states:
             else
               echo "safety:unrecognized mode ($mode)" > ".spur/run/$RUN_ID-route-reason.txt";
             fi &&
-            cat ".spur/run/$RUN_ID-route-reason.txt" >> .spur/memory/lifecycle-routes.log &&
+            printf '%s %s done %s\n' "$RUN_ID" "$wbs" "$(cat ".spur/run/$RUN_ID-route-reason.txt")"
+            >> .spur/memory/lifecycle-routes.log &&
             exit 0
   - id: cancelled
     description: Terminal — abandoned.

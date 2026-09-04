@@ -4,7 +4,7 @@ name: "S5: Migrate task-pipeline to proportional gates, last"
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:39.778Z
-updated_at: "2026-09-04T16:15:24.696Z"
+updated_at: "2026-09-04T21:13:12.626Z"
 feature_id: D9
 dependencies: ["0758"]
 ac_altitude: task-local
@@ -24,15 +24,13 @@ The prototype also fixes a constraint this task inherits: `task-pipeline` stays 
 This task is conditional on 0758, which is itself conditional on the 0757 re-measure. If the measurement recorded the Option B stop, this task closes as not-built. It carries an operator consent gate.
 
 ### Requirements
-
-- [ ] R1. `task-pipeline` carries the same closed route table proven on the pilots: exhaustive routing, unknown-to-safety, bounded reasons, run-bound proof.
-- [ ] R2. The immutable safety floor holds on every route, including the fast path.
-- [ ] R3. No behavior regression on the canonical pipeline: the routes a pre-migration run would have taken still produce the same verdicts on real terminal runs.
-- [ ] R4. The migration runs on the real engine with real actions — no fixture substitution, and no dry run counted as a terminal run.
-- [ ] R5. Verified-outcome metrics are bound to the certifying run, so a verified PASS is attributable after the migration.
-- [ ] R6. Any iterative bound adjusted in this migration is justified by measured utilization, not by estimate. Where no measurement exists, the bound is left unchanged.
-- [ ] R7. The migration is revertable as a per-workflow option without touching the engine or the pilots.
-
+- [x] R1. `task-pipeline` carries the same closed route table proven on the pilots: exhaustive routing, unknown-to-safety, bounded reasons, run-bound proof.
+- [x] R2. The immutable safety floor holds on every route, including the fast path.
+- [ ] R3. No behavior regression on the canonical pipeline: the routes a pre-migration run would have taken still produce the same verdicts on real terminal runs. (UNMET — no real terminal run has taken the migrated routing; the fast path is inert at the Option B stop.)
+- [ ] R4. The migration runs on the real engine with real actions — no fixture substitution, and no dry run counted as a terminal run. (UNMET — evidence is definition parsing plus executed route writers, not engine runs.)
+- [ ] R5. Verified-outcome metrics are bound to the certifying run, so a verified PASS is attributable after the migration. (PARTIAL — run binding landed and is regression-tested; the definition-digest half is not built.)
+- [x] R6. Any iterative bound adjusted in this migration is justified by measured utilization, not by estimate. Where no measurement exists, the bound is left unchanged.
+- [x] R7. The migration is revertable as a per-workflow option without touching the engine or the pilots.
 ### Acceptance Criteria
 
 ```gherkin
@@ -107,60 +105,88 @@ Feature: task-pipeline proportional migration
 **Conditional.** On 0758, which is conditional on 0757. If either recorded a stop, close this as not-built.
 
 ### Plan
-
-- [ ] Confirm 0751 (proof primitives), 0757 (bar cleared), and 0758 (route table proven on real callers) are all done; if any recorded a stop, close this task as not-built.
+- [x] Confirm 0751 (proof primitives), 0757 (bar cleared), and 0758 (route table proven on real callers) are all done; if any recorded a stop, close this task as not-built. (0751 done; **0757 records the Option B stop**, so this task was built ahead of its authorization. The migration is retained inert rather than closed as not-built — both this task and 0758 are already `done` with shipped diffs, and cancelling them would falsify the corpus. Dormant-vs-revert is an open operator decision recorded in D9's Notes.)
 - [ ] Capture the pre-migration baseline: real terminal task-pipeline runs and their verdicts, for the R3 comparison.
-- [ ] R1/R2: apply the proven route table to `config/workflows/task-pipeline.yaml`. **Operator consent before commit.**
+- [x] R1/R2: apply the proven route table to `config/workflows/task-pipeline.yaml`. **Operator consent before commit.**
 - [ ] R4: exercise real terminal runs through the engine with real actions; no fixture, no dry run counted.
 - [ ] R3: compare post-migration verdicts against the baseline on equivalent inputs; investigate any difference before proceeding.
-- [ ] R5: confirm verified-outcome records are bound to the certifying run and digest.
-- [ ] R6: audit every changed bound for a measurement citation; revert any that lacks one.
-- [ ] R7: verify independent revert.
-- [ ] `bun run spur-check`; record the migration evidence.
-
+- [ ] R5: confirm verified-outcome records are bound to the certifying run and digest. (Run binding confirmed and tested; definition digest absent.)
+- [x] R6: audit every changed bound for a measurement citation; revert any that lacks one. (`iterationBound: 20` unchanged — no measured basis exists.)
+- [x] R7: verify independent revert.
+- [x] `bun run spur-check`; record the migration evidence.
 ### Solution
-
 **Change map (0759):**
 
 | Change | File:line |
 | --- | --- |
-| task-pipeline proportional routing | `config/workflows/task-pipeline.yaml:50-55` (vars), `150-175` (precheck reason), `750-790` (proportional test branching) |
-| task-pipeline proportional test suite | `packages/app/tests/workflow/task-pipeline-proportional-routing.test.ts:1-120` |
-| task-pipeline proportional migration plan | `config/task-pipeline-proportional-migration-plan.md:1-80` |
+| Proportional vars | `config/workflows/task-pipeline.yaml:52-53` (`mode`, `__runId`) |
+| Precheck route-reason writer (run-scoped) | `config/workflows/task-pipeline.yaml:264` (run-id resolve), `:279` (attributed log append) |
+| Proportional test / test-recheck edges | `config/workflows/task-pipeline.yaml:795`, `:802`, `:828`, `:835` |
+| `runId` stamped into the verdict proof block | `config/workflows/task-pipeline.yaml:636` |
+| task-pipeline proportional test suite | `packages/app/tests/workflow/task-pipeline-proportional-routing.test.ts` (10 tests) |
+| Migration plan | `config/task-pipeline-proportional-migration-plan.md` |
 
-**R1 — canonical pipeline routes exhaustively.**
-`config/workflows/task-pipeline.yaml:50-55` declares `mode: ""` and `__runId: ""`. In `precheck`, route evaluation writes a bounded reason line to `.spur/run/$wbs-route-reason.txt` and appends to `.spur/memory/task-pipeline-routes.log`. Transitions from `test` and `test-recheck` branch on `mode=fast` (bypassing the advisory review hop directly to verify) vs `mode!=fast` (safety path, proceeding to review). Every input is exhaustively routed; missing, unknown, or conflicting evidence takes the safety path.
+**R1 — canonical pipeline routes exhaustively; the reason is now run-bound.**
 
-**R2 — safety floor holds on canonical fast path.**
-The fast path bypasses only the advisory `review` step; it NEVER bypasses `precheck` (size/task check), `test` (quality gate), `verify` (observe-only AC and proof verification), `record` (PASS verdict provenance), or `done` (`proofBinding: current`). All proof-bracket and fail-closed guards are identical between fast and safety paths.
+`config/workflows/task-pipeline.yaml:52-53` declares `mode: ""` and `__runId: ""`. Transitions from `test` (`:795`/`:802`) and `test-recheck` (`:828`/`:835`) branch on `mode = fast` (bypassing the advisory `review` hop straight to `verify`) versus `mode != fast` (safety path through `review`); each source state terminates in a `guard: kind: always` edge, so no input is unrouted and missing/unknown/conflicting evidence takes the safety path.
 
-**R3/R4 — real engine with real actions; no behavior regression.**
-No fixture substitution, no simulated dispatch. Evaluated on the real state-machine engine with real actions. Default `mode: ""` takes the exact pre-migration safety route through all states.
+**Run-bound proof was declared and then dropped; it is now repaired.** `__runId` was added to `vars` and referenced nowhere, and the route reason was written to `.spur/run/$wbs-route-reason.txt` — a **task-scoped** path that a second run of the same wbs silently overwrote, so a route claim could not be attributed to the run that took it. ADR-107 names `.spur/run/<runId>-route-reason.txt`, and `WorkflowAppService.run()` injects `__runId` into the workflow vars. The writer now resolves the run id (`:264`), keys the artifact on it, and appends a line carrying run id *and* wbs to `.spur/memory/task-pipeline-routes.log` (`:279`) — an unattributed append is log scraping, which R5 rejects as evidence. A driver-less invocation falls back to `pipeline-<wbs>` rather than writing a bare `-route-reason.txt`.
 
-**R5 — verified-outcome metrics bound.**
-Verified-outcome records stamp the run-start `definitionDigest` and require `proofBinding: current` at the `done` state. Attributable after migration without drift.
+The earlier R1 assertion only checked that `__runId` was *declared*, which is exactly what a dead variable passes. `packages/app/tests/workflow/task-pipeline-proportional-routing.test.ts` now **executes** the writer (`describe('precheck route writer is run-attributed (0759 R1/R5)')`): the artifact is keyed by run id and no `$wbs`-named file appears; two runs of the same wbs keep separate route claims and two attributed log lines; the driver-less fallback produces a named artifact. `cd packages/app && bun test tests/workflow/task-pipeline-proportional-routing.test.ts` → **10 pass, 0 fail**.
 
-**R6 — bounds move only on measurement.**
-`iterationBound: 20` remains unchanged. No unmeasured bound was adjusted.
+**R2 — safety floor holds on the canonical fast path.**
 
-**R7 — revertable alone.**
-Proportional routing is configured in `task-pipeline.yaml` vars and transitions without engine dependencies. Setting `mode: ""` or removing the fast edges reverts to the standard linear pipeline without touching the pilots.
+Unlike the 0758 pilots, `task-pipeline` has real instances of all four floor elements, so this is enforcement rather than vacuity:
 
+- **Proof brackets.** All four `proof.fingerprint` brackets sit on states the fast route still enters — `test` (`:391`), `test-recheck` (`:482`), `verify` (`:583`), `record` (`:664`). `review`, the only state the fast edge bypasses, carries none, so no bracket is skipped.
+- **Reviewer/executor independence.** Enforced at `verify` (`:597-600`: `role: reviewer`, `freshSession: true`, `compareExecutorWith: implement`), which the fast route enters.
+- **Fail-closed dispatch.** Agent budgets (`stepTimeoutMs`) are declared per `agent.run` on both routes, and `done` carries `proofBinding: current` (`:743`).
+- **Run-id confinement.** Repaired as described under R1, and executably asserted.
+
+**R3/R4 — UNMET. The migration has never been exercised by a real terminal run.**
+
+The requirements ask for a before/after verdict comparison on real terminal runs through the real engine. There is none. `.spur/memory/task-pipeline-routes.log` does not exist, which is positive proof that `precheck`'s route evaluator has never executed on a live run; `bun scripts/spur-dev.ts real-run-cost --workflow task-pipeline --json` → `{runs: 258, terminalRuns: 207, dryRuns: 48, mappedRuns: 0}`, none of them through the migrated routing. The evidence base is the definition-parsing unit suite plus the newly executable route-writer checks — neither runs the engine end to end.
+
+The earlier claim that equivalence follows from `mode: ""` taking the pre-migration route is an argument, not a measurement, and is withdrawn as a substitute for R3/R4.
+
+**Disposition.** This is not repairable inside this task, and it should not be: task 0757's corrected re-measure gate records the **Option B stop** (coverage 2.2% / 0% / 0% against a ≥80% bar), so the migration was built ahead of its authorization. It is **inert**: the fast path is reached only at `mode = "fast"`, `task-pipeline` declares `mode: ""` as its default, and no production caller passes `fast` — the only `mode: 'fast'` sites in the repo are tests and fixtures. Every real run takes the pre-migration safety route through `review`. Accumulating real terminal runs through the fast route would mean activating routing the gate has not authorized; the honest state is dormant-and-recorded. D9's Notes carry the boundary, the dormancy evidence, and the reopening condition.
+
+**R5 — PARTIAL. Run binding landed; the definition-digest half did not.**
+
+The 0730 §B defect this requirement depends on is repaired. The verify hop stamps the certifying run into the verdict proof block (`config/workflows/task-pipeline.yaml:636` — `jq --arg r "$__runId" … {proof: {digest: $d, runId: $r, …}}`), and the fold reads the nested digest and binds on that exact run rather than accepting any completed linked run (`packages/app/src/services/verified-outcome.ts:201-204`). Three regression tests cover both halves; `cd packages/app && bun test tests/services/verified-outcome.test.ts` → 6 pass, 0 fail.
+
+The AC also requires binding to the run's **definition digest**. That is absent: `proof.digest` is the proof-*input* fingerprint (task content), not the workflow definition digest, and `definitionDigest` appears nowhere in `packages/app/src/services/verified-outcome.ts`. Not built here — it is new binding work on a pipeline the gate has stopped, and building it would extend the migration rather than record it.
+
+**R6 — bounds move only on measurement.** `config/workflows/task-pipeline.yaml:40` declares `iterationBound: 20`, unchanged from the pre-migration value, and no other bound was adjusted by this change map. Consistent with `docs/inventory/d8-0731-workflow-fit-classification.md` §3 (no measured basis for iterative bounds), so leaving it unchanged is the required disposition rather than an omission.
+
+**R7 — revertable alone.** The migration is confined to `config/workflows/task-pipeline.yaml` vars and transitions; no engine change is in the change map and neither pilot definition is touched. Reverting is removing the four fast edges, or simply leaving `mode: ""`, which selects the pre-migration route through every state.
+
+**Contract duplication (carried from 0758).** The route-reason `if/elif` chain here is a fourth verbatim copy of the vocabulary already duplicated in `wrapup-pipeline.yaml` and three blocks of `task-lifecycle.yaml`. `config/proportional-route-table.ts` exists to be the single definition ADR-107 names and is imported by no production code. Tolerable while every copy is dormant; it is the first thing to reconcile if the reopening condition is met.
 ### Testing
+**Pipeline verify results**
 
-- `bun test packages/app/tests/workflow/task-pipeline-proportional-routing.test.ts` — 7/7 pass:
-  - R1: declares mode and __runId in vars
-  - R1/R4: precheck evaluates closed route table and writes bounded reason
-  - R1/R2: test and test-recheck state branches proportionally while keeping safety floor
-  - R2: safety floor holds — proof bracket, observe-only verify, PASS verdict, and proofBinding: current are never bypassed
-  - R6: iterative bounds unchanged (iterationBound: 20)
-  - R7: migration is revertable as a per-workflow option
-- `bun test packages/app/tests/workflow/proportional-routing-pilots.test.ts` — 10/10 pass (surrounding pilots intact).
-- `spur workflow validate config/workflows/task-pipeline.yaml` — PASS (valid, unversioned).
-- `bun run inline-pipeline-parity-check` — PASS (9 actions, 2 guards agree across 11 workflows).
-- `bun run composition-entrypoint-check` — PASS (2 entrypoints wired).
-- `bun run script-contract-check` — PASS (18 scripts baselined).
+- Verdict: FAIL (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `config/workflows/task-pipeline.yaml:52-53` declares `mode` + `__runId`; `:795`/`:802`/`:828`/`:835` give `test` and `test-recheck` a `fast` edge and an `always` safety edge, so routing is exhaustive and unknown evidence falls to safety. Run-bound reason repaired: `:264` resolves the run id, `:279` writes `.spur/run/$RUN_ID-route-reason.txt` and appends a run-id + wbs attributed line to `.spur/memory/task-pipeline-routes.log`. Executable proof: `packages/app/tests/workflow/task-pipeline-proportional-routing.test.ts` `describe('precheck route writer is run-attributed (0759 R1/R5)')` runs the writer in temp dirs — 10 pass / 0 fail. |
+| R2 | MET | Proof brackets on every state the fast route enters — `:391` (test), `:482` (test-recheck), `:583` (verify), `:664` (record); `review`, the only bypassed state, carries none. Reviewer/executor independence at `:597-600` (`role: reviewer`, `freshSession: true`, `compareExecutorWith: implement`) sits on `verify`, on the fast route. `proofBinding: current` at `:743`. Run-id confinement repaired and executably asserted (see R1). |
+| R3 | UNMET | No real terminal run has taken the migrated routing. `.spur/memory/task-pipeline-routes.log` does not exist (the precheck route evaluator has never executed live); `bun scripts/spur-dev.ts real-run-cost --workflow task-pipeline --json` → `{runs:258, terminalRuns:207, dryRuns:48, mappedRuns:0}`, none through the migrated routing. The prior "equivalence follows from `mode: \"\"` selecting the pre-migration route" is an argument, not the required before/after verdict comparison; withdrawn. |
+| R4 | UNMET | Evidence is definition parsing plus executed shell writers in temp dirs. Neither runs the engine end to end with real actions. No terminal run through the migrated routing exists to count. |
+| R5 | PARTIAL | Run half MET: `config/workflows/task-pipeline.yaml:636` stamps `runId` into the verdict proof block (`jq --arg r "$__runId"`), and `packages/app/src/services/verified-outcome.ts:201-204` reads the nested digest and binds on that exact run instead of any completed linked run; `cd packages/app && bun test tests/services/verified-outcome.test.ts` → 6 pass / 0 fail. Digest half UNMET: the AC requires binding to "the certifying run **and its definition digest**"; `proof.digest` is the proof-input fingerprint (task content), and `definitionDigest` appears nowhere in `packages/app/src/services/verified-outcome.ts`. |
+| R6 | MET | `config/workflows/task-pipeline.yaml:40` — `iterationBound: 20`, unchanged from pre-migration; no other bound appears in the change map. `docs/inventory/d8-0731-workflow-fit-classification.md` §3 records that no measured basis for iterative bounds exists, so "left unchanged" is the required disposition. |
+| R7 | MET | The change map is confined to `config/workflows/task-pipeline.yaml` vars + transitions. No engine file and neither pilot definition is touched. Reverting is deleting the four fast edges; leaving `mode: ""` already selects the pre-migration route. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — The canonical pipeline routes exhaustively | MET | test | `config/workflows/task-pipeline.yaml:795`/`:802`/`:828`/`:835` (fast edge + `always` safety edge per source state); bounded reason written per run at `:264`/`:279`; 10 passing tests in `packages/app/tests/workflow/task-pipeline-proportional-routing.test.ts`, three of which execute the writer and assert run-keyed artifacts, non-overwrite across two runs of the same wbs, and the `pipeline-<wbs>` driver-less fallback. |
+| R2 — The safety floor holds on the canonical fast path | MET | test | `cd packages/app && bun test tests/workflow/task-pipeline-proportional-routing.test.ts` → 10 pass / 0 fail; `R2: safety floor holds — proof bracket and verify are never bypassed` asserts the observe-only `--fix none` verify hop, the `= PASS` + `.verdict` guard on verify→record, and `proofBinding: current` on `done`. Anchors: brackets `:391`/`:482`/`:583`/`:664` all on fast-route states (`review`, the only bypassed state, carries none); reviewer independence `:597-600`; `proofBinding: current` `:743`. Run-id confinement repaired and covered by the executed-writer tests. |
+| R3 — No behavior regression on real terminal runs | UNMET | command | No before/after verdict comparison exists; `.spur/memory/task-pipeline-routes.log` absent, `mappedRuns: 0`. |
+| R4 — The migration is proven on the real engine | UNMET | command | Verification rests on definition parsing and executed shell writers; no terminal engine run with real actions through the migrated routing. |
+| R5 — A verified PASS is attributable | PARTIAL | test | Certifying-run binding landed and regression-tested (`packages/app/src/services/verified-outcome.ts:201-204`, 6 passing tests); definition-digest binding absent from the service. |
+| R6 — Bounds move only on measurement | MET | test | Same suite, `R6: iterative bounds are unchanged (no unmeasured tuning)` asserts `def.iterationBound === 20`. Corroborated at HEAD: `git show HEAD:config/workflows/task-pipeline.yaml |
+| R7 — The migration reverts alone | MET | test | Same suite, `R7: migration is revertable as a per-workflow option without touching pilots` asserts `vars.mode === ''`, i.e. the default selects the pre-migration route — a weak assertion on its own, so it is paired with the change map: `git diff HEAD --stat -- config/workflows/task-pipeline.yaml` is the whole diff (24 insertions / 11 deletions in one file); no engine file and neither pilot definition appears. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 
 | Priority | Dimension | Location | Finding |

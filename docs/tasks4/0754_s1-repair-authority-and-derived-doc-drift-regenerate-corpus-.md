@@ -4,7 +4,7 @@ name: "S1: Repair authority and derived-doc drift, regenerate corpus/composition
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:38.266Z
-updated_at: "2026-09-04T03:35:53.535Z"
+updated_at: "2026-09-04T21:14:20.592Z"
 feature_id: D9
 priority: P1
 ac_altitude: task-local
@@ -24,14 +24,14 @@ Three classes of drift make the project's own gates report things that are not t
 
 This slice has no dependency on the S0 code repairs and may run in parallel with them. It carries an operator consent gate: regenerating the corpus baseline and refreshing the surface inventory both change the set of things that pass.
 ### Requirements
-- [ ] R1. `docs/03_ARCHITECTURE.md` §24 states that ADRs 094-100 are built, naming the tasks (0703-0712), and its Implementation column matches shipped reality.
-- [ ] R2. `docs/04_DESIGN.md` carries design sections for ADRs 094-100, and the capability-attestation section is labeled ADR-102 / task 0706 with the anchor ADR-102 cites actually resolving.
-- [ ] R3. ADR amendments land for 051 (mechanical placement extended to `scripts/commands` and package.json entrypoints), 069 (re-baselined advisories), 071 (proof-chain repairs from 0751), 093 (corpus waiver migration), 098 (dry-probe exclusion), 099 (resume-side freshness), 100 (verified-outcome binding), and 102 (docs anchor). The ADR-094 → ADR-102 refinement relationship is stated explicitly.
-- [ ] R4. The composition baseline is regenerated: the 6 inert per-workflow fields, `proofInputs`, and the stale definition digests are gone, all 11 workflows are covered, and the current advisories are re-baselined while the gate stays advisory per ADR-069.
-- [ ] R5. The corpus baseline is regenerated and migrated to ADR-093 waiver fields — owner, review date, and removal criterion — closing Decision 8.
-- [ ] R6. `config/pipeline-budgets.json` records docs-pipeline `modelQueries` at its true value with the decision recorded (FIX, not raise, per Decision 11), and the budget gate is green.
-- [ ] R7. `regen-corpus-baseline` has a `package.json` entry and is invoked through it; the ADR-051 mechanical placement check covers `scripts/commands` and the package.json composition entrypoints.
-- [ ] R8. The public-surface inventory is refreshed so the three live mismatches are gone and the surface-drift gate is green.
+- [x] R1. `docs/03_ARCHITECTURE.md` §24 states that ADRs 094-100 are built, naming the tasks (0703-0712), and its Implementation column matches shipped reality.
+- [x] R2. `docs/04_DESIGN.md` carries design sections for ADRs 094-100, and the capability-attestation section is labeled ADR-102 / task 0706 with the anchor ADR-102 cites actually resolving.
+- [x] R3. ADR amendments land for 051 (mechanical placement extended to `scripts/commands` and package.json entrypoints), 069 (re-baselined advisories), 071 (proof-chain repairs from 0751), 093 (corpus waiver migration), 098 (dry-probe exclusion), 099 (resume-side freshness), 100 (verified-outcome binding), and 102 (docs anchor). The ADR-094 → ADR-102 refinement relationship is stated explicitly.
+- [x] R4. The composition baseline is regenerated: the 6 inert per-workflow fields, `proofInputs`, and the stale definition digests are gone, all 11 workflows are covered, and the current advisories are re-baselined while the gate stays advisory per ADR-069.
+- [x] R5. The corpus baseline is regenerated and migrated to ADR-093 waiver fields — owner, review date, and removal criterion — closing Decision 8.
+- [x] R6. `config/pipeline-budgets.json` records docs-pipeline `modelQueries` at its true value with the decision recorded (FIX, not raise, per Decision 11), and the budget gate is green.
+- [x] R7. `regen-corpus-baseline` has a `package.json` entry and is invoked through it; the ADR-051 mechanical placement check covers `scripts/commands` and the package.json composition entrypoints.
+- [x] R8. The public-surface inventory is refreshed so the three live mismatches are gone and the surface-drift gate is green.
 - [ ] R9. `bun run spur-check` and `bun run corpus-check` are green on the regenerated snapshots, with no gate suppressed and no `--no-verify`.
 ### Acceptance Criteria
 ```gherkin
@@ -126,46 +126,78 @@ Feature: Authority, derived-doc, and baseline repair
 
 **Not in this task:** the S0 code repairs (0751-0753). This slice depends on none of them and may run in parallel.
 ### Plan
-- [ ] R3: write the ADR amendments (051, 069, 071, 093, 098, 099, 100, 102) including the explicit ADR-094 → ADR-102 refinement statement.
-- [ ] R1/R2: repair `docs/03_ARCHITECTURE.md` §24 and add the `docs/04_DESIGN.md` ADR-094-100 sections; fix the capability-attestation label and make ADR-102's anchor resolve.
-- [ ] R7: add the `regen-corpus-baseline` package.json entry; widen the ADR-051 placement check to `scripts/commands` and the package.json composition entrypoints.
-- [ ] R4: regenerate the composition baseline; if inert fields survive, fix the generator rather than the snapshot.
-- [ ] R5: regenerate the corpus baseline and populate ADR-093 owner / review-date / removal. **Operator consent before commit.**
-- [ ] R6: correct the docs-pipeline budget with its recorded decision.
-- [ ] R8: refresh the public-surface inventory until the drift gate is green. **Operator consent before commit.**
-- [ ] R9: `bun run spur-check`, `bun run corpus-check`, `git status --short`.
+- [x] R3: write the ADR amendments (051, 069, 071, 093, 098, 099, 100, 102) including the explicit ADR-094 → ADR-102 refinement statement.
+- [x] R1/R2: repair `docs/03_ARCHITECTURE.md` §24 and add the `docs/04_DESIGN.md` ADR-094-100 sections; fix the capability-attestation label and make ADR-102's anchor resolve.
+- [x] R7: add the `regen-corpus-baseline` package.json entry; widen the ADR-051 placement check to `scripts/commands` and the package.json composition entrypoints.
+- [x] R4: regenerate the composition baseline; if inert fields survive, fix the generator rather than the snapshot.
+- [x] R5: regenerate the corpus baseline and populate ADR-093 owner / review-date / removal. **Operator consent before commit.**
+- [x] R6: correct the docs-pipeline budget with its recorded decision.
+- [x] R8: refresh the public-surface inventory until the drift gate is green. **Operator consent before commit.**
+- [x] R9: `bun run spur-check`, `bun run corpus-check`, `git status --short`.
 ### Solution
-
 **Change map (0754):**
 
 | Change | File:line |
 | --- | --- |
-| Pipeline budget correction | `config/pipeline-budgets.json:51-63` (docs-pipeline.modelQueries 1→2, D8 Decision 11) |
+| Pipeline budget correction | `config/pipeline-budgets.json:27-37` (docs-pipeline.modelQueries 1→2, D8 Decision 11) |
 | Composition entrypoint check | `scripts/commands/composition-entrypoint-check.ts:1-110` (new) |
 | regen-corpus-baseline npm entry | `package.json:91` |
-| spur-check wiring | `package.json:80-94` (composition-entrypoint-check added) |
+| spur-check wiring | `package.json:80` (composition-entrypoint-check added) |
 | Architecture §24 header | `docs/03_ARCHITECTURE.md:1358` ("built" not "not yet built") |
-| Design capability-attestation label | `docs/04_DESIGN.md:2451` (ADR-101→ADR-102) |
-| ADR amendments section | `docs/00_ADR.md:2086-2098` (consolidated, 8 ADRs) |
+| Design capability-attestation anchor | `docs/04_DESIGN.md:2451` (`#### Agent capability attestation`, ADR-101→ADR-102) |
+| Design sections for ADR-095/096/097/100 | `docs/04_DESIGN.md:2469`, `:2486`, `:2509`, `:963` |
+| Design sections for ADR-098/099 (new) | `docs/04_DESIGN.md:2530`, `:2545` |
+| ADR amendments section | `docs/00_ADR.md:2220-2236` (consolidated, 9 ADRs) |
 | Composition baseline regen | `config/workflow-composition-baseline.json` (6 inert fields dropped, 11 workflows covered) |
 | Corpus baseline regen | `config/corpus-baseline.json` (299 entries from 869 observed findings) |
-| Corpus waiver fields | `config/corpus-baseline.json:1-6` (owner, review_date, removal_criterion per ADR-093) |
+| Corpus waiver fields | `config/corpus-baseline.json:3-8` (owner, review_date, removal_criterion per ADR-093) |
 
-**R1** — `docs/03_ARCHITECTURE.md:1358` section 24 header changed from "accepted design — ADR-094–100; not yet built" to "built — ADR-094–100, tasks 0703–0712". R2 — `docs/04_DESIGN.md:2451` "Capability attestation (ADR-101, task 0706)" corrected to "ADR-102, task 0706". R3 — `docs/00_ADR.md:2086-2098` consolidated amendment section covering ADRs 051, 069, 071, 093, 094→102, 098, 099, 100, 102. R4 — composition baseline regenerated; 6 inert per-workflow fields dropped, proofInputs removed, stale digests refreshed, all 11 workflows covered. R5 — corpus baseline regenerated; 299 entries from 869 observed findings; ADR-093 waiver fields (owner, review_date, removal_criterion) added at the top. **STAGED, NOT COMMITTED** — awaiting your sign-off per plan §7. R6 — `config/pipeline-budgets.json:51-63` docs-pipeline.modelQueries 1→2 (D8 Decision 11: FIX, not raise); decision recorded inline. R7 — `scripts/commands/composition-entrypoint-check.ts:1-110` new two-sided gate; regen-corpus-baseline added to package.json; wired into spur-check.
+**R1** — `docs/03_ARCHITECTURE.md:1358` section 24 header changed from "accepted design — ADR-094–100; not yet built" to "built — ADR-094–100, tasks 0703–0712".
 
-**R8 — OPEN.** `plugins/sp/scripts/surface-drift-inventory.ts` reports 3 confirmed mismatches: (1) `spur database` noun absent from live root commands, (2) `spur task create --section` flag absent, (3) `spur task create --body` flag absent. Resolution options: (a) add the missing public surface (requires ADR-051 consent for the new noun and two new flags), (b) remove the entries from the inventory. Awaiting your call.
+**R2** — `docs/04_DESIGN.md` now carries the ADR-094–100 design surfaces and the capability-attestation section is correctly labelled. `#### Agent capability attestation` (`docs/04_DESIGN.md:2451`) is the anchor ADR-102 cites from `docs/00_ADR.md:2039` (`04 Design §agent-capability-attestation`), so that pointer resolves; the body beneath it is relabelled "ADR-094 principle / ADR-102 contract, task 0706" (was the mislabelled ADR-101). The already-shipped sections were relabelled with their ADR ids — usage propagation and hard budgets (ADR-095, `:2469`), fail-closed operational trip wires (ADR-096, `:2486`), fresh-context review independence (ADR-097, `:2509`), verified-outcome projection (ADR-100, `:963`) — and the two genuinely missing surfaces were written from the shipped contracts: escalation packets (ADR-098, `:2530`) and checkpoint / indexed-context freshness (ADR-099, `:2545`).
 
-**R9 — PENDING.** Full project check needs R8 to close first.
+**R3** — `docs/00_ADR.md:2220-2236` consolidated amendment section covering ADRs 051, 069, 071, 093, 094→102, 098, 099, 100, 102, with the ADR-094 → ADR-102 refinement relationship stated explicitly in the 094 row.
 
+**R4** — composition baseline regenerated; 6 inert per-workflow fields dropped, `proofInputs` removed, stale digests refreshed, all 11 workflows covered; the gate stays advisory per ADR-069.
+
+**R5** — corpus baseline regenerated; 299 entries from 869 observed findings; ADR-093 waiver fields (owner, review_date, removal_criterion) added at `config/corpus-baseline.json:3-8`.
+
+**R6** — `config/pipeline-budgets.json:27-37` docs-pipeline.modelQueries 1→2 (D8 Decision 11: FIX, not raise — the budget was stale against the live SSOT `['draft','verify']`, the workflow's declared query count did not change); the decision block records date, wbs, and rationale inline.
+
+**R7** — `scripts/commands/composition-entrypoint-check.ts:1-110` new two-sided gate; `regen-corpus-baseline` added at `package.json:91` and invoked through it; `composition-entrypoint-check` wired into the `spur-check` chain at `package.json:80`.
+
+**R8** — closed. The single remaining confirmed mismatch was the empty, gitignored `.spur/workflows/` leftover that `plugins/sp/scripts/surface-drift-inventory.ts:783-793` reported as `symlink-absent` ("still present — should be removed (task 0650 R3)"). The directory was removed; `bun plugins/sp/scripts/surface-drift-inventory.ts` now reports "No confirmed mismatches." (exit 0). No new public surface was added, so no ADR-051 consent was required.
+
+**R9** — `bun run spur-check` and `bun run corpus-check` re-run on the regenerated snapshots with no gate suppressed and no `--no-verify`; results recorded in `## Testing`.
 ### Testing
+**Pipeline verify results**
 
-- `bunx @biomejs/biome check` — clean on all touched files
-- `bun scripts/commands/regen-composition-baseline.ts` — R4 verified, 51 facts re-accepted
-- `bun scripts/commands/regen-corpus-baseline.ts` — R5 verified, 299 entries from 869 observed findings
-- `bun scripts/commands/composition-entrypoint-check.ts` — R7 verified, 2 composition entrypoints wired
-- `bun plugins/sp/scripts/surface-drift-inventory.ts` — R8 3 mismatches identified (not yet resolved)
-- `bun test plugins/sp/tests/inline-pipeline-parity-check.test.ts` — 2/2 pass (from 0755)
+- Verdict: PARTIAL (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `docs/03_ARCHITECTURE.md:1358` — "## 24. Production Autonomy Contracts (built — ADR-094–100, tasks 0703–0712)"; body at `:1360-1361` reads "These controls are **built and live** as of tasks 0703-0712". The "not yet built" wording is gone. `sed -n '1356,1362p' docs/03_ARCHITECTURE.md`. |
+| R2 | MET | `docs/04_DESIGN.md:2451` `#### Agent capability attestation`, body at `:2453` labelled "(ADR-094 principle / ADR-102 contract, task 0706)" — the ADR-101 mislabel is gone. `docs/00_ADR.md:2039` cites `04 Design §agent-capability-attestation`, which slugifies to that heading, so the pointer resolves. `grep -n 'agent-capability-attestation' docs/00_ADR.md`. |
+| R3 | MET | `docs/00_ADR.md:2220` "## Amendments (task 0754, D8 Decision 8 closure)" with a 9-row table covering 051, 069, 071, 093, 094, 098, 099, 100, 102. The 094 row states the refinement explicitly: "Refines to: ADR-102 … Neither supersedes the other; ADR-102 refines ADR-094's principle into an executable contract." `sed -n '2216,2242p' docs/00_ADR.md`. |
+| R4 | MET | `jq` over `config/workflow-composition-baseline.json`: top-level keys are exactly `schemaVersion,workflows`; 11 workflows tracked; the per-workflow non-schema key scan (anything but `definition`/`terminalStates`/`modelQueries`/`actions`) returns empty, so no inert field and no `proofInputs` survives. `ls -1 config/workflows/ \| grep -c '\.ya\?ml$'` → 11, and `bun run scripts/commands/regen-composition-baseline.ts --check` printed no untracked-workflow warning and exited 0 ("baseline already matches the live definitions"), which is the no-stale-digest proof. |
+| R5 | MET | `config/corpus-baseline.json:3-8` carries the ADR-093 waiver object: `owner: spur-dev-maintainers`, `review_date: 2026-12-01`, and a `removal_criterion` tying retirement to a zero-finding sweep. `head -12 config/corpus-baseline.json`. The requirement's own clauses hold; its AC's second conjunct (corpus gate green) does not — see the AC table. |
+| R6 | MET | `config/pipeline-budgets.json` `budgets["docs-pipeline"].modelQueries` is `2`, matching the live SSOT list `['draft','verify']`, with a `decision` block recording `date 2026-09-03`, `wbs 0754`, and the FIX-not-raise rationale per D8 Decision 11. `bun test packages/app/tests --test-name-pattern "budget"` → 11 pass / 0 fail / 36 expect(). |
+| R7 | MET | `package.json:91` `"regen-corpus-baseline": "bun run scripts/commands/regen-corpus-baseline.ts"`, invoked through the script name (not a bare path) by `scripts/commands/composition-entrypoint-check.ts:98-102`. The check is two-sided: the disk side scans `scripts/commands` (`listTsFiles`, `:37-42`) and the package.json side re-validates both entrypoints. `bun run composition-entrypoint-check` → "ok (2 composition entrypoints wired through package.json)", exit 0; it is wired into `spur-check` at `package.json:80`. |
+| R8 | MET | `bun plugins/sp/scripts/surface-drift-inventory.ts` → "No confirmed mismatches." The `.spur/workflows/` leftover that `plugins/sp/scripts/surface-drift-inventory.ts:793` reported as `symlink-absent` is gone (`ls -la .spur/workflows` → "No such file or directory"). |
+| R9 | PARTIAL | Re-measured at the end of the D9 batch, both gates run with no suppression, no skipped test, and no `--no-verify` — and neither is green, for reasons outside 0754's change set. `bun run spur-check` → **1 fail / 7367 tests across 407 files** (117.10s), `EXIT=1`; the sole failure is `db migrations > CLI_MIGRATIONS > has foundation …`, `packages/domain/tests/dao/migrations.test.ts:123` expecting 40 `CLI_MIGRATIONS` against 39 in `packages/domain/src/migrations.ts` — **the file the operator explicitly carved out of this session** and assigned elsewhere; the test-side bump to 40 arrived with task 0763's in-flight work in this tree. Every other leg is green (link-check, transition-shim-check, script-contract-check 18/0, inline-pipeline-parity-check, composition-entrypoint-check, dependency-drift-check, importer-schema-check, history-surface-freeze-check, lint 895 files, typecheck ×7, `rule run --preset recommended-pre-check --fail-on warning` 44/44). `bun run corpus-check` → `EXIT=1`: errors 6 observed / 6 baselined / **0 new**; warnings 840 observed / 293 baselined / **8 new**, and none is a 0754 regression: 3 are `L3.unchecked-checklist` on 0754/0758/0759 — deliberate open boxes recording the Option B stop, which flipping would falsify — and 5 belong to task 0763 (4 on the carved-out `packages/domain/src/migrations.ts`, 1 on an unmerged `drizzle/0039_*.sql`). `bun run scripts/commands/regen-composition-baseline.ts --check` → exit 0, baseline matches. **Disposition: accepted as PARTIAL, not repaired here.** Both residuals are owned elsewhere — one by the operator's carve-out, one by another agent's task — and the only ways to turn this green from inside 0754 are the two the requirement forbids: suppress the failing assertion, or regenerate the corpus baseline to absorb another agent's warnings. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Architecture describes what is built | MET | command | `sed -n '1356,1362p' docs/03_ARCHITECTURE.md` → §24 header reads "(built — ADR-094–100, tasks 0703–0712)" and the body reads "built and live as of tasks 0703-0712"; no "not yet built" wording remains. |
+| R2 — Capability attestation is attributed to the right ADR and resolves | MET | command | `sed -n '2449,2453p' docs/04_DESIGN.md` → `#### Agent capability attestation` labelled "ADR-094 principle / ADR-102 contract, task 0706"; `grep -n 'agent-capability-attestation' docs/00_ADR.md` → `:2039` cites `04 Design §agent-capability-attestation`, which resolves to that heading. |
+| R4 — The composition baseline carries no dead weight | MET | command | `jq` scan of `config/workflow-composition-baseline.json` → top-level keys exactly `schemaVersion,workflows`; 11 workflow entries; the non-schema per-workflow key scan returns empty (no inert field, no `proofInputs`). `bun run scripts/commands/regen-composition-baseline.ts --check` → exit 0, "baseline already matches the live definitions", with no untracked-workflow warning against the 11 files in `config/workflows/`. |
+| R5 — The corpus snapshot declares itself as a waiver | PARTIAL | command | First conjunct MET: `head -12 config/corpus-baseline.json` → `waiver.owner`, `waiver.review_date` (2026-12-01), `waiver.removal_criterion` at `:3-8` per ADR-093. Second conjunct ("the corpus gate is green on the regenerated snapshot") UNMET: `bun run corpus-check` exits 1 with 11 new warnings. The snapshot 0754 generated has since gone stale against tasks 0756/0758/0759/0763 — expected drift, not a defect in the regeneration, but the AC states a condition that no longer holds. |
+| R6 — The budget records the true value with its decision | MET | test | `jq '.budgets["docs-pipeline"]' config/pipeline-budgets.json` → `modelQueries: 2` matching the live SSOT `['draft','verify']`, with a `decision` block (date 2026-09-03, wbs 0754, FIX-not-raise rationale). `bun test packages/app/tests --test-name-pattern "budget"` → 11 pass / 0 fail / 36 expect(). |
+| R7 — Every composition entrypoint is reachable and mechanically checked | MET | command | `bun run composition-entrypoint-check` → "ok (2 composition entrypoints wired through package.json)", exit 0. `grep -n 'regen-corpus-baseline' package.json` → `:91` invokes the script by name; `:80` wires the check into the `spur-check` chain. Both sides of the gate are exercised: disk-side scan of `scripts/commands` at `scripts/commands/composition-entrypoint-check.ts:75-87` and package.json-side existence check at `:90-104`. |
+| R8 — The public surface inventory matches the shipped CLI | MET | command | `bun plugins/sp/scripts/surface-drift-inventory.ts` → "No confirmed mismatches."; `ls -la .spur/workflows` → "No such file or directory", confirming the `symlink-absent` mismatch source is removed. |
+| R9 — Nothing is forced green | PARTIAL | command | The forced-green half holds absolutely: no suppression, no `.skip`, no `--no-verify`, no `biome-ignore`/`eslint-disable` anywhere in the run. The green half does not: `bun run spur-check` exits 1 on one real assertion (`packages/domain/tests/dao/migrations.test.ts:123`, 40 expected vs 39 actual) in `packages/domain/src/migrations.ts`, the file the operator carved out of this session, and `bun run corpus-check` exits 1 on 8 new warnings, 5 of them task 0763's and 3 of them deliberate open checkboxes. Accepted as PARTIAL rather than forced — see the R9 row. |
+| The corpus and composition gates are green on regenerated snapshots | PARTIAL | command | Composition, budget, surface-drift, and script-contract gates all pass (`regen-composition-baseline --check` exit 0; 11 budget tests pass; "No confirmed mismatches."; `script-contract-check` 18 scripts / 0 violations). The **corpus** gate does not: `bun run corpus-check` exits 1 with 11 new warnings. The other two conjuncts hold — the corpus snapshot carries owner/review-date/removal at `config/corpus-baseline.json:3-8`, and the composition baseline's non-schema per-workflow key scan is empty. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 
 | Priority | Count | Notes |

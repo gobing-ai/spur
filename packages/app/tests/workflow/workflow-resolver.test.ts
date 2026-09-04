@@ -322,3 +322,54 @@ Fresh session notes
         }
     });
 });
+
+describe('Task 0756: optional behavior-neutral workflow version', () => {
+    /**
+     * R1 regression. The dialect JSON schemas were given `minLength: 1`, but the load path
+     * validates against the engine's Zod schema, which has no minimum — so an empty literal
+     * validated and then got reported as `unversioned`, indistinguishable from an absent field.
+     */
+    const VERSIONED = (version: string) => `name: versioned-flow
+kind: state-machine
+version: ${version}
+initialState: start
+states:
+  - id: start
+  - id: done
+transitions:
+  - from: start
+    to: done
+terminalStates:
+  - done
+`;
+
+    test('R1: an empty root version is rejected with a diagnostic naming the empty value', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-0756-'));
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        await writeFile(join(wfDir, 'versioned-flow.yaml'), VERSIONED('""'));
+
+        await expect(resolveWorkflowDefinition(dir, 'versioned-flow')).rejects.toThrow(/"version" is an empty string/);
+
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('R1/R2: a non-empty literal resolves and is carried through opaquely', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-0756-'));
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        await writeFile(join(wfDir, 'versioned-flow.yaml'), VERSIONED('"not-a-semver"'));
+
+        const resolved = await resolveWorkflowDefinition(dir, 'versioned-flow');
+        expect(resolved.workflow.version).toBe('not-a-semver');
+
+        // R3: the version participates in the digest and nothing else — an otherwise identical
+        // unversioned copy resolves to a different digest with the same states/transitions.
+        await writeFile(join(wfDir, 'unversioned-flow.yaml'), VERSIONED('"x"').replace('version: "x"\n', ''));
+        const plain = await resolveWorkflowDefinition(dir, 'unversioned-flow');
+        expect(plain.workflow.version).toBeUndefined();
+        expect(plain.digest).not.toBe(resolved.digest);
+
+        await rm(dir, { recursive: true, force: true });
+    });
+});

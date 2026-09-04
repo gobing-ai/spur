@@ -250,23 +250,33 @@ states:
               echo "FAIL" > "$EVID_FILE";
             fi &&
             exit 0
-      # Proportional route table evaluation (0759 R1/R4).
+      # Proportional route table evaluation (0759 R1/R4). The reason artifact is RUN-scoped, not
+      # wbs-scoped: ADR-107 names `.spur/run/<runId>-route-reason.txt`, and a wbs-scoped path lets
+      # a re-run of the same task overwrite the earlier run's route claim, so the artifact could
+      # not attribute a route to the run that took it (0759 R5). `__runId` is injected by
+      # WorkflowAppService.run(); the wbs fallback keeps a driver-less invocation from writing to
+      # a bare "-route-reason.txt". The log line carries the run id for the same reason — an
+      # unattributed append is log scraping, which R5 explicitly rejects as evidence.
       - kind: shell
         options:
           command: >-
             mkdir -p .spur/run .spur/memory &&
+            RUN_ID="$__runId" &&
+            if [ -z "$RUN_ID" ]; then RUN_ID="pipeline-$wbs"; fi &&
+            REASON_FILE=".spur/run/$RUN_ID-route-reason.txt" &&
             if [ "$mode" = "fast" ]; then
-              echo "fast:evidence complete+consistent" > ".spur/run/$wbs-route-reason.txt";
+              echo "fast:evidence complete+consistent" > "$REASON_FILE";
             elif [ -z "$mode" ]; then
-              echo "safety:standard verification" > ".spur/run/$wbs-route-reason.txt";
+              echo "safety:standard verification" > "$REASON_FILE";
             elif [ "$mode" = "unknown" ]; then
-              echo "safety:unknown evidence quality" > ".spur/run/$wbs-route-reason.txt";
+              echo "safety:unknown evidence quality" > "$REASON_FILE";
             elif [ "$mode" = "conflict" ]; then
-              echo "safety:conflicting evidence" > ".spur/run/$wbs-route-reason.txt";
+              echo "safety:conflicting evidence" > "$REASON_FILE";
             else
-              echo "safety:unrecognized evidence (mode=$mode)" > ".spur/run/$wbs-route-reason.txt";
+              echo "safety:unrecognized evidence (mode=$mode)" > "$REASON_FILE";
             fi &&
-            cat ".spur/run/$wbs-route-reason.txt" >> .spur/memory/task-pipeline-routes.log &&
+            printf '%s %s %s\n' "$RUN_ID" "$wbs" "$(cat "$REASON_FILE")"
+            >> .spur/memory/task-pipeline-routes.log &&
             exit 0
 
   - id: implement
@@ -611,8 +621,11 @@ states:
         options:
           command: "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt"
       # R3 (0703): write the required proof block into the verdict artifact — the digest, the
-      # capture point, and the named per-stage results, each stage carrying the SAME digest
-      # value (prose asserting proof validity is insufficient). Also keeps the flat
+      # certifying run id, the capture point, and the named per-stage results, each stage carrying
+      # the SAME digest value (prose asserting proof validity is insufficient). `runId` closes
+      # 0730 §B.2 (task 0757 R4): without it the verified-outcome fold has to accept ANY linked
+      # run as certifying, so a dry-run probe linked to the same wbs reads as proof of completion.
+      # Also keeps the flat
       # `proof-input-digest` check row for consumers that read `checks[]`. Soft action + hard
       # guard: a missing/malformed stamp fails the `verify → record` guard below, not this step.
       - kind: shell
@@ -620,8 +633,8 @@ states:
           command: >-
             V=".spur/run/$wbs-verdict.json";
             if [ -f "$V" ] && [ -n "$proofDigest" ]; then
-              jq --arg d "$proofDigest" --arg g "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)"
-              '. + {proof: {digest: $d, capturePoint: "quality-gate-entry", stages: {
+              jq --arg d "$proofDigest" --arg r "$__runId" --arg g "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)"
+              '. + {proof: {digest: $d, runId: $r, capturePoint: "quality-gate-entry", stages: {
                 qualityGate: {status: $g, digest: $d},
                 review: {status: "completed", digest: $d},
                 verification: {status: .verdict, digest: $d}}}}

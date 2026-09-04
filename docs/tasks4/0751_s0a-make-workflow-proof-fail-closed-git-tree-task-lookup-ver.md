@@ -4,7 +4,7 @@ name: "S0a: Make workflow proof fail-closed — git-tree, task lookup, verifier 
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:30.404Z
-updated_at: "2026-09-03T23:04:22.104Z"
+updated_at: "2026-09-04T21:12:07.125Z"
 feature_id: D9
 priority: P1
 ac_altitude: task-local
@@ -22,12 +22,12 @@ Anchors verified 2026-09-03: `packages/app/src/workflow/proof-input-fingerprint.
 
 ### Requirements
 
-- [ ] R1. Git-tree proof-input capture fails closed: when `read-tree`, `add`, or `write-tree` fails, or the `catch` fires, the caller receives a distinguishable failure rather than an empty string, and no fingerprint is derived from it.
-- [ ] R2. The task-pipeline task-spec lookup is not suppressed: an empty resolved task path is an error that fails the step, not a silent fall-through to whole-tree-only proof.
-- [ ] R3. An `expectFile` assertion is satisfied only by an artifact produced by the current run — a file left behind by a prior run cannot satisfy it.
-- [ ] R4. `run.artifact`'s `proofBinding` is validated at artifact write. An artifact whose declared binding does not hold is rejected; the option stops being decorative.
-- [ ] R5. Each of R1-R4 has a regression test that fails against the pre-repair code and passes after, exercising the failure path rather than only the happy path.
-- [ ] R6. No change widens what counts as proof. Repairs only remove fail-open paths; no new bypass, env override, or `softFail` escape is introduced.
+- [x] R1. Git-tree proof-input capture fails closed: when `read-tree`, `add`, or `write-tree` fails, or the `catch` fires, the caller receives a distinguishable failure rather than an empty string, and no fingerprint is derived from it.
+- [x] R2. The task-pipeline task-spec lookup is not suppressed: an empty resolved task path is an error that fails the step, not a silent fall-through to whole-tree-only proof.
+- [x] R3. An `expectFile` assertion is satisfied only by an artifact produced by the current run — a file left behind by a prior run cannot satisfy it.
+- [x] R4. `run.artifact`'s `proofBinding` is validated at artifact write. An artifact whose declared binding does not hold is rejected; the option stops being decorative.
+- [x] R5. Each of R1-R4 has a regression test that fails against the pre-repair code and passes after, exercising the failure path rather than only the happy path.
+- [x] R6. No change widens what counts as proof. Repairs only remove fail-open paths; no new bypass, env override, or `softFail` escape is introduced.
 
 ### Acceptance Criteria
 
@@ -71,6 +71,13 @@ Feature: Fail-closed workflow proof
     Then no environment variable, option, or softFail path restores the previous fail-open behavior.
 ```
 
+
+<!-- DD-09 coverage: this task's scenarios sit at task-local altitude and are R-titled, so their
+     normalized titles do not match the feature's ship-contract wording. The `covers:` aliases
+     below name the D9 scenarios R4 and R6 actually satisfy (0700 R3). -->
+
+- [x] AC-D9a. (covers: The done-state verdict artifact declares the enforced proof binding) R4 — the done-state `run.artifact` declares `proofBinding: current` and an unbound artifact is rejected at write.
+- [x] AC-D9b. (covers: No new bypass is introduced in the pipeline composition) R6 — the repaired proof paths add no `2>/dev/null`, `|| true`, forced `exit 0`, env override, or `softFail` escape.
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
@@ -124,28 +131,29 @@ Implemented fail-closed proof capture (R1-R4, R6); all four fail-open paths now 
 **Not done (out of scope per Design)**: F-10 whole-tree attribution; resolve/resume seam (0752); action-option/confinement (0753). R1/R2 will surface latent failures in previously-"passing" runs — accepted tradeoff per Design, re-measured at 0757.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | `ProofCaptureError` class `packages/app/src/workflow/proof-input-fingerprint.ts:64`; all four git failure paths throw carrying stderr — read-tree `:116`, add `:121`, write-tree `:125`, catch-convert `:127-129`; no `return ''` sentinel remains (grep). `computeProofInputFingerprint` awaits with no internal catch (`:223`), so no digest is derived from a failed capture; its only production caller fails the action via try/catch `packages/app/src/workflow/actions/proof-fingerprint.ts:68-76`. Exported `packages/app/src/index.ts:621`. Regression: `packages/app/tests/workflow/proof-input-fingerprint.test.ts:210-277` (4 git-failure shapes + compute rejects). Fresh run: 166 pass / 0 fail across the four touched suites. |
-| R2 | MET | Fail-closed lookup `config/workflows/task-pipeline.yaml:348`: no `2>/dev/null` on the lookup, no `\|\| true`, no forced `exit 0`; explicit empty-path check exits 1 naming the unresolved wbs. Priority read stays tolerant by design. Baseline re-pin string-identical `config/workflow-composition-baseline.json:253`. Regression: structural no-suppression pins + behavioral non-zero exit `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:179-242`. |
-| R3 | MET | Delete-before-invoke: target resolved and deleted pre-dispatch, deletion failure fails the step before spawn `packages/app/src/workflow/actions/agent-run.ts:333-352`; post-exit assert unchanged `:576-606`. Regression: stale answer cannot satisfy (`ok:false`, "expected file is absent", stale file consumed from disk) and absent-at-dispatch proof `packages/app/tests/workflow/actions/agent-run.test.ts:555-593`. |
-| R4 | MET | Binding enforced at write BEFORE ledger: unknown binding rejected `packages/app/src/workflow/actions/run-artifact.ts:92-96`; missing/malformed `sha256:<64hex>` digest in `proofDigestNow`→`proofDigest` rejected `:97-110`; `dao.record` only at `:118` on pass. Sole declaration `config/workflows/task-pipeline.yaml:710` (holds by construction — record re-captures `proofDigestNow` with expect). Regression with zero-ledger-row assertions on every reject branch `packages/app/tests/workflow/actions/run-artifact.test.ts:109-201`. |
-| R5 | MET | Each regression names its requirement and exercises the failure path: R1 `packages/app/tests/workflow/proof-input-fingerprint.test.ts:210-277`; R2 `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:179-242` (+ driver case `plugins/sp/tests/inline-pipeline-driver.test.ts:283`); R3 `packages/app/tests/workflow/actions/agent-run.test.ts:555-593`; R4 `packages/app/tests/workflow/actions/run-artifact.test.ts:109-201`. Fresh this run: packages/app 4 suites 166 pass / 0 fail (485 expect, 2.25s); plugins/sp driver 4 pass / 0 fail (1.29s). |
-| R6 | MET | Static audit of all added diff lines this run: no `process.env`, no softFail, no `\|\| true`/`exit 0`, no bypass option introduced ("NO bypass-introducing additions found"). Every change removes a fail-open route; `config/rules/structure/protected-files.yaml:28-30` is secrets-scanner scope hygiene (review advisory #3), not a proof-surface widening. |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/workflow/proof-input-fingerprint.ts:63` declares `ProofCaptureError`; `:114-126` throw it on non-zero `read-tree` / `add` / `write-tree`; `:127-130` re-throw from the `catch` — no empty-string sentinel remains. `bun test tests/workflow/proof-input-fingerprint.test.ts --test-name-pattern "git-tree capture fails closed"` → 5 pass / 0 fail. |
+| R2 | MET | `config/workflows/task-pipeline.yaml:368` fails the step when the resolved task path is empty ("fail-closed proof chain (0751 R2): task path for $wbs did not resolve"); the comment at `:365` states the path is NOT optional. `bun test tests/workflow/task-pipeline-proof-chain.test.ts --test-name-pattern "task-path lookup fails closed"` → 4 pass / 0 fail. |
+| R3 | MET | `packages/app/src/workflow/actions/agent-run.ts:339-352` deletes `expectFile` before dispatch and fails if it cannot; `:576-606` fails after a zero exit when the file is absent. `bun test tests/workflow/actions/agent-run.test.ts --test-name-pattern "0751 R3"` → 2 pass / 0 fail. |
+| R4 | MET | `packages/app/src/workflow/actions/run-artifact.ts:28` narrows `proofBinding`; `:86-103` rejects an unsupported value and rejects `current` when the run carries no current proof input, before any artifact record is persisted. `bun test tests/workflow/actions/run-artifact.test.ts --test-name-pattern "proofBinding enforcement"` → 5 pass / 0 fail. |
+| R5 | MET | All four failure-path suites run green together: `cd packages/app && bun test tests/workflow/proof-input-fingerprint.test.ts tests/workflow/task-pipeline-proof-chain.test.ts tests/workflow/actions/run-artifact.test.ts tests/workflow/actions/agent-run.test.ts` → 166 pass / 0 fail / 485 expect() calls. Each suite asserts the thrown error or failed result, not only the happy path. |
+| R6 | MET | `git show c838f89f4 -U0 -- packages/app/src config/workflows \| grep '^+' \| grep -icE 'softfail\|continueonerror\|bypass\|allowmissing\|SPUR_.*=\|process\.env\.[A-Z]'` → `0`. The only `process.env` reads in the touched files (`proof-input-fingerprint.ts:109`, `agent-run.ts:1094`) are pre-existing child-process env inheritance, not proof overrides. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
-| Proof fingerprinting fails closed on a git failure | MET | test | `packages/app/tests/workflow/proof-input-fingerprint.test.ts:210-277` (add/write-tree/throw awaited rejections; compute derives no digest on read-tree failure); code `packages/app/src/workflow/proof-input-fingerprint.ts:116,121,125,127-129`; downstream step fails via `packages/app/src/workflow/actions/proof-fingerprint.ts:75-76` |
-| A missing task spec fails instead of degrading to tree-only proof | MET | test | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:226-241` (rendered command with unresolvable task throws via execSync); guard at `config/workflows/task-pipeline.yaml:348` exits 1 naming the unresolved task |
-| A stale verifier answer cannot satisfy a fresh assertion | MET | test | `packages/app/tests/workflow/actions/agent-run.test.ts:555-593` (stale file → `ok:false` naming absence; target absent at dispatch time); code `packages/app/src/workflow/actions/agent-run.ts:339-352` |
-
+|---------------------|--------|---------------|----------|
+| R1 — Proof fingerprinting fails closed on a git failure | MET | test | `bun test tests/workflow/proof-input-fingerprint.test.ts --test-name-pattern "git-tree capture fails closed"` → 5 pass / 0 fail / 9 expect(). The suite drives each git step to a non-zero exit and asserts `ProofCaptureError`, so no digest is derived. |
+| R2 — A missing task spec fails instead of degrading to tree-only proof | MET | test | `bun test tests/workflow/task-pipeline-proof-chain.test.ts --test-name-pattern "task-path lookup fails closed"` → 4 pass / 0 fail / 11 expect(), asserting the `config/workflows/task-pipeline.yaml:368` guard errors on an unresolved path. |
+| R3 — A stale verifier answer cannot satisfy a fresh assertion | MET | test | `bun test tests/workflow/actions/agent-run.test.ts --test-name-pattern "0751 R3"` → 2 pass / 0 fail / 6 expect(): a pre-seeded `expectFile` is deleted before dispatch and the assertion fails when the run does not rewrite it. |
+| R4 — A declared proof binding is enforced at artifact write | MET | test | `bun test tests/workflow/actions/run-artifact.test.ts --test-name-pattern "proofBinding enforcement"` → 5 pass / 0 fail / 12 expect(): unsupported and unheld bindings both fail before persistence. |
+| R6 — The repairs add no new bypass | MET | command | `git show c838f89f4 -U0 -- packages/app/src config/workflows \| grep '^+' \| grep -icE 'softfail\|continueonerror\|bypass\|allowmissing\|SPUR_.*=\|process\.env\.[A-Z]'` → `0` added bypass-shaped lines. |
+| The done-state verdict artifact declares the enforced proof binding | MET | test | (D9 ship-contract alias of this task's R4; see task AC checklist `AC-D9a`.) `config/workflows/task-pipeline.yaml:743` declares `proofBinding: current` on the done-state `run.artifact`; `cd packages/app && bun test tests/workflow/actions/run-artifact.test.ts --test-name-pattern "proofBinding enforcement"` -> 5 pass / 0 fail / 12 expect(): unsupported and unheld bindings both fail before persistence, so a missing or stale binding cannot reach `dao.record`. |
+| No new bypass is introduced in the pipeline composition | MET | command | (D9 ship-contract alias of this task's R6; see task AC checklist `AC-D9b`.) `git show c838f89f4 -U0 -- packages/app/src config/workflows |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 **Verdict: PASS** — all six requirements met with file:line evidence; no blocker/major findings. 2 minor, 2 advisory.

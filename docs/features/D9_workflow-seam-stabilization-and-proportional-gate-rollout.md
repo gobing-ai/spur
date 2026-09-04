@@ -6,7 +6,7 @@ status: verifying
 priority: P1
 tags: []
 created_at: "2026-09-03T20:25:50.515Z"
-updated_at: "2026-09-04T16:18:42.736Z"
+updated_at: "2026-09-04T21:14:49.860Z"
 ---
 
 # D9: Workflow seam stabilization and proportional gate rollout
@@ -242,6 +242,46 @@ ADR-094/102 relationship should be stated explicitly when S1 writes the ADR amen
 Option A/B "affected ADRs" summary lines under-report the §6 matrix by two ADRs each (051, 098). The
 §6 matrix is authoritative on both counts.
 
+### Re-measure gate outcome (0757): the feature is at the Option B boundary
+
+The re-measure gate ran and **the pilot bar is not met**. The bar is a conjunction — ≥5 real terminal
+runs per candidate pilot **and** ≥80% run-scoped cost row coverage. Measured against the main-tree
+database (full commands and provenance in task 0757 `## Solution`):
+
+| Candidate | Real terminal (bar ≥5) | `mappedRuns` / `terminalRuns` | Coverage (bar ≥80%) |
+| --- | --- | --- | --- |
+| wrapup-pipeline | 23 ✅ | 1 / 45 | 2.2% ❌ |
+| task-lifecycle | 27 ✅ | 0 / 465 | 0% ❌ |
+| task-pipeline | 33 ✅ | 0 / 207 | 0% ❌ |
+
+Corroboration: the 25 `history_run_session` links resolve to 10 distinct runs across two workflows
+(`history-anatomy` 9, `wrapup-pipeline` 1). Neither pilot has a cost population to divide by.
+
+**0757's first pass recorded "Option A continues" by evaluating one conjunct and assuming the other.
+That disposition is withdrawn.** S3 (0758) and S5 (0759) had already been built on it. They are not
+reverted — deleting shipped, tested code is the operator's call — but they are **inert**: the
+proportional fast path is reached only at `mode = "fast"`, all three pilots declare `mode: ""` as
+their default, and no production caller passes `fast` (the only `mode: 'fast'` sites in the repo are
+tests and fixtures). Every real run takes the safety path, exactly as before the pilots landed.
+
+**Reopening condition.** Activate the fast path for a pilot only when a re-run of the 0757
+measurement shows that pilot at **≥80% `mappedRuns` / `terminalRuns`** and ≥5 real terminal runs.
+That requires run-scoped session attribution for `task-lifecycle` and `task-pipeline`, which is
+currently zero. Until then the routing stays unreferenced.
+
+**Open operator decision.** Whether to keep 0758/0759 dormant as-is, or revert the pilots to restore
+the pre-S3 shape, is not decided here. Dormancy is the status quo recorded above.
+### Batch verify outcome (D9, all tasks)
+
+Final recorded verdicts across the feature: **0750/0751/0752/0753/0755/0756/0760 PASS · 0754 PARTIAL · 0757 PARTIAL · 0758 FAIL · 0759 FAIL**. The two FAILs and the two PARTIALs are the honest record of the Option B boundary above, not unfinished repair work:
+
+- **0758 / 0759 FAIL** — both pilots and the canonical migration are built, tested, and **inert**. Their UNMET requirements are the coverage half of the bar (0758 R6) and the real-terminal-run evidence (0759 R3/R4), and both can only be satisfied by *activating* routing the re-measure gate declined to authorize. 0759 R5 is PARTIAL: the certifying-run binding landed and is regression-tested; the definition-digest half is unbuilt.
+- **0757 PARTIAL** — R6's disposition is recorded, but its "close 0758/0759 as not-built" clause is counterfactual: both are `done` with shipped diffs, so cancelling them would falsify the corpus.
+- **0754 PARTIAL** — R9 accepted as PARTIAL. `bun run spur-check` exits 1 on exactly one assertion, `packages/domain/tests/dao/migrations.test.ts:123` (40 expected vs 39), inside `packages/domain/src/migrations.ts` — the file the operator carved out of this session. `bun run corpus-check` exits 1 on 8 new warnings: 3 deliberate `L3.unchecked-checklist` boxes on 0754/0758/0759 (flipping them would falsify the stop) and 5 belonging to task 0763's in-flight work. The only ways to force either gate green from inside 0754 are the two the requirement forbids.
+
+**DD-09 traceability closed.** The three feature scenarios 0760 added — "A missing task spec fails the docs-pipeline proof step too", "The done-state verdict artifact declares the enforced proof binding", "No new bypass is introduced in the pipeline composition" — were covered by no task, because 0751/0760 sit at `task-local` altitude and their scenario titles do not mimic the feature's. Closed with `(covers: …)` aliases (0700 R3) in each task's AC plus matching MET rows in their verdict artifacts, both of which are PASS. `spur feature check D9` now reports only the three genuine `scenario-unverified` warnings for 0754/0757/0758 — exactly the scenarios the Option B stop leaves unverified.
+
+**Composition baseline** — `bun run scripts/commands/regen-composition-baseline.ts --check` → exit 0, baseline matches the live definitions.
 ## History
 
 - 2026-09-03T22:54:31.541Z backlog → active (system)

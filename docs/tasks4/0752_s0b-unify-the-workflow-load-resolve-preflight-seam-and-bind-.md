@@ -4,7 +4,7 @@ name: "S0b: Unify the workflow load/resolve/preflight seam and bind resume to th
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:30.732Z
-updated_at: "2026-09-04T00:38:39.664Z"
+updated_at: "2026-09-04T18:22:52.701Z"
 feature_id: D9
 priority: P1
 ac_altitude: task-local
@@ -105,10 +105,9 @@ Feature: One workflow resolve, preflight, and resume seam
 - [x] Run the workflow-service suite from inside its workspace; then `bun run spur-check`.
 
 ### Solution
-
 #### Summary
 
-Unified the workflow load/resolve/preflight seam into `packages/app/src/workflow/workflow-resolver.ts` so `run`, `continue`, and `validate` share a single project-first resolution contract, schema-validation posture (`validateSchema: true`), and canonical definition digest. Resumed runs are bound to their launched `definitionDigest` and validate session checkpoint freshness before execution. Threaded `spurConfig` through `makeSvc` in CLI commands. Deleted divergent `resolveWorkflowDefByName` and bundled-first `resolveWorkflowPath`. Tests in `packages/app/tests/workflow/workflow-resolver-seam.test.ts`, `apps/cli/tests/workflow/make-lifecycle-adapter.test.ts`, and `apps/cli/tests/commands/workflow.test.ts` verify all requirements.
+Unified the workflow load/resolve/preflight seam into `packages/app/src/workflow/workflow-resolver.ts` so `run`, `continue`, and `validate` share a single project-first resolution contract, schema-validation posture (`validateSchema: true`), and canonical definition digest. Resumed runs are bound to their launched `definitionDigest` and validate session checkpoint freshness before execution. Threaded `spurConfig` through the CLI's `WorkflowAppService` construction. Deleted divergent `resolveWorkflowDefByName` and bundled-first `resolveWorkflowPath`. Regression tests live in `packages/app/tests/workflow/workflow-resolver.test.ts` (R1–R5, one named test each), `apps/cli/tests/workflow/make-lifecycle-adapter.test.ts`, and `apps/cli/tests/commands/workflow.test.ts:2572` (R2 through the CLI surface).
 
 #### Call-Site Mapping
 
@@ -121,39 +120,40 @@ Unified the workflow load/resolve/preflight seam into `packages/app/src/workflow
 
 | File:Line | Change |
 | --- | --- |
-| `packages/app/src/workflow/workflow-resolver.ts:84` | Extract unified project-first `resolveWorkflowFile` resolver supporting bare names and path patterns |
-| `packages/app/src/workflow/workflow-resolver.ts:180` | Implement `resolveWorkflowDefinition` with embedded schemas, schema validation, and digest computation |
-| `packages/app/src/services/workflow-service.ts:485` | Move `WorkflowAppService.validate` to `resolveWorkflowDefinition` returning canonical digest |
-| `packages/app/src/services/workflow-service.ts:593` | Update `WorkflowAppService.run` to load workflow definition through unified `resolveWorkflowDefinition` |
-| `packages/app/src/services/workflow-service.ts:971` | Bind `continuePaused` to launched `definitionDigest` and validate checkpoint freshness before execution |
-| `packages/app/src/services/workflow-service.ts:1075` | Implement `validateResumeCheckpointFreshness` checking terminal status, staleness, and run row matching |
-| `packages/app/src/workflow/checkpoint-contract.ts:79` | Fix array syntax parsing for empty or inline list in checkpoint artifacts |
-| `packages/app/src/workflow/progress-projection.ts:248` | Switch projection definition lookup to unified `resolveWorkflowDefinition` with schema validation |
-| `apps/cli/src/commands/workflow.ts:260` | Thread `spurConfig` through `makeSvc` for CLI workflow execution |
-| `apps/cli/src/commands/workflow.ts:697` | Add `--force` option to continue command for explicit drift bypass |
-| `apps/cli/src/workflow/make-lifecycle-adapter.ts:18` | Replace bundled-first lookup with project-first `resolveWorkflowFile` in lifecycle adapter |
-
+| `packages/app/src/workflow/workflow-resolver.ts:133` | Unified project-first `resolveWorkflowFile` supporting bare names and path patterns; the by-name project scan it delegates to is `scanWorkflowByName` at `:75` |
+| `packages/app/src/workflow/workflow-resolver.ts:194` | `resolveWorkflowDefinition` — the single resolve/preflight seam, with embedded schemas, schema validation, and digest computation |
+| `packages/app/src/services/workflow-service.ts:485` | `WorkflowAppService.validate` resolves through `resolveWorkflowDefinition`, returning the canonical digest |
+| `packages/app/src/services/workflow-service.ts:593` | `WorkflowAppService.run` loads the definition through the same seam |
+| `packages/app/src/services/workflow-service.ts:971` | `continuePaused` bound to the launched `definitionDigest`; checkpoint freshness validated at `:992` before any step executes |
+| `packages/app/src/services/workflow-service.ts:1007-1014` | R3 digest comparison: persisted vs re-resolved, refusing on unconfirmed drift and naming both hashes |
+| `packages/app/src/services/workflow-service.ts:1075` | `validateResumeCheckpointFreshness` — terminal status, staleness, and run-row match |
+| `packages/app/src/workflow/checkpoint-contract.ts:82-87` | Array-syntax parsing for an empty or inline `artifacts` list in checkpoint artifacts |
+| `packages/app/src/workflow/progress-projection.ts:248` | Projection definition lookup switched to `resolveWorkflowDefinition` with `validateSchema: true` |
+| `apps/cli/src/commands/workflow.ts:318` | Threads `context.spurConfig ?? null` into `WorkflowAppService` for CLI workflow execution |
+| `apps/cli/src/commands/workflow.ts:795` | `--force` option on `continue` for explicit, named drift bypass (`SHARED_OPTIONS.forceWorkflowContinue`) |
+| `apps/cli/src/workflow/make-lifecycle-adapter.ts:18` | Bundled-first lookup replaced with project-first `resolveWorkflowFile` in the lifecycle adapter |
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| ------------- | -------- | ---------- |
-| R1 | MET | packages/app/src/workflow/workflow-resolver.ts:180 resolveWorkflowDefinition unified across run, continue, validate |
-| R2 | MET | apps/cli/src/commands/workflow.ts:260 threads spurConfig |
-| R3 | MET | packages/app/src/services/workflow-service.ts:998-1025 bound to definitionDigest with refusal on drift |
-| R4 | MET | packages/app/src/workflow/workflow-resolver.ts:84 project-first precedence; apps/cli/src/workflow/make-lifecycle-adapter.ts:18 |
-| R5 | MET | packages/app/src/services/workflow-service.ts:992,1075 validateResumeCheckpointFreshness validates checkpoint |
-| R6 | MET | packages/app/tests/workflow/workflow-resolver.test.ts regression tests for R1-R5 |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/workflow/workflow-resolver.ts:194` `resolveWorkflowDefinition` is the single seam; `packages/app/src/services/workflow-service.ts:485` (validate), `:593` (run), and `:971` (continuePaused) all enter through it with `validateSchema: true`. `cd packages/app && bun test tests/workflow/workflow-resolver.test.ts --test-name-pattern "R1:"` → 1 pass / 0 fail. |
+| R2 | MET | `apps/cli/src/commands/workflow.ts:318` threads `context.spurConfig ?? null` into `WorkflowAppService`. `cd apps/cli && bun test tests/commands/workflow.test.ts --test-name-pattern "R2: CLI workflow run passes spurConfig"` → 1 pass / 0 fail, plus `cd packages/app && bun test tests/workflow/workflow-resolver.test.ts --test-name-pattern "R2:"` → 1 pass / 0 fail. |
+| R3 | MET | `packages/app/src/services/workflow-service.ts:1007-1014` compares the persisted `definitionDigest` against the re-resolved definition and refuses on unconfirmed drift; `apps/cli/src/commands/workflow.ts:795` supplies the explicit `--force` confirmation. `bun test tests/workflow/workflow-resolver.test.ts --test-name-pattern "R3:"` → 1 pass / 0 fail. |
+| R4 | MET | `packages/app/src/workflow/workflow-resolver.ts:133` resolves project-first (`scanWorkflowByName` at `:75` scans `.spur/workflows` before the bundled tier); `apps/cli/src/workflow/make-lifecycle-adapter.ts:18` routes the adapter through the same seam. `bun test tests/workflow/workflow-resolver.test.ts --test-name-pattern "R4:"` → 1 pass / 0 fail; `cd apps/cli && bun test tests/workflow/make-lifecycle-adapter.test.ts` → 9 pass / 0 fail. |
+| R5 | MET | `packages/app/src/services/workflow-service.ts:992` calls `validateResumeCheckpointFreshness` before any step runs; the method at `:1075` checks terminal status, staleness, and run-row match. `bun test tests/workflow/workflow-resolver.test.ts --test-name-pattern "R5:"` → 1 pass / 0 fail. |
+| R6 | MET | Five named regression tests, one per requirement, in `packages/app/tests/workflow/workflow-resolver.test.ts:72,118,162,205,247`; the whole file runs 5 pass / 0 fail / 22 expect(). Each asserts the repaired behaviour (single digest, config-resolved agent, drift refusal, project-first win, stale-checkpoint refusal) that the pre-repair code could not satisfy. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| A resumed run is bound to the exact definition it launched from | MET | test | packages/app/tests/workflow/workflow-resolver.test.ts:168 |
-
+| R1 — run, continue, and validate agree on one definition | MET | test | `cd packages/app && bun test tests/workflow/workflow-resolver.test.ts --test-name-pattern "R1:"` → 1 pass / 0 fail: all three surfaces select the same file, report the same digest, and share `validateSchema: true`. |
+| R2 — a CLI workflow run resolves its default agent from configuration | MET | test | `cd apps/cli && bun test tests/commands/workflow.test.ts --test-name-pattern "R2: CLI workflow run passes spurConfig"` → 1 pass / 0 fail, asserting the CLI path matches the non-CLI resolution for the same config. |
+| R3 — A resumed run is bound to the exact definition it launched from | MET | test | `cd packages/app && bun test tests/workflow/workflow-resolver.test.ts --test-name-pattern "R3:"` → 1 pass / 0 fail: the edited definition is detected by digest before any step executes and the resume is refused without explicit confirmation. |
+| R4 — a project definition wins on every surface | MET | test | `cd packages/app && bun test tests/workflow/workflow-resolver.test.ts --test-name-pattern "R4:"` → 1 pass / 0 fail; `cd apps/cli && bun test tests/workflow/make-lifecycle-adapter.test.ts` → 9 pass / 0 fail for the adapter surface. |
+| R5 — a stale checkpoint does not silently resume | MET | test | `cd packages/app && bun test tests/workflow/workflow-resolver.test.ts --test-name-pattern "R5:"` → 1 pass / 0 fail: the resume path reads the checkpoint, reports the staleness, and does not continue. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 
 #### Multi-Dimensional Review

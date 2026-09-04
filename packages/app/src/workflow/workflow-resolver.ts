@@ -213,6 +213,19 @@ export async function resolveWorkflowDefinition(
         validateSchema: options.validateSchema !== false,
         ...(embedded !== undefined ? embedded : {}),
     });
+    // R1 (0756): the dialect JSON schemas declare the root `version` as `minLength: 1`, but the
+    // load path validates against the engine's Zod schema (`version: z.string().optional()`, no
+    // minimum), so `version: ""` reached the digest silently and `classifyVersion` in
+    // `apps/cli/src/commands/workflow.ts:173` reported it as `unversioned` — a meaningless literal
+    // wearing the absent field's label. Enforced at this seam because run, continue, and validate
+    // all route through it (0752 R1); a per-surface guard would leave the others open. Drop this
+    // once `@gobing-ai/ts-dual-workflow-engine` ships `z.string().min(1)` on the root version.
+    if (workflow.version === '') {
+        throw new Error(
+            `Invalid workflow definition ${resolved.path}: root "version" is an empty string. ` +
+                'Omit the field for an unversioned definition, or give it a non-empty literal.',
+        );
+    }
     const digest = computeDefinitionDigest(workflow);
     return {
         path: resolved.path,

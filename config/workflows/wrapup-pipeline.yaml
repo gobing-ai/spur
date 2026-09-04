@@ -102,6 +102,11 @@ states:
       - kind: note
         options:
           message: "Resolving task list: ${vars.tasks} (proportional mode: ${vars.mode})"
+      # Run-id confinement (0758 R3). The run-scoped reason file is the only route artifact: a
+      # second copy at the fixed path `.spur/run/wrapup-route-reason.txt` had no reader and was
+      # overwritten by whichever run finished last, so a route claim read from it belonged to no
+      # particular run. The log append carries the run id for the same reason — an unattributed
+      # line is log scraping, which R5 rejects as evidence.
       - kind: shell
         options:
           command: >-
@@ -122,8 +127,8 @@ states:
             else
               echo "safety:unrecognized evidence (mode=$mode)" > "$REASON_FILE";
             fi &&
-            cp "$REASON_FILE" .spur/run/wrapup-route-reason.txt &&
-            cat "$REASON_FILE" >> .spur/memory/wrapup-routes.log &&
+            printf '%s %s\n' "$RUN_ID" "$(cat "$REASON_FILE")"
+            >> .spur/memory/wrapup-routes.log &&
             exit 0
 
   - id: doc-sync

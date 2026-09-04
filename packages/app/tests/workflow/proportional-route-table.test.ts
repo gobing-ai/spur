@@ -6,7 +6,7 @@ import {
     ROUTE_TABLE,
     type RouteInput,
     safetyFloorHolds,
-} from './proportional-route-table';
+} from '../../../../config/proportional-route-table';
 
 const BASE_INPUT: RouteInput = {
     runId: 'run-1',

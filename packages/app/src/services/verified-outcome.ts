@@ -9,8 +9,9 @@
  * - Task file corpus — frontmatter `done_forced` / `status`, `## History`
  *   transition lines (first wip, last done, reopen), and the `## Testing`
  *   section `Verdict:` line, via the shared locators/parsers.
- * - `.spur/run/<wbs>-verdict.json` — the recorded verify verdict artifact and
- *   its `proofDigest`.
+ * - `.spur/run/<wbs>-verdict.json` — the recorded verify verdict artifact, its
+ *   proof digest (nested `proof.digest`, or the flat `proofDigest` older
+ *   artifacts carry), and the run id the proof block binds it to.
  * - `run_sessions` ⨝ history cost columns — measured token cost per verified
  *   result, exact mappings only (reuse `attributeActionCost`; estimated
  *   mappings and dollar figures stay unread, R4).
@@ -141,7 +142,7 @@ async function deriveTaskInput(
     // Engine vocabulary: runs finalize as 'done'/'failed' (lifecycle-adapter); legacy rows were
     // migrated 'completed'→'done' (0017). 'completed' kept for defensive parity with
     // progress-projection's normalization.
-    const certifyingRunCompleted = linkedRuns.some((r) => r.status === 'done' || r.status === 'completed');
+    const runCompleted = (r: LinkedRun) => r.status === 'done' || r.status === 'completed';
     const supersedingFailedRun = linkedRuns.some((r) => r.status === 'failed' || r.status === 'cancelled');
 
     let done = false;
@@ -181,16 +182,40 @@ async function deriveTaskInput(
     let verdictPresent = false;
     let passVerdict = false;
     let proofDigestPresent = false;
+    // The run the verdict names as its certifying run, when it names one (0730 §B.2).
+    let boundRunId: string | null = null;
     let measuredTokens: number | null = null;
     try {
         const verdictRaw = await deps.fs.readFile(`${deps.cwd}/.spur/run/${wbs}-verdict.json`);
-        const verdict = JSON.parse(verdictRaw) as { verdict?: unknown; proofDigest?: unknown };
+        const verdict = JSON.parse(verdictRaw) as {
+            verdict?: unknown;
+            proofDigest?: unknown;
+            proof?: { digest?: unknown; runId?: unknown };
+        };
         verdictPresent = typeof verdict.verdict === 'string';
         passVerdict = verdict.verdict === 'PASS';
-        proofDigestPresent = typeof verdict.proofDigest === 'string' && verdict.proofDigest.length > 0;
+        // 0730 §B.1: the pipeline stamps `proof: {digest, runId, …}` (task-pipeline.yaml verify
+        // hop); the flat `proofDigest` form is what older/hand-written artifacts carry. Reading
+        // only the flat key made `proofDigestPresent` a constant false for every pipeline-shaped
+        // verdict, which excluded every task from the verified population.
+        const digest = typeof verdict.proof?.digest === 'string' ? verdict.proof.digest : verdict.proofDigest;
+        proofDigestPresent = typeof digest === 'string' && digest.length > 0;
+        if (typeof verdict.proof?.runId === 'string' && verdict.proof.runId.length > 0) {
+            boundRunId = verdict.proof.runId;
+        }
     } catch {
         // No verdict artifact — fold routes to missing/synthetic buckets.
     }
+
+    // 0730 §B.2: when the verdict names its certifying run, that exact run must have completed.
+    // Without the binding the fold has to accept ANY linked run, and live `task_run_links` rows
+    // show dry-run probes and driver labels linked to the same wbs — so an unbound verdict's
+    // "certifying run" is an assumption, not evidence. Unbound artifacts keep the permissive
+    // reading (they predate the stamp); bound ones are checked against the run they name.
+    const certifyingRunCompleted =
+        boundRunId !== null
+            ? linkedRuns.some((r) => r.runId === boundRunId && runCompleted(r))
+            : linkedRuns.some(runCompleted);
 
     if (passVerdict) {
         let tokens = 0;

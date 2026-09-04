@@ -42,9 +42,12 @@ export interface VerifiedOutcomeTaskInput {
     passVerdict: boolean;
     /** A `Verdict:` line exists in the corpus Testing section (synthetic marker when the artifact is absent). */
     sectionVerdictPresent: boolean;
-    /** The verdict artifact carries a non-empty `proofDigest`. */
+    /** The verdict artifact carries a non-empty proof digest (`proof.digest`, or flat `proofDigest`). */
     proofDigestPresent: boolean;
-    /** The certifying pipeline run completed (proof guard passed at record time). */
+    /**
+     * The certifying pipeline run completed. When the verdict's proof block names a `runId`,
+     * this is that exact run's completion; otherwise any completed linked run (0730 §B.2).
+     */
     certifyingRunCompleted: boolean;
     /** Any `done → wip` reopen transition appears in the corpus History. */
     reopened: boolean;
