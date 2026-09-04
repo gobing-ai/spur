@@ -45,7 +45,7 @@
 # defense).
 #   - Wrap-up never mutates task status (consumes completed work only).
 
-"$schema": "../../apps/cli/schemas/state-machine-workflow.schema.json"
+"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: wrapup-pipeline
 description: "Post-execution wrap-up: doc-sync (doc drift + learning capture), metrics, feature-transition, branch-cleanup"

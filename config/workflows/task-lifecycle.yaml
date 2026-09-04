@@ -7,7 +7,7 @@
 #     paths
 #   - No agent.run nodes (by design — pure status graph)
 #   - cancelled is the sole terminal; done is re-enterable (reopen → wip)
-"$schema": "../../apps/cli/schemas/state-machine-workflow.schema.json"
+"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: task-lifecycle
 description: >
@@ -34,10 +34,10 @@ initialState: backlog
 terminalStates:
   - cancelled
 vars:
-  spurBin: 'spur'
-  wbs: '0000'
-  mode: ''
-  __runId: ''
+  spurBin: "spur"
+  wbs: "0000"
+  mode: ""
+  __runId: ""
 
 states:
   - id: backlog
