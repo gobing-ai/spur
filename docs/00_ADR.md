@@ -2198,6 +2198,25 @@ unchanged (ADR-103, E91/R11).
 
 **Detail:** `docs/design/history-incremental-materialization.md` §12 (D10); feature E91 R21–R25.
 
+## ADR-107: Proportional Workflow Routing on Surrounding Pilots
+
+**Status:** Accepted · **Date:** 2026-09-04 · **Feature:** D9 · **Task:** 0758
+
+**Decision.** Workflow proportional routing uses a closed route table with mutually exhaustive predicates:
+missing, unknown, or conflicting evidence always selects the safety path (default); complete and
+consistent evidence selects the fast path. The immutable safety floor (proof-bracket guards,
+budget fail-closed dispatch, reviewer/executor independence, run-id confinement) holds on every
+route, including the fast path. Every route writes a bounded machine-readable reason to
+`.spur/run/<runId>-route-reason.txt` and appends to `.spur/memory/<workflow>-routes.log`. Routing is
+isolated per workflow definition, independently revertable, and exercises identical routes
+across unversioned and versioned definition forms.
+
+**Why.** Proportional routing allows bounded tasks to avoid unnecessary model or verification
+overhead without compromising the deterministic safety floor. Piloting on `wrapup-pipeline` and
+`task-lifecycle` proves the closed route table on real callers before migrating `task-pipeline`.
+
+**Detail:** `config/proportional-route-table.ts`; `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §4; task 0758.
+
 ## Amendments (task 0754, D8 Decision 8 closure)
 
 Each ADR below is amended to reflect work that shipped between the original acceptance and the 0754

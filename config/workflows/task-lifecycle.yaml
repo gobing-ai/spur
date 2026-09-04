@@ -6,7 +6,7 @@
 #   - CLI done verdict guard is a second layer (0292) covering --no-lifecycle paths
 #   - No agent.run nodes (by design — pure status graph)
 #   - cancelled is the sole terminal; done is re-enterable (reopen → wip)
-"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+"$schema": "../../apps/cli/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: task-lifecycle
 description: >
@@ -35,6 +35,8 @@ terminalStates:
 vars:
   spurBin: 'spur'
   wbs: '0000'
+  mode: ''
+  __runId: ''
 
 states:
   - id: backlog
@@ -43,12 +45,60 @@ states:
     description: Triaged and ready to start.
   - id: wip
     description: Actively being worked on.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run .spur/memory &&
+            RUN_ID="$__runId" &&
+            if [ -z "$RUN_ID" ]; then RUN_ID="lifecycle-$wbs"; fi &&
+            if [ "$mode" = "fast" ]; then
+              echo "fast:evidence complete+consistent" > ".spur/run/$RUN_ID-route-reason.txt";
+            elif [ -z "$mode" ]; then
+              echo "safety:standard verification" > ".spur/run/$RUN_ID-route-reason.txt";
+            else
+              echo "safety:unrecognized mode ($mode)" > ".spur/run/$RUN_ID-route-reason.txt";
+            fi &&
+            cat ".spur/run/$RUN_ID-route-reason.txt" >> .spur/memory/lifecycle-routes.log &&
+            exit 0
   - id: testing
     description: Implementation complete; under test/verification.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run .spur/memory &&
+            RUN_ID="$__runId" &&
+            if [ -z "$RUN_ID" ]; then RUN_ID="lifecycle-$wbs"; fi &&
+            if [ "$mode" = "fast" ]; then
+              echo "fast:evidence complete+consistent" > ".spur/run/$RUN_ID-route-reason.txt";
+            elif [ -z "$mode" ]; then
+              echo "safety:standard verification" > ".spur/run/$RUN_ID-route-reason.txt";
+            else
+              echo "safety:unrecognized mode ($mode)" > ".spur/run/$RUN_ID-route-reason.txt";
+            fi &&
+            cat ".spur/run/$RUN_ID-route-reason.txt" >> .spur/memory/lifecycle-routes.log &&
+            exit 0
   - id: blocked
     description: Impediment; work suspended.
   - id: done
     description: Completed. Re-enterable (reopen with warning + mandatory History entry).
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run .spur/memory &&
+            RUN_ID="$__runId" &&
+            if [ -z "$RUN_ID" ]; then RUN_ID="lifecycle-$wbs"; fi &&
+            if [ "$mode" = "fast" ]; then
+              echo "fast:evidence complete+consistent" > ".spur/run/$RUN_ID-route-reason.txt";
+            elif [ -z "$mode" ]; then
+              echo "safety:standard verification" > ".spur/run/$RUN_ID-route-reason.txt";
+            else
+              echo "safety:unrecognized mode ($mode)" > ".spur/run/$RUN_ID-route-reason.txt";
+            fi &&
+            cat ".spur/run/$RUN_ID-route-reason.txt" >> .spur/memory/lifecycle-routes.log &&
+            exit 0
   - id: cancelled
     description: Terminal — abandoned.
 
@@ -66,18 +116,32 @@ transitions:
       kind: always
   - from: wip
     to: testing
-    description: Implementation complete; enter testing
+    description: Implementation complete (proportional fast path)
     guard:
       kind: shell
       options:
-        command: '$spurBin task check $wbs --as testing'
+        command: 'test "$mode" = fast && $spurBin task check $wbs --as testing'
+  - from: wip
+    to: testing
+    description: Implementation complete (proportional safety path)
+    guard:
+      kind: shell
+      options:
+        command: 'test "$mode" != fast && $spurBin task check $wbs --as testing'
   - from: testing
     to: done
-    description: Testing passed — task complete
+    description: Testing passed (proportional fast path)
     guard:
       kind: shell
       options:
-        command: '$spurBin task check $wbs --as done'
+        command: 'test "$mode" = fast && $spurBin task check $wbs --as done'
+  - from: testing
+    to: done
+    description: Testing passed (proportional safety path)
+    guard:
+      kind: shell
+      options:
+        command: 'test "$mode" != fast && $spurBin task check $wbs --as done'
 
   # Reopen: done → wip (warned, mandatory History entry)
   - from: done

@@ -34,7 +34,7 @@
 #   - branch-cleanup HITL is exhaustive (yes/no/cancel → done; missing answer defense).
 #   - Wrap-up never mutates task status (consumes completed work only).
 
-"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+"$schema": "../../apps/cli/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: wrapup-pipeline
 description: "Post-execution wrap-up: doc-sync (doc drift + learning capture), metrics, feature-transition, branch-cleanup"
@@ -50,6 +50,8 @@ vars:
   merge: "false"
   spurBin: "spur"
   agent: "auto"
+  __runId: ""
+  mode: ""
   stepTimeoutMs: "1800000"
   # Corpus-aware quality gate for the feature-transition hop (R1, task 0625).
   # The per-task gate (`spur-check`) deliberately excludes corpus-check — the only
@@ -78,13 +80,37 @@ states:
 
   - id: task-resolve
     description: >
-      Validate the task list passed by the wrapper is non-empty. The command wrapper
-      (dev-wrap/dev-wrapall) resolves the task list and passes it as vars.tasks;
-      this state validates it before proceeding. Empty list routes to `skipped`.
+      Validate the task list and evaluate closed proportional routing (0758 R1-R4).
+      Empty list -> skipped; tasks > 0 && mode == fast -> fast-path (metrics-record,
+      bypassing doc-sync); missing/unknown/conflict -> doc-sync (safety-path).
+      Writes bounded machine-readable reason to reasonFile.
     onEnter:
       - kind: note
         options:
-          message: "Resolving task list: ${vars.tasks}"
+          message: "Resolving task list: ${vars.tasks} (proportional mode: ${vars.mode})"
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run .spur/memory &&
+            RUN_ID="$__runId" &&
+            if [ -z "$RUN_ID" ]; then RUN_ID="wrapup"; fi &&
+            REASON_FILE=".spur/run/$RUN_ID-route-reason.txt" &&
+            if [ "$(echo "$tasks" | jq length 2>/dev/null || echo 0)" -eq 0 ]; then
+              echo "skipped:empty task list" > "$REASON_FILE";
+            elif [ "$mode" = "fast" ]; then
+              echo "fast:evidence complete+consistent" > "$REASON_FILE";
+            elif [ -z "$mode" ]; then
+              echo "safety:missing evidence (mode empty)" > "$REASON_FILE";
+            elif [ "$mode" = "unknown" ]; then
+              echo "safety:unknown evidence quality" > "$REASON_FILE";
+            elif [ "$mode" = "conflict" ]; then
+              echo "safety:conflicting evidence" > "$REASON_FILE";
+            else
+              echo "safety:unrecognized evidence (mode=$mode)" > "$REASON_FILE";
+            fi &&
+            cp "$REASON_FILE" .spur/run/wrapup-route-reason.txt &&
+            cat "$REASON_FILE" >> .spur/memory/wrapup-routes.log &&
+            exit 0
 
   - id: doc-sync
     description: >
@@ -237,18 +263,7 @@ transitions:
     guard:
       kind: always
 
-  # ── task-resolve: non-empty -> doc-sync, empty/unparseable -> skipped ──
-  # `|| echo 0` is load-bearing: a malformed vars.tasks (or a box without `jq`) makes
-  # `jq length` emit nothing, and bare `test "" -gt 0` exits 2 — so BOTH edges failed
-  # and the run died with an opaque `no-passing-transition` instead of skipping. The
-  # trailing `always` edge is the belt-and-braces defense for any other guard fault.
-  - from: task-resolve
-    to: doc-sync
-    description: Task list resolved and non-empty — begin doc-sync.
-    guard:
-      kind: shell
-      options:
-        command: 'test "$(echo "$tasks" | jq length 2>/dev/null || echo 0)" -gt 0'
+  # ── task-resolve: proportional route table (task 0758 R1-R4) ──
   - from: task-resolve
     to: skipped
     description: Task list is empty — skip wrap-up.
@@ -256,6 +271,20 @@ transitions:
       kind: shell
       options:
         command: 'test "$(echo "$tasks" | jq length 2>/dev/null || echo 0)" -eq 0'
+  - from: task-resolve
+    to: metrics-record
+    description: Proportional fast path — complete and consistent evidence bypasses doc-sync.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(echo "$tasks" | jq length 2>/dev/null || echo 0)" -gt 0 && test "$mode" = fast'
+  - from: task-resolve
+    to: doc-sync
+    description: Proportional safety path — missing/unknown/conflicting evidence routes to full doc-sync.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(echo "$tasks" | jq length 2>/dev/null || echo 0)" -gt 0 && test "$mode" != fast'
   - from: task-resolve
     to: skipped
     description: Defense — task list unparseable; skip rather than fail with no-passing-transition.

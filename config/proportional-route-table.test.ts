@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { evaluateRoute, ROUTE_TABLE, type RouteInput, safetyFloorHolds } from './proportional-route-table';
+import {
+    evaluateLifecycleRoute,
+    evaluateRoute,
+    evaluateWrapupRoute,
+    ROUTE_TABLE,
+    type RouteInput,
+    safetyFloorHolds,
+} from './proportional-route-table';
 
 const BASE_INPUT: RouteInput = {
     runId: 'run-1',
@@ -11,18 +18,82 @@ const BASE_INPUT: RouteInput = {
     runIdConfined: true,
 };
 
-describe('proportional route table scaffold (task 0758 WIP)', () => {
-    test('safety-default is the only predicate in the pilot scaffold', () => {
-        expect(ROUTE_TABLE).toHaveLength(1);
-        expect(ROUTE_TABLE[0]?.id).toBe('safety-default');
-        expect(ROUTE_TABLE[0]?.route).toBe('safety');
+describe('proportional route table (task 0758)', () => {
+    test('route table contains closed set of routes', () => {
+        expect(ROUTE_TABLE).toHaveLength(3);
+        const routeIds = ROUTE_TABLE.map((r) => r.route);
+        expect(routeIds).toContain('safety');
+        expect(routeIds).toContain('fast');
+        expect(routeIds).toContain('skipped');
     });
 
-    test('every input routes to the safety path until per-pilot predicates land', () => {
-        const result = evaluateRoute(BASE_INPUT);
-        expect(result.route).toBe('safety');
-        expect(result.predicateId).toBe('safety-default');
-        expect(result.reason).toContain('pilot scaffold');
+    test('evaluateWrapupRoute maps every input to exactly one route with bounded reason', () => {
+        // empty tasks -> skipped
+        expect(evaluateWrapupRoute({ tasks: [] })).toEqual({
+            route: 'skipped',
+            predicateId: 'skipped-empty',
+            reason: 'skipped:empty task list',
+        });
+        expect(evaluateWrapupRoute({ tasks: '[]' })).toEqual({
+            route: 'skipped',
+            predicateId: 'skipped-empty',
+            reason: 'skipped:empty task list',
+        });
+
+        // tasks > 0 + mode=fast -> fast
+        expect(evaluateWrapupRoute({ tasks: ['0001'], mode: 'fast' })).toEqual({
+            route: 'fast',
+            predicateId: 'fast-complete',
+            reason: 'fast:evidence complete+consistent',
+        });
+
+        // tasks > 0 + mode empty -> safety
+        expect(evaluateWrapupRoute({ tasks: ['0001'] })).toEqual({
+            route: 'safety',
+            predicateId: 'safety-default',
+            reason: 'safety:missing evidence (mode empty)',
+        });
+
+        // tasks > 0 + mode unknown -> safety
+        expect(evaluateWrapupRoute({ tasks: ['0001'], mode: 'unknown' })).toEqual({
+            route: 'safety',
+            predicateId: 'safety-default',
+            reason: 'safety:unknown evidence quality',
+        });
+
+        // tasks > 0 + mode conflict -> safety
+        expect(evaluateWrapupRoute({ tasks: ['0001'], mode: 'conflict' })).toEqual({
+            route: 'safety',
+            predicateId: 'safety-default',
+            reason: 'safety:conflicting evidence',
+        });
+
+        // tasks > 0 + mode other -> safety
+        expect(evaluateWrapupRoute({ tasks: ['0001'], mode: 'random' })).toEqual({
+            route: 'safety',
+            predicateId: 'safety-default',
+            reason: 'safety:unrecognized evidence (mode=random)',
+        });
+    });
+
+    test('evaluateLifecycleRoute routes to fast or safety based on mode', () => {
+        expect(evaluateLifecycleRoute({ mode: 'fast' })).toEqual({
+            route: 'fast',
+            predicateId: 'fast-complete',
+            reason: 'fast:evidence complete+consistent',
+        });
+        expect(evaluateLifecycleRoute({})).toEqual({
+            route: 'safety',
+            predicateId: 'safety-default',
+            reason: 'safety:standard verification',
+        });
+    });
+
+    test('generic evaluateRoute checks costCoverage, proofBinding, and reviewer independence', () => {
+        expect(evaluateRoute(BASE_INPUT).route).toBe('fast');
+        expect(evaluateRoute({ ...BASE_INPUT, costCoverage: 0.5 }).route).toBe('safety');
+        expect(evaluateRoute({ ...BASE_INPUT, proofBinding: 'stale' }).route).toBe('safety');
+        expect(evaluateRoute({ ...BASE_INPUT, reviewerIndependent: false }).route).toBe('safety');
     });
 
     test('safety floor holds only when all three invariants are true', () => {

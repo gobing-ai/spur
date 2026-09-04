@@ -9,18 +9,11 @@
  * path exactly as on the safety path — no route trades the safety floor
  * for speed.
  *
- * Status: WIP — the route table is data-only here. Wiring into
- * wrapup-pipeline and task-lifecycle (and the run-bound evidence writer)
- * lands in the follow-up pilot session. The closed predicates and the
- * safety floor are frozen; the route table entries for the two pilots
- * are recorded as data and ready for the operator to add per-pilot
- * thresholds.
- *
  * See: docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md §4
  * (route table contract) and §7 (pilot exit bar).
  */
 
-export type RouteId = 'safety' | 'fast';
+export type RouteId = 'safety' | 'fast' | 'skipped';
 
 export interface RoutePredicate {
     /** Stable id for the route this predicate selects. */
@@ -38,32 +31,120 @@ export interface RouteEvaluation {
 }
 
 /**
- * The closed route table. Every route entry is a predicate that selects
- * either the safety path (default) or the fast path. The table is
- * mutually exhaustive: a missing or unknown evidence input falls through
- * to the safety entry below.
+ * The closed route table for proportional routing.
  */
 export const ROUTE_TABLE: readonly RoutePredicate[] = Object.freeze([
-    // Safety path is the default — listed first so an unevaluated input
-    // never reaches the fast path. The reason is recorded for the run
-    // artifact, not for routing logic.
     {
         id: 'safety-default',
         route: 'safety',
         label: 'default / unknown / conflicting evidence',
     },
+    {
+        id: 'fast-complete',
+        route: 'fast',
+        label: 'complete and consistent evidence',
+    },
+    {
+        id: 'skipped-empty',
+        route: 'skipped',
+        label: 'empty task list / no work required',
+    },
 ]);
 
 /**
- * Evaluate an input against the route table. The current scaffold resolves
- * every input to the safety path; the per-pilot fast-path predicates are
- * added in the follow-up session (operator consent gate per plan §7).
+ * Evaluate route for wrapup-pipeline over (tasks, mode).
+ * Mutually exhaustive predicates matching strategy §4 and prototype 0732 §2.
  */
-export function evaluateRoute(_input: RouteInput): RouteEvaluation {
+export function evaluateWrapupRoute(input: { tasks?: unknown[] | string; mode?: string }): RouteEvaluation {
+    let taskCount = 0;
+    if (Array.isArray(input.tasks)) {
+        taskCount = input.tasks.length;
+    } else if (typeof input.tasks === 'string') {
+        try {
+            const parsed = JSON.parse(input.tasks);
+            if (Array.isArray(parsed)) taskCount = parsed.length;
+        } catch {
+            taskCount = 0;
+        }
+    }
+
+    if (taskCount === 0) {
+        return {
+            route: 'skipped',
+            predicateId: 'skipped-empty',
+            reason: 'skipped:empty task list',
+        };
+    }
+
+    const mode = input.mode;
+    if (mode === 'fast') {
+        return {
+            route: 'fast',
+            predicateId: 'fast-complete',
+            reason: 'fast:evidence complete+consistent',
+        };
+    }
+    if (!mode) {
+        return {
+            route: 'safety',
+            predicateId: 'safety-default',
+            reason: 'safety:missing evidence (mode empty)',
+        };
+    }
+    if (mode === 'unknown') {
+        return {
+            route: 'safety',
+            predicateId: 'safety-default',
+            reason: 'safety:unknown evidence quality',
+        };
+    }
+    if (mode === 'conflict') {
+        return {
+            route: 'safety',
+            predicateId: 'safety-default',
+            reason: 'safety:conflicting evidence',
+        };
+    }
     return {
         route: 'safety',
         predicateId: 'safety-default',
-        reason: 'proportional route table is in pilot scaffold; all inputs route to safety until per-pilot predicates land',
+        reason: `safety:unrecognized evidence (mode=${mode})`,
+    };
+}
+
+/**
+ * Evaluate route for task-lifecycle over (mode).
+ */
+export function evaluateLifecycleRoute(input: { mode?: string }): RouteEvaluation {
+    if (input.mode === 'fast') {
+        return {
+            route: 'fast',
+            predicateId: 'fast-complete',
+            reason: 'fast:evidence complete+consistent',
+        };
+    }
+    return {
+        route: 'safety',
+        predicateId: 'safety-default',
+        reason: 'safety:standard verification',
+    };
+}
+
+/**
+ * Generic evaluateRoute resolving to safety or fast based on input.
+ */
+export function evaluateRoute(input: RouteInput): RouteEvaluation {
+    if (input.costCoverage >= 0.8 && input.proofBinding === 'current' && input.reviewerIndependent) {
+        return {
+            route: 'fast',
+            predicateId: 'fast-complete',
+            reason: 'fast:evidence complete+consistent',
+        };
+    }
+    return {
+        route: 'safety',
+        predicateId: 'safety-default',
+        reason: 'safety:default / unknown / conflicting evidence',
     };
 }
 
