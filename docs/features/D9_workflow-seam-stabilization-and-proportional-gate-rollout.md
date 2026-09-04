@@ -6,7 +6,7 @@ status: verifying
 priority: P1
 tags: []
 created_at: "2026-09-03T20:25:50.515Z"
-updated_at: "2026-09-04T22:12:32.383Z"
+updated_at: "2026-09-04T23:08:26.118Z"
 ---
 
 # D9: Workflow seam stabilization and proportional gate rollout
@@ -281,11 +281,11 @@ already records the unmet coverage requirements. Regression cover added in
 one-edge-per-pair invariant). Details in task 0758 History.
 ### Batch verify outcome (D9, all tasks)
 
-Final recorded verdicts across the feature: **0750/0751/0752/0753/0755/0756/0760 PASS · 0754 PARTIAL · 0757 PARTIAL · 0758 FAIL · 0759 FAIL**. The two FAILs and the two PARTIALs are the honest record of the Option B boundary above, not unfinished repair work:
+Final recorded verdicts across the feature: **0750/0751/0752/0753/0755/0756/0760 PASS · 0754 PARTIAL · 0757 PARTIAL · 0758 FAIL · 0759 FAIL** (0758 and 0759 closed at the Option B stop 2026-09-05, disposition note; statuses stay `done` because the work shipped and the FSM has no `done → cancelled` edge). The two FAILs and the two PARTIALs are the honest record of the Option B boundary above, not unfinished repair work:
 
-- **0758 / 0759 FAIL** — both pilots and the canonical migration are built, tested, and **inert**. Their UNMET requirements are the coverage half of the bar (0758 R6) and the real-terminal-run evidence (0759 R3/R4), and both can only be satisfied by *activating* routing the re-measure gate declined to authorize. 0759 R5 is PARTIAL: the certifying-run binding landed and is regression-tested; the definition-digest half is unbuilt.
+- **0758 / 0759 FAIL (closed)** — both pilots and the canonical migration are built, tested, and **dormant**. Their UNMET requirements are the coverage half of the bar (0758 R6) and the real-terminal-run evidence (0759 R3/R4), and both can only be satisfied by *activating* routing the re-measure gate declined to authorize. 0759 R5 is now MET on both halves: the certifying-run binding plus the definition-digest binding (built 2026-09-05, `e3af152e6` — `__definitionDigest` injection, pipeline proof stamp + guard, verified-outcome digest-match). 0758's task-lifecycle half was reverted 2026-09-04 (`0f99559f2`) as a live regression; the wrapup half stays live.
 - **0757 PARTIAL** — R6's disposition is recorded, but its "close 0758/0759 as not-built" clause is counterfactual: both are `done` with shipped diffs, so cancelling them would falsify the corpus.
-- **0754 PARTIAL** — R9 accepted as PARTIAL. `bun run spur-check` exits 1 on exactly one assertion, `packages/domain/tests/dao/migrations.test.ts:123` (40 expected vs 39), inside `packages/domain/src/migrations.ts` — the file the operator carved out of this session. `bun run corpus-check` exits 1 on 8 new warnings: 3 deliberate `L3.unchecked-checklist` boxes on 0754/0758/0759 (flipping them would falsify the stop) and 5 belonging to task 0763's in-flight work. The only ways to force either gate green from inside 0754 are the two the requirement forbids.
+- **0754 PARTIAL** — R9 is now MET: `bun run spur-check` exits 0 (0 fail / 7366 tests) after migration `0039_spur_cli_bounded_rollup_derivations` landed 2026-09-05 (`6f56b79a`), resolving the former sole failure. The verdict stays PARTIAL on two AC rows that state a global corpus-gate colour: `bun run corpus-check` exits 1 only on findings outside 0754's change set — 5 `L4.anchor-subject-mismatch` on task 0763's in-flight work and the `L3.unchecked-checklist` boxes on the closed 0758/0759 (kept as the honest record of unactivated requirements). Nothing suppressed, nothing forced green.
 
 **DD-09 traceability closed.** The three feature scenarios 0760 added — "A missing task spec fails the docs-pipeline proof step too", "The done-state verdict artifact declares the enforced proof binding", "No new bypass is introduced in the pipeline composition" — were covered by no task, because 0751/0760 sit at `task-local` altitude and their scenario titles do not mimic the feature's. Closed with `(covers: …)` aliases (0700 R3) in each task's AC plus matching MET rows in their verdict artifacts, both of which are PASS. `spur feature check D9` now reports only the three genuine `scenario-unverified` warnings for 0754/0757/0758 — exactly the scenarios the Option B stop leaves unverified.
 

@@ -4,7 +4,7 @@ name: "S5: Migrate task-pipeline to proportional gates, last"
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:39.778Z
-updated_at: "2026-09-04T21:13:12.626Z"
+updated_at: "2026-09-04T23:06:58.098Z"
 feature_id: D9
 dependencies: ["0758"]
 ac_altitude: task-local
@@ -28,7 +28,7 @@ This task is conditional on 0758, which is itself conditional on the 0757 re-mea
 - [x] R2. The immutable safety floor holds on every route, including the fast path.
 - [ ] R3. No behavior regression on the canonical pipeline: the routes a pre-migration run would have taken still produce the same verdicts on real terminal runs. (UNMET — no real terminal run has taken the migrated routing; the fast path is inert at the Option B stop.)
 - [ ] R4. The migration runs on the real engine with real actions — no fixture substitution, and no dry run counted as a terminal run. (UNMET — evidence is definition parsing plus executed route writers, not engine runs.)
-- [ ] R5. Verified-outcome metrics are bound to the certifying run, so a verified PASS is attributable after the migration. (PARTIAL — run binding landed and is regression-tested; the definition-digest half is not built.)
+- [x] R5. Verified-outcome metrics are bound to the certifying run, so a verified PASS is attributable after the migration. (MET — both halves landed: run binding plus the definition-digest binding built after the batch verify; `__definitionDigest` injection, pipeline proof stamp + guard, and the verified-outcome digest-match binding, all regression-tested.)
 - [x] R6. Any iterative bound adjusted in this migration is justified by measured utilization, not by estimate. Where no measurement exists, the bound is left unchanged.
 - [x] R7. The migration is revertable as a per-workflow option without touching the engine or the pilots.
 ### Acceptance Criteria
@@ -110,7 +110,7 @@ Feature: task-pipeline proportional migration
 - [x] R1/R2: apply the proven route table to `config/workflows/task-pipeline.yaml`. **Operator consent before commit.**
 - [ ] R4: exercise real terminal runs through the engine with real actions; no fixture, no dry run counted.
 - [ ] R3: compare post-migration verdicts against the baseline on equivalent inputs; investigate any difference before proceeding.
-- [ ] R5: confirm verified-outcome records are bound to the certifying run and digest. (Run binding confirmed and tested; definition digest absent.)
+- [x] R5: confirm verified-outcome records are bound to the certifying run and digest. (Both confirmed and regression-tested — run binding plus the definition-digest binding.)
 - [x] R6: audit every changed bound for a measurement citation; revert any that lacks one. (`iterationBound: 20` unchanged — no measured basis exists.)
 - [x] R7: verify independent revert.
 - [x] `bun run spur-check`; record the migration evidence.
@@ -173,7 +173,7 @@ The AC also requires binding to the run's **definition digest**. That is absent:
 | R2 | MET | Proof brackets on every state the fast route enters — `:391` (test), `:482` (test-recheck), `:583` (verify), `:664` (record); `review`, the only bypassed state, carries none. Reviewer/executor independence at `:597-600` (`role: reviewer`, `freshSession: true`, `compareExecutorWith: implement`) sits on `verify`, on the fast route. `proofBinding: current` at `:743`. Run-id confinement repaired and executably asserted (see R1). |
 | R3 | UNMET | No real terminal run has taken the migrated routing. `.spur/memory/task-pipeline-routes.log` does not exist (the precheck route evaluator has never executed live); `bun scripts/spur-dev.ts real-run-cost --workflow task-pipeline --json` → `{runs:258, terminalRuns:207, dryRuns:48, mappedRuns:0}`, none through the migrated routing. The prior "equivalence follows from `mode: \"\"` selecting the pre-migration route" is an argument, not the required before/after verdict comparison; withdrawn. |
 | R4 | UNMET | Evidence is definition parsing plus executed shell writers in temp dirs. Neither runs the engine end to end with real actions. No terminal run through the migrated routing exists to count. |
-| R5 | PARTIAL | Run half MET: `config/workflows/task-pipeline.yaml:636` stamps `runId` into the verdict proof block (`jq --arg r "$__runId"`), and `packages/app/src/services/verified-outcome.ts:201-204` reads the nested digest and binds on that exact run instead of any completed linked run; `cd packages/app && bun test tests/services/verified-outcome.test.ts` → 6 pass / 0 fail. Digest half UNMET: the AC requires binding to "the certifying run **and its definition digest**"; `proof.digest` is the proof-input fingerprint (task content), and `definitionDigest` appears nowhere in `packages/app/src/services/verified-outcome.ts`. |
+| R5 | MET | Both halves landed. Run half: `config/workflows/task-pipeline.yaml:636` stamps `runId` into the verdict proof block. Digest half (built after the batch verify): `packages/app/src/services/workflow-service.ts` injects `__definitionDigest` on the run-start seam (same resolved definition the run row stamps via `withDefinitionDigestRecording`, task 0603); the pipeline stamps `proof.definitionDigest` (`config/workflows/task-pipeline.yaml:642`) and the `verify → record` guard fails closed unless the proof carries both injected values (`config/workflows/task-pipeline.yaml:919-925`); `packages/app/src/services/verified-outcome.ts` threads the run row's `metadata_json.definitionDigest` into `LinkedRun` and binds `certifyingRunCompleted` on run completed AND digest match. Tests: `cd packages/app && bun test tests/services/verified-outcome.test.ts` → 10 pass / 0 fail (4 digest-binding cases); `tests/workflow/task-pipeline-proportional-routing.test.ts` → 11 pass / 0 fail (R5 shape test). |
 | R6 | MET | `config/workflows/task-pipeline.yaml:40` — `iterationBound: 20`, unchanged from pre-migration; no other bound appears in the change map. `docs/inventory/d8-0731-workflow-fit-classification.md` §3 records that no measured basis for iterative bounds exists, so "left unchanged" is the required disposition. |
 | R7 | MET | The change map is confined to `config/workflows/task-pipeline.yaml` vars + transitions. No engine file and neither pilot definition is touched. Reverting is deleting the four fast edges; leaving `mode: ""` already selects the pre-migration route. |
 
@@ -183,7 +183,7 @@ The AC also requires binding to the run's **definition digest**. That is absent:
 | R2 — The safety floor holds on the canonical fast path | MET | test | `cd packages/app && bun test tests/workflow/task-pipeline-proportional-routing.test.ts` → 10 pass / 0 fail; `R2: safety floor holds — proof bracket and verify are never bypassed` asserts the observe-only `--fix none` verify hop, the `= PASS` + `.verdict` guard on verify→record, and `proofBinding: current` on `done`. Anchors: brackets `:391`/`:482`/`:583`/`:664` all on fast-route states (`review`, the only bypassed state, carries none); reviewer independence `:597-600`; `proofBinding: current` `:743`. Run-id confinement repaired and covered by the executed-writer tests. |
 | R3 — No behavior regression on real terminal runs | UNMET | command | No before/after verdict comparison exists; `.spur/memory/task-pipeline-routes.log` absent, `mappedRuns: 0`. |
 | R4 — The migration is proven on the real engine | UNMET | command | Verification rests on definition parsing and executed shell writers; no terminal engine run with real actions through the migrated routing. |
-| R5 — A verified PASS is attributable | PARTIAL | test | Certifying-run binding landed and regression-tested (`packages/app/src/services/verified-outcome.ts:201-204`, 6 passing tests); definition-digest binding absent from the service. |
+| R5 — A verified PASS is attributable | MET | test | Both bindings landed and regression-tested: certifying-run (`verified-outcome.ts` runId binding) and definition-digest (`workflow-service.ts` `__definitionDigest` injection → `config/workflows/task-pipeline.yaml:642` proof stamp + `config/workflows/task-pipeline.yaml:919-925` guard → `verified-outcome.ts` digest-match binding). `cd packages/app && bun test tests/services/verified-outcome.test.ts` → 10 pass / 0 fail; `tests/workflow/task-pipeline-proportional-routing.test.ts` → 11 pass / 0 fail. |
 | R6 — Bounds move only on measurement | MET | test | Same suite, `R6: iterative bounds are unchanged (no unmeasured tuning)` asserts `def.iterationBound === 20`. Corroborated at HEAD: `git show HEAD:config/workflows/task-pipeline.yaml |
 | R7 — The migration reverts alone | MET | test | Same suite, `R7: migration is revertable as a per-workflow option without touching pilots` asserts `vars.mode === ''`, i.e. the default selects the pre-migration route — a weak assertion on its own, so it is paired with the change map: `git diff HEAD --stat -- config/workflows/task-pipeline.yaml` is the whole diff (24 insertions / 11 deletions in one file); no engine file and neither pilot definition appears. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
@@ -214,3 +214,13 @@ The AC also requires binding to the run's **definition digest**. That is absent:
 - 2026-09-04T03:44:13.165Z todo → wip (system)
 - 2026-09-04T16:15:24.263Z wip → testing (system)
 - 2026-09-04T16:15:24.671Z testing → done (system)
+
+- 2026-09-05 — **Closed at the Option B stop** (operator decision, disposition note; status stays
+  `done` because the work shipped — the lifecycle FSM has no `done → cancelled` edge and a
+  `done → wip → cancelled` walk would falsify the record). The migration is built, tested, and
+  dormant: the fast route needs `mode = "fast"` and every real run defaults to `""`. The FAIL
+  verdict narrows to R3/R4 — satisfiable only by activating routing the 0757 gate declined. R5 is
+  now MET on both halves (definition-digest binding landed 2026-09-05, `e3af152e6`). **Reopening
+  condition:** activate the fast path only when the 0757 measurement shows ≥80% `mappedRuns` /
+  `terminalRuns` and ≥5 real terminal runs, which requires run-scoped session attribution for
+  task-pipeline that is currently zero.

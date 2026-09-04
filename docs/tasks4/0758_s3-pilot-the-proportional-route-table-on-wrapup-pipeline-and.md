@@ -4,7 +4,7 @@ name: "S3: Pilot the proportional route table on wrapup-pipeline and task-lifecy
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:39.492Z
-updated_at: "2026-09-04T22:11:49.495Z"
+updated_at: "2026-09-04T23:06:42.532Z"
 feature_id: D9
 dependencies: ["0754", "0757", "0751"]
 priority: P1
@@ -159,7 +159,7 @@ R3 asks that four floor elements "hold on the fast path exactly as on the safety
 - **Run-id confinement — repaired.** It was genuinely broken, and the break was in the reason writer itself. `wrapup-pipeline` copied the run-scoped reason to a fixed `.spur/run/wrapup-route-reason.txt` that every run overwrote and that nothing read, and all three pilots appended bare reason strings to their route logs with no run id — so a logged route claim could not be attributed to the run that made it. The fixed-path copy is deleted; each log append now carries the run id (and, for the lifecycle FSM, the state it routed into, since all three writers previously shared one log). `config/workflows/wrapup-pipeline.yaml:110` and `config/workflows/task-lifecycle.yaml:50`/`:69`/`:91`.
 - **Proof-bracket guards, budget-unverifiable fail-closed dispatch, reviewer/executor independence — no instance on any route of either pilot.** `rg -n 'proof|budget|fingerprint|independen'` over both pilot YAMLs returns one comment line about `spurBin` and nothing else; the same search over `config/workflows/task-pipeline.yaml` returns 63 matches. These are task-pipeline mechanisms. The fast path therefore cannot bypass them: absent on both routes is "exactly as on the safety path", satisfied vacuously rather than by enforcement. Stated plainly because the distinction matters for 0759: when the same table reaches `task-pipeline`, those guards *do* exist and the requirement stops being vacuous.
 - The one gate that does execute on both routes is `$spurBin task check $wbs --as <target>`, identical on the fast and safety lifecycle edges.
-- `safetyFloorHolds()` (`config/proportional-route-table.ts:171`) encodes the four invariants but is imported by no production code — see **Contract-artifact status** below.
+- `safetyFloorHolds()` (`config/proportional-route-table.ts:153`) encodes the four invariants but is imported by no production code — see **Contract-artifact status** below.
 
 **R4/R5 — bounded reasons and run-bound evidence, now with executable proof.**
 
@@ -185,7 +185,7 @@ The coverage conjunct does not. `bun scripts/spur-dev.ts real-run-cost --workflo
 
 **Contract-artifact status.** `config/proportional-route-table.ts` is the closed route table ADR-107 names, but `rg -n "proportional-route-table" --glob '!node_modules' --glob '!*.test.ts'` matches only `config/task-pipeline-proportional-migration-plan.md`, `docs/00_ADR.md`, and this task file. No production code imports it; the routing that actually executes is the shell chain in the two YAML files. The table and the shell chain are therefore two copies of one contract kept in sync only by review — acceptable while the pilots are dormant, and the first thing to reconcile if the reopening condition is ever met.
 
-**Revert note (2026-09-04, operator decision).** The task-lifecycle half of this pilot was reverted; the wrapup-pipeline half stays. The `requestTransition` path resolves a single transition per `(from, to)` pair (`service.ts:269` `.find` + no fallthrough), so 0758's fast-first/safety-second sibling edges denied every `wip→testing` and `testing→done` write under the default `mode: ""` — a live regression, not an inert pilot — and the lifecycle `onEnter` route writers never executed at all (`onEnter` runs only in the auto-run loop). Regression cover landed in `packages/app/tests/workflow/lifecycle-adapter.test.ts`; full reasoning in the History entry.
+**Revert note (2026-09-04, operator decision).** The task-lifecycle half of this pilot was reverted; the wrapup-pipeline half stays. The `requestTransition` path resolves a single transition per `(from, to)` pair with no fallthrough (dual-workflow-engine `service.ts`, ts-libs — pinned by the regression cover in `packages/app/tests/workflow/lifecycle-adapter.test.ts`), so 0758's fast-first/safety-second sibling edges denied every `wip→testing` and `testing→done` write under the default `mode: ""` — a live regression, not an inert pilot — and the lifecycle `onEnter` route writers never executed at all (`onEnter` runs only in the auto-run loop). Regression cover landed in `packages/app/tests/workflow/lifecycle-adapter.test.ts`; full reasoning in the History entry.
 ### Testing
 **Pipeline verify results**
 
@@ -253,7 +253,7 @@ The coverage conjunct does not. `bun scripts/spur-dev.ts real-run-cost --workflo
   still live.
   **Why:** the split was a live regression, not inert. `requestTransition` resolves ONE
   transition per `(from, to)` pair — `transitions.find(...)` in
-  `dual-workflow-engine/src/service.ts:269` — then denies on that transition's guard with no
+  dual-workflow-engine `service.ts` (ts-libs) — then denies on that transition's guard with no
   fallthrough to a sibling. The fast edge was declared first, its guard is
   `test "$mode" = fast && …`, and `LifecycleAdapter.bindGuardVar`
   (`packages/app/src/workflow/lifecycle-adapter.ts:265-269`) binds only `wbs`/`spurBin`, so
@@ -280,7 +280,7 @@ The coverage conjunct does not. `bun scripts/spur-dev.ts real-run-cost --workflo
   still live.
   **Why:** the split was a live regression, not inert. `requestTransition` resolves ONE
   transition per `(from, to)` pair — `transitions.find(...)` in
-  `dual-workflow-engine/src/service.ts:269` — then denies on that transition's guard with no
+  dual-workflow-engine `service.ts` (ts-libs) — then denies on that transition's guard with no
   fallthrough to a sibling. The fast edge was declared first, its guard is
   `test "$mode" = fast && …`, and `LifecycleAdapter.bindGuardVar`
   (`packages/app/src/workflow/lifecycle-adapter.ts:265-269`) binds only `wbs`/`spurBin`, so
@@ -299,3 +299,12 @@ The coverage conjunct does not. `bun scripts/spur-dev.ts real-run-cost --workflo
   hops expected a denial, which is why the suite stayed green) and
   `every (from, to) pair in the lifecycle graph is declared exactly once`.
   Reopening condition unchanged; the diff is recoverable from `c84fcd61a`.
+
+- 2026-09-05 — **Closed at the Option B stop** (operator decision, disposition note; status stays
+  `done` because the work shipped — the lifecycle FSM has no `done → cancelled` edge and a
+  `done → wip → cancelled` walk would falsify the record). The wrapup-pipeline half is live; the
+  task-lifecycle half was reverted 2026-09-04 (`0f99559f2`) as a live regression. The FAIL verdict
+  (R6 coverage bar unmet) is the honest record, not unfinished work. **Reopening condition:**
+  activate proportional routing only when the 0757 measurement shows ≥80% `mappedRuns` /
+  `terminalRuns` and ≥5 real terminal runs — which requires run-scoped session attribution that is
+  currently zero for both pilots.
