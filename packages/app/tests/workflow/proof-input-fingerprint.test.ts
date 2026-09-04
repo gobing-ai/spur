@@ -239,9 +239,14 @@ describe('git-tree capture fails closed (task 0751 R1)', () => {
     } as unknown as import('@gobing-ai/ts-runtime').ProcessExecutor;
 
     test('read-tree failure rejects createGitAlternateTree with ProofCaptureError (no empty sentinel)', async () => {
-        expect(createGitAlternateTree(process.cwd(), undefined, failingExecutor('read-tree'))).rejects.toBeInstanceOf(
-            ProofCaptureError,
+        // 0760 R4: the prior `expect(...).rejects` form could settle before the
+        // matcher ran, so a regression back to the pre-0751 `''` sentinel could
+        // pass vacuously. Await via the sibling `.catch(e => e)` pattern so a
+        // thrown rejection is asserted, not the promise of one.
+        const err = await createGitAlternateTree(process.cwd(), undefined, failingExecutor('read-tree')).catch(
+            (e) => e,
         );
+        expect(err).toBeInstanceOf(ProofCaptureError);
     });
 
     test('add failure carries the git stderr in the rejection', async () => {

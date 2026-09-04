@@ -68,17 +68,51 @@ Scenario: D9 verify answers cite exact AC labels for 0751 R4 and R6
 
 ### Design
 
-<!-- Chosen implementation approach, key tradeoffs, invariants, and impacted surfaces. -->
+0760 is a 1-sibling follow-up to 0751. The repair pattern is identical: drop `2>/dev/null` + `|| true` + forced `exit 0`, add `-z "$task_path"` + `exit 1` + a named error. The other two changes (R4 `await` and R5 gherkin AC) are mechanical, one each. Sharing one reviewable unit preserves the 0751 review provenance the original ask named.
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+- [x] R1: de-suppress the task-path lookup in `config/workflows/docs-pipeline.yaml`.
+- [x] R2: regression pin `packages/app/tests/workflow/docs-pipeline-proof-chain.test.ts` mirroring `task-pipeline-proof-chain.test.ts`.
+- [x] R3: verify no new bypass introduced; the change *removes* a bypass, so this is structurally satisfied.
+- [x] R4: add `await` via `.catch(e => e)` to `proof-input-fingerprint.test.ts:241-244`.
+- [x] R5: add three gherkin scenarios to `docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md` for docs-pipeline task-path failure, proofBinding (0751 R4), and no-new-bypass (0751 R6).
+- [x] Run lint + targeted tests from inside `packages/app`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R1 — de-suppress docs-pipeline task-path lookup.** `config/workflows/docs-pipeline.yaml:144-152` — replace the single-line `$spurBin task path $wbs --json 2>/dev/null | jq ... || true; exit 0` with a multi-line `set -e` block: resolve the path, fail closed with `echo "docs-pipeline: task path did not resolve for wbs $wbs" >&2; exit 1` on empty, otherwise write the path to `.spur/run/$wbs-docs-taskpath.txt`. The resolved `taskSpecPath` still folds into the proof digest via the two `proof.fingerprint` actions in the verify state (`taskFile: ${vars.taskSpecPath}`), so a silent miss no longer degrades the proof to tree-only.
+
+**R2 — regression pin for docs-pipeline.** `packages/app/tests/workflow/docs-pipeline-proof-chain.test.ts` (new file) — `describe('docs-pipeline task-path lookup fails closed (task 0760 R1/R2)')` with four tests: structural suppression scan, empty-path check, `taskFile:` folding into proof digest, and a behavioral test that renders the command with a stub `emit.sh` returning `{}` and asserts `execSync` throws.
+
+**R3 — no new bypass.** R1 removes the bypass; no other change in this slice introduces one. Verified by the same suppression scan in the R2 regression test.
+
+**R4 — `await` the R1 rejection assertion.** `packages/app/tests/workflow/proof-input-fingerprint.test.ts:241-244` — convert the `expect(...).rejects.toBeInstanceOf(...)` form to the sibling `.catch(e => e)` + `expect(err).toBeInstanceOf(...)` pattern so a thrown rejection is asserted rather than a promise of one. Matches the immediately following test in the same file.
+
+**R5 — D9 feature AC gains gherkin scenarios.** `docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md` — three new scenarios: "A missing task spec fails the docs-pipeline proof step too" (R1 docs-sibling), "The done-state verdict artifact declares the enforced proof binding" (0751 R4), and "No new bypass is introduced in the pipeline composition" (0751 R6). Titles match the verify-stage AC-label matching contract so future verify answer files cite exact AC labels.
 
 ### Testing
+
+- `bunx @biomejs/biome check` — clean on all touched files
+- `bunx tsc --noEmit` (packages/app) — clean
+- `bun test packages/app/tests/workflow/docs-pipeline-proof-chain.test.ts` — 4/4 pass (R2)
+- `bun test packages/app/tests/workflow/proof-input-fingerprint.test.ts --test-name-pattern "read-tree failure"` — 1/1 pass (R4)
+- Pre-existing R1 and R2 tests in `task-pipeline-proof-chain.test.ts` still pass (unchanged surface)
+
+### Review
+
+| Priority | Count | Notes |
+| --- | --- | --- |
+| P1 | 0 | No blocking findings. |
+| P2 | 0 | — |
+| P3 | 0 | — |
+| P4 | 0 | The sibling-pattern choice over a generic helper keeps the diff reviewable as one unit and matches 0751's structural precedent; the small duplication of the test describe block is acceptable for the same reason. |
+
+**Per-requirement verdict** — R1 MET · R2 MET · R3 MET (structurally satisfied by R1's bypass removal) · R4 MET · R5 MET.
+
+**Residual risk** — none for 0760. The pre-existing `applyCliMigrations` bug (0753 Review P4) is unrelated to this slice and tracked separately.
+
+**Final disposition:** done.
 
 <!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
 

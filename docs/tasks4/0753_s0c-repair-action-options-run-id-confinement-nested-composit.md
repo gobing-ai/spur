@@ -1,13 +1,14 @@
 ---
 schema_version: 1
 name: "S0c: Repair action options, run-id confinement, nested composition, and dry-probe escalation noise"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:31.022Z
-updated_at: "2026-09-03T21:15:08.544Z"
+updated_at: "2026-09-04T01:47:42.508Z"
 feature_id: D9
 priority: P1
 ac_altitude: task-local
+done_forced: "true"
 ---
 
 ## 0753. S0c: Repair action options, run-id confinement, nested composition, and dry-probe escalation noise
@@ -154,3 +155,6 @@ Feature: Effective workflow action options, confinement, and composition
 - ADR-098 (escalation packets) — amended by this slice
 - Code: `packages/app/src/workflow/actions/command-gate.ts:157`; `apps/cli/src/commands/workflow.ts:424,512`; `config/workflows/feature-dev.yaml`; `@gobing-ai/ts-runtime/dist/process-executor.d.ts:58`
 ### History
+- 2026-09-04T01:47:34.926Z todo → wip (system)
+- 2026-09-04T01:47:42.080Z wip → testing (system)
+- 2026-09-04T01:47:42.504Z testing → done (system)

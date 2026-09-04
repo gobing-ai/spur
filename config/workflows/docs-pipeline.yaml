@@ -142,7 +142,17 @@ states:
       # excluded from the digest's git-tree half, so the spec is folded in via `taskFile`.
       - kind: shell
         options:
-          command: '$spurBin task path $wbs --json 2>/dev/null | jq -r ".path // .filePath // empty" > ".spur/run/$wbs-docs-taskpath.txt" || true; exit 0'
+          # 0760 R1 (sibling of 0751 R2): task-path lookup fails closed. Drop
+          # `2>/dev/null`, `|| true`, and the forced `exit 0` so an unresolved
+          # wbs exits non-zero with a named message. The resolved path folds
+          # into the proof digest via `taskFile:` below; a silent miss would
+          # degrade the docs-pipeline proof to tree-only (same hazard 0751 R2
+          # removed from task-pipeline).
+          command: >-
+            set -e;
+            task_path="$($spurBin task path $wbs --json | jq -r '.path // .filePath // empty')";
+            if [ -z "$task_path" ]; then echo "docs-pipeline: task path did not resolve for wbs $wbs" >&2; exit 1; fi;
+            printf '%s' "$task_path" > ".spur/run/$wbs-docs-taskpath.txt"
       - kind: file.read.into-var
         options:
           path: .spur/run/${vars.wbs}-docs-taskpath.txt

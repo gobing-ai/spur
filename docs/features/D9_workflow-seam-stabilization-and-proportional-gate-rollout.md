@@ -114,6 +114,24 @@ Feature: Workflow seam stabilization and proportional gate rollout
     Then the step fails with a named error
     And it does not report a successful lookup
 
+  Scenario: A missing task spec fails the docs-pipeline proof step too
+    Given a docs-pipeline run whose task path lookup returns nothing
+    When the proof step executes
+    Then the step exits non-zero naming the unresolved wbs
+    And no tree-only proof digest is produced
+
+  Scenario: The done-state verdict artifact declares the enforced proof binding
+    Given the done-state onEnter of task-pipeline
+    When the verdict artifact is declared
+    Then it carries proofBinding: current
+    And a missing or stale proof binding fails the verify-to-done guard
+
+  Scenario: No new bypass is introduced in the pipeline composition
+    Given the task-pipeline and docs-pipeline definitions after 0751 / 0760
+    When the composition is scanned for suppression patterns
+    Then no `2>/dev/null`, `|| true`, or forced `exit 0` appears on a task-path or proof capture step
+    And any such pattern would fail the proof-chain regression tests
+
   Scenario: A stale verifier answer cannot satisfy a fresh assertion
     Given a verifier answer file left behind by a previous run
     When a new run asserts on that artifact
