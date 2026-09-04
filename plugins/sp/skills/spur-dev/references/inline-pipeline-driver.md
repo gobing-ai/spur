@@ -13,13 +13,13 @@ see_also:
 
 **Owner:** `spur-dev-maintainers` (per task 0755 R1). Reach the named owner via the frontmatter; no need to read the originating task.
 
-**Retirement criterion (0755 R5, D8 decision D7):** the per-task interpreter retires once the engine covers per-task execution for `/sp:dev-runall` with real terminal runs **and** the parity check (this doc's documented action/guard set ≡ `config/workflows/task-pipeline.yaml`'s resolved action/guard set) is green. Recording the criterion is part of this task; acting on it is not — that is a separate A3-gate decision.
+**Retirement criterion (0755 R5, D8 decision D7):** the per-task interpreter retires once the engine covers per-task execution for `/sp:dev-runall` with real terminal runs **and** the parity check (this doc's documented action/guard set ≡ `.spur/workflows/task-pipeline.yaml`'s resolved action/guard set) is green. Recording the criterion is part of this task; acting on it is not — that is a separate A3-gate decision.
 
 ## Supported action and guard set (0755 R2 parity contract)
 
 The action and guard kinds this driver implements. The parity check
 (`apps/cli/src/scripts/check-inline-pipeline-parity.ts`) compares this set against
-`config/workflows/task-pipeline.yaml`'s resolved actions and guards; any element present
+`.spur/workflows/task-pipeline.yaml`'s resolved actions and guards; any element present
 in one and absent in the other fails the check. Add a new kind here when the driver
 implements it; remove the entry when the corresponding kind is dropped from the YAML.
 

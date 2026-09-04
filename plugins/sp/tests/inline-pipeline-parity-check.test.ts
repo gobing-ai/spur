@@ -27,7 +27,7 @@ describe('inline-pipeline-parity-check (task 0755 R2/R3)', () => {
         // Simulate a drift: copy a workflow, add an unknown action kind, point the check at it.
         const tmp = join('/tmp', `t0755-parity-${Date.now()}`);
         const fs = require('node:fs') as typeof import('node:fs');
-        const workflowsDir = join(tmp, 'config/workflows');
+        const workflowsDir = join(tmp, 'config', 'workflows');
         fs.mkdirSync(workflowsDir, { recursive: true });
         fs.writeFileSync(
             join(workflowsDir, 'drift.yaml'),

@@ -2,7 +2,7 @@
 /**
  * inline-pipeline-parity-check — two-sided gate between the inline pipeline
  * driver's documented action/guard set and the resolved action/guard sets in
- * `config/workflows/task-pipeline.yaml` and `config/workflows/idea-pipeline.yaml`
+ * `.spur/workflows/task-pipeline.yaml` and `.spur/workflows/idea-pipeline.yaml`
  * (task 0755 R2/R3).
  *
  * The driver reference at `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`
@@ -29,7 +29,7 @@ import { parse as parseYaml } from 'yaml';
 /** Documented action and guard set. Must stay in lockstep with the
  *  "Supported action and guard set (0755 R2 parity contract)" section in
  *  `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`. The
- *  driver supports a kind if ANY workflow in `config/workflows/*.yaml` uses
+ *  driver supports a kind if ANY workflow in `.spur/workflows/*.yaml` uses
  *  it (the driver applies to any selected pipeline per its reference doc). */
 const DOCUMENTED = {
     actions: new Set([
@@ -47,7 +47,7 @@ const DOCUMENTED = {
 } as const;
 
 /** Directory of workflow definitions the driver is responsible for. */
-const WORKFLOW_DIR = 'config/workflows';
+const WORKFLOW_DIR = join('config', 'workflows');
 
 /** Walk a state list and yield every `kind:` value found in `onEnter` action
  *  lists. Skips the top-level workflow `kind:` (e.g. `state-machine`). */
