@@ -997,6 +997,19 @@ CREATE INDEX IF NOT EXISTS idx_history_board_dimension_daily_day
     ON history_board_dimension_daily (dimension, day);
 `;
 
+/**
+ * Migration 0038: Retention compaction run-marker (task 0746).
+ * A tiny KV table recording when the DB compaction last ran, so the daily pipeline can gate
+ * compaction on a minimum interval without re-reading the file mtime. Idempotent.
+ */
+export const RETENTION_COMPACTION_META_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS spur_retention_meta (
+    kind    TEXT NOT NULL,
+    ran_at  INTEGER NOT NULL,
+    PRIMARY KEY (kind)
+);
+`;
+
 export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
     // Renamed from `0001_spur_team_inbox` so the filename carries the
@@ -1145,6 +1158,11 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         // All statements idempotent (CREATE TABLE/INDEX IF NOT EXISTS).
         id: '0037_spur_cli_history_dimension_marts',
         sql: HISTORY_DIMENSION_MARTS_SCHEMA_SQL,
+    },
+    {
+        // 0746: Retention compaction run-marker table (CREATE TABLE IF NOT EXISTS).
+        id: '0038_spur_cli_retention_compaction_meta',
+        sql: RETENTION_COMPACTION_META_SCHEMA_SQL,
     },
 ];
 
