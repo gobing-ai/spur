@@ -5,7 +5,9 @@ import {
     deriveDimensionMarts,
     historyBoardDimensionDailyFromMart,
     historyBoardKpiWindowFromMart,
+    historyBoardKpiWindowRowsFromMart,
     historyBoardPreviousWindowKpiFromMart,
+    historyBoardSummaryFromMart,
     MART_DIMENSIONS,
     MART_MIN_RANGE_DAYS,
     resolveSummaryReadPath,
@@ -470,6 +472,34 @@ describe('historyBoardPreviousWindowKpiFromMart (0743 R3 regression)', () => {
         };
         const prev = await historyBoardPreviousWindowKpiFromMart(db, unbounded);
         expect(prev).toBeNull();
+        db.close();
+    });
+
+    test('historyBoardSummaryFromMart and historyBoardKpiWindowRowsFromMart read filtered rows', async () => {
+        const db = await setup();
+        await seedMultiDay(db, 3);
+        await refreshHistoryBoardRollupsIncremental(db);
+
+        const kpiRows = await historyBoardKpiWindowRowsFromMart(db, '30d');
+        expect(kpiRows instanceof Map).toBe(true);
+
+        const filtered = {
+            since: '2026-01-01T00:00:00Z',
+            until: '2026-01-20T00:00:00Z',
+            sources: ['claude'],
+            models: ['gpt-5', 'gpt-5-mini'],
+            tools: null,
+            skills: null,
+            sessionId: null,
+            runId: null,
+            taskWbs: null,
+        };
+        const summary = await historyBoardSummaryFromMart(db, filtered, 'model');
+        expect(summary.buckets.length).toBeGreaterThanOrEqual(1);
+        expect(summary.models.length).toBeGreaterThanOrEqual(1);
+        expect(summary.sources.length).toBeGreaterThanOrEqual(1);
+        expect(summary.sourceModels.length).toBeGreaterThanOrEqual(1);
+        expect(summary.sessions).toBeGreaterThanOrEqual(1);
         db.close();
     });
 });

@@ -26,6 +26,7 @@ import type {
 
 /** The four dimensions materialized in `history_board_dimension_daily`. */
 export const MART_DIMENSIONS = ['model', 'source', 'tool', 'skill'] as const;
+/** A dimension materialized in `history_board_dimension_daily`. */
 export type MartDimension = (typeof MART_DIMENSIONS)[number];
 
 /**
@@ -402,6 +403,9 @@ export async function historyBoardKpiWindowFromMart(
     return { trend };
 }
 
+/**
+ * Read the materialized KPI window rows for a given range key, indexed by window kind.
+ */
 export async function historyBoardKpiWindowRowsFromMart(
     db: DbAdapter,
     rangeKey: string,
