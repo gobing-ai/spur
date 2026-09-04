@@ -4,7 +4,7 @@ name: "Verify the History surface is unchanged and record the latency result"
 status: done
 template: feature-impl
 created_at: 2026-09-03T16:43:04.224Z
-updated_at: "2026-09-04T00:03:02.850Z"
+updated_at: "2026-09-04T03:33:55.869Z"
 feature_id: E91
 priority: P1
 tags: ["history", "verification", "gate"]
@@ -16,6 +16,7 @@ done_reason: "Latency rows R4/R5/R7 are PARTIAL: the live 1.79M-row corpus is un
 ## 0745. Verify the History surface is unchanged and record the latency result
 
 ### Background
+
 The operator's constraint is explicit: all History tabviews are verified, so the UI must not change. A constraint that is only stated is not a constraint — a reviewer reading a large diff will not reliably notice one changed line in a module that was not supposed to change at all. This task makes it mechanical.
 
 Both protected surfaces exist and are small enough to freeze wholesale. `apps/web/src/modules/history/` holds fourteen files: `index.tsx`, `HistoryShell.tsx`, `HistoryFilters.tsx`, `AgentIcon.tsx`, `charts.tsx`, `tabs.ts`, `TimelineScrubber.tsx`, `ToolCallDetail.tsx`, and the six tab components. `packages/contracts/src/history.ts` is the transport contract.
@@ -23,7 +24,9 @@ Both protected surfaces exist and are small enough to freeze wholesale. `apps/we
 One premise correction. The decomposition named five tabs to measure — Summary, Sessions, Insights, Sources, and Tool Using — but `HISTORY_TABS` at `apps/web/src/modules/history/tabs.ts` declares **six**: `summary`, `timeline`, `tool-using`, `sessions`, `insights`, `sources`. Timeline was omitted. It is not a materialization target — ADR-103 permits per-message drill-down by `record_hash` point lookup, which is what Timeline does — but a latency gate that skips a tab cannot detect a regression in it, and E91 changes the indexes and the refresh behaviour underneath every tab. This task therefore measures all six, and the Requirements below were corrected accordingly during refinement.
 
 Recorded baselines to measure against: rollup point read about 0.001 s, rollup re-GROUP BY 0.087–0.112 s, `bySession` 2.30 s, `byTool` 4.17 s, consolidated `toolSequenceQuery` 1.29 s, full `refreshHistoryRollups` 43.9 s, at a corpus of 1,791,462 messages and 494,215 tool calls in a 4.20 GB database.
+
 ### Requirements
+
 - [x] R1. A CI assertion fails when `apps/web/src/modules/history/` has any changed line against the merge base with the default branch.
 - [x] R2. The same assertion covers `packages/contracts/src/history.ts`.
 - [x] R3. Every History endpoint returns the same response shape it returned before the change.
@@ -32,7 +35,9 @@ Recorded baselines to measure against: rollup point read about 0.001 s, rollup r
 - [x] R6. Each measurement is the median of a stated number of runs rather than a single sample.
 - [ ] R7. No tab regresses against its baseline beyond a declared noise tolerance.
 - [x] R8. Each measurement records the CLI binary path and resolved importer package version used to produce it.
+
 ### Acceptance Criteria
+
 ```gherkin
 Feature: History read path materialized-only: incremental rollup ETL, per-table freshness, and precomputed UI aggregates
 
@@ -55,6 +60,7 @@ Feature: History read path materialized-only: incremental rollup ETL, per-table 
 
 
 ```
+
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
@@ -72,7 +78,9 @@ Feature: History read path materialized-only: incremental rollup ETL, per-table 
 **Why does this task not also assert an improvement?** Improvement is claimed by the tasks that cause it, each of which states its own target. Making this task the gate for both no-regression and improvement would let one tab's disappointing gain block a branch whose no-change constraint is fully satisfied.
 
 **Deferred:** a visual or screenshot-level UI assertion. The diff gate covers source, and the response-shape assertion covers transport; a rendering assertion needs a browser harness this repo does not have and would be the right addition only if a source-identical, contract-identical change ever produced a visible difference.
+
 ### Design
+
 **WHAT.** A mechanical diff gate over the two protected surfaces, a response-shape assertion per History endpoint, and a recorded before-and-after latency table for all six tabs.
 
 **WHY.** E91's value claim is a latency claim and its central constraint is a no-change claim. Both are assertions until something fails when they stop holding.
@@ -108,13 +116,16 @@ The check script is internal self-development tooling, so it lives in `scripts/c
 **Ordering.** This task runs last in E91 because step 4 requires the other tasks' changes to be in the tree. Steps 1 through 3 do not, and the baseline in step 3 must be captured before any of them land or it is not a baseline.
 
 Authority: ADR-103; design section 10 (D8).
+
 ### Plan
+
 1. Add `scripts/commands/history-surface-freeze-check.ts` with `FROZEN_HISTORY_SURFACES`, comparing against the merge base and reporting offending paths and line counts. Test intent: a seeded one-line change under either frozen path fails with that path named; an unrelated change elsewhere passes.
 2. Wire `history-surface-freeze-check` into `package.json` and into the `spur-check` chain. Test intent: the gate runs in the standard check rather than only when someone remembers it.
 3. Add a response-shape assertion per History endpoint, comparing against the contract types rather than hand-written literals. Test intent: a field added, removed, or retyped in `packages/contracts/src/history.ts` fails the assertion.
 4. Record the pre-change baseline for all six tabs before any E91 change lands: median of `LATENCY_SAMPLE_COUNT` runs, with binary path and importer version. Test intent: the recorded artifact contains N, the median, and the provenance for every tab, so a later reader can reproduce it.
 5. After the other E91 tasks land, repeat the measurements with fresh rollups under the identical protocol. Test intent: the post-change run uses the same N and the same harness, so the two tables are comparable.
 6. Record both tables together and assert no tab exceeds `LATENCY_NOISE_TOLERANCE_RATIO` over its baseline. Test intent: a seeded regression beyond the tolerance fails; a change within it does not.
+
 ### Solution
 
 The gate is mechanical and the measurement protocol is frozen before measuring. The changes are all
@@ -154,12 +165,13 @@ Not changed (frozen surfaces): `apps/web/src/modules/history/` and `packages/con
 are untouched; the contract gained no fields.
 
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | scripts/commands/history-surface-freeze-check.ts:95 historySurfaceFreezeCheck compares the working tree against the merge base with main (never HEAD~1) and fails when apps/web/src/modules/history/ differs. Tests: 'fails naming the path when a frozen web file changes', 'uses the merge base, not HEAD~1 — a change-then-revert is not flagged'. Run on this tree: OK (surfaces unchanged against merge base 0f896a8). |
 | R2 | MET | FROZEN_HISTORY_SURFACES includes 'packages/contracts/src/history.ts'. Tests: 'fails naming the path when the frozen contract changes'. The contract is untouched in this tree (git diff empty for packages/contracts/src/history.ts). |
 | R3 | MET | packages/app/tests/services/history-response-shape.test.ts compares each History endpoint's result keys against the contract zod schema's shape (compile-time type assignment + runtime key-set comparison) — Summary, Timeline, Sessions, Insights, Sources, Tool Using. 6 pass, 0 fail. |
@@ -173,20 +185,31 @@ are untouched; the contract gained no fields.
 |---------------------|--------|---------------|----------|
 | Scenario: R11 — The History UI and its transport contracts are unchanged | MET | test | history-surface-freeze-check (7 tests) + history-response-shape.test.ts (6 tests). Run on this tree: freeze-check OK (surfaces unchanged against merge base 0f896a8); contract untouched. All six endpoints return the contract shape. |
 | Scenario: R12 — Affected tabs show recorded latency improvement against a measured baseline | PARTIAL | test | The no-regression harness (assertNoRegression, median-of-N protocol, LATENCY_NOISE_TOLERANCE_RATIO) is implemented + tested. PARTIAL: the live post-change versus pre-change median requires the 1.79M-row corpus and is recorded as documented residual risk in docs/report/2026-09-03-E91-history-tab-latency-baseline.md, matching 0741's R8 disposition. |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
+
 <!-- spur:record-review -->
 
 **Review findings** and disposition.
 
 | Priority | Dimension | Location | Finding | Disposition |
-|----------|-----------|----------|----------|-------------|
+| ---------- | ----------- | ---------- | ---------- | ------------- |
 | P2 | measurement | docs/report/2026-09-03-E91-history-tab-latency-baseline.md | R4/R5/R7 (latency baseline, post-change measurement, no-regression) are PARTIAL — the live median requires the 1.79M-row corpus, and a genuine pre-change baseline could not be re-captured because 0741/0743/0744 already landed in the tree. | **Accepted residual risk** — the measurement harness (median-of-N, provenance, no-regression) is implemented + tested; the live numbers are recorded as a documented baseline artifact with an explicit provenance caveat, matching 0741's R8 disposition (operator-approved). |
 | P4 | surface | scripts/commands/history-surface-freeze-check.ts | The diff gate uses `git diff --numstat <merge-base> -- <surface>` which flags tracked changes; untracked files under a frozen path are surfaced separately via `git ls-files --others`. | Accepted — both tracked and untracked surface changes are caught; merge-base (not HEAD~1) is the correct base. |
 | P4 | scope | package.json | `history-surface-freeze-check` is wired into `spur-check`/`spur-check-new`/`spur-check:full` and is internal self-development tooling (not a public `spur` verb). | Accepted — per ADR-051 surface governance. |
 
 **Disposition:** APPROVED with the R4/R5/R7 latency measurement documented as PARTIAL residual risk (requires the live corpus; harness implemented + tested). The hard no-change constraint (R1/R2/R3) is fully MET: the freeze-check is green on this tree and every endpoint returns the contract shape. All gates: domain 1206/0, app 2418/0, freeze-check OK, lint + typecheck clean.
+
+---
+
+**Re-verify 2026-09-04 (`/sp:dev-verifyall --feature E91 --force --focus all`) — verdict: PARTIAL. Status left `done`.**
+
+The no-change constraints (R1/R2/R3) re-verified and still hold; the freeze-check is green and every endpoint returns the contract shape. The recorded gate evidence above ("domain 1206/0, app 2418/0") does **not** reproduce on this tree: at merge `b61cf1e24` the domain suite was 878/333, every failure tracing to `SQLiteError: no such column: effective_tool_name` from migration 0034 (see task 0739 Review). Fixed in `20291adb0`; domain is now 1210/0. The recorded numbers were captured against a tree that did not include the 0739 migration, so they were never true of the merged result.
+
 ### References
+
 - Parent feature: `docs/features/E91_history-read-path-materialized-only-incremental-rollup-etl-per-table-freshness-and-precomputed-ui-aggregates.md`
 - Design satellite: `docs/design/history-incremental-materialization.md` section 10 (D8)
 - ADR-103: `docs/00_ADR.md`
@@ -194,7 +217,9 @@ are untouched; the contract gained no fields.
 - Frozen transport contract: `packages/contracts/src/history.ts`
 - Internal check-script convention and the `spur-check` chain: `CLAUDE.md` build-and-verification section, and `docs/design/harness-surface-governance.md` for why this is not a public `spur` verb
 - Source-local CLI requirement for real-data validation: `CLAUDE.md` build-and-verification section
+
 ### History
+
 - 2026-09-04T00:02:40.015Z todo → wip (system)
 - 2026-09-04T00:02:40.435Z wip → testing (system)
 - 2026-09-04T00:03:02.845Z testing → done (system)

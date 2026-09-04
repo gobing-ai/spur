@@ -2038,7 +2038,6 @@ to `unknown`, never permissive.
 
 **Detail:** task 0706; `04 Design §agent-capability-attestation`.
 
-
 ## ADR-103: History Rollups Refresh Incrementally by Bucket Under a Refresh Watermark
 
 **Status:** Accepted (design) · **Date:** 2026-09-03
@@ -2198,7 +2197,6 @@ This is a storage-layer decision. No History response gains a field, so the tran
 unchanged (ADR-103, E91/R11).
 
 **Detail:** `docs/design/history-incremental-materialization.md` §12 (D10); feature E91 R21–R25.
-
 
 ## Amendments (task 0754, D8 Decision 8 closure)
 

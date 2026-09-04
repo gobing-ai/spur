@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Persist tool identity at import: effective_tool_name, tool_name_alias, and the alias resolution seam"
-status: done
+status: wip
 template: feature-impl
 created_at: 2026-09-03T16:43:04.048Z
-updated_at: "2026-09-03T20:39:36.840Z"
+updated_at: "2026-09-04T03:32:54.802Z"
 feature_id: E91
 priority: P1
 tags: ["history", "etl", "tool-identity"]
@@ -13,6 +13,7 @@ tags: ["history", "etl", "tool-identity"]
 ## 0739. Persist tool identity at import: effective_tool_name, tool_name_alias, and the alias resolution seam
 
 ### Background
+
 `EFFECTIVE_TOOL_NAME_SQL` (`packages/domain/src/analytics/history-board-rollup.ts:27`) is a multi-branch CASE over `json_extract(tc.args_raw, ...)` plus `call_id` prefix matching, evaluated per row per query. It is unindexable because it is an expression over JSON. Verified 2026-09-03: **12 call sites** interpolate it — 3 in `history-board-rollup.ts` (lines 81, 379, 423/425) and 7 in `forensic-query.ts` (lines 169, 341, 351, 483, 487, 1093, 1129).
 
 Removing the double evaluation is worth 0.5% (4.152 s vs 4.171 s measured) — the scan and join dominate. **This task is a correctness and groupability fix, not a latency fix, and must not be justified as the latter.**
@@ -22,7 +23,9 @@ It fixes a live defect: `toolSequenceQuery` (`packages/domain/src/analytics/fore
 `history_board_tool_5m.tool_name` is **already** populated from `EFFECTIVE_TOOL_NAME_SQL` at `packages/domain/src/analytics/history-board-rollup.ts:379`, so the rollup path already stores the extracted name. What is missing is the persisted column on the *fact* table, which is what makes the raw-path queries groupable and indexable.
 
 Separately, `history_tool_call` holds 256 distinct `tool_name` values. The shell family alone spans nine `(source, tool_name)` pairs across eight agents and ~233K calls: pi|bash 80572, omp|bash 47258, codex|exec_command 32737, agy|run_command 22179, claude|Bash 17965, codex|exec 17495, grok|run_terminal_command 10842, opencode|bash 2730, codex|shell 1077. Cross-agent tool breakdowns are not comparable today.
+
 ### Requirements
+
 - [x] R1. `history_tool_call` carries a persisted `effective_tool_name` column with a supporting index, populated at import.
 - [x] R2. The Summary top-tools path and the tool-sequence path both filter on `effective_tool_name`; a tool selected from the Summary list returns matching rows in the tool-sequence view.
 - [x] R3. `history_tool_call` carries a `tool_name_alias` column whose value defaults to that row's `effective_tool_name`.
@@ -30,7 +33,9 @@ Separately, `history_tool_call` holds 256 distinct `tool_name` values. The shell
 - [x] R5. Backfill migrations populate both columns for every pre-existing row.
 - [x] R6. With an empty mapping table, every tool breakdown is identical to the breakdown produced before the columns existed.
 - [x] R7. Adding a mapping entry regroups alias-grouped breakdowns into a single row while leaving `effective_tool_name` and every breakdown grouped by it unchanged.
+
 ### Acceptance Criteria
+
 ```gherkin
 Feature: History read path materialized-only: incremental rollup ETL, per-table freshness, and precomputed UI aggregates
 
@@ -63,6 +68,7 @@ Feature: History read path materialized-only: incremental rollup ETL, per-table 
 
 
 ```
+
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
@@ -84,7 +90,9 @@ Feature: History read path materialized-only: incremental rollup ETL, per-table 
 **Is this a performance task? — No.** The double-evaluation removal measured 4.152 s vs 4.171 s, 0.5%. Scan and join dominate. Justifying this task on latency would be dishonest and would set the wrong acceptance bar; its value is correctness (R2) and groupability (R7).
 
 **When is `EFFECTIVE_TOOL_NAME_SQL` deleted? — After the backfill migration that uses it is written.** A migration must remain reproducible from the tree at its own commit, so the expression outlives its last read-path use by exactly one change.
+
 ### Design
+
 **WHAT.** Persist two columns on `history_tool_call` — `effective_tool_name` (extraction) and `tool_name_alias` (canonicalization) — written by the importer, backfilled for existing rows, with a single alias-resolution seam that falls through to identity.
 
 **WHY.** Recomputing an unindexable JSON expression per row per query is the read-path work ADR-103 exists to remove, and the two paths that compute it differently produce a user-visible mismatch. Fact-row identity belongs to the party that can populate it at write time (ADR-105, ADR-106).
@@ -136,7 +144,9 @@ Collapsing them into one column loses the extraction result, which downstream dr
 Task 0743 (dimension marts + read routing) groups its tool dimension by `tool_name_alias` and drills down by `effective_tool_name`; both names are frozen above. Task 0745 (unchanged-surface verification) treats R6's byte-identical breakdown output as one of its baselines. Neither may reintroduce `EFFECTIVE_TOOL_NAME_SQL`.
 
 Authority: ADR-103, ADR-105, ADR-106; `docs/design/history-incremental-materialization.md` section 9 (D7).
+
 ### Plan
+
 1. **R1a (upstream DDL).** Add `effective_tool_name` to the importer's `history_tool_call` block in `HISTORY_IMPORT_SCHEMA_SQL`.
 2. **R1b (upstream population).** Port the `EFFECTIVE_TOOL_NAME_SQL` CASE branches into the per-source mappers verbatim, including the `'unknown'` default. Test intent: assert the mapper output equals the SQL expression's output for a fixture covering every branch — wrapper `call_*` prefixes, each `args_raw` JSON field, empty `tool_name`, and the unresolved default. That equivalence is what makes R6 provable.
 3. **R3 (alias column).** Add `tool_name_alias` defaulting to the row's `effective_tool_name`.
@@ -146,12 +156,14 @@ Authority: ADR-103, ADR-105, ADR-106; `docs/design/history-incremental-materiali
 7. **R6 (identity proof).** With `history_tool_alias_map` empty, assert every tool breakdown is byte-identical to the pre-change output. Test intent: prove the change is inert on day one; any diff here is a ported-rule error from step 2.
 8. **R7 (regrouping proof).** Insert a mapping entry collapsing several shell names onto one alias, refresh, and assert alias-grouped breakdowns report one row while `effective_tool_name` values and every breakdown grouped by them are unchanged.
 9. Run the domain and app test suites plus `bun run spur-check`.
+
 ### Solution
+
 Change-map (auto-generated — implement step did not record a Solution).
 Each entry cites the first changed line per file (`file:line`).
 
 | Change (`file:line`) |
-|----------------------|
+| ---------------------- |
 | `packages/domain/src/analytics/forensic-query.ts:1092` |
 | `packages/domain/src/analytics/forensic-query.ts:1099` |
 | `packages/domain/src/analytics/forensic-query.ts:1135` |
@@ -199,13 +211,15 @@ Each entry cites the first changed line per file (`file:line`).
 | `packages/domain/tests/dao/ownership-conformance.test.ts:122` |
 | `packages/domain/tests/dao/ownership-conformance.test.ts:129` |
 | `packages/domain/tests/dao/ownership-conformance.test.ts:156` |
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | history_tool_call carries effective_tool_name and tool_name_alias with supporting indexes idx_history_tool_call_effective_tool_name and idx_history_tool_call_alias (0034_spur_cli_history_tool_identity.sql). Verified in packages/domain/tests/analytics/forensic-query.test.ts:805. |
 | R2 | MET | packages/domain/src/analytics/forensic-query.ts:1878 — toolSequenceQuery filters on effective_tool_name; packages/domain/tests/analytics/forensic-query.test.ts:805 asserts a tool with blank raw tool_name and wrapper call_id matches in tool-sequence view; suite ran fresh: 28 pass, 0 fail. |
 | R3 | MET | history_tool_call carries tool_name_alias defaulting to effective_tool_name via migration 0034 backfill and schema default. Verified in packages/domain/tests/analytics/forensic-query.test.ts:825. |
@@ -215,11 +229,13 @@ Each entry cites the first changed line per file (`file:line`).
 | R7 | MET | packages/domain/tests/analytics/tool-alias.test.ts:14 — mapping entries regroup alias-grouped queries to single rows while leaving raw effective_tool_name unchanged. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
+| --------------------- | -------- | --------------- | ---------- |
 | Scenario: R9 — Tool identity is persisted once at import and used consistently | MET | test | packages/domain/tests/analytics/forensic-query.test.ts:805 — 28 pass, 0 fail (fresh) |
 | Scenario: R19 — Tool names carry a cross-agent alias that defaults to identity | MET | test | packages/domain/tests/analytics/tool-alias.test.ts:7 — 3 pass, 0 fail (fresh); packages/domain/tests/analytics/forensic-query.test.ts:825 |
 | Scenario: R20 — Adding a tool alias mapping regroups breakdowns without changing facts | MET | test | packages/domain/tests/analytics/tool-alias.test.ts:14 — 3 pass, 0 fail (fresh) |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
 <!-- spur:record-review -->
 
@@ -229,7 +245,31 @@ Each entry cites the first changed line per file (`file:line`).
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+
+---
+
+**Re-verify 2026-09-04 (`/sp:dev-verifyall --feature E91 --force --focus all`) — verdict: FAIL.** Reopened `done → wip`.
+
+| Req | Status | Evidence |
+| ----- | -------- | ---------- |
+| R1 — columns populated at import | **UNMET** | Migration 0034 backfilled existing rows, but no import path wrote the columns. Every newly imported row landed `'unknown'`. `@gobing-ai/ts-llm-jsonl-importer` 0.4.55 `src/schema-sql.ts` declares neither column. |
+| R4 — single alias-resolution seam | **UNMET** | `packages/domain/src/analytics/tool-alias.ts` has no production caller; only `packages/domain/tests/analytics/tool-alias.test.ts` imports it. |
+| R7 — adding a mapping regroups queries | **UNMET** | Follows from R4: nothing routes through the seam, so a new `history_tool_alias_map` row regroups nothing. |
+
+**P0 uncovered during re-verify (fixed).** Migration `0034_spur_cli_history_tool_identity` indexed and backfilled `history_tool_call.effective_tool_name` / `.tool_name_alias`, but no DDL anywhere created them — not the importer's `HISTORY_IMPORT_SCHEMA_SQL`, not any Spur migration. Its only guard skipped on a missing *table*, not missing *columns*. Every `spur` command that opened a real database threw `SQLiteError: no such column: effective_tool_name`, and 333 domain tests failed. The branch tip was byte-identical to the merge (`git diff a67f5ee1f b61cf1e24 -- packages/domain/src/migrations.ts drizzle/` is empty), so the gate was never run against the committed tree. Fixed by a guarded per-column pre-step in `packages/domain/src/migrations.ts` (commit `20291adb0`), following the 0009 provisioning precedent. Verified on the live 4.2 GB `.spur/spur.db`: columns at PRAGMA positions 18/19, 498,522 rows backfilled, 19,525 residual `'unknown'`.
+
+**R1 remediation (ADR-105 axis 2 — a column on a fact table belongs to whoever produces the value).** Landed upstream in `@gobing-ai/ts-llm-jsonl-importer` 0.4.56:
+
+- `src/schema-sql.ts` — both columns appended **last** in the `history_tool_call` CREATE, so a fresh database converges on the same `PRAGMA table_info` order as one that gained them through Spur's ALTER.
+- `src/jsonl-importer-dao.ts` — `resolveToolIdentity()` mirrors migration 0034's backfill CASE, wired into **both** insert paths: `recordInsertOp` (all typed mappers) and `openCodeBulkWriteOperations` (the OpenCode bulk path json-extracts every column off the payload, so it needed the identity folded into the record).
+- `HISTORY_IMPORT_SCHEMA_VERSION` and package version bumped to `0.4.56`; new schema hash `55b98f42…f13e` pinned in the bump-or-fail test.
+
+Verified against the local build: `packages/domain/tests/dao/migrations.test.ts` 54/0, including R10/R4 schema convergence. Blocked on publishing 0.4.56 and bumping the spur-new catalog pin.
+
+**R4/R7 remain open** — the alias seam still needs a production caller before this task can return to `done`.
+
 ### References
+
 - Parent feature: `docs/features/E91_history-read-path-materialized-only-incremental-rollup-etl-per-table-freshness-and-precomputed-ui-aggregates.md`
 - `docs/00_ADR.md` — ADR-103 (materialized-only read path), ADR-105 (three-axis ownership), ADR-106 (measure vector / fact identity)
 - `docs/design/history-incremental-materialization.md` — section 9 (D7, tool identity split)
@@ -238,7 +278,10 @@ Each entry cites the first changed line per file (`file:line`).
 - Upstream DDL and mappers: `@gobing-ai/ts-llm-jsonl-importer` `src/schema-sql.ts` line 57 (`history_tool_call`), `src/mappers.ts`
 - Current max migration `0031_spur_cli_history_board_tool_stats_columns`; `0032` reserved by task 0748
 - Dependents: task 0743 (groups by `tool_name_alias`), task 0745 (uses R6 output as a baseline)
+
 ### History
+
 - 2026-09-03T20:39:09.157Z todo → wip (system)
 - 2026-09-03T20:39:25.271Z wip → testing (system)
 - 2026-09-03T20:39:36.840Z testing → done (system)
+- 2026-09-04T03:32:30.622Z done → wip (system)
