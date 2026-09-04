@@ -203,6 +203,10 @@
                     "kind": "shell",
                     "invocation": "EVID_FILE=\".spur/run/$wbs-precheck-evidence.status\" && mkdir -p .spur/run && EVID_SCRIPT=\"plugins/sp/scripts/task-evidence-precheck.ts\"; [ -f \"$EVID_SCRIPT\" ] || EVID_SCRIPT=\"$(superskill script path sp task-evidence-precheck.ts 2>/dev/null)\"; if [ -n \"$EVID_SCRIPT\" ] && [ -f \"$EVID_SCRIPT\" ]; then bun \"$EVID_SCRIPT\" \"$wbs\" --spur-bin \"$spurBin\"; else\n  echo \"task-evidence-precheck failed closed — checker not found\" >&2 &&\n  echo \"in plugins/sp/scripts/ nor staged; run 'superskill install sp'.\" >&2 &&\n  echo \"FAIL\" > \"$EVID_FILE\";\nfi && exit 0"
                 },
+                "precheck:onEnter:5": {
+                    "kind": "shell",
+                    "invocation": "mkdir -p .spur/run .spur/memory && if [ \"$mode\" = \"fast\" ]; then\n  echo \"fast:evidence complete+consistent\" > \".spur/run/$wbs-route-reason.txt\";\nelif [ -z \"$mode\" ]; then\n  echo \"safety:standard verification\" > \".spur/run/$wbs-route-reason.txt\";\nelif [ \"$mode\" = \"unknown\" ]; then\n  echo \"safety:unknown evidence quality\" > \".spur/run/$wbs-route-reason.txt\";\nelif [ \"$mode\" = \"conflict\" ]; then\n  echo \"safety:conflicting evidence\" > \".spur/run/$wbs-route-reason.txt\";\nelse\n  echo \"safety:unrecognized evidence (mode=$mode)\" > \".spur/run/$wbs-route-reason.txt\";\nfi && cat \".spur/run/$wbs-route-reason.txt\" >> .spur/memory/task-pipeline-routes.log && exit 0"
+                },
                 "implement:onEnter:0": {
                     "kind": "agent.run",
                     "invocation": "/sp:dev-run --mode implement ${vars.wbs} --auto"
@@ -313,6 +317,10 @@
                 },
                 "task-resolve:onEnter:0": {
                     "kind": "note"
+                },
+                "task-resolve:onEnter:1": {
+                    "kind": "shell",
+                    "invocation": "mkdir -p .spur/run .spur/memory && RUN_ID=\"$__runId\" && if [ -z \"$RUN_ID\" ]; then RUN_ID=\"wrapup\"; fi && REASON_FILE=\".spur/run/$RUN_ID-route-reason.txt\" && if [ \"$(echo \"$tasks\" | jq length 2>/dev/null || echo 0)\" -eq 0 ]; then\n  echo \"skipped:empty task list\" > \"$REASON_FILE\";\nelif [ \"$mode\" = \"fast\" ]; then\n  echo \"fast:evidence complete+consistent\" > \"$REASON_FILE\";\nelif [ -z \"$mode\" ]; then\n  echo \"safety:missing evidence (mode empty)\" > \"$REASON_FILE\";\nelif [ \"$mode\" = \"unknown\" ]; then\n  echo \"safety:unknown evidence quality\" > \"$REASON_FILE\";\nelif [ \"$mode\" = \"conflict\" ]; then\n  echo \"safety:conflicting evidence\" > \"$REASON_FILE\";\nelse\n  echo \"safety:unrecognized evidence (mode=$mode)\" > \"$REASON_FILE\";\nfi && cp \"$REASON_FILE\" .spur/run/wrapup-route-reason.txt && cat \"$REASON_FILE\" >> .spur/memory/wrapup-routes.log && exit 0"
                 },
                 "doc-sync:onEnter:0": {
                     "kind": "agent.run",
