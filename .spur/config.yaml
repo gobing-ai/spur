@@ -68,6 +68,7 @@ agent:
   executors:
     - name: pi-dsv4-flash-volc
       agent: pi
+      # tier: standard
       executionCapabilities:
         version: 1
         axes:

@@ -130,10 +130,21 @@ agent:
     #   agent: omp
     #   model: minimax/MiniMax-M3
     #   tier: cheap
-    - name: omp
-      agent: omp
-      model: opencode/deepseek-v4-flash
-      tier: standard
+    - name: pi-dsv4-flash-volc
+      agent: pi
+    #   tier: standard
+      executionCapabilities:
+        version: 1
+        axes:
+          fsRead:
+            state: available
+            provenance: native-known
+          fsWrite:
+            state: available
+            provenance: native-known
+          processSpawn:
+            state: available
+            provenance: native-known
     # - name: omp-zai
     #   agent: omp
     #   model: zai/glm-5.2
