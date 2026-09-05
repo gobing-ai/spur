@@ -266,7 +266,7 @@ export async function messageRollup(
     const wm = applyWatermarkToWhere(where, opts?.watermark);
     return db.queryAll<MessageRollupRow>(
         `WITH filtered AS (
-             SELECT m.source, m.model, m.ts, m.input_tokens, m.output_tokens,
+             SELECT m.source, m.session_id, m.model, m.ts, m.input_tokens, m.output_tokens,
                     m.cache_read_tokens, m.cache_write_tokens, m.cost_usd, m.role, m.duration_ms,
                     ROW_NUMBER() OVER (PARTITION BY m.request_id ORDER BY m.rowid DESC) AS rn,
                     m.request_id
@@ -274,7 +274,17 @@ export async function messageRollup(
              ${wm.where}
          ),
          selected AS (
-             SELECT * FROM filtered WHERE request_id IS NULL OR rn = 1
+             SELECT source,
+                    COALESCE(
+                        NULLIF(NULLIF(model, ''), 'unknown'),
+                        MAX(CASE WHEN model IS NOT NULL AND model != '' AND model != 'unknown' THEN model END)
+                            OVER (PARTITION BY source, session_id),
+                        NULLIF(model, ''),
+                        'unknown'
+                    ) AS model,
+                    ts, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+                    cost_usd, role, duration_ms
+             FROM filtered WHERE request_id IS NULL OR rn = 1
          )
          SELECT source, model, DATE(ts) AS day,
                 COUNT(*) AS messages,
@@ -304,7 +314,15 @@ export async function toolRollup(
     const wm = applyWatermarkToWhere(where, opts?.watermark);
     return db.queryAll<ToolRollupRow>(
         `WITH filtered_messages AS (
-             SELECT m.record_hash, m.source, m.model, m.ts
+             SELECT m.record_hash, m.source, m.session_id,
+                    COALESCE(
+                        NULLIF(NULLIF(m.model, ''), 'unknown'),
+                        MAX(CASE WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model END)
+                            OVER (PARTITION BY m.source, m.session_id),
+                        NULLIF(m.model, ''),
+                        'unknown'
+                    ) AS model,
+                    m.ts
              FROM history_message m
              ${wm.where}
          )
@@ -986,7 +1004,16 @@ export async function loopRepeatedCallsQuery(
                 tc.message_hash AS messageHash,
                 tc.session_id AS sessionId,
                 tc.source AS source,
-                m.model AS model,
+                CASE
+                    WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model
+                    WHEN m.session_id IS NOT NULL AND m.session_id NOT IN ('', 'unknown', 'session') THEN (
+                        SELECT m2.model FROM history_message m2
+                        WHERE m2.source = m.source AND m2.session_id = m.session_id
+                          AND m2.model IS NOT NULL AND m2.model != '' AND m2.model != 'unknown'
+                        LIMIT 1
+                    )
+                    ELSE m.model
+                END AS model,
                 (SELECT COUNT(*) FROM history_tool_call l WHERE l.message_hash = m.record_hash) AS links,
                 m.input_tokens AS inputTokens,
                 m.cache_read_tokens AS cacheReadTokens,
@@ -1189,7 +1216,17 @@ export async function topStepsByTokens(
     const tokensGuard = rankOrderExpr(sel, '(m.input_tokens IS NOT NULL OR m.output_tokens IS NOT NULL)');
     const tokensPredicate = withStepPredicates(wm.where, `m.role = 'assistant' AND ${tokensGuard}`);
     return db.queryAll<StepRow>(
-        `SELECT m.session_id AS sessionId, m.source AS source, m.ts AS ts, m.model AS model,
+        `SELECT m.session_id AS sessionId, m.source AS source, m.ts AS ts,
+                CASE
+                    WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model
+                    WHEN m.session_id IS NOT NULL AND m.session_id NOT IN ('', 'unknown', 'session') THEN (
+                        SELECT m2.model FROM history_message m2
+                        WHERE m2.source = m.source AND m2.session_id = m.session_id
+                          AND m2.model IS NOT NULL AND m2.model != '' AND m2.model != 'unknown'
+                        LIMIT 1
+                    )
+                    ELSE 'unknown'
+                END AS model,
                 m.input_tokens AS inputTokens, m.cache_read_tokens AS cacheReadTokens,
                 m.output_tokens AS outputTokens, m.cost_usd AS costUsd, m.duration_ms AS durationMs
          FROM history_message m
@@ -1214,7 +1251,17 @@ export async function topStepsByDuration(
     const durationOrder = rankOrderExpr(sel, 'm.duration_ms');
     const durationPredicate = withStepPredicates(wm.where, `m.role = 'assistant' AND ${durationOrder} IS NOT NULL`);
     return db.queryAll<StepRow>(
-        `SELECT m.session_id AS sessionId, m.source AS source, m.ts AS ts, m.model AS model,
+        `SELECT m.session_id AS sessionId, m.source AS source, m.ts AS ts,
+                CASE
+                    WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model
+                    WHEN m.session_id IS NOT NULL AND m.session_id NOT IN ('', 'unknown', 'session') THEN (
+                        SELECT m2.model FROM history_message m2
+                        WHERE m2.source = m.source AND m2.session_id = m.session_id
+                          AND m2.model IS NOT NULL AND m2.model != '' AND m2.model != 'unknown'
+                        LIMIT 1
+                    )
+                    ELSE 'unknown'
+                END AS model,
                 m.input_tokens AS inputTokens, m.cache_read_tokens AS cacheReadTokens,
                 m.output_tokens AS outputTokens, m.cost_usd AS costUsd, m.duration_ms AS durationMs
          FROM history_message m
@@ -1272,7 +1319,17 @@ export async function topCacheWasteSteps(
         `m.role = 'assistant' AND ${inputOrder} > ? AND m.cache_read_tokens < m.input_tokens * ?`,
     );
     return db.queryAll<StepRow>(
-        `SELECT m.session_id AS sessionId, m.source AS source, m.ts AS ts, m.model AS model,
+        `SELECT m.session_id AS sessionId, m.source AS source, m.ts AS ts,
+                CASE
+                    WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model
+                    WHEN m.session_id IS NOT NULL AND m.session_id NOT IN ('', 'unknown', 'session') THEN (
+                        SELECT m2.model FROM history_message m2
+                        WHERE m2.source = m.source AND m2.session_id = m.session_id
+                          AND m2.model IS NOT NULL AND m2.model != '' AND m2.model != 'unknown'
+                        LIMIT 1
+                    )
+                    ELSE 'unknown'
+                END AS model,
                 m.input_tokens AS inputTokens, m.cache_read_tokens AS cacheReadTokens,
                 m.output_tokens AS outputTokens, m.cost_usd AS costUsd, m.duration_ms AS durationMs
          FROM history_message m
@@ -1701,25 +1758,34 @@ async function queryTimelineEvents(
     db: DbAdapter,
     whereClause: string,
     params: unknown[],
-    subWhereClause: string,
-    subParams: unknown[],
+    _subWhereClause: string,
+    _subParams: unknown[],
     limit: number,
     correlationMap?: Map<string, 'exact' | 'estimated'>,
 ): Promise<TimelineQueryResult> {
     const fetchLimit = limit + 1;
     const mainCondition = whereClause.startsWith('WHERE ') ? whereClause.slice(6) : whereClause;
-    const subCondition = subWhereClause.startsWith('WHERE ') ? subWhereClause.slice(6) : subWhereClause;
-
-    const dedupSubWhere = subCondition ? `WHERE ${subCondition} AND ` : 'WHERE ';
-    const fullWhere = mainCondition
-        ? `WHERE ${mainCondition} AND (m.request_id IS NULL OR m.rowid IN (SELECT MIN(dm.rowid) FROM history_message dm ${dedupSubWhere}dm.request_id IS NOT NULL GROUP BY dm.request_id))`
-        : `WHERE (m.request_id IS NULL OR m.rowid IN (SELECT MIN(dm.rowid) FROM history_message dm ${dedupSubWhere}dm.request_id IS NOT NULL GROUP BY dm.request_id))`;
+    const dedupCondition = `(m.request_id IS NULL OR NOT EXISTS (
+        SELECT 1 FROM history_message dm
+        WHERE dm.request_id = m.request_id AND dm.rowid < m.rowid
+    ))`;
+    const fullWhere = mainCondition ? `WHERE ${mainCondition} AND ${dedupCondition}` : `WHERE ${dedupCondition}`;
 
     const rows = await db.queryAll<JoinedTimelineRow>(
         `SELECT m.record_hash AS messageHash, m.seq AS messageSeq,
                 COALESCE(m.turn_index, m.seq) AS turnIndex,
                 m.ts AS messageTs, m.role AS messageRole, COALESCE(m.record_type, m.role) AS recordType,
-                m.source, m.session_id AS sessionId, m.model,
+                m.source, m.session_id AS sessionId,
+                CASE
+                    WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model
+                    WHEN m.session_id IS NOT NULL AND m.session_id NOT IN ('', 'unknown', 'session') THEN (
+                        SELECT m2.model FROM history_message m2
+                        WHERE m2.source = m.source AND m2.session_id = m.session_id
+                          AND m2.model IS NOT NULL AND m2.model != '' AND m2.model != 'unknown'
+                        LIMIT 1
+                    )
+                    ELSE m.model
+                END AS model,
                 m.duration_ms AS messageDurationMs, m.input_tokens AS inputTokens,
                 m.cache_read_tokens AS cacheReadTokens, m.output_tokens AS outputTokens,
                 m.content_text AS messagePayload,
@@ -1731,10 +1797,9 @@ async function queryTimelineEvents(
          FROM history_message m
          LEFT JOIN history_tool_call tc ON tc.message_hash = m.record_hash
          ${fullWhere}
-         ORDER BY COALESCE(m.ts, '0000-00-00') DESC, m.rowid DESC, COALESCE(tc.seq, 0) DESC
+         ORDER BY m.ts DESC NULLS LAST, m.rowid DESC, COALESCE(tc.seq, 0) DESC
          LIMIT ?`,
         ...params,
-        ...subParams,
         fetchLimit,
     );
 
@@ -2296,7 +2361,16 @@ export async function toolSequenceQuery(
                 tc.message_hash AS messageHash,
                 tc.session_id AS sessionId,
                 tc.source AS source,
-                m.model AS model,
+                CASE
+                    WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model
+                    WHEN m.session_id IS NOT NULL AND m.session_id NOT IN ('', 'unknown', 'session') THEN (
+                        SELECT m2.model FROM history_message m2
+                        WHERE m2.source = m.source AND m2.session_id = m.session_id
+                          AND m2.model IS NOT NULL AND m2.model != '' AND m2.model != 'unknown'
+                        LIMIT 1
+                    )
+                    ELSE m.model
+                END AS model,
                 (SELECT COUNT(*) FROM history_tool_call l WHERE l.message_hash = m.record_hash) AS links,
                 m.input_tokens AS inputTokens,
                 m.cache_read_tokens AS cacheReadTokens,

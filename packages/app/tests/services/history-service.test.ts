@@ -282,8 +282,8 @@ describe('HistoryService', () => {
             expect(artifact.totals.durationMs).toBe(550); // tool calls only — unchanged semantics
             // bySource / byModel / daily
             expect(artifact.bySource.claude?.messages).toBe(3);
-            expect(artifact.byModel['claude-opus-5']?.messages).toBe(2);
-            expect(artifact.byModel.unknown?.messages).toBe(1);
+            expect(artifact.byModel['claude-opus-5']?.messages).toBe(3);
+            expect(artifact.byModel.unknown).toBeUndefined();
             expect(artifact.daily.map((d) => d.date).sort()).toEqual(['2026-05-30', '2026-05-31']);
             // byTool ranked by duration
             expect(artifact.byTool[0]?.toolName).toBe('Bash');

@@ -309,9 +309,10 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                 WITH enriched AS (
                     SELECT m.*,
                            COALESCE(
-                               m.model,
+                               NULLIF(NULLIF(m.model, ''), 'unknown'),
                                MAX(CASE WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model END)
                                    OVER (PARTITION BY m.source, m.session_id),
+                               NULLIF(m.model, ''),
                                'unknown'
                            ) AS effective_model
                     FROM history_message m
@@ -342,9 +343,10 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                 WITH enriched AS (
                     SELECT m.*,
                            COALESCE(
-                               m.model,
+                               NULLIF(NULLIF(m.model, ''), 'unknown'),
                                MAX(CASE WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model END)
                                    OVER (PARTITION BY m.source, m.session_id),
+                               NULLIF(m.model, ''),
                                'unknown'
                            ) AS effective_model,
                            COALESCE(
@@ -1366,9 +1368,11 @@ function message5mBucketOps(bucket: string): DbBatchOp[] {
                 WITH enriched AS (
                     SELECT m.*,
                            COALESCE(
-                               m.model,
-                               MAX(CASE WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model END)
-                                   OVER (PARTITION BY m.source, m.session_id),
+                               NULLIF(NULLIF(m.model, ''), 'unknown'),
+                               (SELECT m2.model FROM history_message m2
+                                WHERE m2.source = m.source AND m2.session_id = m.session_id
+                                  AND m2.model IS NOT NULL AND m2.model != '' AND m2.model != 'unknown'
+                                LIMIT 1),
                                'unknown'
                            ) AS effective_model
                     FROM history_message m
@@ -1406,9 +1410,11 @@ function tool5mBucketOps(bucket: string): DbBatchOp[] {
                 WITH enriched AS (
                     SELECT m.*,
                            COALESCE(
-                               m.model,
-                               MAX(CASE WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model END)
-                                   OVER (PARTITION BY m.source, m.session_id),
+                               NULLIF(NULLIF(m.model, ''), 'unknown'),
+                               (SELECT m2.model FROM history_message m2
+                                WHERE m2.source = m.source AND m2.session_id = m.session_id
+                                  AND m2.model IS NOT NULL AND m2.model != '' AND m2.model != 'unknown'
+                                LIMIT 1),
                                'unknown'
                            ) AS effective_model,
                            COALESCE(

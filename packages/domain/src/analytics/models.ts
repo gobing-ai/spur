@@ -18,6 +18,7 @@ export const MODEL_PRICING: Readonly<Record<string, ModelPricing>> = {
     'gemini-2.0-flash': { inputPricePer1M: 0.1, outputPricePer1M: 0.4 },
 
     // GPT models (OpenAI) — used via Codex/OpenCode
+    'gpt-6-astra': { inputPricePer1M: 2.5, outputPricePer1M: 10 },
     'gpt-4o': { inputPricePer1M: 2.5, outputPricePer1M: 10 },
     'gpt-4o-mini': { inputPricePer1M: 0.15, outputPricePer1M: 0.6 },
     'gpt-4-turbo': { inputPricePer1M: 10, outputPricePer1M: 30 },

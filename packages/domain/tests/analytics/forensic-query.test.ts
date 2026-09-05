@@ -9,6 +9,7 @@ import {
     bySession,
     byTool,
     cacheWasteAggregate,
+    consolidatedTimeline,
     drift,
     loops,
     messageRollup,
@@ -846,6 +847,62 @@ describe('persisted tool identity (0739 R1/R2/R5/R6/R7)', () => {
         );
         expect(row?.effective_tool_name).toBe('Bash');
         expect(row?.tool_name_alias).toBe('Bash');
+
+        db.close();
+    });
+
+    test('messageRollup, toolRollup, and timeline queries propagate session model to rows where model is null or empty', async () => {
+        const db = await setup();
+
+        // Turn context record carries model 'gpt-6-astra'
+        await db.run(
+            `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq, role, record_type, disposition, ts, model, input_tokens, output_tokens, provenance, imported_at)
+             VALUES ('m-turn', 'codex', 'codex.jsonl', 1, 's-codex', 1, 'meta', 'turn_context', 'meta', '2026-08-21T10:00:00Z', 'gpt-6-astra', 0, 0, 'agent', '2026-08-21T12:00:00Z')`,
+        );
+        // Assistant message has model NULL (as in Codex sessions)
+        await db.run(
+            `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq, role, record_type, disposition, ts, model, input_tokens, output_tokens, provenance, imported_at)
+             VALUES ('m-asst', 'codex', 'codex.jsonl', 2, 's-codex', 2, 'assistant', 'message', 'ok', '2026-08-21T10:01:00Z', NULL, 500, 200, 'agent', '2026-08-21T12:00:00Z')`,
+        );
+        // Tool call linked to assistant message
+        await db.run(
+            `INSERT INTO history_tool_call (record_hash, message_hash, source, source_file, source_line, session_id, seq, tool_name, call_id, status, duration_ms, imported_at)
+             VALUES ('tc-asst', 'm-asst', 'codex', 'codex.jsonl', 3, 's-codex', 1, 'exec', 'call_exec_1', 'success', 150, '2026-08-21T12:00:00Z')`,
+        );
+
+        const mRollup = await messageRollup(db, ALL);
+        expect(mRollup.length).toBe(1);
+        expect(mRollup[0]?.model).toBe('gpt-6-astra');
+        expect(mRollup[0]?.inputTokens).toBe(500);
+
+        const tRollup = await toolRollup(db, ALL);
+        expect(tRollup.length).toBe(1);
+        expect(tRollup[0]?.model).toBe('gpt-6-astra');
+        expect(tRollup[0]?.toolCalls).toBe(1);
+
+        const timeline = await consolidatedTimeline(db, ALL);
+        const asstEvent = timeline.events.find((e) => e.eventType === 'message' && e.role === 'assistant');
+        expect(asstEvent?.model).toBe('gpt-6-astra');
+
+        const seq = await toolSequenceQuery(db, { mode: 'consolidated', sel: ALL }, {});
+        expect(seq.rows[0]?.model).toBe('gpt-6-astra');
+
+        db.close();
+    });
+
+    test('arbitrary new model names are preserved as-is without coercion', async () => {
+        const db = await setup();
+
+        const brandNewModel = 'future-agent-model-2027-preview';
+        await db.run(
+            `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq, role, record_type, disposition, ts, model, input_tokens, output_tokens, provenance, imported_at)
+             VALUES ('m-new', 'hermes', 'hermes.jsonl', 1, 's-new', 1, 'assistant', 'message', 'ok', '2026-08-21T10:00:00Z', ?, 300, 100, 'agent', '2026-08-21T12:00:00Z')`,
+            brandNewModel,
+        );
+
+        const mRollup = await messageRollup(db, ALL);
+        expect(mRollup.find((r) => r.model === brandNewModel)).toBeDefined();
+        expect(mRollup.find((r) => r.model === 'unknown')).toBeUndefined();
 
         db.close();
     });

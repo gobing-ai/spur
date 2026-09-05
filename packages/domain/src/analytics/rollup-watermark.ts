@@ -17,10 +17,10 @@ import type { DbAdapter } from '@gobing-ai/ts-db';
  * rebuilt rather than extended from the existing watermark (R6 / R27). A
  * derivation-SQL change without a bump fails the pinned-value test.
  */
-// v4 (0763 re-audit): preserve raw-only source/day rows, keep an empty loop scope
-// as a no-op, and include sources first seen in the alias-update delta. Marts
-// materialized under v3 must rebuild rather than extend.
-export const ROLLUP_DEFINITION_VERSION = 'v4';
+// v5: resolve session model in incremental 5m buckets and raw query fallbacks
+// so brand-new/sparse models (e.g. gpt-6-astra) are accurately attributed.
+// Marts materialized under v4 must rebuild rather than extend.
+export const ROLLUP_DEFINITION_VERSION = 'v5';
 
 /** A table with no watermark row reports this sentinel state (empty watermark → stale). */
 export const EMPTY_ROLLUP_WATERMARK: RollupWatermarkState = {
