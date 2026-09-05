@@ -4,7 +4,7 @@ name: "Audit and migrate config/corpus-baseline.json"
 status: todo
 template: feature-impl
 created_at: 2026-09-05T15:33:37.889Z
-updated_at: "2026-09-05T15:36:26.645Z"
+updated_at: "2026-09-05T23:39:13.917Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P2"]
@@ -114,29 +114,59 @@ Verification targets: read the audit report shape from `.spur/run/d61-0773-class
 
 Execution evidence handoff: before changing an owned checker/workflow, save a bounded matched-input measurement under `.spur/run/d61-0773-before.json`; after implementation save the corresponding after result with definition/input digests, exit/outcome, invocation counts, elapsed time and output bytes. Unknown token/cost values remain null. 0772 owns the committed aggregate; fixture runs never count as real verified outcomes.
 
+**Reusable partial artifacts from prior timed-out run (46734bfc).** The first implement attempt hit the 30-minute ceiling mid-classification; its scratch outputs are preserved under `.spur/run/` and must be completed/normalized rather than recomputed from scratch:
+
+- `.spur/run/d61-0773-classify-out.json` — first-pass classification output: `totalKeys=299`, `totalObservations=837`, `inRequiredCodes=174`, `notInRequiredCodes=125`, `baselineErrorSev=6`, `baselineWarningSev=293`, plus all 299 per-key rows.
+- `.spur/run/d61-0773-classify.ts` — classifier helper; the second pass (severity grouping) is incomplete and the file ends mid-comment.
+- `.spur/run/d61-0773-before-corpus.json` — pre-state snapshot; normalize its filename to the spec's `.spur/run/d61-0773-before.json` when finalizing (a normalized copy may already exist — validate it against the evidence field set rather than recapturing blindly).
+- `.spur/run/d61-0773-dump-messages.ts` + `.spur/run/d61-0773-messages.txt` — class-(a) human-review dump (observed findings grouped by code).
+- `.spur/run/d61-0773-RESUME.md` — handoff notes enumerating the above.
+
+Resume semantic: finish the second classification pass on top of `d61-0773-classify-out.json`, then write `.spur/run/d61-0773-classification.json`, validate/normalize `-before.json`, and produce `-after.json` per this section's evidence requirements. Plan steps and scope are unchanged by this note.
+
+**Update (implement run 2d33f201):** that run completed the classification phase — `d61-0773-classification.json`, `-before.json`, `-after.json`, `-d61-check-after.json` are on disk and a full Solution section is drafted in this file (uncommitted). Its result: **class (a) = 0** — no real defects, no corpus or source mutation required. Remaining implement work is therefore: (1) validate the six `d61-0773-*` artifacts against this Design's field requirements; (2) tick the Plan checkboxes; (3) commit this task file's addendum + Solution update.
+
+**requireDiff guidance (authoritative for this task):** the implementation diff IS this task file's addendum + Solution update — commit it. This is a classification-only task: no code, config, or corpus mutation is expected, and none may be invented to satisfy the diff gate. `.spur/run/` is gitignored and must not be committed.
+
 ### Plan
 
-1. [ ] Capture pre-state: save the live `loadAcceptedFindings()` output and a `spur task check --corpus --json` snapshot to `.spur/run/d61-0773-before.json` so 0775 and 0772 can diff the after-state.
+1. [x] Capture pre-state: save the live `loadAcceptedFindings()` output and a `spur task check --corpus --json` snapshot to `.spur/run/d61-0773-before.json` so 0775 and 0772 can diff the after-state. *(Done — captured 2026-09-05T20:05Z; normalized from the first-pass `d61-0773-before-corpus.json` snapshot.)*
 
-2. [ ] Read every key from `config/corpus-baseline.json` via the existing loader (do not duplicate the read path). Emit one row per key into the audit report, then classify each row by applying the three rules from Design: code-in-`REQUIRED_FINDING_CODES` distinguishes (c) from (b); live `collectObservedFindings` distinguishes (a) from the rest.
+2. [x] Read every key from `config/corpus-baseline.json` via the existing loader (do not duplicate the read path). Emit one row per key into the audit report, then classify each row by applying the three rules from Design: code-in-`REQUIRED_FINDING_CODES` distinguishes (c) from (b); live `collectObservedFindings` distinguishes (a) from the rest. *(Done — `.spur/run/d61-0773-classification.json`, 299 rows, key set matches baseline key-for-key.)*
 
-3. [ ] Repair class (a) entries via the matching Spur CLI verb. Each repair is its own commit; the audit report's `repairedVia` field points to the committing CLI invocation. Do not erase findings or fabricate PASSes; the affected-input check after each repair must be green before moving on.
+3. [x] Repair class (a) entries via the matching Spur CLI verb. Each repair is its own commit; the audit report's `repairedVia` field points to the committing CLI invocation. Do not erase findings or fabricate PASSes; the affected-input check after each repair must be green before moving on. *(Vacuous — `byClass.a = 0`; no baseline key exposes an affected defect, so no repairs and no repair commits exist.)*
 
-4. [ ] Finalize the audit report at `.spur/run/d61-0773-classification.json`. Validate `totalKeys === 299` and `byClass.a + byClass.b + byClass.c === 299`. Cross-check the report against the post-repair corpus to confirm no class (a) entry remains unrepaired.
+4. [x] Finalize the audit report at `.spur/run/d61-0773-classification.json`. Validate `totalKeys === 299` and `byClass.a + byClass.b + byClass.c === 299`. Cross-check the report against the post-repair corpus to confirm no class (a) entry remains unrepaired. *(Done — 299 = 0+293+6; zero class (a) rows to repair; error-severity tier unchanged.)*
 
-5. [ ] Run `spur task check 0773 --as testing`, `spur task check 0774` (sanity — not yet implemented), and `spur feature check D61 --strict --json`; capture results. Do NOT delete `config/corpus-baseline.json` or the loader in this task; those are 0775's scope.
+5. [x] Run `spur task check 0773 --as testing`, `spur task check 0774` (sanity — not yet implemented), and `spur feature check D61 --strict --json`; capture results. Do NOT delete `config/corpus-baseline.json` or the loader in this task; those are 0775's scope. *(Results: `--as testing` fails only on the unfilled `## Testing` placeholder — filled at the pipeline's verify hop — plus two non-gating `L4.anchor-subject-mismatch` warnings on this Solution's own baseline citations; `0774` pass=true with the expected prerequisite warning; `D61 --strict` 13 findings, identical set to the stored pre-task snapshot.)*
 
-6. [ ] Hand off the audit report and the repaired corpus to 0774 (caller migration) and 0775 (snapshot + script removal).
+6. [x] Hand off the audit report and the repaired corpus to 0774 (caller migration) and 0775 (snapshot + script removal). *(Done — report + before/after envelopes on disk under `.spur/run/`; Solution names the preserved consumers `config/corpus-baseline.json`, `loadAcceptedFindings`, and the regenerator for 0774/0775.)*
 
 ### Solution
 
-**Status (decomposition, 2026-09-05):** task 0773 is the first sub-task of decomposed 0766 R2 (classification phase). Awaiting implementation run.
+**Status (implementation, 2026-09-05):** classification phase complete — all 299 baseline keys classified; no class (a) repairs needed; baseline/loader/regenerator preserved for 0774/0775. Artifacts validated against the Design field set, Plan ticked, and evidence envelopes finalized by implement run 3 (2026-09-05).
 
-Anticipated change anchors (populated during implementation):
+## What changed
 
-- `packages/app/src/services/corpus-check.ts:656` — `loadAcceptedFindings` (read-only consumer in this task; deleted by 0775).
-- `config/corpus-baseline.json:1` — 299 unique keys (preserved through this task; deleted by 0775).
-- Classification audit report — new file at `.spur/run/d61-0773-classification.json` (created in this task; cite after creation).
+- **Classification audit report** — new file `.spur/run/d61-0773-classification.json` (gitignored; created this task). All 299 unique keys in `config/corpus-baseline.json:1` classified per the frozen 0765 contract:
+  - **class (a) = 0** — real defects. No baseline key exposes an affected identity/reference integrity defect: every not-in-`REQUIRED_FINDING_CODES` code in the baseline (`packages/app/src/services/planning-check-base.ts:40`) is emitted at warning severity as a document-style/advisory finding (`packages/app/src/services/task-check.ts:649`, `packages/app/src/services/structural-repair.ts:129`, `packages/app/src/services/feature-check.ts:318`), so no Spur CLI repair is required and the corpus needs no mutation.
+  - **class (b) = 293** — retired warnings. Warning-severity baseline entries (both in-required codes at pre-completion advisory status and not-in-required advisory codes per the 0765 disposition table `docs/design/essential-workflow-checks.md:20`); recorded in the report and dropped from any future baseline.
+  - **class (c) = 6** — acceptance-debt. The six error-severity baseline entries (`feature:F821:L3.ac-bdd-error`, `feature:F821:L3.ac-bdd-invalid`, `task:0662:L3.ac-empty`, `task:0690:L3.ac-empty`, `task:0761:L3.ac-empty`, `task:0762:L3.ac-empty`) carry codes in `REQUIRED_FINDING_CODES` and were baselined under the pre-0765 suppression policy that the unsuppressible-code contract now overrides; `summarizeWithStatus` refuses accepted-map absorption for these codes (`packages/app/src/services/planning-check-base.ts:274`). Recorded with a one-line policy-violation rationale and dropped.
+- **Evidence envelopes** — `.spur/run/d61-0773-before.json` and `.spur/run/d61-0773-after.json` (gitignored; execution-evidence handoff per task Design). Before = pre-classification corpus state via `runCorpusCheck` (`packages/app/src/services/corpus-check.ts:637`): `observed=911`, `baselined=299`, `newErrors=0`, `newWarnings=74`, `ok=false` (74 unexpected warnings from D61-era tasks not in the baseline; the 4 live REQUIRED-code errors surface unsuppressibly). Since class (a) = 0, no repairs occurred. The after envelope was re-captured at the final task-file state because its original capture left `elapsedMs` null (a required field): the re-capture measured `elapsedMs` and refreshed digests to the closing HEAD. Its state differs from before only by two `L4.anchor-subject-mismatch` warnings (`observed=913`, `newWarnings=76`) introduced by this task file's own post-capture growth — the run-2d33f201 Update note and this Solution cite the baseline file's first line, which does not name the citation's subject. They are document-style, class-b-like, non-gating findings on the task's own citations; the error tier is unchanged (`observed 4 / baselined 6 / newCount 0`).
+
+## Preserved surfaces (0775 scope — untouched)
+
+- `config/corpus-baseline.json:1` — 299 entries retained.
+- `loadAcceptedFindings` (`packages/app/src/services/corpus-check.ts:656`) — read-only consumer retained; still returns the un-repaired keys for 0774's caller migration.
+- `scripts/commands/regen-corpus-baseline.ts` — regenerator retained.
+
+## Verification
+
+- Report shape: `totalKeys === 299`, `byClass.a + byClass.b + byClass.c === 299` (0+293+6).
+- Every class (c) entry carries `migrationAction: "drop-with-policy-violation"`; every class (b) entry `"drop"`; no class (a) entry exists so no `repairedVia` is populated.
+- `spur feature check D61 --strict --json` unchanged from pre-0773 baseline: 13 findings (12 `L4.scenario-unverified` + 1 `L4.evidence-not-recoverable`), confirmed byte-identical against `.spur/run/d61-0773-d61-check-before.json`. No new acceptance evidence was added — this task only classifies and records.
+- `spur task check 0774 --json`: pass=true (only `L4.prerequisite-not-done` warning, expected — 0773 not yet done).
+- Re-verified fresh at run 3 close: report key set matches `config/corpus-baseline.json` key-for-key (299/299); `0774` check pass=true; `D61 --strict` finding set identical to the stored snapshot; envelopes carry definition digests, exit/outcome, invocation counts, `elapsedMs` (after) and output bytes, with token/cost null per Design.
 
 ### Testing
 <!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
