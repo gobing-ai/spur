@@ -99,9 +99,12 @@ describe('database compaction (0746)', () => {
     test('compaction runs VACUUM and records the marker when reclaim is deterministically above the gate', async () => {
         const { db, path, dir } = await fileDb();
         // A fresh migrated DB's incidental page slack is platform-dependent (below the 3% gate on
-        // CI since migration 0039), so manufacture guaranteed reclaim: fill table pages then free
-        // them. DELETE leaves the pages' unused bytes in dbstat until VACUUM repacks them.
-        for (let i = 0; i < 500; i++) {
+        // CI since migration 0039), so manufacture guaranteed dbstat `unused`: insert rows ~2KB
+        // wide. Every leaf page fits several but never packs flush, so partial-fill slack is a
+        // large fraction of the file on any page size — no DELETE/free-list contingency (freed
+        // pages leave the btree and dbstat stops counting them).
+        const filler = 'x'.repeat(2048);
+        for (let i = 0; i < 300; i++) {
             await db.run(
                 `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq,
                      role, record_type, disposition, ts, model, input_tokens, output_tokens, cache_read_tokens,
@@ -121,11 +124,10 @@ describe('database compaction (0746)', () => {
                 100,
                 50,
                 20,
-                'agent',
+                filler,
                 '2026-08-01T00:00:00Z',
             );
         }
-        await db.run(`DELETE FROM history_message WHERE source_file = ?`, 'bulk.jsonl');
         const result = await compactDatabase(db, { dbPath: path, now: NOW });
         expect(result.ran).toBe(true);
         expect(result.skippedReason).toBeUndefined();
