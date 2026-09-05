@@ -84,6 +84,8 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
+**Status (batch halt, 2026-09-05):** task 0767 is **not-attempted** at the batch level — the batch halted at task 0766 (deferred) with stop-the-batch default. The remaining 6 tasks (0767-0772) inherit the halted-batch state and require a follow-up session to drive per the topo order (0767/0768 after 0766, 0769/0770 after 0766/0767/0768, 0771 after 0767/0768, 0772 last).
+
 ### Testing
 
 <!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->

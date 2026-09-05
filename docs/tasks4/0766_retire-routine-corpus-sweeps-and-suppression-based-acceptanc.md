@@ -91,6 +91,25 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
+**Status (batch halt, 2026-09-05):** task 0766 is **deferred** at the batch level.
+
+The scope of 0766 requires migration of 299 baseline keys, removal of `loadAcceptedFindings` from every CLI / fallback path, deletion of `config/corpus-baseline.json` + `regen-corpus-baseline.ts`, deletion of `config/workflow-composition-baseline.json` + `regen-composition-baseline.ts`, and a fixture migration across the test corpus. A 0766 R2 attempt that removed `accepted` at the gate broke 11/172 CLI task-check tests (verified by `bun test apps/cli/tests/commands/task.test.ts`), confirming that the migration requires per-fixture remediation that exceeds one-session scope.
+
+**Scope split (handoff to a follow-up session):**
+
+1. **Audit `config/corpus-baseline.json`**: classify the 299 keys as (a) real defects to repair via Spur CLI, (b) stylistic warnings the design contract retires, (c) acceptance-debt entries that should never have been baselined. Migrate each class to its proper destination.
+2. **Migrate CLI/fallback `accepted` callers**: the 2 sites in `apps/cli/src/commands/task.ts` (line ~1286, ~1628) currently pass `accepted` to `svc.check()`. Removing the parameter requires fixture updates so that no current finding is incorrectly demoted; until those fixtures are migrated, the loader is kept in `packages/app/src/services/corpus-check.ts:656` (`loadAcceptedFindings`).
+3. **Delete the regenerator scripts + snapshots**: `scripts/commands/regen-corpus-baseline.ts`, `scripts/commands/regen-composition-baseline.ts`, `config/corpus-baseline.json`, `config/workflow-composition-baseline.json`. Replace the snapshot equality tests in `packages/app/tests/workflow/composition-baseline.test.ts` with focused behavior tests (the design contract target).
+4. **Keep the JSON response compatibility fixture**: `packages/app/tests/fixtures/json-raw-baseline.json` stays — the contract is "the JSON compatibility fixture still verifies its response contract", not "delete every baseline-shaped file".
+5. **Rebuild the CLI bundle and assert retired assets are absent from generated output**: bundle rebuild + binary diff assertion, task 0772 P1.
+
+**What 0765 handed off to 0766 (frozen contracts):**
+
+- `REQUIRED_FINDING_CODES` in `packages/app/src/services/planning-check-base.ts` is the unsuppressible set. Any finding code in this set cannot be absorbed by `accepted`-map suppression.
+- `accepted`-map suppression remains active in `summarizeWithStatus()` for advisory warnings only. The 0766 follow-up removes the parameter entirely once fixture migration makes the snapshot irrelevant.
+
+**Why a partial 0766 is not committed here:** the design contract says "no automatic regeneration accepts new debt during migration" — committing a partial 0766 with the snapshot intact would violate that. The right artifact for 0766 is a follow-up task that classifies all 299 keys with the audit trail and only then deletes the snapshot.
+
 ### Testing
 
 <!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
