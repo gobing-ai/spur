@@ -1012,7 +1012,7 @@ export async function loopRepeatedCallsQuery(
                 tc.session_id AS sessionId,
                 tc.source AS source,
                 COALESCE(NULLIF(NULLIF(m.model, ''), 'unknown'), ?) AS model,
-                (SELECT COUNT(*) FROM history_tool_call l WHERE l.message_hash = m.record_hash) AS links,
+                1 AS links,
                 m.input_tokens AS inputTokens,
                 m.cache_read_tokens AS cacheReadTokens,
                 m.output_tokens AS outputTokens

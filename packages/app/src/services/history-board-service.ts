@@ -1572,7 +1572,12 @@ export class LiveHistoryBoardService implements HistoryBoardService {
 
         const sel = toArtifactSelector(filter);
         const rollupsFresh = await historyBoardRollupsFresh(db);
-        const [loopRows, cacheWasteRows, sessionRows, largeSteps, slowStepsRows, modelCompRows] = rollupsFresh
+        const hasRollupRows = await db.queryFirst<{ ok: number }>(
+            'SELECT 1 AS ok FROM history_board_loop_findings LIMIT 1',
+        );
+        const useRollup = rollupsFresh || hasRollupRows?.ok === 1;
+        const effectiveSel = rollupsFresh ? sel : boundStaleSelector(sel);
+        const [loopRows, cacheWasteRows, sessionRows, largeSteps, slowStepsRows, modelCompRows] = useRollup
             ? await Promise.all([
                   historyBoardLoopsFromRollup(db, sel, 100),
                   historyBoardRankedStepsFromRollup(db, sel, 'cache-waste', 10),
@@ -1582,61 +1587,74 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                   historyBoardModelComparisonFromRollup(db, sel),
               ])
             : await Promise.all([
-                  loops(db, sel),
-                  topCacheWasteSteps(db, sel, 10),
-                  bySession(db, sel, 5),
-                  topStepsByTokens(db, sel, 10),
-                  topStepsByDuration(db, sel, 10),
-                  modelComparison(db, sel),
+                  loops(db, effectiveSel),
+                  topCacheWasteSteps(db, effectiveSel, 10),
+                  bySession(db, effectiveSel, 5),
+                  topStepsByTokens(db, effectiveSel, 10),
+                  topStepsByDuration(db, effectiveSel, 10),
+                  modelComparison(db, effectiveSel),
               ]);
 
+        const EAGER_LOOP_DETAIL_LIMIT = 10;
         const loopFindings = await Promise.all(
-            loopRows.map(async (l) => {
-                let repeatedCalls: HistoryToolCallItem[] = [];
-                try {
-                    const callRows = await loopRepeatedCallsQuery(db, {
-                        source: l.source,
-                        sessionId: l.sessionId,
-                        toolName: l.toolName,
-                        argsDigest: l.argsDigest,
-                        model: l.model,
-                        limit: 50,
-                    });
+            loopRows.map(async (l, idx) => {
+                let repeatedCalls: HistoryToolCallItem[] | undefined;
+                let avgTokens = 250;
+                if (idx < EAGER_LOOP_DETAIL_LIMIT) {
+                    try {
+                        const callRows = await loopRepeatedCallsQuery(db, {
+                            source: l.source,
+                            sessionId: l.sessionId,
+                            toolName: l.toolName,
+                            argsDigest: l.argsDigest,
+                            model: l.model,
+                            limit: 50,
+                        });
 
-                    repeatedCalls = callRows.map((row) => {
-                        const category = toolCategory(row.toolName);
-                        const links = row.links && row.links > 0 ? row.links : 1;
-                        const billedTokens = row.inputTokens + row.outputTokens;
-                        return {
-                            seq: row.toolSeq,
-                            toolSeq: row.toolSeq,
-                            ts: row.ts,
-                            toolName: row.toolName,
-                            category,
-                            status: row.status === 'ok' ? 'ok' : row.status === 'error' ? 'error' : 'unknown',
-                            durationMs: row.durationMs,
-                            durationSource: row.durationMs !== null ? 'measured' : 'unmeasured',
-                            resultBytes: row.resultBytes,
-                            argsRaw: row.argsRaw,
-                            argsDigest: row.argsDigest,
-                            errorText: row.errorText,
-                            callId: row.callId,
-                            messageHash: row.messageHash,
-                            sessionId: row.sessionId,
-                            source: row.source,
-                            model: row.model,
-                            tokens: {
-                                billedTokens: Math.round(billedTokens / links),
-                                freshInputTokens: Math.round(row.inputTokens / links),
-                                cacheReadTokens: Math.round(row.cacheReadTokens / links),
-                                outputTokens: Math.round(row.outputTokens / links),
-                                cacheSavedTokens: 0,
-                            },
-                        };
-                    });
-                } catch {
-                    repeatedCalls = [];
+                        if (callRows.length > 0) {
+                            const totalSampleTokens = callRows.reduce(
+                                (acc, r) => acc + r.inputTokens + r.outputTokens,
+                                0,
+                            );
+                            avgTokens = Math.max(1, Math.round(totalSampleTokens / callRows.length));
+                        }
+
+                        repeatedCalls = callRows.map((row) => {
+                            const category = toolCategory(row.toolName);
+                            const billedTokens = row.inputTokens + row.outputTokens;
+                            return {
+                                seq: row.toolSeq,
+                                toolSeq: row.toolSeq,
+                                ts: row.ts,
+                                toolName: row.toolName,
+                                category,
+                                status: row.status === 'ok' ? 'ok' : row.status === 'error' ? 'error' : 'unknown',
+                                durationMs: row.durationMs,
+                                durationSource: row.durationMs !== null ? 'measured' : 'unmeasured',
+                                resultBytes: row.resultBytes,
+                                argsRaw: row.argsRaw,
+                                argsDigest: row.argsDigest,
+                                errorText: row.errorText,
+                                callId: row.callId,
+                                messageHash: row.messageHash,
+                                sessionId: row.sessionId,
+                                source: row.source,
+                                model: row.model,
+                                tokens: {
+                                    billedTokens,
+                                    freshInputTokens: row.inputTokens,
+                                    cacheReadTokens: row.cacheReadTokens,
+                                    outputTokens: row.outputTokens,
+                                    cacheSavedTokens: 0,
+                                },
+                            };
+                        });
+                    } catch {
+                        repeatedCalls = [];
+                    }
                 }
+
+                const wastedTokens = Math.max(0, l.repeats - 1) * avgTokens;
 
                 return {
                     tool: l.toolName,
@@ -1645,7 +1663,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                     repeats: l.repeats,
                     fromSeq: l.firstSeq,
                     toSeq: l.lastSeq,
-                    wastedTokens: l.repeats * 250,
+                    wastedTokens,
                     repeatedCalls,
                 };
             }),
