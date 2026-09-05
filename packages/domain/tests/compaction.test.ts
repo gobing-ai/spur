@@ -96,39 +96,17 @@ describe('database compaction (0746)', () => {
         rmSync(dir, { recursive: true, force: true });
     });
 
-    test('compaction runs VACUUM and records the marker when reclaim is deterministically above the gate', async () => {
+    test('compaction runs VACUUM and records the marker once the reclaim gate passes', async () => {
         const { db, path, dir } = await fileDb();
-        // A fresh migrated DB's incidental page slack is platform-dependent (below the 3% gate on
-        // CI since migration 0039), so manufacture guaranteed dbstat `unused`: insert rows ~2KB
-        // wide. Every leaf page fits several but never packs flush, so partial-fill slack is a
-        // large fraction of the file on any page size — no DELETE/free-list contingency (freed
-        // pages leave the btree and dbstat stops counting them).
-        const filler = 'x'.repeat(2048);
-        for (let i = 0; i < 300; i++) {
-            await db.run(
-                `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq,
-                     role, record_type, disposition, ts, model, input_tokens, output_tokens, cache_read_tokens,
-                     provenance, imported_at)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-                `bulk${i}`,
-                'claude',
-                'bulk.jsonl',
-                1,
-                'bulk',
-                1,
-                'assistant',
-                'message',
-                'ok',
-                '2026-08-01T00:00:00Z',
-                'gpt-5',
-                100,
-                50,
-                20,
-                filler,
-                '2026-08-01T00:00:00Z',
-            );
-        }
-        const result = await compactDatabase(db, { dbPath: path, now: NOW });
+        // The reclaim estimate is environmental, not data-shaped: CI Linux SQLite builds lack
+        // the compile-time-optional `dbstat` module, so the real estimator always returns 0
+        // there. Stub the sensor to exercise the success path (VACUUM, size measurement, marker)
+        // deterministically on every platform.
+        const result = await compactDatabase(db, {
+            dbPath: path,
+            now: NOW,
+            estimateReclaim: async () => 1 << 30,
+        });
         expect(result.ran).toBe(true);
         expect(result.skippedReason).toBeUndefined();
         expect(result.bytesAfter).toBeLessThanOrEqual(result.bytesBefore);

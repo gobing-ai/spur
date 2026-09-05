@@ -107,7 +107,19 @@ async function databaseBytes(db: DbAdapter): Promise<number> {
  *
  * Best-effort: a failure records `ran: false` and never aborts the daily run.
  */
-export async function compactDatabase(db: DbAdapter, opts: { dbPath: string; now?: Date }): Promise<CompactionResult> {
+export async function compactDatabase(
+    db: DbAdapter,
+    opts: {
+        dbPath: string;
+        now?: Date;
+        /**
+         * Test seam overriding the environment-dependent reclaim estimate: CI Linux SQLite
+         * builds lack the compile-time-optional `dbstat` module, so the real estimator always
+         * returns 0 there and the VACUUM success path would be unreachable in tests.
+         */
+        estimateReclaim?: (db: DbAdapter) => Promise<number>;
+    },
+): Promise<CompactionResult> {
     const bytesBefore = await databaseBytes(db);
 
     try {
@@ -124,7 +136,7 @@ export async function compactDatabase(db: DbAdapter, opts: { dbPath: string; now
             return { ran: false, skippedReason: 'recent-run', bytesBefore, bytesAfter: bytesBefore };
         }
 
-        const reclaimable = await estimateReclaimableBytes(db);
+        const reclaimable = await (opts.estimateReclaim ?? estimateReclaimableBytes)(db);
         if (bytesBefore === 0) {
             return { ran: false, skippedReason: 'empty-db', bytesBefore, bytesAfter: bytesBefore };
         }
