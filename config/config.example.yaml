@@ -35,18 +35,29 @@ bootstrap:
     url: .spur/spur.db # ${DATABASE_URL} interpolation supported
   scheduler:
     enabled: false # CLI is run-once; no scheduler
-    # Declarative jobs (task 0734) — only tick while `spur serve` runs, so
-    # they pair with enabled: true. Each tick enqueues `scheduler.custom`;
-    # the job worker runs `command` through /bin/sh -c in the project root.
-    # Schedule form is either `intervalMinutes` (legacy) or a five-field
-    # cron in local process time (*/N steps, ranges, and lists supported).
-    # jobs:
-    #   - name: cache-efficiency
-    #     intervalMinutes: 5
-    #     command: python tools/rollup.py
-    #   - name: nightly-rollup
-    #     cron: "0 3 * * *"
-    #     command: bun tools/nightly.ts
+    # Periodic executions live here and nowhere else (task 0750). A tick
+    # enqueues `scheduler.custom`, which the server's job worker runs through
+    # /bin/sh -c in the project root. Use the repo-local CLI, never a global
+    # `spur` that may be a stale bundle (AGENTS.md history-validation rule).
+    jobs:
+      # Incremental refresh, waking hours only (07:00-23:50; the cron hour range
+      # keeps 00:00-06:59 quiet). `history daily` = import + analyze; analyze is
+      # what refreshes the Board History rollups (token usage included) - import
+      # alone never does. Checkpoint resume + the rollup-freshness short-circuit
+      # keep a no-op tick cheap (I81).
+      - name: history-refresh
+        cron: "*/10 7-23 * * *"
+        command: spur --no-logo history daily
+
+      # 05:00 daily: full-corpus import (checkpoint resume self-heals gaps),
+      # then the twelve-section history-anatomy diagnostic report headless. On
+      # a cache hit the workflow skips the token-expensive model stages and
+      # republishes provenance (ADR-079), so a ready report costs no tokens.
+      - name: history-daily-report
+        cron: "3 5 * * *"
+        command: >-
+          spur --no-logo history import --source all &&
+          spur --no-logo workflow run config/workflows/history-anatomy.yaml --quiet
 
 # ── Spur app section (validated by spurConfigSchema in
 # @gobing-ai/spur-config) ──
