@@ -96,6 +96,48 @@ describe('database compaction (0746)', () => {
         rmSync(dir, { recursive: true, force: true });
     });
 
+    test('compaction runs VACUUM and records the marker when reclaim is deterministically above the gate', async () => {
+        const { db, path, dir } = await fileDb();
+        // A fresh migrated DB's incidental page slack is platform-dependent (below the 3% gate on
+        // CI since migration 0039), so manufacture guaranteed reclaim: fill table pages then free
+        // them. DELETE leaves the pages' unused bytes in dbstat until VACUUM repacks them.
+        for (let i = 0; i < 500; i++) {
+            await db.run(
+                `INSERT INTO history_message (record_hash, source, source_file, source_line, session_id, seq,
+                     role, record_type, disposition, ts, model, input_tokens, output_tokens, cache_read_tokens,
+                     provenance, imported_at)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                `bulk${i}`,
+                'claude',
+                'bulk.jsonl',
+                1,
+                'bulk',
+                1,
+                'assistant',
+                'message',
+                'ok',
+                '2026-08-01T00:00:00Z',
+                'gpt-5',
+                100,
+                50,
+                20,
+                'agent',
+                '2026-08-01T00:00:00Z',
+            );
+        }
+        await db.run(`DELETE FROM history_message WHERE source_file = ?`, 'bulk.jsonl');
+        const result = await compactDatabase(db, { dbPath: path, now: NOW });
+        expect(result.ran).toBe(true);
+        expect(result.skippedReason).toBeUndefined();
+        expect(result.bytesAfter).toBeLessThanOrEqual(result.bytesBefore);
+        // The marker recorded by the successful run gates the immediately-following run.
+        const again = await compactDatabase(db, { dbPath: path, now: new Date(NOW.getTime() + 1) });
+        expect(again.ran).toBe(false);
+        expect(again.skippedReason).toBe('recent-run');
+        db.close();
+        rmSync(dir, { recursive: true, force: true });
+    });
+
     test('board-read invariance: a fixed query returns identical results before and after compaction', async () => {
         const { db, path, dir } = await fileDb();
         await seedCorpus(db);
