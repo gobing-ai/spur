@@ -23,6 +23,7 @@
     ├── [done] **D4**: Workflow YAML rule-style extensions ([D4_workflow-yaml-rule-style-extensions.md](./D4_workflow-yaml-rule-style-extensions.md))
     ├── [done] **D5**: Workflow pipeline contract, progress projection, and staged consolidation ([D5_task-pipeline2-promotion-gated-by-the-eval-suite-bar.md](./D5_task-pipeline2-promotion-gated-by-the-eval-suite-bar.md))
     ├── [active] **D6**: Workflow cost, deterministic ownership surface, and role-addressed coordination ([D6_workflow-cost-deterministic-ownership-surface-and-role-addressed-coordination.md](./D6_workflow-cost-deterministic-ownership-surface-and-role-addressed-coordination.md))
+        └── [backlog] **D61**: Essential workflow checks and observable execution ([D61_essential-workflow-checks-and-observable-execution.md](./D61_essential-workflow-checks-and-observable-execution.md))
     ├── [done] **D7**: Workflow todo projection: show --format for deterministic plan rendering ([D7_workflow-todo-projection-show-format-for-deterministic-plan-rendering.md](./D7_workflow-todo-projection-show-format-for-deterministic-plan-rendering.md))
     ├── [done] **D8**: Proportional workflow upgrade strategy ([D8_proportional-workflow-upgrade-strategy.md](./D8_proportional-workflow-upgrade-strategy.md))
     └── [done] **D9**: Workflow seam stabilization and proportional gate rollout ([D9_workflow-seam-stabilization-and-proportional-gate-rollout.md](./D9_workflow-seam-stabilization-and-proportional-gate-rollout.md))
