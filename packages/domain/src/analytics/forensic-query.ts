@@ -988,8 +988,15 @@ export async function loopRepeatedCallsQuery(
         toolName: string;
         argsDigest: string | null;
         limit?: number;
+        model?: string | null;
     },
 ): Promise<LoopRepeatedCallRow[]> {
+    const argsDigestSql =
+        params.argsDigest !== null && params.argsDigest !== ''
+            ? 'tc.args_digest = ?'
+            : "(tc.args_digest IS NULL OR tc.args_digest = '')";
+    const argsDigestParam = params.argsDigest !== null && params.argsDigest !== '' ? [params.argsDigest] : [];
+
     return db.queryAll<LoopRepeatedCallRow>(
         `SELECT tc.seq AS toolSeq,
                 COALESCE(tc.started_at, m.ts) AS ts,
@@ -1004,16 +1011,7 @@ export async function loopRepeatedCallsQuery(
                 tc.message_hash AS messageHash,
                 tc.session_id AS sessionId,
                 tc.source AS source,
-                CASE
-                    WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model
-                    WHEN m.session_id IS NOT NULL AND m.session_id NOT IN ('', 'unknown', 'session') THEN (
-                        SELECT m2.model FROM history_message m2
-                        WHERE m2.source = m.source AND m2.session_id = m.session_id
-                          AND m2.model IS NOT NULL AND m2.model != '' AND m2.model != 'unknown'
-                        LIMIT 1
-                    )
-                    ELSE m.model
-                END AS model,
+                COALESCE(NULLIF(NULLIF(m.model, ''), 'unknown'), ?) AS model,
                 (SELECT COUNT(*) FROM history_tool_call l WHERE l.message_hash = m.record_hash) AS links,
                 m.input_tokens AS inputTokens,
                 m.cache_read_tokens AS cacheReadTokens,
@@ -1021,14 +1019,14 @@ export async function loopRepeatedCallsQuery(
          FROM history_tool_call tc
          JOIN history_message m ON m.record_hash = tc.message_hash
          WHERE tc.source = ? AND tc.session_id = ? AND tc.tool_name = ?
-           AND (tc.args_digest = ? OR (tc.args_digest IS NULL AND ? = ''))
+           AND ${argsDigestSql}
          ORDER BY tc.seq ASC
          LIMIT ?`,
+        params.model ?? null,
         params.source,
         params.sessionId,
         params.toolName,
-        params.argsDigest ?? '',
-        params.argsDigest ?? '',
+        ...argsDigestParam,
         params.limit ?? 50,
     );
 }

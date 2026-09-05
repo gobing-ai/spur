@@ -1599,6 +1599,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                         sessionId: l.sessionId,
                         toolName: l.toolName,
                         argsDigest: l.argsDigest,
+                        model: l.model,
                         limit: 50,
                     });
 
