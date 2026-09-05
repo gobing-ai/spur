@@ -80,6 +80,20 @@ agent:
           processSpawn:
             state: available
             provenance: native-known
+    - name: pi-zai
+      agent: pi
+      executionCapabilities:
+        version: 1
+        axes:
+          fsRead:
+            state: available
+            provenance: native-known
+          fsWrite:
+            state: available
+            provenance: native-known
+          processSpawn:
+            state: available
+            provenance: native-known
   team:
     demo:
       name: "Team Spur"
