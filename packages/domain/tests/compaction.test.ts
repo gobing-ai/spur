@@ -69,8 +69,11 @@ describe('database compaction (0746)', () => {
 
     test('compaction skips on a recent run with the recent-run reason', async () => {
         const { db, path } = await fileDb();
-        // First run establishes a marker (or runs); the immediately-following run must skip.
-        await compactDatabase(db, { dbPath: path, now: NOW });
+        // Seed the marker directly: whether a first pass actually VACUUMs depends on the fresh
+        // DB's dbstat page slack (platform-dependent), so exercising the recent-run gate through
+        // a real first run is flaky. Seeding also pins the documented precedence: recent-run is
+        // evaluated before the reclaim-ratio gate.
+        await db.run("INSERT INTO spur_retention_meta (kind, ran_at) VALUES ('compaction', ?)", NOW.getTime());
         const second = await compactDatabase(db, { dbPath: path, now: new Date(NOW.getTime() + 1) });
         expect(second.ran).toBe(false);
         expect(second.skippedReason).toBe('recent-run');
