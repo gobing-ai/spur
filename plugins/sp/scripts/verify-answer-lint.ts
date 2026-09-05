@@ -269,6 +269,10 @@ function extractAcIdentities(taskContent: string, featureContent: string | null)
         const leading = label.split(/\s+/)[0] ?? '';
         if (leading && leading !== label) identities.add(leading);
     }
+    for (const m of section.matchAll(/^[ \t]*Scenario:\s*(.+)\s*$/gm)) {
+        const title = (m[1] ?? '').trim();
+        if (title) identities.add(title);
+    }
     if (featureContent !== null) {
         for (const m of featureContent.matchAll(/^[ \t]*Scenario:\s*(.+)\s*$/gm)) {
             const title = (m[1] ?? '').trim();

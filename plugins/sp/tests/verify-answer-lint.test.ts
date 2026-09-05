@@ -121,6 +121,17 @@ describe('verify-answer-lint behavior (0726 R3)', () => {
         expect(r.code).toBe(0);
     });
 
+    test('complete answer using an exact task-local Gherkin scenario title passes', () => {
+        const title = 'R1 — task-local behavior is verified';
+        const sb = makeSandbox(`${TASK_CONTENT}\n\`\`\`gherkin\n  Scenario: ${title}\n\`\`\``);
+        const answer = completeAnswer().replace(
+            '| AC1 | MET | test | `tests/a.test.ts:9` |',
+            `| ${title} | MET | test | \`tests/a.test.ts:9\` |`,
+        );
+        const r = sb.exec(answer);
+        expect(r.code).toBe(0);
+    });
+
     test('missing requirement row is rejected', () => {
         const sb = makeSandbox();
         const r = sb.exec(completeAnswer().replace('| R2 | MET | `src/lint.ts:10` |\n', ''));
