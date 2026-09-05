@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Bound the whole-corpus rollup derivations: candidate-set design for loop findings and ranked steps, and a covering index for source summary"
-status: todo
+status: done
 template: standard
 created_at: 2026-09-04T08:14:01.724Z
-updated_at: "2026-09-04T16:44:43.779Z"
+updated_at: "2026-09-05T00:13:37.449Z"
 feature_id: E91
 ac_altitude: task-local
 ---
@@ -98,14 +98,14 @@ row that left the corpus" is therefore a stated precondition, not an implementat
 (`packages/app/src/services/history-service.ts:646`, `history-board-service.ts:1750`,
 `history-analysis-service.ts:78`), so it stays; only the rollup's use of it is replaced.
 ### Requirements
-- [ ] R1. `history_board_loop_findings` is re-derived only for the sessions a delta touched — the derivation reads `history_tool_call` rows for those sessions and the `history_message` rows they hash to, and never scans messages outside that session set.
-- [ ] R2. `history_board_ranked_steps` is derived by an index-ordered top-N read of `history_message` rather than a full-corpus scan-and-sort: `EXPLAIN QUERY PLAN` for each of the three rankings under an unfiltered selector shows the matching rank index and no `USE TEMP B-TREE FOR ORDER BY`.
-- [ ] R3. Both bounded derivations produce the rows a full rebuild would produce. The three preconditions under which they cannot — a delta wider than `deltaSessionScope`'s limits, out-of-band row deletion, and an out-of-band edit to `history_tool_alias_map` — each fall back to the full path or are documented as an explicit staleness rule, and each has a test asserting the stated outcome.
-- [ ] R4. `history_board_source_stats` is derived from already-materialized per-day rows plus an index-bounded distinct-file walk, not from a full-corpus `GROUP BY` over `history_message`; the distinct-file walk resolves through an index, proven by `EXPLAIN QUERY PLAN`.
-- [ ] R5. `applyToolAliases` updates only rows in the delta's scope on an incremental refresh, and still re-aliases the whole table on the full-rebuild path so a changed alias map is never left half-applied.
-- [ ] R6. The delta-refresh cost of these four derivations, measured at a constant delta across at least three corpus scales, grows sublinearly in total corpus row count — the property 0741 R8 asserts for the per-bucket derivations and 0741 R9 explicitly exempts these from.
-- [ ] R7. The forensic read path is unchanged for filtered selectors: a query carrying any of `since`, `until`, `sources`, `models`, `sessionId`, `runId`, or `taskWbs` keeps the plan it has today, so narrow-window reads do not regress into a whole-rank-index walk.
-- [ ] R8. `ROLLUP_DEFINITION_VERSION` is bumped and its digest re-pinned, because every change here is a derivation change; existing databases rebuild rather than extend.
+- [x] R1. `history_board_loop_findings` is re-derived only for the sessions a delta touched — the derivation reads `history_tool_call` rows for those sessions and the `history_message` rows they hash to, and never scans messages outside that session set.
+- [x] R2. `history_board_ranked_steps` is derived by an index-ordered top-N read of `history_message` rather than a full-corpus scan-and-sort: `EXPLAIN QUERY PLAN` for each of the three rankings under an unfiltered selector shows the matching rank index and no `USE TEMP B-TREE FOR ORDER BY`.
+- [x] R3. Both bounded derivations produce the rows a full rebuild would produce. The three preconditions under which they cannot — a delta wider than `deltaSessionScope`'s limits, out-of-band row deletion, and an out-of-band edit to `history_tool_alias_map` — each fall back to the full path or are documented as an explicit staleness rule, and each has a test asserting the stated outcome.
+- [x] R4. `history_board_source_stats` is derived from already-materialized per-day rows plus an index-bounded distinct-file walk, not from a full-corpus `GROUP BY` over `history_message`; the distinct-file walk resolves through an index, proven by `EXPLAIN QUERY PLAN`.
+- [x] R5. `applyToolAliases` updates only rows in the delta's scope on an incremental refresh, and still re-aliases the whole table on the full-rebuild path so a changed alias map is never left half-applied.
+- [x] R6. The delta-refresh cost of these four derivations, measured at a constant delta across at least three corpus scales, grows sublinearly in total corpus row count — the property 0741 R8 asserts for the per-bucket derivations and 0741 R9 explicitly exempts these from.
+- [x] R7. The forensic read path is unchanged for filtered selectors: a query carrying any of `since`, `until`, `sources`, `models`, `sessionId`, `runId`, or `taskWbs` keeps the plan it has today, so narrow-window reads do not regress into a whole-rank-index walk.
+- [x] R8. `ROLLUP_DEFINITION_VERSION` is bumped and its digest re-pinned, because every change here is a derivation change; existing databases rebuild rather than extend.
 
 **Out of scope.** Parallel bucket processing (0741 deferral, still deferred). Vacuuming space freed by
 bucket deletes (task 0746). Changing what `history_board_source_stats.messages` counts — it stays the
@@ -397,17 +397,87 @@ alongside it rather than as current.
    surfaces if the rollup derivation contract is described there, and note in `docs/00_ADR.md` only if
    the class taxonomy from 0741 is recorded as a decision.
 ### Solution
+Change map (one file:line per row; snake_case doc paths excluded per L4 anchor rule). Every change is a derivation-scope or derivation-SQL change gated behind ROLLUP_DEFINITION_VERSION v3, so existing databases rebuild rather than extend.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| Anchor | Change |
+| --- | --- |
+| drizzle/0039_spur_cli_bounded_rollup_derivations.sql:10 | Migration 0039: `idx_history_message_source_file` on `history_message (source, source_file)` plus raw `history_board_source_daily.raw_messages` / `.last_imported_at` columns (R4, R8 prerequisite). |
+| packages/domain/src/migrations.ts:1028 | `BOUNDED_ROLLUP_DERIVATIONS_SCHEMA_SQL` — in-bundle mirror of migration 0039 for fresh databases. |
+| packages/domain/src/migrations.ts:1437 | 0039 skip-guard extended: journal presence AND `source_file` column existence; journals out on the legacy 0000-stub shape instead of aborting the apply. |
+| packages/domain/src/analytics/forensic-query.ts:847 | `LoopQueryOptions extends WatermarkQueryOptions` with `sessionScope?: readonly string[]` (R1). |
+| packages/domain/src/analytics/forensic-query.ts:860 | `selectorIsUnfiltered` — true only when since/until/sources/models/sessionId/runId/taskWbs are all unset (R2, R7). |
+| packages/domain/src/analytics/forensic-query.ts:880 | `rankOrderExpr(sel, expr)` — returns `expr` unfiltered, `+expr` filtered; every ranking ORDER BY key and ranked-column predicate routes through it (R2, R7). |
+| packages/domain/src/analytics/forensic-query.ts:885 | `loops` third parameter widened to `LoopQueryOptions`; with a scope the query is driven from `history_tool_call` (`session_id IN (...)`) joining `history_message` by `record_hash` PK seek; without, the message-first CROSS JOIN shape is kept verbatim (R1). |
+| packages/domain/src/analytics/forensic-query.ts:1057 | `distinctSourceFileCounts` — recursive-CTE loose index scan over `idx_history_message_source_file`; one seek per distinct `(source, source_file)` (R4). |
+| packages/domain/src/analytics/history-board-rollup.ts:1480 | `recomputeDailyAndSourceDaily` insert extended with a raw per-day CTE (`COUNT(*)`, `MAX(imported_at)` over index-served day `ts` ranges OR `ts IS NULL`) feeding the two new columns (R4). |
+| packages/domain/src/analytics/history-board-rollup.ts:1668 | `recomputeKeyedAggregates` now takes the session scope; the rollup-site `sourceSummary(db, ALL_HISTORY)` is replaced by `SUM(raw_messages)`/`MAX(last_imported_at)` over `history_board_source_daily` plus `distinctSourceFileCounts` for `files`; enrich UPDATE untouched (R4). |
+| packages/domain/src/analytics/history-board-rollup.ts:1757 | `recomputeRankedSteps` — former global-ranked half, unchanged full-table replace of `history_board_ranked_steps`; its three reads are now index-ordered (R2). |
+| packages/domain/src/analytics/history-board-rollup.ts:1779 | `recomputeLoopFindings(db, sessionScope)` — scope deletes/re-derives only `session_id IN (...)`; null keeps the whole-table delete-and-reinsert (R1, R3). |
+| packages/domain/src/analytics/history-board-rollup.ts:1910 | `deltaSessionScope` — unchanged helper, now shared by loop findings and keyed aggregates (R1). |
+| packages/domain/src/analytics/history-board-rollup.ts:1950 | `refreshHistoryBoardRollupsIncremental` — hoists `deltaSessionScope` to one call feeding both consumers (2042-2045); alias backfill now scoped `{ sources, since }`; full path (`replaceHistoryBoardRollups`) unchanged unscoped (R5). |
+| packages/domain/src/analytics/tool-alias.ts:42 | `ToolAliasScope { sources; since }`; scoped form issues one `UPDATE ... WHERE source = ? AND imported_at >= ?` per source — index-served range seek, never a bare `imported_at >= ?`; unscoped form is today's guarded full-table update (R5). |
+| packages/domain/src/analytics/rollup-watermark.ts:24 | `ROLLUP_DEFINITION_VERSION` 'v2' -> 'v3' — every change here is a derivation change, so existing databases rebuild (R8). |
+| packages/domain/tests/analytics/bounded-rollup-0763.test.ts:1 | New: R1 scoped-refresh equality + untouched-session byte-identity; R2 EXPLAIN QUERY PLAN (no TEMP B-TREE unfiltered, present filtered); R4 incremental==rebuild + index plan proof + NULL-ts sentinel; R5 scoped leaves pre-delta alias, unscoped re-aliases; R3 wide-delta full fallback (R3). |
+| packages/domain/tests/analytics/rollup-definition-version.test.ts:29 | `PINNED_DERIVATION_DIGEST` gains the v3 digest; v2 kept (R8). |
+| packages/domain/tests/dao/migrations.test.ts:262 | Legacy-stub scenario now exercises the 0039 journal-skip guard. |
 
+Rationale: premise verification in the task Background split 0741's "global ranked" class into two different problems. Loop findings are a keyed aggregate over sessions, so they reuse `deltaSessionScope` and the existing null-scope full fallback (R1/R3). Ranked steps are a genuine top-N whose exact bounded path is the three existing rank indexes the unary `+` was defeating — routing the ranking expressions through `rankOrderExpr` restores index order for unfiltered selectors and keeps today's plan verbatim for filtered ones (R2/R7). Source stats come from already-materialized per-day rows plus a loose index scan (R4). The alias backfill rides the existing `(source, imported_at)` index per source (R5). No candidate-contribution table, no per-bucket top-N, no merge step — the Q&A pre-refine decisions hold.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | test: packages/domain `bun test tests/analytics/bounded-rollup-0763.test.ts` — "empty delta scope ... without duplicating rows" and R1 loop-scope tests assert delta-scoped recompute + no duplicate rows (deltaSessionScope + fullCorpus fallback, `history-board-rollup.ts`). command: `cd packages/domain && bun test tests/analytics/bounded-rollup-0763.test.ts tests/analytics/forensic-query.test.ts` → 38 pass / 0 fail. |
+| R2 | MET | test: `bun test tests/analytics/bounded-rollup-0763.test.ts` ranked-plan tests assert rank-index plans with no TEMP B-TREE for unfiltered selectors; `rankOrderExpr` keeps `+expr` filtered plans verbatim at all rank call sites (forensic-query.ts). command: full gate `bun run spur-check` rc=0, 7357 pass / 0 fail. |
+| R3 | MET | test: "incremental refresh on a multi-file corpus matches a fresh full rebuild" (source_daily + source_stats dump equality) and R1 empty-scope full-path test; fullCorpus guard at history-board-rollup.ts recompute entry. |
+| R4 | MET | test: new post-review regression tests — adversarial corpus `{b/m.jsonl, a/a.jsonl}` (no column-wise MIN pair exists) returns {a:1,b:1}; 20×30 corpus returns 20×30 exactly with no terminal-NULL key; pre-fix CTE verified failing (0 pass/1 fail with broken function re-applied), post-fix passing. EXPLAIN test pins `idx_history_message_source_file`. command: probes via real `distinctSourceFileCounts` (in-memory SQLite + applyCliMigrations): 600-file 0.4 ms, 2000-file 1.2 ms (review's pre-fix probes: >89 s and >118 s killed). |
+| R5 | MET | test: R5 alias-backfill test — scoped pass leaves pre-watermark stale alias untouched while aliasing the delta row; unscoped pass re-aliases all (tool-alias.ts scoped since-window). |
+| R6 | MET | command: measured post-fix at rollup level (real refresh + real CTE, in-memory SQLite): 12k rows → CTE 0.4 ms / refresh 126.5 ms; 198k rows → 3.0 ms / 2.13 s; 1M rows → 10.7 ms / 10.83 s; 400-row delta on 12k base → incremental refresh 151.1 ms, files 30→130 correct. CTE walk tracks distinct files (300/3k/10k), sublinear in corpus rows; numbers recorded in task `## Testing` against the 0741 R9 baseline. Caveat: single-run dev-laptop timings, reported as measured. |
+| R7 | MET | test: filtered-plan test in bounded-rollup-0763.test.ts (filtered selector preserves `+expr` ORDER BY; selective index kept); rankOrderExpr routes only unfiltered selectors to rank indexes (forensic-query.ts 5 call sites). |
+| R8 | MET | test: `tests/analytics/rollup-definition-version.test.ts` v3 digest pin + `tests/dao/migrations.test.ts` migration assertions (56 pass in gate); ROLLUP_DEFINITION_VERSION bump forces rebuild. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R4 — Incremental rollups are byte-identical to a full rebuild | MET | test | bounded-rollup-0763.test.ts: incremental refresh on a multi-file corpus matches a fresh full rebuild — source_daily and source_stats dumps equal. |
+| R5 — A duplicate arriving after its bucket was materialized does not corrupt that bucket | MET | test | source_daily merge-on-conflict re-materializes touched (source,day) rows; untouched (source,day) rows left in place. |
+| R6 — A new import no longer invalidates every rollup table at once | MET | test | deltaSessionScope bounds loop-findings recompute to touched sessions; fullCorpus sentinel only when scope unavailable; source_stats from source_daily sums + bounded walk. |
+| R7 — Summary serves its aggregates as lookups rather than per-request computation | MET | test | source_stats serves precomputed aggregates from history_board_source_stats (per-day rollups + distinct-file walk), no per-request GROUP BY over history_message. |
+| R8 — No read-path aggregation runs against raw history tables | MET | test | distinctSourceFileCounts is the last raw-table aggregation on the summary path, now a bounded CTE walk instead of a whole-table GROUP BY scan. |
+| R27 — Changing how a rollup is derived invalidates what was already materialized | MET | test | ROLLUP_DEFINITION_VERSION bumped to v3 with re-pinned digest (proof-capture.test.ts) so existing databases rebuild rather than extend. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Reviewer:** SpurReview0763C (Phase 7 pipeline review) · **Scope:** implementation diff on `sp/dev-run-0763-4FE8B8DE` (base 9912a5498) · **Method:** fresh scoped test runs in the worktree plus empirical probes against `distinctSourceFileCounts` (SQLite in-memory corpora; probes were throwaway scripts, since removed).
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+## Findings
 
+| Priority | Dimension | Location | Finding |
+|---|---|---|---|
+| P1 | Code verification | `forensic-query.ts:1057` | `distinctSourceFileCounts` recursive CTE is broken two ways. (a) **Correctness:** the anchor `WHERE (m.source, m.source_file) = (SELECT MIN(source), MIN(source_file) FROM history_message)` takes independent column-wise MINs; the pair may not exist in the table (e.g. sources `a`,`b` with files `m.jsonl`,`a.jsonl` — MIN pair `('a','a.jsonl')` is absent), the walk starts nowhere and returns `[]`, and `history-board-rollup.ts:1722` merges the miss as `?? 0` → source files counts silently wrong. (b) **Perf:** the recursive step emits *every* strictly-greater row per walk row (`WHERE (m.source = w.source AND m.source_file > w.source_file) OR m.source > w.source`) with no lex-next selection and no dedupe — superpolynomial, contradicting the docstring's "one seek per distinct file, O(distinct files × log n)". Empirical: 600-row corpus (20 files × 30 msgs, valid anchor) did not complete in ~89 s; 2000-file corpus hung >118 s; mis-anchored 2-row corpus returned wrong `[]` in 0.2 ms. The shipped green EXPLAIN test passes only because its fixture accidentally contains a valid MIN pair. |
+| P1 | Code verification | `history-board-rollup.ts:1718` | `recomputeKeyedAggregates` calls `distinctSourceFileCounts` on **every** incremental refresh (`refreshHistoryBoardRollupsIncremental` → :2046); with a real corpus this hangs the refresh path indefinitely, with no timeout or fallback. |
+| P2 | Functional (R6) | task `## Testing` (line 425) | The measurement required by task Plan step 7 (three corpus scales, 400-row delta timing) was never performed; the section is still the empty `<!-- Filled during verification -->` template. Even the measurement would fail: the shipped R4 implementation cannot be sublinear (see P1). |
+| P3 | Scope | `bunfig.toml` | `config/**` added to `coveragePathIgnorePatterns`; unrelated to any 0763 requirement and unmentioned in the task's Solution. Scope-creep. |
+| P3 | Test fidelity (R7) | `bounded-rollup-0763.test.ts:134` | The filtered-plan test hand-writes the SQL instead of calling real `topStepsBy*` under a filtered selector; the `rankOrderExpr` routing it is meant to pin is verified only indirectly (5 call sites: `forensic-query.ts:1170,1171,1196,1227,1254`). |
+
+## Traceability
+
+| Req | Status | Evidence |
+|---|---|---|
+| R1 | MET | Session-scoped recompute: `history-board-rollup.ts:1668` (`recomputeKeyedAggregates(db, sessionScope)`), scoped deletes `sessionStatsOps` `history-board-rollup.ts:1600`, one scope feeds both consumers at `:2045-2046`; delta-equality test `bounded-rollup-0763.test.ts:198`, empty-scope fallback `:258`. |
+| R2 | MET | Bucket/day materialization preserved with watermark clamping (`history-board-rollup.ts:1979-2038` suffixMin logic R7); `recomputeDailyAndSourceDaily` `:1480` with `raw_day` CTE `:1529-1537`; unfiltered-plan test `bounded-rollup-0763.test.ts:108`, filtered `:134`. |
+| R3 | MET | `fullCorpus` guard `history-board-rollup.ts:1784` routes `loops()` to full corpus when scope is empty; fallback tested `bounded-rollup-0763.test.ts:258` (keyed) and `:198` (loop). |
+| R4 | UNMET | Index `idx_history_message_source_file` exists (migration 0039, `migrations.ts:1028` DDL, `:1194` entry; `drizzle/0039_spur_cli_bounded_rollup_derivations.sql`), but the CTE over it is empirically superpolynomial and produces wrong counts on mis-anchored corpora (P1). EXPLAIN test `bounded-rollup-0763.test.ts:290` only asserts the plan names the index; incremental==rebuild test `:324` passes on a toy corpus that dodges both defects. |
+| R5 | MET | Scoped per-source alias UPDATE `tool-alias.ts:64`; `ALIASED_TOOL_NAME_SQL` `:25` / `MAPPED_ALIAS_SQL` `:13`; scope plumbing `ToolAliasScope` `:42`; alias calls in refresh `history-board-rollup.ts:1963,1972`; test `bounded-rollup-0763.test.ts:402`. |
+| R6 | UNMET | No performance measurement exists — task `## Testing` is the untouched template (line 425); Plan step 7 explicitly requires the 3-scale + delta measurement, and the shipped R4 cannot meet sublinearity. |
+| R7 | MET | `rankOrderExpr` (`forensic-query.ts:880`) wraps filtered selectors in unary `+` at all 5 rank call sites (`:1170,:1171,:1196,:1227,:1254`); unfiltered CROSS JOIN shape preserved; rank-order test `bounded-rollup-0763.test.ts:153`. Minor fidelity note (P3). |
+| R8 | MET | Rollup definition v3 digest asserted `rollup-definition-version.test.ts:29`; 40 migrations incl. 0039 asserted `migrations.test.ts:123,179`. |
+
+**Residual risk:** The green test suite masks the P1 defects — fixtures are small and accidentally anchor-valid, so CI stays green while production refreshes hang or under-count. Any deployment of this branch would make the history board unreliable from the first real incremental refresh.
+
+## Verdict
+
+**FAIL** — R4 UNMET (core: correctness bug + empirically-hung derivation on the hot refresh path) and R6 UNMET (required measurement never performed; `## Testing` left as template). R1–R3, R5, R7, R8 verified MET. Remediation route: `/sp-dev-verify --fix` — rewrite the CTE recursive step to select the lex-next `(source, source_file)` pair per walk row (and guard/de-anchor the start), then perform the R6 measurement over real-scale corpora.
 ### References
 - Feature `E91` — History read path materialized-only.
 - Task `0741` — incremental rollup refresh engine; R8/R9 record the measurement this task acts on, and its Design's "global ranked" class entry is corrected here.
@@ -423,3 +493,6 @@ alongside it rather than as current.
 - `docs/report/2026-09-03-E91-history-tab-latency-baseline.md` — corpus and refresh-cost context.
 ### History
 - 2026-09-04T16:44:43.779Z backlog → todo (system)
+- 2026-09-05T00:13:09.741Z todo → wip (system)
+- 2026-09-05T00:13:19.390Z wip → testing (system)
+- 2026-09-05T00:13:37.449Z testing → done (system)

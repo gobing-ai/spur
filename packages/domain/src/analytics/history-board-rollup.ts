@@ -12,6 +12,8 @@ import type {
 } from './forensic-query';
 import {
     cacheWasteAggregate,
+    distinctSourceFileCounts,
+    type LoopQueryOptions,
     loops,
     messageRollup,
     sourceSummary,
@@ -432,7 +434,7 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
         {
             sql: `INSERT INTO history_board_source_daily (
                     source, day, fresh_input_tokens, cache_read_tokens, cache_write_tokens,
-                    output_tokens, sessions, tool_calls
+                    output_tokens, sessions, tool_calls, raw_messages, last_imported_at
                 )
                 WITH messages AS (
                     SELECT source, SUBSTR(bucket_start, 1, 10) AS day,
@@ -447,10 +449,17 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                 ), tools AS (
                     SELECT source, SUBSTR(bucket_start, 1, 10) AS day, SUM(calls) AS tool_calls
                     FROM history_board_tool_5m GROUP BY source, day
+                ), raw_day AS (
+                    SELECT source, COALESCE(SUBSTR(m.ts, 1, 10), '') AS day,
+                           COUNT(*) AS raw_messages,
+                           MAX(m.imported_at) AS last_imported_at
+                    FROM history_message m GROUP BY source, day
                 )
                 SELECT m.source, m.day, m.fresh_input_tokens, m.cache_read_tokens, m.cache_write_tokens,
-                       m.output_tokens, m.sessions, COALESCE(t.tool_calls, 0)
-                FROM messages m LEFT JOIN tools t ON t.source = m.source AND t.day = m.day`,
+                       m.output_tokens, m.sessions, COALESCE(t.tool_calls, 0),
+                       COALESCE(r.raw_messages, 0), r.last_imported_at
+                FROM messages m LEFT JOIN tools t ON t.source = m.source AND t.day = m.day
+                LEFT JOIN raw_day r ON r.source = m.source AND r.day = m.day`,
             params: [],
         },
     ];
@@ -1508,7 +1517,8 @@ async function recomputeDailyAndSourceDaily(db: DbAdapter, days: string[]): Prom
         })),
         {
             sql: `INSERT INTO history_board_source_daily (
-                    source, day, fresh_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, sessions, tool_calls
+                    source, day, fresh_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, sessions, tool_calls,
+                    raw_messages, last_imported_at
                 )
                 WITH messages AS (
                     SELECT source, SUBSTR(bucket_start, 1, 10) AS day,
@@ -1527,13 +1537,53 @@ async function recomputeDailyAndSourceDaily(db: DbAdapter, days: string[]): Prom
                     FROM history_board_tool_5m
                     WHERE SUBSTR(bucket_start, 1, 10) IN (${placeholders})
                     GROUP BY source, day
+                ), raw_day AS (
+                    SELECT source,
+                           COALESCE(SUBSTR(m.ts, 1, 10), '') AS day,
+                           COUNT(*) AS raw_messages,
+                           MAX(m.imported_at) AS last_imported_at
+                    FROM history_message m
+                    WHERE ${rawMessageDayPredicate(days)}
+                    GROUP BY source, day
                 )
                 SELECT m.source, m.day, m.fresh_input_tokens, m.cache_read_tokens, m.cache_write_tokens,
-                       m.output_tokens, m.sessions, COALESCE(t.tool_calls, 0)
-                FROM messages m LEFT JOIN tools t ON t.source = m.source AND t.day = m.day`,
-            params: [...days, ...days],
+                       m.output_tokens, m.sessions, COALESCE(t.tool_calls, 0),
+                       COALESCE(r.raw_messages, 0) AS raw_messages,
+                       r.last_imported_at AS last_imported_at
+                FROM messages m LEFT JOIN tools t ON t.source = m.source AND t.day = m.day
+                LEFT JOIN raw_day r ON r.source = m.source AND r.day = m.day`,
+            params: [...days, ...days, ...rawMessageDayParams(days)],
         },
     ]);
+}
+
+/**
+ * Half-open `ts` range predicate over history_message that powers the
+ * raw_messages / last_imported_at CTE inside the source_daily insert. Every
+ * term is index-served by `idx_history_message_ts` (0741 R8), and the sentinel
+ * day `''` (messages with NULL ts) is included when present via `m.ts IS NULL`.
+ */
+function rawMessageDayPredicate(days: readonly string[]): string {
+    const terms: string[] = [];
+    if (days.includes('')) terms.push('m.ts IS NULL');
+    for (const day of days) {
+        if (day === '') continue;
+        terms.push('(m.ts >= ? AND m.ts < ?)');
+    }
+    if (terms.length === 0) return '0';
+    return terms.join(' OR ');
+}
+
+function rawMessageDayParams(days: readonly string[]): string[] {
+    const params: string[] = [];
+    for (const day of days) {
+        if (day === '') continue;
+        params.push(`${day}T00:00:00Z`);
+        const next = new Date(`${day}T00:00:00Z`);
+        next.setUTCDate(next.getUTCDate() + 1);
+        params.push(`${next.toISOString().slice(0, 19)}Z`);
+    }
+    return params;
 }
 
 /** Re-derive the keyed-aggregate class after the bucketed deltas land. */
@@ -1659,14 +1709,26 @@ async function recomputeKeyedAggregates(db: DbAdapter, sessionScope: string[] | 
 
     await db.batch(sessionStatsOps(sessionScope));
 
-    // source_stats: import metadata from sourceSummary, plus the derived enrich update.
-    const sourceRows = await sourceSummary(db, ALL_HISTORY);
+    // source_stats: message counts and last_imported_at come from the per-day rows already
+    // materialized by recomputeDailyAndSourceDaily (R4 — sublinear in corpus). The
+    // distinct-file count comes from distinctSourceFileCounts(db), which is a recursive-CTE
+    // loose index scan over idx_history_message_source_file (one seek per distinct file
+    // pair, not one per message). The enrich UPDATE against the session / daily sums is
+    // unchanged.
+    const distinctFiles = await distinctSourceFileCounts(db);
+    const sourceRows = await db.queryAll<{ source: string; messages: number; last_imported_at: string | null }>(
+        `SELECT source,
+                SUM(raw_messages) AS messages,
+                MAX(last_imported_at) AS last_imported_at
+         FROM history_board_source_daily
+         GROUP BY source`,
+    );
     const ops: DbBatchOp[] = [{ sql: 'DELETE FROM history_board_source_stats', params: [] }];
     for (const row of sourceRows) {
         ops.push({
             sql: `INSERT INTO history_board_source_stats (source, files, messages, last_imported_at)
                   VALUES (?, ?, ?, ?)`,
-            params: [row.source, row.files, row.messages, row.lastImportedAt],
+            params: [row.source, distinctFiles.get(row.source) ?? 0, row.messages, row.last_imported_at],
         });
     }
     ops.push({
@@ -1684,18 +1746,54 @@ async function recomputeKeyedAggregates(db: DbAdapter, sessionScope: string[] | 
     await db.batch(ops);
 }
 
-/** Global-ranked class: recompute loop findings and ranked steps in full when any bucket changed. */
-async function recomputeGlobalRanked(db: DbAdapter): Promise<void> {
-    const [loopRows, tokenSteps, durationSteps, cacheWasteSteps] = await Promise.all([
-        loops(db, ALL_HISTORY),
+/**
+ * Global-ranked class — ranked steps (0763 R2).
+ *
+ * The three top-N reads now resolve through their rank indexes
+ * (`idx_history_message_duration_rank`, `_token_rank`, `_input_rank`) because
+ * `rankOrderExpr` strips the unary `+` for an unfiltered selector. The
+ * derivation itself is unchanged: a delete-and-reinsert full-table replace.
+ */
+async function recomputeRankedSteps(db: DbAdapter): Promise<void> {
+    const [tokenSteps, durationSteps, cacheWasteSteps] = await Promise.all([
         topStepsByTokens(db, ALL_HISTORY, RANK_DEPTH),
         topStepsByDuration(db, ALL_HISTORY, RANK_DEPTH),
         topCacheWasteSteps(db, ALL_HISTORY, RANK_DEPTH),
     ]);
-    const ops: DbBatchOp[] = [
-        { sql: 'DELETE FROM history_board_loop_findings', params: [] },
-        { sql: 'DELETE FROM history_board_ranked_steps', params: [] },
-    ];
+    const ops: DbBatchOp[] = [{ sql: 'DELETE FROM history_board_ranked_steps', params: [] }];
+    appendRankedSteps(ops, 'tokens', tokenSteps);
+    appendRankedSteps(ops, 'duration', durationSteps);
+    appendRankedSteps(ops, 'cache-waste', cacheWasteSteps);
+    await db.batch(ops);
+}
+
+/**
+ * Global-ranked class — loop findings (0763 R1).
+ *
+ * `sessionScope` narrows the derivation to a set of sessions touched by the
+ * delta, deleting and re-inserting only those sessions' rows. `null` means
+ * "rebuild every session" — the full-rebuild path, or an incremental
+ * refresh whose delta is wider than `SESSION_SCOPE_LIMIT`. R3's first
+ * precondition case.
+ */
+async function recomputeLoopFindings(db: DbAdapter, sessionScope: string[] | null): Promise<void> {
+    // An empty (but non-null) scope arises when every delta row's session_id was
+    // filtered out by deltaSessionScope. `loops()` treats it as full corpus (its
+    // scoped branch requires length > 0), so the delete side must match — an
+    // `IN ()` delete would otherwise leave the inserted full-corpus rows duplicated.
+    const fullCorpus = sessionScope === null || sessionScope.length === 0;
+    const opts: LoopQueryOptions | undefined = fullCorpus ? undefined : { sessionScope };
+    const loopRows = await loops(db, ALL_HISTORY, opts);
+    const ops: DbBatchOp[] = [];
+    if (fullCorpus) {
+        ops.push({ sql: 'DELETE FROM history_board_loop_findings', params: [] });
+    } else {
+        const placeholders = sessionScope.map(() => '?').join(', ');
+        ops.push({
+            sql: `DELETE FROM history_board_loop_findings WHERE session_id IN (${placeholders})`,
+            params: [...sessionScope],
+        });
+    }
     for (const row of loopRows) {
         ops.push({
             sql: `INSERT INTO history_board_loop_findings (
@@ -1714,9 +1812,6 @@ async function recomputeGlobalRanked(db: DbAdapter): Promise<void> {
             ],
         });
     }
-    appendRankedSteps(ops, 'tokens', tokenSteps);
-    appendRankedSteps(ops, 'duration', durationSteps);
-    appendRankedSteps(ops, 'cache-waste', cacheWasteSteps);
     await db.batch(ops);
 }
 
@@ -1805,6 +1900,16 @@ const POST_WATERMARK_TABLES = [
 const SESSION_SCOPE_LIMIT = 1000;
 const DELTA_ROW_SCAN_LIMIT = 200_000;
 
+/**
+ * Distinct sources in `history_board_source_stats` — the per-source list the
+ * alias-scope path reads. Bounded by `ALL_ROLLUP_TABLES` cardinality (tens of
+ * rows); a handful at most on any realistic corpus.
+ */
+async function sourceScopeRows(db: DbAdapter): Promise<string[]> {
+    const rows = await db.queryAll<{ source: string }>('SELECT source FROM history_board_source_stats');
+    return rows.map((row) => row.source);
+}
+
 async function deltaSessionScope(db: DbAdapter, watermark: string): Promise<string[] | null> {
     const rows = await db.queryAll<{ sessionId: string }>(
         `SELECT session_id AS sessionId FROM history_message
@@ -1846,14 +1951,25 @@ async function postPassLags(db: DbAdapter, bucketWatermark: string): Promise<boo
  * the bucketed deltas land; their watermarks advance last (R7).
  */
 export async function refreshHistoryBoardRollupsIncremental(db: DbAdapter): Promise<void> {
-    await applyToolAliases(db);
+    // Resolving the alias scope needs the same per-source source set the post-pass uses.
+    // Reading it up front costs a tiny `SELECT source FROM history_board_source_stats` and
+    // lets the incremental path pass a real { sources, since } scope (R5).
+    const existingSources = await sourceScopeRows(db);
     const watermarks = await readRollupWatermarks(db);
     const messageWm = watermarks.get('history_board_message_5m');
     const needsRebuild = messageWm === undefined || messageWm.definitionVersion !== ROLLUP_DEFINITION_VERSION;
 
     if (needsRebuild) {
+        await applyToolAliases(db); // Full-rebuild path: re-alias every row, see R5.
         await rebuildAllRollups(db);
         return;
+    }
+
+    // Incremental path: scope the alias backfill to the sources we know exist. No source
+    // list is read from history_tool_call — that table carries only rows that have
+    // imported at least once, which is exactly what we want.
+    if (existingSources.length > 0) {
+        await applyToolAliases(db, { sources: existingSources, since: messageWm.importedAtWatermark });
     }
 
     const affected = await affectedBucketsWithRange(db, messageWm.importedAtWatermark);
@@ -1923,11 +2039,13 @@ export async function refreshHistoryBoardRollupsIncremental(db: DbAdapter): Prom
     const days =
         affected.length > 0 ? [...new Set(affected.map((a) => bucketDay(a.bucket)))] : await allMaterializedDays(db);
     await recomputeDailyAndSourceDaily(db, days);
-    await recomputeKeyedAggregates(
-        db,
-        affected.length > 0 ? await deltaSessionScope(db, messageWm.importedAtWatermark) : null,
-    );
-    await recomputeGlobalRanked(db);
+    // One deltaSessionScope call feeds both recomputeKeyedAggregates and
+    // recomputeLoopFindings — same scope, two consumers. null (a delta wider than
+    // SESSION_SCOPE_LIMIT) means both fall back to the full recompute.
+    const sessionScope = affected.length > 0 ? await deltaSessionScope(db, messageWm.importedAtWatermark) : null;
+    await recomputeKeyedAggregates(db, sessionScope);
+    await recomputeRankedSteps(db);
+    await recomputeLoopFindings(db, sessionScope);
 
     // The post-pass tables are now consistent — advance their watermarks last.
     for (const table of POST_WATERMARK_TABLES) {

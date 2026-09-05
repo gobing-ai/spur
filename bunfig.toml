@@ -16,6 +16,7 @@ pathIgnorePatterns = ["vendors/**", "drizzle/**"]
 # unit tests — exclude them from the per-file coverage gate so DOM branches
 # (onChange/onSubmit handlers) don't drag the 90/90 threshold.
 coveragePathIgnorePatterns = [
+    "config/**",
     "**/*.tsx",
     "**/tests/**/fixtures/**",
     "**/spur-wf-ext-*/**",

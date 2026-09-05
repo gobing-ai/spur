@@ -831,8 +831,87 @@ export async function selectionPopulation(
     return { sessions: sessionRow?.n ?? 0, tools: toolRow?.n ?? 0 };
 }
 
+// ---------------------------------------------------------------------------
+// Unfiltered-selector detection (task 0763)
+// ---------------------------------------------------------------------------
+
+/**
+ * Options accepted by {@link loops} in addition to the standard watermark
+ * options. `sessionScope` narrows the loop-finding derivation to a known set
+ * of sessions, which is what lets the incremental refresh rewrite loop
+ * findings only for the delta's touched sessions instead of recomputing the
+ * whole table (R1). When `sessionScope` is null or absent, the query keeps
+ * the message-first CROSS JOIN shape it had before 0763 — that path stays the
+ * full-corpus recompute, identical to what a fresh derivation produced.
+ */
+export interface LoopQueryOptions extends WatermarkQueryOptions {
+    /** Sessions to limit the loop-finding derivation to. `null` means full corpus. */
+    sessionScope?: readonly string[] | null;
+}
+
+/**
+ * True when a selector carries no constraints against `history_message`
+ * (0763 R2 / R7). Unfiltered ranking reads must drop the unary `+` prefix the
+ * filtered path keeps, so the three rank indexes serve the `ORDER BY … DESC
+ * LIMIT` in index order — anything else defeats the partial indexes with a
+ * forced `USE TEMP B-TREE FOR ORDER BY`. `tools` and `skills` constrain the
+ * tool-side dimension, not the message table, so they do not count.
+ */
+function selectorIsUnfiltered(sel: ArtifactSelector): boolean {
+    return (
+        sel.since === null &&
+        sel.until === null &&
+        (sel.sources === null || sel.sources.length === 0) &&
+        (sel.models === null || (sel.models?.length ?? 0) === 0) &&
+        sel.sessionId === null &&
+        sel.runId === null &&
+        sel.taskWbs === null
+    );
+}
+
+/**
+ * For an unfiltered selector, return `expr` so the matching rank index
+ * (`idx_history_message_duration_rank` / `_token_rank` / `_input_rank`) is
+ * usable in the `ORDER BY` and the equality predicates that reference the
+ * ranked column. For any filtered selector, wrap `expr` in a unary `+` to
+ * preserve the pre-0763 plan verbatim (R7). The selector is the single
+ * decision point — there is no caller flag.
+ */
+function rankOrderExpr(sel: ArtifactSelector, expr: string): string {
+    return selectorIsUnfiltered(sel) ? expr : `+${expr}`;
+}
 /** Repeated-call loop findings (Q4): same args_digest repeated >= 3 times. */
-export async function loops(db: DbAdapter, sel: ArtifactSelector, opts?: WatermarkQueryOptions): Promise<LoopRow[]> {
+export async function loops(db: DbAdapter, sel: ArtifactSelector, opts?: LoopQueryOptions): Promise<LoopRow[]> {
+    const sessionScope = opts?.sessionScope;
+    if (sessionScope && sessionScope.length > 0) {
+        // Scoped derivation: drive from history_tool_call (session index) and join the
+        // message-side metadata by record_hash. Each session emits one SELECT into
+        // history_tool_call; the message lookup is a primary-key seek per row. Untouched
+        // sessions' loop rows are left in place by the corresponding delete-side predicate
+        // in recomputeLoopFindings — see history-board-rollup.ts (R1).
+        const placeholders = sessionScope.map(() => '?').join(', ');
+        return db.queryAll<LoopRow>(
+            `SELECT tc.source AS source, tc.session_id AS sessionId,
+                    COALESCE(MAX(m.model), 'unknown') AS model, MIN(m.ts) AS startedAt,
+                    tc.tool_name AS toolName,
+                    tc.args_digest AS argsDigest,
+                    COUNT(*) AS repeats,
+                    MIN(tc.seq) AS firstSeq,
+                    MAX(tc.seq) AS lastSeq
+             FROM history_tool_call tc
+             JOIN history_message m ON m.record_hash = tc.message_hash
+             WHERE tc.session_id IN (${placeholders})
+               AND tc.args_digest IS NOT NULL
+               AND tc.session_id NOT IN ('', 'unknown', 'session')
+             GROUP BY tc.source, tc.session_id, tc.tool_name, tc.args_digest
+             HAVING COUNT(*) >= 3
+             ORDER BY repeats DESC`,
+            ...sessionScope,
+        );
+    }
+    // Unscoped derivation: the original message-first CROSS JOIN shape. Used by the
+    // full rebuild and by incremental refresh when deltaSessionScope returns null
+    // (a delta too wide to scope). Identical output to the pre-0763 implementation.
     const { where, params } = buildMessageWhere(sel);
     const wm = applyWatermarkToWhere(where, opts?.watermark);
     return db.queryAll<LoopRow>(
@@ -958,6 +1037,57 @@ export async function sourceSummary(db: DbAdapter, sel: ArtifactSelector): Promi
 }
 
 /**
+ * Distinct (source, source_file) count per source via a recursive-CTE loose
+ * index scan over `idx_history_message_source_file` (task 0763 R4).
+ *
+ * The anchor takes the true lexicographically-first pair (ORDER BY ... LIMIT 1,
+ * wrapped in a subselect because SQLite forbids ORDER BY inside a compound select's
+ * left arm), NOT the column-wise MIN pair, which need not exist in the table. Each
+ * recursive step is a COALESCE of two pure index seeks — next file in the same
+ * source, else first row of the next source — so the walk costs one seek per
+ * distinct file, O(distinct files x log n); distinct files grows with imported
+ * files, not with messages. The WHERE guards keep the terminal NULL pair (no next
+ * row) out of the count. The non-rollup callers of `sourceSummary` keep their
+ * COUNT(DISTINCT) shape because they accept arbitrary selectors on the forensic
+ * path; only the rollup uses this helper.
+ */
+export async function distinctSourceFileCounts(db: DbAdapter): Promise<Map<string, number>> {
+    const rows = await db.queryAll<{ source: string; files: number }>(
+        `WITH RECURSIVE walk(src, file) AS (
+             SELECT * FROM (
+                 SELECT source, source_file FROM history_message
+                 ORDER BY source, source_file LIMIT 1
+             )
+             UNION ALL
+             SELECT
+                 COALESCE(
+                     (SELECT source FROM history_message
+                      WHERE source = w.src AND source_file > w.file
+                      ORDER BY source, source_file LIMIT 1),
+                     (SELECT source FROM history_message
+                      WHERE source > w.src
+                      ORDER BY source, source_file LIMIT 1)
+                 ),
+                 COALESCE(
+                     (SELECT source_file FROM history_message
+                      WHERE source = w.src AND source_file > w.file
+                      ORDER BY source, source_file LIMIT 1),
+                     (SELECT source_file FROM history_message
+                      WHERE source > w.src
+                      ORDER BY source, source_file LIMIT 1)
+                 )
+             FROM walk w
+             WHERE w.src IS NOT NULL
+         )
+         SELECT src AS source, COUNT(*) AS files
+         FROM walk
+         WHERE src IS NOT NULL
+         GROUP BY source`,
+    );
+    return new Map(rows.map((r) => [r.source, r.files] as const));
+}
+
+/**
  * Count `history_import_checkpoint` rows for a source (task 0470 R4 was-non-empty
  * detection). Owned here so raw SQL stays in the domain layer (ADR-011).
  */
@@ -1054,13 +1184,16 @@ export async function topStepsByTokens(
 ): Promise<StepRow[]> {
     const { where, params } = buildMessageWhere(sel);
     const wm = applyWatermarkToWhere(where, opts?.watermark);
+    const tokensOrder = rankOrderExpr(sel, 'COALESCE(m.input_tokens, 0) + COALESCE(m.cache_read_tokens, 0)');
+    const tokensGuard = rankOrderExpr(sel, '(m.input_tokens IS NOT NULL OR m.output_tokens IS NOT NULL)');
+    const tokensPredicate = withStepPredicates(wm.where, "m.role = 'assistant' AND " + tokensGuard);
     return db.queryAll<StepRow>(
         `SELECT m.session_id AS sessionId, m.source AS source, m.ts AS ts, m.model AS model,
                 m.input_tokens AS inputTokens, m.cache_read_tokens AS cacheReadTokens,
                 m.output_tokens AS outputTokens, m.cost_usd AS costUsd, m.duration_ms AS durationMs
          FROM history_message m
-         ${withStepPredicates(wm.where, "m.role = 'assistant' AND +(m.input_tokens IS NOT NULL OR m.output_tokens IS NOT NULL)")}
-         ORDER BY +(COALESCE(m.input_tokens, 0) + COALESCE(m.cache_read_tokens, 0)) DESC
+         ${tokensPredicate}
+         ORDER BY ${tokensOrder} DESC
          LIMIT ?`,
         ...params,
         ...wm.params,
@@ -1077,13 +1210,18 @@ export async function topStepsByDuration(
 ): Promise<StepRow[]> {
     const { where, params } = buildMessageWhere(sel);
     const wm = applyWatermarkToWhere(where, opts?.watermark);
+    const durationOrder = rankOrderExpr(sel, 'm.duration_ms');
+    const durationPredicate = withStepPredicates(
+        wm.where,
+        "m.role = 'assistant' AND " + durationOrder + ' IS NOT NULL',
+    );
     return db.queryAll<StepRow>(
         `SELECT m.session_id AS sessionId, m.source AS source, m.ts AS ts, m.model AS model,
                 m.input_tokens AS inputTokens, m.cache_read_tokens AS cacheReadTokens,
                 m.output_tokens AS outputTokens, m.cost_usd AS costUsd, m.duration_ms AS durationMs
          FROM history_message m
-         ${withStepPredicates(wm.where, "m.role = 'assistant' AND +m.duration_ms IS NOT NULL")}
-         ORDER BY +m.duration_ms DESC
+         ${durationPredicate}
+         ORDER BY ${durationOrder} DESC
          LIMIT ?`,
         ...params,
         ...wm.params,
@@ -1103,13 +1241,15 @@ export async function cacheWasteAggregate(
 ): Promise<CacheWasteAggregateRow | null | undefined> {
     const { where, params } = buildMessageWhere(sel);
     const wm = applyWatermarkToWhere(where, opts?.watermark);
+    const inputOrder = rankOrderExpr(sel, 'm.input_tokens');
+    const wastePredicate = withStepPredicates(
+        wm.where,
+        "m.role = 'assistant' AND " + inputOrder + ' > ? AND m.cache_read_tokens < m.input_tokens * ?',
+    );
     return db.queryFirst<CacheWasteAggregateRow>(
         `SELECT COUNT(*) AS steps, SUM(m.input_tokens) AS inputTokens
          FROM history_message m
-         ${withStepPredicates(
-             wm.where,
-             "m.role = 'assistant' AND +m.input_tokens > ? AND m.cache_read_tokens < m.input_tokens * ?",
-         )}
+         ${wastePredicate}
          LIMIT ?`,
         ...params,
         CACHE_WASTE_MIN_INPUT_TOKENS,
@@ -1128,16 +1268,18 @@ export async function topCacheWasteSteps(
 ): Promise<StepRow[]> {
     const { where, params } = buildMessageWhere(sel);
     const wm = applyWatermarkToWhere(where, opts?.watermark);
+    const inputOrder = rankOrderExpr(sel, 'm.input_tokens');
+    const wastePredicate2 = withStepPredicates(
+        wm.where,
+        "m.role = 'assistant' AND " + inputOrder + ' > ? AND m.cache_read_tokens < m.input_tokens * ?',
+    );
     return db.queryAll<StepRow>(
         `SELECT m.session_id AS sessionId, m.source AS source, m.ts AS ts, m.model AS model,
                 m.input_tokens AS inputTokens, m.cache_read_tokens AS cacheReadTokens,
                 m.output_tokens AS outputTokens, m.cost_usd AS costUsd, m.duration_ms AS durationMs
          FROM history_message m
-         ${withStepPredicates(
-             wm.where,
-             "m.role = 'assistant' AND +m.input_tokens > ? AND m.cache_read_tokens < m.input_tokens * ?",
-         )}
-         ORDER BY +m.input_tokens DESC
+         ${wastePredicate2}
+         ORDER BY ${inputOrder} DESC
          LIMIT ?`,
         ...params,
         CACHE_WASTE_MIN_INPUT_TOKENS,
