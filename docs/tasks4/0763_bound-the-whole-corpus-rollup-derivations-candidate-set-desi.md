@@ -4,7 +4,7 @@ name: "Bound the whole-corpus rollup derivations: candidate-set design for loop 
 status: done
 template: standard
 created_at: 2026-09-04T08:14:01.724Z
-updated_at: "2026-09-05T00:13:37.449Z"
+updated_at: "2026-09-05T02:40:08.794Z"
 feature_id: E91
 ac_altitude: task-local
 ---
@@ -232,196 +232,95 @@ showing the two counts agree on the real corpus.
 
 **Deferred (from 0741, still deferred):** parallel bucket processing; vacuuming freed space (task 0746).
 ### Design
-**WHAT.** Give each of the four unbounded derivations a scope that is bounded by the delta or by an
-index, without adding a candidate-set table: loop findings become session-scoped, ranked steps become
-index-ordered, source stats are summed from already-materialized per-day rows plus an index walk, and the
-alias backfill is scoped per source to the delta's imported-at range.
+**WHAT.** Bound the four expensive rollup derivations with existing scopes and indexes: loop findings
+reuse the delta session set, ranked steps use the existing rank indexes for unfiltered reads, source
+coverage comes from materialized raw day rows plus a loose index walk, and alias backfill is scoped by
+source and import watermark. No candidate table or merge engine is introduced.
 
-**WHY.** 0741 classified `loop_findings` and `ranked_steps` together as "global ranked ... cheap because
-they are already bounded". Measurement disproved the cheapness, and premise verification (Background)
-disproved the classification: they are two different problems. `loop_findings` is a keyed aggregate over
-sessions and needs the scoping mechanism that already exists; `ranked_steps` is a genuine global top-N
-whose exact bounded path is the three rank indexes that already exist and are being defeated by a unary
-`+`. Neither needs new machinery, which is why this task adds one index and two columns rather than a
-candidate-contribution table.
+**Frozen surfaces.**
 
-**WHERE — frozen names.**
-
-| Name | Kind | Location |
-| --- | --- | --- |
-| `0039_spur_cli_bounded_rollup_derivations` | migration | `drizzle/0039_spur_cli_bounded_rollup_derivations.sql` + `BOUNDED_ROLLUP_DERIVATIONS_SCHEMA_SQL` in `packages/domain/src/migrations.ts` |
-| `idx_history_message_source_file` | index on `history_message (source, source_file)` | same migration |
-| `history_board_source_daily.raw_messages` | column `INTEGER NOT NULL DEFAULT 0` | same migration |
-| `history_board_source_daily.last_imported_at` | column `TEXT` | same migration |
-| `LoopQueryOptions` | `interface LoopQueryOptions extends WatermarkQueryOptions { sessionScope?: readonly string[] }` | `packages/domain/src/analytics/forensic-query.ts` |
-| `loops(db, sel, opts?: LoopQueryOptions)` | existing function, third parameter widened | `packages/domain/src/analytics/forensic-query.ts:835` |
-| `selectorIsUnfiltered(sel)` | module-private predicate | `packages/domain/src/analytics/forensic-query.ts` |
-| `rankOrderExpr(sel, expr)` | module-private helper returning `expr` when unfiltered, `` `+${expr}` `` otherwise | `packages/domain/src/analytics/forensic-query.ts` |
-| `distinctSourceFileCounts(db)` | exported function returning `Map<string, number>` | `packages/domain/src/analytics/forensic-query.ts` |
-| `applyToolAliases(db, scope?: ToolAliasScope)` | existing function, optional second parameter | `packages/domain/src/analytics/tool-alias.ts:39` |
-| `ToolAliasScope` | `interface ToolAliasScope { sources: readonly string[]; since: string }` | `packages/domain/src/analytics/tool-alias.ts` |
-| `ROLLUP_DEFINITION_VERSION` | bumped `'v2'` -> `'v3'` | `packages/domain/src/analytics/rollup-watermark.ts:22` |
-
-No other public API changes. `sourceSummary`, `historyBoardLoopsFromRollup`,
-`historyBoardRankedStepsFromRollup`, `replaceHistoryBoardRollups`, and
-`refreshHistoryBoardRollupsIncremental` all keep their names and signatures.
+| Name | Contract |
+| --- | --- |
+| `0039_spur_cli_bounded_rollup_derivations` | Adds `idx_history_message_source_file` plus `history_board_source_daily.raw_messages` and `.last_imported_at`. |
+| `LoopQueryOptions.sessionScope` | Optional `readonly string[] \| null`; `[]` is a no-op and `null`/absent is full corpus. |
+| `selectorIsUnfiltered` / `rankOrderExpr` | Drop unary `+` only for selectors that do not constrain `history_message`; filtered reads retain the prior plan. |
+| `distinctSourceFileCounts` | Walks the true lexicographic next `(source, source_file)` key through the covering index. |
+| `ToolAliasScope` | Carries `sources` and inclusive `since`; unscoped `applyToolAliases` remains the full-rebuild path. |
+| `ROLLUP_DEFINITION_VERSION` | `v4`; the digest pin retains `v2` and `v3`. |
 
 **Algorithm and precedence.**
 
-1. **Ranked steps (R2, R7).** In `topStepsByTokens`, `topStepsByDuration`, and `topCacheWasteSteps`,
-   route every `+`-prefixed ranking expression — both the `ORDER BY` key and the `IS NOT NULL` /
-   comparison predicates that reference the ranked column — through `rankOrderExpr(sel, …)`.
-   `selectorIsUnfiltered` returns true only when `since`, `until`, `sources`, `models`, `sessionId`,
-   `runId`, and `taskWbs` are all null/undefined; `tools` and `skills` do not constrain
-   `history_message` and are ignored. Unfiltered drops the `+` and the existing partial indexes serve the
-   `ORDER BY … DESC LIMIT` in index order; filtered keeps today's plan verbatim. This is the entire
-   ranked-steps change — `recomputeGlobalRanked` keeps calling the same three functions with
-   `ALL_HISTORY`.
-2. **Loop findings (R1, R3).** Add `sessionScope` to `loops`. When present, the query is driven from
-   `history_tool_call` (`idx_history_tool_call_session_id_seq`, `session_id IN (…)`) and joins
-   `history_message` by `record_hash`, which is that table's `PRIMARY KEY` — a seek per tool call. When
-   absent, the query keeps its current message-first `CROSS JOIN` shape. Split `recomputeGlobalRanked`
-   into `recomputeRankedSteps(db)` (unchanged full-table replace of `history_board_ranked_steps`; the
-   three reads are now index-ordered) and `recomputeLoopFindings(db, sessionScope)`, which with a scope
-   deletes only `WHERE session_id IN (…)` and re-inserts those sessions, and with `null` keeps the
-   existing whole-table delete-and-reinsert. `refreshHistoryBoardRollupsIncremental` already computes
-   `deltaSessionScope(db, messageWm.importedAtWatermark)` for `recomputeKeyedAggregates`; hoist that call
-   and pass the same value to `recomputeLoopFindings`, so one scope resolution serves both and the two can
-   never disagree.
-3. **Source stats (R4).** In `recomputeDailyAndSourceDaily`, extend the `history_board_source_daily`
-   insert with a third CTE reading `history_message` directly, filtered to the affected days as an `OR`
-   of half-open `ts` ranges (`ts >= ? AND ts < ?`) plus `ts IS NULL` for the sentinel day `''` — every
-   term index-served by `idx_history_message_ts`. It supplies `raw_messages` (`COUNT(*)`) and
-   `last_imported_at` (`MAX(imported_at)`) per `(source, day)`. Then in `recomputeKeyedAggregates`,
-   replace `sourceSummary(db, ALL_HISTORY)` with: `SUM(raw_messages)` and `MAX(last_imported_at)` grouped
-   by source over `history_board_source_daily`, plus `distinctSourceFileCounts(db)` for `files`. That
-   helper is a recursive CTE emulating a loose index scan over `idx_history_message_source_file` —
-   seed with `SELECT MIN(source), MIN(source_file)`, step with
-   `SELECT MIN(source_file) … WHERE source = ? AND source_file > ?` — so its cost is one seek per distinct
-   `(source, source_file)` pair. The subsequent enrich `UPDATE` over `history_board_source_stats` is
-   unchanged.
-4. **Alias backfill (R5).** `applyToolAliases(db)` with no scope keeps today's guarded full-table
-   `UPDATE` and stays the call at the top of `replaceHistoryBoardRollups`. `refreshHistoryBoardRollupsIncremental`
-   passes `{ sources, since }`, where `since` is the message-table watermark it already reads and
-   `sources` is `SELECT source FROM history_board_source_stats` (a handful of rows). The scoped form
-   issues one `UPDATE … WHERE source = ? AND imported_at >= ?` per source, which
-   `idx_history_tool_call_source_imported` serves as a range seek — a bare `imported_at >= ?` cannot use
-   that index, so the per-source loop is the point, not an accident. The existing guard
-   (`WHERE tool_name_alias IS NOT COALESCE(…)`) stays in both forms.
-5. **Version bump (R8).** Every step above changes emitted SQL. Bump `ROLLUP_DEFINITION_VERSION` to
-   `'v3'` and add the reported digest under a new `v3` key in `PINNED_DERIVATION_DIGEST`
-   (`packages/domain/tests/analytics/rollup-definition-version.test.ts:28`), keeping the `v2` entry.
-   Because the version differs, existing databases take `rebuildAllRollups`, which is what makes the two
-   new `history_board_source_daily` columns populate for already-materialized days.
+1. The three global top-N queries use their rank indexes only for `ALL_HISTORY`; any source, model,
+   time, session, run, or task filter preserves the unary-plus plan.
+2. Loop findings delete and re-derive only the touched sessions. An explicit empty scope returns no
+   rows and performs no delete; a wide delta resolves to `null` and uses the full fallback.
+3. Source-day derivation is driven by raw `(source, day)` rows and left-joins analyzed measures, so a
+   day removed by request-id dedup still contributes raw message/import coverage. Source totals sum
+   those materialized rows; file counts use a true lex-first anchor and two index seeks per recursive
+   step (next file in the same source, otherwise first file in the next source).
+4. Incremental alias scope is the union of already-materialized sources and sources first seen in the
+   current message delta. Each source gets an indexed `(source, imported_at)` range update; a full
+   rebuild keeps the unscoped guarded update.
+5. The emitted SQL changes invalidate prior materializations through `v4` and its pinned digest.
 
-**Documented preconditions (R3).** Each falls back to the full path or is a stated rule:
+**Preconditions and fallbacks.**
 
-| Precondition | Behaviour | Test |
-| --- | --- | --- |
-| Delta wider than `DELTA_ROW_SCAN_LIMIT` / `SESSION_SCOPE_LIMIT` | `deltaSessionScope` returns `null`; loop findings recompute in full, exactly as session stats already do | assert a wide delta produces full-rebuild-identical loop rows |
-| Rows deleted out of band | Not produced by any refresh path; `history-reset.ts` is the only deleter and it truncates the rollups too | assert reset leaves no orphan rollup rows |
-| `history_tool_alias_map` edited out of band | Stated rule: a full rebuild is required; a map change shipped by migration trips the pinned digest and forces the bump | assert scoped alias update leaves pre-delta rows untouched, and that the unscoped call re-aliases them |
+| Condition | Required behavior |
+| --- | --- |
+| Delta exceeds `DELTA_ROW_SCAN_LIMIT` / `SESSION_SCOPE_LIMIT` | Resolve the session scope to `null` and recompute loops/keyed aggregates in full. |
+| Delta touches no sessions | Preserve all existing loop rows; do not expand an empty scope to a corpus scan. |
+| Rows are deleted through history reset | Reset truncates source and rollup tables together; the next refresh rebuilds cleanly. |
+| Alias map changes outside import | Requires the unscoped/full-rebuild path; scoped refresh intentionally leaves pre-delta rows untouched. |
 
-**Anti-patterns — do not do these.**
+No public CLI, DTO, or UI surface changes. Candidate-contribution tables, per-bucket top-N merging,
+unconditional removal of unary `+`, and incremental `previous + delta` accumulation remain explicitly
+out of scope: the existing scope/index/materialized-day seams are sufficient and preserve restart
+correctness.
 
-- Do not add a candidate-contribution table, a per-bucket top-N, or a merge-with-materialized step. The
-  rank indexes make the top-N exact without one (Q&A), and loop findings are not a ranking.
-- Do not delete the `+` unconditionally. Filtered forensic selectors depend on it; R7 is the guard.
-- Do not scope the alias `UPDATE` with a bare `imported_at >= ?`. The index is `(source, imported_at)`.
-- Do not accumulate `raw_messages` as `previous + delta`. An interrupted refresh reprocesses its range
-  (0741 R7) and would double-count; the per-day column must be delete-and-re-derive.
-- Do not change what `history_board_source_stats.messages` counts, and do not source it from the deduped
-  `history_board_source_daily` token/session columns. `raw_messages` is a separate, deliberately raw column.
-- Do not re-point `sourceSummary` itself. Three forensic callers pass arbitrary selectors and need it as
-  it is; only the rollup's call site is replaced.
-- Do not derive `files` from `history_import_checkpoint` without first measuring the divergence (Q&A).
-
-**Primary file targets.**
-
-- `packages/domain/src/analytics/forensic-query.ts` — `rankOrderExpr`, `selectorIsUnfiltered`,
-  `LoopQueryOptions`, `distinctSourceFileCounts`, the three ranking queries, `loops`.
-- `packages/domain/src/analytics/history-board-rollup.ts` — `recomputeGlobalRanked` split,
-  `recomputeDailyAndSourceDaily`, `recomputeKeyedAggregates`, `refreshHistoryBoardRollupsIncremental`.
-- `packages/domain/src/analytics/tool-alias.ts` — `ToolAliasScope`, scoped `applyToolAliases`.
-- `packages/domain/src/analytics/rollup-watermark.ts` — version bump.
-- `packages/domain/src/migrations.ts` + `drizzle/0039_spur_cli_bounded_rollup_derivations.sql`.
-- `packages/domain/tests/analytics/rollup-definition-version.test.ts` — new `v3` digest key.
-
-**Cross-task.** Assumes from 0741: the watermark, the per-bucket transaction, `deltaSessionScope`,
-`postPassLags`, and the R7 reprocess-on-interrupt rule — none of which this task re-owns or changes.
-Leaves for 0746: database size and vacuuming. Supersedes 0741 R9's budget with the R6 measurement;
-0741's Design table entry for the "global ranked" class is corrected by this task and should be read
-alongside it rather than as current.
+**Cross-task.** Reuses 0741's watermark, per-bucket transaction, touched-session scope, and interrupted
+refresh replay rule. Task 0746 continues to own database size and vacuuming.
 ### Plan
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
-
-1. **Migration 0039** (R4, R8 prerequisite). Add `drizzle/0039_spur_cli_bounded_rollup_derivations.sql`
-   and `BOUNDED_ROLLUP_DERIVATIONS_SCHEMA_SQL` in `packages/domain/src/migrations.ts`:
-   `idx_history_message_source_file ON history_message (source, source_file)`, plus
-   `history_board_source_daily.raw_messages INTEGER NOT NULL DEFAULT 0` and
-   `.last_imported_at TEXT`, each with a comment stating the columns are raw (no dedup, no turn
-   watermark) because they back import coverage. Verify the migration applies to an existing database
-   and to a fresh one.
-2. **Ranked steps** (R2, R7). Add `selectorIsUnfiltered` and `rankOrderExpr` to `forensic-query.ts` and
-   route the `+` prefixes in `topStepsByTokens`, `topStepsByDuration`, `topCacheWasteSteps` through it.
-   Test: `EXPLAIN QUERY PLAN` for each ranking under `ALL_HISTORY` names the matching rank index and
-   contains no `USE TEMP B-TREE FOR ORDER BY`; under a `since`+`sources` selector the plan is unchanged
-   from the pre-change baseline.
-3. **Loop findings** (R1, R3). Add `LoopQueryOptions.sessionScope` and the tool-call-first query shape to
-   `loops`. Split `recomputeGlobalRanked` into `recomputeRankedSteps` and
-   `recomputeLoopFindings(db, sessionScope)`; hoist the existing `deltaSessionScope` call in
-   `refreshHistoryBoardRollupsIncremental` so one value feeds both it and `recomputeKeyedAggregates`.
-   Tests: scoped refresh leaves untouched sessions' rows byte-identical and matches a full rebuild;
-   a delta exceeding the scope limits falls back to the full recompute and still matches.
-4. **Source stats** (R4). Extend the `history_board_source_daily` insert in
-   `recomputeDailyAndSourceDaily` with the raw per-day CTE (day `ts` ranges `OR ts IS NULL`). Add
-   `distinctSourceFileCounts`. Replace the `sourceSummary(db, ALL_HISTORY)` call in
-   `recomputeKeyedAggregates` with the summed per-day rows plus that helper; leave the enrich `UPDATE`
-   alone. Tests: source-stats rows match a full rebuild including the NULL-`ts` sentinel day;
-   `EXPLAIN QUERY PLAN` for the distinct-file walk shows the new index; no statement in the derivation
-   groups over the whole `history_message` table.
-5. **Alias backfill** (R5). Add `ToolAliasScope` and the optional second parameter to
-   `applyToolAliases`; pass `{ sources, since }` from `refreshHistoryBoardRollupsIncremental` only.
-   Tests: with a scope, a pre-delta row keeps its stale alias; without one (full rebuild), it is
-   re-aliased.
-6. **Version bump** (R8). Set `ROLLUP_DEFINITION_VERSION = 'v3'`, run
-   `packages/domain/tests/analytics/rollup-definition-version.test.ts`, add the reported digest under a
-   new `v3` key, keep `v2`. Confirm an existing v2 database takes `rebuildAllRollups` and populates the
-   two new columns.
-7. **Measurement** (R6). Re-run the 0741 harness — full rebuild after clearing every board table, then
-   one 400-row delta import and an incremental refresh, timed through a proxy `DbAdapter` — at 100k,
-   400k, and 1.81M messages. Record the four derivations' per-statement times and the whole-delta vs
-   full-rebuild ratio in `## Testing`, alongside the 0741 R9 baseline they supersede. Publish the
-   comparison in a report under `docs/report/` following the existing E91 latency report.
-8. **Gates.** `bun run spur-check`, `bun run test`, `bun run build`. Update `docs/04_DESIGN.md` history
-   surfaces if the rollup derivation contract is described there, and note in `docs/00_ADR.md` only if
-   the class taxonomy from 0741 is recorded as a decision.
+1. Add migration 0039 with the `(source, source_file)` index and raw source-day coverage columns; mirror
+   it in the bundled schema and test fresh/existing migration paths.
+2. Route unfiltered ranked queries through the existing rank indexes while preserving every filtered
+   query plan; assert the production queries with `EXPLAIN QUERY PLAN`.
+3. Reuse the touched-session scope for loop findings, including explicit empty-scope no-op and
+   wide-delta full fallback; compare incremental rows with a fresh rebuild.
+4. Drive source-day rows from raw coverage, sum their materialized totals, and count distinct files with
+   a lexicographic loose index walk; cover raw-only days and adversarial source/file ordering.
+5. Scope incremental alias application to materialized plus first-seen delta sources; retain unscoped
+   re-aliasing for full rebuilds.
+6. Advance the rollup definition to `v4`, pin its derivation digest, and retain the `v2`/`v3` pins.
+7. Measure one constant 400-row delta at 100k, 400k, and 1.81M-message scales and record provenance,
+   method, statement timings, growth, and the 0741 comparison in the tracked E91 report.
+8. Run targeted regressions and the repository lint/type/test/build/corpus gates; sync the affected
+   history design/report surfaces and record a fresh task verdict and review.
 ### Solution
-Change map (one file:line per row; snake_case doc paths excluded per L4 anchor rule). Every change is a derivation-scope or derivation-SQL change gated behind ROLLUP_DEFINITION_VERSION v3, so existing databases rebuild rather than extend.
+The bounded design remains deliberately small: reuse the touched-session scope for loops, let SQLite's
+existing rank indexes serve unfiltered top-N reads, derive source coverage from materialized day rows
+plus the existing loose index walk, and scope alias updates by source and watermark. No candidate table
+or merge engine was added.
 
 | Anchor | Change |
 | --- | --- |
-| drizzle/0039_spur_cli_bounded_rollup_derivations.sql:10 | Migration 0039: `idx_history_message_source_file` on `history_message (source, source_file)` plus raw `history_board_source_daily.raw_messages` / `.last_imported_at` columns (R4, R8 prerequisite). |
-| packages/domain/src/migrations.ts:1028 | `BOUNDED_ROLLUP_DERIVATIONS_SCHEMA_SQL` — in-bundle mirror of migration 0039 for fresh databases. |
-| packages/domain/src/migrations.ts:1437 | 0039 skip-guard extended: journal presence AND `source_file` column existence; journals out on the legacy 0000-stub shape instead of aborting the apply. |
-| packages/domain/src/analytics/forensic-query.ts:847 | `LoopQueryOptions extends WatermarkQueryOptions` with `sessionScope?: readonly string[]` (R1). |
-| packages/domain/src/analytics/forensic-query.ts:860 | `selectorIsUnfiltered` — true only when since/until/sources/models/sessionId/runId/taskWbs are all unset (R2, R7). |
-| packages/domain/src/analytics/forensic-query.ts:880 | `rankOrderExpr(sel, expr)` — returns `expr` unfiltered, `+expr` filtered; every ranking ORDER BY key and ranked-column predicate routes through it (R2, R7). |
-| packages/domain/src/analytics/forensic-query.ts:885 | `loops` third parameter widened to `LoopQueryOptions`; with a scope the query is driven from `history_tool_call` (`session_id IN (...)`) joining `history_message` by `record_hash` PK seek; without, the message-first CROSS JOIN shape is kept verbatim (R1). |
-| packages/domain/src/analytics/forensic-query.ts:1057 | `distinctSourceFileCounts` — recursive-CTE loose index scan over `idx_history_message_source_file`; one seek per distinct `(source, source_file)` (R4). |
-| packages/domain/src/analytics/history-board-rollup.ts:1480 | `recomputeDailyAndSourceDaily` insert extended with a raw per-day CTE (`COUNT(*)`, `MAX(imported_at)` over index-served day `ts` ranges OR `ts IS NULL`) feeding the two new columns (R4). |
-| packages/domain/src/analytics/history-board-rollup.ts:1668 | `recomputeKeyedAggregates` now takes the session scope; the rollup-site `sourceSummary(db, ALL_HISTORY)` is replaced by `SUM(raw_messages)`/`MAX(last_imported_at)` over `history_board_source_daily` plus `distinctSourceFileCounts` for `files`; enrich UPDATE untouched (R4). |
-| packages/domain/src/analytics/history-board-rollup.ts:1757 | `recomputeRankedSteps` — former global-ranked half, unchanged full-table replace of `history_board_ranked_steps`; its three reads are now index-ordered (R2). |
-| packages/domain/src/analytics/history-board-rollup.ts:1779 | `recomputeLoopFindings(db, sessionScope)` — scope deletes/re-derives only `session_id IN (...)`; null keeps the whole-table delete-and-reinsert (R1, R3). |
-| packages/domain/src/analytics/history-board-rollup.ts:1910 | `deltaSessionScope` — unchanged helper, now shared by loop findings and keyed aggregates (R1). |
-| packages/domain/src/analytics/history-board-rollup.ts:1950 | `refreshHistoryBoardRollupsIncremental` — hoists `deltaSessionScope` to one call feeding both consumers (2042-2045); alias backfill now scoped `{ sources, since }`; full path (`replaceHistoryBoardRollups`) unchanged unscoped (R5). |
-| packages/domain/src/analytics/tool-alias.ts:42 | `ToolAliasScope { sources; since }`; scoped form issues one `UPDATE ... WHERE source = ? AND imported_at >= ?` per source — index-served range seek, never a bare `imported_at >= ?`; unscoped form is today's guarded full-table update (R5). |
-| packages/domain/src/analytics/rollup-watermark.ts:24 | `ROLLUP_DEFINITION_VERSION` 'v2' -> 'v3' — every change here is a derivation change, so existing databases rebuild (R8). |
-| packages/domain/tests/analytics/bounded-rollup-0763.test.ts:1 | New: R1 scoped-refresh equality + untouched-session byte-identity; R2 EXPLAIN QUERY PLAN (no TEMP B-TREE unfiltered, present filtered); R4 incremental==rebuild + index plan proof + NULL-ts sentinel; R5 scoped leaves pre-delta alias, unscoped re-aliases; R3 wide-delta full fallback (R3). |
-| packages/domain/tests/analytics/rollup-definition-version.test.ts:29 | `PINNED_DERIVATION_DIGEST` gains the v3 digest; v2 kept (R8). |
-| packages/domain/tests/dao/migrations.test.ts:262 | Legacy-stub scenario now exercises the 0039 journal-skip guard. |
+| `drizzle/0039_spur_cli_bounded_rollup_derivations.sql:10` | Adds `idx_history_message_source_file` and raw source-day coverage columns. |
+| `packages/domain/src/migrations.ts:1028` | Mirrors migration 0039 in the bundled schema and preserves the legacy-stub skip guard. |
+| `packages/domain/src/analytics/forensic-query.ts:847` | `LoopQueryOptions.sessionScope` carries the bounded session set; empty and wide scopes have explicit no-op/full behavior. |
+| `packages/domain/src/analytics/forensic-query.ts:880` | Unfiltered ranks use their indexes; filtered plans keep the unary `+`. |
+| `packages/domain/src/analytics/forensic-query.ts:1055` | The distinct-file walk starts at the true lex-first pair and seeks one distinct key at a time. |
+| `packages/domain/src/analytics/history-board-rollup.ts:452` | Full source-day derivation is raw-driven, preserving coverage removed by request-id dedup. |
+| `packages/domain/src/analytics/history-board-rollup.ts:1519` | Incremental source-day derivation uses the same raw-driven relation for affected days. |
+| `packages/domain/src/analytics/history-board-rollup.ts:1778` | Loop findings replace only touched sessions, with explicit empty/full fallback semantics. |
+| `packages/domain/src/analytics/history-board-rollup.ts:1967` | Incremental aliases include sources first seen in the delta. |
+| `packages/domain/src/analytics/rollup-watermark.ts:23` | Definition version advances to `v4`, forcing existing materializations through a full rebuild. |
+| `packages/domain/tests/analytics/bounded-rollup-0763.test.ts:148` | Real-query plan and regression coverage includes rank plans, loop fallbacks, reset, raw-only days, first-seen sources, equality, and adversarial loose-index anchoring. |
+| `packages/domain/tests/analytics/rollup-definition-version.test.ts:27` | Pins `v4` while retaining `v2`/`v3`. |
+| `plugins/sp/scripts/verify-answer-lint.ts:272` | Accepts exact task-local Gherkin scenario titles so all seven AC rows are linted and recorded; `plugins/sp/tests/verify-answer-lint.test.ts:124` is the regression. |
+| `docs/report/2026-09-04-E91-bounded-rollup-derivations.md:1` | Records the three-scale, constant-delta benchmark and its 0741 comparison. |
 
-Rationale: premise verification in the task Background split 0741's "global ranked" class into two different problems. Loop findings are a keyed aggregate over sessions, so they reuse `deltaSessionScope` and the existing null-scope full fallback (R1/R3). Ranked steps are a genuine top-N whose exact bounded path is the three existing rank indexes the unary `+` was defeating — routing the ranking expressions through `rankOrderExpr` restores index order for unfiltered selectors and keeps today's plan verbatim for filtered ones (R2/R7). Source stats come from already-materialized per-day rows plus a loose index scan (R4). The alias backfill rides the existing `(source, imported_at)` index per source (R5). No candidate-contribution table, no per-bucket top-N, no merge step — the Q&A pre-refine decisions hold.
+Re-verification repaired three correctness gaps: empty session scopes no longer expand to a corpus
+scan, raw source/day coverage survives message dedup, and a new source participates in alias backfill
+on its first delta. Those SQL changes supersede the originally planned `v3` closeout with `v4`.
 ### Testing
 **Pipeline verify results**
 
@@ -429,55 +328,68 @@ Rationale: premise verification in the task Background split 0741's "global rank
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | test: packages/domain `bun test tests/analytics/bounded-rollup-0763.test.ts` — "empty delta scope ... without duplicating rows" and R1 loop-scope tests assert delta-scoped recompute + no duplicate rows (deltaSessionScope + fullCorpus fallback, `history-board-rollup.ts`). command: `cd packages/domain && bun test tests/analytics/bounded-rollup-0763.test.ts tests/analytics/forensic-query.test.ts` → 38 pass / 0 fail. |
-| R2 | MET | test: `bun test tests/analytics/bounded-rollup-0763.test.ts` ranked-plan tests assert rank-index plans with no TEMP B-TREE for unfiltered selectors; `rankOrderExpr` keeps `+expr` filtered plans verbatim at all rank call sites (forensic-query.ts). command: full gate `bun run spur-check` rc=0, 7357 pass / 0 fail. |
-| R3 | MET | test: "incremental refresh on a multi-file corpus matches a fresh full rebuild" (source_daily + source_stats dump equality) and R1 empty-scope full-path test; fullCorpus guard at history-board-rollup.ts recompute entry. |
-| R4 | MET | test: new post-review regression tests — adversarial corpus `{b/m.jsonl, a/a.jsonl}` (no column-wise MIN pair exists) returns {a:1,b:1}; 20×30 corpus returns 20×30 exactly with no terminal-NULL key; pre-fix CTE verified failing (0 pass/1 fail with broken function re-applied), post-fix passing. EXPLAIN test pins `idx_history_message_source_file`. command: probes via real `distinctSourceFileCounts` (in-memory SQLite + applyCliMigrations): 600-file 0.4 ms, 2000-file 1.2 ms (review's pre-fix probes: >89 s and >118 s killed). |
-| R5 | MET | test: R5 alias-backfill test — scoped pass leaves pre-watermark stale alias untouched while aliasing the delta row; unscoped pass re-aliases all (tool-alias.ts scoped since-window). |
-| R6 | MET | command: measured post-fix at rollup level (real refresh + real CTE, in-memory SQLite): 12k rows → CTE 0.4 ms / refresh 126.5 ms; 198k rows → 3.0 ms / 2.13 s; 1M rows → 10.7 ms / 10.83 s; 400-row delta on 12k base → incremental refresh 151.1 ms, files 30→130 correct. CTE walk tracks distinct files (300/3k/10k), sublinear in corpus rows; numbers recorded in task `## Testing` against the 0741 R9 baseline. Caveat: single-run dev-laptop timings, reported as measured. |
-| R7 | MET | test: filtered-plan test in bounded-rollup-0763.test.ts (filtered selector preserves `+expr` ORDER BY; selective index kept); rankOrderExpr routes only unfiltered selectors to rank indexes (forensic-query.ts 5 call sites). |
-| R8 | MET | test: `tests/analytics/rollup-definition-version.test.ts` v3 digest pin + `tests/dao/migrations.test.ts` migration assertions (56 pass in gate); ROLLUP_DEFINITION_VERSION bump forces rebuild. |
+| R1 | MET | `packages/domain/src/analytics/forensic-query.ts:884` scopes the query by session and treats `[]` as a no-op; `packages/domain/tests/analytics/bounded-rollup-0763.test.ts:250` proves incremental/full equality and untouched-session preservation. |
+| R2 | MET | `packages/domain/tests/analytics/bounded-rollup-0763.test.ts:148` captures the three real ranking queries; EXPLAIN names the token, duration, and input rank indexes with no temporary ORDER BY tree. |
+| R3 | MET | `packages/domain/tests/analytics/bounded-rollup-0763.test.ts:250`, `:310`, `:343`, `:386`, `:431`, and `:556` cover equality plus empty, wide-delta, reset/deletion, and alias-map staleness/full-rebuild outcomes. |
+| R4 | MET | `packages/domain/src/analytics/history-board-rollup.ts:1519` derives source/day coverage from raw-driven materialized rows and `packages/domain/src/analytics/forensic-query.ts:1055` performs the loose index walk; plan, equality, raw-only-day, and adversarial-key tests pass. |
+| R5 | MET | `packages/domain/src/analytics/history-board-rollup.ts:1967` scopes materialized and first-seen delta sources; `packages/domain/tests/analytics/bounded-rollup-0763.test.ts:556` proves scoped, unscoped, and new-source alias behavior. |
+| R6 | MET | The three-scale benchmark execution is recorded with corpus provenance and method at `docs/report/2026-09-04-E91-bounded-rollup-derivations.md:6`; `:21` records 18.1x corpus growth versus 3.7x derivation growth and the 0741 baseline. |
+| R7 | MET | `packages/domain/src/analytics/forensic-query.ts:880` routes every listed selector dimension to the preserved filtered expression; the real-query filtered-plan regression at `packages/domain/tests/analytics/bounded-rollup-0763.test.ts:181` retains the temporary sort. |
+| R8 | MET | `packages/domain/src/analytics/rollup-watermark.ts:23` advances the definition to v4; `packages/domain/tests/analytics/rollup-definition-version.test.ts:27` pins the new digest and passes with prior pins retained. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R4 — Incremental rollups are byte-identical to a full rebuild | MET | test | bounded-rollup-0763.test.ts: incremental refresh on a multi-file corpus matches a fresh full rebuild — source_daily and source_stats dumps equal. |
-| R5 — A duplicate arriving after its bucket was materialized does not corrupt that bucket | MET | test | source_daily merge-on-conflict re-materializes touched (source,day) rows; untouched (source,day) rows left in place. |
-| R6 — A new import no longer invalidates every rollup table at once | MET | test | deltaSessionScope bounds loop-findings recompute to touched sessions; fullCorpus sentinel only when scope unavailable; source_stats from source_daily sums + bounded walk. |
-| R7 — Summary serves its aggregates as lookups rather than per-request computation | MET | test | source_stats serves precomputed aggregates from history_board_source_stats (per-day rollups + distinct-file walk), no per-request GROUP BY over history_message. |
-| R8 — No read-path aggregation runs against raw history tables | MET | test | distinctSourceFileCounts is the last raw-table aggregation on the summary path, now a bounded CTE walk instead of a whole-table GROUP BY scan. |
-| R27 — Changing how a rollup is derived invalidates what was already materialized | MET | test | ROLLUP_DEFINITION_VERSION bumped to v3 with re-pinned digest (proof-capture.test.ts) so existing databases rebuild rather than extend. |
+| R1 — Loop findings are re-derived only for the sessions a delta touched | MET | test | `packages/domain/tests/analytics/bounded-rollup-0763.test.ts:250` compares incremental and fresh rows and proves the untouched session remains at three repeats. |
+| R2 — Ranked steps resolve from the rank indexes without a sort | MET | test | `packages/domain/tests/analytics/bounded-rollup-0763.test.ts:149` executes the production queries and asserts the exact three indexes with no temporary ORDER BY tree. |
+| R3 — The bounded derivations agree with the full rebuild | MET | test | `packages/domain/tests/analytics/bounded-rollup-0763.test.ts:250`, `:343`, `:386`, `:431`, and `:556` cover equality and every documented fallback/staleness precondition. |
+| R4 — Source summary is derived from materialized rows and an index walk | MET | test | `packages/domain/tests/analytics/bounded-rollup-0763.test.ts:402` proves the production loose-walk plan uses `idx_history_message_source_file`; `:431` proves incremental/full source rows are identical. |
+| R5 — Alias backfill is scoped to the delta on an incremental refresh | MET | test | `packages/domain/tests/analytics/bounded-rollup-0763.test.ts:556` proves pre-delta rows stay untouched by scoped apply while the delta aliases, then proves unscoped apply rewrites both. |
+| R6 — Delta cost stays sublinear as the corpus grows | MET | command | The executed constant-delta benchmark's provenance, method, three-scale timings, and baseline comparison are retained at `docs/report/2026-09-04-E91-bounded-rollup-derivations.md:6` and `:21`. |
+| R7 — Filtered forensic reads keep their current plan | MET | test | `packages/domain/tests/analytics/bounded-rollup-0763.test.ts:181` calls the real filtered ranking query and asserts the preserved unary-plus plan still sorts rather than walking the rank index. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
-**Reviewer:** SpurReview0763C (Phase 7 pipeline review) · **Scope:** implementation diff on `sp/dev-run-0763-4FE8B8DE` (base 9912a5498) · **Method:** fresh scoped test runs in the worktree plus empirical probes against `distinctSourceFileCounts` (SQLite in-memory corpora; probes were throwaway scripts, since removed).
+**Reviewer:** `sp:super-reviewer` (`review_0763_final`)
+**Scope:** final task 0763 implementation, requirements/AC, verification evidence, and architecture
+**Method:** source inspection plus fresh domain and answer-lint regression runs
 
 ## Findings
 
 | Priority | Dimension | Location | Finding |
-|---|---|---|---|
-| P1 | Code verification | `forensic-query.ts:1057` | `distinctSourceFileCounts` recursive CTE is broken two ways. (a) **Correctness:** the anchor `WHERE (m.source, m.source_file) = (SELECT MIN(source), MIN(source_file) FROM history_message)` takes independent column-wise MINs; the pair may not exist in the table (e.g. sources `a`,`b` with files `m.jsonl`,`a.jsonl` — MIN pair `('a','a.jsonl')` is absent), the walk starts nowhere and returns `[]`, and `history-board-rollup.ts:1722` merges the miss as `?? 0` → source files counts silently wrong. (b) **Perf:** the recursive step emits *every* strictly-greater row per walk row (`WHERE (m.source = w.source AND m.source_file > w.source_file) OR m.source > w.source`) with no lex-next selection and no dedupe — superpolynomial, contradicting the docstring's "one seek per distinct file, O(distinct files × log n)". Empirical: 600-row corpus (20 files × 30 msgs, valid anchor) did not complete in ~89 s; 2000-file corpus hung >118 s; mis-anchored 2-row corpus returned wrong `[]` in 0.2 ms. The shipped green EXPLAIN test passes only because its fixture accidentally contains a valid MIN pair. |
-| P1 | Code verification | `history-board-rollup.ts:1718` | `recomputeKeyedAggregates` calls `distinctSourceFileCounts` on **every** incremental refresh (`refreshHistoryBoardRollupsIncremental` → :2046); with a real corpus this hangs the refresh path indefinitely, with no timeout or fallback. |
-| P2 | Functional (R6) | task `## Testing` (line 425) | The measurement required by task Plan step 7 (three corpus scales, 400-row delta timing) was never performed; the section is still the empty `<!-- Filled during verification -->` template. Even the measurement would fail: the shipped R4 implementation cannot be sublinear (see P1). |
-| P3 | Scope | `bunfig.toml` | `config/**` added to `coveragePathIgnorePatterns`; unrelated to any 0763 requirement and unmentioned in the task's Solution. Scope-creep. |
-| P3 | Test fidelity (R7) | `bounded-rollup-0763.test.ts:134` | The filtered-plan test hand-writes the SQL instead of calling real `topStepsBy*` under a filtered selector; the `rankOrderExpr` routing it is meant to pin is verified only indirectly (5 call sites: `forensic-query.ts:1170,1171,1196,1227,1254`). |
+| --- | --- | --- | --- |
+| P4 | — | — | No P1–P3 findings. Functional, SECUA, and architecture review pass. |
 
-## Traceability
+## Requirement traceability
 
-| Req | Status | Evidence |
-|---|---|---|
-| R1 | MET | Session-scoped recompute: `history-board-rollup.ts:1668` (`recomputeKeyedAggregates(db, sessionScope)`), scoped deletes `sessionStatsOps` `history-board-rollup.ts:1600`, one scope feeds both consumers at `:2045-2046`; delta-equality test `bounded-rollup-0763.test.ts:198`, empty-scope fallback `:258`. |
-| R2 | MET | Bucket/day materialization preserved with watermark clamping (`history-board-rollup.ts:1979-2038` suffixMin logic R7); `recomputeDailyAndSourceDaily` `:1480` with `raw_day` CTE `:1529-1537`; unfiltered-plan test `bounded-rollup-0763.test.ts:108`, filtered `:134`. |
-| R3 | MET | `fullCorpus` guard `history-board-rollup.ts:1784` routes `loops()` to full corpus when scope is empty; fallback tested `bounded-rollup-0763.test.ts:258` (keyed) and `:198` (loop). |
-| R4 | UNMET | Index `idx_history_message_source_file` exists (migration 0039, `migrations.ts:1028` DDL, `:1194` entry; `drizzle/0039_spur_cli_bounded_rollup_derivations.sql`), but the CTE over it is empirically superpolynomial and produces wrong counts on mis-anchored corpora (P1). EXPLAIN test `bounded-rollup-0763.test.ts:290` only asserts the plan names the index; incremental==rebuild test `:324` passes on a toy corpus that dodges both defects. |
-| R5 | MET | Scoped per-source alias UPDATE `tool-alias.ts:64`; `ALIASED_TOOL_NAME_SQL` `:25` / `MAPPED_ALIAS_SQL` `:13`; scope plumbing `ToolAliasScope` `:42`; alias calls in refresh `history-board-rollup.ts:1963,1972`; test `bounded-rollup-0763.test.ts:402`. |
-| R6 | UNMET | No performance measurement exists — task `## Testing` is the untouched template (line 425); Plan step 7 explicitly requires the 3-scale + delta measurement, and the shipped R4 cannot meet sublinearity. |
-| R7 | MET | `rankOrderExpr` (`forensic-query.ts:880`) wraps filtered selectors in unary `+` at all 5 rank call sites (`:1170,:1171,:1196,:1227,:1254`); unfiltered CROSS JOIN shape preserved; rank-order test `bounded-rollup-0763.test.ts:153`. Minor fidelity note (P3). |
-| R8 | MET | Rollup definition v3 digest asserted `rollup-definition-version.test.ts:29`; 40 migrations incl. 0039 asserted `migrations.test.ts:123,179`. |
+| Requirement | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `forensic-query.ts:884` implements session-scoped loop queries; `bounded-rollup-0763.test.ts:250` proves incremental/full equality and untouched-session preservation. |
+| R2 | MET | Production-query plan tests at `bounded-rollup-0763.test.ts:148` prove all three unfiltered ranks use their indexes without a temporary ORDER BY tree. |
+| R3 | MET | Tests at `:250`, `:310`, `:343`, `:386`, `:431`, and `:556` cover equality, empty/wide scope, reset/deletion, and alias-map staleness/full-rebuild behavior. |
+| R4 | MET | `history-board-rollup.ts:1519` materializes raw-driven source days and `forensic-query.ts:1055` performs the corrected loose walk; plan, equality, raw-only-day, and adversarial-key tests pass. |
+| R5 | MET | `history-board-rollup.ts:1967` scopes existing and first-seen sources; `bounded-rollup-0763.test.ts:556` proves scoped, unscoped, and new-source alias behavior. |
+| R6 | MET | `docs/report/2026-09-04-E91-bounded-rollup-derivations.md:6` records benchmark provenance/method and `:21` records 18.1x corpus growth versus 3.7x derivation growth. |
+| R7 | MET | `forensic-query.ts:880` preserves the filtered expression and the production-query regression at `bounded-rollup-0763.test.ts:181` retains the sort plan. |
+| R8 | MET | `rollup-watermark.ts:23` advances to `v4`; `rollup-definition-version.test.ts:27` pins the digest with prior versions retained. |
 
-**Residual risk:** The green test suite masks the P1 defects — fixtures are small and accidentally anchor-valid, so CI stays green while production refreshes hang or under-count. Any deployment of this branch would make the history board unreliable from the first real incremental refresh.
+## SECUA
 
-## Verdict
+| Dimension | Result |
+| --- | --- |
+| Security | PASS — no new trust boundary, credential, dynamic execution, or authorization surface. |
+| Errors | PASS — empty and wide scopes have explicit, tested semantics; failures are not suppressed. |
+| Consistency | PASS — full and incremental derivations are compared directly across fallbacks. |
+| Usage | PASS — changes stay behind existing domain APIs and migration conventions. |
+| Alignment | PASS — implementation and tracked history design/report surfaces agree on v4 behavior. |
+| Scope | PASS — unrelated `config/**` coverage exclusion was removed before closeout. |
 
-**FAIL** — R4 UNMET (core: correctness bug + empirically-hung derivation on the hot refresh path) and R6 UNMET (required measurement never performed; `## Testing` left as template). R1–R3, R5, R7, R8 verified MET. Remediation route: `/sp-dev-verify --fix` — rewrite the CTE recursive step to select the lex-next `(source, source_file)` pair per walk row (and guard/de-anchor the start), then perform the R6 measurement over real-scale corpora.
+## Architecture
+
+The implementation reuses existing session scopes, materialized day rows, and covering indexes. The
+distinct-file walk remains proportional to distinct file keys rather than message rows; the tracked
+three-scale benchmark verifies sublinear behavior. No new public surface or stateful abstraction was
+introduced.
+
+**Review Verdict: PASS.**
 ### References
 - Feature `E91` — History read path materialized-only.
 - Task `0741` — incremental rollup refresh engine; R8/R9 record the measurement this task acts on, and its Design's "global ranked" class entry is corrected here.
