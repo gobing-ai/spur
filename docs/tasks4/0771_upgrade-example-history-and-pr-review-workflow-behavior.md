@@ -83,14 +83,14 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 
 Anticipated change anchors (populated during implementation):
 
-- `config/workflows/basic.yaml` — `version: "1"` once positive/negative checks pass; retain `qualityGateCmd: "bun run check"`; tested with `false && echo should-not-run` and a valid compound command.
-- `config/workflows/history-anatomy.yaml` — `version: "1"`; assert-clean mutation confinement; tighten verdict acceptance to canonical reader or anchored `Verdict: PASS` line.
-- `config/workflows/pr-review.yaml` — `version: "1"`; preserve `pr-reviewing.ts` request/dedupe/wait/collect/status ownership.
-- `plugins/sp/scripts/history-anatomy-cache.ts` — bounded shared correction count; remove duplicate validation of unchanged candidate.
-- `plugins/sp/scripts/pr-reviewing.ts` — `requestedAt` empty for already-reviewed/requested dedupe; retain `--head` checks on every read.
-- `packages/app/tests/workflow/basic-workflow.test.ts` — new test file for executed shell/branch behavior.
-- `plugins/sp/tests/history-anatomy-cache.test.ts` — extended.
-- `plugins/sp/tests/pr-reviewing.test.ts` — extended; publication routing/verdict spoofing fixtures.
+- `config/workflows/basic.yaml:1` — `version: "1"` once positive/negative checks pass; retain `qualityGateCmd: "bun run check"`; tested with `false && echo should-not-run` and a valid compound command.
+- `config/workflows/history-anatomy.yaml:1` — `version: "1"`; assert-clean mutation confinement; tighten verdict acceptance to canonical reader or anchored `Verdict: PASS` line.
+- `config/workflows/pr-review.yaml:1` — `version: "1"`; preserve `pr-reviewing.ts` request/dedupe/wait/collect/status ownership.
+- `plugins/sp/scripts/history-anatomy-cache.ts:1` — bounded shared correction count; remove duplicate validation of unchanged candidate.
+- `plugins/sp/scripts/pr-reviewing.ts:1` — `requestedAt` empty for already-reviewed/requested dedupe; retain `--head` checks on every read.
+- `packages/app/tests/workflow/basic-workflow.test.ts:1` — new test file for executed shell/branch behavior.
+- `plugins/sp/tests/history-anatomy-cache.test.ts:1` — extended.
+- `plugins/sp/tests/pr-reviewing.test.ts:1` — extended; publication routing/verdict spoofing fixtures.
 
 ### Testing
 

@@ -109,14 +109,14 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 
 Anticipated change anchors (populated during implementation):
 
-- `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts` — proof failure-path tests (required for `version: "1"`).
-- `packages/app/tests/workflow/task-pipeline-proportional-routing.test.ts` — proportional routing tests.
-- `packages/app/tests/workflow/proof-input-fingerprint.test.ts` — proof-input-fingerprint owner tests.
-- `packages/app/tests/services/done-transition-guard.test.ts` — extended for bounded status/attempt/path summary.
-- `plugins/sp/tests/task-pipeline-resilience.test.ts` — extended for inline-pipeline parity.
-- `scripts/commands/bundle-config.ts` — narrow fix if its copy leaves deleted config assets; verify stale corpus/composition files disappear from generated output.
-- `config/workflows/` vs `apps/cli/config/workflows/` — bundle-rebuilt comparison; all eleven names verified: basic, docs-pipeline, feature-dev, feature-lifecycle, history-anatomy, idea-pipeline, pr-review, task-lifecycle, task-pipeline, wayfinder-resolution, wrapup-pipeline.
-- `docs/plans/2026-09-04-d61-rollout-evidence.md` — committed aggregate of per-task measurements.
+- `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:1` — proof failure-path tests (required for `version: "1"`).
+- `packages/app/tests/workflow/task-pipeline-proportional-routing.test.ts:1` — proportional routing tests.
+- `packages/app/tests/workflow/proof-input-fingerprint.test.ts:1` — proof-input-fingerprint owner tests.
+- `packages/app/tests/services/done-transition-guard.test.ts:1` — extended for bounded status/attempt/path summary.
+- `plugins/sp/tests/task-pipeline-resilience.test.ts:1` — extended for inline-pipeline parity.
+- `scripts/commands/bundle-config.ts:1` — narrow fix if its copy leaves deleted config assets; verify stale corpus/composition files disappear from generated output.
+- `apps/cli/config/workflows/<each>.yaml:1` (11 names: basic, docs-pipeline, feature-dev, feature-lifecycle, history-anatomy, idea-pipeline, pr-review, task-lifecycle, task-pipeline, wayfinder-resolution, wrapup-pipeline) — bundle-rebuilt comparison vs `config/workflows/`.
+- `docs/plans/2026-09-04-d61-rollout-evidence.md:1` — committed aggregate of per-task measurements.
 
 ### Testing
 
