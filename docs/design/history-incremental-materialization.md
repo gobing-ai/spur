@@ -166,6 +166,11 @@ ranked steps is a genuine top-N whose exact bounded path is the three rank index
 defeating. Neither class scans the whole corpus — the earlier "honest limit" (ranked steps still cost
 a full pass) is superseded.
 
+*Re-audit correction (0763, definition v4):* an explicit empty eligible-session scope is a no-op;
+only a `null` scope selects the documented whole-corpus fallback. `history_board_source_daily` is
+driven by the raw source/day set and left-joins analyzed message/tool measures, so a source/day is
+preserved even when request-id dedup removes its only analyzed message.
+
 ---
 
 ## 6. D4 — Why incremental aggregates equal a full rebuild (dedup invariant)
@@ -294,8 +299,9 @@ eight different names, so any "which tool dominates" answer is really "which age
   entries plus a refresh, not changing query code. The seam is a write/read/select triple rather
   than a scalar function, because resolution has to happen in SQL where the grouping happens:
   `applyToolAliases(db)` recomputes `tool_name_alias` from the map before every rollup refresh —
-  on the incremental path scoped to the delta's per-source `imported_at` range (`{ sources, since }`,
-  0763 R5), on the full-rebuild path a guarded whole-table update,
+  on the incremental path scoped to the union of already materialized sources and sources first seen
+  in the message delta, plus the per-source `imported_at` range (`{ sources, since }`, 0763 R5), on
+  the full-rebuild path a guarded whole-table update,
   `ALIASED_TOOL_NAME_SQL` reads the persisted result in the rollup inserts, and
   `toolSelectionSql(tc, placeholders)` lets a drill-down match a selection that named either the
   alias or the effective name.
@@ -494,7 +500,10 @@ code change shipped alongside a data change.
 **Decision.** Rollup tables store a **definition version** alongside the watermark. When it differs
 from the current one, the affected tables are rebuilt rather than extended from the watermark. A
 definition change unaccompanied by a version bump fails a test (**R27**), the same shape as the
-importer's `HISTORY_IMPORT_SCHEMA_VERSION` guard in E92.
+importer’s `HISTORY_IMPORT_SCHEMA_VERSION` guard in E92.
+
+Definition `v4` covers the 0763 re-audit corrections: empty loop scope is a no-op, source/day
+coverage is driven from raw rows, and first-seen delta sources participate in alias backfill.
 
 ### 13.3 Equivalence is exact for integers, bounded for allocations
 

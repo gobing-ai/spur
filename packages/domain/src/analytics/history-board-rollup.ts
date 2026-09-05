@@ -455,11 +455,11 @@ export async function replaceHistoryBoardRollups(db: DbAdapter, seed: HistoryBoa
                            MAX(m.imported_at) AS last_imported_at
                     FROM history_message m GROUP BY source, day
                 )
-                SELECT m.source, m.day, m.fresh_input_tokens, m.cache_read_tokens, m.cache_write_tokens,
-                       m.output_tokens, m.sessions, COALESCE(t.tool_calls, 0),
-                       COALESCE(r.raw_messages, 0), r.last_imported_at
-                FROM messages m LEFT JOIN tools t ON t.source = m.source AND t.day = m.day
-                LEFT JOIN raw_day r ON r.source = m.source AND r.day = m.day`,
+                SELECT r.source, r.day, COALESCE(m.fresh_input_tokens, 0), COALESCE(m.cache_read_tokens, 0),
+                       COALESCE(m.cache_write_tokens, 0), COALESCE(m.output_tokens, 0),
+                       COALESCE(m.sessions, 0), COALESCE(t.tool_calls, 0), r.raw_messages, r.last_imported_at
+                FROM raw_day r LEFT JOIN messages m ON m.source = r.source AND m.day = r.day
+                LEFT JOIN tools t ON t.source = r.source AND t.day = r.day`,
             params: [],
         },
     ];
@@ -1546,12 +1546,11 @@ async function recomputeDailyAndSourceDaily(db: DbAdapter, days: string[]): Prom
                     WHERE ${rawMessageDayPredicate(days)}
                     GROUP BY source, day
                 )
-                SELECT m.source, m.day, m.fresh_input_tokens, m.cache_read_tokens, m.cache_write_tokens,
-                       m.output_tokens, m.sessions, COALESCE(t.tool_calls, 0),
-                       COALESCE(r.raw_messages, 0) AS raw_messages,
-                       r.last_imported_at AS last_imported_at
-                FROM messages m LEFT JOIN tools t ON t.source = m.source AND t.day = m.day
-                LEFT JOIN raw_day r ON r.source = m.source AND r.day = m.day`,
+                SELECT r.source, r.day, COALESCE(m.fresh_input_tokens, 0), COALESCE(m.cache_read_tokens, 0),
+                       COALESCE(m.cache_write_tokens, 0), COALESCE(m.output_tokens, 0),
+                       COALESCE(m.sessions, 0), COALESCE(t.tool_calls, 0), r.raw_messages, r.last_imported_at
+                FROM raw_day r LEFT JOIN messages m ON m.source = r.source AND m.day = r.day
+                LEFT JOIN tools t ON t.source = r.source AND t.day = r.day`,
             params: [...days, ...days, ...rawMessageDayParams(days)],
         },
     ]);
@@ -1768,7 +1767,7 @@ async function recomputeRankedSteps(db: DbAdapter): Promise<void> {
 }
 
 /**
- * Global-ranked class — loop findings (0763 R1).
+ * Keyed aggregate — loop findings (0763 R1).
  *
  * `sessionScope` narrows the derivation to a set of sessions touched by the
  * delta, deleting and re-inserting only those sessions' rows. `null` means
@@ -1777,11 +1776,9 @@ async function recomputeRankedSteps(db: DbAdapter): Promise<void> {
  * precondition case.
  */
 async function recomputeLoopFindings(db: DbAdapter, sessionScope: string[] | null): Promise<void> {
-    // An empty (but non-null) scope arises when every delta row's session_id was
-    // filtered out by deltaSessionScope. `loops()` treats it as full corpus (its
-    // scoped branch requires length > 0), so the delete side must match — an
-    // `IN ()` delete would otherwise leave the inserted full-corpus rows duplicated.
-    const fullCorpus = sessionScope === null || sessionScope.length === 0;
+    // Every delta row had a sentinel session id, so no eligible loop can have changed.
+    if (sessionScope !== null && sessionScope.length === 0) return;
+    const fullCorpus = sessionScope === null;
     const opts: LoopQueryOptions | undefined = fullCorpus ? undefined : { sessionScope };
     const loopRows = await loops(db, ALL_HISTORY, opts);
     const ops: DbBatchOp[] = [];
@@ -1901,12 +1898,18 @@ const SESSION_SCOPE_LIMIT = 1000;
 const DELTA_ROW_SCAN_LIMIT = 200_000;
 
 /**
- * Distinct sources in `history_board_source_stats` — the per-source list the
- * alias-scope path reads. Bounded by `ALL_ROLLUP_TABLES` cardinality (tens of
- * rows); a handful at most on any realistic corpus.
+ * Sources whose tool calls can need aliasing: already materialized sources plus
+ * sources first seen in the delta. The second arm is served by the message
+ * imported-at index, so discovering a new source scans the delta rather than the
+ * tool-call corpus whose usable index begins with `source`.
  */
-async function sourceScopeRows(db: DbAdapter): Promise<string[]> {
-    const rows = await db.queryAll<{ source: string }>('SELECT source FROM history_board_source_stats');
+async function sourceScopeRows(db: DbAdapter, watermark: string): Promise<string[]> {
+    const rows = await db.queryAll<{ source: string }>(
+        `SELECT source FROM history_board_source_stats
+         UNION
+         SELECT source FROM history_message WHERE imported_at >= ?`,
+        watermark,
+    );
     return rows.map((row) => row.source);
 }
 
@@ -1951,10 +1954,6 @@ async function postPassLags(db: DbAdapter, bucketWatermark: string): Promise<boo
  * the bucketed deltas land; their watermarks advance last (R7).
  */
 export async function refreshHistoryBoardRollupsIncremental(db: DbAdapter): Promise<void> {
-    // Resolving the alias scope needs the same per-source source set the post-pass uses.
-    // Reading it up front costs a tiny `SELECT source FROM history_board_source_stats` and
-    // lets the incremental path pass a real { sources, since } scope (R5).
-    const existingSources = await sourceScopeRows(db);
     const watermarks = await readRollupWatermarks(db);
     const messageWm = watermarks.get('history_board_message_5m');
     const needsRebuild = messageWm === undefined || messageWm.definitionVersion !== ROLLUP_DEFINITION_VERSION;
@@ -1965,11 +1964,9 @@ export async function refreshHistoryBoardRollupsIncremental(db: DbAdapter): Prom
         return;
     }
 
-    // Incremental path: scope the alias backfill to the sources we know exist. No source
-    // list is read from history_tool_call — that table carries only rows that have
-    // imported at least once, which is exactly what we want.
-    if (existingSources.length > 0) {
-        await applyToolAliases(db, { sources: existingSources, since: messageWm.importedAtWatermark });
+    const deltaSources = await sourceScopeRows(db, messageWm.importedAtWatermark);
+    if (deltaSources.length > 0) {
+        await applyToolAliases(db, { sources: deltaSources, since: messageWm.importedAtWatermark });
     }
 
     const affected = await affectedBucketsWithRange(db, messageWm.importedAtWatermark);

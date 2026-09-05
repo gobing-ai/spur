@@ -27,6 +27,7 @@ import { applyCliMigrations } from '../../src/migrations';
 const PINNED_DERIVATION_DIGEST: Record<string, string> = {
     v2: '21a1ee94980403313e5795dab6140c7883574aa51b4695524f0f3893022da9c1',
     v3: '02e476217b3ef1c4b4094a3ded4f3decb5e7f09451a1ab2359b9985d7cba0951',
+    v4: 'f71856d6de327c5ff913bdb87dfd36b82d0d0819565148e00b8a549377491fbc',
 };
 
 const EMPTY_SEED: HistoryBoardRollupSeed = {

@@ -883,7 +883,8 @@ function rankOrderExpr(sel: ArtifactSelector, expr: string): string {
 /** Repeated-call loop findings (Q4): same args_digest repeated >= 3 times. */
 export async function loops(db: DbAdapter, sel: ArtifactSelector, opts?: LoopQueryOptions): Promise<LoopRow[]> {
     const sessionScope = opts?.sessionScope;
-    if (sessionScope && sessionScope.length > 0) {
+    if (sessionScope !== undefined && sessionScope !== null) {
+        if (sessionScope.length === 0) return [];
         // Scoped derivation: drive from history_tool_call (session index) and join the
         // message-side metadata by record_hash. Each session emits one SELECT into
         // history_tool_call; the message lookup is a primary-key seek per row. Untouched
@@ -1186,7 +1187,7 @@ export async function topStepsByTokens(
     const wm = applyWatermarkToWhere(where, opts?.watermark);
     const tokensOrder = rankOrderExpr(sel, 'COALESCE(m.input_tokens, 0) + COALESCE(m.cache_read_tokens, 0)');
     const tokensGuard = rankOrderExpr(sel, '(m.input_tokens IS NOT NULL OR m.output_tokens IS NOT NULL)');
-    const tokensPredicate = withStepPredicates(wm.where, "m.role = 'assistant' AND " + tokensGuard);
+    const tokensPredicate = withStepPredicates(wm.where, `m.role = 'assistant' AND ${tokensGuard}`);
     return db.queryAll<StepRow>(
         `SELECT m.session_id AS sessionId, m.source AS source, m.ts AS ts, m.model AS model,
                 m.input_tokens AS inputTokens, m.cache_read_tokens AS cacheReadTokens,
@@ -1211,10 +1212,7 @@ export async function topStepsByDuration(
     const { where, params } = buildMessageWhere(sel);
     const wm = applyWatermarkToWhere(where, opts?.watermark);
     const durationOrder = rankOrderExpr(sel, 'm.duration_ms');
-    const durationPredicate = withStepPredicates(
-        wm.where,
-        "m.role = 'assistant' AND " + durationOrder + ' IS NOT NULL',
-    );
+    const durationPredicate = withStepPredicates(wm.where, `m.role = 'assistant' AND ${durationOrder} IS NOT NULL`);
     return db.queryAll<StepRow>(
         `SELECT m.session_id AS sessionId, m.source AS source, m.ts AS ts, m.model AS model,
                 m.input_tokens AS inputTokens, m.cache_read_tokens AS cacheReadTokens,
@@ -1244,7 +1242,7 @@ export async function cacheWasteAggregate(
     const inputOrder = rankOrderExpr(sel, 'm.input_tokens');
     const wastePredicate = withStepPredicates(
         wm.where,
-        "m.role = 'assistant' AND " + inputOrder + ' > ? AND m.cache_read_tokens < m.input_tokens * ?',
+        `m.role = 'assistant' AND ${inputOrder} > ? AND m.cache_read_tokens < m.input_tokens * ?`,
     );
     return db.queryFirst<CacheWasteAggregateRow>(
         `SELECT COUNT(*) AS steps, SUM(m.input_tokens) AS inputTokens
@@ -1271,7 +1269,7 @@ export async function topCacheWasteSteps(
     const inputOrder = rankOrderExpr(sel, 'm.input_tokens');
     const wastePredicate2 = withStepPredicates(
         wm.where,
-        "m.role = 'assistant' AND " + inputOrder + ' > ? AND m.cache_read_tokens < m.input_tokens * ?',
+        `m.role = 'assistant' AND ${inputOrder} > ? AND m.cache_read_tokens < m.input_tokens * ?`,
     );
     return db.queryAll<StepRow>(
         `SELECT m.session_id AS sessionId, m.source AS source, m.ts AS ts, m.model AS model,

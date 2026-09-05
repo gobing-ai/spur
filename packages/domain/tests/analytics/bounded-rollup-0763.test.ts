@@ -5,16 +5,36 @@
  * rank indexes (no TEMP B-TREE for unfiltered, `+expr` preserved when filtered);
  * R4 source stats via the recursive-CTE loose index scan over
  * idx_history_message_source_file; R5 alias backfill scoped to the delta's
- * sources and imported-at window. R3 (wide-delta fallback) is exercised through
- * the empty-scope edge in the R1 test.
+ * sources and imported-at window. R3 covers the wide-delta fallback, reset
+ * cleanup, and first-seen source path.
  */
 import { describe, expect, test } from 'bun:test';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import { HISTORY_IMPORT_SCHEMA_SQL, sha256 } from '@gobing-ai/ts-llm-jsonl-importer';
-import { distinctSourceFileCounts } from '../../src/analytics/forensic-query';
+import type { ArtifactSelector } from '../../src/analytics/artifact';
+import {
+    distinctSourceFileCounts,
+    loops,
+    topCacheWasteSteps,
+    topStepsByDuration,
+    topStepsByTokens,
+} from '../../src/analytics/forensic-query';
 import { refreshHistoryBoardRollupsIncremental } from '../../src/analytics/history-board-rollup';
+import { resetHistoryTables } from '../../src/analytics/history-reset';
 import { applyToolAliases } from '../../src/analytics/tool-alias';
 import { applyCliMigrations } from '../../src/migrations';
+
+const ALL_HISTORY: ArtifactSelector = {
+    since: null,
+    until: null,
+    sources: null,
+    models: null,
+    tools: null,
+    skills: null,
+    sessionId: null,
+    runId: null,
+    taskWbs: null,
+};
 
 interface Msg {
     recordHash: string;
@@ -30,6 +50,7 @@ interface Msg {
     output?: number | null;
     durationMs?: number | null;
     importedAt?: string;
+    requestId?: string | null;
 }
 
 async function setup(): Promise<DbAdapter> {
@@ -68,9 +89,29 @@ async function insertMessage(db: DbAdapter, m: Msg): Promise<void> {
         null,
         null,
         m.durationMs ?? null,
-        null,
+        m.requestId ?? null,
         m.importedAt ?? '2026-06-01T00:00:00Z',
     );
+}
+
+interface RecordedQuery {
+    sql: string;
+    params: unknown[];
+}
+
+function recordingQueryAdapter(db: DbAdapter, sink: RecordedQuery[]): DbAdapter {
+    return new Proxy(db, {
+        get(target, prop, receiver) {
+            const value = Reflect.get(target, prop, receiver);
+            if (typeof value !== 'function') return value;
+            return (...args: unknown[]) => {
+                if (prop === 'queryAll' && typeof args[0] === 'string') {
+                    sink.push({ sql: args[0], params: args.slice(1) });
+                }
+                return (value as (...callArgs: unknown[]) => unknown).apply(target, args);
+            };
+        },
+    }) as DbAdapter;
 }
 
 interface ToolCall {
@@ -115,18 +156,25 @@ describe('0763 R2 — ranked plan reads the rank indexes', () => {
             input: 100,
             durationMs: 500,
         });
-        for (const [order, guard] of [
-            [
-                'COALESCE(m.input_tokens, 0) + COALESCE(m.cache_read_tokens, 0)',
-                '(m.input_tokens IS NOT NULL OR m.output_tokens IS NOT NULL)',
-            ],
-            ['m.duration_ms', 'm.duration_ms IS NOT NULL'],
-            ['m.input_tokens', 'm.input_tokens > 0 AND m.cache_read_tokens < m.input_tokens * 0.5'],
-        ] as const) {
-            const sql = `SELECT m.session_id FROM history_message m WHERE m.role = 'assistant' AND ${guard} ORDER BY ${order} DESC LIMIT 5`;
-            const plan = (await db.queryAll<{ detail: string }>(`EXPLAIN QUERY PLAN ${sql}`))
+        const queries: RecordedQuery[] = [];
+        const recorder = recordingQueryAdapter(db, queries);
+        await topStepsByTokens(recorder, ALL_HISTORY, 5);
+        await topStepsByDuration(recorder, ALL_HISTORY, 5);
+        await topCacheWasteSteps(recorder, ALL_HISTORY, 5);
+
+        const expectedIndexes = [
+            'idx_history_message_token_rank',
+            'idx_history_message_duration_rank',
+            'idx_history_message_input_rank',
+        ] as const;
+        expect(queries).toHaveLength(expectedIndexes.length);
+        for (const [index, expectedIndex] of expectedIndexes.entries()) {
+            const query = queries[index];
+            if (!query) throw new Error(`missing captured rank query ${index}`);
+            const plan = (await db.queryAll<{ detail: string }>(`EXPLAIN QUERY PLAN ${query.sql}`, ...query.params))
                 .map((r) => r.detail)
                 .join('\n');
+            expect(plan).toContain(expectedIndex);
             expect(plan).not.toContain('USE TEMP B-TREE FOR ORDER BY');
         }
     });
@@ -141,10 +189,14 @@ describe('0763 R2 — ranked plan reads the rank indexes', () => {
             input: 100,
             durationMs: 500,
         });
-        // since+sources selector → rankOrderExpr wraps the expr in unary `+`; the partial
-        // rank index can then not serve the ORDER BY and SQLite reports the temp b-tree.
-        const sql = `SELECT m.session_id FROM history_message m WHERE m.imported_at >= '2026-06-01T00:00:00Z' AND m.role = 'assistant' AND (m.input_tokens IS NOT NULL OR m.output_tokens IS NOT NULL) ORDER BY +(COALESCE(m.input_tokens, 0) + COALESCE(m.cache_read_tokens, 0)) DESC LIMIT 5`;
-        const plan = (await db.queryAll<{ detail: string }>(`EXPLAIN QUERY PLAN ${sql}`))
+        const queries: RecordedQuery[] = [];
+        const recorder = recordingQueryAdapter(db, queries);
+        await topStepsByTokens(recorder, { ...ALL_HISTORY, since: '2026-06-01T00:00:00Z', sources: ['claude'] }, 5);
+        const query = queries[0];
+        expect(query).toBeDefined();
+        if (query === undefined) throw new Error('topStepsByTokens issued no query');
+        expect(query.sql).toContain('ORDER BY +');
+        const plan = (await db.queryAll<{ detail: string }>(`EXPLAIN QUERY PLAN ${query.sql}`, ...query.params))
             .map((r) => r.detail)
             .join('\n');
         expect(plan).toContain('USE TEMP B-TREE FOR ORDER BY');
@@ -255,13 +307,16 @@ describe('0763 R1 — loop findings scoped by delta sessions', () => {
         expect(bySession.get('sB')).toBe(3);
     });
 
-    test('empty delta scope (all sessions filtered) takes the full-corpus path without duplicating rows', async () => {
+    test('empty delta scope is a no-op and never falls back to the full-corpus loop query', async () => {
         const db = await setup();
         await seedLoopCorpus(db, '2026-06-01T05:00:00Z', 'base');
         await refreshHistoryBoardRollupsIncremental(db);
 
+        expect(await loops(db, ALL_HISTORY, { sessionScope: [] })).toEqual([]);
+        const before = await db.queryAll('SELECT * FROM history_board_loop_findings ORDER BY session_id, args_digest');
+
         // Delta rows whose session_id is one of the filtered sentinel sessions:
-        // deltaSessionScope returns [] (not null), which must delete unscoped.
+        // deltaSessionScope returns [] (not null), so there is nothing to re-derive.
         await insertMessage(db, {
             recordHash: 'x-1',
             sessionId: 'unknown',
@@ -281,8 +336,66 @@ describe('0763 R1 — loop findings scoped by delta sessions', () => {
         });
         await refreshHistoryBoardRollupsIncremental(db);
 
-        const rows = await db.queryAll('SELECT * FROM history_board_loop_findings');
-        expect(rows.length).toBe(2); // exactly one row per session — no IN () duplicates
+        const after = await db.queryAll('SELECT * FROM history_board_loop_findings ORDER BY session_id, args_digest');
+        expect(after).toEqual(before);
+    });
+
+    test('more than 1000 touched sessions falls back to a full recompute', async () => {
+        const db = await setup();
+        await seedLoopCorpus(db, '2026-06-01T05:00:00Z', 'base');
+        await refreshHistoryBoardRollupsIncremental(db);
+
+        for (let i = 0; i <= 1000; i++) {
+            await insertMessage(db, {
+                recordHash: `wide-${i}-0`,
+                sessionId: `wide-${i}`,
+                seq: 0,
+                ts: '2026-06-01T12:00:00Z',
+                importedAt: '2026-06-01T08:00:00Z',
+            });
+        }
+        for (let i = 0; i < 3; i++) {
+            const messageHash = i === 0 ? 'wide-0-0' : `wide-0-${i}`;
+            if (i > 0) {
+                await insertMessage(db, {
+                    recordHash: messageHash,
+                    sessionId: 'wide-0',
+                    seq: i,
+                    ts: '2026-06-01T12:00:00Z',
+                    importedAt: '2026-06-01T08:00:00Z',
+                });
+            }
+            await insertToolCall(db, {
+                recordHash: `wide-tool-${i}`,
+                messageHash,
+                sessionId: 'wide-0',
+                seq: i,
+                args: { path: '/wide' },
+                importedAt: '2026-06-01T08:00:00Z',
+            });
+        }
+
+        await refreshHistoryBoardRollupsIncremental(db);
+        expect(
+            await db.queryFirst<{ repeats: number }>(
+                "SELECT repeats FROM history_board_loop_findings WHERE session_id = 'wide-0'",
+            ),
+        ).toEqual({ repeats: 3 });
+    });
+
+    test('history reset removes raw rows and their loop findings together', async () => {
+        const db = await setup();
+        await seedLoopCorpus(db, '2026-06-01T05:00:00Z', 'base');
+        await refreshHistoryBoardRollupsIncremental(db);
+        expect(await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_board_loop_findings')).toEqual({
+            n: 2,
+        });
+
+        await resetHistoryTables(db);
+        expect(await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_message')).toEqual({ n: 0 });
+        expect(await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_board_loop_findings')).toEqual({
+            n: 0,
+        });
     });
 });
 
@@ -301,21 +414,15 @@ describe('0763 R4 — source stats via the loose index scan', () => {
             sourceFile: 'c.jsonl',
         });
 
-        const counts = await distinctSourceFileCounts(db);
+        const queries: RecordedQuery[] = [];
+        const counts = await distinctSourceFileCounts(recordingQueryAdapter(db, queries));
         expect(counts.get('claude')).toBe(2);
         expect(counts.get('codex')).toBe(1);
 
-        const plan = (
-            await db.queryAll<{ detail: string }>(
-                `EXPLAIN QUERY PLAN WITH RECURSIVE walk(source, source_file) AS (
-                     SELECT m.source, m.source_file FROM history_message m
-                     WHERE (m.source, m.source_file) = (SELECT MIN(source), MIN(source_file) FROM history_message)
-                     UNION ALL
-                     SELECT m.source, m.source_file FROM history_message m, walk w
-                     WHERE (m.source = w.source AND m.source_file > w.source_file) OR m.source > w.source
-                 ) SELECT source, COUNT(*) AS files FROM (SELECT DISTINCT source, source_file FROM walk) GROUP BY source`,
-            )
-        )
+        const query = queries[0];
+        expect(query).toBeDefined();
+        if (query === undefined) throw new Error('distinctSourceFileCounts issued no query');
+        const plan = (await db.queryAll<{ detail: string }>(`EXPLAIN QUERY PLAN ${query.sql}`, ...query.params))
             .map((r) => r.detail)
             .join('\n');
         expect(plan).toContain('idx_history_message_source_file');
@@ -396,6 +503,53 @@ describe('0763 R4 — source stats via the loose index scan', () => {
         });
         expect(await dump(incremental)).toEqual(await dump(fresh));
     });
+
+    test('raw source counts retain a deduplicated-away day', async () => {
+        const db = await setup();
+        await insertMessage(db, {
+            recordHash: 'stream-1',
+            sessionId: 'stream',
+            seq: 1,
+            ts: '2026-06-01T10:00:00Z',
+            input: 10,
+            requestId: 'request-1',
+            importedAt: '2026-06-01T05:00:00Z',
+        });
+        await insertMessage(db, {
+            recordHash: 'stream-2',
+            sessionId: 'stream',
+            seq: 2,
+            ts: '2026-06-02T10:00:00Z',
+            input: 20,
+            requestId: 'request-1',
+            importedAt: '2026-06-01T05:00:00Z',
+        });
+        await refreshHistoryBoardRollupsIncremental(db);
+        await insertMessage(db, {
+            recordHash: 'delta',
+            sessionId: 'delta',
+            seq: 1,
+            ts: '2026-06-03T10:00:00Z',
+            input: 30,
+            importedAt: '2026-06-01T07:00:00Z',
+        });
+        await refreshHistoryBoardRollupsIncremental(db);
+
+        expect(
+            await db.queryAll<{ day: string; raw_messages: number }>(
+                'SELECT day, raw_messages FROM history_board_source_daily ORDER BY day',
+            ),
+        ).toEqual([
+            { day: '2026-06-01', raw_messages: 1 },
+            { day: '2026-06-02', raw_messages: 1 },
+            { day: '2026-06-03', raw_messages: 1 },
+        ]);
+        expect(
+            await db.queryFirst<{ messages: number }>(
+                "SELECT messages FROM history_board_source_stats WHERE source = 'claude'",
+            ),
+        ).toEqual({ messages: 3 });
+    });
 });
 
 describe('0763 R5 — alias backfill scoped to the delta', () => {
@@ -469,6 +623,50 @@ describe('0763 R5 — alias backfill scoped to the delta', () => {
         await applyToolAliases(db);
         expect(await aliasOf('t1')).toBe('Shell');
         expect(await aliasOf('t2')).toBe('Shell');
+    });
+
+    test('incremental refresh aliases the first delta from a new source', async () => {
+        const db = await setup();
+        await insertMessage(db, {
+            recordHash: 'base',
+            sessionId: 'base',
+            seq: 1,
+            ts: '2026-06-01T10:00:00Z',
+            importedAt: '2026-06-01T05:00:00Z',
+        });
+        await refreshHistoryBoardRollupsIncremental(db);
+        await db.run(
+            "INSERT INTO history_tool_alias_map (source, effective_tool_name, alias) VALUES ('codex', 'exec_command', 'Shell')",
+        );
+        await insertMessage(db, {
+            recordHash: 'codex-message',
+            source: 'codex',
+            sessionId: 'codex-session',
+            seq: 1,
+            ts: '2026-06-01T11:00:00Z',
+            importedAt: '2026-06-01T07:00:00Z',
+        });
+        await insertToolCall(db, {
+            recordHash: 'codex-tool',
+            messageHash: 'codex-message',
+            source: 'codex',
+            sessionId: 'codex-session',
+            seq: 1,
+            toolName: 'exec_command',
+            importedAt: '2026-06-01T07:00:00Z',
+        });
+
+        await refreshHistoryBoardRollupsIncremental(db);
+        expect(
+            await db.queryFirst<{ tool_name_alias: string }>(
+                "SELECT tool_name_alias FROM history_tool_call WHERE record_hash = 'codex-tool'",
+            ),
+        ).toEqual({ tool_name_alias: 'Shell' });
+        expect(
+            await db.queryFirst<{ tool_name: string }>(
+                "SELECT tool_name FROM history_board_tool_5m WHERE source = 'codex'",
+            ),
+        ).toEqual({ tool_name: 'Shell' });
     });
 });
 
