@@ -141,6 +141,7 @@ export interface StackedColumnBucket {
     label: string;
     v: Record<string, number>;
     lineValue?: number;
+    secondLineValue?: number;
 }
 
 export interface ChartSeries {
@@ -153,252 +154,321 @@ export const StackedColumnsChart: React.FC<{
     buckets: StackedColumnBucket[];
     series: ChartSeries[];
     lineColor?: string;
+    lineLabel?: string;
+    secondLineColor?: string;
+    secondLineLabel?: string;
     height?: number;
-}> = memo(({ buckets, series, lineColor = '#22d3ee', height = 260 }) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [width, setWidth] = useState(1000);
-    const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+}> = memo(
+    ({
+        buckets,
+        series,
+        lineColor = '#22d3ee',
+        lineLabel = 'Cache Hit Ratio',
+        secondLineColor = '#f59e0b',
+        secondLineLabel = 'Gain Ratio',
+        height = 260,
+    }) => {
+        const containerRef = useRef<HTMLDivElement>(null);
+        const [width, setWidth] = useState(1000);
+        const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
-    useEffect(() => {
-        if (!containerRef.current) return;
-        const el = containerRef.current;
-        const updateWidth = () => {
-            const w = el.clientWidth;
-            if (w > 0) setWidth(w);
-        };
-        updateWidth();
-        const observer = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                const w = Math.round(entry.contentRect.width);
+        useEffect(() => {
+            if (!containerRef.current) return;
+            const el = containerRef.current;
+            const updateWidth = () => {
+                const w = el.clientWidth;
                 if (w > 0) setWidth(w);
+            };
+            updateWidth();
+            const observer = new ResizeObserver((entries) => {
+                for (const entry of entries) {
+                    const w = Math.round(entry.contentRect.width);
+                    if (w > 0) setWidth(w);
+                }
+            });
+            observer.observe(el);
+            return () => observer.disconnect();
+        }, []);
+
+        const W = width;
+        const PL = 54;
+        const PR = 50;
+        const PT = 16;
+        const PB = 26;
+        const iw = Math.max(60, W - PL - PR);
+        const ih = height - PT - PB;
+
+        const { totals, ticks, top, band, bw, labelEvery, linePath, secondLinePath } = useMemo(() => {
+            const t = buckets.map((b) => series.reduce((a, s) => a + (b.v[s.id] || 0), 0));
+            const m = Math.max(1, ...t);
+            const tk = niceTicks(m, 4);
+            const tp = tk[tk.length - 1] || m;
+            const bnd = iw / Math.max(1, buckets.length);
+            const bWidth = Math.max(2, bnd * 0.85);
+            const mLbls = Math.max(2, Math.floor(iw / 70));
+            const lblEvery = Math.max(1, Math.ceil(buckets.length / mLbls));
+
+            const yP = (v: number) => PT + ih - (Math.max(0, Math.min(100, v)) / 100) * ih;
+            const lPts = buckets
+                .map((b, i) => (b.lineValue !== undefined ? { x: PL + i * bnd + bnd / 2, y: yP(b.lineValue) } : null))
+                .filter((p): p is { x: number; y: number } => p !== null);
+
+            const lPath =
+                lPts.length > 1
+                    ? lPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+                    : '';
+
+            const l2Pts = buckets
+                .map((b, i) =>
+                    b.secondLineValue !== undefined ? { x: PL + i * bnd + bnd / 2, y: yP(b.secondLineValue) } : null,
+                )
+                .filter((p): p is { x: number; y: number } => p !== null);
+
+            const l2Path =
+                l2Pts.length > 1
+                    ? l2Pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+                    : '';
+
+            return {
+                totals: t,
+                ticks: tk,
+                top: tp,
+                band: bnd,
+                bw: bWidth,
+                labelEvery: lblEvery,
+                linePath: lPath,
+                secondLinePath: l2Path,
+            };
+        }, [buckets, series, iw, ih]);
+
+        const y = (v: number) => PT + ih - (v / top) * ih;
+        const yPct = (v: number) => PT + ih - (Math.max(0, Math.min(100, v)) / 100) * ih;
+        const cx = (i: number) => PL + i * band + band / 2;
+
+        const handleSvgMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            if (rect.width <= 0) return;
+            const svgX = ((e.clientX - rect.left) / rect.width) * W;
+            const colX = svgX - PL;
+            if (colX >= 0 && colX <= iw) {
+                const idx = Math.floor(colX / band);
+                if (idx >= 0 && idx < buckets.length) {
+                    if (hoverIdx !== idx) setHoverIdx(idx);
+                    return;
+                }
             }
-        });
-        observer.observe(el);
-        return () => observer.disconnect();
-    }, []);
-
-    const W = width;
-    const PL = 54;
-    const PR = 50;
-    const PT = 16;
-    const PB = 26;
-    const iw = Math.max(60, W - PL - PR);
-    const ih = height - PT - PB;
-
-    const { totals, ticks, top, band, bw, labelEvery, linePath } = useMemo(() => {
-        const t = buckets.map((b) => series.reduce((a, s) => a + (b.v[s.id] || 0), 0));
-        const m = Math.max(1, ...t);
-        const tk = niceTicks(m, 4);
-        const tp = tk[tk.length - 1] || m;
-        const bnd = iw / Math.max(1, buckets.length);
-        const bWidth = Math.max(2, bnd * 0.85);
-        const mLbls = Math.max(2, Math.floor(iw / 70));
-        const lblEvery = Math.max(1, Math.ceil(buckets.length / mLbls));
-
-        const yP = (v: number) => PT + ih - (Math.max(0, Math.min(100, v)) / 100) * ih;
-        const lPts = buckets
-            .map((b, i) => (b.lineValue !== undefined ? { x: PL + i * bnd + bnd / 2, y: yP(b.lineValue) } : null))
-            .filter((p): p is { x: number; y: number } => p !== null);
-
-        const lPath =
-            lPts.length > 1
-                ? lPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
-                : '';
-
-        return {
-            totals: t,
-            ticks: tk,
-            top: tp,
-            band: bnd,
-            bw: bWidth,
-            labelEvery: lblEvery,
-            linePath: lPath,
+            if (hoverIdx !== null) setHoverIdx(null);
         };
-    }, [buckets, series, iw, ih]);
 
-    const y = (v: number) => PT + ih - (v / top) * ih;
-    const yPct = (v: number) => PT + ih - (Math.max(0, Math.min(100, v)) / 100) * ih;
-    const cx = (i: number) => PL + i * band + band / 2;
+        const tooltipLeft = hoverIdx !== null ? Math.max(110, Math.min(W - 110, cx(hoverIdx))) : W / 2;
 
-    const handleSvgMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        if (rect.width <= 0) return;
-        const svgX = ((e.clientX - rect.left) / rect.width) * W;
-        const colX = svgX - PL;
-        if (colX >= 0 && colX <= iw) {
-            const idx = Math.floor(colX / band);
-            if (idx >= 0 && idx < buckets.length) {
-                if (hoverIdx !== idx) setHoverIdx(idx);
-                return;
-            }
-        }
-        if (hoverIdx !== null) setHoverIdx(null);
-    };
-
-    const tooltipLeft = hoverIdx !== null ? Math.max(110, Math.min(W - 110, cx(hoverIdx))) : W / 2;
-
-    return (
-        <div ref={containerRef} className="relative w-full overflow-hidden">
-            <svg
-                viewBox={`0 0 ${W} ${height}`}
-                width="100%"
-                height={height}
-                className="w-full block select-none"
-                role="img"
-                aria-label="Stacked column token chart with cache hit ratio overlay"
-                onMouseMove={handleSvgMouseMove}
-                onMouseLeave={() => setHoverIdx(null)}
-            >
-                {/* Left Y Axis grid & labels */}
-                {ticks.map((t) => (
-                    <g key={t}>
-                        <line x1={PL} x2={PL + iw} y1={y(t)} y2={y(t)} stroke="currentColor" strokeOpacity={0.1} />
-                        <text x={PL - 8} y={y(t) + 3.5} textAnchor="end" className="text-[10px] fill-base-content/60">
-                            {fmtTokAxis(t)}
-                        </text>
-                    </g>
-                ))}
-
-                {/* Right Y Axis labels for Cache Hit Ratio */}
-                {[0, 25, 50, 75, 100].map((pct) => (
-                    <text
-                        key={pct}
-                        x={PL + iw + 8}
-                        y={yPct(pct) + 3.5}
-                        textAnchor="start"
-                        fill={lineColor}
-                        className="text-[10px] opacity-80"
-                    >
-                        {pct}%
-                    </text>
-                ))}
-
-                {/* Hover Column Highlight Band */}
-                {hoverIdx !== null && (
-                    <rect
-                        x={PL + hoverIdx * band}
-                        y={PT}
-                        width={band}
-                        height={ih}
-                        fill="currentColor"
-                        fillOpacity={0.04}
-                        rx={2}
-                    />
-                )}
-
-                {/* Stacked Columns */}
-                {buckets.map((b, i) => {
-                    const x = PL + i * band + (band - bw) / 2;
-                    let acc = 0;
-                    return (
-                        <g key={b.id ?? `${b.label}-${i}`} opacity={hoverIdx === null || hoverIdx === i ? 1 : 0.45}>
-                            {series
-                                .slice()
-                                .reverse()
-                                .map((sr) => {
-                                    const v = b.v[sr.id] || 0;
-                                    if (v <= 0) return null;
-                                    const yTop = y(acc + v);
-                                    const hRaw = y(acc) - yTop;
-                                    const segH = Math.max(1, hRaw);
-                                    acc += v;
-                                    return (
-                                        <rect
-                                            key={sr.id}
-                                            x={x}
-                                            y={yTop}
-                                            width={bw}
-                                            height={segH}
-                                            fill={sr.color}
-                                            rx={1}
-                                        />
-                                    );
-                                })}
-                            {i % labelEvery === 0 && (
-                                <text
-                                    x={cx(i)}
-                                    y={height - 6}
-                                    textAnchor="middle"
-                                    className="text-[10px] fill-base-content/60"
-                                >
-                                    {b.label}
-                                </text>
-                            )}
-                        </g>
-                    );
-                })}
-
-                {/* Secondary Rate Line */}
-                {linePath && (
-                    <>
-                        <path
-                            d={linePath}
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth={4}
-                            strokeOpacity={0.2}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                        />
-                        <path
-                            d={linePath}
-                            fill="none"
-                            stroke={lineColor}
-                            strokeWidth={2}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                        />
-                    </>
-                )}
-
-                {/* Active Hover Dot on Line */}
-                {hoverIdx !== null && buckets[hoverIdx]?.lineValue !== undefined && (
-                    <circle
-                        cx={cx(hoverIdx)}
-                        cy={yPct(buckets[hoverIdx]?.lineValue ?? 0)}
-                        r={4.5}
-                        fill={lineColor}
-                        stroke="#1f2937"
-                        strokeWidth={2}
-                    />
-                )}
-            </svg>
-
-            {/* Hover Tooltip Overlay */}
-            {hoverIdx !== null && buckets[hoverIdx] && (
-                <div
-                    className="absolute top-2 bg-base-300 border border-base-content/15 shadow-xl rounded-lg px-3 py-2 text-xs pointer-events-none z-20 flex flex-col gap-1 min-w-[180px] backdrop-blur-sm"
-                    style={{ left: `${tooltipLeft}px`, transform: 'translateX(-50%)' }}
+        return (
+            <div ref={containerRef} className="relative w-full overflow-hidden">
+                <svg
+                    viewBox={`0 0 ${W} ${height}`}
+                    width="100%"
+                    height={height}
+                    className="w-full block select-none"
+                    role="img"
+                    aria-label="Stacked column token chart with cache hit ratio and gain ratio overlays"
+                    onMouseMove={handleSvgMouseMove}
+                    onMouseLeave={() => setHoverIdx(null)}
                 >
-                    <div className="font-semibold text-base-content/90 border-b border-base-content/10 pb-1">
-                        {fmtBucketTooltip(buckets[hoverIdx]?.id ?? buckets[hoverIdx]?.label ?? '')}
-                    </div>
-                    {series
-                        .filter((s) => (buckets[hoverIdx]?.v[s.id] ?? 0) > 0)
-                        .map((s) => (
-                            <div key={s.id} className="flex justify-between items-center gap-2">
-                                <span className="flex items-center gap-1.5">
-                                    <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
-                                    {s.label}
-                                </span>
-                                <span className="font-mono">{fmtTok(buckets[hoverIdx]?.v[s.id] ?? 0)}</span>
-                            </div>
-                        ))}
-                    <div className="flex justify-between items-center font-bold pt-1 border-t border-base-content/10">
-                        <span>Total</span>
-                        <span className="font-mono">{fmtTok(totals[hoverIdx] ?? 0)}</span>
-                    </div>
-                    {buckets[hoverIdx]?.lineValue !== undefined && (
-                        <div className="flex justify-between items-center text-cyan-400">
-                            <span>Cache Hit Ratio</span>
-                            <span className="font-mono">{buckets[hoverIdx]?.lineValue}%</span>
-                        </div>
+                    {/* Left Y Axis grid & labels */}
+                    {ticks.map((t) => (
+                        <g key={t}>
+                            <line x1={PL} x2={PL + iw} y1={y(t)} y2={y(t)} stroke="currentColor" strokeOpacity={0.1} />
+                            <text
+                                x={PL - 8}
+                                y={y(t) + 3.5}
+                                textAnchor="end"
+                                className="text-[10px] fill-base-content/60"
+                            >
+                                {fmtTokAxis(t)}
+                            </text>
+                        </g>
+                    ))}
+
+                    {/* Right Y Axis labels for Rate Overlays (0-100%) */}
+                    {[0, 25, 50, 75, 100].map((pct) => (
+                        <text
+                            key={pct}
+                            x={PL + iw + 8}
+                            y={yPct(pct) + 3.5}
+                            textAnchor="start"
+                            fill="currentColor"
+                            className="text-[10px] fill-base-content/50"
+                        >
+                            {pct}%
+                        </text>
+                    ))}
+
+                    {/* Hover Column Highlight Band */}
+                    {hoverIdx !== null && (
+                        <rect
+                            x={PL + hoverIdx * band}
+                            y={PT}
+                            width={band}
+                            height={ih}
+                            fill="currentColor"
+                            fillOpacity={0.04}
+                            rx={2}
+                        />
                     )}
-                </div>
-            )}
-        </div>
-    );
-});
+
+                    {/* Stacked Columns */}
+                    {buckets.map((b, i) => {
+                        const x = PL + i * band + (band - bw) / 2;
+                        let acc = 0;
+                        return (
+                            <g key={b.id ?? `${b.label}-${i}`} opacity={hoverIdx === null || hoverIdx === i ? 1 : 0.45}>
+                                {series
+                                    .slice()
+                                    .reverse()
+                                    .map((sr) => {
+                                        const v = b.v[sr.id] || 0;
+                                        if (v <= 0) return null;
+                                        const yTop = y(acc + v);
+                                        const hRaw = y(acc) - yTop;
+                                        const segH = Math.max(1, hRaw);
+                                        acc += v;
+                                        return (
+                                            <rect
+                                                key={sr.id}
+                                                x={x}
+                                                y={yTop}
+                                                width={bw}
+                                                height={segH}
+                                                fill={sr.color}
+                                                rx={1}
+                                            />
+                                        );
+                                    })}
+                                {i % labelEvery === 0 && (
+                                    <text
+                                        x={cx(i)}
+                                        y={height - 6}
+                                        textAnchor="middle"
+                                        className="text-[10px] fill-base-content/60"
+                                    >
+                                        {b.label}
+                                    </text>
+                                )}
+                            </g>
+                        );
+                    })}
+
+                    {/* Secondary Rate Line (Cache Hit Ratio) */}
+                    {linePath && (
+                        <>
+                            <path
+                                d={linePath}
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth={4}
+                                strokeOpacity={0.2}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                            <path
+                                d={linePath}
+                                fill="none"
+                                stroke={lineColor}
+                                strokeWidth={2}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                        </>
+                    )}
+
+                    {/* Third Rate Line (Gain Ratio) */}
+                    {secondLinePath && (
+                        <>
+                            <path
+                                d={secondLinePath}
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth={4}
+                                strokeOpacity={0.2}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                            <path
+                                d={secondLinePath}
+                                fill="none"
+                                stroke={secondLineColor}
+                                strokeWidth={2}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                        </>
+                    )}
+
+                    {/* Active Hover Dots on Lines */}
+                    {hoverIdx !== null && buckets[hoverIdx]?.lineValue !== undefined && (
+                        <circle
+                            cx={cx(hoverIdx)}
+                            cy={yPct(buckets[hoverIdx]?.lineValue ?? 0)}
+                            r={4.5}
+                            fill={lineColor}
+                            stroke="#1f2937"
+                            strokeWidth={2}
+                        />
+                    )}
+                    {hoverIdx !== null && buckets[hoverIdx]?.secondLineValue !== undefined && (
+                        <circle
+                            cx={cx(hoverIdx)}
+                            cy={yPct(buckets[hoverIdx]?.secondLineValue ?? 0)}
+                            r={4.5}
+                            fill={secondLineColor}
+                            stroke="#1f2937"
+                            strokeWidth={2}
+                        />
+                    )}
+                </svg>
+
+                {/* Hover Tooltip Overlay */}
+                {hoverIdx !== null && buckets[hoverIdx] && (
+                    <div
+                        className="absolute top-2 bg-base-300 border border-base-content/15 shadow-xl rounded-lg px-3 py-2 text-xs pointer-events-none z-20 flex flex-col gap-1 min-w-[180px] backdrop-blur-sm"
+                        style={{ left: `${tooltipLeft}px`, transform: 'translateX(-50%)' }}
+                    >
+                        <div className="font-semibold text-base-content/90 border-b border-base-content/10 pb-1">
+                            {fmtBucketTooltip(buckets[hoverIdx]?.id ?? buckets[hoverIdx]?.label ?? '')}
+                        </div>
+                        {series
+                            .filter((s) => (buckets[hoverIdx]?.v[s.id] ?? 0) > 0)
+                            .map((s) => (
+                                <div key={s.id} className="flex justify-between items-center gap-2">
+                                    <span className="flex items-center gap-1.5">
+                                        <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+                                        {s.label}
+                                    </span>
+                                    <span className="font-mono">{fmtTok(buckets[hoverIdx]?.v[s.id] ?? 0)}</span>
+                                </div>
+                            ))}
+                        <div className="flex justify-between items-center font-bold pt-1 border-t border-base-content/10">
+                            <span>Total</span>
+                            <span className="font-mono">{fmtTok(totals[hoverIdx] ?? 0)}</span>
+                        </div>
+                        {buckets[hoverIdx]?.lineValue !== undefined && (
+                            <div className="flex justify-between items-center text-cyan-400">
+                                <span>{lineLabel}</span>
+                                <span className="font-mono">{buckets[hoverIdx]?.lineValue?.toFixed(1)}%</span>
+                            </div>
+                        )}
+                        {buckets[hoverIdx]?.secondLineValue !== undefined && (
+                            <div className="flex justify-between items-center text-amber-400">
+                                <span>{secondLineLabel}</span>
+                                <span className="font-mono">{buckets[hoverIdx]?.secondLineValue?.toFixed(1)}%</span>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    },
+);
 
 // ─── Stacked Area Chart ──────────────────────────────────────────────────────
 

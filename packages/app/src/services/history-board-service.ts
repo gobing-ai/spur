@@ -332,11 +332,17 @@ function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras):
         0,
     );
     const useCalls = totalBucketTokens === 0;
-    const timeSeries = new Map<string, { cacheRead: number; billed: number; series: Record<string, number> }>();
+    const timeSeries = new Map<
+        string,
+        { cacheRead: number; billed: number; output: number; series: Record<string, number> }
+    >();
     for (const row of rows.buckets) {
-        const point = timeSeries.get(row.bucketStart) ?? { cacheRead: 0, billed: 0, series: {} };
-        const billed = useCalls ? (row.calls ?? 0) : (row.freshInputTokens ?? 0) + (row.outputTokens ?? 0);
+        const point = timeSeries.get(row.bucketStart) ?? { cacheRead: 0, billed: 0, output: 0, series: {} };
+        const fresh = row.freshInputTokens ?? 0;
+        const output = row.outputTokens ?? 0;
+        const billed = useCalls ? (row.calls ?? 0) : fresh + output;
         point.billed += billed;
+        point.output += output;
         point.cacheRead += row.cacheReadTokens ?? 0;
         point.series[row.key] = (point.series[row.key] ?? 0) + billed;
         timeSeries.set(row.bucketStart, point);
@@ -382,14 +388,15 @@ function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras):
             toolCallsCount: rows.toolCalls,
             errorRate: rows.toolCalls > 0 ? Math.round((rows.toolErrors / rows.toolCalls) * 1000) / 10 : 0,
         },
-        timeSeries: Array.from(timeSeries.entries()).map(([bucketStart, point]) => ({
-            bucketStart,
-            cacheHitRatio:
-                point.billed + point.cacheRead > 0
-                    ? Math.round((point.cacheRead / (point.billed + point.cacheRead)) * 100)
-                    : 0,
-            series: point.series,
-        })),
+        timeSeries: Array.from(timeSeries.entries()).map(([bucketStart, point]) => {
+            const totalTokens = point.billed + point.cacheRead;
+            return {
+                bucketStart,
+                cacheHitRatio: totalTokens > 0 ? Math.round((point.cacheRead / totalTokens) * 100) : 0,
+                gainRatio: totalTokens > 0 ? Math.round((point.output / totalTokens) * 1000) / 10 : 0,
+                series: point.series,
+            };
+        }),
         topModels: toTopItems(rows.models, false),
         topSources: toTopItems(rows.sources, true),
         topTools: topToolRows.map((row) => ({
@@ -552,25 +559,32 @@ function previousWindowSelector(sel: ArtifactSelector): ArtifactSelector | null 
 function projectSkillTimeSeries(buckets: BucketedTokenRow[]): HistoryTimeSeriesPoint[] {
     const totalTokens = buckets.reduce((sum, row) => sum + (row.freshInputTokens ?? 0) + (row.outputTokens ?? 0), 0);
     const useCalls = totalTokens === 0;
-    const byBucket = new Map<string, { cacheRead: number; billed: number; series: Record<string, number> }>();
+    const byBucket = new Map<
+        string,
+        { cacheRead: number; billed: number; output: number; series: Record<string, number> }
+    >();
     for (const row of buckets) {
-        const point = byBucket.get(row.bucketStart) ?? { cacheRead: 0, billed: 0, series: {} };
-        const val = useCalls ? (row.calls ?? 0) : (row.freshInputTokens ?? 0) + (row.outputTokens ?? 0);
+        const point = byBucket.get(row.bucketStart) ?? { cacheRead: 0, billed: 0, output: 0, series: {} };
+        const fresh = row.freshInputTokens ?? 0;
+        const output = row.outputTokens ?? 0;
+        const val = useCalls ? (row.calls ?? 0) : fresh + output;
         point.billed += val;
+        point.output += output;
         point.cacheRead += row.cacheReadTokens ?? 0;
         point.series[row.key] = (point.series[row.key] ?? 0) + val;
         byBucket.set(row.bucketStart, point);
     }
     return Array.from(byBucket.entries())
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([bucketStart, point]) => ({
-            bucketStart,
-            cacheHitRatio:
-                point.billed + point.cacheRead > 0
-                    ? Math.round((point.cacheRead / (point.billed + point.cacheRead)) * 100)
-                    : 0,
-            series: point.series,
-        }));
+        .map(([bucketStart, point]) => {
+            const totalTokens = point.billed + point.cacheRead;
+            return {
+                bucketStart,
+                cacheHitRatio: totalTokens > 0 ? Math.round((point.cacheRead / totalTokens) * 100) : 0,
+                gainRatio: totalTokens > 0 ? Math.round((point.output / totalTokens) * 1000) / 10 : 0,
+                series: point.series,
+            };
+        });
 }
 
 /** KPIs of a rollup-shaped summary — used for the previous window baseline. */

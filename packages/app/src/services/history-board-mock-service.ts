@@ -398,22 +398,27 @@ export class MockHistoryBoardService implements HistoryBoardService {
 
         for (const s of matching) {
             const bKey = new Date(Math.floor(s.start / bucketInterval) * bucketInterval).toISOString();
-            if (!buckets[bKey]) buckets[bKey] = { total: 0, cacheRead: 0, series: {} };
-            if (!modelBuckets[bKey]) modelBuckets[bKey] = { total: 0, cacheRead: 0, series: {} };
-            if (!sourceBuckets[bKey]) sourceBuckets[bKey] = { total: 0, cacheRead: 0, series: {} };
-            if (!toolBuckets[bKey]) toolBuckets[bKey] = { total: 0, cacheRead: 0, series: {} };
-            if (!skillBuckets[bKey]) skillBuckets[bKey] = { total: 0, cacheRead: 0, series: {} };
+            if (!buckets[bKey]) buckets[bKey] = { total: 0, cacheRead: 0, output: 0, series: {} };
+            if (!modelBuckets[bKey]) modelBuckets[bKey] = { total: 0, cacheRead: 0, output: 0, series: {} };
+            if (!sourceBuckets[bKey]) sourceBuckets[bKey] = { total: 0, cacheRead: 0, output: 0, series: {} };
+            if (!toolBuckets[bKey]) toolBuckets[bKey] = { total: 0, cacheRead: 0, output: 0, series: {} };
+            if (!skillBuckets[bKey]) skillBuckets[bKey] = { total: 0, cacheRead: 0, output: 0, series: {} };
 
             buckets[bKey].total += s.tokens.billedTokens;
             buckets[bKey].cacheRead += s.tokens.cacheReadTokens;
+            buckets[bKey].output += s.tokens.outputTokens;
             modelBuckets[bKey].total += s.tokens.billedTokens;
             modelBuckets[bKey].cacheRead += s.tokens.cacheReadTokens;
+            modelBuckets[bKey].output += s.tokens.outputTokens;
             sourceBuckets[bKey].total += s.tokens.billedTokens;
             sourceBuckets[bKey].cacheRead += s.tokens.cacheReadTokens;
+            sourceBuckets[bKey].output += s.tokens.outputTokens;
             toolBuckets[bKey].total += s.tokens.billedTokens;
             toolBuckets[bKey].cacheRead += s.tokens.cacheReadTokens;
+            toolBuckets[bKey].output += s.tokens.outputTokens;
             skillBuckets[bKey].total += s.tokens.billedTokens;
             skillBuckets[bKey].cacheRead += s.tokens.cacheReadTokens;
+            skillBuckets[bKey].output += s.tokens.outputTokens;
 
             modelBuckets[bKey].series[s.model] = (modelBuckets[bKey].series[s.model] ?? 0) + s.tokens.billedTokens;
             sourceBuckets[bKey].series[s.source] = (sourceBuckets[bKey].series[s.source] ?? 0) + s.tokens.billedTokens;
@@ -459,9 +464,11 @@ export class MockHistoryBoardService implements HistoryBoardService {
                 .map(([bKey, bVal]) => {
                     const denom = bVal.total + bVal.cacheRead;
                     const ratio = denom > 0 ? Math.round((bVal.cacheRead / denom) * 100) : 0;
+                    const gainRatio = denom > 0 ? Math.round((bVal.output / denom) * 1000) / 10 : 0;
                     return {
                         bucketStart: bKey,
                         cacheHitRatio: ratio,
+                        gainRatio,
                         series: bVal.series,
                     };
                 });

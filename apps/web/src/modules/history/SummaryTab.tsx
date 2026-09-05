@@ -178,7 +178,8 @@ const SummaryDimensionBlock: React.FC<SummaryDimensionBlockProps> = memo(
                                             </th>
                                         ))}
                                         <th className="py-1.5 pr-2 text-right">Total</th>
-                                        <th className="py-1.5 text-right">Cache Hit %</th>
+                                        <th className="py-1.5 pr-2 text-right">Cache Hit %</th>
+                                        <th className="py-1.5 text-right">Gain Ratio %</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -200,8 +201,13 @@ const SummaryDimensionBlock: React.FC<SummaryDimensionBlockProps> = memo(
                                                 <td className="py-1.5 pr-2 text-right tabular-nums font-bold">
                                                     {fmtTok(total)}
                                                 </td>
-                                                <td className="py-1.5 text-right tabular-nums">
+                                                <td className="py-1.5 pr-2 text-right tabular-nums text-cyan-400">
                                                     {b.lineValue !== undefined ? `${b.lineValue.toFixed(1)}%` : '—'}
+                                                </td>
+                                                <td className="py-1.5 text-right tabular-nums text-amber-400">
+                                                    {b.secondLineValue !== undefined
+                                                        ? `${b.secondLineValue.toFixed(1)}%`
+                                                        : '—'}
                                                 </td>
                                             </tr>
                                         );
@@ -228,20 +234,32 @@ const SummaryDimensionBlock: React.FC<SummaryDimensionBlockProps> = memo(
                     )}
                 </div>
 
-                {/* Series legend chips */}
-                {series.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-base-content/5">
-                        {series.map((s) => (
-                            <span
-                                key={s.id}
-                                className="inline-flex items-center px-2 py-0.5 rounded-md bg-base-300/80 border border-base-content/5 gap-1.5 font-mono text-[10px] text-base-content/80"
-                            >
-                                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} />
-                                <span className="truncate max-w-[150px]">{s.label}</span>
-                            </span>
-                        ))}
+                {/* Series legend chips & rate indicators */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-base-content/5">
+                    {series.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                            {series.map((s) => (
+                                <span
+                                    key={s.id}
+                                    className="inline-flex items-center px-2 py-0.5 rounded-md bg-base-300/80 border border-base-content/5 gap-1.5 font-mono text-[10px] text-base-content/80"
+                                >
+                                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} />
+                                    <span className="truncate max-w-[150px]">{s.label}</span>
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                    <div className="flex items-center gap-3 text-[10px] font-mono text-base-content/70 ml-auto">
+                        <span className="inline-flex items-center gap-1.5">
+                            <span className="w-3 h-0.5 bg-cyan-400 rounded-full inline-block" />
+                            <span className="text-cyan-400">Cache Hit %</span>
+                        </span>
+                        <span className="inline-flex items-center gap-1.5">
+                            <span className="w-3 h-0.5 bg-amber-400 rounded-full inline-block" />
+                            <span className="text-amber-400">Gain Ratio %</span>
+                        </span>
                     </div>
-                )}
+                </div>
             </div>
         );
     },
@@ -278,13 +296,19 @@ const buildSeries = (
 };
 
 const toBuckets = (
-    points: Array<{ bucketStart: string; series: Record<string, number>; cacheHitRatio?: number }>,
+    points: Array<{
+        bucketStart: string;
+        series: Record<string, number>;
+        cacheHitRatio?: number;
+        gainRatio?: number;
+    }>,
 ): StackedColumnBucket[] =>
     points.map((b) => ({
         id: b.bucketStart,
         label: fmtBucketLabel(b.bucketStart),
         v: b.series,
         lineValue: b.cacheHitRatio,
+        secondLineValue: b.gainRatio,
     }));
 
 const toolColors = [
@@ -617,7 +641,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                             <h3 className="font-bold text-base text-base-content">Token Activity & Cache Hit Ratio</h3>
                             <p className="text-xs text-base-content/60">
                                 4-block breakdown across Model, Source, Tool, and Skill (Stacked token bars with Cache
-                                Hit % line overlay)
+                                Hit % and Gain Ratio % line overlays)
                             </p>
                         </div>
 
@@ -670,7 +694,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                     <div className="flex flex-col gap-6 w-full">
                         <SummaryDimensionBlock
                             title="By Model"
-                            description="Token load by LLM model with cache hit ratio overlay"
+                            description="Token load by LLM model with cache hit ratio and gain ratio overlays"
                             series={modelSeries}
                             buckets={modelBuckets}
                             chartMode={blockModes.model}
@@ -679,7 +703,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                         />
                         <SummaryDimensionBlock
                             title="By Source"
-                            description="Token load by agent platform with cache hit ratio overlay"
+                            description="Token load by agent platform with cache hit ratio and gain ratio overlays"
                             series={sourceSeries}
                             buckets={sourceBuckets}
                             chartMode={blockModes.source}
@@ -688,7 +712,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                         />
                         <SummaryDimensionBlock
                             title="By Tool"
-                            description="Token load (or call volume when unmeasured) by tool execution with cache hit ratio overlay"
+                            description="Token load (or call volume when unmeasured) by tool execution with cache hit ratio and gain ratio overlays"
                             series={toolSeries}
                             buckets={toolBuckets}
                             chartMode={blockModes.tool}
@@ -697,7 +721,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                         />
                         <SummaryDimensionBlock
                             title="By Skill"
-                            description="Token load by specialized skill with cache hit ratio overlay"
+                            description="Token load by specialized skill with cache hit ratio and gain ratio overlays"
                             series={skillSeries}
                             buckets={skillBuckets}
                             chartMode={blockModes.skill}

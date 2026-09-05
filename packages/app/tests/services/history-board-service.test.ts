@@ -297,6 +297,7 @@ describe('LiveHistoryBoardService', () => {
         expect(rtcSummary.toolTimeSeries?.some((p) => p.series.run_terminal_command === 700)).toBe(true);
         expect(rtcSummary.modelTimeSeries?.length).toBeGreaterThan(0);
         expect(rtcSummary.modelTimeSeries?.some((p) => p.series['claude-sonnet-4'] === 700)).toBe(true);
+        expect(rtcSummary.modelTimeSeries?.some((p) => p.gainRatio === 25)).toBe(true);
         expect(rtcSummary.sourceTimeSeries?.length).toBeGreaterThan(0);
         expect(rtcSummary.sourceTimeSeries?.some((p) => p.series.opencode === 700)).toBe(true);
 
