@@ -634,11 +634,13 @@ export const SummaryTab: React.FC<SummaryTabProps> = memo(
                     />
                 </div>
 
-                {/* Token Activity & Cache Hit Ratio Overview Header */}
+                {/* Token Activity & Cache Hit Ratio & Gain Ratio Overview Header */}
                 <div className="flex flex-col gap-4">
                     <div className="flex flex-wrap justify-between items-center gap-3">
                         <div>
-                            <h3 className="font-bold text-base text-base-content">Token Activity & Cache Hit Ratio</h3>
+                            <h3 className="font-bold text-base text-base-content">
+                                Token Activity & Cache Hit Ratio & Gain Ratio
+                            </h3>
                             <p className="text-xs text-base-content/60">
                                 4-block breakdown across Model, Source, Tool, and Skill (Stacked token bars with Cache
                                 Hit % and Gain Ratio % line overlays)
