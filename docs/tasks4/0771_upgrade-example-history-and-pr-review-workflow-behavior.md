@@ -79,7 +79,18 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
-**Status (batch halt, 2026-09-05):** task 0771 is **not-attempted** at the batch level — the batch halted at task 0766 (deferred) with stop-the-batch default. The remaining 6 tasks (0767-0772) inherit the halted-batch state and require a follow-up session to drive per the topo order (0767/0768 after 0766, 0769/0770 after 0766/0767/0768, 0771 after 0767/0768, 0772 last).
+**Status (corpus fix, 2026-09-05):** task 0771 Solution is **planned**, awaiting implementation run. The 2026-09-05 batch halted at the precheck of 0771 because the Solution section lacked `path:line` citations; the corpus fix below restores precheck-pass before implementation.
+
+Anticipated change anchors (populated during implementation):
+
+- `config/workflows/basic.yaml` — `version: "1"` once positive/negative checks pass; retain `qualityGateCmd: "bun run check"`; tested with `false && echo should-not-run` and a valid compound command.
+- `config/workflows/history-anatomy.yaml` — `version: "1"`; assert-clean mutation confinement; tighten verdict acceptance to canonical reader or anchored `Verdict: PASS` line.
+- `config/workflows/pr-review.yaml` — `version: "1"`; preserve `pr-reviewing.ts` request/dedupe/wait/collect/status ownership.
+- `plugins/sp/scripts/history-anatomy-cache.ts` — bounded shared correction count; remove duplicate validation of unchanged candidate.
+- `plugins/sp/scripts/pr-reviewing.ts` — `requestedAt` empty for already-reviewed/requested dedupe; retain `--head` checks on every read.
+- `packages/app/tests/workflow/basic-workflow.test.ts` — new test file for executed shell/branch behavior.
+- `plugins/sp/tests/history-anatomy-cache.test.ts` — extended.
+- `plugins/sp/tests/pr-reviewing.test.ts` — extended; publication routing/verdict spoofing fixtures.
 
 ### Testing
 

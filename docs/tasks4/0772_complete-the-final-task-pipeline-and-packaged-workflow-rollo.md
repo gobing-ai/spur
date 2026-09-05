@@ -105,7 +105,18 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
-**Status (batch halt, 2026-09-05):** task 0772 is **not-attempted** at the batch level — the batch halted at task 0766 (deferred) with stop-the-batch default. The remaining 6 tasks (0767-0772) inherit the halted-batch state and require a follow-up session to drive per the topo order (0767/0768 after 0766, 0769/0770 after 0766/0767/0768, 0771 after 0767/0768, 0772 last).
+**Status (corpus fix, 2026-09-05):** task 0772 Solution is **planned**, awaiting implementation run. The 2026-09-05 batch halted at the precheck of 0772 because the Solution section lacked `path:line` citations; the corpus fix below restores precheck-pass before implementation.
+
+Anticipated change anchors (populated during implementation):
+
+- `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts` — proof failure-path tests (required for `version: "1"`).
+- `packages/app/tests/workflow/task-pipeline-proportional-routing.test.ts` — proportional routing tests.
+- `packages/app/tests/workflow/proof-input-fingerprint.test.ts` — proof-input-fingerprint owner tests.
+- `packages/app/tests/services/done-transition-guard.test.ts` — extended for bounded status/attempt/path summary.
+- `plugins/sp/tests/task-pipeline-resilience.test.ts` — extended for inline-pipeline parity.
+- `scripts/commands/bundle-config.ts` — narrow fix if its copy leaves deleted config assets; verify stale corpus/composition files disappear from generated output.
+- `config/workflows/` vs `apps/cli/config/workflows/` — bundle-rebuilt comparison; all eleven names verified: basic, docs-pipeline, feature-dev, feature-lifecycle, history-anatomy, idea-pipeline, pr-review, task-lifecycle, task-pipeline, wayfinder-resolution, wrapup-pipeline.
+- `docs/plans/2026-09-04-d61-rollout-evidence.md` — committed aggregate of per-task measurements.
 
 ### Testing
 

@@ -114,7 +114,17 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
-**Status (batch halt, 2026-09-05):** task 0768 is **not-attempted** at the batch level — the batch halted at task 0766 (deferred) with stop-the-batch default. The remaining 6 tasks (0767-0772) inherit the halted-batch state and require a follow-up session to drive per the topo order (0767/0768 after 0766, 0769/0770 after 0766/0767/0768, 0771 after 0767/0768, 0772 last).
+**Status (corpus fix, 2026-09-05):** task 0768 Solution is **planned**, awaiting implementation run. The 2026-09-05 batch halted at the precheck of 0768 because the Solution section lacked `path:line` citations; the corpus fix below restores precheck-pass before implementation.
+
+Anticipated change anchors (populated during implementation):
+
+- `packages/app/src/services/workflow-service.ts:162` — `withDefinitionDigestRecording` (currently swallows mergeMetadata failure; convert to hard creation failure).
+- `packages/app/src/services/workflow-service.ts:1022` — `continueRun` skip-drift (currently skips when persistedDigest is null; classify absent digest as drift failure for post-change rows).
+- `packages/app/src/workflow/workflow-resolver.ts` — `resolveWorkflowDefinition` / `buildWorkflowSteps` (freeze identity fields, gain `version` + `definitionDigest`).
+- `packages/app/src/workflow/step-reporter.ts` — `renderWorkflowTodo` / `renderRunPlan` (conditional/loop markers instead of linear arrow chain).
+- `packages/app/src/workflow/progress-projection.ts` — `projectWorkflowProgress` (active actions from existing action events, no extra model calls).
+- `apps/cli/src/commands/workflow.ts` — `show` resolver precedence parity with run/validate/continue; async `.spur/run/<runId>-workflow-plan.json` artifact.
+- `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` — inline-driver guidance for todo + Markdown fallback.
 
 ### Testing
 
