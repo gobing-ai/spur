@@ -213,10 +213,18 @@ export class FeatureCheckService extends PlanningCheckService {
 
         const fm = doc.frontmatterData ?? {};
         const status = (fm.status as string) ?? 'backlog';
+        // D61 task 0765 R1 (target-aware): the lifecycle guard passes `--as
+        // <target>` so the rules below evaluate the post-transition state and
+        // never deny the exit they would relieve. `effectiveStatus` drives the
+        // matrix selection, L2/L4 status-dependent rules, the L4 done-time
+        // severity escalation, and the reported check status. When `asStatus`
+        // is omitted, `effectiveStatus` falls back to the on-disk frontmatter
+        // status (fully behavior-compatible with the pre-0765 implementation).
+        const effectiveStatus = options?.asStatus ?? status;
         // Group features are umbrellas: their leaf children own Acceptance Criteria, so requiring
         // AC on the parent would duplicate the children's scope and strand every group at the L2
         // gate. `resolveMatrixEntry` already falls back to `standard` for unknown variants.
-        const entry = this.resolveMatrixEntry(isGroupFeature(fm), status);
+        const entry = this.resolveMatrixEntry(isGroupFeature(fm), effectiveStatus);
 
         // ── L2: Section presence (warning-first, gate:true hard) ──
         this.runL2(doc, entry, findings, raw);
@@ -245,11 +253,11 @@ export class FeatureCheckService extends PlanningCheckService {
                 : options?.tasksDir
                   ? [options.tasksDir]
                   : [];
-        await this.runL4(doc, featureId, status, taskScanDirs, dogfoodDir, runDir, findings);
+        await this.runL4(doc, featureId, effectiveStatus, taskScanDirs, dogfoodDir, runDir, findings);
 
         return {
             id: featureId,
-            ...this.summarizeWithStatus(status, findings, strict, options?.severityOverrides),
+            ...this.summarizeWithStatus(effectiveStatus, findings, strict, options?.severityOverrides),
             repairs,
         };
     }
@@ -538,9 +546,12 @@ export class FeatureCheckService extends PlanningCheckService {
         // elevates to error). Orphans were already handled above and are excluded.
         await this.checkScenarioSatisfaction(acBody, linkedTaskRecords, runDir, findings);
         // DD-13 verifying-readiness: a feature in (or entering) `verifying` should
-        // have all its linked tasks done/cancelled. This is a WARNING (non-blocking)
-        // — it surfaces through the `active→verifying` guard (`spur feature check`,
-        // exit 0 on warnings) so the operator is warned but not stopped (R2/0059).
+        // have all its linked tasks done/cancelled. Pre-completion this is a
+        // WARNING (non-blocking) so the operator is warned but not stopped
+        // (R2/0059, `active→verifying` guard).
+        // D61 task 0765 R1: at the effective done-time transition the rule
+        // escalates to ERROR so incomplete work cannot become done (the code is
+        // unsuppressible per REQUIRED_FINDING_CODES in planning-check-base.ts).
         if (status === 'verifying' && incompleteTasks.length > 0) {
             findings.push({
                 layer: 'L4',
@@ -548,6 +559,15 @@ export class FeatureCheckService extends PlanningCheckService {
                 severity: 'warning',
                 section: '',
                 message: `Feature "${featureId}" is verifying but ${incompleteTasks.length} linked task(s) are not done/cancelled: ${incompleteTasks.join(', ')}`,
+            });
+        }
+        if (status === 'done' && incompleteTasks.length > 0) {
+            findings.push({
+                layer: 'L4',
+                code: FINDING_CODES.L4_VERIFYING_INCOMPLETE_TASKS,
+                severity: 'error',
+                section: '',
+                message: `Feature "${featureId}" is done but ${incompleteTasks.length} linked task(s) are not done/cancelled: ${incompleteTasks.join(', ')}`,
             });
         }
 

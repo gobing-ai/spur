@@ -212,7 +212,12 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     if (current === 'active') {
                         await assertFeatureCheckPass(context, id, options.folder, false, 'verifying');
                     } else if (current === 'verifying') {
-                        await assertFeatureCheckPass(context, id, options.folder, true, 'done');
+                        // D61 task 0765 R1: normal feature check --as done — no
+                        // blanket strictness elevation. Required-error findings
+                        // already carry `error` severity per REQUIRED_FINDING_CODES
+                        // in planning-check-base.ts; advisory warnings stay
+                        // advisory at the done boundary (target-state policy).
+                        await assertFeatureCheckPass(context, id, options.folder, false, 'done');
                     }
 
                     const result = await svc.transition(id, next);

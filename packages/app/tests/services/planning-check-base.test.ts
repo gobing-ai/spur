@@ -5,6 +5,7 @@ import { z } from 'zod';
 import {
     type CheckFindings,
     type CheckResultBase,
+    type CorpusSeverity,
     type DocKind,
     FINDING_CODES,
     type MatrixEntry,
@@ -40,8 +41,15 @@ class TestCheckService extends PlanningCheckService {
         super.runL2(doc, entry, findings, raw);
     }
 
-    override summarizeWithStatus(status: string, findings: CheckFindings[], strict?: boolean): CheckResultBase {
-        return super.summarizeWithStatus(status, findings, strict);
+    override summarizeWithStatus(
+        status: string,
+        findings: CheckFindings[],
+        strict?: boolean,
+        overrides?: Record<string, 'error' | 'warning' | 'off'>,
+        accepted?: ReadonlyMap<string, CorpusSeverity>,
+        id?: string,
+    ): CheckResultBase {
+        return super.summarizeWithStatus(status, findings, strict, overrides, accepted, id);
     }
 }
 
@@ -341,6 +349,97 @@ describe('PlanningCheckService.runL2', () => {
         // Design undeclared → warning
         svc.runL2(doc, entry, findings, doc.bodyWithoutFrontmatter);
         expect(findings).toHaveLength(3);
+    });
+});
+
+// ─── D61 task 0765 — R1 unsuppressible severity precedence ───────────────
+
+describe('PlanningCheckService.summarizeWithStatus (D61 task 0765 — R1 unsuppressible codes)', () => {
+    test('essential L1 schema error survives severityOverrides: { code: off }', () => {
+        const svc = new TestCheckService(simpleMatrix);
+        const findings: CheckFindings[] = [
+            {
+                layer: 'L1',
+                code: FINDING_CODES.L1_SCHEMA_VALIDATION,
+                severity: 'error',
+                section: '',
+                message: 'schema bad',
+            },
+        ];
+        const origWrite = process.stderr.write;
+        process.stderr.write = () => true;
+        const result = svc.summarizeWithStatus('testing', findings, false, {
+            [FINDING_CODES.L1_SCHEMA_VALIDATION]: 'off',
+        });
+        process.stderr.write = origWrite;
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0]?.severity).toBe('error');
+        expect(result.pass).toBe(false);
+    });
+
+    test('advisory L3 warning is still suppressed by severityOverrides: { code: off }', () => {
+        const svc = new TestCheckService(simpleMatrix);
+        const findings: CheckFindings[] = [
+            {
+                layer: 'L3',
+                code: FINDING_CODES.L3_SCOPE_DELINEATION,
+                severity: 'warning',
+                section: 'Scope',
+                message: 'no in/out',
+            },
+        ];
+        // Call through the protected helper because TestCheckService's subclass
+        // shim exposes a 3-arg signature only.
+        const protectedCall = (
+            svc as unknown as {
+                summarizeWithStatus: (
+                    s: string,
+                    f: CheckFindings[],
+                    strict: boolean,
+                    overrides: Record<string, 'error' | 'warning' | 'off'>,
+                ) => CheckResultBase;
+            }
+        ).summarizeWithStatus;
+        const result = protectedCall('testing', findings, false, {
+            [FINDING_CODES.L3_SCOPE_DELINEATION]: 'off',
+        });
+        expect(result.findings).toHaveLength(0);
+        expect(result.pass).toBe(true);
+    });
+
+    test('essential L4 malformed-verdict error survives accepted-map suppression', () => {
+        const svc = new TestCheckService(simpleMatrix);
+        const findings: CheckFindings[] = [
+            {
+                layer: 'L4',
+                code: FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
+                severity: 'error',
+                section: '',
+                message: 'malformed',
+            },
+        ];
+        const accepted = new Map<string, CorpusSeverity>([
+            [`task:0810:${FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT}`, 'error'],
+        ]);
+        // Re-call with the full 6-arg signature to exercise the accepted branch.
+        // TestCheckService only exposes a 3-arg overload; fall back to the
+        // protected helper through a cast.
+        const protectedCall = (
+            svc as unknown as {
+                summarizeWithStatus: (
+                    s: string,
+                    f: CheckFindings[],
+                    strict: boolean,
+                    overrides: undefined,
+                    accepted: Map<string, CorpusSeverity>,
+                    id: string,
+                ) => CheckResultBase;
+            }
+        ).summarizeWithStatus;
+        const result = protectedCall('testing', findings, false, undefined, accepted, '0810');
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0]?.severity).toBe('error');
+        expect(result.pass).toBe(false);
     });
 });
 

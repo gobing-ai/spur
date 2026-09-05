@@ -973,6 +973,12 @@ describe('FeatureCheckService', () => {
                 '## Acceptance Criteria',
                 '',
                 '- [ ] fixture item',
+                '',
+                // D61 task 0765: --as done now drives the matrix selection, so
+                // the fixture must satisfy the done-status matrix (Tasks required).
+                '## Tasks',
+                '',
+                '- [ ] fixture task',
             ].join('\n'),
         };
 

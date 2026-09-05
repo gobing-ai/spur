@@ -30,6 +30,52 @@ export function key(e: { kind: string; id: string; code: string }): string {
     return `${e.kind}:${e.id}:${e.code}`;
 }
 
+// R1 (D61 task 0765): the unsuppressible error set. These finding codes
+// represent structural / completion-integrity errors that cannot be downgraded
+// by `severityOverrides` or absorbed by `accepted`-map filtering. Defaults to
+// the same set the design contract freezes; callers MAY extend it for project-
+// specific essential errors but MUST NOT shrink it. Frozen at the planning-
+// check-base seam so the policy is shared by both TaskCheckService and
+// FeatureCheckService and not redefined per subclass.
+const REQUIRED_FINDING_CODES: ReadonlySet<FindingCode> = new Set<FindingCode>([
+    FINDING_CODES.L1_MARKDOWN_PARSE,
+    FINDING_CODES.L1_SCHEMA_VALIDATION,
+    FINDING_CODES.L2_MISSING_REQUIRED_SECTION,
+    FINDING_CODES.L3_AC_BDD_ERROR,
+    FINDING_CODES.L3_AC_BDD_INVALID,
+    FINDING_CODES.L3_REQUIREMENTS_EMPTY,
+    FINDING_CODES.L3_AC_EMPTY,
+    FINDING_CODES.L3_REQUIRED_SECTION_PLACEHOLDER,
+    // Edge-resolution errors are NOT unsuppressible: the design contract freezes
+    // them as error when the edge is present and unresolvable, but advisory when
+    // the edge is absent (e.g. an optional feature_id). `severityOverrides`
+    // remains free to escalate these from warning to error when the caller
+    // wants stricter behavior.
+    FINDING_CODES.L4_PREREQUISITE_CYCLE,
+    FINDING_CODES.L4_ORPHAN_SCENARIOS,
+    FINDING_CODES.L4_UNCOVERED_FEATURE_SCENARIO,
+    FINDING_CODES.L4_SCENARIO_UNVERIFIED,
+    FINDING_CODES.L4_VERIFYING_INCOMPLETE_TASKS,
+    FINDING_CODES.L4_VERDICT_ROWS_MATCH_NO_SCENARIO,
+    FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
+    FINDING_CODES.L4_EVIDENCE_NOT_RECOVERABLE,
+    FINDING_CODES.L4_DOGFOOD_MISSING,
+    FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
+    FINDING_CODES.L4_TESTING_VERDICT_STUB,
+    FINDING_CODES.L4_UNCOVERED_TASK_SCENARIO,
+    FINDING_CODES.L3_REVIEW_TESTING_CONTRADICTION,
+    FINDING_CODES.L4_ROLLUP_SUBTASKS_OPEN,
+    FINDING_CODES.L4_ROLLUP_MISSING_ROSTER,
+    FINDING_CODES.L4_ROLLUP_ROSTER_NOT_DECLARED_DEPENDENCY,
+]);
+
+/** Whether a finding's code is unsuppressible — its severity was fixed at emit time. */
+export function isUnsuppressibleFinding(code: FindingCode): boolean {
+    return REQUIRED_FINDING_CODES.has(code);
+}
+
+export { REQUIRED_FINDING_CODES };
+
 // ─── Shared types ─────────────────────────────────────────────────────────
 
 // `UNIVERSAL_SECTIONS` (the closed-world relaxation: History/References/Notes)
@@ -213,7 +259,16 @@ export abstract class PlanningCheckService {
     /**
      * Apply config severity overrides (R3/R4) and `--strict` elevation, compute
      * the pass gate, and derive the required/missing section lists from L2 findings.
-     * Drops accepted baseline debt whose severity matches post-elevation (R1, R2).
+     *
+     * **Severity precedence (D61 task 0765 — R1/R3):** essential / required-error
+     * codes (see {@link REQUIRED_FINDING_CODES}) have their severity ESTABLISHED at
+     * emit time and cannot be downgraded by `severityOverrides` or absorbed by
+     * `accepted`-map filtering. Overrides apply only to advisory warnings; an
+     * override that targets an unsuppressible error is silently ignored (with a
+     * stderr trace) so callers see the bypass attempt without changing the pass
+     * gate. `--strict` elevation only walks warnings → errors; required errors
+     * stay required.
+     *
      * Returns the outcome fields common to every check result.
      */
     protected summarizeWithStatus(
@@ -224,19 +279,34 @@ export abstract class PlanningCheckService {
         accepted?: ReadonlyMap<string, CorpusSeverity>,
         id?: string,
     ): CheckResultBase {
+        // R1 (D61 task 0765): essential / required-error codes are unsuppressible.
+        // Their severity was fixed at emit time, so overrides that drop or
+        // downgrade them are refused and the accepted-map cannot absorb them.
+        // Advisory findings keep the legacy override + accepted path.
         const effectiveFindings: CheckFindings[] = [];
         for (const f of findings) {
+            const unsuppressible = isUnsuppressibleFinding(f.code);
             const override = overrides?.[f.code];
             if (override === 'off') {
-                continue; // dropped before pass gate or strict elevation sees it (R4)
+                if (unsuppressible) {
+                    process.stderr.write(`summarize: override 'off' refused for unsuppressible ${f.code}\n`);
+                } else {
+                    continue; // dropped before pass gate or strict elevation sees it (R4)
+                }
             }
             if (override === 'error' || override === 'warning') {
-                f.severity = override;
+                if (unsuppressible) {
+                    process.stderr.write(
+                        `summarize: severity override for unsuppressible ${f.code} ignored (required severity preserved)\n`,
+                    );
+                } else {
+                    f.severity = override;
+                }
             }
             if (strict && f.severity === 'warning') {
                 f.severity = 'error';
             }
-            if (accepted && id) {
+            if (accepted && id && !unsuppressible) {
                 const k = key({ kind: this.docKind, id, code: f.code });
                 const acceptedSev = accepted.get(k);
                 if (acceptedSev !== undefined && acceptedSev === f.severity) {
