@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.34.0
+version: 1.35.0
 owner: Robin Min
-updated_at: 2026-08-29
+updated_at: 2026-09-04
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2216,6 +2216,20 @@ overhead without compromising the deterministic safety floor. Piloting on `wrapu
 `task-lifecycle` proves the closed route table on real callers before migrating `task-pipeline`.
 
 **Detail:** `config/proportional-route-table.ts`; `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §4; task 0758.
+
+**Amendment (2026-09-04 — D9 Option B closure, task 0764).** The failed re-measure selects the
+feature's complete Option B branch: `task-lifecycle` proportional routing is reverted because its
+one-edge-per-pair transition API made the pilot unsafe; the wrapup route table and task-pipeline
+migration remain installed but unreachable by default. A workflow's fast path may be activated only
+after a source-local re-measure shows at least five real terminal runs and at least 80%
+`mappedRuns / terminalRuns` coverage for that workflow. Activation-dependent real-run evidence is
+not applicable while Option B holds; the failed measurement remains recorded rather than forced
+green.
+
+**Why.** The frozen coverage bar failed, so safety requires closure without manufacturing fast-path
+runs solely to satisfy the rollout branch.
+
+**Detail:** feature D9 `## Notes`; tasks 0757–0759 and 0764.
 
 ## Amendments (task 0754, D8 Decision 8 closure)
 

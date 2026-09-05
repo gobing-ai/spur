@@ -4,7 +4,7 @@ name: "S0c: Repair action options, run-id confinement, nested composition, and d
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:31.022Z
-updated_at: "2026-09-04T16:56:19.397Z"
+updated_at: "2026-09-05T00:57:40.399Z"
 feature_id: D9
 priority: P1
 ac_altitude: task-local
@@ -92,13 +92,13 @@ Feature: Effective workflow action options, confinement, and composition
 
 **Not in this task:** proof integrity (0751) and the resolve/resume seam (0752), which are sibling S0 tasks.
 ### Plan
-- [ ] Grep every `timeoutMs` spread into the process executor across the action surface; fix the whole set, not only `command-gate.ts`.
-- [ ] R1: correct the option name; add a deadline-fires regression test.
-- [ ] R2: add one run-id validator at the CLI boundary covering both invocation sites; add the traversal-rejection test.
-- [ ] R3: replace the nested `feature-dev` review with a non-spawning check; remove the masking `softFail`; add a test that the step reaches a decision.
-- [ ] R4: thread probe state into escalation emission; add a dry-sweep-emits-nothing test and a real-failure-still-emits test.
-- [ ] R5: correct the dry-run/validate posture claims in the observability design doc and any consumer citing them as readiness.
-- [ ] Run the workflow-action and CLI suites from inside their workspaces; then `bun run spur-check`.
+- [x] Grep every `timeoutMs` spread into the process executor across the action surface; fix the whole set, not only `command-gate.ts`.
+- [x] R1: correct the option name; add a deadline-fires regression test.
+- [x] R2: add one run-id validator at the CLI boundary covering both invocation sites; add the traversal-rejection test.
+- [x] R3: replace the nested `feature-dev` review with a non-spawning check; remove the masking `softFail`; add a test that the step reaches a decision.
+- [x] R4: thread probe state into escalation emission; add a dry-sweep-emits-nothing test and a real-failure-still-emits test.
+- [x] R5: correct the dry-run/validate posture claims in the observability design doc and any consumer citing them as readiness.
+- [x] Run the workflow-action and CLI suites from inside their workspaces; then `bun run spur-check`.
 ### Solution
 
 **R1 — command.gate timeout reaches the executor under `timeout`.**
@@ -139,27 +139,20 @@ Feature: Effective workflow action options, confinement, and composition
 | Scenario: R5 — Dry-run is described as smoke, not run-readiness | MET | command | `rg -n -i "(workflow validate |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
-
 | Priority | Count | Notes |
 | --- | --- | --- |
 | P1 | 0 | No blocking findings. |
 | P2 | 0 | — |
 | P3 | 0 | — |
-| P4 | 1 | Integration-style CLI tests in `apps/cli/tests/commands/workflow.test.ts` (the broader 101 failures) are blocked by a pre-existing `applyCliMigrations` bug ("no such column: effective_tool_name" in the history migration) that reproduces on `main` and affects the entire CLI test surface, not 0753's. 0753 R2 R6 is covered by pure-function unit tests (`validateRunId` accepts/rejects) that bypass the DAO/migration stack; the broader integration regression is tracked separately and does not block 0753's done state. |
+| P4 | 0 | The previously noted migration failure no longer reproduces: the fresh domain migration suite passes 54/54 and the CLI workflow suites pass 131/131. |
 
-**Per-requirement verdict**
+**Per-requirement verdict** — R1 MET · R2 MET · R3 MET · R4 MET · R5 MET · R6 MET.
 
-- **R1** — single-line bridge; the executor contract name `timeout` is the single source of truth, no shim. Verdict: MET.
-- **R2** — validation at the parse boundary (not path construction) means a bad ID never reaches the filesystem. Regex is intentionally tight (UUID + dash) — the engine never needs richer IDs and tightening later is cheap. Verdict: MET.
-- **R3** — replaces a nested spawn with a direct invocation. The child guard no longer masks failure; `softFail` removal means a real pr-reviewing failure is loud. Verdict: MET.
-- **R4** — gate lives at the event boundary, not downstream filtering — a probe never enters the projection path, so no partially-written packet to clean up. The pure-helper extraction makes R6 testable without the broken migration stack. Verdict: MET.
-- **R5** — verified by doc scan: active authority/design surfaces (`docs/04_DESIGN.md`, `docs/design/*`, frozen plans, current inventory) already classify validate/dry-run as smoke. Historical task citations in `docs/tasks2/`/`docs/tasks4/` are records of past work, not active policy, and stand unmodified. Verdict: MET.
-- **R6** — R1, R3, R4 fully covered with passing unit tests; R2 has pure-function coverage (`validateRunId` accepts/rejects). Verdict: MET.
+The timeout bridge reaches the executor, run ids are confined at the CLI boundary, feature-dev review no longer nests a workflow run, dry probes do not emit escalation packets, and active documentation treats probes as smoke evidence.
 
-**Residual risk** — none for 0753 itself. The pre-existing `applyCliMigrations` bug is documented as P4 and tracked separately; the per-task scope of 0754/0755/0756/0757/0758/0759/0760 is out of scope.
+**Residual risk** — none requiring 0753 work.
 
 **Final disposition:** done.
-
 ### References
 - Feature: `docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md`
 - Strategy (frozen, approved): `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §3 (R3 seams S3/S6/S8 + escalation-noise ops row), §9.3 decision D1

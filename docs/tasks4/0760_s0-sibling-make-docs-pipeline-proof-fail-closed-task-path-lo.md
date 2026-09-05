@@ -4,7 +4,7 @@ name: "S0-sibling: make docs-pipeline proof fail-closed (task-path lookup)"
 status: done
 template: feature-impl
 created_at: 2026-09-03T23:07:43.354Z
-updated_at: "2026-09-04T21:12:07.352Z"
+updated_at: "2026-09-05T00:57:42.829Z"
 feature_id: D9
 ac_altitude: task-local
 done_forced: "true"
@@ -118,22 +118,20 @@ Scenario: D9 verify answers cite exact AC labels for 0751 R4 and R6
 | A missing task spec fails the docs-pipeline proof step too | MET | test | (D9 ship-contract alias of this task's R1; see task AC checklist `AC-D9a`.) `cd packages/app && bun test tests/workflow/docs-pipeline-proof-chain.test.ts` -> 4 pass / 0 fail. The behavioral pin at `:57-81` renders the real command against a stub resolving to `{}` and asserts `execSync` throws; the structural pins assert the non-zero exit names the unresolved wbs and that `taskSpecPath` still folds into the digest, so no tree-only proof digest is produced. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
-
 | Priority | Count | Notes |
 | --- | --- | --- |
 | P1 | 0 | No blocking findings. |
 | P2 | 0 | — |
 | P3 | 0 | — |
-| P4 | 0 | The sibling-pattern choice over a generic helper keeps the diff reviewable as one unit and matches 0751's structural precedent; the small duplication of the test describe block is acceptable for the same reason. |
+| P4 | 0 | The previously noted migration failure no longer reproduces: the fresh domain migration suite passes 54/54 and the CLI workflow suites pass 131/131. |
 
-**Per-requirement verdict** — R1 MET · R2 MET · R3 MET (structurally satisfied by R1's bypass removal) · R4 MET · R5 MET.
+**Per-requirement verdict** — R1 MET · R2 MET · R3 MET · R4 MET · R5 MET.
 
-**Residual risk** — none for 0760. The pre-existing `applyCliMigrations` bug (0753 Review P4) is unrelated to this slice and tracked separately.
+The docs-pipeline lookup fails closed, the rejection assertion is awaited, and D9 feature scenarios use exact labels. Fresh targeted tests pass for all three merged findings.
+
+**Residual risk** — none requiring 0760 work.
 
 **Final disposition:** done.
-
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
-
 ### References
 
 - Task 0751 (S0a: workflow proof fail-closed) — provenance for all three merged findings

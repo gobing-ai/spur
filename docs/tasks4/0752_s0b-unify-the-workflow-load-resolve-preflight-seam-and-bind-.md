@@ -4,7 +4,7 @@ name: "S0b: Unify the workflow load/resolve/preflight seam and bind resume to th
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:30.732Z
-updated_at: "2026-09-04T18:22:52.701Z"
+updated_at: "2026-09-05T00:57:40.054Z"
 feature_id: D9
 priority: P1
 ac_altitude: task-local

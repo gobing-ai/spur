@@ -4,7 +4,7 @@ name: "S0a: Make workflow proof fail-closed — git-tree, task lookup, verifier 
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:30.404Z
-updated_at: "2026-09-04T21:12:07.125Z"
+updated_at: "2026-09-05T00:57:39.706Z"
 feature_id: D9
 priority: P1
 ac_altitude: task-local
@@ -101,15 +101,13 @@ Feature: Fail-closed workflow proof
 **Not in this task:** F-10 whole-tree attribution (out of scope per D9), and the resolve/resume seam (0752) and action-option/confinement repairs (0753), which are sibling S0 tasks.
 
 ### Plan
-
-- [ ] Grep every caller of `createGitAlternateTree` and of the `=== ''` sentinel before editing; record the caller set in the Solution.
+- [x] Grep every caller of `createGitAlternateTree` and of the `=== ''` sentinel before editing; record the caller set in the Solution.
 - [x] R1: convert the capture contract to a failure-carrying result; update all callers; add the git-failure regression test.
 - [x] R4: enforce `proofBinding` in `run-artifact.ts` before `dao.record`; add the unbound-artifact regression test.
 - [x] R3: delete-before-invoke for `expectFile` in `agent-run.ts`; add the stale-answer regression test.
 - [x] R2: de-suppress the task-path lookup in `task-pipeline.yaml`; add the missing-task regression test.
 - [x] R6: audit the changed surface for any newly added bypass; confirm none.
 - [x] Run the workflow-service and workflow-action suites from inside their workspace; then `bun run spur-check`.
-
 ### Solution
 
 Implemented fail-closed proof capture (R1-R4, R6); all four fail-open paths now reject or exit non-zero, none widened what counts as proof.
@@ -152,46 +150,22 @@ Implemented fail-closed proof capture (R1-R4, R6); all four fail-open paths now 
 | R4 — A declared proof binding is enforced at artifact write | MET | test | `bun test tests/workflow/actions/run-artifact.test.ts --test-name-pattern "proofBinding enforcement"` → 5 pass / 0 fail / 12 expect(): unsupported and unheld bindings both fail before persistence. |
 | R6 — The repairs add no new bypass | MET | command | `git show c838f89f4 -U0 -- packages/app/src config/workflows \| grep '^+' \| grep -icE 'softfail\|continueonerror\|bypass\|allowmissing\|SPUR_.*=\|process\.env\.[A-Z]'` → `0` added bypass-shaped lines. |
 | The done-state verdict artifact declares the enforced proof binding | MET | test | (D9 ship-contract alias of this task's R4; see task AC checklist `AC-D9a`.) `config/workflows/task-pipeline.yaml:743` declares `proofBinding: current` on the done-state `run.artifact`; `cd packages/app && bun test tests/workflow/actions/run-artifact.test.ts --test-name-pattern "proofBinding enforcement"` -> 5 pass / 0 fail / 12 expect(): unsupported and unheld bindings both fail before persistence, so a missing or stale binding cannot reach `dao.record`. |
-| No new bypass is introduced in the pipeline composition | MET | command | (D9 ship-contract alias of this task's R6; see task AC checklist `AC-D9b`.) `git show c838f89f4 -U0 -- packages/app/src config/workflows |
+| No new bypass is introduced in the pipeline composition | MET | command | (D9 ship-contract alias of this task's R6; see task AC checklist `AC-D9b`.) `git show c838f89f4 -U0 -- packages/app/src config/workflows \| grep '^+' \| grep -icE 'softfail\|continueonerror\|bypass\|allowmissing\|SPUR_.*=\|process\.env\.[A-Z]'` -> `0` added bypass-shaped lines across the task-pipeline and docs-pipeline surfaces. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | closure | `config/workflows/docs-pipeline.yaml:143` | The prior sibling fail-open lookup was resolved by 0760 and is regression-pinned by `docs-pipeline-proof-chain.test.ts`. |
+| P4 | test fidelity | `packages/app/tests/workflow/proof-input-fingerprint.test.ts:241` | The prior floating rejection matcher was consolidated into 0760 R4 and now awaits the rejection before asserting `ProofCaptureError`. |
+| P4 | documentation | `config/rules/structure/protected-files.yaml:28` | The inaccurate `.spur/` comment is corrected without changing scanner scope. |
 
-**Verdict: PASS** — all six requirements met with file:line evidence; no blocker/major findings. 2 minor, 2 advisory.
+**Per-requirement verdict** — R1 MET · R2 MET · R3 MET · R4 MET · R5 MET · R6 MET.
 
-#### Findings (ranked)
+Fresh verification includes 52 passing app workflow tests covering both resolved findings; the full project gate is recorded by 0764. The digest-presence binding is intentionally narrower than cryptographic artifact-content binding and remains an accepted threat-model ceiling, not unfinished D9 work.
 
-| # | Severity | Dimension | Finding | Location |
-| --- | ---------- | ----------- | --------- | ---------- |
-| 1 | P3 (minor) | functional (P3) | The exact fail-open task-path lookup R2 removed (`2>/dev/null … \|\| true; exit 0`) remains in **docs-pipeline**'s proof chain — and its resolved `taskSpecPath` folds into its proof digest via `taskFile:` (docs-pipeline.yaml:155, :191), so the F-7 defect class is still live in the sibling workflow. Out of R2's literal task-pipeline scope (correctly not bundled here); needs a follow-up task to keep D9's fail-closed property uniform across proof-carrying workflows. | `config/workflows/docs-pipeline.yaml:145` |
-| 2 | P3 (minor) | correctness (P3) | First R1 regression assertion is a floating promise: `expect(createGitAlternateTree(...)).rejects.toBeInstanceOf(...)` is never awaited — bun:test may settle the test before the matcher runs, so a regression back to the `''` sentinel could pass vacuously. Sibling tests use the awaited `.catch(e => e)` pattern; add `await` (one word). | `packages/app/tests/workflow/proof-input-fingerprint.test.ts:241-244` |
-| 3 | P4 (advisory) | security (P4) | `/.spur/` secrets-scanner exclusion's rationale comment (".spur/ is gitignored") is inaccurate — root `.spur/` is partly tracked (`git ls-files`: `.spur/config.yaml`, context/memory markdown). Practical impact ≈ zero: include scope is `apps/`, `packages/`, `scripts/`, so tracked root `.spur/` was never scanned; the exclusion only carves nested gitignored test scaffolding (`/packages/**/.spur/`) out of the `packages/` fragment match. Fix the comment, not the rule. | `config/rules/structure/protected-files.yaml:28-30` |
-| 4 | P4 (advisory) | architecture (P4) | R4 binding verifies digest presence/shape in run vars, not a cryptographic artifact-content↔digest binding — exactly the Design's "exactly that check and no broader one" scope. Recorded as the known ceiling; a future slice could bind artifact bytes to the digest if the threat model ever demands it. | `packages/app/src/workflow/actions/run-artifact.ts:97-109` |
+**Residual risk** — none requiring D9 work.
 
-#### Functional Traceability
-
-| Req | Status | Evidence |
-| ----- | -------- | ---------- |
-| R1 | MET | All four capture paths throw `ProofCaptureError` carrying stderr: read-tree `packages/app/src/workflow/proof-input-fingerprint.ts:116`, add `:120`, write-tree `:124`, catch-convert `:127-129`; `computeProofInputFingerprint` propagates (`:221-223`, no internal swallow). Caller audit confirmed: only production caller is `proof-fingerprint.ts:68-76`, whose try/catch fails the action (`ok:false`) — no digest derived from a failed capture. Exported at `packages/app/src/index.ts:621`. |
-| R2 | MET | Lookup de-suppressed: no `2>/dev/null` on `task path`, no `\|\| true`, no forced `exit 0`; explicit empty-path check exits 1 naming the unresolved wbs (`config/workflows/task-pipeline.yaml:348`). Priority read stays tolerant as designed. Baseline re-pin verified string-identical to the yaml command; docs-pipeline baseline entry untouched. |
-| R3 | MET | Delete-before-invoke: target resolved (same cwd/`isAbsolute`/`join` shape as the post-exit check at `agent-run.ts:577`), deleted pre-dispatch, deletion failure fails the step before spawn (`packages/app/src/workflow/actions/agent-run.ts:339-352`). Uses the file's existing per-call `createNodeFileSystem(cwd)` convention (`:570, :578, :708`). `proofBinding: current` holds by construction: `proof.fingerprint var=proofDigestNow expect=${vars.proofDigest}` (`task-pipeline.yaml:631-635`) runs in the done state before the artifact write (`:710`). |
-| R4 | MET | Enforcement at write, before ledger: unknown binding rejected (`run-artifact.ts:92-96`); missing/malformed `sha256:<64hex>` digest in `proofDigestNow`→`proofDigest` rejected (`:97-109`); `dao.record` only reached on pass. Only declaration in the tree is `task-pipeline.yaml:710` — no other workflow regressed. |
-| R5 | MET | Every regression exercises the failure path and fails against pre-repair code: R1 four git-failure shapes + compute rejection (`proof-input-fingerprint.test.ts:206-277`); R2 structural no-suppression pins + behavioral execSync throw + priority-var never materialized (`task-pipeline-proof-chain.test.ts:179-233`, `inline-pipeline-driver.test.ts` R2 case); R3 stale-answer cannot satisfy + absent-at-dispatch proof (`agent-run.test.ts:555-594`); R4 zero-ledger-row assertions on all reject branches (`run-artifact.test.ts:109-201`). |
-| R6 | MET | Diff adds no env var, option, or softFail escape; every change removes a fail-open route. The `protected-files.yaml` edit is scanner-scope hygiene (finding #3), not a proof-surface widening. |
-
-#### Verification evidence (fresh, this tree)
-
-- `bun test` in `packages/app` on the four touched suites: **166 pass / 0 fail**, 485 expect() calls, 2.05s.
-- `bun test tests/inline-pipeline-driver.test.ts` in `plugins/sp`: **4 pass / 0 fail**, 1.3s.
-- Pipeline quality gate already green on this exact tree (`bun run spur-check` exit 0; digest `sha256:32e3def16523acf727d28ebfcf2f356ec4740e3e6696733bd89445ca03833459`) — not re-run per handoff.
-
-#### Architecture notes
-
-Repairs deepen the proof contract rather than patch symptoms: capture is now total into the error channel (`ProofCaptureError`); freshness is enforced by construction (delete-before-invoke) instead of racy stat/mtime; binding enforcement moved to the write boundary before the ledger row exists. R2's shell guard fails closed on every degradation path checked (failing `spur` → jq yields empty → `-z` fires; missing `jq` → 127; failed redirect → empty path → `-z` fires). No shallow pass-throughs introduced. Finding #1 is the one architectural debt worth scheduling before 0757 re-measurement if docs-pipeline proofs feed the gate denominator.
-
-**Residual risk:** docs-pipeline fail-open lookup (finding #1) and the unawaited assertion (finding #2). Neither blocks this slice; neither widens proof.
-
-**Disposition:** PASS — proceed. Route finding #1 to a follow-up task; finding #2 is a one-word fix ride-along.
-
+**Final disposition:** done.
 ### References
 
 - Feature: `docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md`

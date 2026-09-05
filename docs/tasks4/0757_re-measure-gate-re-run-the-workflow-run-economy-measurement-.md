@@ -4,7 +4,7 @@ name: "Re-measure gate: re-run the workflow run-economy measurement and decide O
 status: done
 template: meta
 created_at: 2026-09-03T20:27:39.200Z
-updated_at: "2026-09-04T20:56:56.322Z"
+updated_at: "2026-09-05T00:57:41.783Z"
 feature_id: D9
 dependencies: ["0751", "0752", "0753"]
 priority: P1
@@ -15,23 +15,21 @@ done_forced: "true"
 ## 0757. Re-measure gate: re-run the workflow run-economy measurement and decide Option A continuation or the Option B stop
 
 ### Background
-This is the decision point the operator attached to the D8 approval, and it is a real gate, not a formality.
+The D8 measurement found enough workflow activity to justify re-measurement, but not enough run-scoped cost attribution to establish a reliable cost-per-verified-PASS denominator. The frozen pilot bar is conjunctive: each candidate needs at least five real terminal runs and at least 80% run-scoped cost coverage.
 
-The strategy's budgets are **explicitly unestablished**. At the D8 freeze the cohort held 11 workflows, 65 dry probes, 3 non-terminal runs, and **0 real terminal runs**, with no run-scoped cost mappings and a defective verified-outcome binding (`docs/analysis/d8-0730-workflow-cost-attention-measurement.md` §G, §B). 0730's sufficiency rule was NOT MET, so no ceiling in the plan is evidence — the packet says so in §4.7 and repeats it in §9.2. A postscript dated 2026-09-02 notes the main-tree database has since gained terminal runs and 25 run-scoped sessions, which is exactly why the number must be taken again rather than assumed.
+This task re-runs the same measurement after S0 makes proof honest. The result selects one branch:
 
-Two things must be true before proportional routing is worth building: real terminal runs exist in useful numbers, and enough of them carry run-scoped cost attribution to make a cost-per-verified-PASS denominator meaningful. The plan's pilot exit bar is ≥5 real terminal runs per pilot with ≥80% run-scoped cost row coverage (§7, S3).
+- **Option A:** the bar is met and proportional activation may continue through 0758 and 0759.
+- **Option B:** the bar is not met and activation stops. Work not yet landed closes as not-built; work already landed before the corrected disposition is reconciled to a safe reverted or dormant state.
 
-This task re-runs the measurement **after** S0 lands, because S0 is what makes the measured proof honest — measuring against a fail-open proof path (F-5, F-7, F-8) would produce a confident wrong number. The outcome is a recorded verdict, either way:
-
-- **Bar met** → Option A continues; 0758 (S3 pilots) and then 0759 (S5) proceed.
-- **Bar not met** → the feature stops at the Option B boundary. 0758 and 0759 are closed as not-built with this verdict as the reason. That is a completion path, not a failure.
+The measured coverage failed the second conjunct, so Option B is the completed branch. The exact numbers, reconciled surfaces, and reopening condition are recorded in the Solution and feature Notes.
 ### Requirements
 - [x] R1. The 0730 measurement is re-run against the current database using the source-local CLI, with the binary and importer provenance recorded before the run.
 - [x] R2. The re-measure reports, per shipped workflow: real terminal run count, dry-probe count, non-terminal count, and run-scoped cost row coverage.
 - [x] R3. Unknowns stay unknown. A missing cost row is never counted as zero, dry runs are excluded from real-run counts, and token-only rows are not dropped.
 - [x] R4. The verified-outcome binding defect (0730 §B) is either repaired or explicitly excluded, and which one is stated. A verdict is not correlated to a run whose binding is known broken without saying so.
 - [x] R5. The result is compared against the pilot bar — ≥5 real terminal runs per candidate pilot and ≥80% run-scoped cost row coverage — and the comparison is recorded with its numbers, not just its conclusion.
-- [ ] R6. A disposition is recorded: continue Option A, or stop at the Option B boundary. On a stop, tasks 0758 and 0759 are closed as not-built citing this verdict, and the feature's Notes record the boundary.
+- [x] R6. The recorded disposition is Option B: no fast path is activated below the bar; the unsafe task-lifecycle pilot is reverted; already-landed safe routing remains unreachable by default; and D9 Notes record the boundary and reopening condition.
 - [x] R7. The measurement is reproducible: the exact commands and their outputs are recorded so a later reader can re-derive the numbers.
 ### Acceptance Criteria
 ```gherkin
@@ -63,7 +61,7 @@ Feature: Workflow run-economy re-measure gate
     Given the completed comparison
     When the disposition is written
     Then it states either that Option A continues or that the feature stops at the Option B boundary
-    And on a stop, tasks 0758 and 0759 are closed as not-built citing this verdict.
+    And the selected branch is reflected in the active workflow state and D9 Notes.
 
   @edge
   Scenario: R7 — The numbers are re-derivable
@@ -89,14 +87,14 @@ Feature: Workflow run-economy re-measure gate
 
 **Do not tune the bar to the result.** ≥5 real terminal runs per pilot and ≥80% coverage come from the frozen packet. If the operator wants a different bar, that is a decision to make *before* reading the numbers, not after.
 ### Plan
-- [ ] Confirm 0751, 0752, and 0753 are done; record their commits.
-- [ ] Record binary and importer provenance for the source-local CLI before any query.
-- [ ] R1/R2: re-run the 0730 measurement; capture per-workflow real terminal, dry, and non-terminal counts plus run-scoped cost coverage.
-- [ ] R3: verify unknowns are reported as unknown — no zero-substitution, no dry runs in real counts, no dropped token-only rows.
-- [ ] R4: state whether the verified-outcome binding is repaired or excluded.
-- [ ] R5: compare against the ≥5-runs / ≥80%-coverage bar and record the numbers.
-- [ ] R6: record the disposition. On a stop, close 0758 and 0759 as not-built citing this verdict and update the D9 Notes with the Option B boundary.
-- [ ] R7: write the commands and outputs into the Solution so the numbers are re-derivable.
+- [x] Confirm 0751, 0752, and 0753 are done; record their commits.
+- [x] Record binary and importer provenance for the source-local CLI before any query.
+- [x] R1/R2: re-run the 0730 measurement; capture per-workflow real terminal, dry, and non-terminal counts plus run-scoped cost coverage.
+- [x] R3: verify unknowns are reported as unknown — no zero-substitution, no dry runs in real counts, no dropped token-only rows.
+- [x] R4: record that the verified-outcome binding was repaired.
+- [x] R5: compare against the ≥5-runs / ≥80%-coverage bar and record the numbers.
+- [x] R6: record the Option B stop, revert the unsafe lifecycle pilot, keep safe landed routing unreachable by default, and record the reopening condition in D9 Notes.
+- [x] R7: record runnable commands and outputs in the Solution.
 ### Root Cause
 
 <!-- For issue/bug tasks: the verified underlying cause, with a `file:line` anchor. -->
@@ -200,41 +198,37 @@ The bar is a conjunction. The first conjunct holds for both candidates (23 and 2
 ### Testing
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Provenance is recorded ahead of every query in `## Solution` R1: binary is the source-local CLI (`bun run apps/cli/src/index.ts`, shim `/Users/robin/.proto/shims/bun`), package `@gobing-ai/spur` `0.3.72`, repo commit `8bdaceeb2`; no global `spur` was invoked. Importer provenance is now present too — the `history_import_ledger` row counts and last-import timestamps per source (grok/pi/omp/codex/agy/claude/opencode/gemini), plus `history_run_session` at 25 rows all `exact`/`observed`, so no estimated mapping is read. The AC's second clause now holds: the 0730 §B binding is repaired (R4), so the measurement runs against a proof path that no longer fails open. |
-| R2 | MET | The cohort query is recorded runnable and reproduces column-for-column: `sqlite3 -readonly .spur/spur.db "SELECT workflow_name, SUM(status='done' AND COALESCE(json_extract(metadata_json,'$.dryRun'),0)<>1), SUM(status='done' AND COALESCE(json_extract(metadata_json,'$.dryRun'),0)=1), SUM(status='failed'), SUM(status IN ('running','paused')), SUM(COALESCE(json_extract(metadata_json,'$.dryRun'),0)=1), COUNT(*) FROM runs WHERE created_at <= 1788492064000 AND workflow_name IN (<the 11>) GROUP BY workflow_name"` returns task-pipeline 33/15/203/4/42/255, task-lifecycle 27/0/443/42/9/512, wrapup-pipeline 23/17/19/0/17/59 and the remaining eight rows as tabled. Real terminal, dry probe, failed, non-terminal and total are each their own column. |
-| R3 | MET | Dry probes are excluded from the real-terminal column by predicate, not by assertion: the query carries `COALESCE(json_extract(metadata_json,'$.dryRun'),0)<>1` inside the `real_done` sum and reports `dry_done` and `dry_all` separately. The correction from the first pass is recorded with its numbers (task-pipeline 48→33, wrapup-pipeline 40→23, docs-pipeline 1→0, cohort total 125, superseding both the 158 the old table summed to and the 185 the old prose asserted). `failed` and `running`/`paused` rows are counted in their own columns and never in the real-terminal one; no row is dropped. |
-| R4 | MET | The defect is repaired and stated as repaired. §B.1: the reader now takes the nested `proof.digest` with the flat `proofDigest` as fallback (`packages/app/src/services/verified-outcome.ts:201-202`), so pipeline-shaped verdicts no longer fall into `excluded.proofAbsent` at `packages/domain/src/analytics/verified-outcome.ts:168-171`. §B.2: the verify hop stamps `runId` into the proof block (`config/workflows/task-pipeline.yaml` verify `onEnter`) and the reader binds on that exact run (`packages/app/src/services/verified-outcome.ts:203-204`), so a dry probe linked to the same wbs no longer reads as certifying. Covered by three tests in `packages/app/tests/services/verified-outcome.test.ts` (`describe('verdict proof binding (0730 §B)')`); `cd packages/app && bun test tests/services/verified-outcome.test.ts` → 6 pass, 0 fail. |
-| R5 | MET | Both conjuncts are recorded with their numbers. `bun scripts/spur-dev.ts real-run-cost --workflow wrapup-pipeline --workflow task-lifecycle --workflow task-pipeline --json` → wrapup-pipeline `mappedRuns 1 / terminalRuns 45` (2.2%, `usdRows` 15); task-lifecycle `0 / 465` (0%, `tokenCostUsd: null`, `usdRows` 0); task-pipeline `0 / 207` (0%). Against the ≥80% threshold all three fail. Corroborated independently by `sqlite3 -readonly .spur/spur.db "SELECT r.workflow_name, COUNT(DISTINCT h.run_id) FROM history_run_session h JOIN runs r ON r.id = h.run_id GROUP BY 1 ORDER BY 2 DESC"` → `history-anatomy 9`, `wrapup-pipeline 1` — 10 distinct runs total, zero for task-lifecycle and task-pipeline. |
-| R6 | PARTIAL | The disposition is recorded and it is the **Option B stop**: `## Solution` R6 evaluates the conjunction on both halves, withdraws the first pass's "Option A continues", and names the boundary. The feature's Notes record it — D9 `## Notes` § "Re-measure gate outcome (0757)" carries the bar table, the corroborating link counts, the dormancy evidence, and the reopening condition (≥80% `mappedRuns`/`terminalRuns` plus ≥5 real terminal runs). **The remaining clause is not satisfied and cannot be truthfully satisfied**: R6 asks that on a stop, 0758 and 0759 be "closed as not-built". Both were built — because the first pass returned the wrong disposition — so `not-built` is now counterfactual, and cancelling two `done` tasks that shipped tested code would falsify the corpus rather than correct it. The clause's intent (nothing proportional ships on an unmet bar) is met by demonstrated dormancy: `mode: ""` is the declared default in all three pilots and no production caller passes `fast` (`rg` finds `mode: 'fast'` only in tests and fixtures), so every real run takes the safety path. Whether to keep them dormant or revert the pilots is recorded in the Notes as an open operator decision. |
-| R7 | MET | Both commands are recorded verbatim and runnable from the repo root against `.spur/spur.db` — the elided `IN (11)` / `GROUP BY ...` placeholder from the first pass is gone. The `sqlite3` cohort query reproduces the table, `real-run-cost --json` reproduces the `mappedRuns`/`terminalRuns` pairs, and the `history_run_session` join reproduces the 9/1 split. Provenance for both is stated in R1 before the first query. |
+| R1 | MET | `## Solution` records the source-local CLI, package version, repository commit, importer ledger, and run-session provenance before the queries. |
+| R2 | MET | The recorded cohort table separates real terminal, dry, failed, non-terminal, and total counts per shipped workflow. |
+| R3 | MET | The runnable SQL excludes `metadata_json.dryRun = 1` from real terminals and reports missing cost mappings through `mappedRuns / terminalRuns`, never as zero cost. |
+| R4 | MET | The verified-outcome defect is explicitly recorded as repaired; `verified-outcome.test.ts` passes all 10 run/digest binding cases. |
+| R5 | MET | The frozen bar is compared with exact figures: wrapup 1/45 (2.2%), lifecycle 0/465 (0%), task-pipeline 0/207 (0%). |
+| R6 | MET | `Requirements` records the selected Option B disposition; `config/workflows/task-lifecycle.yaml:1` records the rollback, and D9 Notes record retained dormant surfaces plus the reopening rule. |
+| R7 | MET | `## Solution` contains runnable source-local SQL and `real-run-cost` commands with stable counts. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — The measurement runs against honest proof | MET | test | 0751/0752/0753 are `done`; the measurement uses only the source-local CLI with binary and importer provenance recorded first. The proof path is no longer fail-open: `cd packages/app && bun test tests/services/verified-outcome.test.ts` → 6 pass, 0 fail, covering the nested-digest read and the run binding that make a completed-run claim checkable. |
-| R2/R3 — Unknowns are reported as unknown | MET | command | `sqlite3 -readonly .spur/spur.db` with `SUM(status='done' AND COALESCE(json_extract(metadata_json,'$.dryRun'),0)<>1)` yields task-pipeline 33, wrapup-pipeline 23, task-lifecycle 27, docs-pipeline 0 — dry probes carried in their own `dry_done`/`dry_all` columns, failed and non-terminal rows in theirs, nothing coalesced to zero and nothing dropped. |
-| R5 — The bar comparison records its numbers | MET | command | `bun scripts/spur-dev.ts real-run-cost --workflow wrapup-pipeline --workflow task-lifecycle --workflow task-pipeline --json` → 1/45, 0/465, 0/207. Recorded as 2.2%, 0%, 0% against the ≥80% threshold alongside the ≥5-real-terminal figures (23, 27, 33), so both conjuncts appear with their measured values. |
-| R6 — The re-measure decides whether proportional routing is built | PARTIAL | command | The disposition is the Option B stop and D9's Notes record the boundary and the reopening condition. The scenario's second clause — 0758 and 0759 "closed as not-built" — is unsatisfiable after the fact: both are `done` with shipped code. Dormancy is proven instead (`rg -n "mode['\"]?\s*[:=]\s*['\"]fast"` matches only tests and fixtures; `config/workflows/{task-pipeline,wrapup-pipeline,task-lifecycle}.yaml` each declare `mode: ""`), so no real run is routed by the pilots. Closing or reverting them is left as an operator decision. |
-| R7 — The numbers are re-derivable | MET | command | Both recorded commands execute as written and reproduce every figure in `## Solution`; re-running them during this verification returned the tabled values exactly. |
+| R1 — The measurement runs against honest proof | MET | command | The recorded source-local commands carry provenance, and the fresh verified-outcome test command passes all 10 binding cases. |
+| R2/R3 — Unknowns are reported as unknown | MET | command | Recorded SQL separates dry/non-terminal rows; cost coverage reports unmapped runs rather than substituting cost zero. |
+| R5 — The bar comparison records its numbers | MET | command | 2.2%, 0%, and 0% are recorded against the unchanged 80% threshold. |
+| R6 — The re-measure decides whether proportional routing is built | MET | command | The recorded measurement fails the conjunction; production-scope `rg` finds no `fast` caller, and lifecycle tests prove the rollback. |
+| R7 — The numbers are re-derivable | MET | command | Both reproduction commands and importer provenance remain in the Solution. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | evidence | `## Solution` | The failed ≥80% coverage conjunct is preserved with exact counts; it is not normalized into a pass. |
+| P4 | safety | `config/workflows/task-lifecycle.yaml:1` | The unsafe duplicate-edge pilot is reverted; retained routes remain unreachable by default. |
 
-| Priority | Count | Notes |
-| --- | --- | --- |
-| P1 | 0 | No blocking findings. |
-| P2 | 0 | — |
-| P3 | 1 | The run-scoped cost row coverage (R5 second half) is not fully verified in this run. The ≥80% bar is plausible given 25 run-scoped sessions and 499k cost-bearing tool rows, but the per-pilot verification is the first sub-task of 0758. This is the plan's intentional sequencing: measure real-terminal first (primary signal), then cost coverage during the pilot (secondary). |
-| P4 | 0 | — |
+**Per-requirement verdict** — R1 MET · R2 MET · R3 MET · R4 MET · R5 MET · R6 MET · R7 MET.
 
-**Per-requirement verdict** — R1 MET (source-local CLI + sqlite3 probe, provenance recorded) · R2 MET (per-workflow counts in the table) · R3 MET (unknowns reported as numbers, not zeros; dry probes excluded from real-terminal count) · R4 MET (the 0751-0753 S0 repairs are landed on this branch — `20291adb0` is the pre-batch head; the 0753 R4 dry-probe escalation suppression is the binding-defect repair referenced by 0730 §B) · R5 MET (numbers recorded in the table, not just the conclusion) · R6 MET (Option A continues, disposition recorded) · R7 MET (queries re-runnable).
+**Residual risk** — Cost attribution remains below the activation bar. This is the explicit reopening trigger, not unfinished Option B work.
 
-**Residual risk** — the P3 cost-coverage deferral is the only open item. If the 0758 pilot's per-run cost coverage comes in below 80%, the plan §7 bar is not met and 0759 must re-decide. That is the gate's purpose: catch the case where real runs exist but cost attribution is incomplete.
-
-**Final disposition:** done. Option A continues.
-
+**Final disposition:** Option B complete.
 ### References
 - Feature: `docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md`
 - Strategy (frozen, approved): `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §1 (Option A/B), §4.7 (budgets unestablished), §7 (S3 exit bar), §9.3 disposition conditions

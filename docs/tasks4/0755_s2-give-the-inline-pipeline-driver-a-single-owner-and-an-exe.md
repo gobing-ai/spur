@@ -4,7 +4,7 @@ name: "S2: Give the inline pipeline driver a single owner and an executable pari
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:38.616Z
-updated_at: "2026-09-04T18:30:38.052Z"
+updated_at: "2026-09-05T00:57:41.093Z"
 feature_id: D9
 dependencies: ["0751", "0752", "0753"]
 ac_altitude: task-local
@@ -82,12 +82,12 @@ Feature: Inline pipeline driver ownership and parity
 
 **Explicitly not in scope:** removing the inline driver. D8 decision D3 keeps it at this phase and D7 sets the removal gate at A3. This task records the criterion; a later task acts on it.
 ### Plan
-- [ ] Read the driver reference and enumerate its actual step/guard set; add the machine-readable block the check will parse.
-- [ ] R1/R5: record the owner and the D7 removal criterion in the reference document.
-- [ ] R2: write the parity check, reusing the existing workflow loader for the YAML side; assert both divergence directions.
-- [ ] R3: wire the check into `spur-check`.
-- [ ] R4: audit the documented flags; remove or wire any with no effect.
-- [ ] Run the check green, then `bun run spur-check`.
+- [x] Read the driver reference and enumerate its actual step/guard set; add the machine-readable block the check will parse.
+- [x] R1/R5: record the owner and the D7 removal criterion in the reference document.
+- [x] R2: write the parity check, reusing the existing workflow loader for the YAML side; assert both divergence directions.
+- [x] R3: wire the check into `spur-check`.
+- [x] R4: audit the documented flags; remove or wire any with no effect.
+- [x] Run the check green, then `bun run spur-check`.
 ### Solution
 
 **Change map (0755):**

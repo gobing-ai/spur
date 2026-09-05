@@ -4,7 +4,7 @@ name: "S4: Optional behavior-neutral workflow version contract in both dialects"
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:38.911Z
-updated_at: "2026-09-04T20:46:42.549Z"
+updated_at: "2026-09-05T00:57:41.439Z"
 feature_id: D9
 dependencies: ["0752"]
 ac_altitude: task-local
@@ -86,13 +86,13 @@ Feature: Optional behavior-neutral workflow version
 
 **Depends on 0752** for the digest comparison R6 relies on. No dependency on 0751 or 0753.
 ### Plan
-- [ ] R1: add `minLength: 1` (and the Zod equivalent) to the root `version` in both dialect schemas; assert the diagnostic names the empty value.
-- [ ] R2: add the `unversioned` / `explicit(<literal>)` classification at the definition-identity reporting point; keep the literal opaque.
-- [ ] R3: add the both-forms test — same definition with and without a version executes identically, digests differ (mirror the 0732 §7 proof).
-- [ ] R6: add the test proving 0752's digest comparison catches a version-only edit across pause/resume; add no new resume code.
-- [ ] R4: amend the workflow-schema documentation with the optional-first contract and the no-registry boundary.
-- [ ] R5/R7: confirm `show`/`trace` default output is unchanged and the diff contains no registry or parser.
-- [ ] `bun run spur-check`.
+- [x] R1: add `minLength: 1` (and the Zod equivalent) to the root `version` in both dialect schemas; assert the diagnostic names the empty value.
+- [x] R2: add the `unversioned` / `explicit(<literal>)` classification at the definition-identity reporting point; keep the literal opaque.
+- [x] R3: add the both-forms test — same definition with and without a version executes identically, digests differ (mirror the 0732 §7 proof).
+- [x] R6: add the test proving 0752's digest comparison catches a version-only edit across pause/resume; add no new resume code.
+- [x] R4: amend the workflow-schema documentation with the optional-first contract and the no-registry boundary.
+- [x] R5/R7: confirm `show`/`trace` default output is unchanged and the diff contains no registry or parser.
+- [x] `bun run spur-check`.
 ### Solution
 
 **R1 — reject empty version with a diagnostic.** Two layers, because the constraint has two

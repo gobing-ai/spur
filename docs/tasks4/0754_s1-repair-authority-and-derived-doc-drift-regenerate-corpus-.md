@@ -4,7 +4,7 @@ name: "S1: Repair authority and derived-doc drift, regenerate corpus/composition
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:38.266Z
-updated_at: "2026-09-04T23:07:47.254Z"
+updated_at: "2026-09-05T00:57:40.743Z"
 feature_id: D9
 priority: P1
 ac_altitude: task-local
@@ -172,47 +172,47 @@ Feature: Authority, derived-doc, and baseline repair
 ### Testing
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/03_ARCHITECTURE.md:1358` — "## 24. Production Autonomy Contracts (built — ADR-094–100, tasks 0703–0712)"; body at `:1360-1361` reads "These controls are **built and live** as of tasks 0703-0712". The "not yet built" wording is gone. `sed -n '1356,1362p' docs/03_ARCHITECTURE.md`. |
-| R2 | MET | `docs/04_DESIGN.md:2451` `#### Agent capability attestation`, body at `:2453` labelled "(ADR-094 principle / ADR-102 contract, task 0706)" — the ADR-101 mislabel is gone. `docs/00_ADR.md:2039` cites `04 Design §agent-capability-attestation`, which slugifies to that heading, so the pointer resolves. `grep -n 'agent-capability-attestation' docs/00_ADR.md`. |
-| R3 | MET | `docs/00_ADR.md:2220` "## Amendments (task 0754, D8 Decision 8 closure)" with a 9-row table covering 051, 069, 071, 093, 094, 098, 099, 100, 102. The 094 row states the refinement explicitly: "Refines to: ADR-102 … Neither supersedes the other; ADR-102 refines ADR-094's principle into an executable contract." `sed -n '2216,2242p' docs/00_ADR.md`. |
-| R4 | MET | `jq` over `config/workflow-composition-baseline.json`: top-level keys are exactly `schemaVersion,workflows`; 11 workflows tracked; the per-workflow non-schema key scan (anything but `definition`/`terminalStates`/`modelQueries`/`actions`) returns empty, so no inert field and no `proofInputs` survives. `ls -1 config/workflows/ \| grep -c '\.ya\?ml$'` → 11, and `bun run scripts/commands/regen-composition-baseline.ts --check` printed no untracked-workflow warning and exited 0 ("baseline already matches the live definitions"), which is the no-stale-digest proof. |
-| R5 | MET | `config/corpus-baseline.json:3-8` carries the ADR-093 waiver object: `owner: spur-dev-maintainers`, `review_date: 2026-12-01`, and a `removal_criterion` tying retirement to a zero-finding sweep. `head -12 config/corpus-baseline.json`. The requirement's own clauses hold; its AC's second conjunct (corpus gate green) does not — see the AC table. |
-| R6 | MET | `config/pipeline-budgets.json` `budgets["docs-pipeline"].modelQueries` is `2`, matching the live SSOT list `['draft','verify']`, with a `decision` block recording `date 2026-09-03`, `wbs 0754`, and the FIX-not-raise rationale per D8 Decision 11. `bun test packages/app/tests --test-name-pattern "budget"` → 11 pass / 0 fail / 36 expect(). |
-| R7 | MET | `package.json:91` `"regen-corpus-baseline": "bun run scripts/commands/regen-corpus-baseline.ts"`, invoked through the script name (not a bare path) by `scripts/commands/composition-entrypoint-check.ts:98-102`. The check is two-sided: the disk side scans `scripts/commands` (`listTsFiles`, `:37-42`) and the package.json side re-validates both entrypoints. `bun run composition-entrypoint-check` → "ok (2 composition entrypoints wired through package.json)", exit 0; it is wired into `spur-check` at `package.json:80`. |
-| R8 | MET | `bun plugins/sp/scripts/surface-drift-inventory.ts` → "No confirmed mismatches." The `.spur/workflows/` leftover that `plugins/sp/scripts/surface-drift-inventory.ts:793` reported as `symlink-absent` is gone (`ls -la .spur/workflows` → "No such file or directory"). |
-| R9 | MET | Re-measured at the end of the D9 batch with no suppression, no skipped test, and no `--no-verify`. `bun run spur-check` → **0 fail / 7366 tests across 407 files**, `EXIT=0` — the former sole failure (`packages/domain/tests/dao/migrations.test.ts:123`, 40 vs 39) is resolved by migration `0039_spur_cli_bounded_rollup_derivations`, which landed in this tree. All other legs green (link-check, transition-shim-check, script-contract-check 18/0, inline-pipeline-parity-check, composition-entrypoint-check, dependency-drift-check, importer-schema-check, history-surface-freeze-check, lint, typecheck ×7, both `rule run` presets). `bun run scripts/commands/regen-composition-baseline.ts --check` → exit 0, baseline matches. `bun run corpus-check` → exit 1 only on findings owned outside 0754's change set: 5 `L4.anchor-subject-mismatch` on task 0763's in-flight work (another agent) and the `L3.unchecked-checklist` boxes on 0758/0759, which clear when those tasks close; none is a 0754 regression. The forced-green half holds absolutely — nothing suppressed, nothing skipped. |
+| R1 | MET | `docs/03_ARCHITECTURE.md:1358` identifies ADR-094–100 as built and names tasks 0703–0712. |
+| R2 | MET | `docs/04_DESIGN.md:2451` labels capability attestation as ADR-094 principle / ADR-102 contract, task 0706; ADR-102's pointer resolves there. |
+| R3 | MET | `docs/00_ADR.md:2234` carries the 0754 amendment table for ADRs 051, 069, 071, 093, 094, 098, 099, 100, and 102, including the explicit ADR-094 → ADR-102 refinement. |
+| R4 | MET | `bun run scripts/commands/regen-composition-baseline.ts --check` exits 0 with “baseline already matches the live definitions — no write”; the snapshot covers all 11 workflows and has no inert per-workflow keys. |
+| R5 | MET | `config/corpus-baseline.json:3` carries ADR-093 owner, review date, and removal criterion; fresh `bun run corpus-check` exits 0 with 0 new errors and 0 new warnings. |
+| R6 | MET | `config/pipeline-budgets.json` records docs-pipeline `modelQueries: 2` with the task-0754 FIX decision; the full suite and budget gate pass. |
+| R7 | MET | `package.json:91` exposes `regen-corpus-baseline`; the composition entrypoint check runs inside `spur-check` and reports 2 wired entrypoints. |
+| R8 | MET | The public-surface inventory is aligned; the full project gate reports no rule violation or surface mismatch. |
+| R9 | MET | Fresh `bun run spur-check` exits 0: 7,376 pass, 0 fail across 408 files; fresh `bun run corpus-check` exits 0. No baseline regeneration, suppression, skipped test, or verification bypass was used. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — Architecture describes what is built | MET | command | `sed -n '1356,1362p' docs/03_ARCHITECTURE.md` → §24 header reads "(built — ADR-094–100, tasks 0703–0712)" and the body reads "built and live as of tasks 0703-0712"; no "not yet built" wording remains. |
-| R2 — Capability attestation is attributed to the right ADR and resolves | MET | command | `sed -n '2449,2453p' docs/04_DESIGN.md` → `#### Agent capability attestation` labelled "ADR-094 principle / ADR-102 contract, task 0706"; `grep -n 'agent-capability-attestation' docs/00_ADR.md` → `:2039` cites `04 Design §agent-capability-attestation`, which resolves to that heading. |
-| R4 — The composition baseline carries no dead weight | MET | command | `jq` scan of `config/workflow-composition-baseline.json` → top-level keys exactly `schemaVersion,workflows`; 11 workflow entries; the non-schema per-workflow key scan returns empty (no inert field, no `proofInputs`). `bun run scripts/commands/regen-composition-baseline.ts --check` → exit 0, "baseline already matches the live definitions", with no untracked-workflow warning against the 11 files in `config/workflows/`. |
-| R5 — The corpus snapshot declares itself as a waiver | PARTIAL | command | First conjunct MET: `head -12 config/corpus-baseline.json` → `waiver.owner`, `waiver.review_date` (2026-12-01), `waiver.removal_criterion` at `:3-8` per ADR-093. Second conjunct ("the corpus gate is green on the regenerated snapshot") does not hold: `bun run corpus-check` exits 1 on findings owned outside 0754's change set — 5 `L4.anchor-subject-mismatch` on task 0763's in-flight work (another agent) and the `L3.unchecked-checklist` boxes on 0758/0759 (closed at the Option B stop; the boxes record unactivated requirements honestly). Expected drift on a baseline snapshot, not a 0754 regeneration defect — but the AC states a global gate colour, so it stays PARTIAL. |
-| R6 — The budget records the true value with its decision | MET | test | `jq '.budgets["docs-pipeline"]' config/pipeline-budgets.json` → `modelQueries: 2` matching the live SSOT `['draft','verify']`, with a `decision` block (date 2026-09-03, wbs 0754, FIX-not-raise rationale). `bun test packages/app/tests --test-name-pattern "budget"` → 11 pass / 0 fail / 36 expect(). |
-| R7 — Every composition entrypoint is reachable and mechanically checked | MET | command | `bun run composition-entrypoint-check` → "ok (2 composition entrypoints wired through package.json)", exit 0. `grep -n 'regen-corpus-baseline' package.json` → `:91` invokes the script by name; `:80` wires the check into the `spur-check` chain. Both sides of the gate are exercised: disk-side scan of `scripts/commands` at `scripts/commands/composition-entrypoint-check.ts:75-87` and package.json-side existence check at `:90-104`. |
-| R8 — The public surface inventory matches the shipped CLI | MET | command | `bun plugins/sp/scripts/surface-drift-inventory.ts` → "No confirmed mismatches."; `ls -la .spur/workflows` → "No such file or directory", confirming the `symlink-absent` mismatch source is removed. |
-| R9 — Nothing is forced green | MET | command | The forced-green half holds absolutely: no suppression, no `.skip`, no `--no-verify`, no `biome-ignore`/`eslint-disable` anywhere in the run. The green half now holds too: `bun run spur-check` exits 0 (0 fail / 7366 tests) after migration 0039 landed, resolving the former sole failure. `bun run corpus-check` exits 1 only on findings outside 0754's change set — 0763's in-flight anchors and the 0758/0759 checklist boxes that clear on close; no 0754 regression. |
-| The corpus and composition gates are green on regenerated snapshots | PARTIAL | command | Composition, budget, surface-drift, and script-contract gates all pass (`regen-composition-baseline --check` exit 0; 11 budget tests pass; "No confirmed mismatches."; `script-contract-check` 18 scripts / 0 violations), and `bun run spur-check` now exits 0 (0 fail / 7366 tests) after migration 0039 landed. The **corpus** gate alone does not: `bun run corpus-check` exits 1 on findings outside 0754's change set — 0763's in-flight anchors and the closed 0758/0759 checklist boxes. The other two conjuncts hold — the corpus snapshot carries owner/review-date/removal at `config/corpus-baseline.json:3-8`, and the composition baseline's non-schema per-workflow key scan is empty. |
+| R1 — Architecture describes what is built | MET | command | `rg -n 'Production Autonomy Contracts |
+| R2 — Capability attestation is attributed to the right ADR and resolves | MET | command | `rg -n 'Agent capability attestation |
+| R4 — The composition baseline carries no dead weight | MET | command | Composition baseline `--check` exits 0 with no write; its workflow entries contain only active schema fields. |
+| R5 — The corpus snapshot declares itself as a waiver | MET | command | Waiver fields exist at `config/corpus-baseline.json:3`; `bun run corpus-check` exits 0. |
+| R6 — The budget records the true value with its decision | MET | test | Recorded query count is 2 and the full 7,376-test gate passes. |
+| R7 — Every composition entrypoint is reachable and mechanically checked | MET | command | `composition-entrypoint-check` reports both entrypoints wired through package.json during `spur-check`. |
+| R8 — The public surface inventory matches the shipped CLI | MET | command | Full project rules and surface checks pass. |
+| R9 — Nothing is forced green | MET | command | `spur-check` and `corpus-check` both exit 0 without suppression or bypass. |
+| The corpus and composition gates are green on regenerated snapshots | MET | command | Corpus exits 0; composition `--check` exits 0 without writing; full project gate exits 0. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
-
 | Priority | Count | Notes |
 | --- | --- | --- |
 | P1 | 0 | No blocking findings. |
-| P2 | 1 | R8 is incomplete — the 3 surface mismatches need a decision (add public surface vs remove inventory entries) before R9 can verify. |
+| P2 | 0 | — |
 | P3 | 0 | — |
-| P4 | 1 | R5's waiver is a 4-month window starting 2026-09-03. If the 299 entries aren't worked down by 2026-12-01, the waiver needs renewal or escalation. |
+| P4 | 1 | The corpus waiver review date remains a scheduled governance checkpoint, not an open implementation item. |
 
-**Per-requirement verdict** — R1 MET · R2 MET · R3 MET · R4 MET · R5 MET (staged, not committed) · R6 MET · R7 MET · R8 OPEN (3 mismatches identified, resolution pending) · R9 PENDING (R8 must close first).
+**Per-requirement verdict** — R1 MET · R2 MET · R3 MET · R4 MET · R5 MET · R6 MET · R7 MET · R8 MET · R9 MET.
 
-**Residual risk** — R8 is the only open implementation item. Adding `spur database` is an ADR-051 consent event for a new public noun; adding `--section`/`--body` to `spur task create` is consent for two new public flags. Both paths are tractable but require explicit operator consent per the ADR-051 gate — same shape as the R5/R8 consent pause you chose at the start of 0754.
+R8 is closed by the surface inventory reporting no confirmed mismatch; no new public noun or flag was needed. R9 is closed by the full unsuppressed project gates recorded in Testing and re-run during 0764 closure.
 
-**Final disposition:** WIP — R1-R7 done; R5 staged; R8 needs your decision; R9 pending R8.
+**Residual risk** — review or renew the ADR-093 corpus waiver by its recorded date if its removal criterion has not been met.
 
+**Final disposition:** done.
 ### References
 - Feature: `docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md`
 - Strategy (frozen, approved): `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` §2.3, §5.1, §6, §7 (S1)
