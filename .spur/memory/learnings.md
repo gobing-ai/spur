@@ -1091,3 +1091,96 @@ This batch adds the skill-load data plane end to end: the `history_skill_call` d
 ### Getting from the run
 
 - **The `skill` dimension and `SkillCall` extraction are strictly additive** — claude native `Skill` tool_use is preserved as a `history_tool_call` row AND emitted as `history_skill_call` (287 rows in the real corpus), so no regression in message/tool-call counts. The ledger invariant holds: `history_message + history_tool_call + history_skill_call == history_import_ledger`.
+All other modified files (`docs/00_ADR.md`, `docs/features/D9_*`, `docs/tasks4/*`) are pre-existing in-progress changes from the sibling D9 batch — not mine. My session's changes are exactly the two docs under repair plus the `.spur/run/wrapup-learnings.md` artifact. No task/feature corpus was written.
+
+Done.
+
+## Drift repair (sp:doc-evolve, wrapup tasks=[0763])
+
+0763 shipped code (bounded rollup derivations, migration 0039, `ROLLUP_DEFINITION_VERSION` v3) with zero key-doc updates. Repaired per constitution §7 / §4.5 / §6.5:
+
+- **`docs/design/history-incremental-materialization.md`** — the E91/ADR-103 satellite (detail owner): header status `proposed (design)` → `implemented (0741, 0763)`; §5 class table split the "Global ranked" class per 0763's premise verification (loop findings → keyed aggregate over sessions via `deltaSessionScope`; ranked steps → index-ordered top-N via `rankOrderExpr`/`selectorIsUnfiltered`) with a dated correction note; §9 D7 `applyToolAliases` documented as scoped `{sources, since}` on incremental / guarded whole-table on full rebuild; §16 accepted limits replaced the stale "rebuild fully" row with the real residual limits.
+- **`docs/04_DESIGN.md`** — index row for the satellite updated to `implemented (0741, 0763)` + description notes the bounded derivations; frontmatter version 1.63.0 → 1.64.0, `updated_at` → 2026-09-05 (§4.3 rule 3).
+- **`docs/00_ADR.md`** — no change: ADR-103 records no class taxonomy as a decision (task plan step 8 gates a 00 note on that), and its read-path aggregation prohibition + definition-version decision still hold. (The visible ADR-103-adjacent diff is a pre-existing sibling-D9 change, not mine.)
+- **`docs/03_ARCHITECTURE.md`** — no change: §7 carries no stale rollup-derivation-class claim.
+- No task/feature corpus written.
+
+## Learnings — task 0763 (2026-09-04 → 2026-09-05)
+
+- [2026-09-04] 0763 (E91): Premise verification before freezing design — 0741's "global ranked, cheap because bounded" class split on inspection: loop findings is a keyed aggregate over sessions (reuses `deltaSessionScope`), ranked steps is an index-ordered top-N whose three rank indexes a SQLite unary `+` was defeating. Two problems, two fixes, no candidate-contribution table.
+- [2026-09-04] 0763 (E91): Reject the speculative intermediate — per-bucket top-N + merge computed to 79k×1000 rows at 5-min grain (bigger than the corpus); dropping the `+` on unfiltered selectors is the whole ranked-steps fix, `EXPLAIN QUERY PLAN` as the deterministic proof.
+- [2026-09-04] 0763 (E91): P1 — `distinctSourceFileCounts` recursive CTE: independent column-wise MIN anchor pair may not exist (walk starts nowhere, `[]`, `?? 0` under-count) and non-lex-next recursion is superpolynomial (600-file >89 s, 2000-file >118 s). Green EXPLAIN test passed only on an accidentally valid MIN-pair fixture. Fix: lex-next pair per walk row + guarded anchor (600-file 0.4 ms).
+- [2026-09-04] 0763 (E91): P2 — required R6 measurement skipped (`## Testing` left as template); post-fix CTE 0.4/3.0/10.7 ms at 12k/198k/1M rows, sublinear in corpus. Gotcha: a "plan names the index" test proves neither correctness nor sublinearity — small fixtures dodge both.
+- [2026-09-04] 0763 (E91): Scope creep (`config/**` in `coveragePathIgnorePatterns`) and test fidelity (hand-written SQL instead of real `topStepsBy*`) caught in review (P3).
+- [2026-09-04] 0763 (E91): Derivation change ⇒ `ROLLUP_DEFINITION_VERSION` v2→v3 + digest re-pin (R8); existing DBs rebuild rather than extend.
+- [2026-09-04] 0763 (E91): Doc-sync deferred to wrapup again — plan scheduled the 04/00 step but the commit shipped no doc edits; wrapup corrected the satellite's class table, accepted limits, alias note, and 04 index row + frontmatter.
+
+# Wrapup learnings — task 0763 (feature E91)
+
+## 2026-09-04 · 0763 — Bound the whole-corpus rollup derivations
+
+### Conventions / patterns that worked
+
+- **Premise verification before freezing design.** 0741's design classified `loop_findings` +
+  `ranked_steps` as one "global ranked" class, rebuilt in full because "a top-N is not
+  decomposable by bucket". The refine checked five premises against the real tree and three
+  changed the build: `loop_findings` is a **keyed aggregate over sessions** (its grouping key
+  carries `session_id`), not a ranking — so it reused the existing `deltaSessionScope` instead of
+  new machinery; `ranked_steps` is a genuine top-N whose exact bounded path was the three rank
+  indexes a unary `+` was defeating. Two different problems, two different fixes — reusing the
+  existing helper and fallback over inventing a candidate-contribution table.
+- **Reject the speculative intermediate.** The per-bucket top-N + merge design was computed out:
+  exactness needs `RANK_DEPTH`=1000 per partition (79k buckets × 1000 rows at 5-min grain) —
+  larger than the corpus it was meant to bound. The whole fix for ranked steps is dropping the
+  unary `+` on unfiltered selectors via `rankOrderExpr`/`selectorIsUnfiltered`; filtered selectors
+  keep the `+` and the selective `(source, ts)` index (R7 pins the no-regression).
+- **One scope resolution feeds both consumers.** `deltaSessionScope` is resolved once and shared
+  by loop findings and keyed aggregates, so the two can never disagree.
+- **`EXPLAIN QUERY PLAN` as the deterministic proof.** R2/R7/R4 assert the plan names the rank /
+  covering index and contains no `USE TEMP B-TREE FOR ORDER BY` unfiltered, and keeps the
+  pre-change plan filtered.
+- **Derivation change ⇒ version bump + digest re-pin.** Every step changed emitted SQL, so
+  `ROLLUP_DEFINITION_VERSION` went v2 → v3 and the digest was re-pinned (keeping v2); existing
+  databases rebuild rather than extend. The pinned-digest test trips on any derivation change
+  (R8).
+
+### Errors fixed (from Phase-7 review FAIL → verify PASS)
+
+- **P1 — `distinctSourceFileCounts` recursive CTE broken two ways.**
+  (a) The anchor `WHERE (m.source, m.source_file) = (SELECT MIN(source), MIN(source_file))` takes
+  independent column-wise MINs whose pair may not exist in the table (e.g. sources `a`,`b` with
+  files `m.jsonl`,`a.jsonl` → MIN pair `('a','a.jsonl')` absent) — the walk starts nowhere, returns
+  `[]`, and the caller merges the miss as `?? 0`, silently wrong file counts.
+  (b) The recursive step emitted *every* strictly-greater row per walk row with no lex-next
+  selection and no dedupe — superpolynomial: 600-file corpus did not complete in ~89 s, 2000-file
+  hung >118 s, contradicting the docstring's O(distinct files × log n).
+  The shipped green EXPLAIN test passed only because its fixture accidentally contained a valid MIN
+  pair. Fix: rewrite the recursive step to select the lex-next `(source, source_file)` pair per
+  walk row and guard/de-anchor the start. Post-fix probes: 600-file 0.4 ms, 2000-file 1.2 ms.
+- **P1 — no timeout/fallback on the hot refresh path.** `recomputeKeyedAggregates` called the
+  broken CTE on every incremental refresh; with a real corpus it hangs the refresh indefinitely.
+- **P2 — required R6 measurement never performed.** Task `## Testing` was the untouched template;
+  the 3-scale × 400-row delta timing was a plan step that got skipped, and the pre-fix
+  implementation could not be sublinear anyway. Post-fix rollup-level measurement recorded: CTE
+  0.4/3.0/10.7 ms and refresh 126.5 ms / 2.13 s / 10.83 s at 12k/198k/1M rows; 400-row delta on 12k
+  base → 151.1 ms incremental, files 30→130 correct. Caveat: single-run dev-laptop timings,
+  reported as measured.
+
+### Gotchas
+
+- **A test asserting "the plan names the index" is not proof of correctness or sublinearity.**
+  Small fixtures dodge both defects while CI stays green — the residual risk note names exactly
+  this: "the green test suite masks the P1 defects; fixtures are small and accidentally
+  anchor-valid, so CI stays green while production refreshes hang or under-count."
+- **Scope creep in the diff.** `config/**` added to `bunfig.toml` `coveragePathIgnorePatterns` —
+  unrelated to any requirement, unmentioned in the Solution (P3).
+- **Test fidelity.** The filtered-plan test hand-wrote the SQL instead of calling the real
+  `topStepsBy*` under a filtered selector, so the `rankOrderExpr` routing was verified only
+  indirectly at its 5 call sites (P3).
+- **Doc-sync deferred to wrapup again.** The plan scheduled a doc step ("update 04 history
+  surfaces if the rollup derivation contract is described there; note in 00 only if the class
+  taxonomy is recorded as a decision") but the implementing commit shipped no 04/00 edits — the
+  same-commit obligation (§5/T3) fell to wrapup, which corrected the E91 satellite's class table,
+  accepted limits, and alias-backfill note, and the 04 index row + frontmatter. The satellite's
+  class-taxonomy text (the "global ranked / honest limit" framing) was the stale claim; ADR-103
+  itself records no class taxonomy as a decision, so no 00 change was warranted.

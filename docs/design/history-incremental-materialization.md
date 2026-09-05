@@ -1,6 +1,6 @@
 # History Incremental Materialization — Refresh Watermark, Bucket-Scoped Rollups, and Precomputed Serving
 
-**Feature:** E91 · **ADR:** ADR-103 · **Status:** proposed (design)
+**Feature:** E91 · **ADR:** ADR-103 · **Status:** implemented (0741 incremental refresh; 0763 bounded derivations)
 
 Companion to [`history-data-processing.md`](history-data-processing.md), which describes the
 ingestion/materialization/serving planes as built. This satellite describes only what E91 changes:
@@ -156,12 +156,15 @@ Cost is proportional to affected buckets, not to corpus size — the property AC
 | Class | Tables | Incremental strategy |
 | --- | --- | --- |
 | Bucketed | `history_board_message_5m`, `history_board_tool_5m`, `history_board_skill_5m`, `history_daily_stats`, `history_board_source_daily` | Bucket-scoped delete + re-derive (above) |
-| Keyed aggregate | `history_board_session_stats`, `history_board_source_stats`, `history_board_model_stats`, `history_board_tool_stats` | Delete + re-derive by affected key set (session ids / sources / models / tools touched since the watermark) |
-| Global ranked | `history_board_ranked_steps`, `history_board_loop_findings` | Bounded full rebuild (`RANK_DEPTH = 1000`); a top-N over the corpus is not decomposable by bucket. Kept full but run *after* the incremental pass so it never blocks fast reads. |
+| Keyed aggregate | `history_board_session_stats`, `history_board_source_stats`, `history_board_model_stats`, `history_board_tool_stats`, `history_board_loop_findings` | Delete + re-derive by affected key set (session ids / sources / models / tools touched since the watermark). Loop findings join this class because its grouping key contains `session_id` (0763) — a keyed aggregate, not a ranking. |
+| Global ranked | `history_board_ranked_steps` | Index-ordered top-N: the three rank indexes (`idx_history_message_{duration,token,input}_rank`) serve the `ORDER BY … DESC LIMIT` in index order for unfiltered selectors via `rankOrderExpr`/`selectorIsUnfiltered`; filtered selectors keep the selective `(source, ts)` index (0763 R2/R7). |
 
-The third class is the honest limit of this design: ranked steps still cost a full pass. It is
-bounded work (`LIMIT 1000`) and does not gate the tabs that matter, so it is accepted rather than
-engineered around.
+*Correction (0763, 2026-09-04):* the original design classified loop findings with ranked steps as a
+"global ranked" class rebuilt in full each pass. Premise verification split them: loop findings is a
+keyed aggregate over sessions (its grouping key carries `session_id`) and reuses `deltaSessionScope`;
+ranked steps is a genuine top-N whose exact bounded path is the three rank indexes a unary `+` was
+defeating. Neither class scans the whole corpus — the earlier "honest limit" (ranked steps still cost
+a full pass) is superseded.
 
 ---
 
@@ -290,7 +293,9 @@ eight different names, so any "which tool dominates" answer is really "which age
   that starts effectively empty and falls through to identity. Fine-tuning later means adding
   entries plus a refresh, not changing query code. The seam is a write/read/select triple rather
   than a scalar function, because resolution has to happen in SQL where the grouping happens:
-  `applyToolAliases(db)` recomputes `tool_name_alias` from the map before every rollup refresh,
+  `applyToolAliases(db)` recomputes `tool_name_alias` from the map before every rollup refresh —
+  on the incremental path scoped to the delta's per-source `imported_at` range (`{ sources, since }`,
+  0763 R5), on the full-rebuild path a guarded whole-table update,
   `ALIASED_TOOL_NAME_SQL` reads the persisted result in the rollup inserts, and
   `toolSelectionSql(tc, placeholders)` lets a drill-down match a selection that named either the
   alias or the effective name.
@@ -524,7 +529,9 @@ board query. Retention/compaction is independent of everything above and lands a
 
 | Limit | Why accepted |
 | --- | --- |
-| Ranked-steps and loop-findings tables still rebuild fully | Top-N over a corpus is not bucket-decomposable; work is bounded by `RANK_DEPTH = 1000` and does not gate the interactive tabs. |
+| Loop-findings recompute falls back to a full pass when a delta exceeds `SESSION_SCOPE_LIMIT` | `deltaSessionScope` returns `null` past its limits; recompute-in-full is then the same path session stats already take (0763 R3). |
+| Out-of-band `history_tool_alias_map` edits require a full rebuild | The scoped alias backfill (0763 R5) does not re-alias pre-delta rows; no runtime writer exists today, so the rule is stated rather than enforced. |
+| The distinct-source-file walk scales with imported files, not messages | Loose index scan over `idx_history_message_source_file`; distinct files grow with imports, not with corpus rows (0763 R4). |
 | Long-tail filter combinations re-aggregate 5-minute rollups | Measured 0.09–0.11 s; precomputing the combinatorial tail costs more than it saves. |
 | Dedup invariant assumes append-only rowids | True under the current single reset path; asserted by test and documented as a constraint on any future partial-delete feature. |
 | No columnar/analytics store | Correct answer at ~10× corpus, but an ADR-scale platform change that breaks the single-`ts-db` consumer rule in `packages/domain`. Recorded as the escape hatch, not built. |
