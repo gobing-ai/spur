@@ -4,7 +4,7 @@ name: "Retire routine corpus sweeps and suppression-based acceptance"
 status: todo
 template: feature-impl
 created_at: 2026-09-05T05:21:56.849Z
-updated_at: "2026-09-05T05:42:34.214Z"
+updated_at: "2026-09-05T15:39:53.681Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P2"]
@@ -14,17 +14,21 @@ dependencies: ["0765"]
 ## 0766. Retire routine corpus sweeps and suppression-based acceptance
 
 ### Background
+
 D61 implementation package P2, approved under ADR-108. Refinement depth: ready. Source inspected at 4801db1bd37422614040eeefcb1afb72d59eede1 with the D61 planning changes in this working tree.
 
 Root corpus-check invokes task check --corpus. runCorpusCheck currently reconciles config/corpus-baseline.json, and loadAcceptedFindings also suppresses individual CLI/fallback task checks. composition-entrypoint-check explicitly requires both regeneration scripts. The accepted audit measured 828 observations against 299 unique baseline keys; these are different counts, not 828 independent waived defects.
 
 Dependencies: 0765. Detailed inputs and handoffs are frozen below.
+
 ### Requirements
+
 - [ ] **R1.** Routine work does not scan the whole corpus: remove default sweep invocations from task iteration, wrapup and ordinary corpus-touch commit guidance; retain affected task/feature and completion-boundary checks. Keep corpus-check and spur-check-new as explicit audit entrypoints only. Update constitution T10/T11, AGENTS and their canonical templates in the same change.
 
 - [ ] **R2.** Explicit corpus audits remain useful without suppressions: preserve existing scope and JSON shape; report all observations, exit 1 on essential errors/required-check failure and 0 on warnings alone. Remove accepted-map readers, the corpus snapshot and its regenerator entirely. Repair newly exposed real affected integrity defects through Spur CLI; never erase findings, fabricate proof or bulk-reformat historical prose to obtain green.
 
 Out of scope: new engines/dependencies/public nouns, broad historical-document cleanup, D9 fast activation, release, merge and external deployment. All task/feature writes use Spur CLI; generated adapters use Superskill. Refine does not author implementation evidence.
+
 ### Acceptance Criteria
 
 ```gherkin
@@ -61,7 +65,9 @@ Feature: Retire routine corpus sweeps and suppression-based acceptance
 Closed: delete corpus acceptance and regeneration; do not build transitional pruning/expiry/waiver metadata. corpus-check remains an operator audit. A real unresolved evidence failure requires truthful repair/re-verification, never an accepted key or fabricated PASS.
 
 No unresolved design question. Mechanical implementation choices stay within these frozen contracts; an actual upstream contract failure is reported with evidence, not silently redesigned.
+
 ### Design
+
 No new API or waiver/pruning tool. Reuse collectObservedFindings and existing structuralSweep/duplicateIds/ungraduatedFog/resolveFogRange in packages/app/src/services/corpus-check.ts. Consume 0765 classification; retain active task-folder scans, feature checks, cross-folder identity/reference resolution and existing --since comparison semantics. An unavailable optional comparison must be explicitly reported as skipped; a failed required check cannot become an empty successful audit.
 
 Replace baseline reconciliation with an unsuppressed result using the existing DTO: observed = all observed findings; baselined = 0; newErrors = all errors; newWarnings = all warnings; bySeverity entries have baselined=0 and newCount equal their unsuppressed count; duplicateKeys=[] (legacy baseline-key diagnostics, NOT corpus duplicate IDs); ok = no essential errors and no required-check failure. Duplicate corpus IDs remain real findings. Preserve other existing scope/result fields and JSON envelope behavior. Human output says errors/warnings rather than NEW/accepted debt; print counts and a saved detail path in agent guidance.
@@ -77,7 +83,9 @@ Input: 0765 policy and completion regression coverage. Output to 0767/0769/0770:
 Verification targets: From packages/app: bun test tests/services/corpus-check.test.ts tests/services/corpus-sweep.test.ts tests/services/task-check.test.ts tests/services/done-transition-guard.test.ts. Extend CLI task-check corpus cases and script entrypoint cases; root bun run test covers scripts. Explicit audit command: bun run apps/cli/src/index.ts task check --corpus --json (save stdout once). Test that changing only a legacy baseline file changes neither findings nor exit code.
 
 Execution evidence handoff: before changing an owned checker/workflow, save a bounded matched-input measurement under .spur/run/d61-<wbs>-before.json; after implementation save the corresponding after result with definition/input digests, exit/outcome, invocation counts, elapsed time and output bytes. Unknown token/cost values remain null. 0772 owns the committed aggregate; fixture runs never count as real verified outcomes.
+
 ### Plan
+
 1. [ ] R1/R2: Before deletion, capture one audit artifact and classify observed essential errors under 0765; distinguish observation counts from keys. Fix concrete affected identity/reference defects with Spur CLI and preserve truthful unresolved evidence.
 
 2. [ ] R2: Implement unsuppressed aggregation and CLI error/warning output with unchanged result fields; remove every accepted-map consumer before deleting its snapshot and regenerator.
@@ -87,28 +95,13 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 4. [ ] R2: Test warning-only, essential-error, duplicate-ID, required-reader failure, --since scope and malformed/missing legacy-baseline cases; prove legacy snapshots cannot influence individual or corpus results.
 
 5. [ ] R1/R2: Run final focused tests, normal affected task/feature checks and exactly one final checker-policy audit; capture its exit/status/counts and any genuine unresolved failure. Run real task verification; never certify a nonzero audit as PASS.
-### Solution
 
+### Solution
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
-**Status (batch halt, 2026-09-05):** task 0766 is **deferred** at the batch level.
+**Status (superseded by decomposition, 2026-09-05):** task 0766 is **superseded** by three sub-tasks: **0773** (audit and migrate `config/corpus-baseline.json`), **0774** (migrate CLI/fallback `accepted` callers and dependent fixtures), and **0775** (delete regenerator scripts + snapshots + replace snapshot-equality tests + apply T10/T11 + update `wrapup-pipeline` default `featureGateCmd`). This task's status remains `todo` because it is not implemented; the decomposition records (per the per-fixture remediation plan) carry the live work. Readers should consult `spur task show 0773 --json`, `spur task show 0774 --json`, and `spur task show 0775 --json` for the scoped-down requirements, design and acceptance criteria. Downstream tasks 0767, 0769 and 0770 now depend on **0775** instead of this task.
 
-The scope of 0766 requires migration of 299 baseline keys, removal of `loadAcceptedFindings` from every CLI / fallback path, deletion of `config/corpus-baseline.json` + `regen-corpus-baseline.ts`, deletion of `config/workflow-composition-baseline.json` + `regen-composition-baseline.ts`, and a fixture migration across the test corpus. A 0766 R2 attempt that removed `accepted` at the gate broke 11/172 CLI task-check tests (verified by `bun test apps/cli/tests/commands/task.test.ts`), confirming that the migration requires per-fixture remediation that exceeds one-session scope.
-
-**Scope split (handoff to a follow-up session):**
-
-1. **Audit `config/corpus-baseline.json`**: classify the 299 keys as (a) real defects to repair via Spur CLI, (b) stylistic warnings the design contract retires, (c) acceptance-debt entries that should never have been baselined. Migrate each class to its proper destination.
-2. **Migrate CLI/fallback `accepted` callers**: the 2 sites in `apps/cli/src/commands/task.ts` (line ~1286, ~1628) currently pass `accepted` to `svc.check()`. Removing the parameter requires fixture updates so that no current finding is incorrectly demoted; until those fixtures are migrated, the loader is kept in `packages/app/src/services/corpus-check.ts:656` (`loadAcceptedFindings`).
-3. **Delete the regenerator scripts + snapshots**: `scripts/commands/regen-corpus-baseline.ts`, `scripts/commands/regen-composition-baseline.ts`, `config/corpus-baseline.json`, `config/workflow-composition-baseline.json`. Replace the snapshot equality tests in `packages/app/tests/workflow/composition-baseline.test.ts` with focused behavior tests (the design contract target).
-4. **Keep the JSON response compatibility fixture**: `packages/app/tests/fixtures/json-raw-baseline.json` stays — the contract is "the JSON compatibility fixture still verifies its response contract", not "delete every baseline-shaped file".
-5. **Rebuild the CLI bundle and assert retired assets are absent from generated output**: bundle rebuild + binary diff assertion, task 0772 P1.
-
-**What 0765 handed off to 0766 (frozen contracts):**
-
-- `REQUIRED_FINDING_CODES` in `packages/app/src/services/planning-check-base.ts` is the unsuppressible set. Any finding code in this set cannot be absorbed by `accepted`-map suppression.
-- `accepted`-map suppression remains active in `summarizeWithStatus()` for advisory warnings only. The 0766 follow-up removes the parameter entirely once fixture migration makes the snapshot irrelevant.
-
-**Why a partial 0766 is not committed here:** the design contract says "no automatic regeneration accepts new debt during migration" — committing a partial 0766 with the snapshot intact would violate that. The right artifact for 0766 is a follow-up task that classifies all 299 keys with the audit trail and only then deletes the snapshot.
+The original scope of 0766 (R1 routine-sweep retirement + R2 unsuppressed audit + corpus/composition snapshot deletion) is preserved across the three sub-tasks without loss of contract. Frozen contracts handed off from 0765 are unchanged: `REQUIRED_FINDING_CODES` in `packages/app/src/services/planning-check-base.ts:40` is the unsuppressible set, and `accepted`-map suppression on `summarizeWithStatus()` is preserved for advisory warnings only through 0774's caller migration (and removed entirely in 0775).
 
 ### Testing
 
@@ -119,6 +112,7 @@ The scope of 0766 requires migration of 299 baseline keys, removal of `loadAccep
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
+
 - [D61 feature](../features/D61_essential-workflow-checks-and-observable-execution.md)
 - [ADR-108](../00_ADR.md#adr-108-essential-workflow-gates-and-explicit-corpus-audits)
 - [Accepted implementation contract](../design/essential-workflow-checks.md)

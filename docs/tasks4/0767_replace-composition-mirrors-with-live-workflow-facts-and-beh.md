@@ -4,25 +4,29 @@ name: "Replace composition mirrors with live workflow facts and behavior checks"
 status: todo
 template: feature-impl
 created_at: 2026-09-05T05:21:56.874Z
-updated_at: "2026-09-05T05:42:36.003Z"
+updated_at: "2026-09-05T15:39:36.731Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P3"]
-dependencies: ["0766"]
+dependencies: ["0775"]
 ---
 
 ## 0767. Replace composition mirrors with live workflow facts and behavior checks
 
 ### Background
+
 D61 implementation package P3, approved under ADR-108. Refinement depth: ready. Source inspected at 4801db1bd37422614040eeefcb1afb72d59eede1 with the D61 planning changes in this working tree.
 
 The composition snapshot mirrors 11 workflows and 143 actions with zero dispositions. Its module also owns canonical JSON and proof digests, so deleting the whole module would break useful consumers. composition-entrypoint-check only enforces the two regenerators; it has no remaining useful check after both are removed.
 
-Dependencies: 0766. Detailed inputs and handoffs are frozen below.
+Dependencies: 0775 (which deletes the corpus/composition baselines and the regenerator-only machinery as the third phase of decomposed 0766 R2). Detailed inputs and handoffs are frozen below.
+
 ### Requirements
+
 - [ ] **R1.** Baseline retirement preserves useful consumers: migrate inventory, pipeline budgets, evaluation, real-run cost and advisory readers to live resolved definitions while preserving proof-digest behavior and the JSON response fixture. Remove the composition snapshot, exact-mirror equality/regeneration machinery and now-empty entrypoint gate after migration. Unknown measured usage stays unknown and actual budget violations remain failures.
 
 Out of scope: new engines/dependencies/public nouns, broad historical-document cleanup, D9 fast activation, release, merge and external deployment. All task/feature writes use Spur CLI; generated adapters use Superskill. Refine does not author implementation evidence.
+
 ### Acceptance Criteria
 
 ```gherkin
@@ -50,7 +54,9 @@ Feature: Replace composition mirrors with live workflow facts and behavior check
 Closed: keep digest helper location for import compatibility; no replacement snapshot/disposition store. Delete composition-entrypoint-check because its only two subjects are gone. Static definitions and measured runs stay distinct.
 
 No unresolved design question. Mechanical implementation choices stay within these frozen contracts; an actual upstream contract failure is reported with evidence, not silently redesigned.
+
 ### Design
+
 No new public API, inventory daemon or waiver ledger. Keep canonicalJsonStringify, computeDefinitionDigest and extractResolvedWorkflowFacts in packages/app/src/workflow/composition-baseline.ts initially to preserve imports; remove its snapshot types/readers/checkWorkflowComposition only after callers migrate. A cosmetic module rename is out of scope. The digest algorithm and canonical ordering must remain byte-compatible for the same definition, including before/after migration tests.
 
 | Consumer | Frozen replacement |
@@ -70,7 +76,9 @@ Input: 0766 removed corpus acceptance and its entrypoint requirement. Output: li
 Verification targets: From packages/app: bun test tests/workflow/composition-baseline.test.ts tests/workflow/composition-advisory.test.ts tests/workflow/task-pipeline-proof-chain.test.ts tests/services/json-envelope-adoption.test.ts (retain/rename the digest test file deliberately if its snapshot tests disappear). Root bun run test includes scripts/commands/{pipeline-budgets,eval-pipeline,real-run-cost}.test.ts. Assert an ordinary prompt edit needs no regeneration, proof-path removal fails its behavior test, and absent measured runs never read as zero-cost success.
 
 Execution evidence handoff: before changing an owned checker/workflow, save a bounded matched-input measurement under .spur/run/d61-<wbs>-before.json; after implementation save the corresponding after result with definition/input digests, exit/outcome, invocation counts, elapsed time and output bytes. Unknown token/cost values remain null. 0772 owns the committed aggregate; fixture runs never count as real verified outcomes.
+
 ### Plan
+
 1. [ ] R1: Capture digest results and budget behavior from current test fixtures before editing; map the five consumer rows to existing exports/imports.
 
 2. [ ] R1: Migrate scripts/advisory to resolved live facts, covering missing definitions and unknown measurements without zero substitution.
@@ -80,11 +88,18 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 4. [ ] R1: Delete composition snapshot/regenerator and the now-empty entrypoint checker; update package script compositions and authority docs atomically.
 
 5. [ ] R1: Run consumer, digest, budget and JSON tests plus applicable final gate; normal task check and real verification must pass. Hand live-definition measurements to 0772.
-### Solution
 
+### Solution
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
-**Status (batch halt, 2026-09-05):** task 0767 is **not-attempted** at the batch level — the batch halted at task 0766 (deferred) with stop-the-batch default. The remaining 6 tasks (0767-0772) inherit the halted-batch state and require a follow-up session to drive per the topo order (0767/0768 after 0766, 0769/0770 after 0766/0767/0768, 0771 after 0767/0768, 0772 last).
+**Status (decomposition, 2026-09-05):** task 0767 is **blocked** on 0775 (the third phase of decomposed 0766 R2, which retires the corpus/composition baselines and the regenerator-only machinery). 0775 must complete first because this task deletes the composition snapshot, exact-mirror equality/regeneration machinery and now-empty entrypoint gate that 0775 itself does not touch. Once 0775 lands, 0767/0768 unblock in parallel.
+
+Anticipated change anchors (populated during implementation; see 0775 for snapshot deletion anchors):
+
+- `packages/app/src/workflow/composition-baseline.ts:1` — digest + canonical helpers retained for import compatibility.
+- `packages/app/tests/workflow/composition-baseline.test.ts:1` — replaced by 0775's focused behavior tests.
+- `config/workflow-composition-baseline.json:1` — deleted by 0775.
+- `scripts/commands/regen-composition-baseline.ts:1` — deleted by 0775.
 
 ### Testing
 
@@ -95,6 +110,7 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
+
 - [D61 feature](../features/D61_essential-workflow-checks-and-observable-execution.md)
 - [ADR-108](../00_ADR.md#adr-108-essential-workflow-gates-and-explicit-corpus-audits)
 - [Accepted implementation contract](../design/essential-workflow-checks.md)

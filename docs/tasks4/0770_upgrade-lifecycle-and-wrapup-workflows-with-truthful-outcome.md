@@ -4,25 +4,29 @@ name: "Upgrade lifecycle and wrapup workflows with truthful outcomes"
 status: todo
 template: feature-impl
 created_at: 2026-09-05T05:21:56.947Z
-updated_at: "2026-09-05T05:42:41.358Z"
+updated_at: "2026-09-05T15:39:37.090Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P6"]
-dependencies: ["0766", "0767", "0768"]
+dependencies: ["0775", "0767", "0768"]
 ---
 
 ## 0770. Upgrade lifecycle and wrapup workflows with truthful outcomes
 
 ### Background
+
 D61 implementation package P6, approved under ADR-108. Refinement depth: ready. Source inspected at 4801db1bd37422614040eeefcb1afb72d59eede1 with the D61 planning changes in this working tree.
 
 Own task-lifecycle.yaml, feature-lifecycle.yaml, feature-dev.yaml and wrapup-pipeline.yaml. Lifecycle transitions are externally requested, so duplicate source/target edges are unsafe. feature-dev currently treats successful review request as PASS even with requireCleanReview=true. Wrapup currently treats parse failure as empty, shares wrapup-learnings.md and reports synchronization errors while exiting successfully. Its branch-cleanup state records consent but performs no git cleanup.
 
-Dependencies: 0766, 0767, 0768. Detailed inputs and handoffs are frozen below.
+Dependencies: 0775, 0767, 0768 (0775 retires the corpus/composition baselines and the regenerator-only machinery as the third phase of decomposed 0766 R2). Detailed inputs and handoffs are frozen below.
+
 ### Requirements
+
 - [ ] **R1.** Lifecycle and wrapup outcomes remain authoritative: preserve single-edge lifecycle transitions and normal target completion guards; reuse an existing feature/task roster; require a collected current-HEAD CLEAN result when requireCleanReview=true; reject malformed wrap input, isolate captures and report failed required sync as failure. Tag all four definitions version: "1" after their behavior checks.
 
 Out of scope: new engines/dependencies/public nouns, broad historical-document cleanup, D9 fast activation, release, merge and external deployment. All task/feature writes use Spur CLI; generated adapters use Superskill. Refine does not author implementation evidence.
+
 ### Acceptance Criteria
 
 ```gherkin
@@ -50,7 +54,9 @@ Feature: Upgrade lifecycle and wrapup workflows with truthful outcomes
 Closed: strict integration review uses one existing head-pinned collect, no polling addition; pending is a visible strict failure and an advisory pending result. Wrapup failure preserves already-written artifacts. Branch cleanup performs no new git action.
 
 No unresolved design question. Mechanical implementation choices stay within these frozen contracts; an actual upstream contract failure is reported with evidence, not silently redesigned.
+
 ### Design
+
 No new API, nested PR workflow or replanning service. Consume 0765 checks and 0766 affected-feature audit default, 0767 live inventory and 0768 metadata/progress. Keep requestTransition adapters and existing feature-sync-bounded/pr-reviewing script owners. 0771 owns pr-review.yaml, so avoid modifying that definition here.
 
 Lifecycle: one transition edge per from/to pair, not sibling fast/safety guards. Every testing/done check uses --as target with 0765 semantics. Preserve reopen/cancel/active-goal behavior and task done provenance; no --no-lifecycle bypass of actual done guard. mode remains empty by default; keep D9 reason reporting and safety path.
@@ -66,7 +72,9 @@ Set each version only after its tests pass. Output: four verified definitions an
 Verification targets: From packages/app: bun test tests/workflow/lifecycle-adapter.test.ts tests/workflow/feature-lifecycle-adapter.test.ts tests/workflow/feature-dev-definition.test.ts tests/workflow/proportional-routing-pilots.test.ts. Add tests/workflow/wrapup-pipeline.test.ts for malformed-vs-empty, resolution failure, repeated-run isolation and required sync failure. Extend plugins/sp/tests/pr-reviewing.test.ts only if its shared script contract changes. Mock command runner/GitHub; never send review requests in verification fixtures.
 
 Execution evidence handoff: before changing an owned checker/workflow, save a bounded matched-input measurement under .spur/run/d61-<wbs>-before.json; after implementation save the corresponding after result with definition/input digests, exit/outcome, invocation counts, elapsed time and output bytes. Unknown token/cost values remain null. 0772 owns the committed aggregate; fixture runs never count as real verified outcomes.
+
 ### Plan
+
 1. [ ] R1: Capture pre-change fixture digests/counts for 0772 and preserve normal lifecycle positive/negative fixtures from 0765.
 
 2. [ ] R1: Refine task/feature lifecycle guards and reason reporting without duplicate source/target edges; test actual requestTransition, reopen and cancel.
@@ -78,11 +86,19 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 5. [ ] R1: Test consecutive runs, invalid input, partial sync failure and branch-cleanup consent-only reporting; tag and validate the four final definitions.
 
 6. [ ] R1: Update live docs/skills, run applicable final gate and real verification; hand outcomes and matched measurements to 0772.
-### Solution
 
+### Solution
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
-**Status (batch halt, 2026-09-05):** task 0770 is **not-attempted** at the batch level — the batch halted at task 0766 (deferred) with stop-the-batch default. The remaining 6 tasks (0767-0772) inherit the halted-batch state and require a follow-up session to drive per the topo order (0767/0768 after 0766, 0769/0770 after 0766/0767/0768, 0771 after 0767/0768, 0772 last).
+**Status (decomposition, 2026-09-05):** task 0770 is **blocked** on 0775 (third phase of decomposed 0766 R2), 0767 and 0768. The original batch halted at task 0766 (deferred); the per-fixture remediation plan decomposes 0766 into 0773/0774/0775, with 0775 being the predecessor this task now wires through. Once 0775/0767/0768 land, 0770 unblocks.
+
+Anticipated change anchors (populated during implementation):
+
+- `config/workflows/task-lifecycle.yaml:1` — single-edge transition guards.
+- `config/workflows/feature-lifecycle.yaml:1` — single-edge transition guards.
+- `config/workflows/feature-dev.yaml:1` — request-plus-collect CLEAN gating under requireCleanReview.
+- `config/workflows/wrapup-pipeline.yaml:82` — featureGateCmd default updated by 0775.
+- `config/templates/docs/99_PROJECT_CONSTITUTION.md:1` — T10/T11 applied by 0775.
 
 ### Testing
 
@@ -93,6 +109,7 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
+
 - [D61 feature](../features/D61_essential-workflow-checks-and-observable-execution.md)
 - [ADR-108](../00_ADR.md#adr-108-essential-workflow-gates-and-explicit-corpus-audits)
 - [Accepted implementation contract](../design/essential-workflow-checks.md)

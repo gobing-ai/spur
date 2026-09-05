@@ -4,25 +4,29 @@ name: "Upgrade planning and evidence workflows without structural ceremony"
 status: todo
 template: feature-impl
 created_at: 2026-09-05T05:21:56.922Z
-updated_at: "2026-09-05T05:42:39.576Z"
+updated_at: "2026-09-05T15:39:36.909Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P5"]
-dependencies: ["0766", "0767", "0768"]
+dependencies: ["0775", "0767", "0768"]
 ---
 
 ## 0769. Upgrade planning and evidence workflows without structural ceremony
 
 ### Background
+
 D61 implementation package P5, approved under ADR-108. Refinement depth: ready. Source inspected at 4801db1bd37422614040eeefcb1afb72d59eede1 with the D61 planning changes in this working tree.
 
 Own exactly idea-pipeline.yaml, docs-pipeline.yaml and wayfinder-resolution.yaml. Idea repeatedly invokes feature check in sibling guards and its prose understates batch schema fields. Wayfinder already searches the correct canonical ### Testing heading; its defect is repeated task reads and >5-line/>60-word proof, plus a standalone verdict word. Docs already has measured verification and a proof bracket; preserve those owners.
 
-Dependencies: 0766, 0767, 0768. Detailed inputs and handoffs are frozen below.
+Dependencies: 0775, 0767, 0768 (0775 retires the corpus/composition baselines and the regenerator-only machinery as the third phase of decomposed 0766 R2). Detailed inputs and handoffs are frozen below.
+
 ### Requirements
+
 - [ ] **R1.** Planning and document workflows use evidence instead of ceremony: refine the three owned definitions as specified below, preserve approval/revision bounds and atomic handoff-only task creation, replace word-count proof with run-bound measured evidence and normal guarded completion, isolate temporary captures by run, and set version: "1" on each definition only after its success/failure checks pass.
 
 Out of scope: new engines/dependencies/public nouns, broad historical-document cleanup, D9 fast activation, release, merge and external deployment. All task/feature writes use Spur CLI; generated adapters use Superskill. Refine does not author implementation evidence.
+
 ### Acceptance Criteria
 
 ```gherkin
@@ -49,7 +53,9 @@ Feature: Upgrade planning and evidence workflows without structural ceremony
 Closed: ### Testing is correct; eliminate scraping, not change heading level. Research evidence uses existing standard verdict/proof owners. The verifier is read-only and approval cannot waive failed proof. Task implementation remains outside idea/research handoff.
 
 No unresolved design question. Mechanical implementation choices stay within these frozen contracts; an actual upstream contract failure is reported with evidence, not silently redesigned.
+
 ### Design
+
 No new API or research implementation pipeline. Consume 0766 audit policy, 0767 live composition facts and 0768 identity/progress. Use existing command.gate, proof.fingerprint, run.artifact, task verdict/record and idea-handoff-cli.ts. Write only the three owned YAMLs plus their existing deterministic owners/tests and canonical skill contracts.
 
 Idea: at AC author/revise boundary run one command.gate with executable=${vars.spurBin}, args=[feature, check, ${vars.featureId}, --json], softFail=true, id=idea-ac-check and resultFile=.spur/run/${vars.__runId}-idea-ac-check.status (the existing PASS/FAIL text contract); all sibling routing guards consume that result. At the separate design author/revise boundary run one new check using id=idea-design-check and its corresponding run-scoped resultFile; do not use the rejected command option. Repeat only after relevant writes or resumed HITL where edits may have occurred; never reuse pre-edit evidence. Keep human feature-check as approval, auto/standard routing, design_approved, retry cap=3, cancellation, needs-design decision and atomic batch creation/dependency/topological handoff. Correct allowed-field prose to the actual batch schema: design, plan and acceptance_criteria are supported and normal default planning fills them. No task implementation or nested task pipeline at the handoff terminal.
@@ -65,7 +71,9 @@ Add quoted version: "1" separately to each verified upgrade. Output: three teste
 Verification targets: From packages/app: bun test tests/workflow/idea-pipeline-definition.test.ts tests/workflow/idea-handoff.test.ts tests/workflow/idea-handoff-cli.test.ts tests/workflow/docs-pipeline-proof-chain.test.ts tests/workflow/docs-pipeline-measured-verdict.test.ts tests/workflow/actions/command-gate.test.ts. Add tests/workflow/wayfinder-resolution.test.ts for executed deterministic gates with model stages mocked. Use workflow validate <owned-file> --json on final files; a validate/dry-run PASS alone is not behavior evidence.
 
 Execution evidence handoff: before changing an owned checker/workflow, save a bounded matched-input measurement under .spur/run/d61-<wbs>-before.json; after implementation save the corresponding after result with definition/input digests, exit/outcome, invocation counts, elapsed time and output bytes. Unknown token/cost values remain null. 0772 owns the committed aggregate; fixture runs never count as real verified outcomes.
+
 ### Plan
+
 1. [ ] R1: Capture each owned definition digest and matched fixture invocation/output counts before editing; preserve the data for 0772.
 
 2. [ ] R1: Refine idea boundary checks and batch field prose using existing command.gate/handoff owners; test approval/revise/exhaustion and invalid atomic batch.
@@ -77,11 +85,19 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 5. [ ] R1: Run positive/negative fixtures for each workflow, then tag each version and validate its final YAML once; update canonical planning/research/docs contracts and 04.
 
 6. [ ] R1: Run applicable final gate and real task verification; record three upgrade outcomes and before/after evidence for 0772.
-### Solution
 
+### Solution
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
-**Status (batch halt, 2026-09-05):** task 0769 is **not-attempted** at the batch level — the batch halted at task 0766 (deferred) with stop-the-batch default. The remaining 6 tasks (0767-0772) inherit the halted-batch state and require a follow-up session to drive per the topo order (0767/0768 after 0766, 0769/0770 after 0766/0767/0768, 0771 after 0767/0768, 0772 last).
+**Status (decomposition, 2026-09-05):** task 0769 is **blocked** on 0775 (third phase of decomposed 0766 R2), 0767 and 0768. The original batch halted at task 0766 (deferred); the per-fixture remediation plan decomposes 0766 into 0773/0774/0775, with 0775 being the predecessor this task now wires through. Once 0775/0767/0768 land, 0769 unblocks.
+
+Anticipated change anchors (populated during implementation):
+
+- `config/workflows/idea-pipeline.yaml:1` — boundary check + batch field prose refined.
+- `config/workflows/docs-pipeline.yaml:1` — capture isolation + current-run verdict derivation.
+- `config/workflows/wayfinder-resolution.yaml:1` — length/standalone-word evidence retired; canonical record/verify/done ordering enforced.
+- `packages/app/src/services/planning-check-base.ts:40` — 0765 precedence unchanged.
+- `config/templates/AGENTS.md:1` — T10/T11 applied by 0775.
 
 ### Testing
 
@@ -92,6 +108,7 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
+
 - [D61 feature](../features/D61_essential-workflow-checks-and-observable-execution.md)
 - [ADR-108](../00_ADR.md#adr-108-essential-workflow-gates-and-explicit-corpus-audits)
 - [Accepted implementation contract](../design/essential-workflow-checks.md)
