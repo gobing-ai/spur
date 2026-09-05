@@ -918,7 +918,10 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         if (path === 'mart') {
             return await this.summaryFromMart(db, sel, bucket, dimension);
         }
-        if (fresh) {
+        const hasRollupData =
+            fresh ||
+            (await db.queryFirst<{ ok: number }>('SELECT 1 AS ok FROM history_board_message_5m LIMIT 1'))?.ok === 1;
+        if (hasRollupData) {
             const rows = await historyBoardSummaryFromRollup(db, sel, bucket, dimension);
             const extras = await computeSummaryExtras(db, sel, bucket, dimension, false, rows.buckets);
             return projectSummary(rows, extras);
@@ -1486,7 +1489,10 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         const sel = toArtifactSelector(input.filter);
         const page = input.page ?? 1;
         const pageSize = input.pageSize ?? 20;
-        if (await historyBoardRollupsFresh(db)) {
+        const hasSessionRollup =
+            (await historyBoardRollupsFresh(db)) ||
+            (await db.queryFirst<{ ok: number }>('SELECT 1 AS ok FROM history_board_session_stats LIMIT 1'))?.ok === 1;
+        if (hasSessionRollup) {
             const result = await historyBoardSessionsFromRollup(db, sel, {
                 page,
                 pageSize,
