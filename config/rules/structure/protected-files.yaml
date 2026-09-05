@@ -25,8 +25,8 @@ rules:
             - ".test.ts"
             - "/node_modules/"
             - "/dist/"
-            # engine scratch dirs (.spur/ is gitignored test/dev scaffold;
-            # e2e partial-work artifacts land there — not a secret-leak site)
+            # nested engine scratch dirs under the included app/package trees;
+            # root .spur/ is outside this rule's include scope
             - "/.spur/"
             - "vendors/"
 
