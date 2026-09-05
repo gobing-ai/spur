@@ -59,6 +59,27 @@ bootstrap:
 # Members are NOT autostarted (autostart defaults to false) — start one
 # explicitly with `spur team start <agent-id>` to populate live data.
 agent:
+  # Project-level executor overrides — merge into the global `executors` block by `name`
+  # (config-global config.yaml carries the canonical agent/model/tier list).
+  # These overrides add `executionCapabilities` to specific executors so capability
+  # attestation (0706 R5) can satisfy stage `requiresCapabilities` (fsWrite,
+  # processSpawn, fsRead). The pi agent actively edits files and spawns processes,
+  # so native-known is the honest provenance; operator-configured would also work.
+  executors:
+    - name: pi-dsv4-flash-volc
+      agent: pi
+      executionCapabilities:
+        version: 1
+        axes:
+          fsRead:
+            state: available
+            provenance: native-known
+          fsWrite:
+            state: available
+            provenance: native-known
+          processSpawn:
+            state: available
+            provenance: native-known
   team:
     demo:
       name: "Team Spur"
