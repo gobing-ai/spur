@@ -2,10 +2,10 @@
 doc: 02_ROADMAP
 owns: WHEN — phases, current vs deferred, sequencing
 authority: derived
-version: 1.5.0
+version: 1.6.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-27
+updated_at: 2026-09-05
 read_before: placing work in a phase
 edit_rules: 99 §6.3
 sync: [T5, T6]
@@ -128,6 +128,10 @@ that run by occupant pin without scraping a terminal.
 ## Phase 3 — Workflow & Constraint Depth
 
 Deepen the two engines from MVP to production parity.
+
+- [ ] D61: essential workflow gates, explicit corpus audits, snapshot retirement, and versioned
+  observable execution across eleven definitions; surrounding workflows before task-pipeline
+  ([design](design/essential-workflow-checks.md), ADR-108; follows D8/D9 Option B).
 
 - [ ] Rule engine: restore advanced evaluators (import-boundary, test-location, tsdoc-export,
   coverage-gate, secrets-scanner, ast-grep, schema-artifact) + fixers + SARIF output.

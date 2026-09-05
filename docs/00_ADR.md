@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.35.0
+version: 1.36.0
 owner: Robin Min
-updated_at: 2026-09-04
+updated_at: 2026-09-05
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2230,6 +2230,26 @@ green.
 runs solely to satisfy the rollout branch.
 
 **Detail:** feature D9 `## Notes`; tasks 0757–0759 and 0764.
+
+## ADR-108: Essential Workflow Gates and Explicit Corpus Audits
+
+**Status:** Accepted (design; implementation pending) · **Date:** 2026-09-05 · **Feature:** D61
+
+**Decision.** Preserve essential integrity and evidence checks at affected write/completion boundaries;
+move whole-corpus checks to explicit audits and retire suppression snapshots and exact workflow
+composition mirrors after migrating their useful consumers. Complete the existing plan/version
+surfaces across all eleven workflows using the existing engine and identity/progress owners.
+
+**Why.** Repeated document checks and acceptance snapshots consume work without proving a better
+outcome; direct behavioral evidence and truthful progress provide the useful guarantees.
+
+**Migration.** D61 implementation supersedes the routine sweep/snapshot policies in ADR-050/062/090/092
+and the corpus application of ADR-093, and the exact composition-mirroring portion of ADR-069.
+Existing enforcement remains until replacements land; each owning task reconciles authority and
+derived contracts in the same change. ADR-107's Option B closure and fast-mode evidence bar remain.
+
+**Detail:** `docs/design/essential-workflow-checks.md`; approved proposal
+`docs/plans/2026-09-04-workflow-upgrade-brainstorm.md`.
 
 ## Amendments (task 0754, D8 Decision 8 closure)
 

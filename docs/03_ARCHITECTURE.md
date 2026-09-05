@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.37.0
+version: 1.38.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-08-29
+updated_at: 2026-09-05
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -186,6 +186,12 @@ formatters are host-registered. Runs persist through the engine's `RulePersisten
 configuration — adding one edits YAML, not code. Flags and surface: `04 §1.1`.
 
 ## 6. Workflows (`ts-dual-workflow-engine`, `spur workflow`)
+
+**D61 accepted design — not yet built (ADR-108):** shared planning-check services own state-aware
+essential errors; corpus audits become explicit and unsuppressed; workflow identity/progress reuse
+the existing resolver and projections. The migration contracts and eight-package order are in
+[`essential-workflow-checks.md`](design/essential-workflow-checks.md). Current runtime behavior below
+remains until the owning implementation packages land.
 
 Two execution models behind one host (ADR-009):
 

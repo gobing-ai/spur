@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.65.0
+version: 1.66.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-09-05
@@ -28,6 +28,9 @@ When collaborating with the design team:
 - **Non-UI Surface & API/Schema DTOs:** Refer to and update `docs/04_DESIGN.md` (and `docs/design/<slug>.md` satellites).
 
 ## 0. Design satellites (`docs/design/`)
+
+- [`essential-workflow-checks.md`](design/essential-workflow-checks.md) — D61 explicit corpus audit,
+  baseline retirement and shared workflow plan/version contracts (accepted design; not implemented).
 
 | Satellite                                                                                               | Area                                                                                                                                                                                                                                                                                                                      | Status                                                                                                                                                          |                                                                                                                               |             |
 | ------------------------------------------------------------------------------------------------------- | -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------                                                                                                                     | -------------------------------                                                                                                                                 |                                                                                                                               |             |
