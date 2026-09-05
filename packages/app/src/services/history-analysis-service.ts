@@ -5,16 +5,7 @@ import {
     type DbAdapter,
     historyBoardHistoryVersion,
     historyBoardRollupsFresh,
-    loops,
-    messageRollup,
-    replaceHistoryBoardRollups,
-    type StepRow,
-    skillCallRollup,
-    sourceSummary,
-    toolRollup,
-    topCacheWasteSteps,
-    topStepsByDuration,
-    topStepsByTokens,
+    refreshHistoryBoardRollupsIncremental,
 } from '@gobing-ai/spur-domain';
 
 const ALL_HISTORY: ArtifactSelector = {
@@ -28,8 +19,6 @@ const ALL_HISTORY: ArtifactSelector = {
     runId: null,
     taskWbs: null,
 };
-
-const RANK_DEPTH = 1000;
 
 /** Outcome of an incremental History Board rollup refresh. */
 export interface HistoryRollupRefreshResult {
@@ -69,30 +58,17 @@ export async function refreshHistoryRollups(db: DbAdapter): Promise<HistoryRollu
         return { status: 'unchanged', historyVersion: await historyBoardHistoryVersion(db), cacheWasteSteps: 0 };
     }
 
-    const historyVersion = await historyBoardHistoryVersion(db);
-    const [messageRows, toolRows, loopRows, sourceRows, tokenSteps, durationSteps, waste, cacheWasteSteps, skillRows] =
-        await Promise.all([
-            messageRollup(db, ALL_HISTORY),
-            toolRollup(db, ALL_HISTORY),
-            loops(db, ALL_HISTORY),
-            sourceSummary(db, ALL_HISTORY),
-            topStepsByTokens(db, ALL_HISTORY, RANK_DEPTH),
-            topStepsByDuration(db, ALL_HISTORY, RANK_DEPTH),
-            cacheWasteAggregate(db, ALL_HISTORY),
-            topCacheWasteSteps(db, ALL_HISTORY, RANK_DEPTH),
-            skillCallRollup(db),
-        ]);
+    await refreshHistoryBoardRollupsIncremental(db);
 
-    await replaceHistoryBoardRollups(db, {
+    const historyVersion = await historyBoardHistoryVersion(db);
+    await db.run(
+        `INSERT INTO history_board_rollup_meta (id, history_version, refreshed_at)
+         VALUES (1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET history_version = excluded.history_version, refreshed_at = excluded.refreshed_at`,
         historyVersion,
-        messageRows,
-        toolRows,
-        loopRows,
-        sourceRows,
-        tokenSteps: tokenSteps as readonly StepRow[],
-        durationSteps: durationSteps as readonly StepRow[],
-        cacheWasteSteps,
-        skill5m: skillRows,
-    });
+        new Date().toISOString(),
+    );
+
+    const waste = await cacheWasteAggregate(db, ALL_HISTORY);
     return { status: 'refreshed', historyVersion, cacheWasteSteps: waste?.steps ?? 0 };
 }
