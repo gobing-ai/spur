@@ -187,7 +187,9 @@ spur task record 0040 --verdict-file .spur/run/0040-verdict.json --solution-from
 - **`--solution-from-diff`** backfills `Solution` from `git diff -U0` hunk headers **only when the
   Solution section is still bare** — a safety net, not an overwrite.
 - **`--transition <status>`** optionally advances the lifecycle after writing (e.g. `testing`).
-  `record` **never transitions to `done`** — the `testing→done` gate stays in the workflow (0108).
+  `--transition done` is a **guarded** completion path: it requires a PASS verdict, auto-walks
+  `wip → testing → done`, and auto-creates the pipeline run-link (0436 R4); a non-PASS verdict to
+  `done` errors instead of transitioning, and the normal done gates still apply (0108).
 
 The verdict shape (`wbs`, `verdict`, `requirements[]`, `checks[]`) and the rendered tables are
 documented in [tasks/verbs.md](tasks/verbs.md).

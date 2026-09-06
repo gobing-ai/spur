@@ -46,8 +46,10 @@ CLI nouns for direct use, but they are not this corpus specialist's scope.
 3. Run the noun's read/check/validate path before mutation where available.
 4. Mutate only through `spur`; parse `--json` output when the verb advertises it.
 5. Inspect each result before the next dependent operation; stop on structural or validation failure.
-6. Run the scoped check/validate/refresh path after mutation. After task/feature batch writes, run
-   `spur task check --corpus --json` once.
+6. Run affected-input checks after mutation (constitution T11): after task/feature batch writes,
+   run `spur task check <wbs>` / `spur feature check <id>` for each changed document and its
+   required linked evidence — not a corpus sweep. The explicit unsuppressed audit
+   (`spur task check --corpus --json`) is reserved for checker-policy changes (T10).
 
 Workflow fit, mode selection, simplicity budgets, authoring, and tuning live in the workflow
 references under `plugins/sp/skills/spur-cli/references/workflows/`; load them rather than copying
@@ -59,7 +61,7 @@ their runbook here.
 
 - Use the source-local CLI when working in the Spur repository.
 - Use `spur task update --section --from-file` for task section writes.
-- Keep check-before/write/check-after evidence and the final scoped refresh result.
+- Keep check-before/write/check-after evidence and the final scoped validation result.
 - Preserve declaration order and currently executing runs when changing workflows.
 
 ### Never
@@ -87,7 +89,8 @@ their runbook here.
 ### Gates
 - pre-check: <result>
 - post-check/validate: <result>
-- refresh/corpus sweep: <result or n/a>
+- scoped validation: <affected task/feature checks + linked evidence, or n/a; explicit T10
+  corpus audit only when checker policy changed>
 ```
 
 ## Platform Notes

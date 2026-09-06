@@ -1935,3 +1935,50 @@ describe('environment-lens single source of truth (task 0686 / R44-adjacent)', (
         expect(text).toContain('no applied change, no diff, and no command the report claims to have run');
     });
 });
+
+/**
+ * Task 0786 — canonical capability guidance matches shipped behavior (audit F-08).
+ *
+ * Three canonical projections had drifted from their owners: expert-spur mandated a routine
+ * post-batch corpus sweep (constitution T11 makes affected-input checks the ordinary path and
+ * reserves the explicit `--corpus` audit for checker-policy changes, T10); the task reference
+ * claimed `record` never transitions to `done` (TaskRecordService supports a guarded PASS-only
+ * done with auto run-link, 0436 R4); the gate checklist described a synthetic docs PASS stub
+ * (docs-pipeline verify is measured read-only verification, fail-closed on missing/non-PASS).
+ * These assertions fail against the stale text so the drift cannot silently return.
+ */
+describe('task 0786 — canonical capability guidance matches T10/T11, guarded record-done, and measured docs verification', () => {
+    test('expert-spur post-batch obligation is affected-input checks (T11), not a corpus sweep', () => {
+        const text = readFileSync(join(AGENTS_DIR, 'expert-spur.md'), 'utf8');
+        // The stale sweep mandate and its report field are gone.
+        expect(text).not.toContain('spur task check --corpus --json` once');
+        expect(text).not.toContain('refresh/corpus sweep');
+        // Ordinary batch writes check changed documents + linked evidence; the explicit
+        // unsuppressed audit stays reserved for checker-policy changes (T10).
+        expect(text).toContain('affected-input checks');
+        expect(text).toContain('required linked evidence');
+        expect(text).toContain('checker-policy changes (T10)');
+        // The report names the scoped validation with explicit T10 applicability.
+        expect(text).toContain('scoped validation');
+        expect(text).toContain('T10');
+    });
+
+    test('tasks.md documents record --transition done as guarded, not forbidden', () => {
+        const text = readFileSync(join(SKILLS_DIR, 'spur-cli', 'references', 'tasks.md'), 'utf8');
+        // The categorical never-done claim is gone.
+        expect(text).not.toContain('never transitions to `done`');
+        // The affirmative contract: PASS required, auto-walk, run-link, non-PASS errors.
+        expect(text).toContain('`--transition done` is a **guarded** completion path');
+        expect(text).toContain('requires a PASS verdict');
+        expect(text).toContain('auto-creates the pipeline run-link');
+        expect(text).toContain('non-PASS verdict to\n  `done` errors');
+    });
+
+    test('gate-checklists.md requires measured docs verification, not a synthetic PASS stub', () => {
+        const text = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'gate-checklists.md'), 'utf8');
+        expect(text).not.toContain('docs PASS stub');
+        expect(text).toContain('read-only measured verification');
+        expect(text).toContain('`.spur/run/<wbs>-verdict.json`');
+        expect(text).toContain('missing or non-PASS evidence is a refusal');
+    });
+});
