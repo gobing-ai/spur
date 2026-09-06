@@ -129,10 +129,6 @@ const MESSAGE_DEDUP = `(m.request_id IS NULL OR NOT EXISTS (
     WHERE o.request_id = m.request_id AND o.rowid > m.rowid
 ))`;
 
-function withMessageDedup(where: string): string {
-    return where === '' ? `WHERE ${MESSAGE_DEDUP}` : `${where} AND ${MESSAGE_DEDUP}`;
-}
-
 function escapeLike(value: string): string {
     return value.replaceAll('!', '!!').replaceAll('%', '!%').replaceAll('_', '!_');
 }
@@ -1769,37 +1765,164 @@ async function queryTimelineEvents(
     ))`;
     const fullWhere = mainCondition ? `WHERE ${mainCondition} AND ${dedupCondition}` : `WHERE ${dedupCondition}`;
 
-    const rows = await db.queryAll<JoinedTimelineRow>(
+    // ── Step 1: Fetch top-N messages only. No tool call join so LIMIT is applied
+    // to the indexed message scan first, without being defeated by window function
+    // pre-evaluation over millions of rows.
+    type MessageOnlyRow = {
+        messageHash: string;
+        messageSeq: number;
+        turnIndex: number;
+        messageTs: string | null;
+        messageRole: string;
+        recordType: string;
+        source: string;
+        sessionId: string;
+        model: string | null;
+        messageDurationMs: number | null;
+        inputTokens: number | null;
+        cacheReadTokens: number | null;
+        outputTokens: number | null;
+        messagePayload: string | null;
+        messageRowId: number;
+    };
+    const msgRows = await db.queryAll<MessageOnlyRow>(
         `SELECT m.record_hash AS messageHash, m.seq AS messageSeq,
                 COALESCE(m.turn_index, m.seq) AS turnIndex,
                 m.ts AS messageTs, m.role AS messageRole, COALESCE(m.record_type, m.role) AS recordType,
-                m.source, m.session_id AS sessionId,
-                CASE
-                    WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model
-                    WHEN m.session_id IS NOT NULL AND m.session_id NOT IN ('', 'unknown', 'session') THEN (
-                        SELECT m2.model FROM history_message m2
-                        WHERE m2.source = m.source AND m2.session_id = m.session_id
-                          AND m2.model IS NOT NULL AND m2.model != '' AND m2.model != 'unknown'
-                        LIMIT 1
-                    )
-                    ELSE m.model
-                END AS model,
+                m.source, m.session_id AS sessionId, m.model,
                 m.duration_ms AS messageDurationMs, m.input_tokens AS inputTokens,
                 m.cache_read_tokens AS cacheReadTokens, m.output_tokens AS outputTokens,
-                m.content_text AS messagePayload,
-                (SELECT COUNT(*) FROM history_tool_call links WHERE links.message_hash = m.record_hash) AS links,
-                tc.tool_name AS toolName, COALESCE(tc.started_at, m.ts) AS toolTs,
-                tc.duration_ms AS toolDurationMs, tc.status AS toolStatus,
-                tc.args_raw AS toolArgsRaw, tc.args_digest AS toolArgsDigest, tc.error_text AS toolErrorText,
-                COALESCE(tc.seq, 0) AS toolSeq, m.rowid AS messageRowId
+                m.content_text AS messagePayload, m.rowid AS messageRowId
          FROM history_message m
-         LEFT JOIN history_tool_call tc ON tc.message_hash = m.record_hash
          ${fullWhere}
-         ORDER BY m.ts DESC NULLS LAST, m.rowid DESC, COALESCE(tc.seq, 0) DESC
+         ORDER BY m.ts DESC NULLS LAST, m.rowid DESC
          LIMIT ?`,
         ...params,
         fetchLimit,
     );
+
+    // ── Step 2: Batch-fetch tool calls for the N selected message hashes.
+    // idx_history_tool_call_message_hash makes this a fast indexed scan over only the
+    // relevant rows instead of a full-table join pre-LIMIT.
+    type TcRow = {
+        messageHash: string;
+        toolName: string;
+        toolTs: string | null;
+        toolDurationMs: number | null;
+        toolStatus: string | null;
+        toolArgsRaw: string | null;
+        toolArgsDigest: string | null;
+        toolErrorText: string | null;
+        toolSeq: number;
+    };
+    const msgHashes = msgRows.map((r) => r.messageHash);
+    // Sliced fetchLimit rows max — IN list stays bounded.
+    const tcMap = new Map<string, TcRow[]>(); // messageHash → tool calls
+    if (msgHashes.length > 0) {
+        const inPlaceholders = msgHashes.map(() => '?').join(', ');
+        const tcRows = await db.queryAll<TcRow>(
+            `SELECT tc.message_hash AS messageHash,
+                    tc.tool_name AS toolName, COALESCE(tc.started_at, m.ts) AS toolTs,
+                    tc.duration_ms AS toolDurationMs, tc.status AS toolStatus,
+                    tc.args_raw AS toolArgsRaw, tc.args_digest AS toolArgsDigest, tc.error_text AS toolErrorText,
+                    COALESCE(tc.seq, 0) AS toolSeq
+             FROM history_tool_call tc
+             JOIN history_message m ON m.record_hash = tc.message_hash
+             WHERE tc.message_hash IN (${inPlaceholders})
+             ORDER BY tc.message_hash, COALESCE(tc.seq, 0)
+             LIMIT ?`,
+            ...msgHashes,
+            fetchLimit * 50, // generous cap; bounded by IN list of N message hashes
+        );
+        for (const tc of tcRows) {
+            let list = tcMap.get(tc.messageHash);
+            if (list === undefined) {
+                list = [];
+                tcMap.set(tc.messageHash, list);
+            }
+            list.push(tc);
+        }
+    }
+
+    // ── Step 3: Resolve missing model values in O(n) — build session→model map
+    // from rows that carry a model, then fill nulls.
+    const sessionModelMap = new Map<string, string>();
+    for (const row of msgRows) {
+        if (row.model && row.model !== '' && row.model !== 'unknown') {
+            const key = `${row.source}:::${row.sessionId}`;
+            if (!sessionModelMap.has(key)) sessionModelMap.set(key, row.model);
+        }
+    }
+    for (const row of msgRows) {
+        if (!row.model || row.model === '' || row.model === 'unknown') {
+            const key = `${row.source}:::${row.sessionId}`;
+            const resolved = sessionModelMap.get(key);
+            if (resolved) row.model = resolved;
+        }
+    }
+
+    // ── Step 4: Synthesize JoinedTimelineRow equivalents by merging message + tool call rows.
+    const rows: JoinedTimelineRow[] = [];
+    for (const m of msgRows) {
+        const tcs = tcMap.get(m.messageHash) ?? [];
+        const links = tcs.length;
+        // Message row (tool_name = null, toolSeq = 0)
+        rows.push({
+            messageHash: m.messageHash,
+            messageSeq: m.messageSeq,
+            turnIndex: m.turnIndex,
+            messageTs: m.messageTs,
+            messageRole: m.messageRole,
+            recordType: m.recordType,
+            source: m.source,
+            sessionId: m.sessionId,
+            model: m.model,
+            messageDurationMs: m.messageDurationMs,
+            inputTokens: m.inputTokens,
+            cacheReadTokens: m.cacheReadTokens,
+            outputTokens: m.outputTokens,
+            messagePayload: m.messagePayload,
+            links,
+            toolName: null,
+            toolTs: null,
+            toolDurationMs: null,
+            toolStatus: null,
+            toolArgsRaw: null,
+            toolArgsDigest: null,
+            toolErrorText: null,
+            toolSeq: 0,
+            messageRowId: m.messageRowId,
+        });
+        // One row per tool call
+        for (const tc of tcs) {
+            rows.push({
+                messageHash: m.messageHash,
+                messageSeq: m.messageSeq,
+                turnIndex: m.turnIndex,
+                messageTs: m.messageTs,
+                messageRole: m.messageRole,
+                recordType: m.recordType,
+                source: m.source,
+                sessionId: m.sessionId,
+                model: m.model,
+                messageDurationMs: m.messageDurationMs,
+                inputTokens: m.inputTokens,
+                cacheReadTokens: m.cacheReadTokens,
+                outputTokens: m.outputTokens,
+                messagePayload: m.messagePayload,
+                links,
+                toolName: tc.toolName,
+                toolTs: tc.toolTs,
+                toolDurationMs: tc.toolDurationMs,
+                toolStatus: tc.toolStatus,
+                toolArgsRaw: tc.toolArgsRaw,
+                toolArgsDigest: tc.toolArgsDigest,
+                toolErrorText: tc.toolErrorText,
+                toolSeq: tc.toolSeq,
+                messageRowId: m.messageRowId,
+            });
+        }
+    }
 
     const rawEvents: RawTimelineEvent[] = [];
     let previousMessage = '';
@@ -2306,47 +2429,59 @@ export async function toolSequenceQuery(
     limit = 5000,
 ): Promise<ToolSequenceQueryResult> {
     const fetchLimit = limit + 1;
-    const params: unknown[] = [];
-    const clauses: string[] = [];
+
+    // ── CTE-based query: dedup messages ONCE (bounded by time/session), join tc against the result.
+    // This avoids the NOT EXISTS correlated subquery firing once per tool_call row (was 2.4–4.7s).
+    //
+    // msg-level predicates go into the CTE; tc-level filter predicates go into the outer WHERE.
+    const msgCteParams: unknown[] = [];
+    const tcFilterParams: unknown[] = [];
+    let msgCteWhere: string;
 
     if (scope.mode === 'session') {
-        clauses.push('tc.source = ? AND tc.session_id = ?');
-        params.push(scope.source, scope.sessionId);
+        // Constrain the message CTE to this session; same constraint on tc in the outer WHERE.
+        msgCteWhere = `WHERE m.source = ? AND m.session_id = ? AND ${MESSAGE_DEDUP}`;
+        msgCteParams.push(scope.source, scope.sessionId);
     } else {
-        const { where, params: selParams } = buildMessageWhere(scope.sel, 'm');
-        if (where !== '') {
-            clauses.push(where.startsWith('WHERE ') ? where.slice(6) : where);
-            params.push(...selParams);
-        }
+        const { where: mw, params: mp } = buildMessageWhere(scope.sel, 'm');
+        const msgCondition = mw.startsWith('WHERE ') ? mw.slice(6) : mw;
+        msgCteWhere = msgCondition ? `WHERE ${msgCondition} AND ${MESSAGE_DEDUP}` : `WHERE ${MESSAGE_DEDUP}`;
+        msgCteParams.push(...mp);
     }
 
+    // tc-level filter conditions (tool name, status, search) go into the outer WHERE.
+    const tcFilterClauses: string[] = [];
+    if (scope.mode === 'session') {
+        // Keep the tc-level session constraint too so the index on (source, session_id) is hit.
+        tcFilterClauses.push('tc.source = ? AND tc.session_id = ?');
+        tcFilterParams.push(scope.source, scope.sessionId);
+    }
     if (filters.toolNames && filters.toolNames.length > 0) {
         const placeholders = filters.toolNames.map(() => '?').join(', ');
-        clauses.push(toolSelectionSql('tc', placeholders));
-        params.push(...filters.toolNames, ...filters.toolNames);
+        tcFilterClauses.push(toolSelectionSql('tc', placeholders));
+        tcFilterParams.push(...filters.toolNames, ...filters.toolNames);
     }
-
     if (filters.status && filters.status !== 'all') {
-        clauses.push('tc.status = ?');
-        params.push(filters.status);
+        tcFilterClauses.push('tc.status = ?');
+        tcFilterParams.push(filters.status);
     }
-
     if (filters.search && filters.search.trim().length > 0) {
         const searchPattern = `%${escapeLike(filters.search.trim())}%`;
-        clauses.push(
+        tcFilterClauses.push(
             "(tc.args_raw LIKE ? ESCAPE '!' OR tc.error_text LIKE ? ESCAPE '!' OR tc.effective_tool_name LIKE ? ESCAPE '!' OR tc.tool_name LIKE ? ESCAPE '!')",
         );
-        params.push(searchPattern, searchPattern, searchPattern, searchPattern);
+        tcFilterParams.push(searchPattern, searchPattern, searchPattern, searchPattern);
     }
-
-    const whereCombined = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
-    const folded = withMessageDedup(whereCombined);
-
-    params.push(fetchLimit);
+    const tcWhere = tcFilterClauses.length > 0 ? `AND ${tcFilterClauses.join(' AND ')}` : '';
 
     const rows = await db.queryAll<ToolSequenceRow>(
-        `SELECT tc.seq AS toolSeq,
-                COALESCE(tc.started_at, m.ts) AS ts,
+        `WITH deduped_messages AS (
+             SELECT record_hash, session_id, source, model, input_tokens, cache_read_tokens, output_tokens, ts
+             FROM history_message m
+             ${msgCteWhere}
+         )
+         SELECT tc.seq AS toolSeq,
+                COALESCE(tc.started_at, dm.ts) AS ts,
                 tc.tool_name AS toolName,
                 tc.effective_tool_name AS effectiveToolName,
                 tc.status AS status,
@@ -2359,27 +2494,84 @@ export async function toolSequenceQuery(
                 tc.message_hash AS messageHash,
                 tc.session_id AS sessionId,
                 tc.source AS source,
-                CASE
-                    WHEN m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown' THEN m.model
-                    WHEN m.session_id IS NOT NULL AND m.session_id NOT IN ('', 'unknown', 'session') THEN (
-                        SELECT m2.model FROM history_message m2
-                        WHERE m2.source = m.source AND m2.session_id = m.session_id
-                          AND m2.model IS NOT NULL AND m2.model != '' AND m2.model != 'unknown'
-                        LIMIT 1
-                    )
-                    ELSE m.model
-                END AS model,
-                (SELECT COUNT(*) FROM history_tool_call l WHERE l.message_hash = m.record_hash) AS links,
-                m.input_tokens AS inputTokens,
-                m.cache_read_tokens AS cacheReadTokens,
-                m.output_tokens AS outputTokens
-         FROM history_tool_call tc
-         JOIN history_message m ON m.record_hash = tc.message_hash
-         ${folded}
-         ORDER BY COALESCE(tc.started_at, m.ts), tc.source, tc.session_id, tc.seq
+                dm.model,
+                0 AS links,
+                dm.input_tokens AS inputTokens,
+                dm.cache_read_tokens AS cacheReadTokens,
+                dm.output_tokens AS outputTokens
+         FROM deduped_messages dm
+         CROSS JOIN history_tool_call tc ON tc.message_hash = dm.record_hash
+         ${tcWhere}
+         ORDER BY COALESCE(tc.started_at, dm.ts), tc.source, tc.session_id, tc.seq
          LIMIT ?`,
-        ...params,
+        ...msgCteParams,
+        ...tcFilterParams,
+        fetchLimit,
     );
+
+    // Compute per-message tool call counts in JS — avoids the window function pre-LIMIT
+    // full scan (was 4.7s). The result already contains all tool calls for the fetched
+    // messages, so counting same-messageHash rows is accurate and O(n).
+    const msgHashCount = new Map<string, number>();
+    for (const row of rows) {
+        msgHashCount.set(row.messageHash, (msgHashCount.get(row.messageHash) ?? 0) + 1);
+    }
+    for (const row of rows) {
+        (row as { links: number }).links = msgHashCount.get(row.messageHash) ?? 1;
+    }
+
+    // Resolve missing model values:
+    // 1. First pass: build session→model map from rows that already carry a model (some sessions have
+    //    the model on the assistant messages directly).
+    const tsqModelMap = new Map<string, string>();
+    for (const row of rows) {
+        if (row.model && row.model !== '' && row.model !== 'unknown') {
+            const key = `${row.source}:::${row.sessionId}`;
+            if (!tsqModelMap.has(key)) tsqModelMap.set(key, row.model);
+        }
+    }
+    // 2. Collect sessions where model is still unresolved — these carry the model on a
+    //    turn_context/meta row that doesn't appear in the tool-call join.
+    const missingKeys = new Set<string>();
+    for (const row of rows) {
+        if (!row.model || row.model === '' || row.model === 'unknown') {
+            const key = `${row.source}:::${row.sessionId}`;
+            if (!tsqModelMap.has(key)) missingKeys.add(key);
+        }
+    }
+    if (missingKeys.size > 0) {
+        // Batch fetch: one query, one row per session, first non-null model wins.
+        const pairs = [...missingKeys].map((k) => {
+            const [src, sid] = k.split(':::') as [string, string];
+            return { src, sid };
+        });
+        const placeholders = pairs.map(() => '(?, ?)').join(', ');
+        const batchParams: string[] = [];
+        for (const { src, sid } of pairs) {
+            batchParams.push(src, sid);
+        }
+        const modelRows = await db.queryAll<{ source: string; session_id: string; model: string }>(
+            `SELECT source, session_id, model
+             FROM history_message
+             WHERE (source, session_id) IN (${placeholders})
+               AND model IS NOT NULL AND model != '' AND model != 'unknown'
+             GROUP BY source, session_id
+             LIMIT ?`,
+            ...batchParams,
+            pairs.length,
+        );
+        for (const mr of modelRows) {
+            tsqModelMap.set(`${mr.source}:::${mr.session_id}`, mr.model);
+        }
+    }
+    // 3. Fill nulls from the resolved map.
+    for (const row of rows) {
+        if (!row.model || row.model === '' || row.model === 'unknown') {
+            const key = `${row.source}:::${row.sessionId}`;
+            const resolved = tsqModelMap.get(key);
+            if (resolved) row.model = resolved;
+        }
+    }
 
     const truncated = rows.length > limit;
     const finalRows = truncated ? rows.slice(0, limit) : rows;

@@ -914,10 +914,12 @@ export const SESSION_ORDER_COLUMNS: Record<string, string> = {
 export async function historyBoardSessionsFromRollup(
     db: DbAdapter,
     sel: ArtifactSelector,
-    input: { page: number; pageSize: number; sortBy: string; sortDir: 'asc' | 'desc' },
+    input: { page: number; pageSize: number; sortBy?: string; sortDir?: 'asc' | 'desc'; sortField?: string },
 ): Promise<HistoryBoardSessionPage> {
     const spec = buildSessionWhere(sel);
-    const order = SESSION_ORDER_COLUMNS[input.sortBy] ?? SESSION_ORDER_COLUMNS.start;
+    const sortKey = input.sortBy ?? input.sortField ?? 'start';
+    const order = SESSION_ORDER_COLUMNS[sortKey] ?? SESSION_ORDER_COLUMNS.start;
+    const sortDir = (input.sortDir ?? 'desc').toUpperCase();
     const offset = (input.page - 1) * input.pageSize;
     const [items, total] = await Promise.all([
         db.queryAll<HistoryBoardSessionRollupRow>(
@@ -930,7 +932,7 @@ export async function historyBoardSessionsFromRollup(
                     s.assistant_duration_ms AS assistantDurationMs,
                     s.top_tool AS topTool, s.state
              FROM history_board_session_stats s ${spec.where}
-             ORDER BY ${order} ${input.sortDir.toUpperCase()}, s.session_id ASC
+             ORDER BY ${order} ${sortDir}, s.session_id ASC
              LIMIT ? OFFSET ?`,
             ...spec.params,
             input.pageSize,
