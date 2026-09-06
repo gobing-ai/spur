@@ -4,7 +4,6 @@ import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-    baselineKeyForPipeline,
     createEvalRun,
     describeBreakdown,
     diffRecords,
@@ -13,10 +12,11 @@ import {
     type EvalRun,
     evalPipeline,
     extractHistoryCost,
-    loadBaselineFacts,
+    loadWorkflowFacts,
     parseVerdict,
     readGateOutcomes,
     removeEvalRun,
+    workflowKeyForPipeline,
 } from './eval-pipeline';
 
 describe('isolated eval project', () => {
@@ -122,71 +122,63 @@ describe('extractHistoryCost', () => {
     });
 });
 
-describe('baseline facts (0607 R1/R4)', () => {
-    test('loadBaselineFacts reads modelQueries + action keys from the frozen baseline', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'eval-baseline-'));
-        const p = join(dir, 'baseline.json');
-        await writeFile(
-            p,
-            JSON.stringify({
-                workflows: {
-                    'task-pipeline': {
-                        definition: 'config/workflows/task-pipeline.yaml',
-                        modelQueries: ['implement', 'test-fix', 'review', 'verify'],
-                        actions: {
-                            'test:onEnter:0': {},
-                            'test-recheck:onEnter:0': {},
-                            'review:onEnter:0': {},
-                            'done:onEnter:0': {},
-                        },
-                    },
-                },
-            }),
-        );
-        const facts = await loadBaselineFacts(p);
-        expect(facts['task-pipeline'].modelQueries).toEqual(['implement', 'test-fix', 'review', 'verify']);
-        expect(facts['task-pipeline'].actions).toHaveLength(4);
-        await rm(dir, { recursive: true, force: true });
+describe('workflow facts (0607 R1/R4; SSOT moved to live definitions by 0775)', () => {
+    test('loadWorkflowFacts extracts modelQueries + action keys from the live definitions', async () => {
+        const workflowsDir = join(new URL('../../', import.meta.url).pathname, 'config/workflows');
+        const facts = await loadWorkflowFacts(workflowsDir);
+        expect(facts['task-pipeline'].modelQueries).toContain('implement');
+        expect(facts['task-pipeline'].actions.length).toBeGreaterThan(0);
     });
 
-    test('baselineKeyForPipeline maps a definition path to its workflow name', () => {
-        expect(baselineKeyForPipeline('config/workflows/task-pipeline.yaml')).toBe('task-pipeline');
-        expect(baselineKeyForPipeline('config/workflows/pr-review.yaml')).toBe('pr-review');
+    test('workflowKeyForPipeline maps a definition path to its workflow name', () => {
+        expect(workflowKeyForPipeline('config/workflows/task-pipeline.yaml')).toBe('task-pipeline');
+        expect(workflowKeyForPipeline('config/workflows/pr-review.yaml')).toBe('pr-review');
     });
 
     test('describeBreakdown counts model hops, deterministic actions, and gate states', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'eval-baseline-'));
-        const p = join(dir, 'baseline.json');
+        const dir = await mkdtemp(join(tmpdir(), 'eval-facts-'));
+        const wfDir = join(dir, 'workflows');
+        await mkdir(wfDir);
+        // 4 model states (implement, test-fix, review, verify) + 5 deterministic
+        // actions, of which test / test-recheck / approve match the gate regex.
         await writeFile(
-            p,
-            JSON.stringify({
-                workflows: {
-                    'task-pipeline': {
-                        modelQueries: ['implement', 'test-fix', 'review', 'verify'],
-                        actions: {
-                            'precheck:onEnter:0': {},
-                            'test:onEnter:0': {},
-                            'test-recheck:onEnter:0': {},
-                            'review:onEnter:0': {},
-                            'approve:onEnter:0': {},
-                            'done:onEnter:0': {},
-                        },
-                    },
-                },
-            }),
+            join(wfDir, 'task-pipeline.yaml'),
+            [
+                'name: eval-fixture',
+                'version: 1',
+                'terminalStates: [done, failed, cancelled]',
+                'states:',
+                ...[
+                    'precheck',
+                    'implement',
+                    'test',
+                    'test-fix',
+                    'test-recheck',
+                    'review',
+                    'approve',
+                    'verify',
+                    'done',
+                ].flatMap((id) => [
+                    `  - id: ${id}`,
+                    '    onEnter:',
+                    `      - kind: ${['implement', 'test-fix', 'review', 'verify'].includes(id) ? 'agent.run' : 'shell.run'}`,
+                    '        options:',
+                    id === 'precheck' ? '          command: echo precheck' : `          input: ${id}`,
+                ]),
+            ].join('\n'),
         );
-        const facts = await loadBaselineFacts(p);
+        const facts = await loadWorkflowFacts(wfDir);
         const b = describeBreakdown(facts, 'config/workflows/task-pipeline.yaml');
         expect(b.modelHops).toBe(4);
-        // 6 total actions − 4 model states = 2 deterministic.
-        expect(b.deterministicActions).toBe(2);
-        // test, test-recheck, approve match the gate regex.
-        expect(b.gateStates).toBe(3);
+        // 9 total actions − 4 model states = 5 deterministic.
+        expect(b.deterministicActions).toBe(5);
+        // test, test-fix, test-recheck, approve match the gate regex.
+        expect(b.gateStates).toBe(4);
         await rm(dir, { recursive: true, force: true });
     });
 
     test('unknown pipeline reports zeros, never a guess', async () => {
-        const facts = await loadBaselineFacts('/nonexistent/baseline.json');
+        const facts = await loadWorkflowFacts('/nonexistent/workflows');
         expect(describeBreakdown(facts, 'config/workflows/unknown.yaml')).toEqual({
             modelHops: 0,
             deterministicActions: 0,

@@ -14,22 +14,25 @@
  * It deliberately does NOT join the fast `spur-check` path: wall-clock measurement requires
  * actually running the pipeline (minutes, model quota), so the gate lives at the deliberate
  * measurement surface — run it after a pipeline change, exactly where a change would be
- * caught. The model-query half is additionally enforced cheaply on the fast path by the
- * two-sided composition-baseline check (`packages/app/.../composition-baseline.ts`, part of
- * `bun run test` inside spur-check), which fails when `config/workflow-composition-baseline.json`
- * drifts from a live definition.
+ * caught. The model-query anchor is the live workflow definition itself, extracted by
+ * `extractResolvedWorkflowFacts` (`packages/app/src/workflow/composition-baseline.ts`, 0775)
+ * and guarded by `composition-baseline.test.ts` in `bun run test` inside spur-check.
  *
  * Repo-internal dev-script, NOT a new public `spur` noun/verb (ADR-051; surface questions
  * route to task 0608).
  */
 import { execFileSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { parse } from 'yaml';
+// Deep relative import (0775): the root node_modules has no @gobing-ai/spur-app workspace
+// link for scripts/commands, so the §1.1 cross-workspace alias rule cannot resolve here.
+import { extractResolvedWorkflowFacts } from '../../packages/app/src/workflow/composition-baseline';
 import { readWorkflowMetrics, type WorkflowMetrics } from './real-run-cost';
 
 const REPO_ROOT = new URL('../../', import.meta.url).pathname;
 const BUDGETS_PATH = join(REPO_ROOT, 'config/pipeline-budgets.json');
-const BASELINE_PATH = join(REPO_ROOT, 'config/workflow-composition-baseline.json');
+const WORKFLOWS_DIR = join(REPO_ROOT, 'config/workflows');
 
 export interface PipelineBudgetDecision {
     /** ISO date the raise was recorded. */
@@ -41,7 +44,7 @@ export interface PipelineBudgetDecision {
 }
 
 export interface PipelineBudget {
-    /** Maximum model-query count (anchor: the baseline `modelQueries` list). */
+    /** Maximum model-query count (anchor: the workflow definition's model-bearing states). */
     modelQueries: number;
     /** Maximum wall-clock in ms; null = unenforced until measured (never 0). */
     wallClockMs: number | null;
@@ -173,15 +176,17 @@ export function measuredFromWorkflows(
     return out;
 }
 
-/** The five in-scope pipelines and their frozen model-query counts from the baseline SSOT. */
-export async function loadBaselineQueryCounts(baselinePath: string = BASELINE_PATH): Promise<Record<string, number>> {
+/** Model-query counts per workflow, extracted from the live definitions (0775 SSOT). */
+export async function loadQueryCounts(workflowsDir: string = WORKFLOWS_DIR): Promise<Record<string, number>> {
     try {
-        const parsed = JSON.parse(await readFile(baselinePath, 'utf-8')) as {
-            workflows?: Record<string, { modelQueries?: string[] }>;
-        };
-        return Object.fromEntries(
-            Object.entries(parsed.workflows ?? {}).map(([name, entry]) => [name, entry.modelQueries?.length ?? 0]),
-        );
+        const out: Record<string, number> = {};
+        for (const entry of await readdir(workflowsDir)) {
+            const m = /^(.+)\.ya?ml$/.exec(entry);
+            if (!m) continue;
+            const def = parse(await readFile(join(workflowsDir, entry), 'utf-8'));
+            out[m[1]] = extractResolvedWorkflowFacts(def).modelQueries.length;
+        }
+        return out;
     } catch {
         return {};
     }
@@ -206,7 +211,7 @@ export async function checkPipelineBudgets(argv: string[]): Promise<number> {
     const config = await loadPipelineBudgets();
     const head = headBudgets();
     const silentRaises = head ? detectSilentRaises(head.budgets, config.budgets) : [];
-    const baselineQueryCounts = await loadBaselineQueryCounts();
+    const queryCounts = await loadQueryCounts();
 
     // Measured values: explicit file wins; otherwise read real-run history.
     let measured: Record<string, { modelQueries: number; wallClockMs: number | null; tokenCostUsd: number | null }>;
@@ -220,7 +225,7 @@ export async function checkPipelineBudgets(argv: string[]): Promise<number> {
         // budgets only. Never crash the gate over a missing DB.
         try {
             const metrics = readWorkflowMetrics(join(REPO_ROOT, '.spur/spur.db'), targets);
-            measured = measuredFromWorkflows(metrics, baselineQueryCounts);
+            measured = measuredFromWorkflows(metrics, queryCounts);
         } catch (error) {
             if (error instanceof Error && /no such table|unable to open/.test(error.message)) {
                 measured = {};

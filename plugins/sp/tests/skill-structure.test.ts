@@ -791,7 +791,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // 211KB references) and `spur-dev` (13.6KB / 294KB) are the shape: the body routes,
         // `references/` carries the procedure.
         //
-        // Two-sided, like config/corpus-baseline.json and config/transition-shims.json:
+        // Two-sided, like config/transition-shims.json:
         // an unlisted skill over budget fails, AND a listed skill that grew fails, AND a
         // listed skill that has come back under budget fails so the entry is removed. The
         // baseline only exists to stop new drift while the four listed bodies are split into

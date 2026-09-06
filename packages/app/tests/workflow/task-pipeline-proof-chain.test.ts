@@ -2,12 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import { extractResolvedWorkflowFacts } from '../../src/workflow/composition-baseline';
 
 // Task 0703 (ADR-071): the task-pipeline proof chain must form ONE immutable bracket around the
 // evidence-producing final chain. Capture happens once at quality-gate entry (before any evidence
 // stage), bounded remediation re-captures, the certifying verify is observe-only, and the
 // completion guards refuse missing/malformed/mismatched proof evidence. These invariants are
-// structural: any composition change that breaks them must fail here AND in the baseline gate.
+// structural: any composition change that breaks them must fail here (0775: the
+// composition-baseline gate retired; this suite is the structural guard).
 
 interface Action {
     kind: string;
@@ -107,20 +109,22 @@ describe('task-pipeline proof chain (task 0703, ADR-071)', () => {
         expect(DEF.transitions.find((t) => t.from === 'record' && t.to === 'failed')?.guard?.kind).toBe('always');
     });
 
-    test('baseline pins the observe-only invocation (R7)', () => {
-        const baseline = JSON.parse(
-            readFileSync(join(import.meta.dir, '../../../../config', 'workflow-composition-baseline.json'), 'utf8'),
-        ) as { workflows: Record<string, { actions: Record<string, { invocation?: string }> }> };
-        const actions = baseline.workflows['task-pipeline']?.actions ?? {};
-        const verifyAgent = Object.values(actions).find((a) => a.invocation?.startsWith('/sp:dev-verify') === true);
+    test('verify pins the observe-only invocation (R7)', () => {
+        // 0775: facts are extracted from the live definition; the snapshot is gone.
+        const facts = extractResolvedWorkflowFacts(
+            DEF as unknown as Parameters<typeof extractResolvedWorkflowFacts>[0],
+        );
+        const verifyAgent = Object.values(facts.actions).find(
+            (a) => a.invocation?.startsWith('/sp:dev-verify') === true,
+        );
         expect(verifyAgent?.invocation).toContain('--fix none');
         expect(verifyAgent?.invocation).not.toContain('--fix all');
     });
 });
 
 describe('task-pipeline review independence (task 0710)', () => {
-    // P2 remediation: the live YAML itself must declare the independence policy. The composition
-    // baseline records kind/invocation only, so without this check a re-pinned executor or a
+    // P2 remediation: the live YAML itself must declare the independence policy. Composition
+    // facts record kind/invocation only, so without this check a re-pinned executor or a
     // dropped freshSession would pass CI silently (review finding 0710-P2).
     const agentRunOf = (state: string): Record<string, unknown> | undefined => {
         const agentRun = DEF.states.find((s) => s.id === state)?.onEnter?.find((a) => a.kind === 'agent.run');

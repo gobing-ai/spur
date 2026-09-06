@@ -52,12 +52,12 @@ for at all.
 
 ### Requirements
 
-- R1 — Render a real forensics report from real artifact data through a `--mode forensics` renderer spike, and diff it section by section against the sample at `.spur/run/sp-dev-find-issue-20260806.md`.
-- R2 — Classify every section of the sample as mechanically derivable, partially derivable, or model-authored, so the CLI/model boundary is drawn from the actual output rather than from intent.
-- R3 — Define the mode registry: how a mode is named, where it is registered, how `report` and `daily` both resolve one, and what happens on an unknown mode name.
-- R4 — State the contract between a mode and the artifact: which derived variables a mode requires, and how a mode fails when the artifact predates them or the source lacks the primitive.
-- R5 — Confirm the existing default behavior survives — `report` with no `--mode` renders what it renders today, and `assertArtifactVersion` staleness banners still fire.
-- R6 — Assess whether the markdown and human renderers stay separate functions or collapse into the mode registry, since three near-identical renderers is the shape this ticket could accidentally create.
+- [ ] R1 — Render a real forensics report from real artifact data through a `--mode forensics` renderer spike, and diff it section by section against the sample at `.spur/run/sp-dev-find-issue-20260806.md`.
+- [ ] R2 — Classify every section of the sample as mechanically derivable, partially derivable, or model-authored, so the CLI/model boundary is drawn from the actual output rather than from intent.
+- [ ] R3 — Define the mode registry: how a mode is named, where it is registered, how `report` and `daily` both resolve one, and what happens on an unknown mode name.
+- [ ] R4 — State the contract between a mode and the artifact: which derived variables a mode requires, and how a mode fails when the artifact predates them or the source lacks the primitive.
+- [ ] R5 — Confirm the existing default behavior survives — `report` with no `--mode` renders what it renders today, and `assertArtifactVersion` staleness banners still fire.
+- [ ] R6 — Assess whether the markdown and human renderers stay separate functions or collapse into the mode registry, since three near-identical renderers is the shape this ticket could accidentally create.
 
 ### Acceptance Criteria
 

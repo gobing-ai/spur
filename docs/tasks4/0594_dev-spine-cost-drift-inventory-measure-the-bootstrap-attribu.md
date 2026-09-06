@@ -86,13 +86,13 @@ This rides along with R3 because it reads the same files — it is not a separat
 Applying any fix. This is measurement and inventory only — the fix path graduates into a feature.
 ### Requirements
 
-- R1 — Produce a cost-attribution table for each `/sp:dev-*` entry point: what loads, in what order, how many tokens, and whether the load is unconditional or on demand. Measured from `spur history analyze` over real sessions and `.spur/context/token-ledger.jsonl` — not estimated from file sizes.
-- R2 — Determine empirically what breaks the prompt prefix cache between invocations, testing each candidate (varying SessionStart hook output, dynamic system-reminder injection, `Skill()` ordering, cold subprocess agents) and reporting which are real causes and which are noise.
-- R3 — Produce a drift table for `spur feature`, `spur agent`, and `spur workflow` only: CLI capability no plugin surface uses; `plugins/sp` prose that restates or contradicts live CLI behavior; workflow YAML that hand-rolls a CLI verb. Cite `path:line` on both sides. `spur task` is excluded (feature F92).
-- R4 — Include the charting-discovered `sp:wayfinder` tagging discrepancy (`--section tags` vs `--field tags`) in the drift table and search for siblings of that class.
-- R5 — Emit a ranked fix path with S/M/L sizing and the expected cost delta per item, plus a recommendation (not a decision) on map open question 2 — whether `plugins/sp` prose should relocate into the CLI's `--help`/`--json`.
-- R6 — Read closed features I2 and I3 first and report the **delta**: which of their reconciliation findings re-drifted after they closed, and why the fix did not hold. Re-drift rate is a first-class result, not a footnote.
-- R7 — Size how much of the 3,410 lines across the 11 `config/workflows/*.yaml` files is duplicated between `task-pipeline`, `idea-pipeline`, and `planning-pipeline`, and whether the engine already supports a shared-fragment mechanism or one would have to be invented.
+- [ ] R1 — Produce a cost-attribution table for each `/sp:dev-*` entry point: what loads, in what order, how many tokens, and whether the load is unconditional or on demand. Measured from `spur history analyze` over real sessions and `.spur/context/token-ledger.jsonl` — not estimated from file sizes.
+- [ ] R2 — Determine empirically what breaks the prompt prefix cache between invocations, testing each candidate (varying SessionStart hook output, dynamic system-reminder injection, `Skill()` ordering, cold subprocess agents) and reporting which are real causes and which are noise.
+- [ ] R3 — Produce a drift table for `spur feature`, `spur agent`, and `spur workflow` only: CLI capability no plugin surface uses; `plugins/sp` prose that restates or contradicts live CLI behavior; workflow YAML that hand-rolls a CLI verb. Cite `path:line` on both sides. `spur task` is excluded (feature F92).
+- [ ] R4 — Include the charting-discovered `sp:wayfinder` tagging discrepancy (`--section tags` vs `--field tags`) in the drift table and search for siblings of that class.
+- [ ] R5 — Emit a ranked fix path with S/M/L sizing and the expected cost delta per item, plus a recommendation (not a decision) on map open question 2 — whether `plugins/sp` prose should relocate into the CLI's `--help`/`--json`.
+- [ ] R6 — Read closed features I2 and I3 first and report the **delta**: which of their reconciliation findings re-drifted after they closed, and why the fix did not hold. Re-drift rate is a first-class result, not a footnote.
+- [ ] R7 — Size how much of the 3,410 lines across the 11 `config/workflows/*.yaml` files is duplicated between `task-pipeline`, `idea-pipeline`, and `planning-pipeline`, and whether the engine already supports a shared-fragment mechanism or one would have to be invented.
 
 ### Acceptance Criteria
 

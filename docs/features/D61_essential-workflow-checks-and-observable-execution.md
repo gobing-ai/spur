@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D61"
 name: "Essential workflow checks and observable execution"
-status: backlog
+status: active
 priority: P1
 tags: []
 created_at: "2026-09-05T05:08:34.650Z"
-updated_at: "2026-09-05T15:40:37.968Z"
+updated_at: "2026-09-06T00:49:08.268Z"
 ---
 
 # D61: Essential workflow checks and observable execution
@@ -158,9 +158,11 @@ Feature: Essential workflow checks and observable execution
 | 0770 | Upgrade lifecycle and wrapup workflows with truthful outcomes | todo |
 | 0771 | Upgrade example, history and PR-review workflow behavior | todo |
 | 0772 | Complete the final task-pipeline and packaged workflow rollout | todo |
-| 0773 | Audit and migrate config/corpus-baseline.json | todo |
+| 0773 | Audit and migrate config/corpus-baseline.json | wip |
 | 0774 | Migrate CLI/fallback accepted callers and dependent fixtures | todo |
 | 0775 | Delete corpus/composition baselines and snapshot tests | todo |
+| 0776 | Fix D61 pipeline execution blockers: stale executor doc and 0765 L4 preflight evidence | todo |
+| 0777 | D61 batch execution findings register — consolidated fixes for pipeline, env leak, evidence, and watcher reliability | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -188,3 +190,4 @@ Planning handoff: eleven task readiness checks PASS (0765 done; 0766–0775 todo
 Next command: `/sp:dev-runall --feature D61 --auto` (the decomposition resolves the previous batch halt at 0766; the new chain drives 0773 → 0774 → 0775 first, then 0767/0768 in parallel, then 0769/0770/0771, then 0772 last).
 
 ## History
+- 2026-09-06T00:49:08.268Z backlog → active (system)

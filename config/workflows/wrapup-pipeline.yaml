@@ -64,22 +64,17 @@ vars:
   __runId: ""
   mode: ""
   stepTimeoutMs: "1800000"
-  # Corpus-aware quality gate for the feature-transition hop (R1, task 0625).
-  # The per-task gate (`spur-check`) deliberately excludes corpus-check — the
-  # only
-  # sweep that observes feature-level findings — so a transition that arms one
-  # would go green. This gate is therefore the CORPUS SWEEP ALONE (~29 s), not
-  # `spur-check-new`: every task in the feature already paid a full `spur-check`
-  # in its own pipeline, and the states that run before this hop (`doc-sync`,
-  # `metrics-record`) write only markdown and task sections, which Biome skips
-  # (`ignoreUnknown: true`). Re-running the ~105 s per-task gate here
-  # re-verifies
-  # unchanged code and measures nothing new. Soft by design: the gate reports
+  # Feature-level quality gate for the feature-transition hop (R1, task 0625;
+  # re-anchored by task 0775). The corpus sweep this hop previously ran was
+  # retired with its snapshot, so the gate is the full `spur-check` (~105 s):
+  # the only remaining repo-wide gate, and the states that run before this hop
+  # (`doc-sync`, `metrics-record`) write only markdown and task sections, which
+  # Biome skips (`ignoreUnknown: true`). Soft by design: the gate reports
   # PASS/FAIL and lets the operator decide; it never hard-fails the wrap-up
   # shell.
   # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (same surface as
   # task-pipeline's qualityGateCmd). Never interpolate untrusted input into it.
-  featureGateCmd: "bun run corpus-check"
+  featureGateCmd: "bun run spur-check"
   __hitlAnswer: ""
 
 states:
@@ -217,11 +212,12 @@ states:
       # path (`spur init` does not scaffold `plugins/sp/`), so seeded projects
       # fall
       # back to the plain `spur feature sync` verb.
-      # R1 (0625): a feature transition that changed state may have armed a
-      # feature-level finding the per-task fast gate (spur-check) never sees.
-      # Run the corpus-aware gate after an applied sync OR a non-zero exit that
-      # may follow a partial multi-hop transition, then report PASS/FAIL. Soft
-      # by design: the operator decides, and wrap-up never hard-fails here.
+      # R1 (0625): a feature transition that changed state may have left
+      # cross-task fallout the per-task fast gates never see. Run the
+      # feature-level gate (featureGateCmd — `spur-check` since 0775) after an
+      # applied sync OR a non-zero exit that may follow a partial multi-hop
+      # transition, then report PASS/FAIL. Soft by design: the operator
+      # decides, and wrap-up never hard-fails here.
       # NOTE: do not add
       # `#` comments INSIDE the folded shell string — YAML `>-` folds them onto
       # the following statement line and comments it out.
@@ -243,14 +239,14 @@ states:
             printf '%s\n' "$SYNC_OUTPUT";
             APPLIED=$(printf '%s' "$SYNC_OUTPUT" | jq -r '.applied // false' 2>/dev/null || echo false);
             if [ "$APPLIED" = "true" ] || [ "$SYNC_RC" -ne 0 ]; then
-              echo "feature-transition: sync applied or failed after a possible partial transition for $feature — running corpus-aware gate: $featureGateCmd";
+              echo "feature-transition: sync applied or failed after a possible partial transition for $feature — running feature gate: $featureGateCmd";
               if sh -c "$featureGateCmd"; then
-                echo "feature-transition: corpus-aware gate PASS for feature $feature";
+                echo "feature-transition: feature gate PASS for feature $feature";
               else
-                echo "feature-transition: corpus-aware gate FAIL for feature $feature — inspect findings before reporting the transition complete" >&2;
+                echo "feature-transition: feature gate FAIL for feature $feature — inspect findings before reporting the transition complete" >&2;
               fi;
             else
-              echo "feature-transition: sync did not apply a transition (rc=$SYNC_RC, applied=$APPLIED) — corpus-aware gate skipped";
+              echo "feature-transition: sync did not apply a transition (rc=$SYNC_RC, applied=$APPLIED) — feature gate skipped";
             fi;
             exit 0
 

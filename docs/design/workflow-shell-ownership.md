@@ -17,7 +17,7 @@ of five options under ADR-051:
 | (b) application service | monorepo-only capability in `packages/app` | idea handoff (monorepo half) |
 | (c) least-privilege built-in action kind | engine-run capability, portable wherever the `spur` CLI runs | idea-pipeline `start` doctor probe (landed; task-pipeline precheck went doctor-free in 0723 — the built-in stays for callers that elect executors at precheck) |
 | (d) workflow-relative external extension | portable standalone script under `plugins/sp/scripts/` invoked from YAML | size precheck, feature sync, pr-reviewing |
-| (e) deliberately-stays-shell | recorded exception with a reason | `qualityGateCmd` / per-project command strings; trivial glue |
+| (e) deliberately-stays-shell | inline, with a `#` reason comment beside the action (0775: the recorded-exception snapshot retired) | `qualityGateCmd` / per-project command strings; trivial glue |
 
 ## Inventory (measured on this tree, 2026-08-20)
 

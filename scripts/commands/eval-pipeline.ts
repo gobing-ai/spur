@@ -22,6 +22,10 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parse } from 'yaml';
+// Deep relative import (0775): the root node_modules has no @gobing-ai/spur-app workspace
+// link for scripts/commands, so the §1.1 cross-workspace alias rule cannot resolve here.
+import { extractResolvedWorkflowFacts } from '../../packages/app/src/workflow/composition-baseline';
 
 const REPO_ROOT = new URL('../../', import.meta.url).pathname;
 const FIXTURE_DIR = join(REPO_ROOT, 'tests/fixtures/pipeline-eval');
@@ -87,9 +91,9 @@ export interface EvalReport {
     variance: { wallClockMs: Record<string, number> } | null;
     promotionBarProposal: string;
     /**
-     * Additive (0607 R1): per pipeline path → model-query count from the frozen
-     * `modelQueries` list in `config/workflow-composition-baseline.json` (the SSOT,
-     * itself two-sided checked). Absent for consumers that never knew it.
+     * Additive (0607 R1; SSOT moved to live definitions by 0775): per pipeline path →
+     * model-query count extracted from the workflow's own definition states. Absent
+     * for consumers that never knew it.
      */
     modelQueries?: Record<string, number>;
     /**
@@ -100,32 +104,29 @@ export interface EvalReport {
     breakdown?: Record<string, { modelHops: number; deterministicActions: number; gateStates: number }>;
 }
 
-/** Per-workflow model-query + action facts read from the composition baseline. */
-interface BaselineWorkflowFacts {
+/** Per-workflow model-query + action facts extracted from a workflow definition. */
+interface WorkflowFacts {
     modelQueries: string[];
     actions: string[];
 }
 
 /**
- * Load the frozen model-query SSOT from `config/workflow-composition-baseline.json`
- * (task 0607 R1: "reuse the modelQueries list already frozen per workflow … as the
- * query-count source of truth"). A pipeline is matched by its definition path's
- * basename minus the `.yaml` suffix, exactly how the baseline's `definition` field
- * is keyed. Missing baseline / unknown pipeline → empty facts (measurement still
- * proceeds; the count is reported as 0 for the un-baselined case, never guessed).
+ * Load the model-query facts from the workflow definitions themselves (0775: the SSOT
+ * is the live YAML — `extractResolvedWorkflowFacts` — guarded by
+ * `composition-baseline.test.ts`; the snapshot JSON was deleted). A pipeline is matched
+ * by its definition path's basename minus the `.yaml` suffix, matching the file name.
+ * Missing dir / unknown pipeline → empty facts (measurement still proceeds; the count
+ * is reported as 0 for the unknown case, never guessed).
  */
-export async function loadBaselineFacts(baselinePath: string): Promise<Record<string, BaselineWorkflowFacts>> {
+export async function loadWorkflowFacts(workflowsDir: string): Promise<Record<string, WorkflowFacts>> {
     try {
-        const content = await readFile(baselinePath, 'utf-8');
-        const parsed = JSON.parse(content) as {
-            workflows?: Record<string, { modelQueries?: string[]; actions?: Record<string, unknown> }>;
-        };
-        const out: Record<string, BaselineWorkflowFacts> = {};
-        for (const [name, entry] of Object.entries(parsed.workflows ?? {})) {
-            out[name] = {
-                modelQueries: entry.modelQueries ?? [],
-                actions: Object.keys(entry.actions ?? {}),
-            };
+        const out: Record<string, WorkflowFacts> = {};
+        for (const entry of await readdir(workflowsDir)) {
+            const m = /^(.+)\.ya?ml$/.exec(entry);
+            if (!m) continue;
+            const def = parse(await readFile(join(workflowsDir, entry), 'utf-8'));
+            const facts = extractResolvedWorkflowFacts(def);
+            out[m[1]] = { modelQueries: facts.modelQueries, actions: Object.keys(facts.actions) };
         }
         return out;
     } catch {
@@ -133,8 +134,8 @@ export async function loadBaselineFacts(baselinePath: string): Promise<Record<st
     }
 }
 
-/** Map a pipeline definition path to its baseline key (basename minus `.yaml`). */
-export function baselineKeyForPipeline(pipelinePath: string): string {
+/** Map a pipeline definition path to its workflow key (basename minus `.yaml`). */
+export function workflowKeyForPipeline(pipelinePath: string): string {
     return (
         pipelinePath
             .split('/')
@@ -144,16 +145,16 @@ export function baselineKeyForPipeline(pipelinePath: string): string {
 }
 
 /**
- * Per-pipeline structural breakdown (0607 R4): model hops = the baseline `modelQueries`
- * list length; deterministic actions = every other recorded action; gate/recheck states
+ * Per-pipeline structural breakdown (0607 R4): model hops = the definition's model-query
+ * state count; deterministic actions = every other recorded action; gate/recheck states
  * = actions whose key names a gate/recheck/approve/test state. Reported as a guide for
  * the measured breakdown, never as a timing claim.
  */
 export function describeBreakdown(
-    facts: Record<string, BaselineWorkflowFacts>,
+    facts: Record<string, WorkflowFacts>,
     pipelinePath: string,
 ): { modelHops: number; deterministicActions: number; gateStates: number } {
-    const entry = facts[baselineKeyForPipeline(pipelinePath)];
+    const entry = facts[workflowKeyForPipeline(pipelinePath)];
     if (!entry) return { modelHops: 0, deterministicActions: 0, gateStates: 0 };
     const gateStates = entry.actions.filter((key) => /(^|:)(test|recheck|approve|gate)/i.test(key)).length;
     return {
@@ -625,7 +626,7 @@ export async function evalPipeline(argv: string[]): Promise<number> {
     process.env[NESTING_ENV] = '1';
     const args = parseArgs(argv);
     const label = args.label ?? 'run';
-    const baselineFacts = await loadBaselineFacts(join(REPO_ROOT, 'config/workflow-composition-baseline.json'));
+    const workflowFacts = await loadWorkflowFacts(join(REPO_ROOT, 'config/workflows'));
     const records: EvalRecord[] = [];
     for (let r = 0; r < args.runs; r++) {
         for (const pipeline of args.pipelines) {
@@ -635,9 +636,9 @@ export async function evalPipeline(argv: string[]): Promise<number> {
     const byPipeline: EvalRecord[][] = args.pipelines.map((p) => records.filter((r) => r.pipeline === p));
     // 0607 R1/R4: per-pipeline model-query count (baseline SSOT) and structural breakdown.
     const modelQueries = Object.fromEntries(
-        args.pipelines.map((p) => [p, baselineFacts[baselineKeyForPipeline(p)]?.modelQueries.length ?? 0]),
+        args.pipelines.map((p) => [p, workflowFacts[workflowKeyForPipeline(p)]?.modelQueries.length ?? 0]),
     );
-    const breakdown = Object.fromEntries(args.pipelines.map((p) => [p, describeBreakdown(baselineFacts, p)]));
+    const breakdown = Object.fromEntries(args.pipelines.map((p) => [p, describeBreakdown(workflowFacts, p)]));
     const first = byPipeline[0] ?? [];
     const variance: { wallClockMs: Record<string, number> } | null =
         args.runs > 1 && first.length > 0

@@ -73,5 +73,5 @@ rules:
             # Synchronous template & workflow resolvers:
             - "apps/cli/src/commands/task.ts" # sync loadTemplateContent/Bodies callbacks
             - "apps/cli/src/workflow/make-lifecycle-adapter.ts" # sync resolveWorkflowPath lookup
-            - "packages/app/src/services/workflow-service.ts" # sync workflow-composition-baseline.json lookup (walk-up) for the validate composition advisory (task 0614); sync read inside the synchronous validate path
+            - "packages/app/src/services/workflow-service.ts" # composition advisory source (0775: facts extracted from the live definition inside the synchronous validate path; the baseline snapshot sync read was retired)
             - "apps/cli/src/release-ops.ts" # sync manifest/workspace reads + Bun.write rewrites inside the git release flow (task 0617); mirrors task.ts sync-template exemption

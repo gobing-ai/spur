@@ -63,14 +63,14 @@ has not improved anything.
 
 ### Requirements
 
-- R1 — Specify the rewritten flow against the CLI contract the preceding tickets settled: which `spur history` invocations it makes, in what order, and what it does with the output.
-- R2 — Draw the command / skill / CLI split explicitly, naming what shrinks in the thin command wrapper, what shrinks or disappears in the 424-line skill and its session-formats reference, and why the survivor is the right owner of what remains.
-- R3 — Resolve, with the operator, whether the command still writes a task file or becomes report-first with task creation optional, and record the ruling rather than assuming it.
-- R4 — Show the rewrite reproduces the capability that prompted this map by walking the omp sample through the proposed flow and naming which step produces each of its sections.
-- R5 — Emit the implementation-ready task files that are this map's destination, covering the import, analyze, report and command work the map settled, each passing `spur task check --json` with zero errors.
-- R6 — State the sequencing and dependencies between those task files so the downstream batch runs in a correct order rather than being re-derived later.
-- R7 — Argue the inversion of the skill's written stance that history ETL is not a substitute for raw tool-loop evidence, stating what is gained, what is lost, and under which conditions raw JSONL parsing remains the fallback.
-- R8 — Carry forward the `session-formats.md` ownership verdict from the coverage matrix and specify the edit, and note the pre-existing `--template` default contradiction without fixing it inline.
+- [ ] R1 — Specify the rewritten flow against the CLI contract the preceding tickets settled: which `spur history` invocations it makes, in what order, and what it does with the output.
+- [ ] R2 — Draw the command / skill / CLI split explicitly, naming what shrinks in the thin command wrapper, what shrinks or disappears in the 424-line skill and its session-formats reference, and why the survivor is the right owner of what remains.
+- [ ] R3 — Resolve, with the operator, whether the command still writes a task file or becomes report-first with task creation optional, and record the ruling rather than assuming it.
+- [ ] R4 — Show the rewrite reproduces the capability that prompted this map by walking the omp sample through the proposed flow and naming which step produces each of its sections.
+- [ ] R5 — Emit the implementation-ready task files that are this map's destination, covering the import, analyze, report and command work the map settled, each passing `spur task check --json` with zero errors.
+- [ ] R6 — State the sequencing and dependencies between those task files so the downstream batch runs in a correct order rather than being re-derived later.
+- [ ] R7 — Argue the inversion of the skill's written stance that history ETL is not a substitute for raw tool-loop evidence, stating what is gained, what is lost, and under which conditions raw JSONL parsing remains the fallback.
+- [ ] R8 — Carry forward the `session-formats.md` ownership verdict from the coverage matrix and specify the edit, and note the pre-existing `--template` default contradiction without fixing it inline.
 
 ### Acceptance Criteria
 

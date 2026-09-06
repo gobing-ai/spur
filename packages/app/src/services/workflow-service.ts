@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { AGENT_ROLE_NAMES, type SpurConfig } from '@gobing-ai/spur-config';
@@ -50,7 +50,7 @@ import {
     isTerminalCheckpointStatus,
     parseCheckpointMetadata,
 } from '../workflow/checkpoint-contract';
-import { computeDefinitionDigest, type WorkflowCompositionBaseline } from '../workflow/composition-baseline';
+import { computeDefinitionDigest } from '../workflow/composition-baseline';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import type { WorkflowSteeringController } from '../workflow/steering';
 import {
@@ -205,7 +205,6 @@ export type WorkflowValidateResult =
 /** Warn-only composition advisory for a validated workflow (0614). */
 export interface CompositionAdvisory {
     findings: CompositionFinding[];
-    suppressed: number;
 }
 
 /** One advisory finding under the frozen composition measures. */
@@ -1615,15 +1614,13 @@ export function collectUndeclaredShellVarViolations(def: WorkflowDef): string[] 
 
 /**
  * Warn-only composition advisory walk (0614). Measures shell actions and
- * non-slash agent.run prompts against the frozen ADR-069 thresholds and
- * suppresses adjudicated findings via action-level `disposition` entries in
- * `config/workflow-composition-baseline.json`. Guards are excluded wholesale
- * (bulk exception, `docs/design/workflow-shell-ownership.md`). Never affects
- * the validate exit status.
+ * non-slash agent.run prompts against the frozen ADR-069 thresholds. Guards
+ * are excluded wholesale (bulk exception, `docs/design/workflow-shell-ownership.md`).
+ * Never affects the validate exit status.
  */
 function collectCompositionAdvisory(def: WorkflowDef, workflowFile: string): CompositionAdvisory {
     const findings: CompositionFinding[] = [];
-    let suppressed = 0;
+    const workflowName = basename(workflowFile, '.yaml');
 
     /** Frozen measure (ADR-069 amendment): shell lines = non-blank, non-comment
      *  units after splitting `options.command` on `\n` and `;`. */
@@ -1639,16 +1636,6 @@ function collectCompositionAdvisory(def: WorkflowDef, workflowFile: string): Com
         return 'high';
     };
 
-    const baseline = loadCompositionBaselineFor(workflowFile);
-    const workflowName = basename(workflowFile, '.yaml');
-
-    const adjudicated = (actionKey: string): boolean => {
-        if (!baseline) return false;
-        const entry = baseline.workflows[workflowName];
-        if (!entry) return false;
-        const action = entry.actions[actionKey];
-        return action?.disposition !== undefined;
-    };
     const visitAction = (stateId: string, action: ActionDef, idx: number, phase: 'onEnter' | 'onExit'): void => {
         const actionKey = `${stateId}:${phase}:${idx}`;
         if (action.kind === 'shell') {
@@ -1656,33 +1643,25 @@ function collectCompositionAdvisory(def: WorkflowDef, workflowFile: string): Com
             if (typeof cmd !== 'string' || cmd.length === 0) return;
             const measured = shellLines(cmd);
             if (measured < 6) return;
-            if (adjudicated(actionKey)) {
-                suppressed += 1;
-                return;
-            }
             findings.push({
                 workflow: workflowName,
                 state: stateId,
                 actionKey,
                 measure: { kind: 'shell-lines', measured, threshold: 6 },
-                recommendation: `shell action at ${actionKey} measures ${measured} lines (>5 frozen threshold, ADR-069) — extract to a script or record a disposition in config/workflow-composition-baseline.json`,
+                recommendation: `shell action at ${actionKey} measures ${measured} lines (>5 frozen threshold, ADR-069) — extract to a script under scripts/ or plugins/sp/scripts`,
             });
         } else if (action.kind === 'agent.run') {
             const input = action.options?.input;
             if (typeof input !== 'string' || input.length === 0) return;
             if (input.trimStart().startsWith('/')) return; // slash-pinned steps are fine
-            if (adjudicated(actionKey)) {
-                suppressed += 1;
-            } else {
-                const severity = agentRunSeverity(input);
-                findings.push({
-                    workflow: workflowName,
-                    state: stateId,
-                    actionKey,
-                    measure: { kind: 'agent-run-chars', measured: input.length, severity },
-                    recommendation: `agent.run prompt at ${actionKey} is ${input.length} chars, not slash-pinned (severity ${severity}) — pin to a slash command or a script with a bounded prompt`,
-                });
-            }
+            const severity = agentRunSeverity(input);
+            findings.push({
+                workflow: workflowName,
+                state: stateId,
+                actionKey,
+                measure: { kind: 'agent-run-chars', measured: input.length, severity },
+                recommendation: `agent.run prompt at ${actionKey} is ${input.length} chars, not slash-pinned (severity ${severity}) — pin to a slash command or a script with a bounded prompt`,
+            });
         }
     };
 
@@ -1699,28 +1678,7 @@ function collectCompositionAdvisory(def: WorkflowDef, workflowFile: string): Com
         }
     }
 
-    return { findings, suppressed };
-}
-
-/**
- * Resolve `config/workflow-composition-baseline.json` for a workflow file by
- * walking up from the file's directory to the repo root; absent baseline
- * reports all findings with zero suppressed.
- */
-function loadCompositionBaselineFor(workflowFile: string): WorkflowCompositionBaseline | undefined {
-    let dir = dirname(resolve(workflowFile));
-    for (let i = 0; i < 10; i++) {
-        const candidate = join(dir, 'config/workflow-composition-baseline.json');
-        if (existsSync(candidate)) {
-            try {
-                return JSON.parse(readFileSync(candidate, 'utf8')) as WorkflowCompositionBaseline;
-            } catch {
-                return undefined;
-            }
-        }
-        dir = dirname(dir);
-    }
-    return undefined;
+    return { findings };
 }
 
 async function fileExists(path: string): Promise<boolean> {

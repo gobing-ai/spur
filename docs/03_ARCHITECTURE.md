@@ -635,10 +635,11 @@ linked task edges
 
 The per-task quality gate deliberately remains the fast `spur-check` chain. The wrap-up
 `feature-transition` action reads the sync result and runs trusted project command `featureGateCmd`
-(default `bun run corpus-check`) when either `applied` is true or sync exits non-zero (a
+(default `bun run spur-check` — the full repo gate; 0775 retired the corpus sweep this hop
+previously ran) when either `applied` is true or sync exits non-zero (a
 conservative signal that an earlier hop may already have landed). The shell remains advisory: it
-emits an explicit corpus-gate PASS or FAIL and exits 0 so the operator owns the recovery decision;
-a complete or partial feature transition cannot leave the corpus gate unobserved.
+emits an explicit feature-gate PASS or FAIL and exits 0 so the operator owns the recovery decision;
+a complete or partial feature transition cannot leave the feature gate unobserved.
 
 Content checks close the remaining projection gaps at read time. `TaskCheckService` flags the
 record-generated hollow Testing row and derives subject tokens from a bare Solution change-map
@@ -999,14 +1000,15 @@ The agent-role transition ships tracked compatibility: a compatibility path carr
 comment marker `@transition-shim(<id>)`, registered in `config/transition-shims.json` with id /
 owning WBS / file / what it keeps working / removal condition. The gate
 `plugins/sp/scripts/transition-shim-check.ts` reconciles markers against the manifest
-**two-sided**, mirroring `packages/app/src/services/corpus-check.ts` semantics: a marker with no
+**two-sided**: a marker with no
 manifest entry fails as a **new unregistered shim** (id + file named); a manifest entry whose
 marker no longer appears fails as a **stale entry**; an incomplete entry fails naming the missing
 field. It scans the source roots `apps, packages, plugins, config, scripts, tooling`, skipping
 build output, `vendors`, and `tests`/`test` directories (a fixture mentioning a marker id is test
 data, not a shim) and `docs/` (prose examples do not trip the gate). Node-builtin only so it ships
 to arbitrary projects; `--manifest` / `--roots` overridable. Wired into the fast `spur-check`
-chain; `spur-check-new` composes that chain and then adds `corpus-check` (§12.5). Exit 0 when every
+chain; `spur-check-new` now composes the identical chain (0775 retired the corpus sweep it used to
+add; §12.5). Exit 0 when every
 entry is present and every marker registered; 1 on any violation.
 
 **Invariants (enforceable)**
@@ -1350,8 +1352,8 @@ Baseline files are classified by effect, not filename:
 
 | Class | Current artifact | Gate effect | Lifecycle |
 | --- | --- | --- | --- |
-| Gate waiver | `config/corpus-baseline.json` | matching current findings pass | temporary debt; migrate before the next acceptance wave |
-| Reference contract | `config/workflow-composition-baseline.json` | drift from reviewed workflow facts fails | durable while the reviewed contract exists |
+| Gate waiver | ~~`config/corpus-baseline.json`~~ | — | **retired (task 0775)** — findings fail the gate directly; no snapshot to waive into |
+| Reference contract | ~~`config/workflow-composition-baseline.json`~~ | — | **retired (task 0775)** — composition facts read from the live definitions (`extractResolvedWorkflowFacts`) |
 | Regression budget | `config/pipeline-budgets.json` | measured regression beyond a numeric ceiling fails | durable; `null` means unenforced measurement debt, not an exemption |
 | Transition manifest | `config/transition-shims.json` | undeclared and stale shims both fail | temporary by construction; complete only when empty (ADR-058) |
 

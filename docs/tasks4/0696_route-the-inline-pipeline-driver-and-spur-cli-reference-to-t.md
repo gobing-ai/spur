@@ -35,7 +35,7 @@ markers, not reading the file.
 
 ### Requirements
 
-R1. **Layer 1 comes from the CLI.** Rewrite `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`
+- [ ] R1. **Layer 1 comes from the CLI.** Rewrite `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`
 § Run setup step 4 so layer 1 is obtained from
 `spur workflow show <pipeline-yaml> --format todo --json` and read out of its `steps[]` array
 (ids in declaration order, with the `initial` / `terminal` / `failure` / `pause` / `loopBack` /
@@ -43,12 +43,12 @@ R1. **Layer 1 comes from the CLI.** Rewrite `plugins/sp/skills/spur-dev/referenc
 source-of-truth bullet names the CLI projection for layer 1 and the step-1 YAML parse for layer 2,
 and its prohibition covers hand-**deriving** the state list, not only hand-copying it.
 
-R2. **Nothing else in the reference changes.** Layer 2 (the active state's `onEnter` actions), the
+- [ ] R2. **Nothing else in the reference changes.** Layer 2 (the active state's `onEnter` actions), the
 stage-boundary refresh cadence, and Run-setup steps 1–3 and 5 are left as they are. The rewritten
 step introduces no new state list, ordering rule, or marker vocabulary — it names only the command
 and field names 0695 froze, so the two documents cannot drift.
 
-R3. **No second hand-derivation instruction survives.** Sweep the shipped plugin tree
+- [ ] R3. **No second hand-derivation instruction survives.** Sweep the shipped plugin tree
 (`plugins/sp/**`) for any other instruction to enumerate, copy, or infer a workflow's state list by
 reading YAML. Update each in the same commit, or record in this task's Solution why it is out of
 scope (for example, a surface that needs action bodies the todo projection does not carry).

@@ -14,8 +14,8 @@ feature_id: D9
 This follow-up was created from 0751 review finding #2, then consolidated into 0760 R4 before separate implementation. It is intentionally cancelled so the identical assertion repair has one owner and one proof record.
 ### Requirements
 
-- R1. `packages/app/tests/workflow/proof-input-fingerprint.test.ts:241-244`: the first R1 regression assertion `expect(createGitAlternateTree(...)).rejects.toBeInstanceOf(...)` is never awaited — add `await` (sibling tests use the awaited `.catch(e => e)` pattern). Without it, bun:test may settle before the matcher runs, so a regression back to the `''` sentinel could pass vacuously.
-- R2. The test still fails against pre-0751 code after the fix (failure path stays exercised).
+- [ ] R1. `packages/app/tests/workflow/proof-input-fingerprint.test.ts:241-244`: the first R1 regression assertion `expect(createGitAlternateTree(...)).rejects.toBeInstanceOf(...)` is never awaited — add `await` (sibling tests use the awaited `.catch(e => e)` pattern). Without it, bun:test may settle before the matcher runs, so a regression back to the `''` sentinel could pass vacuously.
+- [ ] R2. The test still fails against pre-0751 code after the fix (failure path stays exercised).
 
 ### Acceptance Criteria
 - N/A — 0760 R4 owns the non-vacuous rejection assertion and its negative probe; 0761 has no independent delivery branch.

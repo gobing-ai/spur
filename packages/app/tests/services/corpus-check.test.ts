@@ -17,254 +17,17 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import {
-    key,
-    loadAcceptedFindings,
-    resolveFogRange,
-    runCorpusCheck,
-    sectionLabels,
-    ungraduatedFog,
-} from '../../src/services/corpus-check';
+import { key, resolveFogRange, sectionLabels, ungraduatedFog } from '../../src/services/corpus-check';
 
 const FOG = /^###\s+Not yet specified\b/;
 const OUT_OF_SCOPE = /^###\s+Out of scope\b/;
 const REPO = join(import.meta.dir, '..', '..', '..', '..');
-
-function corpusFixture(): string {
-    const root = mkdtempSync(join(tmpdir(), 'spur-corpus-check-'));
-    mkdirSync(join(root, 'config'), { recursive: true });
-    mkdirSync(join(root, 'docs', 'tasks'), { recursive: true });
-    writeFileSync(join(root, 'config', 'corpus-baseline.json'), JSON.stringify({ entries: [] }));
-    return root;
-}
-
-function writeBaseline(root: string, entries: unknown[]): void {
-    writeFileSync(join(root, 'config', 'corpus-baseline.json'), JSON.stringify({ entries }));
-}
 
 /**
  * A schema-valid `todo` task without `feature_id` — the shape that emits only
  * warning-severity findings (L4.missing-feature-id) so the ratchet tests can
  * exercise the warning half of the reconciliation without error noise.
  */
-function validTaskMd(wbs = '0001'): string {
-    return [
-        '---',
-        'template: standard',
-        'schema_version: 1',
-        `name: "Fixture ${wbs}"`,
-        'description: "fixture"',
-        'status: todo',
-        'type: task',
-        'profile: standard',
-        'parent_wbs: null',
-        'priority: P3',
-        'tags: []',
-        'dependencies: []',
-        'created_at: "2026-08-10T00:00:00.000Z"',
-        'updated_at: "2026-08-10T00:00:00.000Z"',
-        '---',
-        '',
-        `## ${wbs}. Fixture ${wbs}`,
-        '',
-        '### Background',
-        'fixture',
-        '',
-        '### Acceptance Criteria',
-        'Acceptance criteria fixture.',
-        '',
-        '### Design',
-        'Design fixture.',
-        '',
-        '### Plan',
-        '- [x] done fixture item',
-        '',
-    ].join('\n');
-}
-
-describe('runCorpusCheck', () => {
-    /** Unique-identity baseline entries from the observed findings (identity = kind:id:code:severity). */
-    function uniqueBaseline(first: Awaited<ReturnType<typeof runCorpusCheck>>): unknown[] {
-        const seen = new Set<string>();
-        return [...first.newErrors, ...first.newWarnings]
-            .filter((f) => {
-                const k = `${f.kind}:${f.id}:${f.code}:${f.severity}`;
-                if (seen.has(k)) return false;
-                seen.add(k);
-                return true;
-            })
-            .map((f) => ({ ...f, message: undefined }));
-    }
-
-    test('reconciles a baselined finding and preserves the result contract', async () => {
-        const root = corpusFixture();
-        write(root, 'docs/tasks/0001_broken.md', 'not task markdown\n');
-
-        const first = await runCorpusCheck(root);
-        const finding = first.newErrors[0];
-        expect(finding).toBeDefined();
-        if (finding === undefined) throw new Error('expected malformed task finding');
-        const errorEntries = uniqueBaseline(first).filter((e) => (e as { severity: string }).severity === 'error');
-        const warningEntries = uniqueBaseline(first).filter((e) => (e as { severity: string }).severity === 'warning');
-
-        writeBaseline(root, uniqueBaseline(first));
-        expect(await runCorpusCheck(root)).toEqual({
-            observed: first.observed,
-            baselined: uniqueBaseline(first).length,
-            newErrors: [],
-            newWarnings: [],
-            bySeverity: {
-                error: {
-                    observed: first.bySeverity.error.observed,
-                    baselined: errorEntries.length,
-                    newCount: 0,
-                },
-                warning: {
-                    observed: first.bySeverity.warning.observed,
-                    baselined: warningEntries.length,
-                    newCount: 0,
-                },
-            },
-            duplicateKeys: [],
-            ok: true,
-        });
-    });
-
-    test('a duplicated baseline key fails the gate — extras over-cover and hide a partial reduction', async () => {
-        const root = corpusFixture();
-        write(root, 'docs/tasks/0001_broken.md', 'not task markdown\n');
-
-        const first = await runCorpusCheck(root);
-        const entries = uniqueBaseline(first);
-        const duplicated = entries[0];
-        expect(duplicated).toBeDefined();
-        if (duplicated === undefined) throw new Error('expected at least one baseline entry');
-
-        // Emit the SAME key twice — exactly what per-finding (rather than per-key)
-        // baseline generation produces. Reconciliation is key-addressed, so the second
-        // entry can never match independently.
-        writeBaseline(root, [...entries, duplicated]);
-
-        const result = await runCorpusCheck(root);
-        expect(result.duplicateKeys).toHaveLength(1);
-        expect(result.duplicateKeys[0]?.count).toBe(2);
-        // No new findings — the gate must still fail, on the duplicate alone.
-        expect(result.newErrors).toEqual([]);
-        expect(result.newWarnings).toEqual([]);
-        expect(result.ok).toBe(false);
-    });
-
-    test('sweeps the active task folder only; archived folders are read-only history (ADR-092)', async () => {
-        const root = corpusFixture();
-        // docs/tasks is active; docs/tasks2 is configured but inactive (archived).
-        // ADR-062 §1 swept every configured folder and the same commit minted 1,127
-        // baseline entries to absorb the result. Measured 2026-08-28: 71.4% of observed
-        // findings came from archived folders whose tasks are 99% done/cancelled, and
-        // 99.24% of all observations were suppressed. ADR-092 narrows the check loop to
-        // the active folder; the archived corpora stay resolvable but unswept.
-        write(
-            root,
-            '.spur/config.yaml',
-            [
-                'tasks:',
-                '  active: docs/tasks',
-                '  folders:',
-                '    docs/tasks:',
-                '      baseCounter: 0',
-                '    docs/tasks2:',
-                '      baseCounter: 100',
-                '',
-            ].join('\n'),
-        );
-        write(root, 'docs/tasks2/0101_broken.md', 'not task markdown\n');
-        write(root, 'docs/tasks/0002_broken.md', 'not task markdown\n');
-
-        const result = await runCorpusCheck(root);
-        // Active folder is swept.
-        expect(result.newErrors.some((e) => e.id === '0002')).toBe(true);
-        // Archived folder is not.
-        expect(result.newErrors.some((e) => e.id === '0101')).toBe(false);
-        expect(result.ok).toBe(false);
-    });
-
-    test('fails on new findings; a vanished baseline entry no longer fails', async () => {
-        const newRoot = corpusFixture();
-        write(newRoot, 'docs/tasks/0001_broken.md', 'not task markdown\n');
-        const newResult = await runCorpusCheck(newRoot);
-        expect(newResult.ok).toBe(false);
-        expect(newResult.newErrors.length).toBeGreaterThan(0);
-
-        const vanishedRoot = corpusFixture();
-        const vanished = {
-            kind: 'task',
-            id: '0999',
-            code: 'L1.fixture',
-            severity: 'error',
-        };
-        writeBaseline(vanishedRoot, [vanished]);
-        expect(await runCorpusCheck(vanishedRoot)).toMatchObject({
-            observed: 0,
-            baselined: 1,
-            newErrors: [],
-            newWarnings: [],
-            ok: true,
-        });
-    });
-
-    test('fails hard when the in-process sweep configuration is unparseable', async () => {
-        const root = corpusFixture();
-        write(root, '.spur/tasks/section-matrix.yaml', 'variants: [\n');
-        await expect(runCorpusCheck(root)).rejects.toThrow('could not parse task section matrix');
-    });
-
-    test('ratchets a warning outside the baseline as a new warning failure', async () => {
-        const root = corpusFixture();
-        write(root, 'docs/tasks/0001_warn.md', validTaskMd());
-        const result = await runCorpusCheck(root);
-        expect(result.newWarnings.length).toBeGreaterThan(0);
-        expect(result.newWarnings.every((w) => w.severity === 'warning')).toBe(true);
-        expect(result.newErrors).toEqual([]);
-        expect(result.ok).toBe(false);
-        expect(result.bySeverity.warning.newCount).toBe(result.newWarnings.length);
-    });
-
-    test('severity is part of the acceptance contract: a baselined warning does not cover an error', async () => {
-        const root = corpusFixture();
-        write(root, 'docs/tasks/0001_warn.md', validTaskMd());
-        // Baseline an error for the same key that actually reproduces as a warning
-        const observed = await runCorpusCheck(root);
-        const [warning] = observed.newWarnings;
-        expect(warning).toBeDefined();
-        if (warning === undefined) throw new Error('expected a warning finding');
-        writeBaseline(root, [
-            {
-                kind: warning.kind,
-                id: warning.id,
-                code: warning.code,
-                severity: 'error',
-            },
-        ]);
-        const mismatched = await runCorpusCheck(root);
-        // Warning still reads as new (error entry does not cover it)
-        expect(mismatched.newWarnings.map((w) => w.code)).toContain(warning.code);
-        // The error entry does not reproduce as an error — under the snapshot gate
-        // that direction is silent by design (ADR-090); only the new-warning half fires.
-        expect(mismatched.ok).toBe(false);
-    });
-
-    test('resolves the project baseline from a nested cwd', async () => {
-        const root = corpusFixture();
-        write(root, 'docs/tasks/0001_broken.md', 'not task markdown\n');
-        const first = await runCorpusCheck(root);
-        // Baseline every unique observed identity (errors AND warnings) so the nested run
-        // asserts pure path resolution, not this task's ratchet behaviour.
-        writeBaseline(root, uniqueBaseline(first));
-        const nested = join(root, 'packages', 'nested');
-        mkdirSync(nested, { recursive: true });
-
-        expect((await runCorpusCheck(nested)).ok).toBe(true);
-    });
-});
 
 function inspectFog(cwd: string, opts: { since?: string; head?: string } = {}) {
     return ungraduatedFog(cwd, { ...opts, report: () => {} });
@@ -521,15 +284,14 @@ describe('ungraduatedFog decision table', () => {
         expect(await inspectFog(root)).toHaveLength(1);
     });
 
-    test('a violation is baselineable through the shared identity, not a second mechanism', async () => {
+    test('a violation carries the shared finding identity, not a second mechanism', async () => {
         const root = scaffold(
             (r) => write(r, MAP_FILE, mapMd(FOG_3)),
             (r) => write(r, MAP_FILE, mapMd(FOG_2)),
         );
         const [error] = await inspectFog(root);
-        // `corpusCheck` diffs observed errors against `config/corpus-baseline.json` on exactly this
-        // triple, and that two-sided diff (unexpected fails, stale fails) is pre-existing shared
-        // code. What is new here is that a fog finding carries an identity it can match on.
+        // The finding carries the shared identity triple so any consumer (transition
+        // gates, audits, tooling) can key on it without a second mechanism.
         const baselineEntry = { kind: 'feature', id: 'Z1', code: 'corpus.ungraduated-fog' };
         expect(key(error as { kind: string; id: string; code: string })).toBe(key(baselineEntry));
     });
@@ -659,43 +421,4 @@ describe('replay of the E1 graduation', () => {
         },
         30000,
     );
-});
-
-describe('loadAcceptedFindings', () => {
-    test('missing baseline file degrades to an empty map (no exemptions)', async () => {
-        const root = mkdtempSync(join(tmpdir(), 'spur-baseline-missing-'));
-        const accepted = await loadAcceptedFindings(root);
-        expect(accepted.size).toBe(0);
-    });
-
-    test('malformed json degrades to an empty map', async () => {
-        const root = corpusFixture();
-        writeFileSync(join(root, 'config', 'corpus-baseline.json'), '{ not valid json');
-        const accepted = await loadAcceptedFindings(root);
-        expect(accepted.size).toBe(0);
-    });
-
-    test('loads baseline entries and maps key to baselineSeverity', async () => {
-        const root = corpusFixture();
-        writeBaseline(root, [
-            { kind: 'task', id: '0001', code: 'L1.schema-validation' },
-            {
-                kind: 'task',
-                id: '0002',
-                code: 'L4.anchor-subject-mismatch',
-                severity: 'warning',
-            },
-            {
-                kind: 'feature',
-                id: 'F1',
-                code: 'L3.scope-delineation',
-                severity: 'error',
-            },
-        ]);
-        const accepted = await loadAcceptedFindings(root);
-        expect(accepted.size).toBe(3);
-        expect(accepted.get('task:0001:L1.schema-validation')).toBe('error'); // default legacy to error
-        expect(accepted.get('task:0002:L4.anchor-subject-mismatch')).toBe('warning');
-        expect(accepted.get('feature:F1:L3.scope-delineation')).toBe('error');
-    });
 });

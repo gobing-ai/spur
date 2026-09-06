@@ -14,8 +14,8 @@ feature_id: D9
 This follow-up was created from 0751 traceability review, then consolidated into 0760 R5 before separate implementation. It is intentionally cancelled so the exact D9 scenario labels have one owner and one proof record.
 ### Requirements
 
-- R1. Feature D9 acceptance criteria (docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md) gain gherkin scenarios covering proofBinding enforcement (0751 R4) and no-new-bypass (0751 R6), so future verify-stage answer files can cite exact AC labels instead of a companion table (0751 verify deviation).
-- R2. Scenario titles match the verify-stage AC-label matching contract (exact label = scenario title text).
+- [ ] R1. Feature D9 acceptance criteria (docs/features/D9_workflow-seam-stabilization-and-proportional-gate-rollout.md) gain gherkin scenarios covering proofBinding enforcement (0751 R4) and no-new-bypass (0751 R6), so future verify-stage answer files can cite exact AC labels instead of a companion table (0751 verify deviation).
+- [ ] R2. Scenario titles match the verify-stage AC-label matching contract (exact label = scenario title text).
 
 ### Acceptance Criteria
 - N/A — 0760 R5 owns the exact D9 scenario labels and their feature-check proof; 0762 has no independent delivery branch.

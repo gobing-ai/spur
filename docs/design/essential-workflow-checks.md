@@ -32,11 +32,13 @@ Never certify post-record completion using a pre-record task check.
 
 ## Corpus-check contract
 
-Keep existing `bun run corpus-check` and `task check --corpus --json` as explicit diagnostics.
-Retain the documented scope: active task folder, feature checks, cross-folder identity/reference
-resolution and existing `--since` fog comparison. Do not expand archived prose scanning. Report
-effective scope/skipped comparisons; failed required integrity checks cannot produce a clean result.
-Fog prose heuristics are advisory unless a concrete broken required reference is established.
+0775 retired `bun run corpus-check`, `task check --corpus --json`, and the accepted-debt snapshot;
+corpus checks live on as the per-task gate plus the unit-tested corpus-gate behavior inside
+`spur-check` (`packages/app/tests/services/corpus-check.test.ts`). The retired scope — active task
+folder sweep, feature checks, cross-folder identity/reference resolution, `--since` fog comparison —
+is not reinstated; archived prose scanning stays unexpanded. Failed required integrity checks
+cannot produce a clean result. Fog prose heuristics are advisory unless a concrete broken required
+reference is established.
 
 - Exit 0: no essential error; warnings may exist.
 - Exit 1: essential integrity error or failed required check; preserve CLI usage-error behavior.

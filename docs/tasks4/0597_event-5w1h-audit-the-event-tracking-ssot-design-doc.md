@@ -68,12 +68,12 @@ Changing any emitter or Board component. This ticket produces the audit and the 
 graduates into its own feature. Anything under `spur task` (feature F92, concurrent agent).
 ### Requirements
 
-- R1 — Produce a per-event 5W1H matrix over every cataloged system event, marking who / what / when / where / why / how as present, partial, or absent, with the emitter's `path:line` for each row.
-- R2 — Separate the gap list into payload gaps (the emitter never captured it) and presentation gaps (the payload holds it but `metadataFields` or `renderer` does not surface it), and rank them — the two causes need different fixes.
-- R3 — Document the specific `task.updated` / `feature.updated` failure: the event fires without a field-level diff, so the Board cannot say what changed. Specify the diff convention that closes it.
-- R4 — Document the `workflow.*` legibility failure: steps render as raw ids. Specify the naming convention that makes which-workflow-which-step readable without a uuid lookup.
-- R5 — Write `docs/design/event-tracking.md` as the SSOT: the 5W1H contract, the `*.updated` diff convention, the `workflow.*` naming convention, tier/policy rules, and the emitter checklist. Reconcile with `docs/design/actionable-observability-context.md` and `docs/04_DESIGN.md §7.9` rather than forking them.
-- R6 — Recommend an enforcement mechanism — generate the catalog from the SSOT, or check it against the SSOT via a two-sided gate — so the doc cannot silently drift.
+- [ ] R1 — Produce a per-event 5W1H matrix over every cataloged system event, marking who / what / when / where / why / how as present, partial, or absent, with the emitter's `path:line` for each row.
+- [ ] R2 — Separate the gap list into payload gaps (the emitter never captured it) and presentation gaps (the payload holds it but `metadataFields` or `renderer` does not surface it), and rank them — the two causes need different fixes.
+- [ ] R3 — Document the specific `task.updated` / `feature.updated` failure: the event fires without a field-level diff, so the Board cannot say what changed. Specify the diff convention that closes it.
+- [ ] R4 — Document the `workflow.*` legibility failure: steps render as raw ids. Specify the naming convention that makes which-workflow-which-step readable without a uuid lookup.
+- [ ] R5 — Write `docs/design/event-tracking.md` as the SSOT: the 5W1H contract, the `*.updated` diff convention, the `workflow.*` naming convention, tier/policy rules, and the emitter checklist. Reconcile with `docs/design/actionable-observability-context.md` and `docs/04_DESIGN.md §7.9` rather than forking them.
+- [ ] R6 — Recommend an enforcement mechanism — generate the catalog from the SSOT, or check it against the SSOT via a two-sided gate — so the doc cannot silently drift.
 
 ### Acceptance Criteria
 

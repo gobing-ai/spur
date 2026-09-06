@@ -94,7 +94,7 @@ describe('bundled-config', () => {
         expect(files.some((f) => f.startsWith('workflows/'))).toBe(false);
         // Placeholders with no reader at all.
         expect(files.some((f) => f.startsWith('plugins/'))).toBe(false);
-        // The five monorepo dev baselines are read from repo-root config/, not .spur/.
+        // The three monorepo dev baselines are read from repo-root config/, not .spur/.
         expect(files.filter((f) => !f.includes('/') && f.endsWith('.json'))).toEqual([]);
         // The shipped global default seeds ~/.config/spur/, never a project.
         expect(files).not.toContain('config.global.yaml');

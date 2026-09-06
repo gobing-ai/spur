@@ -50,12 +50,12 @@ first and capture the baseline, so the new pipeline has a target to hit rather t
 Authoring `task-pipeline2.yaml` — that is [0596].
 ### Requirements
 
-- R1 — Build a deterministic fixture task set that exercises the full pipeline path (precheck → implement → test → review → verify → done), extending `sp:dogfood-testing` rather than standing up a parallel runner.
-- R2 — Build a comparator that, given a fixture set and a workflow YAML, emits a per-task record of verify verdict, artifacts written, gate outcomes, token cost, and wall-clock, diffable across two workflow files.
-- R3 — Run the comparator against `config/workflows/task-pipeline.yaml` and record the result as the reference baseline.
-- R4 — Document where fixture tasks live and how they are cleaned up, so a comparator run never pollutes the real task corpus.
-- R5 — Propose a concrete, measurable promotion bar for replacing `task-pipeline.yaml` with `task-pipeline2.yaml`, and surface it as the answer candidate for map open question 1 without ratifying it.
-- R6 — Surface any required `spur` CLI flag that does not yet exist to the operator as an ADR-051 consent item instead of adding it.
+- [ ] R1 — Build a deterministic fixture task set that exercises the full pipeline path (precheck → implement → test → review → verify → done), extending `sp:dogfood-testing` rather than standing up a parallel runner.
+- [ ] R2 — Build a comparator that, given a fixture set and a workflow YAML, emits a per-task record of verify verdict, artifacts written, gate outcomes, token cost, and wall-clock, diffable across two workflow files.
+- [ ] R3 — Run the comparator against `config/workflows/task-pipeline.yaml` and record the result as the reference baseline.
+- [ ] R4 — Document where fixture tasks live and how they are cleaned up, so a comparator run never pollutes the real task corpus.
+- [ ] R5 — Propose a concrete, measurable promotion bar for replacing `task-pipeline.yaml` with `task-pipeline2.yaml`, and surface it as the answer candidate for map open question 1 without ratifying it.
+- [ ] R6 — Surface any required `spur` CLI flag that does not yet exist to the operator as an ADR-051 consent item instead of adding it.
 
 ### Acceptance Criteria
 

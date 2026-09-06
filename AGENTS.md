@@ -156,12 +156,13 @@ bun run lint
 bun run test
 bun run test-cf
 bun run build
-bun run corpus-check     # once at commit prep when task/feature corpus changed
+bun run spur-check       # fast comprehensive gate (0775: the corpus sweep is retired)
 git status --short
 ```
 
-`spur-check-new` is `spur-check` plus the corpus sweep. Iterate with targeted tests and
-`spur task check <wbs>`; run the corpus sweep once, not per edit. Never use `--no-verify` or silent
+`spur-check-new` is now the identical chain (0775 retired the corpus sweep it used to add).
+Iterate with targeted tests and `spur task check <wbs>`; run the full gate once, not per edit.
+Never use `--no-verify` or silent
 suppressions to force green.
 
 Targeted-test loop — run from **inside the workspace**, never the repo root (task 0699 R4):

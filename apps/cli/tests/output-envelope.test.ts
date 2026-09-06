@@ -492,8 +492,8 @@ const FAILURE_CASES: Array<{
     { label: 'rule trace --last 0', argv: ['rule', 'trace', '--last', '0'], exit: 1, code: 'VALIDATION_FAILED' },
     { label: 'task check --as bogus', argv: ['task', 'check', '--as', 'bogus'], exit: 2, code: 'VALIDATION_FAILED' },
     {
-        label: 'task check --fix --corpus',
-        argv: ['task', 'check', '--fix', '--corpus'],
+        label: 'task check --as rejects a non-canonical status',
+        argv: ['task', 'check', '0602', '--as', 'bogus'],
         exit: 2,
         code: 'VALIDATION_FAILED',
     },

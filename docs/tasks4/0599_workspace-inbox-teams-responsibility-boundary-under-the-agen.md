@@ -54,12 +54,12 @@ counts make it the obvious hypothesis to test first.
 Writing React or moving files. Anything under `spur task` (F92, concurrent agent).
 ### Requirements
 
-- R1 — Write a one-sentence definition of what Workspace, Inbox, and Teams each *is*, such that no two overlap; if no clean sentence exists for one, report that as the finding and recommend absorption or deletion.
-- R2 — Evidence the overlap with `path:line` citations where the three modules read the same data, render the same thing, or duplicate components — starting with the `SupervisorTab` present in both `inbox/` and `teams/`.
-- R3 — State concretely what the `spur agent run` role mechanism made redundant and what it made newly necessary, including what M5's "a member is a role plus an executor" implies for the other two modules.
-- R4 — Read features M, M1, M2, M3, M4, and M5 before proposing anything, and report which questions those features already answered so this ticket does not re-decide them.
-- R5 — Emit a disposition per module (keep / merge into X / delete) with its reason and migration cost, plus the target information architecture: nav entries, tabs, and what each answers.
-- R6 — Recommend, with reasoning, whether the role mechanism warrants a first-class `role` noun on the `spur` CLI, as the input to map open question 4 — recommendation only, since adding a noun is ADR-051-gated.
+- [ ] R1 — Write a one-sentence definition of what Workspace, Inbox, and Teams each *is*, such that no two overlap; if no clean sentence exists for one, report that as the finding and recommend absorption or deletion.
+- [ ] R2 — Evidence the overlap with `path:line` citations where the three modules read the same data, render the same thing, or duplicate components — starting with the `SupervisorTab` present in both `inbox/` and `teams/`.
+- [ ] R3 — State concretely what the `spur agent run` role mechanism made redundant and what it made newly necessary, including what M5's "a member is a role plus an executor" implies for the other two modules.
+- [ ] R4 — Read features M, M1, M2, M3, M4, and M5 before proposing anything, and report which questions those features already answered so this ticket does not re-decide them.
+- [ ] R5 — Emit a disposition per module (keep / merge into X / delete) with its reason and migration cost, plus the target information architecture: nav entries, tabs, and what each answers.
+- [ ] R6 — Recommend, with reasoning, whether the role mechanism warrants a first-class `role` noun on the `spur` CLI, as the input to map open question 4 — recommendation only, since adding a noun is ADR-051-gated.
 
 ### Acceptance Criteria
 

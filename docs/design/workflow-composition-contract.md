@@ -32,74 +32,21 @@ workflow definitions remain regression fixtures or examples unless a later ADR c
 | D5-O | idea handoff onto `finalizeIdeaHandoff` | landed as monorepo writer + portable shell fallback |
 | D5-P | advisory integration review at the feature boundary | landed in `feature-dev.yaml` |
 
-**Known baseline gap (not closed here).** `checkWorkflowComposition` compares an action's
-`invocation` only when the baseline records one, and ~50 pre-existing actions across all seven
-workflows record none — so their shell bodies can be rewritten undetected. Closing this means
-recording every shell program in the manifest; it is a follow-up, not part of this migration.
+**Known baseline gap (carried forward by design).** The composition advisory is heuristic — it
+measures shell length and slash-invocation shape only, so a semantic rewrite of a shell body can
+still go undetected. Task 0775 retired the manifest that was proposed to close this; the residual
+risk is accepted and documented here.
 
-## Composition baseline
+## Composition facts (post-0775)
 
-The checked manifest is `config/workflow-composition-baseline.json`. It records resolved
-facts, not executable behavior. The first baseline must describe the live definitions truthfully:
-
-```json
-{
-    "schemaVersion": 1,
-    "proofInputs": {
-        "repository": {
-            "excludeConfiguredCorpusFolders": true
-        },
-        "taskFields": ["wbs", "name", "feature_id", "depends_on"],
-        "taskSections": ["Background", "Requirements", "Acceptance Criteria", "Design", "Plan"],
-        "featureFields": ["id", "name"],
-        "featureSections": ["Goal", "Scope", "Acceptance Criteria"]
-    },
-    "workflows": {
-        "task-pipeline": {
-            "definition": "config/workflows/task-pipeline.yaml",
-            "boundary": "task-execution",
-            "callers": ["sp:spur-dev", "sp:super-planner"],
-            "terminalStates": ["done", "failed", "cancelled"],
-            "artifacts": ["verify-answer", "verify-verdict", "testing-section", "review-section"],
-            "failurePolicy": "fail-closed",
-            "modelQueries": ["implement", "test-fix", "review", "verify"],
-            "actions": {
-                "test:onEnter:0": {
-                    "kind": "shell",
-                    "stateEffect": "write",
-                    "evidenceEffect": "write"
-                },
-                "verify:onEnter:0": {
-                    "kind": "agent.run",
-                    "invocation": "/sp:dev-verify ${vars.wbs} --auto --fix all --focus all",
-                    "stateEffect": "may-write",
-                    "evidenceEffect": "write"
-                },
-                "verify:onEnter:1": {
-                    "kind": "shell",
-                    "invocation": "spur task verdict --from-answer",
-                    "stateEffect": "read",
-                    "evidenceEffect": "write"
-                }
-            }
-        },
-        "task-pipeline2": {
-            "definition": "config/workflows/task-pipeline2.yaml",
-            "actions": {
-                "residual-sweep:onEnter:0": {
-                    "kind": "agent.run",
-                    "stateEffect": "may-write",
-                    "evidenceEffect": "none"
-                }
-            }
-        }
-    }
-}
-```
-
-The checker compares the resolved definition, not YAML text. A changed graph, caller, terminal,
-artifact owner, failure policy, model-query location, action kind, or effect classification fails
-with a field-level diff until the baseline and design are deliberately updated together.
+Task 0775 retired `config/workflow-composition-baseline.json` and the two-sided snapshot check.
+Resolved composition facts (`terminalStates`, `modelQueries`, per-action `kind`/`invocation`) are
+extracted from the live definitions by `extractResolvedWorkflowFacts`
+(`packages/app/src/workflow/composition-baseline.ts`) and guarded by unit tests
+(`composition-baseline.test.ts`, `task-pipeline-proof-chain.test.ts`). The checker-era guarantee —
+a field-level diff until design and definition are deliberately updated together — is now carried
+by those unit gates plus the advisory. The snapshot's `stateEffect`/`evidenceEffect` declarations
+and the proof-input baseline retired with the snapshot.
 
 ## Stable action identity and effects
 

@@ -170,7 +170,7 @@ transition to `done`.
 > The verify skill writes this shape automatically — operators only need it when hand-authoring
 > an answer file or debugging an UNKNOWN verdict.
 
-> **Corpus baseline discipline (`corpus-check`).** `corpus-check` sweeps every task/feature and fails on any structural finding outside `config/corpus-baseline.json`. The baseline is two-sided: an unlisted finding fails, **and** a listed entry that no longer reproduces fails. When introducing or tightening finding rules, reconcile the fallout in the same commit (constitution **T10**).
+> **Finding-rule discipline (post-0775).** The corpus snapshot gate (`corpus-check` + `config/corpus-baseline.json`) is retired. Structural findings fail the per-task gate directly, and the residual corpus-gate behavior (fog range, ungraduated severity) is pinned by unit tests (`packages/app/tests/services/corpus-check.test.ts`) inside `bun run test` / `spur-check`. When introducing or tightening finding rules, fix newly-failing tasks/features in the same commit (constitution **T10**).
 >
 > **Transition-shim discipline (`transition-shim-check`, task 0541 / ADR-058).** Wired as an early step of `spur-check` / `spur-check-new` (second, after `link-check` and before `lint`) so a shim violation fails in ~0.3 s rather than after the test run. Two-sided against `config/transition-shims.json`: an `@transition-shim(<id>)` marker with no manifest entry fails as a **new unregistered shim**, **and** a listed entry whose marker is gone from source fails as a **stale entry**. Emptying the manifest is the definition of the agent-role transition being complete. A removal condition must be objectively checkable against the repository. Shapes: `docs/04_DESIGN.md` §2.5.
 

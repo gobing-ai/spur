@@ -147,7 +147,7 @@ Invoked when a map already exists (operator provides the feature ID). A ticket i
    — no task is claimed, and it does not consume the session's one ticket.
 
 5. **Record the resolution.** Post the answer in the task body, then `spur task update <wbs> done`. Append one line to the map's **## Decisions so far**: `- [<WBS> <title>](path) — <one-line gist of the answer>`.
-6. **Graduate fog into new tickets.** Any fog the answer has made specifiable becomes fresh child tasks (create-then-wire). Clear each graduated patch from **### Not yet specified** so it lives only as its new ticket. Doing half of this — deleting the fog without creating the ticket — destroys the only record the work was ever identified, so `corpus-check` fails the branch (`corpus.ungraduated-fog`) unless the removal is matched by a new/re-parented ticket or a line in **### Out of scope**.
+6. **Graduate fog into new tickets.** Any fog the answer has made specifiable becomes fresh child tasks (create-then-wire). Clear each graduated patch from **### Not yet specified** so it lives only as its new ticket. Doing half of this — deleting the fog without creating the ticket — destroys the only record the work was ever identified; the `corpus.ungraduated-fog` sweep retired in 0775 — enforcement is review-time discipline.
 7. **Rule out mis-scoped tickets.** If the answer reveals a ticket sits beyond the destination, close it and add one line to **### Out of scope** (the gist + why it's out of scope, linking the closed ticket). A scope boundary is not a step on the route — it stays out of **## Decisions so far**.
 8. **Stop after ONE ticket.** Never resolve more than one per session.
 

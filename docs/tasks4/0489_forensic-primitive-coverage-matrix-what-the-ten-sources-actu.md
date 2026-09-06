@@ -58,12 +58,12 @@ same schema.
 
 ### Requirements
 
-- R1 — Produce a coverage matrix of the ten forensic primitives against the ten sources (pi, claude, codex, gemini, opencode, antigravity, openclaw, omp, grok, agy), each cell backed by a repo-relative `file:line` in the mapper or schema, or by a measured row count against the real database.
-- R2 — For each primitive that no source supports, state whether the blocker is the shared schema, the per-source mapper, or the upstream JSONL itself — these have different fixes and only the third is unfixable.
-- R3 — Measure, not assume, which sources populate the latency columns (`history_message.duration_ms`, `history_tool_call.started_at`/`completed_at`/`duration_ms`), reporting non-null rates per source against the current database.
-- R4 — Establish whether each source emits a todo-like signal at all, and name it where one exists, since phase detection is the primitive with no fallback in the current data.
-- R5 — Name the exact payload each unsupported primitive would need retained at import, sized in bytes or rows per session, so the operator's retention ruling has a cost attached rather than a preference.
-- R6 — State what the existing import modes already cover (`full`, `incremental`, `force-file`, `--source all`, checkpoint resume) so the downstream import spec proposes only genuine deltas and does not re-specify shipped behavior.
+- [ ] R1 — Produce a coverage matrix of the ten forensic primitives against the ten sources (pi, claude, codex, gemini, opencode, antigravity, openclaw, omp, grok, agy), each cell backed by a repo-relative `file:line` in the mapper or schema, or by a measured row count against the real database.
+- [ ] R2 — For each primitive that no source supports, state whether the blocker is the shared schema, the per-source mapper, or the upstream JSONL itself — these have different fixes and only the third is unfixable.
+- [ ] R3 — Measure, not assume, which sources populate the latency columns (`history_message.duration_ms`, `history_tool_call.started_at`/`completed_at`/`duration_ms`), reporting non-null rates per source against the current database.
+- [ ] R4 — Establish whether each source emits a todo-like signal at all, and name it where one exists, since phase detection is the primitive with no fallback in the current data.
+- [ ] R5 — Name the exact payload each unsupported primitive would need retained at import, sized in bytes or rows per session, so the operator's retention ruling has a cost attached rather than a preference.
+- [ ] R6 — State what the existing import modes already cover (`full`, `incremental`, `force-file`, `--source all`, checkpoint resume) so the downstream import spec proposes only genuine deltas and does not re-specify shipped behavior.
 
 ### Acceptance Criteria
 

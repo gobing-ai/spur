@@ -77,14 +77,8 @@ export {
     qualifySectionBody,
     resolveConfiguredTaskDirs,
 } from './services/anchor-qualifier';
-export type { BaselineEntry, CorpusCheckResult, CorpusSeverity } from './services/corpus-check';
-export {
-    baselineSeverity,
-    collectObservedFindings,
-    reconcileBaseline,
-    resolveFogRange,
-    runCorpusCheck,
-} from './services/corpus-check';
+export type { CorpusSeverity } from './services/corpus-check';
+export { resolveFogRange } from './services/corpus-check';
 export type {
     CorpusMigratorOptions,
     FileReport,
@@ -544,15 +538,9 @@ export { RunArtifactActionRunner, type RunArtifactOptions } from './workflow/act
 // Workflow built-in action runners
 export { registerSpurBuiltins, type SpurWorkflowBuiltinsOptions } from './workflow/builtins';
 export {
-    type CompositionCheckDiff,
-    type CompositionCheckResult,
     canonicalJsonStringify,
-    checkWorkflowComposition,
     computeDefinitionDigest,
     extractResolvedWorkflowFacts,
-    type WorkflowActionBaseline,
-    type WorkflowCompositionBaseline,
-    type WorkflowEntryBaseline,
 } from './workflow/composition-baseline';
 export {
     buildEscalationPacket,

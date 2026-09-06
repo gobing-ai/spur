@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Audit and migrate config/corpus-baseline.json"
-status: testing
+status: done
 template: feature-impl
 created_at: 2026-09-05T15:33:37.889Z
-updated_at: "2026-09-06T00:51:36.768Z"
+updated_at: "2026-09-06T00:52:04.913Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P2"]
@@ -210,3 +210,4 @@ Resume semantic: finish the second classification pass on top of `d61-0773-class
 ### History
 - 2026-09-06T00:25:25.080Z todo → wip (system)
 - 2026-09-06T00:51:36.768Z wip → testing (system)
+- 2026-09-06T00:52:04.913Z testing → done (system)

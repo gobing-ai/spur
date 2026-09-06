@@ -31,12 +31,12 @@ The three research tickets settled the design:
 
 This ticket ships the command + skill as prompt-first markdown. No TypeScript, no schema changes, no new spur verbs (map substrate decision).
 ### Requirements
-- R1 — Ship `plugins/sp/commands/dev-find-next.md` + `plugins/sp/skills/next-feature/` so the command answers *which feature*, returning a ranked frontier where each candidate carries the evidence that placed it; `/sp:dev-next` remains the surface for advancing a chosen target.
-- R2 — Every ranking signal derives from existing corpus, git, or authority-doc evidence; no feature frontmatter field, domain schema, or spur CLI verb is added; the `priority` field is not used as the ordering.
-- R3 — Unactionable features are gated, not ranked: a feature whose child tasks have unmet dependencies (or no open tasks) is excluded with the reason reported.
-- R4 — Structure-defect detection emits proposals conforming to the `docs/plans/feature-tree-restructure-map.md` schema; the command performs no `spur feature move` and routes all application through `/sp:dev-featurechange`.
-- R5 — The command is a thin wrapper forwarding `$ARGUMENTS` to the skill; the skill carries protocol + references as SSOT; `docs/04_DESIGN.md` records the surface in the same commit.
-- R6 — After this task verifies, `/sp:dev-verifyall --feature H12` reports `Shippable: PASS`; the map's `### Not yet specified` entries resolved here are struck or consciously deferred.
+- [ ] R1 — Ship `plugins/sp/commands/dev-find-next.md` + `plugins/sp/skills/next-feature/` so the command answers *which feature*, returning a ranked frontier where each candidate carries the evidence that placed it; `/sp:dev-next` remains the surface for advancing a chosen target.
+- [ ] R2 — Every ranking signal derives from existing corpus, git, or authority-doc evidence; no feature frontmatter field, domain schema, or spur CLI verb is added; the `priority` field is not used as the ordering.
+- [ ] R3 — Unactionable features are gated, not ranked: a feature whose child tasks have unmet dependencies (or no open tasks) is excluded with the reason reported.
+- [ ] R4 — Structure-defect detection emits proposals conforming to the `docs/plans/feature-tree-restructure-map.md` schema; the command performs no `spur feature move` and routes all application through `/sp:dev-featurechange`.
+- [ ] R5 — The command is a thin wrapper forwarding `$ARGUMENTS` to the skill; the skill carries protocol + references as SSOT; `docs/04_DESIGN.md` records the surface in the same commit.
+- [ ] R6 — After this task verifies, `/sp:dev-verifyall --feature H12` reports `Shippable: PASS`; the map's `### Not yet specified` entries resolved here are struck or consciously deferred.
 ### Acceptance Criteria
 ```gherkin
 Feature: 0497 ship dev-find-next

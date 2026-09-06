@@ -887,9 +887,9 @@ time. Before launching a full `spur-check-new`:
    `console.*`), spawn processes via `NodeProcessExecutor` (no `Bun.spawnSync`), get a
    `runtime-boundaries` fs-io exemption for sync reads (mirrors `task.ts`), and a non-command helper
    must not live in `apps/cli/src/commands/` (the noun scan treats every file there as a noun).
-3. **Doc/TSDoc edits shift `file:line` anchors** cited by other tasks — `corpus-check` surfaces them
-   as `L4.anchor-subject-mismatch`. Repoint the shifted citations (via `spur task update --section`)
-   in the same commit, and reconcile new/stale baseline entries before the gate run.
+3. **Doc/TSDoc edits shift `file:line` anchors** cited by other tasks — the per-task gate surfaces
+   them as `L4.anchor-subject-mismatch` (0775: the corpus sweep retired; run `spur task check <wbs>`
+   on touched tasks). Repoint the shifted citations (via `spur task update --section`)
 
 ## AC traceability
 

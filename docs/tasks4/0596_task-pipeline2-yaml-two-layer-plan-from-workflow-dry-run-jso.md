@@ -77,13 +77,13 @@ Promoting `task-pipeline2.yaml` over `task-pipeline.yaml`. Promotion needs the b
 Touching `spur task` (feature F92, concurrent agent).
 ### Requirements
 
-- R1 — Confirm empirically that `spur workflow run --dry-run --json` already yields a walkable step plan with no engine change, before designing any new mechanism.
-- R2 — Author `config/workflows/task-pipeline2.yaml` as a new file beside the live pipeline; `task-pipeline.yaml` is unmodified and both remain runnable.
-- R3 — Render a two-layer plan (pipeline stages; steps within the active stage) into the coding agent's todo list at run start, refreshed at stage boundaries, sourced from the dry-run plan.
-- R4 — Add the residual-sweep stage that runs after a PASS verdict and before commit, in both single-task and `--feature` batch forms, preserving the operator's verbatim prompts quoted in Background; state whether it is an FSM stage or a step inside verify, and why.
-- R5 — Run the new pipeline through 0595's comparator and report the result against the recorded baseline.
-- R6 — Answer whether the operator's three-session loop (strong-model plan, normal-model implement, strong-model verify, manual residual sweep) is expressible as one workflow with declared per-stage executor tiers, or is irreducibly multi-session.
-- R7 — State how the two-layer plan generalizes to the rest of the `dev-*` family: the workflow-backed entry points that can source a plan from `--dry-run --json`, and the skill-dispatch commands that have no FSM to plan from — including whether the latter is worth doing or is a scope cut.
+- [ ] R1 — Confirm empirically that `spur workflow run --dry-run --json` already yields a walkable step plan with no engine change, before designing any new mechanism.
+- [ ] R2 — Author `config/workflows/task-pipeline2.yaml` as a new file beside the live pipeline; `task-pipeline.yaml` is unmodified and both remain runnable.
+- [ ] R3 — Render a two-layer plan (pipeline stages; steps within the active stage) into the coding agent's todo list at run start, refreshed at stage boundaries, sourced from the dry-run plan.
+- [ ] R4 — Add the residual-sweep stage that runs after a PASS verdict and before commit, in both single-task and `--feature` batch forms, preserving the operator's verbatim prompts quoted in Background; state whether it is an FSM stage or a step inside verify, and why.
+- [ ] R5 — Run the new pipeline through 0595's comparator and report the result against the recorded baseline.
+- [ ] R6 — Answer whether the operator's three-session loop (strong-model plan, normal-model implement, strong-model verify, manual residual sweep) is expressible as one workflow with declared per-stage executor tiers, or is irreducibly multi-session.
+- [ ] R7 — State how the two-layer plan generalizes to the rest of the `dev-*` family: the workflow-backed entry points that can source a plan from `--dry-run --json`, and the skill-dispatch commands that have no FSM to plan from — including whether the latter is worth doing or is a scope cut.
 
 ### Acceptance Criteria
 

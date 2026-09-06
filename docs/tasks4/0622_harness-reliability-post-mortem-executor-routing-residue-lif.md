@@ -255,6 +255,41 @@ and `history report` needed an explicit path rather than resolving the latest po
 - [ ] Close source coverage: agy chunk boundaries, the two empty sources, the etl tables, run→session correlation (R7) — task 0623 R5 + task 0624 R3/R4/R5
 - [x] Add retention for `rule_eval_runs`, `queue_jobs`, the import ledger, and `.spur/backups`, with a non-manual trigger (R8)
 - [x] Fix the gate-language word boundary, reconcile `sp:issue-finding` with the live section matrix and the binary contract (R9)
+### Root Cause
+Confidence is stated per finding. HIGH = observed directly and reproducibly; MEDIUM = strong
+evidence with a live alternative explanation; LOW = fact observed, cause unverified.
+
+| ID | Finding | Conf | Evidence |
+| --- | --- | --- | --- |
+| F2 | `agent:` pin beats declared `role:`, so per-action role routing never fires | HIGH | `agent-run.ts:142-143`; all 7 shipped pipelines set `agent: ${vars.agent}` |
+| F4 | No fallback ladder on runtime executor exhaustion | HIGH (failure) / MEDIUM (mechanism) | Run `7b8116eb`: 429 → `discovery [failed]` → workflow failed in 4,475 ms. "No rung was tried" is inferred; the ladder implementation was not read |
+| F5 | `import --json` reports `toolCalls: 0` for all 10 sources | HIGH | 25,652 rows in `history_tool_call` with `imported_at` in the run window; `analyze` counts them (agy 38,661) |
+| F6 | `claude` usage counted per JSONL line, not per API response | HIGH | Lines 24/25 share `requestId req_011CeE…` and one `usage` block; `parentUuid`→`uuid` linked; content blocks `thinking` / `tool_use`. 59 collision groups; 139,323 vs 72,800 deduped |
+| F7 | Cache-hit ratio renders 7,567,843.0% | HIGH | `20,584,533 ÷ 272 × 100` reproduces it exactly; label "Input tokens (billed, cache incl.)" shows the cache-excl value |
+| F8 | All ten `history_etl_*` tables empty | HIGH (fact) / MEDIUM (meaning) | `COUNT(*)` = 0 each vs 1.65M messages; they may be intentionally retired |
+| F9 | `agy` skipped 727 records | HIGH (count) / MEDIUM (cause) | Import warning `source-degraded`; samples are chunk-file boundary parse errors. Boundary-splitting is inferred from filenames and error text |
+| F10 | `antigravity` and `openclaw` import 0 files | HIGH (fact) / LOW (cause) | `status: empty`, 0 files. Whether the roots exist was never checked |
+| F11 | `runs.status` has two terminal spellings | HIGH | `done` 150 · `completed` 2 |
+| F12 | Run→session correlation 84/942 (8.9%), zero `claude` | HIGH | `history_run_session` by source: omp 43, pi 19, codex 12, grok 10 |
+| F13 | `.spur/` 7.5 GB, no retention invoked | HIGH | `du`; `rule_eval_runs` 237,361 / 62 days; `queue_jobs` 52,336; ledger 1,978,502; every `workflow clean` match is docs/docstring/impl; `scheduler.enabled: false`; `logRetentionDays` unset |
+| F14 | Forensics blind on `claude` | HIGH | Rendered report: 74/74 unmeasured durations, LLM latency 0ms, tool exec 0ms, unattributed 69%, Per-Phase unavailable, `result_bytes` 0, model `unknown` 193/329 |
+| F15 | Full re-import re-hashes the whole ledger | MEDIUM | DB write window 23:30:04→23:33:51 is HIGH; total wall clock was estimated at ~8 min |
+| F16 | 72% pipeline failure; `task-lifecycle` 0 done in 430 runs | HIGH (counts) / MEDIUM (meaning) | Shipped pipelines only: 248 failed / 86 done. `runs.mode` has no `dry` value, so some failures may be intentional dry-run validations |
+| F18 | Inline drive invisible to the data plane | HIGH | `workflow trace` shows only the failed subprocess run; no record, log, or run-link for the successful drive |
+| F19 | `L4.gate-language` fires on "parity-gated" | HIGH | `\bGATED\b` matches after the hyphen; reproduced and worked around in task 0616 |
+| T2 | `analyze` artifact 2.7 MB; `report` needed an explicit path | HIGH | Observed running the skill's own Phase 1 recipe |
+| T3 | Token leaderboard rows render indistinguishably | HIGH | 20 rows, 0 exact duplicates in the artifact; rendered columns collapse distinct `ts` values |
+| T5 | `sp:issue-finding` contradicts the live section matrix and the source-local-binary contract | HIGH | Phase 4 names `Notes`/`References` and denies `Root Cause`; matrix `meta` variant is the exact inverse. Phase 1 `SPUR_BIN` falls back to bare `spur` |
+
+**Discarded after verification.** `spur workflow trace --json` was suspected of an unparseable shape;
+it returns `{entries,total}` and parses correctly. The failure was a wrong assumption in the analysis
+script. Recorded so it is not re-reported.
+
+**Agent-side traps hit during the analysis** — no product defect, but they cost round trips and are
+worth pinning in guidance: `rg -rn <pattern>` silently *replaces* matches (`-r` is the replace flag),
+which produced output where every "role" read "n"; piping a `--json` CLI run through `tee` masks its
+exit status, which nearly produced a false exit-code finding; and background task output files append
+`[exited with code N]` after the JSON, breaking a naive `JSON.parse`.
 ### Solution
 
 L3-evidenced by path:line below; all cited tests run green in this session (`bun run spur-check` — 6036 pass / 0 fail).
@@ -294,41 +329,6 @@ home:
 | F18 — inline-drive provenance (general case; R3 closed via the spine branch instead) | open, unowned |
 
 Importer-side items land in `~/xprojects/ts-libs/` (`@gobing-ai/ts-llm-jsonl-importer`), not this repo.
-### Root Cause
-Confidence is stated per finding. HIGH = observed directly and reproducibly; MEDIUM = strong
-evidence with a live alternative explanation; LOW = fact observed, cause unverified.
-
-| ID | Finding | Conf | Evidence |
-| --- | --- | --- | --- |
-| F2 | `agent:` pin beats declared `role:`, so per-action role routing never fires | HIGH | `agent-run.ts:142-143`; all 7 shipped pipelines set `agent: ${vars.agent}` |
-| F4 | No fallback ladder on runtime executor exhaustion | HIGH (failure) / MEDIUM (mechanism) | Run `7b8116eb`: 429 → `discovery [failed]` → workflow failed in 4,475 ms. "No rung was tried" is inferred; the ladder implementation was not read |
-| F5 | `import --json` reports `toolCalls: 0` for all 10 sources | HIGH | 25,652 rows in `history_tool_call` with `imported_at` in the run window; `analyze` counts them (agy 38,661) |
-| F6 | `claude` usage counted per JSONL line, not per API response | HIGH | Lines 24/25 share `requestId req_011CeE…` and one `usage` block; `parentUuid`→`uuid` linked; content blocks `thinking` / `tool_use`. 59 collision groups; 139,323 vs 72,800 deduped |
-| F7 | Cache-hit ratio renders 7,567,843.0% | HIGH | `20,584,533 ÷ 272 × 100` reproduces it exactly; label "Input tokens (billed, cache incl.)" shows the cache-excl value |
-| F8 | All ten `history_etl_*` tables empty | HIGH (fact) / MEDIUM (meaning) | `COUNT(*)` = 0 each vs 1.65M messages; they may be intentionally retired |
-| F9 | `agy` skipped 727 records | HIGH (count) / MEDIUM (cause) | Import warning `source-degraded`; samples are chunk-file boundary parse errors. Boundary-splitting is inferred from filenames and error text |
-| F10 | `antigravity` and `openclaw` import 0 files | HIGH (fact) / LOW (cause) | `status: empty`, 0 files. Whether the roots exist was never checked |
-| F11 | `runs.status` has two terminal spellings | HIGH | `done` 150 · `completed` 2 |
-| F12 | Run→session correlation 84/942 (8.9%), zero `claude` | HIGH | `history_run_session` by source: omp 43, pi 19, codex 12, grok 10 |
-| F13 | `.spur/` 7.5 GB, no retention invoked | HIGH | `du`; `rule_eval_runs` 237,361 / 62 days; `queue_jobs` 52,336; ledger 1,978,502; every `workflow clean` match is docs/docstring/impl; `scheduler.enabled: false`; `logRetentionDays` unset |
-| F14 | Forensics blind on `claude` | HIGH | Rendered report: 74/74 unmeasured durations, LLM latency 0ms, tool exec 0ms, unattributed 69%, Per-Phase unavailable, `result_bytes` 0, model `unknown` 193/329 |
-| F15 | Full re-import re-hashes the whole ledger | MEDIUM | DB write window 23:30:04→23:33:51 is HIGH; total wall clock was estimated at ~8 min |
-| F16 | 72% pipeline failure; `task-lifecycle` 0 done in 430 runs | HIGH (counts) / MEDIUM (meaning) | Shipped pipelines only: 248 failed / 86 done. `runs.mode` has no `dry` value, so some failures may be intentional dry-run validations |
-| F18 | Inline drive invisible to the data plane | HIGH | `workflow trace` shows only the failed subprocess run; no record, log, or run-link for the successful drive |
-| F19 | `L4.gate-language` fires on "parity-gated" | HIGH | `\bGATED\b` matches after the hyphen; reproduced and worked around in task 0616 |
-| T2 | `analyze` artifact 2.7 MB; `report` needed an explicit path | HIGH | Observed running the skill's own Phase 1 recipe |
-| T3 | Token leaderboard rows render indistinguishably | HIGH | 20 rows, 0 exact duplicates in the artifact; rendered columns collapse distinct `ts` values |
-| T5 | `sp:issue-finding` contradicts the live section matrix and the source-local-binary contract | HIGH | Phase 4 names `Notes`/`References` and denies `Root Cause`; matrix `meta` variant is the exact inverse. Phase 1 `SPUR_BIN` falls back to bare `spur` |
-
-**Discarded after verification.** `spur workflow trace --json` was suspected of an unparseable shape;
-it returns `{entries,total}` and parses correctly. The failure was a wrong assumption in the analysis
-script. Recorded so it is not re-reported.
-
-**Agent-side traps hit during the analysis** — no product defect, but they cost round trips and are
-worth pinning in guidance: `rg -rn <pattern>` silently *replaces* matches (`-r` is the replace flag),
-which produced output where every "role" read "n"; piping a `--json` CLI run through `tee` masks its
-exit status, which nearly produced a false exit-code finding; and background task output files append
-`[exited with code N]` after the JSON, breaking a naive `JSON.parse`.
 ### Testing
 
 

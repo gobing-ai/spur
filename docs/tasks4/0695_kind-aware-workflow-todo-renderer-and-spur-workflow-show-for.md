@@ -46,19 +46,19 @@ idea-evaluation gate, which also rejected a boolean `--todo` flag and a separate
 
 ### Requirements
 
-R1. **Shared step builder.** Add `buildWorkflowSteps(def: WorkflowDef): WorkflowStep[]` to
+- [ ] R1. **Shared step builder.** Add `buildWorkflowSteps(def: WorkflowDef): WorkflowStep[]` to
 `packages/app/src/workflow/step-reporter.ts`, returning one entry per declared state (state-machine)
 or node (transition-flow) in **declaration order**, each carrying its id and its `initial`,
 `terminal`, `failure`, `pause`, `loopBack`, `conditional` markers plus the transition-flow
 `nodeType`. Rewrite `renderRunPlan` to derive its sequence from this builder; its emitted string
 stays byte-identical (`plan: a → b → c`).
 
-R2. **Todo renderer.** Add `renderWorkflowTodo(def: WorkflowDef): string` to the same module,
+- [ ] R2. **Todo renderer.** Add `renderWorkflowTodo(def: WorkflowDef): string` to the same module,
 rendering the builder output as a markdown checklist — one `- [ ] <id>` line per step with its
 markers appended. For `kind: state-machine` the header block states that the list is a declared
 inventory, not a predicted execution path. No topological reordering is applied for either kind.
 
-R3. **`--format` on `spur workflow show`.** Add `--format <mermaid|todo>` defaulting to `mermaid`.
+- [ ] R3. **`--format` on `spur workflow show`.** Add `--format <mermaid|todo>` defaulting to `mermaid`.
 With the option omitted, stdout is byte-identical to the pre-change output. In the **same commit**:
 document the resulting `show` option surface in `docs/04_DESIGN.md` (constitution T3), add both
 options to the `show` row in `plugins/sp/skills/spur-cli/references/workflows.md` (the
@@ -66,12 +66,12 @@ options to the `show` row in `plugins/sp/skills/spur-cli/references/workflows.md
 `workflow show --help`, so omitting it fails `bun run test` with `on-CLI-not-documented`), and
 record the ADR-051 public-surface consent granted at the D7 idea gate.
 
-R4. **`--json` on `spur workflow show`.** Emit `{ name, kind, format, steps }` for
+- [ ] R4. **`--json` on `spur workflow show`.** Emit `{ name, kind, format, steps }` for
 `--format todo` (steps being the `buildWorkflowSteps` output) and `{ name, kind, format, diagram }`
 for `mermaid`, where `diagram` is the fenced block the human path prints. `--json` with no
 `--format` returns the mermaid envelope.
 
-R5. **Predictable failure.** An unrecognised `--format` value exits non-zero with stderr naming both
+- [ ] R5. **Predictable failure.** An unrecognised `--format` value exits non-zero with stderr naming both
 accepted values. A path that does not resolve, or a file that fails schema validation, exits 1 with
 the message the mermaid path emits today — identically for every format.
 

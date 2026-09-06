@@ -8,11 +8,11 @@
  * so it is a grep target and a review signal, and a manifest entry in
  * `config/transition-shims.json` records who owns it and when it can be removed.
  *
- * The gate is deliberately two-sided, matching `config/corpus-baseline.json`
- * semantics (corpus-check.ts): a marker with no manifest entry FAILS, and a
- * manifest entry whose marker no longer appears in source FAILS. Without the
- * second half the manifest would rot into a permanent suppression list — the
- * exact invisible-debt pattern this gate exists to end.
+ * The gate is deliberately two-sided: a marker with no manifest entry
+ * FAILS, and a manifest entry whose marker no longer appears in source
+ * FAILS. Without the second half the manifest would rot into a permanent
+ * suppression list — the exact invisible-debt pattern this gate exists to
+ * end.
  *
  * Marker convention (docs/04_DESIGN.md §2.5):
  *   // @transition-shim(<id>) — <one line on what this keeps working>
@@ -134,7 +134,7 @@ function scanMarkers(cwd: string, roots: string[]): Map<string, Set<string>> {
     return found;
 }
 
-/** Load the manifest; a missing file degrades to no entries (corpus-check parity). */
+/** Load the manifest; a missing file degrades to no entries (fail-open). */
 function loadManifest(path: string): { entries: ManifestEntry[]; raw: string | null } {
     if (!existsSync(path)) return { entries: [], raw: null };
     const raw = readFileSync(path, 'utf8');

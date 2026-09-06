@@ -13,9 +13,7 @@ import {
     type MigrationReport,
     PlanningWriteService,
     readVerdictArtifact,
-    resolveFogRange,
     resolvePlanningFolders,
-    runCorpusCheck,
     type SectionMatrix,
     SectionMutationError,
     TASK_LIFECYCLE_PROFILE,
@@ -1143,8 +1141,6 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             'Compatibility alias (F92 R2): historically the done-gate label; kept so installed plugins/workflows that call it keep working. No longer meaningful on its own — target-state selection (`--as`) supplies the real done semantics.',
         )
         .option(...SHARED_OPTIONS.asTaskF92)
-        .option('--corpus', 'Sweep every task and feature against config/corpus-baseline.json')
-        .option('--since <ref>', 'Scope the corpus fog check to changes since a git ref (requires --corpus)')
         .option(
             '--fix',
             "repair structural findings in place (heading presence/level/order; adds missing R-item checkbox markers — flipping verified boxes is task record's job, not --fix)",
@@ -1173,113 +1169,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 context.setExitCode(2);
                 return;
             }
-            if (asStatus !== undefined && options.corpus === true) {
-                writeJsonError(
-                    context.output,
-                    options,
-                    '--as <status> is a single-task target projection and cannot be combined with --corpus',
-                    'VALIDATION_FAILED',
-                );
-                context.setExitCode(2);
-                return;
-            }
-            if (options.fix === true && options.corpus === true) {
-                writeJsonError(
-                    context.output,
-                    options,
-                    '--fix repairs files in place and cannot be combined with --corpus',
-                    'VALIDATION_FAILED',
-                );
-                context.setExitCode(2);
-                return;
-            }
             try {
-                if (options.corpus === true) {
-                    if (wbs !== undefined) {
-                        writeJsonError(
-                            context.output,
-                            options,
-                            '--corpus validates the whole corpus and cannot be combined with a WBS',
-                            'VALIDATION_FAILED',
-                        );
-                        context.setExitCode(2);
-                        return;
-                    }
-                    if (String(options.since ?? '').startsWith('-')) {
-                        // Commander eats a following flag as a missing option's value
-                        // (`--since --json` → since='--json'); reject flag-like values
-                        // instead of silently running an unscoped sweep (R3 parity with
-                        // the deleted spur-dev throw at scripts/spur-dev.ts:102). A
-                        // truly absent value already throws "option '--since <ref>'
-                        // argument missing" via exitOverride.
-                        writeJsonError(
-                            context.output,
-                            options,
-                            '--since requires a git ref value (e.g. --since HEAD~1)',
-                            'VALIDATION_FAILED',
-                        );
-                        context.setExitCode(2);
-                        return;
-                    }
-                    if (options.since !== undefined) {
-                        // Restore the spur-dev-era visible SKIPPED diagnostic (P3): an
-                        // explicitly supplied but unresolvable ref skips the fog half of
-                        // the sweep; the runCorpusCheck result cannot carry the reason
-                        // (frozen JSON shape), so the transport surfaces it on stderr.
-                        const fogRange = await resolveFogRange(context.cwd, options.since);
-                        if ('skip' in fogRange) {
-                            context.output.error(
-                                `corpus-check: fog check SKIPPED (${fogRange.skip}) — range ${fogRange.spec} was not evaluated.`,
-                            );
-                        }
-                    }
-                    const result = await runCorpusCheck(context.cwd, options.since);
-                    if (json) {
-                        context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
-                    } else {
-                        const e = result.bySeverity.error;
-                        const w = result.bySeverity.warning;
-                        context.output.write(
-                            `corpus-check: swept tasks + features — errors ${e.observed} observed, ` +
-                                `${e.baselined} baselined, ${e.newCount} new; ` +
-                                `warnings ${w.observed} observed, ${w.baselined} baselined, ` +
-                                `${w.newCount} new.`,
-                        );
-                        for (const error of result.newErrors) {
-                            context.output.error(
-                                `  NEW    [error]   ${error.kind} ${error.id}: ${error.code} — ${error.message}`,
-                            );
-                        }
-                        for (const warning of result.newWarnings) {
-                            context.output.error(
-                                `  NEW    [warning] ${warning.kind} ${warning.id}: ${warning.code} — ${warning.message}`,
-                            );
-                        }
-
-                        for (const dup of result.duplicateKeys) {
-                            context.output.error(
-                                `  DUP    ${dup.key} — ${dup.count} entries for one key; reconciliation is key-addressed, ` +
-                                    'so the extras over-cover and hide a partial reduction. Keep one entry per key.',
-                            );
-                        }
-                        context.output.write(
-                            result.ok
-                                ? 'corpus-check OK — no corpus errors or warnings outside the accepted baseline.'
-                                : 'corpus-check FAILED — fix the new findings above, or accept them by regenerating the snapshot: bun run scripts/commands/regen-corpus-baseline.ts.',
-                        );
-                    }
-                    if (!result.ok) context.setExitCode(1);
-                    // The corpus sweep is terminal — fall through and the unscoped
-                    // per-task scan appends its own results JSON after the corpus
-                    // payload, corrupting the --json contract (task 0691 R2 fix).
-                    return;
-                }
-                if (options.since !== undefined) {
-                    writeJsonError(context.output, options, '--since requires --corpus', 'VALIDATION_FAILED');
-                    context.setExitCode(2);
-                    return;
-                }
-
                 const svc = await makeCheckService(context);
                 const planningFolders = await resolvePlanningFolders(context.fs);
                 const activeFolder = planningFolders.foldersConfig.active_folder;

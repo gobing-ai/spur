@@ -9,8 +9,8 @@ import { WorkflowAppService } from '../../src/services/workflow-service';
 
 // 0614: warn-only composition advisory on `workflow validate` (ADR-069 amendment).
 // Drives the private advisory through WorkflowAppService.validate(); temp dirs sit
-// under /var/folders (no config/workflow-composition-baseline.json ancestor within
-// 10 hops), so suppression paths are exercised via an explicit baseline drop.
+// under /var/folders, away from any repo config, so no ancestor state can alter
+// the measured findings.
 
 function makeCtx(cwd: string) {
     let db: ReturnType<typeof createMigratedDb> | undefined;
@@ -52,7 +52,6 @@ describe('workflow validate composition advisory', () => {
             expect(r5.valid).toBe(true);
             if (!r5.valid) return;
             expect(r5.composition?.findings).toHaveLength(0);
-            expect(r5.composition?.suppressed).toBe(0);
         } finally {
             await rm(dir, { recursive: true, force: true });
         }
@@ -125,7 +124,7 @@ describe('workflow validate composition advisory', () => {
         }
     });
 
-    test('recorded disposition suppresses the shell finding into `suppressed`', async () => {
+    test('baseline disposition files are ignored — the finding stays visible (0775 R1)', async () => {
         const dir = await mkdtemp(join(tmpdir(), 'spur-comp-adv-'));
         try {
             await writeFile(join(dir, 'w.yaml'), sm(shellAction(6)));
@@ -149,8 +148,10 @@ describe('workflow validate composition advisory', () => {
             const r = await new WorkflowAppService(makeCtx(dir)).validate(join(dir, 'w.yaml'));
             expect(r.valid).toBe(true);
             if (!r.valid) return;
-            expect(r.composition?.findings).toHaveLength(0);
-            expect(r.composition?.suppressed).toBe(1);
+            // The retired suppression layer must not silently resurrect: a stale
+            // baseline file cannot hide the advisory.
+            expect(r.composition?.findings).toHaveLength(1);
+            expect(r.composition?.findings[0]?.actionKey).toBe('start:onEnter:0');
         } finally {
             await rm(dir, { recursive: true, force: true });
         }
@@ -185,25 +186,6 @@ describe('workflow validate composition advisory', () => {
             expect(r.valid).toBe(true); // findings present, validity unchanged — that IS the contract
             if (!r.valid) return;
             expect(r.composition?.findings).toHaveLength(1);
-        } finally {
-            await rm(dir, { recursive: true, force: true });
-        }
-    });
-
-    test('workflow absent from baseline reports findings unsuppressed even with a baseline present', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'spur-comp-adv-'));
-        try {
-            await writeFile(join(dir, 'w.yaml'), sm(shellAction(6)));
-            await mkdir(join(dir, 'config'), { recursive: true });
-            await writeFile(
-                join(dir, 'config/workflow-composition-baseline.json'),
-                JSON.stringify({ version: 1, workflows: { other: { actions: {} } } }),
-            );
-            const r = await new WorkflowAppService(makeCtx(dir)).validate(join(dir, 'w.yaml'));
-            expect(r.valid).toBe(true);
-            if (!r.valid) return;
-            expect(r.composition?.findings).toHaveLength(1);
-            expect(r.composition?.suppressed).toBe(0);
         } finally {
             await rm(dir, { recursive: true, force: true });
         }

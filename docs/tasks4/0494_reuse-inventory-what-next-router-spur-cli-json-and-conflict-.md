@@ -53,11 +53,11 @@ before they are written — which is cheaper than discovering the overlap during
 Scope note: `/sp:dev-featurechange`'s protocol and the restructure mapping-file schema belong to
 **0495**, not here. This ticket stops at what the *ranking and reporting* half composes.
 ### Requirements
-- R1 — Rule on the frontier predicate (`routing-table.md:83`, row B3): can dev-find-next reference it as the SSOT, or must it restate it? If restated, name the mechanism that keeps the two from drifting, since two disagreeing definitions of "actionable" is worse than one imperfect one.
-- R2 — Map every TABLE B feature-level row (B4–B7, `routing-table.md:84-87`) against what a "which feature next" answer would say about the same feature, and state per row whether dev-find-next defers to next-router, restates it, or genuinely differs.
-- R3 — Inventory which candidate signals from 0493 are already produced by an existing `spur` verb (`feature sync`, `feature refresh`, `feature check`, `feature list --json`, `task list --json`, `status`), with the verb and flag that yields each. Hand-derivation of anything on this list is duplicated logic.
-- R4 — Extract the reusable structure of the prompt-first command+skill pattern from `sp:conflict-finding` (SKILL.md + 4 references) and `plugins/sp/commands/dev-find-conflict.md`: which reference files are pattern, which are conflict-specific, and what the analogous reference set for `sp:next-feature` should be.
-- R5 — Produce a build-vs-reuse ledger: for each capability the prioritizer needs, one of reuse-as-is / compose / must-build, each with the file:line or verb that justifies the call.
+- [ ] R1 — Rule on the frontier predicate (`routing-table.md:83`, row B3): can dev-find-next reference it as the SSOT, or must it restate it? If restated, name the mechanism that keeps the two from drifting, since two disagreeing definitions of "actionable" is worse than one imperfect one.
+- [ ] R2 — Map every TABLE B feature-level row (B4–B7, `routing-table.md:84-87`) against what a "which feature next" answer would say about the same feature, and state per row whether dev-find-next defers to next-router, restates it, or genuinely differs.
+- [ ] R3 — Inventory which candidate signals from 0493 are already produced by an existing `spur` verb (`feature sync`, `feature refresh`, `feature check`, `feature list --json`, `task list --json`, `status`), with the verb and flag that yields each. Hand-derivation of anything on this list is duplicated logic.
+- [ ] R4 — Extract the reusable structure of the prompt-first command+skill pattern from `sp:conflict-finding` (SKILL.md + 4 references) and `plugins/sp/commands/dev-find-conflict.md`: which reference files are pattern, which are conflict-specific, and what the analogous reference set for `sp:next-feature` should be.
+- [ ] R5 — Produce a build-vs-reuse ledger: for each capability the prioritizer needs, one of reuse-as-is / compose / must-build, each with the file:line or verb that justifies the call.
 ### Acceptance Criteria
 ```gherkin
 Feature: 0494 wayfinder investigation

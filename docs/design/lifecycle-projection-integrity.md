@@ -26,7 +26,8 @@ feature lifecycle status; `sync` owns status alignment.
 
 ### `L4.testing-verdict-stub`
 
-- **Severity:** warning; ratcheted in `config/corpus-baseline.json` per ADR-062/T10.
+- **Severity:** warning (062-era ratcheting snapshot retired by task 0775 — the warning now
+  surfaces directly; ADR-062/T10 history).
 - **Trigger:** the `## Testing` body contains the record-generated table row
   `| — | — | No requirements recorded; verify verdict <token> |` (ASCII/en/em dash runs accepted).
 - **Non-trigger:** prose mentioning the phrase, or a populated requirement/evidence table.

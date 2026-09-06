@@ -231,10 +231,10 @@ agent prompts where a first-class surface would own it better?" — nothing more
   raw prompt length only sets the reported severity (<200 low / ≤1000 medium / >1000 high).
 
 **How to run it:** it is not a separate command — `spur workflow validate <file> --json` returns
-`composition: {findings[], suppressed}` on the valid path; human mode prints the advisory to stderr
-with exit 0. Actions with a recorded disposition in
-`config/workflow-composition-baseline.json` (resolved by walking up from the workflow file) are
-counted in `suppressed`, not `findings`.
+`composition: {findings[]}` on the valid path; human mode prints the advisory to stderr
+with exit 0. Findings are derived from the workflow definition itself
+(`extractResolvedWorkflowFacts`, guarded by `composition-baseline.test.ts`); 0775 retired the
+suppression snapshot, so every finding is reported — none are suppressed.
 
 **How to read it, and the fix path per defect class:**
 

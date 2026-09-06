@@ -72,14 +72,14 @@ running a real `superskill install sp --targets codex --dry-run` and inspecting 
 **Confidence that this matters: LOW until measured** — an earlier attempt to test `spur init` seeding
 was invalid (sandbox denied `mktemp`, so the probe listed this repo's own symlink).
 ### Requirements
-- R1 — Replace Bun globals with Node equivalents in the 7 shipping scripts: `Bun.argv` → `process.argv.slice(2)`, `Bun.spawn`/`Bun.spawnSync` → `node:child_process`, `Bun.file` → `node:fs`. Required by either contract, so it lands independently of the superskill release.
-- R2 — Settle whether `sp` installs to any Bun-less target, by running a real staged install and inspecting the result; record the answer with evidence before doing R3.
-- R3 — Build and commit a `.mjs` twin for each of the 7 shipping scripts via `superskill script convert sp <rel>`, and verify each twin executes under bare `node` — not merely that convert exited 0.
-- R4 — Rewrite all 16 anti-pattern call sites to `node "$(superskill script path sp <rel>)"`, including `pr-reviewing/SKILL.md:136`, whose prose currently documents running staged `.ts` under Bun as the house style.
-- R5 — Add a `build:scripts` npm script that regenerates every twin, and wire it into `build` so a stale twin cannot ship.
-- R6 — Guard `config/workflows/task-pipeline.yaml:257` the way `:528` already guards its sibling, so a seeded end-user project degrades instead of failing.
-- R7 — Add a gate that fails when a shipped surface (`plugins/sp/{commands,skills,agents}`, `README.md`) contains `bun plugins/sp/scripts/`, or when a shipping script has no twin — two-sided, in the style of `transition-shim-check`.
-- R8 — Record the contract as a new ADR in `docs/00_ADR.md`: which contract each `sp` script uses, the mandatory twin + `$(superskill script path sp <rel>)` invocation form, the forbidden repo-relative form, and the gate from R7. Cite superskill's ADR-015/ADR-022 as upstream authority rather than restating them.
+- [ ] R1 — Replace Bun globals with Node equivalents in the 7 shipping scripts: `Bun.argv` → `process.argv.slice(2)`, `Bun.spawn`/`Bun.spawnSync` → `node:child_process`, `Bun.file` → `node:fs`. Required by either contract, so it lands independently of the superskill release.
+- [ ] R2 — Settle whether `sp` installs to any Bun-less target, by running a real staged install and inspecting the result; record the answer with evidence before doing R3.
+- [ ] R3 — Build and commit a `.mjs` twin for each of the 7 shipping scripts via `superskill script convert sp <rel>`, and verify each twin executes under bare `node` — not merely that convert exited 0.
+- [ ] R4 — Rewrite all 16 anti-pattern call sites to `node "$(superskill script path sp <rel>)"`, including `pr-reviewing/SKILL.md:136`, whose prose currently documents running staged `.ts` under Bun as the house style.
+- [ ] R5 — Add a `build:scripts` npm script that regenerates every twin, and wire it into `build` so a stale twin cannot ship.
+- [ ] R6 — Guard `config/workflows/task-pipeline.yaml:257` the way `:528` already guards its sibling, so a seeded end-user project degrades instead of failing.
+- [ ] R7 — Add a gate that fails when a shipped surface (`plugins/sp/{commands,skills,agents}`, `README.md`) contains `bun plugins/sp/scripts/`, or when a shipping script has no twin — two-sided, in the style of `transition-shim-check`.
+- [ ] R8 — Record the contract as a new ADR in `docs/00_ADR.md`: which contract each `sp` script uses, the mandatory twin + `$(superskill script path sp <rel>)` invocation form, the forbidden repo-relative form, and the gate from R7. Cite superskill's ADR-015/ADR-022 as upstream authority rather than restating them.
 ### Acceptance Criteria
 ```gherkin
 Feature: plugins/sp script entrypoint contract alignment

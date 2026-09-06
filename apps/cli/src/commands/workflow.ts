@@ -365,18 +365,13 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     `workflow valid: ${result.workflow.name} (${formatWorkflowVersion(result.workflow.version)})`,
                 );
                 const c = result.composition;
-                if (c && (c.findings.length > 0 || c.suppressed > 0)) {
+                if (c && c.findings.length > 0) {
                     for (const f of c.findings) {
                         const m =
                             f.measure.kind === 'shell-lines'
                                 ? `${f.measure.measured} shell lines (threshold ${f.measure.threshold})`
                                 : `${f.measure.measured} prompt chars (severity ${f.measure.severity})`;
                         context.output.error(`composition advisory: ${f.actionKey} — ${m} — ${f.recommendation}`);
-                    }
-                    if (c.suppressed > 0) {
-                        context.output.error(
-                            `composition advisory: ${c.suppressed} shell finding(s) suppressed by baseline dispositions (guards excluded wholesale; docs/design/workflow-shell-ownership.md)`,
-                        );
                     }
                 }
             } else {

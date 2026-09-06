@@ -5,7 +5,7 @@
  * Usage: bun scripts/spur-dev.ts real-run-cost [--workflow <name>]... [--json]
  *
  * Reads the main history plane (`.spur/spur.db`) and aggregates, per in-scope workflow
- * (every definition in `config/workflows/` plus the composition-baseline keys):
+ * (every definition in `config/workflows/`):
  *   - wall-clock from the `runs` table (`completed_at - started_at`) over TERMINAL,
  *     NON-DRY runs only (0730 R2: dry-run probes and non-terminal rows with a stale
  *     `completed_at` are excluded and counted, never folded into real-work stats);
@@ -27,12 +27,11 @@
  * an unmeasured duration/cost (0284 invariant).
  */
 import { Database } from 'bun:sqlite';
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const REPO_ROOT = new URL('../../', import.meta.url).pathname;
 const DB_PATH = join(REPO_ROOT, '.spur/spur.db');
-const BASELINE_PATH = join(REPO_ROOT, 'config/workflow-composition-baseline.json');
 const WORKFLOWS_DIR = join(REPO_ROOT, 'config/workflows');
 
 /** Engine vocabulary: runs finalize as done/failed (lifecycle-adapter); cancelled is the
@@ -248,23 +247,12 @@ export function readWorkflowMetrics(dbPath: string, workflows: string[]): Workfl
 }
 
 /**
- * The in-scope cohort (0730 R1/R2: all repository workflows, not the baseline subset):
- * the union of the composition-baseline keys and the definitions in
- * `config/workflows/`. Sorted; duplicates collapse.
+ * The in-scope cohort (0730 R1/R2: all repository workflows): the definitions in
+ * `config/workflows/`. Sorted; duplicates collapse. (0775: the composition-baseline
+ * union is gone with the snapshot.)
  */
-export async function inScopeWorkflows(
-    baselinePath: string = BASELINE_PATH,
-    workflowsDir: string = WORKFLOWS_DIR,
-): Promise<string[]> {
+export async function inScopeWorkflows(workflowsDir: string = WORKFLOWS_DIR): Promise<string[]> {
     const names = new Set<string>();
-    try {
-        const parsed = JSON.parse(await readFile(baselinePath, 'utf-8')) as {
-            workflows?: Record<string, unknown>;
-        };
-        for (const key of Object.keys(parsed.workflows ?? {})) names.add(key);
-    } catch {
-        // baseline unreadable — the definitions directory still scopes the cohort
-    }
     try {
         for (const entry of await readdir(workflowsDir)) {
             const m = /^(.+)\.ya?ml$/.exec(entry);
@@ -272,7 +260,7 @@ export async function inScopeWorkflows(
             if (name) names.add(name);
         }
     } catch {
-        // no project-local definitions dir — baseline keys only
+        // no definitions dir — empty cohort
     }
     return [...names].sort();
 }

@@ -64,13 +64,13 @@ worth landing explicitly rather than discovering during implementation.
 Time decomposition (methodology step 6) is the right subject to spike: it needs multiple inputs,
 per-session grouping, and arithmetic across rows, so it exercises whatever the mechanism is bad at.
 ### Requirements
-- R1 — Implement time decomposition (LLM latency vs tool execution vs idle, per session) under each of the three candidate mechanisms — workflow-as-orchestrator, in-analyze metric registry, and custom typed action — all producing the same numbers from the same real data.
-- R2 — Compare the three on evidence, not taste: lines of code, wall-clock runtime on a real day's data, behavior when a source is missing, how each is unit-tested, and what a second metric costs to add afterwards.
-- R3 — State how derived variables reach the artifact under the recommended mechanism, given the pinned schema version and its assertion, choosing between an additive optional block, a versioned migration, and a side-car artifact.
-- R4 — Recommend one mechanism with a stated confidence level, addressing the operator's `spur workflow` framing directly and saying whether the evidence supports the strongest reading of it, not merely the weakest.
-- R5 — Name the full derived-variable set the forensics report needs (phases, per-phase metrics, time decomposition, bottleneck ranking, issue candidates) and confirm the recommended mechanism carries all of them, not only the one spiked.
-- R6 — Keep the spike out of the shipped surface: state where the code lives and that it is throwaway evidence, not delivery-path code.
-- R7 — Establish whether the recommended mechanism can compute anything for a source the coverage matrix marked unsupported, so a degraded source produces an explicit gap rather than a silently wrong number.
+- [ ] R1 — Implement time decomposition (LLM latency vs tool execution vs idle, per session) under each of the three candidate mechanisms — workflow-as-orchestrator, in-analyze metric registry, and custom typed action — all producing the same numbers from the same real data.
+- [ ] R2 — Compare the three on evidence, not taste: lines of code, wall-clock runtime on a real day's data, behavior when a source is missing, how each is unit-tested, and what a second metric costs to add afterwards.
+- [ ] R3 — State how derived variables reach the artifact under the recommended mechanism, given the pinned schema version and its assertion, choosing between an additive optional block, a versioned migration, and a side-car artifact.
+- [ ] R4 — Recommend one mechanism with a stated confidence level, addressing the operator's `spur workflow` framing directly and saying whether the evidence supports the strongest reading of it, not merely the weakest.
+- [ ] R5 — Name the full derived-variable set the forensics report needs (phases, per-phase metrics, time decomposition, bottleneck ranking, issue candidates) and confirm the recommended mechanism carries all of them, not only the one spiked.
+- [ ] R6 — Keep the spike out of the shipped surface: state where the code lives and that it is throwaway evidence, not delivery-path code.
+- [ ] R7 — Establish whether the recommended mechanism can compute anything for a source the coverage matrix marked unsupported, so a degraded source produces an explicit gap rather than a silently wrong number.
 ### Acceptance Criteria
 ```gherkin
 Feature: 0490 wayfinder investigation

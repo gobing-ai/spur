@@ -185,43 +185,23 @@ describe('readWorkflowMetrics (0730 R2 measurement repairs)', () => {
 });
 
 describe('inScopeWorkflows (0730 R1/R2 cohort scope)', () => {
-    test('unions baseline keys with config/workflows definitions (not baseline-only)', async () => {
+    test('scopes the cohort to the config/workflows definitions', async () => {
         const dir = await mkdtemp(join(tmpdir(), 'scope-'));
         try {
-            const baseline = join(dir, 'baseline.json');
             const wfDir = join(dir, 'workflows');
-            await writeFile(baseline, JSON.stringify({ workflows: { 'task-pipeline': {}, 'docs-pipeline': {} } }));
             await mkdir(wfDir);
-            // task-pipeline overlaps; the three workflows missing from the live
-            // baseline (feature-lifecycle, history-anatomy, task-lifecycle) are added.
             for (const name of ['task-pipeline', 'task-lifecycle', 'feature-lifecycle', 'history-anatomy']) {
                 await writeFile(join(wfDir, `${name}.yaml`), 'placeholder');
             }
             await writeFile(join(wfDir, 'not-a-workflow.txt'), 'skip');
-            const scope = await inScopeWorkflows(baseline, wfDir);
-            expect(scope).toEqual([
-                'docs-pipeline',
-                'feature-lifecycle',
-                'history-anatomy',
-                'task-lifecycle',
-                'task-pipeline',
-            ]);
+            const scope = await inScopeWorkflows(wfDir);
+            expect(scope).toEqual(['feature-lifecycle', 'history-anatomy', 'task-lifecycle', 'task-pipeline']);
         } finally {
             await rm(dir, { recursive: true, force: true });
         }
     });
 
-    test('falls back to the definitions dir when the baseline is unreadable, and vice versa', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'scope2-'));
-        try {
-            const wfDir = join(dir, 'workflows');
-            await mkdir(wfDir);
-            await writeFile(join(wfDir, 'basic.yaml'), 'placeholder');
-            expect(await inScopeWorkflows(join(dir, 'missing.json'), wfDir)).toEqual(['basic']);
-            await writeFile(join(dir, 'baseline.json'), JSON.stringify({ workflows: { 'pr-review': {} } }));
-            expect(await inScopeWorkflows(join(dir, 'baseline.json'), join(dir, 'missing-dir'))).toEqual(['pr-review']);
-        } finally {
-            await rm(dir, { recursive: true, force: true });
-        }
+    test('a missing definitions dir degrades to an empty cohort, never a crash', async () => {
+        expect(await inScopeWorkflows('/nonexistent/workflows')).toEqual([]);
     });
 });

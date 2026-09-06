@@ -93,14 +93,14 @@ Writing the contract package, the server route, or any React. Any `TasksTab` / `
 design. A new board module. Anything under `spur task` (feature F92, concurrent agent).
 ### Requirements
 
-- R1 — Specify the run-record contract: exactly two files per workflow-run instance — an append-only markdown of every input and output in sequence, and a read/write JSON state cache — stating what each holds and who writes them.
-- R2 — Map every one of the ~30 existing `.spur/run` artifact kinds into the new contract or explicitly drop it, and state the disposition of the second directory `.spur/runs/workflow/`.
-- R3 — Identify every current mid-run *reader* of a run artifact before declaring the append-only rule, since a live reader is what makes that rule non-trivial.
-- R4 — Propose a concrete retention window and GC mechanism for run artifacts, stating the forensic-evidence trade-off, as the recommendation for map open question 3 without deciding it.
-- R5 — Audit what `ToolUsingTab` reads today with `path:line`; if its source is anything other than the `spur history import` → `spur history analyze` plane, state the gap and what moving it there requires.
-- R6 — Assess `SystemEventsTab` and `RoutingTab` for source correctness and keep/rebuild; inventory `TasksTab` and `JobsTab` with their data gaps named and defer them without producing refactor designs.
-- R7 — State which of the operator's three desired views — token/execution Overall summary, Tool use with per-call time and token cost, Execution log/audit trail of original input and output — the surviving Observability tabs serve, and which need a new tab in that module.
-- R8 — Name every contract the surviving surface requires, starting with the absent history oRPC contract, and size each piece S/M/L.
+- [ ] R1 — Specify the run-record contract: exactly two files per workflow-run instance — an append-only markdown of every input and output in sequence, and a read/write JSON state cache — stating what each holds and who writes them.
+- [ ] R2 — Map every one of the ~30 existing `.spur/run` artifact kinds into the new contract or explicitly drop it, and state the disposition of the second directory `.spur/runs/workflow/`.
+- [ ] R3 — Identify every current mid-run *reader* of a run artifact before declaring the append-only rule, since a live reader is what makes that rule non-trivial.
+- [ ] R4 — Propose a concrete retention window and GC mechanism for run artifacts, stating the forensic-evidence trade-off, as the recommendation for map open question 3 without deciding it.
+- [ ] R5 — Audit what `ToolUsingTab` reads today with `path:line`; if its source is anything other than the `spur history import` → `spur history analyze` plane, state the gap and what moving it there requires.
+- [ ] R6 — Assess `SystemEventsTab` and `RoutingTab` for source correctness and keep/rebuild; inventory `TasksTab` and `JobsTab` with their data gaps named and defer them without producing refactor designs.
+- [ ] R7 — State which of the operator's three desired views — token/execution Overall summary, Tool use with per-call time and token cost, Execution log/audit trail of original input and output — the surviving Observability tabs serve, and which need a new tab in that module.
+- [ ] R8 — Name every contract the surviving surface requires, starting with the absent history oRPC contract, and size each piece S/M/L.
 
 ### Acceptance Criteria
 

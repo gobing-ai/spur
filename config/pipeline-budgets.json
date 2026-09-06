@@ -1,7 +1,7 @@
 {
     "schemaVersion": 1,
     "generatedAt": "2026-08-20T00:00:00.000Z",
-    "note": "Per-pipeline model-query + wall-clock cost budgets (task 0607 R3). modelQueries anchors the frozen config/workflow-composition-baseline.json list (the SSOT, two-sided checked). wallClockMs is a gross-regression ceiling anchored to measured real-run data (R5): the gate compares the median-of-sane terminal-run wall-clock against it. A null budget is unenforced until measured — never treated as 0. Raising a numeric budget requires a fresh recorded decision in the same commit (config/pipeline-budgets.json vs git HEAD); the check-pipeline-budgets gate fails a silent raise by name.",
+    "note": "Per-pipeline model-query + wall-clock cost budgets (task 0607 R3). modelQueries anchors the live workflow definitions' query lists — the SSOT, extracted by extractResolvedWorkflowFacts and guarded by composition-baseline.test.ts (0775 retired the snapshot this file previously anchored to). wallClockMs is a gross-regression ceiling anchored to measured real-run data (R5): the gate compares the median-of-sane terminal-run wall-clock against it. A null budget is unenforced until measured — never treated as 0. Raising a numeric budget requires a fresh recorded decision in the same commit (config/pipeline-budgets.json vs git HEAD); the check-pipeline-budgets gate fails a silent raise by name.",
     "budgets": {
         "task-pipeline": {
             "modelQueries": 4,
@@ -28,18 +28,18 @@
             "modelQueries": 2,
             "wallClockMs": null,
             "tokenCostUsd": null,
-            "source": "No fixture (0607 option a) and only dry/short runs recorded in history (max 1s, n=4) — wall-clock budget unenforced until a real docs-pipeline run exists. Query budget 2 matches the live SSOT list ['draft','verify'] in config/workflow-composition-baseline.json (added by task 0704; 0607 R3 recorded 1, which is stale against the SSOT). 0754 R6: FIX, not raise — the value was wrong against the SSOT, the workflow's declared query count did not change.",
+            "source": "No fixture (0607 option a) and only dry/short runs recorded in history (max 1s, n=4) — wall-clock budget unenforced until a real docs-pipeline run exists. Query budget 2 matches the live workflow definition's query list ['draft','verify'] (added by task 0704; 0607 R3 recorded 1, which is stale against the definition). 0754 R6: FIX, not raise — the value was wrong against the definition, the workflow's declared query count did not change.",
             "decision": {
                 "date": "2026-09-03",
                 "wbs": "0754",
-                "note": "align docs-pipeline.modelQueries to the live baseline SSOT ['draft','verify']; not a measured-cost raise — the workflow's declared query count was already 2 (added by 0704); the budget was the stale side, not the workflow. Per D8 Decision 11."
+                "note": "align docs-pipeline.modelQueries to the live workflow definition's query list ['draft','verify']; not a measured-cost raise — the workflow's declared query count was already 2 (added by 0704); the budget was the stale side, not the workflow. Per D8 Decision 11."
             }
         },
         "pr-review": {
             "modelQueries": 0,
             "wallClockMs": null,
             "tokenCostUsd": null,
-            "source": "Zero-query pipeline (baseline modelQueries []); query budget trivially 0 — the gate handles an empty list (0607 R3). No real full run recorded; wall-clock unenforced.",
+            "source": "Zero-query pipeline (the live definition declares no model queries); query budget trivially 0 — the gate handles an empty list (0607 R3). No real full run recorded; wall-clock unenforced.",
             "decision": null
         }
     }

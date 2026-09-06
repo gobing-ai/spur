@@ -140,10 +140,10 @@ reports it. Do not invent a second threshold; author to the one that is frozen (
 | Node count | Every node earns its transition round-trip | A node that always runs immediately after another, with no guard between them, is one node |
 
 **When a node breaches the budget, do not reformat to dodge the measure.** Joining five lines with
-`&&` moves the complexity, not the ownership. Pick an owner from the five recorded options in
+`&&` moves the complexity, not the ownership. Pick one of the four remaining owners from
 `docs/design/workflow-shell-ownership.md`: public `spur` verb (consent-gated), application service,
-least-privilege built-in action kind, workflow-relative external extension, or a recorded
-stays-shell exception with its reason in `config/workflow-composition-baseline.json`.
+least-privilege built-in action kind, or workflow-relative external extension. (0775 retired the
+recorded stays-shell exception along with the suppression snapshot.)
 
 **Advisory posture is binding.** Composition findings never block a run, never change a `validate`
 exit status, and are never a reason to hot-edit an executing pipeline. Surface them; fix on operator
@@ -193,8 +193,8 @@ Steps:
 2. **Return each node's work to its owner** — judgment nodes to the command or skill they should
    have been calling; a genuinely useful shell sequence to one script under its owning surface.
 3. **Rewrite the entry surface as the procedure**, in the order the graph ran.
-4. **Delete the YAML and its `config/workflow-composition-baseline.json` entries** in the same
-   change. A baseline entry whose action no longer exists fails the two-sided check.
+4. **Delete the YAML** in the same change. (0775 retired the composition-baseline entries that
+   used to be deleted alongside it; the live definition is the only artifact left.)
 5. **Record the demotion** and its trigger, so the next author does not re-promote it by reflex.
 
 ### optimize — refine an accepted workflow in place

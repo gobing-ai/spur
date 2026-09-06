@@ -129,9 +129,10 @@ export const BUNDLED_GLOBAL_CONFIG = 'config.global.yaml';
  *   and the remaining templates use the bundled tree.
  * - `workflows/**` — workflow commands resolve an explicit project path first,
  *   then fall back to the bundled workflow tree.
- * - top-level `*.json` — the five monorepo dev baselines (corpus-baseline,
- *   pipeline-budgets, plugin-scripts, transition-shims, workflow-composition).
- *   Their consumers are repo gates reading repo-root `config/`, never `.spur/`.
+ * - top-level `*.json` — the three monorepo dev baselines (pipeline-budgets,
+ *   plugin-scripts, transition-shims). Their consumers are repo gates reading
+ *   repo-root `config/`, never `.spur/` (0775: the corpus and composition
+ *   snapshots were retired).
  * - `plugins/**` — `.gitkeep` placeholders with no reader at all.
  *
  * Kept on purpose: `rules/**` (operator ruling — rules resolve against project
