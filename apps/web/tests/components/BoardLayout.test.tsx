@@ -156,11 +156,14 @@ describe('BoardLayout', () => {
         );
         const layoutCss = await Bun.file(new URL('../../src/styles/board-layout.css', import.meta.url)).text();
         const documentRule = layoutCss.match(/html,\s*body\s*\{([^}]*)\}/)?.[1] ?? '';
+        const rootRule = layoutCss.match(/:root\s*\{([^}]*)\}/)?.[1] ?? '';
 
         expect(workspace?.classList.contains('h-full')).toBe(true);
         expect(workspace?.classList.contains('overflow-hidden')).toBe(true);
         expect(scrollport?.classList.contains('min-h-0')).toBe(true);
         expect(documentRule).toContain('overflow: hidden');
+        expect(rootRule).toContain('--sidebar-w: 48px');
+        expect(rootRule).toContain('--rightpanel-w: 0px');
     });
 
     test('collapse toggle flips data-sidebar-collapsed and persists', () => {

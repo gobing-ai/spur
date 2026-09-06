@@ -9,10 +9,10 @@ body {
 }
 
 :root {
-    --sidebar-w: 240px;
-    --rightpanel-w: 320px;
-    --sidebar-handle-w: 4px;
-    --rightpanel-handle-w: 4px;
+    --sidebar-w: 48px;
+    --rightpanel-w: 0px;
+    --sidebar-handle-w: 0px;
+    --rightpanel-handle-w: 0px;
 }
 
 /*
@@ -34,9 +34,17 @@ body {
     --sidebar-handle-w: 0px;
 }
 
+.board-layout[data-sidebar-collapsed="false"] {
+    --sidebar-handle-w: 4px;
+}
+
 .board-layout[data-rightpanel-collapsed="true"] {
     --rightpanel-w: 0px;
     --rightpanel-handle-w: 0px;
+}
+
+.board-layout[data-rightpanel-collapsed="false"] {
+    --rightpanel-handle-w: 4px;
 }
 
 /*
