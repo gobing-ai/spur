@@ -137,7 +137,8 @@ in generated output. The task-pipeline quality gate emits a bounded summary (gre
 attempts, log path, bytes; red: last 40 lines plus path) with the full log preserved on disk.
 Rollout evidence: `docs/plans/2026-09-04-d61-rollout-evidence.md`.
 
-**Implemented (task 0782, 2026-09-06):** `feature-dev.yaml` v2 reuses an existing feature's
+**Implemented (task 0782, 2026-09-06):** `feature-dev.yaml` (shipped as v2 by 0782; later bumped
+to v3 by task 0784's resume-identity change without altering this contract) reuses an existing feature's
 accepted AC and task roster instead of re-planning. Brainstorm/plan states are deleted; the
 precheck validates the essential roster contract through CLI reads (identity, nonempty array,
 unique WBS identities, known statuses, no backlog/wip/testing/blocked member) and freezes the

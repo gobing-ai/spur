@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D6"
 name: "Workflow cost, deterministic ownership surface, and role-addressed coordination"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-20T00:08:14.252Z"
-updated_at: "2026-09-06T18:43:32.842Z"
+updated_at: "2026-09-06T22:53:04.389Z"
 ---
 
 # D6: Workflow cost, deterministic ownership surface, and role-addressed coordination
@@ -157,11 +157,11 @@ Feature: Workflow cost, deterministic ownership surface, and role-addressed coor
 | 0609 | Resolve role-addressed coordination for agent wait and message | done |
 | 0723 | Upgrade task-pipeline precheck for deterministic low-latency execution | done |
 | 0781 | Close bounded workflow audit defects and track remaining repairs | done |
-| 0782 | Reuse existing feature plans and rosters before workflow dispatch | todo |
-| 0783 | Make wrapup consume validated inputs and fail on incomplete synchronization | todo |
-| 0784 | Align workflow resume identity and checkpoint freshness with persisted runs | todo |
-| 0785 | Close remaining proof-input and physical artifact confinement gaps | todo |
-| 0786 | Remove stale corpus-sweep and task-record instructions from canonical capability sources | todo |
+| 0782 | Reuse existing feature plans and rosters before workflow dispatch | done |
+| 0783 | Make wrapup consume validated inputs and fail on incomplete synchronization | done |
+| 0784 | Align workflow resume identity and checkpoint freshness with persisted runs | done |
+| 0785 | Close remaining proof-input and physical artifact confinement gaps | done |
+| 0786 | Remove stale corpus-sweep and task-record instructions from canonical capability sources | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -172,3 +172,4 @@ Feature: Workflow cost, deterministic ownership surface, and role-addressed coor
 - 2026-08-20T21:53:35.698Z active → verifying (system)
 - 2026-08-20T21:55:08.156Z verifying → done (system)
 - 2026-08-30T19:42:38.148Z done → active (system)
+- 2026-09-06T22:53:04.389Z active → verifying (system)

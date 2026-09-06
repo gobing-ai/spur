@@ -110,3 +110,8 @@ Verdict `PASS` sourced from the task's pipeline verdict artifact (`# Testing →
 {"wbs":"0758","feature_id":"D9","status":"wip","verdict":"UNKNOWN","timestamp":"2026-09-04T16:05:24Z"}
 {"wbs":"0758","feature_id":"D9","status":"wip","verdict":"UNKNOWN","timestamp":"2026-09-04T16:06:48Z"}
 {"wbs":"0763","feature_id":"E91","status":"done","verdict":"UNKNOWN","timestamp":"2026-09-05T00:31:07Z"}
+{"wbs":"0782","feature_id":"D6","status":"done","verdict":"PASS","timestamp":"2026-09-06T22:53:02Z"}
+{"wbs":"0783","feature_id":"D6","status":"done","verdict":"PASS","timestamp":"2026-09-06T22:53:02Z"}
+{"wbs":"0784","feature_id":"D6","status":"done","verdict":"PASS","timestamp":"2026-09-06T22:53:02Z"}
+{"wbs":"0785","feature_id":"D6","status":"done","verdict":"PASS","timestamp":"2026-09-06T22:53:02Z"}
+{"wbs":"0786","feature_id":"D6","status":"done","verdict":"PASS","timestamp":"2026-09-06T22:53:02Z"}
