@@ -4,7 +4,8 @@
  *
  * ADR-079 makes cache validity a *derived* fact, not a stored claim: a cached report is reusable
  * only for its model-authored half, and only when a freshly derived semantic digest of the analyze
- * artifact plus the contract/skill/workflow logic digests all match what the cache recorded.
+ * artifact plus the contract/skill/workflow/helper logic digests all match what the cache
+ * recorded (helper digest: task 0771 — the deterministic half is part of cache identity).
  *
  * This script performs deterministic file, hash, and schema work only — no finding, remediation,
  * severity, or ranking logic (that is judgment, owned by the sp:history-anatomy skill). Jobs:
@@ -68,6 +69,8 @@ export interface CacheProvenance {
     contractDigest: string;
     skillDigest: string;
     workflowDigest: string;
+    /** Digest of the executing helper twin itself (0771): a changed deterministic half invalidates. */
+    helperDigest: string;
     coverage: Array<{ source: string; status: string; lastImportedAt: string | null }>;
     // 0660 R7 audit fields. Recorded in the published frontmatter for provenance; deliberately
     // NOT part of the invalidation matrix — a changed run id or executor is not stale evidence.
@@ -243,6 +246,7 @@ export function parseProvenance(reportMarkdown: string): CacheProvenance | null 
             contractDigest: String(obj.contractDigest ?? ''),
             skillDigest: String(obj.skillDigest ?? ''),
             workflowDigest: String(obj.workflowDigest ?? ''),
+            helperDigest: String(obj.helperDigest ?? ''),
             coverage: coverage.map((c) => ({
                 source: String(c.source ?? ''),
                 status: String(c.status ?? ''),
@@ -300,6 +304,7 @@ export function decideCache(
     if (cached.contractDigest !== current.contractDigest) reasons.push('logic-changed:contract');
     if (cached.skillDigest !== current.skillDigest) reasons.push('logic-changed:skill');
     if (cached.workflowDigest !== current.workflowDigest) reasons.push('logic-changed:workflow');
+    if (cached.helperDigest !== current.helperDigest) reasons.push('logic-changed:helper');
 
     // Coverage cannot degrade: the cache must not claim broader coverage than the current
     // analyze covers. If the cached report covered a source the current analyze no longer does,
@@ -601,6 +606,7 @@ export interface ProbeOptions {
     skillDir?: string;
     contractFile?: string;
     workflowFile?: string;
+    helperFile?: string;
     contractVersion?: string;
     runId?: string;
     spurVersion?: string;
@@ -660,6 +666,7 @@ export function buildProvenance(opts: ProbeOptions): CacheProvenance {
         contractDigest: logicDigest(opts.contractFile),
         skillDigest: logicDigest(opts.skillDir),
         workflowDigest: logicDigest(opts.workflowFile),
+        helperDigest: logicDigest(opts.helperFile),
         coverage,
         runId: opts.runId,
         currentArtifactPath: opts.artifact,
@@ -697,6 +704,7 @@ const YAML_KEYS: Array<keyof CacheProvenance> = [
     'contractDigest',
     'skillDigest',
     'workflowDigest',
+    'helperDigest',
     'runId',
     'currentArtifactPath',
     'baselineArtifactPath',
@@ -823,7 +831,7 @@ export function diffPorcelain(before: string, now: string, expects: Set<string>)
 const VALID_COMMANDS = 'digest, check, paths, assert-clean, probe, stamp, refresh, publish';
 const PROBE_USAGE =
     '<script> probe --artifact <a.json> --target <report.md> [--baseline <b.json>] [--mode daily|ad-hoc] ' +
-    '[--date <YYYY-MM-DD>] [--recompute true] [--out <prov.json>] [--skill-dir <d>] [--contract <f>] [--workflow <f>]';
+    '[--date <YYYY-MM-DD>] [--recompute true] [--out <prov.json>] [--skill-dir <d>] [--contract <f>] [--workflow <f>] [--helper <f>]';
 
 /** `--key value` / `--flag` → record. Bare flags become `"true"` so `--recompute` needs no value. */
 function parseFlags(args: string[]): Record<string, string | undefined> {
@@ -956,6 +964,7 @@ export function runCacheCli(argv: string[]): CacheCliResult {
                     skillDir: f['skill-dir'],
                     contractFile: f.contract,
                     workflowFile: f.workflow,
+                    helperFile: f.helper,
                     contractVersion: f['contract-version'],
                     runId: f['run-id'],
                     spurVersion: f['spur-version'],

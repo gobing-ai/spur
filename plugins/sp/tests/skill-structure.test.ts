@@ -989,7 +989,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         ]);
         // `stamp` is reachable only from `validate`, and only on a PASS verdict.
         expect(edges.filter((e) => e.endsWith('->stamp'))).toEqual(['validate->stamp']);
-        expect(text).toContain('grep -q "Verdict: PASS" .spur/run/$__runId-validation.txt');
+        expect(text).toContain('tail -n 1 .spur/run/$__runId-validation.txt 2>/dev/null | grep -qx "Verdict: PASS"'); // 0771 anchored final-line guard
         // The digest must come from a fresh analyze, so analyze precedes the probe (ADR-079).
         expect(edges).toContain('analyze->cache-probe');
         expect(edges).not.toContain('cache-probe->analyze');

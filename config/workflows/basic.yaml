@@ -6,6 +6,8 @@
 # Reliability (aligned with task-pipeline / ADR-043):
 #   - check is a soft probe (status file + always exit 0) so red gates route to fix
 #     via transitions, not a raw lifecycle abort that skips the failed terminal
+#   - qualityGateCmd is TRUSTED CONFIG ONLY — executed via `sh -c` so compound
+#     commands (`&&`, `||`) preserve their exit status; never interpolated task data
 #   - fix is pure slash /sp:dev-fixall against the same qualityGateCmd (single-sourced)
 #   - qualityGateMaxFixAttempts bounds the fix loop; exhausted → failed (fail-closed)
 #   - Bun package scripts only for gate surface (no alternate package-manager CLIs)
@@ -13,7 +15,8 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 name: basic
 kind: state-machine
-description: The canonical implement-check-fix-until-pass loop
+description: The canonical implement-check-fix-until-pass loop (example definition; override qualityGateCmd per project)
+version: "1"
 iterationBound: 8
 initialState: implement
 terminalStates:
@@ -57,7 +60,7 @@ states:
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-basic-gate.status" &&
             set +e &&
-            ( $qualityGateCmd ); gate_rc=$?; set -e &&
+            sh -c "$qualityGateCmd"; gate_rc=$?; set -e &&
             if [ "$gate_rc" -eq 0 ]; then
               printf 'PASS\n' > "$STATUS_FILE";
             else

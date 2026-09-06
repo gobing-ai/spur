@@ -198,6 +198,7 @@ function parseProvenance(reportMarkdown) {
       contractDigest: String(obj.contractDigest ?? ""),
       skillDigest: String(obj.skillDigest ?? ""),
       workflowDigest: String(obj.workflowDigest ?? ""),
+      helperDigest: String(obj.helperDigest ?? ""),
       coverage: coverage.map((c) => ({
         source: String(c.source ?? ""),
         status: String(c.status ?? ""),
@@ -244,6 +245,8 @@ function decideCache(cached, current, opts) {
     reasons.push("logic-changed:skill");
   if (cached.workflowDigest !== current.workflowDigest)
     reasons.push("logic-changed:workflow");
+  if (cached.helperDigest !== current.helperDigest)
+    reasons.push("logic-changed:helper");
   const currentSources = new Set(current.coverage.map((c) => c.source));
   if (cached.coverage.some((c) => !currentSources.has(c.source)))
     reasons.push("coverage-degraded");
@@ -473,6 +476,7 @@ function buildProvenance(opts) {
     contractDigest: logicDigest(opts.contractFile),
     skillDigest: logicDigest(opts.skillDir),
     workflowDigest: logicDigest(opts.workflowFile),
+    helperDigest: logicDigest(opts.helperFile),
     coverage,
     runId: opts.runId,
     currentArtifactPath: opts.artifact,
@@ -503,6 +507,7 @@ var YAML_KEYS = [
   "contractDigest",
   "skillDigest",
   "workflowDigest",
+  "helperDigest",
   "runId",
   "currentArtifactPath",
   "baselineArtifactPath",
@@ -595,7 +600,7 @@ function diffPorcelain(before, now, expects) {
   return [...porcelainPaths(now)].filter((p) => !beforePaths.has(p) && !expects.has(p)).sort();
 }
 var VALID_COMMANDS = "digest, check, paths, assert-clean, probe, stamp, refresh, publish";
-var PROBE_USAGE = "<script> probe --artifact <a.json> --target <report.md> [--baseline <b.json>] [--mode daily|ad-hoc] " + "[--date <YYYY-MM-DD>] [--recompute true] [--out <prov.json>] [--skill-dir <d>] [--contract <f>] [--workflow <f>]";
+var PROBE_USAGE = "<script> probe --artifact <a.json> --target <report.md> [--baseline <b.json>] [--mode daily|ad-hoc] " + "[--date <YYYY-MM-DD>] [--recompute true] [--out <prov.json>] [--skill-dir <d>] [--contract <f>] [--workflow <f>] [--helper <f>]";
 function parseFlags(args) {
   const out = {};
   for (let i = 0;i < args.length; i++) {
@@ -729,6 +734,7 @@ ${result.problems.map((p) => `- ${p}
           skillDir: f["skill-dir"],
           contractFile: f.contract,
           workflowFile: f.workflow,
+          helperFile: f.helper,
           contractVersion: f["contract-version"],
           runId: f["run-id"],
           spurVersion: f["spur-version"]

@@ -108,9 +108,9 @@ program deliberately sequences two independently-owned capabilities.
 | `precheck:onEnter:0` | POLICY | executes per-project `preReviewCmd` via `sh -c`; project-only policy, override is the point |
 | `push:onEnter:0` | EXT | `pr-reviewing.ts push` |
 | `ensure-pr:onEnter:0` | EXT | `pr-reviewing.ts ensure-pr` |
-| `request:onEnter:0` | EXT | `pr-reviewing.ts request` + conditional `--force` flag |
-| `wait:onEnter:0` | EXT | inline JSON field reads + `pr-reviewing.ts wait`; workflow-local glue around the extension |
-| `collect:onEnter:0` | EXT | same pattern, `pr-reviewing.ts collect` + `status` |
+| `request:onEnter:0` | EXT | `pr-reviewing.ts request` + conditional `--force` flag; 0771 adds one extraction of the request record's requestedAt/head into run-scoped `.txt` files |
+| `wait:onEnter:0` | EXT | `pr-reviewing.ts wait`; since 0771 the record is read via `file.read.into-var` vars (`prSince`/`prHead`) exported as shell env — no repeated JSON parsing in shell |
+| `collect:onEnter:0` | EXT | same pattern, `pr-reviewing.ts collect` + `status`; 0771 pins the same vars and makes a non-empty `--head` mandatory in the script (moved HEAD fails loud) |
 
 ### wayfinder-resolution.yaml
 

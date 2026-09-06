@@ -519,8 +519,14 @@ function hasPendingRequest(comments: readonly GhIssueComment[], head: string, lo
 }
 
 function requireExpectedHead(args: ParsedArgs, pr: GhPr): void {
+    // 0771: head pinning only protects when the flag actually carries a SHA — an empty or
+    // missing --head must fail loud instead of silently reviewing whatever HEAD is current.
     const expected = args.flags.get('--head');
-    if (expected && expected !== pr.headRefOid) {
+    if (!expected) {
+        writeStatus(args, 'FAIL');
+        fail(args, '--head <sha> is required and must match the reviewed request HEAD', 2);
+    }
+    if (expected !== pr.headRefOid) {
         writeStatus(args, 'FAIL');
         fail(
             args,

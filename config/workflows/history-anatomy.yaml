@@ -48,6 +48,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: history-anatomy
+version: "1"
 description: "Daily/ad-hoc history-anatomy report: cache branch, deterministic analyze/render, skill enrichment, deterministic structure gate, independent evidence validation, bounded correction, atomic publication"
 iterationBound: 20
 initialState: start
@@ -153,7 +154,7 @@ states:
             --baseline .spur/run/$__runId-history-anatomy-baseline.json --target "$HA_TARGET"
             --mode "$mode" --date "$HA_DATE" --recompute "$recompute" --executor "$agent"
             --skill-dir "$HA_SKILL" --contract "$HA_SKILL/references/report-contract.md"
-            --workflow "$workflowFile" --contract-version "$contractVersion" --run-id "$__runId"
+            --workflow "$workflowFile" --helper "$HA_HELPER" --contract-version "$contractVersion" --run-id "$__runId"
             --out .spur/run/$__runId-provenance.json
             > .spur/run/$__runId-cache-disposition.txt
 
@@ -208,6 +209,9 @@ states:
     description: >
       Independent evidence validation via the skill operation sp:history-anatomy validate.
       Publication is reachable only from a PASS here. Same undeclared-write assertion as enrich (0676 R3).
+      The publish guard reads the ANCHORED FINAL LINE (0771): only a validation artifact whose last
+      line is exactly `Verdict: PASS` publishes — a leading PASS under a later FAIL or a
+      `not Verdict: PASS` line can never satisfy it.
     onEnter:
       - kind: shell
         options:
@@ -390,18 +394,18 @@ transitions:
 
   - from: validate
     to: stamp
-    description: Independent validation PASS — stamp provenance, then publish atomically.
+    description: Independent validation PASS (anchored final line, 0771) — stamp provenance, then publish atomically.
     guard:
       kind: shell
       options:
-        command: 'grep -q "Verdict: PASS" .spur/run/$__runId-validation.txt 2>/dev/null'
+        command: 'tail -n 1 .spur/run/$__runId-validation.txt 2>/dev/null | grep -qx "Verdict: PASS"'
   - from: validate
     to: correct
     description: Validation FAIL under the shared two-pass correction cap.
     guard:
       kind: shell
       options:
-        command: '! grep -q "Verdict: PASS" .spur/run/$__runId-validation.txt 2>/dev/null && test "$(cat .spur/run/$__runId-correction-count 2>/dev/null || echo 0)" -lt 2'
+        command: '! tail -n 1 .spur/run/$__runId-validation.txt 2>/dev/null | grep -qx "Verdict: PASS" && test "$(cat .spur/run/$__runId-correction-count 2>/dev/null || echo 0)" -lt 2'
   - from: validate
     to: failed
     description: Validation FAIL with the correction cap exhausted — terminate without publishing.

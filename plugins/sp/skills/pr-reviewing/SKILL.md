@@ -164,12 +164,15 @@ superskill script contract.
 8. **Collect** — `<script> collect --since "$requestedAt" --head "$requestHead" --json`. Normalize
    only the requested HEAD and request window; then invoke `status` with the same bounds for
    PR/base/CI/local state. Never turn an absent, stale, or moved-HEAD result into `clean`.
+   `--head` is mandatory on wait/collect/status (0771): an empty or missing pin fails loud
+   instead of silently reviewing whatever HEAD is current.
 
 ## Fix mode
 
 Only in `fix` mode:
 
-1. **Collect before editing.** Invoke direct `collect --json` plus `status --json` and require a
+1. **Collect before editing.** Invoke direct `collect --json --head "$(git rev-parse HEAD)"` plus
+   `status --json --head "$(git rev-parse HEAD)"` and require a
    completed result for the current pushed HEAD. If the result is pending, stale, or unavailable,
    report it and stop without source edits. If it is explicitly clean, report no fixes and stop.
 2. **Validate each finding.** Open the referenced code; trace callers/callees; verify the problem

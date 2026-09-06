@@ -325,7 +325,11 @@ function hasPendingRequest(comments, head, login) {
 }
 function requireExpectedHead(args, pr) {
   const expected = args.flags.get("--head");
-  if (expected && expected !== pr.headRefOid) {
+  if (!expected) {
+    writeStatus(args, "FAIL");
+    fail(args, "--head <sha> is required and must match the reviewed request HEAD", 2);
+  }
+  if (expected !== pr.headRefOid) {
     writeStatus(args, "FAIL");
     fail(args, `PR HEAD moved from ${expected.slice(0, 7)} to ${pr.headRefOid.slice(0, 7)} \u2014 request a new review`, 2);
   }

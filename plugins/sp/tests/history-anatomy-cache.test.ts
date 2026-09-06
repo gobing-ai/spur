@@ -36,6 +36,7 @@ function baseProvenance(over: Partial<CacheProvenance> = {}): CacheProvenance {
         contractDigest: 'cf',
         skillDigest: 'sf',
         workflowDigest: 'wf',
+        helperDigest: 'hf',
         coverage: [
             { source: 'claude', status: 'ok', lastImportedAt: '2026-08-24T23:00:00Z' },
             { source: 'codex', status: 'ok', lastImportedAt: '2026-08-24T23:00:00Z' },
@@ -387,6 +388,21 @@ describe('decideCache invalidation matrix (R2, R4)', () => {
         const cur = baseProvenance({ skillDigest: 'new-skill' });
         const d = decideCache(baseProvenance(), cur, { recompute: false, dayClosed: true });
         expect(d.reasons).toContain('logic-changed:skill');
+    });
+
+    // 0771: the executing helper twin is part of cache identity.
+    test('changed helper digest is a logic-changed:helper miss', () => {
+        const cur = baseProvenance({ helperDigest: 'new-helper' });
+        const d = decideCache(baseProvenance(), cur, { recompute: false, dayClosed: true });
+        expect(d.disposition).toBe('miss');
+        expect(d.reasons).toContain('logic-changed:helper');
+    });
+
+    test('pre-0771 provenance without a helper digest misses once, then hits', () => {
+        const older = baseProvenance() as Partial<CacheProvenance>;
+        delete (older as { helperDigest?: string }).helperDigest;
+        const d = decideCache(older as CacheProvenance, baseProvenance(), { recompute: false, dayClosed: true });
+        expect(d.reasons).toContain('logic-changed:helper');
     });
 
     test('identity mismatch (date) is a miss', () => {
@@ -1215,5 +1231,86 @@ describe('checkReportStructure closed category vocabulary (0686/I9)', () => {
         // Retro name as the first segment: fails by name instead of passing vacuously.
         const bad = withRow.replace('workflow:category:key', 'navigation:category:key');
         expect(checkReportStructure(bad).problems).toContain('finding-invalid-key-category:navigation');
+    });
+});
+
+// 0771: the publish guard is the workflow YAML's anchored final-line check, so the fixture
+// parses the actual guard out of history-anatomy.yaml and runs it against spoofed verdict
+// artifacts — no whole-YAML equality.
+describe('validate publish guard (0771 anchored verdict)', () => {
+    const { parse } = require('yaml') as typeof import('yaml');
+    const ROOT = join(import.meta.dir, '..', '..', '..');
+    const guard = ((): { toStamp: string; toCorrect: string } => {
+        const doc = parse(readFileSync(join(ROOT, 'config', 'workflows', 'history-anatomy.yaml'), 'utf8')) as {
+            transitions: Array<{ from: string; to: string; guard?: { kind: string; options?: { command?: string } } }>;
+        };
+        const toStamp = doc.transitions.find((t) => t.from === 'validate' && t.to === 'stamp');
+        const toCorrect = doc.transitions.find((t) => t.from === 'validate' && t.to === 'correct');
+        if (!toStamp?.guard?.options?.command || !toCorrect?.guard?.options?.command) {
+            throw new Error('validate guards missing');
+        }
+        return { toStamp: toStamp.guard.options.command, toCorrect: toCorrect.guard.options.command };
+    })();
+
+    const sh = (cmd: string, cwd: string): number =>
+        Bun.spawnSync(['/bin/sh', '-c', cmd], { cwd, stdout: 'ignore', stderr: 'ignore' }).exitCode ?? -1;
+
+    test('exact final PASS publishes; PASS-then-FAIL, negation, and missing file do not', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'ha-guard-'));
+        const validation = join(dir, 'validation.txt');
+        const runId = '__runId';
+        try {
+            const sub = (cmd: string): string =>
+                cmd.replaceAll(`.spur/run/$${runId}-validation.txt`, validation).replaceAll('$__runId', runId);
+            writeFileSync(validation, 'Verdict: PASS\n');
+            expect(sh(sub(guard.toStamp), dir)).toBe(0);
+            expect(sh(sub(guard.toCorrect), dir)).not.toBe(0);
+            writeFileSync(validation, 'Verdict: PASS\nVerdict: FAIL\n');
+            expect(sh(sub(guard.toStamp), dir)).not.toBe(0);
+            writeFileSync(validation, 'not Verdict: PASS\n');
+            expect(sh(sub(guard.toStamp), dir)).not.toBe(0);
+            writeFileSync(validation, 'trailing verdict text Verdict: PASS\n');
+            expect(sh(sub(guard.toStamp), dir)).not.toBe(0);
+            rmSync(validation);
+            expect(sh(sub(guard.toStamp), dir)).not.toBe(0);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+// 0771: probe CLI carries --helper into the provenance so the cache identity includes the twin.
+describe('probe --helper digest identity (0771)', () => {
+    test('helperDigest records the sha256 of the helper twin', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'ha-helper-'));
+        try {
+            const helper = join(dir, 'helper.mjs');
+            writeFileSync(helper, 'export {};\n');
+            const artifact = join(dir, 'artifact.json');
+            writeFileSync(
+                artifact,
+                JSON.stringify({ selector: { since: 's', until: 'u' }, coverage: [{ source: 'x', status: 'ok' }] }),
+            );
+            const out = join(dir, 'prov.json');
+            const r = runCacheCli([
+                'probe',
+                '--artifact',
+                artifact,
+                '--target',
+                join(dir, 'report.md'),
+                '--mode',
+                'daily',
+                '--out',
+                out,
+                '--helper',
+                helper,
+            ]);
+            expect(r.exitCode).toBe(0);
+            const prov = JSON.parse(readFileSync(out, 'utf8')) as { helperDigest: string };
+            expect(prov.helperDigest).toBe(logicDigest(helper));
+            expect(prov.helperDigest).not.toBe('not available');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 });

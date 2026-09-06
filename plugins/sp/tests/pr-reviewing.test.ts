@@ -73,12 +73,27 @@ describe('parseArgs', () => {
             join(import.meta.dir, '..', '..', '..', 'config', 'workflows', 'pr-review.yaml'),
             'utf8',
         );
-        expect(workflow.match(/--since "\$SINCE"/g)?.length).toBe(3);
-        expect(workflow.match(/--head "\$REQUEST_HEAD"/g)?.length).toBe(3);
-        expect(workflow).toContain('pr-reviewing.ts)" status --since "$SINCE" --head "$REQUEST_HEAD" --json');
+        expect(workflow.match(/--since "\$prSince"/g)?.length).toBe(3);
+        expect(workflow.match(/--head "\$prHead"/g)?.length).toBe(3);
+        expect(workflow).toContain('pr-reviewing.ts)" status --since "$prSince" --head "$prHead" --json');
         expect(workflow).not.toContain('node -e');
         expect(workflow).toContain('-pr-status.json');
         expect(workflow).toContain('sh -c "$preReviewCmd"');
+    });
+
+    test('request extracts requestedAt/head once; wait/collect read them via file.read.into-var (0771)', () => {
+        const workflow = readFileSync(
+            join(import.meta.dir, '..', '..', '..', 'config', 'workflows', 'pr-review.yaml'),
+            'utf8',
+        );
+        // Extraction happens once, in the request state; downstream states read the .txt files.
+        expect(workflow.match(/pr-since\.txt/g)?.length).toBe(3); // write + 2 reads
+        expect(workflow.match(/pr-head\.txt/g)?.length).toBe(3);
+        expect(workflow.match(/kind: file\.read\.into-var/g)?.length).toBe(4);
+        expect(workflow.match(/PAIR=/g)?.length ?? 0).toBe(0);
+        expect(workflow).toContain('var: prSince');
+        expect(workflow).toContain('var: prHead');
+        expect(workflow).toContain('version: "1"');
     });
 });
 
@@ -731,6 +746,8 @@ describe('CLI subcommands over stubbed git/gh', () => {
         );
         const res = runScript([
             'wait',
+            '--head',
+            'aaaa1111bbbb2222cccc3333dddd4444eeee5555',
             '--since',
             '2026-08-01T00:00:00Z',
             '--timeout',
@@ -761,6 +778,8 @@ describe('CLI subcommands over stubbed git/gh', () => {
         const statusFile = join(fix, 'wait.status');
         const res = runScript([
             'wait',
+            '--head',
+            'aaaa1111bbbb2222cccc3333dddd4444eeee5555',
             '--since',
             '2026-08-01T00:00:00Z',
             '--timeout',
@@ -777,13 +796,30 @@ describe('CLI subcommands over stubbed git/gh', () => {
     });
 
     test('wait timeout is pending (exit 3), never a failure', () => {
-        const res = runScript(['wait', '--since', '2026-08-01T00:00:00Z', '--timeout', '1', '--interval', '1']);
+        const res = runScript([
+            'wait',
+            '--head',
+            'aaaa1111bbbb2222cccc3333dddd4444eeee5555',
+            '--since',
+            '2026-08-01T00:00:00Z',
+            '--timeout',
+            '1',
+            '--interval',
+            '1',
+        ]);
         expect(res.code).toBe(3);
         expect(res.stdout).toContain('pending');
     });
 
     test('wait rejects invalid polling budgets instead of spinning', () => {
-        const res = runScript(['wait', '--timeout', 'not-a-number', '--json']);
+        const res = runScript([
+            'wait',
+            '--head',
+            'aaaa1111bbbb2222cccc3333dddd4444eeee5555',
+            '--timeout',
+            'not-a-number',
+            '--json',
+        ]);
         expect(res.code).toBe(1);
         expect(JSON.parse(res.stdout).error).toContain('--timeout');
     });
@@ -801,7 +837,14 @@ describe('CLI subcommands over stubbed git/gh', () => {
                 },
             ])}\n`,
         );
-        const res = runScript(['collect', '--json', '--status-file', join(fix, 'collect.status')]);
+        const res = runScript([
+            'collect',
+            '--head',
+            'aaaa1111bbbb2222cccc3333dddd4444eeee5555',
+            '--json',
+            '--status-file',
+            join(fix, 'collect.status'),
+        ]);
         expect(res.code).toBe(0);
         const payload = JSON.parse(res.stdout);
         expect(payload.verdict).toBe('FINDINGS');
@@ -810,7 +853,7 @@ describe('CLI subcommands over stubbed git/gh', () => {
     });
 
     test('collect with no current-HEAD Codex output reports pending', () => {
-        const res = runScript(['collect', '--json']);
+        const res = runScript(['collect', '--head', 'aaaa1111bbbb2222cccc3333dddd4444eeee5555', '--json']);
         expect(res.code).toBe(0);
         expect(JSON.parse(res.stdout).verdict).toBe('PENDING');
     });
@@ -819,6 +862,14 @@ describe('CLI subcommands over stubbed git/gh', () => {
         const res = runScript(['collect', '--head', 'old-head', '--json']);
         expect(res.code).toBe(2);
         expect(JSON.parse(res.stdout).error).toContain('PR HEAD moved');
+    });
+
+    test('wait/collect/status fail loud without a non-empty --head (0771)', () => {
+        for (const verb of ['wait', 'collect', 'status']) {
+            const res = runScript([verb, '--json']);
+            expect(res.code).toBe(2);
+            expect(JSON.parse(res.stdout).error).toContain('--head <sha> is required');
+        }
     });
 
     test('collect reports clean only for an explicit current-HEAD review', () => {
@@ -834,7 +885,14 @@ describe('CLI subcommands over stubbed git/gh', () => {
                 },
             ])}\n`,
         );
-        const res = runScript(['collect', '--json', '--status-file', join(fix, 'collect.status')]);
+        const res = runScript([
+            'collect',
+            '--head',
+            'aaaa1111bbbb2222cccc3333dddd4444eeee5555',
+            '--json',
+            '--status-file',
+            join(fix, 'collect.status'),
+        ]);
         expect(res.code).toBe(0);
         expect(JSON.parse(res.stdout).verdict).toBe('CLEAN');
         expect(readFileSync(join(fix, 'collect.status'), 'utf8').trim()).toBe('CLEAN');
@@ -857,7 +915,7 @@ describe('CLI subcommands over stubbed git/gh', () => {
                 },
             ])}\n`,
         );
-        const res = runScript(['collect', '--json']);
+        const res = runScript(['collect', '--head', 'aaaa1111bbbb2222cccc3333dddd4444eeee5555', '--json']);
         expect(res.code).toBe(0);
         expect(JSON.parse(res.stdout)).toMatchObject({ verdict: 'PENDING', findings: [] });
     });
@@ -876,7 +934,7 @@ describe('CLI subcommands over stubbed git/gh', () => {
                 },
             ])}\n`,
         );
-        const res = runScript(['status', '--json']);
+        const res = runScript(['status', '--head', 'aaaa1111bbbb2222cccc3333dddd4444eeee5555', '--json']);
         expect(res.code).toBe(0);
         const payload = JSON.parse(res.stdout);
         expect(payload).toMatchObject({
@@ -904,7 +962,7 @@ describe('CLI subcommands over stubbed git/gh', () => {
                 },
             ])}\n`,
         );
-        const res = runScript(['status', '--json']);
+        const res = runScript(['status', '--head', 'aaaa1111bbbb2222cccc3333dddd4444eeee5555', '--json']);
         expect(res.code).toBe(0);
         expect(JSON.parse(res.stdout).codex).toBe('findings');
     });
@@ -922,14 +980,21 @@ describe('CLI subcommands over stubbed git/gh', () => {
                 },
             ])}\n`,
         );
-        const res = runScript(['status', '--since', '2026-08-13T00:00:00Z', '--json']);
+        const res = runScript([
+            'status',
+            '--head',
+            'aaaa1111bbbb2222cccc3333dddd4444eeee5555',
+            '--since',
+            '2026-08-13T00:00:00Z',
+            '--json',
+        ]);
         expect(res.code).toBe(0);
         expect(JSON.parse(res.stdout).codex).toBe('pending');
     });
 
     test('status leaves CI unavailable when GitHub reports no checks', () => {
         writeFileSync(join(fix, 'checks'), '[]\n');
-        const res = runScript(['status', '--json']);
+        const res = runScript(['status', '--head', 'aaaa1111bbbb2222cccc3333dddd4444eeee5555', '--json']);
         expect(res.code).toBe(0);
         expect(JSON.parse(res.stdout).ci).toBe('unavailable');
     });
@@ -941,7 +1006,7 @@ describe('CLI subcommands over stubbed git/gh', () => {
         ] as const) {
             writeFileSync(join(fix, 'checks'), `${JSON.stringify([{ bucket }])}\n`);
             writeFileSync(join(fix, 'checks_exit'), exitCode);
-            const res = runScript(['status', '--json']);
+            const res = runScript(['status', '--head', 'aaaa1111bbbb2222cccc3333dddd4444eeee5555', '--json']);
             expect(res.code).toBe(0);
             expect(JSON.parse(res.stdout).ci).toBe(expected);
         }
@@ -950,7 +1015,7 @@ describe('CLI subcommands over stubbed git/gh', () => {
     test('status never treats skipped or unknown CI buckets as passing', () => {
         for (const bucket of ['skipping', 'mystery']) {
             writeFileSync(join(fix, 'checks'), `${JSON.stringify([{ bucket }])}\n`);
-            const res = runScript(['status', '--json']);
+            const res = runScript(['status', '--head', 'aaaa1111bbbb2222cccc3333dddd4444eeee5555', '--json']);
             expect(res.code).toBe(0);
             expect(JSON.parse(res.stdout).ci).toBe('unavailable');
         }
