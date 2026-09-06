@@ -34,6 +34,11 @@ import {
     type WorkflowTraceTimeline,
     WorkflowTraceWriter,
 } from '@gobing-ai/spur-app';
+import {
+    capabilityDiagnostic,
+    evaluateCapabilities,
+    parseRequiresCapabilities,
+} from '@gobing-ai/spur-app/capability-attestation';
 import type { SpurConfig } from '@gobing-ai/spur-config';
 import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import type { ActionCost } from '@gobing-ai/spur-domain';
@@ -770,6 +775,33 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             let planPreview: string | undefined;
             if (options.plan !== false && resolvedDefinition !== undefined) {
                 planPreview = renderRunPlan(resolvedDefinition.workflow);
+            }
+            // 0777 R4 (F4): run-start capability preflight — BEFORE plan display and
+            // any dispatch, warn when a pinned executor cannot satisfy a step's
+            // requiresCapabilities under attestation. Advisory only: the fail-closed
+            // pre-spawn gate (0706 R5) still refuses the dispatch; this moves the
+            // signal from ~1s-after-launch to run start.
+            if (resolvedDefinition !== undefined) {
+                const executors = context.spurConfig?.agent?.executors;
+                const flow = resolvedDefinition.workflow;
+                const agentRunActions =
+                    flow.kind === 'transition-flow'
+                        ? flow.nodes.flatMap((node) => (node.action?.kind === 'agent.run' ? [node.action] : []))
+                        : flow.states.flatMap((state) => (state.onEnter ?? []).filter((a) => a.kind === 'agent.run'));
+                for (const action of agentRunActions) {
+                    const pin = action.options?.agent;
+                    const requires = parseRequiresCapabilities(action.options?.requiresCapabilities);
+                    if (typeof pin !== 'string' || !requires.ok) continue;
+                    const evaluation = evaluateCapabilities(
+                        requires.requires,
+                        executors?.find((e) => e.name === pin),
+                    );
+                    if (!evaluation.ok) {
+                        context.output.error(
+                            `Warning: capability preflight (0777 R4): ${capabilityDiagnostic(pin, evaluation)}`,
+                        );
+                    }
+                }
             }
             // Consolidated all-in-one run log (feature D2 / task 0426): a read-only
             // subscriber on the bus that appends `.spur/run/<RUNID>.log` from creation

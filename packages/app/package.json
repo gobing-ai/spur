@@ -6,6 +6,7 @@
     "exports": {
         ".": "./src/index.ts",
         "./errors": "./src/errors.ts",
+        "./capability-attestation": "./src/services/capability-attestation.ts",
         "./feature-check": "./src/services/feature-check.ts",
         "./system-event-tap": "./src/services/system-event-tap.ts",
         "./system-events": "./src/services/event-names.ts"
