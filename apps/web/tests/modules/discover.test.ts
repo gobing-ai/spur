@@ -268,6 +268,6 @@ describe('discoverModules (real fs fallback under bun test)', () => {
         const discovered = discoverModules();
         expect(discovered.length).toBeGreaterThan(0);
         expect(discovered[0]?.id).toBe('observability');
-        expect(discovered[0]?.order).toBe(0);
+        expect(discovered[0]?.order).toBe(10);
     });
 });

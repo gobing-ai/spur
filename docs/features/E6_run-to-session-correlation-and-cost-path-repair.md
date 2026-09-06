@@ -154,7 +154,7 @@ Feature: Run-to-session and task-to-session correlation
 | 0557 | Capture the run-to-session mapping at the agent invoke boundary | done |
 | 0558 | Correlate existing history retroactively by time window, marked estimated | done |
 | 0559 | Repoint cost attribution at typed columns and retire the dead ETL path | done |
-| 0722 | Recover task attribution from imported agent sessions | todo |
+| 0722 | Recover task attribution from imported agent sessions | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

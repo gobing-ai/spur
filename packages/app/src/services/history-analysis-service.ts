@@ -5,7 +5,7 @@ import {
     type DbAdapter,
     historyBoardHistoryVersion,
     historyBoardRollupsFresh,
-    markHistoryBoardRollupsRefreshed,
+    recordHistoryBoardRollupMeta,
     refreshHistoryBoardRollupsIncremental,
 } from '@gobing-ai/spur-domain';
 
@@ -62,7 +62,7 @@ export async function refreshHistoryRollups(db: DbAdapter): Promise<HistoryRollu
     await refreshHistoryBoardRollupsIncremental(db);
 
     const historyVersion = await historyBoardHistoryVersion(db);
-    await markHistoryBoardRollupsRefreshed(db, historyVersion);
+    await recordHistoryBoardRollupMeta(db, historyVersion);
 
     const waste = await cacheWasteAggregate(db, ALL_HISTORY);
     return { status: 'refreshed', historyVersion, cacheWasteSteps: waste?.steps ?? 0 };

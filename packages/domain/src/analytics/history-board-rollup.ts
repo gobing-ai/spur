@@ -930,10 +930,12 @@ export const SESSION_ORDER_COLUMNS: Record<string, string> = {
 export async function historyBoardSessionsFromRollup(
     db: DbAdapter,
     sel: ArtifactSelector,
-    input: { page: number; pageSize: number; sortBy: string; sortDir: 'asc' | 'desc' },
+    input: { page: number; pageSize: number; sortBy?: string; sortDir?: 'asc' | 'desc'; sortField?: string },
 ): Promise<HistoryBoardSessionPage> {
     const spec = buildSessionWhere(sel);
-    const order = SESSION_ORDER_COLUMNS[input.sortBy] ?? SESSION_ORDER_COLUMNS.start;
+    const sortKey = input.sortBy ?? input.sortField ?? 'start';
+    const order = SESSION_ORDER_COLUMNS[sortKey] ?? SESSION_ORDER_COLUMNS.start;
+    const sortDir = (input.sortDir ?? 'desc').toUpperCase();
     const offset = (input.page - 1) * input.pageSize;
     const [items, total] = await Promise.all([
         db.queryAll<HistoryBoardSessionRollupRow>(
@@ -946,7 +948,7 @@ export async function historyBoardSessionsFromRollup(
                     s.assistant_duration_ms AS assistantDurationMs,
                     s.top_tool AS topTool, s.state
              FROM history_board_session_stats s ${spec.where}
-             ORDER BY ${order} ${input.sortDir.toUpperCase()}, s.session_id ASC
+             ORDER BY ${order} ${sortDir}, s.session_id ASC
              LIMIT ? OFFSET ?`,
             ...spec.params,
             input.pageSize,
@@ -2077,3 +2079,38 @@ export async function refreshHistoryBoardRollupsIncremental(db: DbAdapter): Prom
 
 // Re-export from here so ROLLUP_DEFINITION_VERSION is reachable at the frozen location.
 export { ROLLUP_DEFINITION_VERSION } from './rollup-watermark';
+
+/** Tables probed to check if rollup data rows exist. */
+export type HistoryBoardRollupProbeTable =
+    | 'history_board_message_5m'
+    | 'history_board_session_stats'
+    | 'history_board_loop_findings';
+
+/** Record the updated rollup meta row after a refresh. */
+export async function recordHistoryBoardRollupMeta(
+    db: DbAdapter,
+    historyVersion: string,
+    refreshedAt: string = new Date().toISOString(),
+): Promise<void> {
+    await db.run(
+        `INSERT INTO history_board_rollup_meta (id, history_version, refreshed_at)
+         VALUES (1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET history_version = excluded.history_version, refreshed_at = excluded.refreshed_at`,
+        historyVersion,
+        refreshedAt,
+    );
+}
+
+/** Check whether a rollup table has at least one materialized row. */
+export async function hasHistoryBoardRollupRows(db: DbAdapter, table: HistoryBoardRollupProbeTable): Promise<boolean> {
+    const validTables: Record<HistoryBoardRollupProbeTable, true> = {
+        history_board_message_5m: true,
+        history_board_session_stats: true,
+        history_board_loop_findings: true,
+    };
+    if (!validTables[table]) {
+        throw new Error(`Invalid rollup probe table: ${table}`);
+    }
+    const row = await db.queryFirst<{ ok: number }>(`SELECT 1 AS ok FROM ${table} LIMIT 1`);
+    return row?.ok === 1;
+}

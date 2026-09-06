@@ -44,6 +44,7 @@ import {
     type HistoryBoardSourceRollupRow,
     type HistoryBoardSummaryRollup,
     type HistoryDimension,
+    hasHistoryBoardRollupRows,
     historyBoardBucketsFromRollup,
     historyBoardDatabaseBytes,
     historyBoardDimensionDailyFromMart,
@@ -183,7 +184,7 @@ function resolveBucket(bucket: string | undefined, range: HistoryRange = '4h'): 
         return bucket as DomainHistoryBucket;
     }
     if (range === '1h') return '1m';
-    if (range === '4h') return '3m';
+    if (range === '4h') return '1m';
     if (range === '24h') return '10m';
     if (range === '7d') return '30m';
     return '1d';
@@ -332,11 +333,17 @@ function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras):
         0,
     );
     const useCalls = totalBucketTokens === 0;
-    const timeSeries = new Map<string, { cacheRead: number; billed: number; series: Record<string, number> }>();
+    const timeSeries = new Map<
+        string,
+        { cacheRead: number; billed: number; output: number; series: Record<string, number> }
+    >();
     for (const row of rows.buckets) {
-        const point = timeSeries.get(row.bucketStart) ?? { cacheRead: 0, billed: 0, series: {} };
-        const billed = useCalls ? (row.calls ?? 0) : (row.freshInputTokens ?? 0) + (row.outputTokens ?? 0);
+        const point = timeSeries.get(row.bucketStart) ?? { cacheRead: 0, billed: 0, output: 0, series: {} };
+        const fresh = row.freshInputTokens ?? 0;
+        const output = row.outputTokens ?? 0;
+        const billed = useCalls ? (row.calls ?? 0) : fresh + output;
         point.billed += billed;
+        point.output += output;
         point.cacheRead += row.cacheReadTokens ?? 0;
         point.series[row.key] = (point.series[row.key] ?? 0) + billed;
         timeSeries.set(row.bucketStart, point);
@@ -382,14 +389,15 @@ function projectSummary(rows: HistoryBoardSummaryRollup, extras: SummaryExtras):
             toolCallsCount: rows.toolCalls,
             errorRate: rows.toolCalls > 0 ? Math.round((rows.toolErrors / rows.toolCalls) * 1000) / 10 : 0,
         },
-        timeSeries: Array.from(timeSeries.entries()).map(([bucketStart, point]) => ({
-            bucketStart,
-            cacheHitRatio:
-                point.billed + point.cacheRead > 0
-                    ? Math.round((point.cacheRead / (point.billed + point.cacheRead)) * 100)
-                    : 0,
-            series: point.series,
-        })),
+        timeSeries: Array.from(timeSeries.entries()).map(([bucketStart, point]) => {
+            const totalTokens = point.billed + point.cacheRead;
+            return {
+                bucketStart,
+                cacheHitRatio: totalTokens > 0 ? Math.round((point.cacheRead / totalTokens) * 100) : 0,
+                gainRatio: totalTokens > 0 ? Math.round((point.output / totalTokens) * 1000) / 10 : 0,
+                series: point.series,
+            };
+        }),
         topModels: toTopItems(rows.models, false),
         topSources: toTopItems(rows.sources, true),
         topTools: topToolRows.map((row) => ({
@@ -552,25 +560,32 @@ function previousWindowSelector(sel: ArtifactSelector): ArtifactSelector | null 
 function projectSkillTimeSeries(buckets: BucketedTokenRow[]): HistoryTimeSeriesPoint[] {
     const totalTokens = buckets.reduce((sum, row) => sum + (row.freshInputTokens ?? 0) + (row.outputTokens ?? 0), 0);
     const useCalls = totalTokens === 0;
-    const byBucket = new Map<string, { cacheRead: number; billed: number; series: Record<string, number> }>();
+    const byBucket = new Map<
+        string,
+        { cacheRead: number; billed: number; output: number; series: Record<string, number> }
+    >();
     for (const row of buckets) {
-        const point = byBucket.get(row.bucketStart) ?? { cacheRead: 0, billed: 0, series: {} };
-        const val = useCalls ? (row.calls ?? 0) : (row.freshInputTokens ?? 0) + (row.outputTokens ?? 0);
+        const point = byBucket.get(row.bucketStart) ?? { cacheRead: 0, billed: 0, output: 0, series: {} };
+        const fresh = row.freshInputTokens ?? 0;
+        const output = row.outputTokens ?? 0;
+        const val = useCalls ? (row.calls ?? 0) : fresh + output;
         point.billed += val;
+        point.output += output;
         point.cacheRead += row.cacheReadTokens ?? 0;
         point.series[row.key] = (point.series[row.key] ?? 0) + val;
         byBucket.set(row.bucketStart, point);
     }
     return Array.from(byBucket.entries())
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([bucketStart, point]) => ({
-            bucketStart,
-            cacheHitRatio:
-                point.billed + point.cacheRead > 0
-                    ? Math.round((point.cacheRead / (point.billed + point.cacheRead)) * 100)
-                    : 0,
-            series: point.series,
-        }));
+        .map(([bucketStart, point]) => {
+            const totalTokens = point.billed + point.cacheRead;
+            return {
+                bucketStart,
+                cacheHitRatio: totalTokens > 0 ? Math.round((point.cacheRead / totalTokens) * 100) : 0,
+                gainRatio: totalTokens > 0 ? Math.round((point.output / totalTokens) * 1000) / 10 : 0,
+                series: point.series,
+            };
+        });
 }
 
 /** KPIs of a rollup-shaped summary — used for the previous window baseline. */
@@ -1572,7 +1587,10 @@ export class LiveHistoryBoardService implements HistoryBoardService {
 
         const sel = toArtifactSelector(filter);
         const rollupsFresh = await historyBoardRollupsFresh(db);
-        const [loopRows, cacheWasteRows, sessionRows, largeSteps, slowStepsRows, modelCompRows] = rollupsFresh
+        const hasRollupRows = await hasHistoryBoardRollupRows(db, 'history_board_loop_findings');
+        const useRollup = rollupsFresh || hasRollupRows;
+        const effectiveSel = rollupsFresh ? sel : boundStaleSelector(sel);
+        const [loopRows, cacheWasteRows, sessionRows, largeSteps, slowStepsRows, modelCompRows] = useRollup
             ? await Promise.all([
                   historyBoardLoopsFromRollup(db, sel, 100),
                   historyBoardRankedStepsFromRollup(db, sel, 'cache-waste', 10),
@@ -1582,60 +1600,77 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                   historyBoardModelComparisonFromRollup(db, sel),
               ])
             : await Promise.all([
-                  loops(db, sel),
-                  topCacheWasteSteps(db, sel, 10),
-                  bySession(db, sel, 5),
-                  topStepsByTokens(db, sel, 10),
-                  topStepsByDuration(db, sel, 10),
-                  modelComparison(db, sel),
+                  loops(db, effectiveSel),
+                  topCacheWasteSteps(db, effectiveSel, 10),
+                  bySession(db, effectiveSel, 5),
+                  topStepsByTokens(db, effectiveSel, 10),
+                  topStepsByDuration(db, effectiveSel, 10),
+                  modelComparison(db, effectiveSel),
               ]);
 
+        const EAGER_LOOP_DETAIL_LIMIT = 10;
         const loopFindings = await Promise.all(
-            loopRows.map(async (l) => {
-                let repeatedCalls: HistoryToolCallItem[] = [];
-                try {
-                    const callRows = await loopRepeatedCallsQuery(db, {
-                        source: l.source,
-                        sessionId: l.sessionId,
-                        toolName: l.toolName,
-                        argsDigest: l.argsDigest,
-                        limit: 50,
-                    });
+            loopRows.map(async (l, idx) => {
+                let repeatedCalls: HistoryToolCallItem[] | undefined;
+                let avgTokens = 250;
+                if (idx < EAGER_LOOP_DETAIL_LIMIT) {
+                    try {
+                        const callRows = await loopRepeatedCallsQuery(db, {
+                            source: l.source,
+                            sessionId: l.sessionId,
+                            toolName: l.toolName,
+                            argsDigest: l.argsDigest,
+                            model: l.model,
+                            limit: 50,
+                        });
 
-                    repeatedCalls = callRows.map((row) => {
-                        const category = toolCategory(row.toolName);
-                        const links = row.links && row.links > 0 ? row.links : 1;
-                        const billedTokens = row.inputTokens + row.outputTokens;
-                        return {
-                            seq: row.toolSeq,
-                            toolSeq: row.toolSeq,
-                            ts: row.ts,
-                            toolName: row.toolName,
-                            category,
-                            status: row.status === 'ok' ? 'ok' : row.status === 'error' ? 'error' : 'unknown',
-                            durationMs: row.durationMs,
-                            durationSource: row.durationMs !== null ? 'measured' : 'unmeasured',
-                            resultBytes: row.resultBytes,
-                            argsRaw: row.argsRaw,
-                            argsDigest: row.argsDigest,
-                            errorText: row.errorText,
-                            callId: row.callId,
-                            messageHash: row.messageHash,
-                            sessionId: row.sessionId,
-                            source: row.source,
-                            model: row.model,
-                            tokens: {
-                                billedTokens: Math.round(billedTokens / links),
-                                freshInputTokens: Math.round(row.inputTokens / links),
-                                cacheReadTokens: Math.round(row.cacheReadTokens / links),
-                                outputTokens: Math.round(row.outputTokens / links),
-                                cacheSavedTokens: 0,
-                            },
-                        };
-                    });
-                } catch {
-                    repeatedCalls = [];
+                        if (callRows.length > 0) {
+                            const totalSampleTokens = callRows.reduce(
+                                (acc, r) => acc + (r.inputTokens ?? 0) + (r.outputTokens ?? 0),
+                                0,
+                            );
+                            avgTokens = Math.max(1, Math.round(totalSampleTokens / callRows.length));
+                        }
+
+                        repeatedCalls = callRows.map((row) => {
+                            const category = toolCategory(row.toolName);
+                            const freshInputTokens = row.inputTokens ?? 0;
+                            const cacheReadTokens = row.cacheReadTokens ?? 0;
+                            const outputTokens = row.outputTokens ?? 0;
+                            const billedTokens = freshInputTokens + outputTokens;
+                            return {
+                                seq: row.toolSeq,
+                                toolSeq: row.toolSeq,
+                                ts: row.ts,
+                                toolName: row.toolName,
+                                category,
+                                status: row.status === 'ok' ? 'ok' : row.status === 'error' ? 'error' : 'unknown',
+                                durationMs: row.durationMs ?? null,
+                                durationSource: row.durationMs !== null ? 'measured' : 'unmeasured',
+                                resultBytes: row.resultBytes ?? null,
+                                argsRaw: row.argsRaw ?? null,
+                                argsDigest: row.argsDigest ?? null,
+                                errorText: row.errorText ?? null,
+                                callId: row.callId ?? null,
+                                messageHash: row.messageHash,
+                                sessionId: row.sessionId,
+                                source: row.source,
+                                model: row.model ?? null,
+                                tokens: {
+                                    billedTokens,
+                                    freshInputTokens,
+                                    cacheReadTokens,
+                                    outputTokens,
+                                    cacheSavedTokens: 0,
+                                },
+                            };
+                        });
+                    } catch {
+                        repeatedCalls = [];
+                    }
                 }
+
+                const wastedTokens = Math.max(0, l.repeats - 1) * avgTokens;
 
                 return {
                     tool: l.toolName,
@@ -1644,7 +1679,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                     repeats: l.repeats,
                     fromSeq: l.firstSeq,
                     toSeq: l.lastSeq,
-                    wastedTokens: l.repeats * 250,
+                    wastedTokens,
                     repeatedCalls,
                 };
             }),

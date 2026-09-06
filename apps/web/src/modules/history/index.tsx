@@ -13,6 +13,7 @@ export const module: WebModule = {
     icon: '📊',
     route: 'history',
     component: HistoryShell,
-    sidebarLabel: 'History',
-    order: 3,
+    sidebarLabel: 'Histories',
+    description: 'Imported agent sessions, token analytics, and tool-call forensics',
+    order: 20,
 };

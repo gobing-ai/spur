@@ -102,6 +102,9 @@ Feature: Corpus gate integrity
 | 0688 | Right-size the post-implementation task gate: drop no-signal citation checks, keep real drift detection | done |
 | 0714 | Post-F95 corpus drift reconciliation: re-point shifted anchors, fix matcher false positives, baseline verdict-rows findings | done |
 | 0721 | Fail closed on hollow MET verdict evidence in task-verdict derivation | done |
+| 0726 | Harden history import provenance and pipeline verify loop (0722 session review) | done |
+| 0727 | Harden inline pipeline driver observability: todo reconciliation, implement-stage timeout, run-log timestamps | done |
+| 0728 | Generalize verify-answer-lint requirement/AC ID extraction to the full corpus convention set | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

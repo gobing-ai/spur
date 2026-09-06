@@ -116,6 +116,7 @@ describe('rpc client', () => {
         const client = createORPCClient(
             new OpenAPILink(contract, {
                 url: 'http://127.0.0.1:1/api',
+                fetch: () => Promise.reject(new TypeError('Failed to fetch')),
                 adapterInterceptors: [onError(logTransportError)],
             }),
         ) as { health: () => Promise<unknown> };

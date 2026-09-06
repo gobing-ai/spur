@@ -26,7 +26,7 @@ describe('MockHistoryBoardService', () => {
         expect(summary.cacheEfficiency.bySource?.[0]?.source).toBeDefined();
         expect(summary.cacheEfficiency.bySource?.[0]?.hitRatio).toBeGreaterThanOrEqual(0);
 
-        // 1H range uses 1m interval, 4H range uses 3m interval
+        // 1H range uses 1m interval, 4H range uses 1m interval
         const summary1h = await service.getSummary({ range: '1h' });
         expect(summary1h.cacheEfficiency.bySource).toBeDefined();
 

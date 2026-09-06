@@ -120,29 +120,41 @@ export const HistoryShell: React.FC = () => {
         setSummaryError(null);
         setInsightsLoading(true);
         setInsightsError(null);
-        (async () => {
-            const [summaryRes, insightsRes] = await Promise.allSettled([
-                api.history.getSummary(filter),
-                api.history.getInsights(filter),
-            ]);
-            if (!mounted) return;
-            if (summaryRes.status === 'fulfilled' && summaryRes.value?.data) {
-                setSummaryData(summaryRes.value.data);
-            } else {
-                setSummaryError(
-                    summaryRes.status === 'rejected' ? errorMessage(summaryRes.reason) : 'Failed to load summary',
-                );
-            }
-            if (insightsRes.status === 'fulfilled' && insightsRes.value?.data) {
-                setInsightsData(insightsRes.value.data);
-            } else {
-                setInsightsError(
-                    insightsRes.status === 'rejected' ? errorMessage(insightsRes.reason) : 'Failed to load insights',
-                );
-            }
-            setSummaryLoading(false);
-            setInsightsLoading(false);
-        })();
+
+        api.history
+            .getSummary(filter)
+            .then((res) => {
+                if (!mounted) return;
+                if (res?.data) {
+                    setSummaryData(res.data);
+                } else {
+                    setSummaryError('Failed to load summary');
+                }
+            })
+            .catch((err) => {
+                if (mounted) setSummaryError(errorMessage(err));
+            })
+            .finally(() => {
+                if (mounted) setSummaryLoading(false);
+            });
+
+        api.history
+            .getInsights(filter)
+            .then((res) => {
+                if (!mounted) return;
+                if (res?.data) {
+                    setInsightsData(res.data);
+                } else {
+                    setInsightsError('Failed to load insights');
+                }
+            })
+            .catch((err) => {
+                if (mounted) setInsightsError(errorMessage(err));
+            })
+            .finally(() => {
+                if (mounted) setInsightsLoading(false);
+            });
+
         return () => {
             mounted = false;
         };

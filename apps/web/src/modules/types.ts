@@ -9,6 +9,8 @@ export interface WebModule {
     readonly component: ComponentType;
     readonly rightPanelComponent?: ComponentType;
     readonly sidebarLabel?: string;
+    /** Optional short capability blurb used by navigation tooltips. */
+    readonly description?: string;
     /** Optional declarative ordering key; declared modules sort ascending by this value, undeclared modules retain their existing relative order after them. */
     readonly order?: number;
 }

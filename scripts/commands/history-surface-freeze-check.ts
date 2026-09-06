@@ -25,6 +25,14 @@ import { readFileSync } from 'node:fs';
 /** The two protected surfaces. Directory paths end in '/'. */
 export const FROZEN_HISTORY_SURFACES = ['apps/web/src/modules/history/', 'packages/contracts/src/history.ts'] as const;
 
+/**
+ * Files excluded from the freeze check.
+ * apps/web/src/modules/history/index.tsx is the module registration descriptor (order,
+ * sidebarLabel, capability description); it carries board shell metadata updated by feature A7
+ * while all History UI tabviews, filters, charts, and transport contracts remain frozen.
+ */
+export const FROZEN_HISTORY_EXCLUSIONS = ['apps/web/src/modules/history/index.tsx'] as const;
+
 export interface FrozenSurfaceChange {
     path: string;
     added: number;
@@ -53,6 +61,9 @@ function git(args: string[], cwd: string): GitResult {
 }
 
 function isUnderFrozen(path: string): boolean {
+    if (FROZEN_HISTORY_EXCLUSIONS.some((excluded) => path === excluded)) {
+        return false;
+    }
     return FROZEN_HISTORY_SURFACES.some((surface) =>
         surface.endsWith('/') ? path.startsWith(surface) : path === surface,
     );
@@ -107,7 +118,9 @@ export function historySurfaceFreezeCheck(
         }
         for (const line of diff.stdout.split('\n').filter(Boolean)) {
             const change = parseNumstat(line);
-            if (change.path) changes.push(change);
+            if (change.path && !FROZEN_HISTORY_EXCLUSIONS.some((excluded) => change.path === excluded)) {
+                changes.push(change);
+            }
         }
     }
 

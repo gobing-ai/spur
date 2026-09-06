@@ -16,7 +16,6 @@ export const module: WebModule = {
     route: 'workspace',
     component: WorkspaceShell,
     sidebarLabel: 'Workspace',
-    // 0197 R5: declared order 0 (sorts with observability's order 0; the stable
-    // id pre-sort keeps observability first).
-    order: 0,
+    description: 'Repository state, working tree, and project surfaces',
+    order: 50,
 };

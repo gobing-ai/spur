@@ -23,9 +23,9 @@ describe('History Board Web Module', () => {
         expect(historyModule.id).toBe('history');
         expect(historyModule.name).toBe('History');
         expect(historyModule.route).toBe('history');
-        expect(historyModule.sidebarLabel).toBe('History');
+        expect(historyModule.sidebarLabel).toBe('Histories');
         expect(historyModule.icon).toBe('📊');
-        expect(historyModule.order).toBe(3);
+        expect(historyModule.order).toBe(20);
         expect(historyModule.component).toBeDefined();
     });
 
@@ -36,7 +36,7 @@ describe('History Board Web Module', () => {
 
     test('resolveAutoBucket maps time range to bucket granularity', () => {
         expect(resolveAutoBucket('1h')).toBe('1m');
-        expect(resolveAutoBucket('4h')).toBe('3m');
+        expect(resolveAutoBucket('4h')).toBe('1m');
         expect(resolveAutoBucket('24h')).toBe('10m');
         expect(resolveAutoBucket('7d')).toBe('30m');
         expect(resolveAutoBucket('30d')).toBe('1d');

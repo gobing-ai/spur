@@ -8,7 +8,7 @@ import type {
     HistoryTimelineResponse,
 } from '@gobing-ai/spur-contracts';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
-import { HeatmapGrid } from '../../../src/modules/history/charts';
+import { HeatmapGrid, StackedColumnsChart } from '../../../src/modules/history/charts';
 import HistoryFilters from '../../../src/modules/history/HistoryFilters';
 import InsightsTab from '../../../src/modules/history/InsightsTab';
 import SessionsTab from '../../../src/modules/history/SessionsTab';
@@ -988,6 +988,8 @@ describe('History Board components', () => {
         fireEvent.click(view.getByRole('button', { name: 'All Tables' }));
         expect(view.getAllByTestId('summary-bucket-table').length).toBeGreaterThanOrEqual(1);
         expect(view.getAllByText('Bucket').length).toBeGreaterThanOrEqual(1);
+        expect(view.getAllByText('Cache Hit %').length).toBeGreaterThanOrEqual(1);
+        expect(view.getAllByText('Gain Ratio %').length).toBeGreaterThanOrEqual(1);
         fireEvent.click(view.getByRole('button', { name: 'All Charts' }));
         expect(view.queryByTestId('summary-bucket-table')).toBeNull();
     });
@@ -1447,5 +1449,41 @@ describe('History Board components', () => {
         const mdNode = render(<div>{renderTimelinePayload('---\nauthor: Robin\n---\n# Header')}</div>);
         expect(mdNode.container.textContent).toContain('author');
         expect(mdNode.container.textContent).toContain('Header');
+    });
+
+    test('StackedColumnsChart renders dual line overlays for Cache Hit Ratio and Gain Ratio', () => {
+        const chart = render(
+            <StackedColumnsChart
+                buckets={[
+                    {
+                        id: '2026-08-21T00:00:00Z',
+                        label: '08-21',
+                        v: { 'gpt-5.6-sol': 1000 },
+                        lineValue: 60.5,
+                        secondLineValue: 12.3,
+                    },
+                    {
+                        id: '2026-08-22T00:00:00Z',
+                        label: '08-22',
+                        v: { 'gpt-5.6-sol': 2000 },
+                        lineValue: 75.0,
+                        secondLineValue: 18.5,
+                    },
+                ]}
+                series={[{ id: 'gpt-5.6-sol', label: 'gpt-5.6-sol', color: '#3987e5' }]}
+            />,
+        );
+
+        const svg = chart.container.querySelector('svg');
+        expect(svg).toBeDefined();
+        expect(svg?.getAttribute('aria-label')).toContain('gain ratio');
+
+        // Rate overlay percentage scale (0%, 25%, 50%, 75%, 100%)
+        expect(chart.getByText('100%')).toBeDefined();
+        expect(chart.getByText('0%')).toBeDefined();
+
+        // 4 path elements: 2 glow/backdrop paths + 2 primary/secondary stroke paths
+        const paths = chart.container.querySelectorAll('path');
+        expect(paths.length).toBe(4);
     });
 });

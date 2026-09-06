@@ -5,6 +5,7 @@ import { loadLayoutState, saveLayoutState } from '../lib/layout-state';
 import { getModule } from '../modules/registry';
 import type { WebModule } from '../modules/types';
 import ApiErrorToast from './ApiErrorToast';
+import GlobalAgentBar from './GlobalAgentBar';
 import LeftSidebar from './LeftSidebar';
 import MainWorkspace from './MainWorkspace';
 import ResizeHandle from './ResizeHandle';
@@ -140,7 +141,7 @@ export default function BoardLayout() {
             >
                 <ActiveModuleContext.Provider value={activeModule}>
                     <LeftSidebar
-                        collapsed={state.sidebarCollapsed}
+                        collapsed={state.sidebarCollapsed && !mobileSidebarOpen}
                         onToggle={toggleSidebar}
                         onMobileClose={closeMobile}
                     />
@@ -158,6 +159,7 @@ export default function BoardLayout() {
                     </RightPanel>
                 </ActiveModuleContext.Provider>
             </div>
+            <GlobalAgentBar activeModule={activeModule} />
             <ApiErrorToast />
         </>
     );

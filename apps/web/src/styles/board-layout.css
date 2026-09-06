@@ -78,15 +78,6 @@ body {
         pointer-events: auto;
     }
 
-    /* Sidebar backdrop */
-    .board-layout[data-mobile-sidebar-open="true"]::before {
-        content: "";
-        position: fixed;
-        inset: 0;
-        z-index: 49;
-        background: rgba(0, 0, 0, 0.4);
-    }
-
     /* Right panel becomes a bottom sheet overlay */
     .board-layout > aside:last-of-type {
         position: fixed;
@@ -106,15 +97,6 @@ body {
         transform: translateY(0);
         pointer-events: auto;
     }
-
-    /* Bottom sheet backdrop */
-    .board-layout[data-mobile-panel-open="true"]::after {
-        content: "";
-        position: fixed;
-        inset: 0;
-        z-index: 49;
-        background: rgba(0, 0, 0, 0.4);
-    }
 }
 
 /* Mobile bar — only visible <md; sits at top of MainWorkspace */
@@ -127,7 +109,7 @@ body {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0.5rem 0.75rem;
+        padding: 0.75rem;
         background: var(--color-spur-surface);
         border-bottom: 1px solid var(--color-spur-border);
         flex-shrink: 0;

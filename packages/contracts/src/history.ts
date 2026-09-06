@@ -77,6 +77,7 @@ export type HistoryKpiTrendPoint = z.infer<typeof historyKpiTrendPointSchema>;
 export const historyTimeSeriesPointSchema = z.object({
     bucketStart: z.string(),
     cacheHitRatio: z.number(),
+    gainRatio: z.number().optional(),
     series: z.record(z.string(), z.number()),
 });
 

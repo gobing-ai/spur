@@ -134,6 +134,7 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 **Coverage claim:** the new contract is exercised by three regression tests in `planning-check-base.test.ts` covering (a) essential error survives `severityOverrides: 'off'`, (b) advisory warning still suppressed by `severityOverrides: 'off'`, (c) essential error survives `accepted`-map suppression at matching severity. The feature-level contract is exercised by the existing `--as done` direction-aware one-active-goal test (updated fixture satisfies the now-done-aware matrix selection).
 
 **Out of scope (deferred to 0766+):** removing `loadAcceptedFindings` from CLI task checks and the fallback done gate (task 0766). The current change keeps the `accepted` parameter on `summarizeWithStatus` so the legacy callers still work; 0766 will remove the parameter and the accepted-map plumbing.
+
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->

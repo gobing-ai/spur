@@ -29,13 +29,13 @@ afterAll(async () => {
 });
 
 describe('Workspace module registration (R5)', () => {
-    test('discovers the workspace module with id/route workspace, label Workspace, order 0', () => {
+    test('discovers the workspace module with id/route workspace, label Workspace, order 50', () => {
         const discovered = discoverModules();
         const workspace = discovered.find((m) => m.id === 'workspace');
         expect(workspace).toBeDefined();
         expect(workspace?.route).toBe('workspace');
         expect(workspace?.sidebarLabel).toBe('Workspace');
-        expect(workspace?.order).toBe(0);
+        expect(workspace?.order).toBe(50);
         expect(typeof workspace?.component).toBe('function');
         // unique id + route
         expect(discovered.filter((m) => m.id === 'workspace')).toHaveLength(1);
