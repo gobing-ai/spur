@@ -43,7 +43,7 @@ describe('layout-state', () => {
         const state = loadLayoutState();
         expect(state.sidebarWidth).toBe(240);
         expect(state.rightPanelWidth).toBe(320);
-        expect(state.sidebarCollapsed).toBe(false);
+        expect(state.sidebarCollapsed).toBe(true);
         expect(state.rightPanelCollapsed).toBe(true);
         restoreStorage();
     });

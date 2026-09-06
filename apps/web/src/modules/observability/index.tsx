@@ -15,6 +15,7 @@ export const module: WebModule = {
     icon: '📡',
     route: 'observability',
     component: ObservabilityShell,
-    sidebarLabel: 'Observability',
-    order: 0,
+    sidebarLabel: 'Observabilities',
+    description: 'Real-time system events, execution traces, and agent doctor telemetry',
+    order: 10,
 };

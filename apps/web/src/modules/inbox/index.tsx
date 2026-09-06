@@ -17,6 +17,6 @@ export const module: WebModule = {
     route: 'inbox',
     component: InboxShell,
     sidebarLabel: 'Inbox',
-    // 0422 R1: declared order keeps Inbox immediately adjacent to Teams (order 2).
-    order: 1,
+    order: 60,
+    description: 'Agent messages, coordination requests, and notifications',
 };

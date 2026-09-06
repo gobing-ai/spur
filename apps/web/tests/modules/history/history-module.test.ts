@@ -23,9 +23,9 @@ describe('History Board Web Module', () => {
         expect(historyModule.id).toBe('history');
         expect(historyModule.name).toBe('History');
         expect(historyModule.route).toBe('history');
-        expect(historyModule.sidebarLabel).toBe('History');
+        expect(historyModule.sidebarLabel).toBe('Histories');
         expect(historyModule.icon).toBe('📊');
-        expect(historyModule.order).toBe(3);
+        expect(historyModule.order).toBe(20);
         expect(historyModule.component).toBeDefined();
     });
 

@@ -11,7 +11,7 @@ export interface LayoutState {
 const DEFAULTS: LayoutState = {
     sidebarWidth: 240,
     rightPanelWidth: 320,
-    sidebarCollapsed: false,
+    sidebarCollapsed: true,
     rightPanelCollapsed: true,
 };
 

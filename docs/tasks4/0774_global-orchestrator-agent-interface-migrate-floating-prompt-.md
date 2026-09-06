@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Global orchestrator agent interface: migrate floating prompt bar to top-level BoardLayout"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-06T03:28:02.371Z
-updated_at: "2026-09-06T03:44:11.427Z"
+updated_at: "2026-09-06T04:11:12.684Z"
 feature_id: A7
 priority: P2
 tags: ["web", "agent", "orchestrator"]
@@ -224,17 +224,35 @@ telemetry and tool calls are not wired yet. Local state only — no store, no su
    `bun run autofix && bun run spur-check`. Grep for stragglers:
    `rg -n "FloatingAgentBar" apps/web` must return nothing.
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+- `apps/web/src/components/GlobalAgentBar.tsx:1`: relocated from `apps/web/src/modules/features/FloatingAgentBar.tsx` via `git mv`, added `GlobalAgentBarProps` interface with optional `activeModule`, implemented context badge (`data-testid="agent-bar-context"`), module-aware quick action chips (`data-testid="agent-bar-chips"`), and telemetry execution drawer (`data-testid="agent-bar-drawer"`).
+- `apps/web/src/modules/features/FeaturesShell.tsx:8`: removed `FloatingAgentBar` import and JSX render element.
+- `apps/web/src/components/BoardLayout.tsx:8`: imported `GlobalAgentBar` and mounted `<GlobalAgentBar activeModule={activeModule} />` after `.board-layout` div.
+- `apps/web/tests/modules/features/components.test.tsx:1179`: replaced in-features FloatingAgentBar tests with verification that `FeaturesShell` no longer renders the dock.
+- `apps/web/tests/components/GlobalAgentBar.test.tsx:1`: authored comprehensive test suite covering dock folding/expansion, send disabled/enabled, stub notice, `BoardLayout` mounting, context badge resolution, quick-action chip insertion, and drawer toggling.
 ### Testing
-
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
-
+- `cd apps/web && bun test tests/components/GlobalAgentBar.test.tsx tests/modules/features/components.test.tsx`: 70 pass, 0 fail.
+- `cd apps/web && bun test tests`: 746 pass, 0 fail across 49 files.
 ### Review
+- Functional Traceability: Verified all R1-R6 scenarios satisfied.
+  - R1: `FloatingAgentBar.tsx` moved to `apps/web/src/components/GlobalAgentBar.tsx` via `git mv`.
+  - R2: Removed from `FeaturesShell.tsx`; mounted in `BoardLayout.tsx`.
+  - R3: Prop-based active module passing; context badge renders `Context: <label>`.
+  - R4: Module-specific quick action chips and execution drawer toggle with honesty notice.
+  - R5: Fixed position z-30 maintained; sits below mobile drawer (z-50) and backdrops (z-49/z-40).
+  - R6: Existing tests relocated and extended with new coverage.
+- SECUA: UI-only presentation; no unsanitized user input execution; honest stub notice.
+- Architecture: Prop-driven integration avoids circular import with `BoardLayout`.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Evidence | Disposition |
+| --- | --- | --- | --- |
+| P1 | none | — | — |
+| P2 | none | — | — |
+| P3 | none | — | — |
+| P4 | Execution drawer and agent dispatch are UI stubs without backend streaming | GlobalAgentBar.tsx:32,154 | Accepted — backend streaming endpoints and real agent orchestrator out of scope for A7 |
 
+**Residual risk:** Low. UI-only component migration; 100% test pass rate.
+
+**Disposition:** Approved.
 ### References
 - Parent feature: `docs/features/A7_spur-board-layout-optimization-and-global-orchestrator-agent-interface.md` (scenario R5; its scope line naming `FloatingActionProgress.tsx` is corrected in Background)
 - Design doc: `docs/design/board-ui-layout-and-global-agent-bar.md` §4 (context-vs-prop and the `FloatingActionProgress` premise are corrected here)
@@ -244,3 +262,6 @@ telemetry and tool calls are not wired yet. Local state only — no store, no su
 - Source surfaces: `apps/web/src/modules/features/FloatingAgentBar.tsx`, `apps/web/src/modules/features/FeaturesShell.tsx`,
   `apps/web/src/components/BoardLayout.tsx`, `apps/web/tests/modules/features/components.test.tsx`
 ### History
+- 2026-09-06T04:11:06.419Z todo → wip (system)
+- 2026-09-06T04:11:07.215Z wip → testing (system)
+- 2026-09-06T04:11:12.684Z testing → done (system)

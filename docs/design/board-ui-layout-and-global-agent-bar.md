@@ -129,7 +129,23 @@ The component acts as the visual frontend interface for the project orchestrator
 
 ## 5. Open Design Verification Seam
 
-- Layout prototypes, token consistency, and visual hierarchy can be verified against Open Design workspaces:
-  - Dark canvas tokens (`#0f1117` base, `#161922` surface, `#252936` border).
-  - Accent colors: Spur violet/cyan gradients.
-  - Consistent padding scales (4px grid) and typographic contrast.
+- Layout prototypes, token consistency, and visual hierarchy can be verified against Open Design workspaces and root `DESIGN.md`:
+  - **Shared Dark Theme (`@theme` in `src/styles/global.css`)**:
+    - Canvas background: `#0f1117`
+    - Surface: `#1a1d27`
+    - Border: `#334155`
+    - Accent: `#6366f1` (hover `#818cf8`)
+    - Text: `#e2e8f0` (muted `#94a3b8`, faint `#5f6978`)
+  - **Shared Light Theme (`[data-theme="light"]` in `src/styles/global.css`)**:
+    - Canvas background: `#ffffff`
+    - Surface: `#f8fafc`
+    - Border: `#e2e8f0`
+    - Accent: `#4f46e5` (hover `#6366f1`)
+    - Text: `#0f172a` (muted `#64748b`, faint `#7c8699`)
+  - **Scoped Linear Ladder (`.task-kanban` / `.inbox` in `src/styles/global.css`)**:
+    - Deliberately scoped (0420 R6, 0422 R13) to preserve module visual consistency without regressing the 13+ files using the shared palette:
+    - Canvas background: `#010102`
+    - Surface ladder: `#0f1011` / `#141516` / `#18191a`
+    - Hairline border: `#23252a`
+    - Single accent: `#5e6ad2`
+  - Consistent padding scales (4px grid base, 12px header/footer chrome padding) and typographic contrast.

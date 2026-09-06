@@ -5,7 +5,6 @@ import type { FeatureSummary } from '../../lib/feature-types';
 import { resolveApiUrl } from '../../lib/rpc-client';
 import FeatureDetail from './FeatureDetail';
 import FeatureTree, { groupFeaturesByParent } from './FeatureTree';
-import FloatingAgentBar from './FloatingAgentBar';
 import NewFeaturePanel from './NewFeaturePanel';
 import { isFeaturesSseEvent } from './sse-helpers';
 import { FEATURE_STATUSES, FeatureStatusIcon } from './status-icons';
@@ -353,7 +352,6 @@ export default function FeaturesShell() {
                 onClose={() => setShowNewRootPanel(false)}
                 onCreated={handleRootFeatureCreated}
             />
-            <FloatingAgentBar />
         </>
     );
 }

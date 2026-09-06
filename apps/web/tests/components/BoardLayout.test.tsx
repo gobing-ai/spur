@@ -141,10 +141,10 @@ describe('BoardLayout', () => {
         localStorage.clear();
     });
 
-    test('renders with the sidebar expanded and right panel collapsed by default', () => {
+    test('renders with the sidebar collapsed and right panel collapsed by default', () => {
         const { container } = renderBoard();
         const root = container.querySelector('.board-layout');
-        expect(root?.getAttribute('data-sidebar-collapsed')).toBe('false');
+        expect(root?.getAttribute('data-sidebar-collapsed')).toBe('true');
         expect(root?.getAttribute('data-rightpanel-collapsed')).toBe('true');
     });
 
@@ -164,6 +164,15 @@ describe('BoardLayout', () => {
     });
 
     test('collapse toggle flips data-sidebar-collapsed and persists', () => {
+        localStorage.setItem(
+            'spur-board-layout',
+            JSON.stringify({
+                sidebarWidth: 240,
+                rightPanelWidth: 320,
+                sidebarCollapsed: false,
+                rightPanelCollapsed: true,
+            }),
+        );
         const { container, getByLabelText } = renderBoard();
         const root = container.querySelector('.board-layout');
         expect(root?.getAttribute('data-sidebar-collapsed')).toBe('false');
@@ -261,6 +270,44 @@ describe('BoardLayout', () => {
         expect(document.documentElement.style.getPropertyValue('--rightpanel-w')).toBe('380px');
         const persisted = JSON.parse(localStorage.getItem('spur-board-layout') ?? '{}');
         expect(persisted.rightPanelWidth).toBe(380);
+    });
+
+    test('single-backdrop invariant: mobile backdrop dismisses drawer and panel, and stylesheet contains no pseudo-scrim', async () => {
+        const { getByLabelText, container } = renderBoard();
+        const root = container.querySelector('.board-layout');
+        expect(root).toBeDefined();
+
+        // Open mobile sidebar
+        fireEvent.click(getByLabelText('Open navigation'));
+        expect(root?.getAttribute('data-mobile-sidebar-open')).toBe('true');
+
+        // Single backdrop element exists with aria-hidden="true" and fixed inset-0 z-40
+        const backdrops = container.querySelectorAll('[aria-hidden="true"].fixed.inset-0');
+        expect(backdrops.length).toBe(1);
+        const firstBackdrop = backdrops[0];
+        expect(firstBackdrop).toBeDefined();
+        if (!firstBackdrop) return;
+        expect(firstBackdrop.className).toContain('z-40');
+
+        // Tapping backdrop dismisses the drawer
+        fireEvent.click(firstBackdrop);
+        expect(root?.getAttribute('data-mobile-sidebar-open')).toBe('false');
+
+        // Open mobile panel
+        fireEvent.click(getByLabelText('Open panel'));
+        expect(root?.getAttribute('data-mobile-panel-open')).toBe('true');
+
+        const panelBackdrop = container.querySelector('[aria-hidden="true"].fixed.inset-0');
+        expect(panelBackdrop).toBeDefined();
+        if (panelBackdrop) {
+            fireEvent.click(panelBackdrop);
+        }
+        expect(root?.getAttribute('data-mobile-panel-open')).toBe('false');
+
+        // Verify board-layout.css no longer declares pseudo-scrim ::before/::after
+        const layoutCss = await Bun.file(new URL('../../src/styles/board-layout.css', import.meta.url)).text();
+        expect(layoutCss).not.toContain('data-mobile-sidebar-open="true"]::before');
+        expect(layoutCss).not.toContain('data-mobile-panel-open="true"]::after');
     });
 });
 

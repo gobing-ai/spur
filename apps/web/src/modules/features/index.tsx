@@ -17,4 +17,6 @@ export const module: WebModule = {
     route: 'features',
     component: FeaturesShell,
     sidebarLabel: 'Features',
+    description: 'Feature tree, acceptance criteria, and decomposition into tasks',
+    order: 30,
 };

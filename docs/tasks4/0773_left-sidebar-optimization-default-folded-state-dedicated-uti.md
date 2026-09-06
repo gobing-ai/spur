@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Left sidebar optimization: default folded state, dedicated utility footer, and module normalization"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-06T03:28:02.303Z
-updated_at: "2026-09-06T03:42:42.430Z"
+updated_at: "2026-09-06T04:08:53.124Z"
 feature_id: A7
 priority: P2
 tags: ["web", "layout", "sidebar"]
@@ -245,17 +245,50 @@ deliberately leaves both untouched so 0775 has a clean surface.
 9. **Verify** — from inside the workspace: `cd apps/web && bun test tests`, then repo-root
    `bun run autofix && bun run spur-check`.
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+- `apps/web/src/modules/types.ts:16`: added optional `readonly description?: string;` property to `WebModule` interface.
+- `apps/web/src/modules/observability/index.tsx:18`: set `order: 10`, `sidebarLabel: 'Observabilities'`, and added capability description.
+- `apps/web/src/modules/history/index.tsx:16`: set `order: 20`, `sidebarLabel: 'Histories'`, and added capability description.
+- `apps/web/src/modules/features/index.tsx:17`: set `order: 30`, `sidebarLabel: 'Features'`, and added capability description.
+- `apps/web/src/modules/task-kanban/index.tsx:18`: set `order: 40`, `sidebarLabel: 'Tasks'`, and added capability description.
+- `apps/web/src/modules/workspace/index.tsx:18`: set `order: 50`, `sidebarLabel: 'Workspace'`, and added capability description.
+- `apps/web/src/modules/inbox/index.tsx:19`: set `order: 60`, `sidebarLabel: 'Inbox'`, and added capability description.
+- `apps/web/src/modules/teams/index.tsx:18`: set `order: 70`, `sidebarLabel: 'Teams'`, and added capability description.
+- `apps/web/src/lib/layout-state.ts:14`: updated `DEFAULTS.sidebarCollapsed` from `false` to `true`.
+- `apps/web/src/components/BoardLayout.tsx:143`: passed `collapsed={state.sidebarCollapsed && !mobileSidebarOpen}` to `LeftSidebar` to preserve mobile drawer UX and close navigation button.
+- `apps/web/src/components/SettingsModal.tsx:1`: created placeholder modal component wrapped with `@/ui` `Modal` with title and close control.
+- `apps/web/src/components/LeftSidebar.tsx:86`: moved `ThemeToggle` from header to footer, added settings button trigger (`data-testid="sidebar-settings"`), wired `SettingsModal`, added `@/ui` `Tooltip` in collapsed mode with label and description, and configured conditional `overflow` (`overflow-visible` when collapsed).
+- `apps/web/tests/lib/layout-state.test.ts:46`: updated default assertion for `sidebarCollapsed`.
+- `apps/web/tests/components/BoardLayout.test.tsx:144`: updated default assertion and seeded expanded state for collapse toggle test.
+- `apps/web/tests/components/LeftSidebar.test.tsx:96`: updated test for footer theme toggle and added tests for footer, modal, module ordering, and tooltips.
+- `apps/web/tests/modules/discover.test.ts:271`: updated order expectation for observability module.
+- `apps/web/tests/modules/workspace/workspace.test.tsx:32`: updated order expectation for workspace module.
+- `apps/web/tests/modules/history/history-module.test.ts:26`: updated sidebarLabel and order expectation for history module.
 ### Testing
-
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
-
+- `cd apps/web && bun test tests/lib/layout-state.test.ts tests/components/BoardLayout.test.tsx tests/components/LeftSidebar.test.tsx tests/components/ResponsiveAndTheme.test.tsx`: 40 pass, 0 fail.
+- `cd apps/web && bun test tests`: 741 pass, 0 fail across 48 test files.
 ### Review
+- Functional Traceability: Verified all R1-R8 scenarios satisfied.
+  - R1: Sidebar collapsed by default via `DEFAULTS.sidebarCollapsed = true`.
+  - R2: Dedicated footer with `ThemeToggle` and `SettingsButton`.
+  - R3: Vertical icon layout in collapsed mode, horizontal in expanded mode.
+  - R4: Plural labels `Observabilities` and `Histories` rendered in sidebar.
+  - R5: Strict module ordering 10-70 adhered to.
+  - R6: Rich two-line tooltips (`${label}\n${description}`) rendered in collapsed rail without clipping.
+  - R7: Mobile drawer maintains expanded layout when opened from collapsed desktop default.
+  - R8: `SettingsModal` placeholder mounted and controlled from footer.
+- SECUA: Safe pure client-side UI changes; no unsafe HTML injection; accessible ARIA labels preserved.
+- Architecture: Zero dependencies added; clean reuse of `@/ui` `Modal` and `Tooltip`.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Evidence | Disposition |
+| --- | --- | --- | --- |
+| P1 | none | — | — |
+| P2 | none | — | — |
+| P3 | none | — | — |
+| P4 | Settings modal is a placeholder copy without persistence | SettingsModal.tsx:28 | Accepted — persistence and config forms deferred to future release |
 
+**Residual risk:** Low. Clean UI state changes; zero backend dependency; all existing tests passing.
+
+**Disposition:** Approved.
 ### References
 - Parent feature: `docs/features/A7_spur-board-layout-optimization-and-global-orchestrator-agent-interface.md` (scenarios R1, R2, R3)
 - Design doc: `docs/design/board-ui-layout-and-global-agent-bar.md` §3 (rail width corrected 56px → 48px here)
@@ -266,3 +299,6 @@ deliberately leaves both untouched so 0775 has a clean surface.
   `apps/web/src/lib/layout-state.ts`, `apps/web/src/modules/types.ts`, `apps/web/src/modules/*/index.tsx`,
   `apps/web/src/styles/board-layout.css` (read-only for this task)
 ### History
+- 2026-09-06T04:08:04.209Z todo → wip (system)
+- 2026-09-06T04:08:06.943Z wip → testing (system)
+- 2026-09-06T04:08:53.124Z testing → done (system)

@@ -8,7 +8,6 @@ import { isWebModule } from '../../../src/modules/discover';
 import FeatureDetail from '../../../src/modules/features/FeatureDetail';
 import FeaturesShell from '../../../src/modules/features/FeaturesShell';
 import FeatureTree from '../../../src/modules/features/FeatureTree';
-import FloatingAgentBar from '../../../src/modules/features/FloatingAgentBar';
 import { module } from '../../../src/modules/features/index';
 import { FEATURE_STATUSES, FeatureStatusIcon } from '../../../src/modules/features/status-icons';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
@@ -1177,73 +1176,12 @@ describe('FeaturesShell', () => {
         expect(container.querySelector('[data-filter-menu]')).toBeNull();
     });
 });
-/**
- * Read a node's React fiber props and invoke `onChange` directly — happy-dom +
- * React 19 do not deliver fireEvent.change to a controlled textarea's onChange
- * (capricorn86/happy-dom#856); matches the teams/MemberTerminal convention.
- */
-function setPromptValue(textarea: Element, value: string): void {
-    const holder = textarea as unknown as Record<string, Record<string, unknown> | undefined>;
-    const key = Object.keys(holder).find((k) => k.startsWith('__reactProps$'));
-    const props = key ? holder[key] : undefined;
-    const onChange = props?.onChange as ((e: { target: { value: string } }) => void) | undefined;
-    if (!onChange) throw new Error('onChange not found on agent-bar-input');
-    act(() => onChange({ target: { value } }));
-}
-
-describe('FloatingAgentBar', () => {
-    test('F841 R7/R8: folded by default as a spirit dock, opens to wider 84rem glass bar, and collapses back', () => {
-        const { getByTestId, getByLabelText, queryByTestId } = render(<FloatingAgentBar />);
-        // Starts folded
-        expect(queryByTestId('agent-bar')).toBeNull();
-        const dock = getByTestId('agent-bar-dock');
-        expect(dock.className).toContain('fixed');
-        expect(dock.className).toContain('bottom-6');
-        expect(dock.className).toContain('right-6');
-        expect(dock.className).toContain('z-30');
-
-        // Click to open
-        fireEvent.click(dock);
-        const bar = getByTestId('agent-bar');
-        expect(bar.className).toContain('fixed');
-        expect(bar.className).toContain('backdrop-blur-md');
-        expect(bar.className).toContain('bg-base-100/80');
-        expect(bar.className).toContain('w-[calc(100vw-2rem)]');
-        expect(bar.className).toContain('max-w-[84rem]');
-        expect(bar.className).toContain('z-30');
-
-        // Collapse back
-        fireEvent.click(getByLabelText('Collapse agent prompt bar'));
-        expect(queryByTestId('agent-bar')).toBeNull();
-        expect(getByTestId('agent-bar-dock')).toBeDefined();
-    });
-
-    test('Send is disabled while the prompt is empty, enabled once text is entered', () => {
-        const { getByTestId, getByText } = render(<FloatingAgentBar />);
-        // Open the bar
-        fireEvent.click(getByTestId('agent-bar-dock'));
-        const send = getByText('Send') as HTMLButtonElement;
-        expect(send.disabled).toBe(true);
-        setPromptValue(getByTestId('agent-bar-input'), 'refine this feature');
-        expect((send as HTMLButtonElement).disabled).toBe(false);
-    });
-
-    test('submitting clears the field and surfaces the stub notice', () => {
-        const { getByTestId, getByText, getByRole } = render(<FloatingAgentBar />);
-        // Open the bar
-        fireEvent.click(getByTestId('agent-bar-dock'));
-        const input = getByTestId('agent-bar-input') as HTMLTextAreaElement;
-        setPromptValue(input, 'implement F84');
-        fireEvent.click(getByText('Send'));
-        expect(input.value).toBe('');
-        expect(getByRole('status').textContent).toContain('Agent dispatch is not wired yet');
-    });
-
-    test('renders alongside the shell empty-state placeholder with no feature selected', async () => {
+describe('FeaturesShell global agent bar detachment', () => {
+    test('FeaturesShell no longer renders the global agent bar dock (migrated to BoardLayout)', async () => {
         setFetchForTesting((async () => jsonResponse({ ok: true, data: [] })) as unknown as typeof fetch);
-        const { getByText, getByTestId } = render(<FeaturesShell />);
+        const { getByText, queryByTestId } = render(<FeaturesShell />);
         await waitFor(() => expect(getByText('Select a feature to view details')).toBeDefined());
-        expect(getByTestId('agent-bar-dock')).not.toBeNull();
+        expect(queryByTestId('agent-bar-dock')).toBeNull();
     });
 });
 
@@ -1561,11 +1499,6 @@ describe('F841 Acceptance Criteria', () => {
         const metaToggle = getByTestId('metadata-toggle');
         fireEvent.click(metaToggle);
         fireEvent.click(metaToggle);
-
-        // Toggle floating prompt
-        const promptDock = getByTestId('agent-bar-dock');
-        fireEvent.click(promptDock);
-        fireEvent.click(getByLabelText('Collapse agent prompt bar'));
 
         // No additional network requests were made during presentation toggles
         expect(calls.length).toBe(callsBeforeToggles);
