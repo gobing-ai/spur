@@ -44,12 +44,19 @@ bootstrap:
       # then the twelve-section history-anatomy diagnostic report headless. On
       # a cache hit the workflow skips the token-expensive model stages and
       # republishes provenance (ADR-079), so a ready report costs no tokens.
+      # Ends with database maintenance (PRAGMA optimize + wal_checkpoint).
       - name: history-daily-report
         cron: "0 5 * * *"
         command: >-
           bun apps/cli/src/index.ts --no-logo history import --source all &&
-          bun apps/cli/src/index.ts --no-logo workflow run
-          config/workflows/history-anatomy.yaml --quiet
+          bun apps/cli/src/index.ts --no-logo workflow run config/workflows/history-anatomy.yaml --quiet &&
+          bun apps/cli/src/index.ts --no-logo self maintain
+
+      # 04:00 Sunday weekly: deep database maintenance (VACUUM defragmentation +
+      # page compaction, PRAGMA optimize, and WAL checkpoint truncation).
+      - name: database-weekly-maintenance
+        cron: "0 4 * * 0"
+        command: bun apps/cli/src/index.ts --no-logo self maintain --vacuum
 
 # ── Teams (feature M) — declarative rosters materialized by `spur team up` ──
 # The sample team below keeps the Teams board tabs (Roster / Messages /

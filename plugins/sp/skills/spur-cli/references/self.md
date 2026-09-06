@@ -1,14 +1,14 @@
 ---
 name: spur-cli-self
-description: "spur-cli noun reference for `spur self`: self-management verbs — scaffold (`init`), schema migrations (`migrate`), local web server (`serve`), and status overview (`status`). Each verb mounts the same command builder as its legacy top-level noun, which remains a hidden alias over the identical command."
+description: "spur-cli noun reference for `spur self`: self-management verbs — scaffold (`init`), database maintenance (`maintain`), schema migrations (`migrate`), local web server (`serve`), and status overview (`status`). Each verb mounts the same command builder as its legacy top-level noun, which remains a hidden alias over the identical command."
 see_also:
   - spur-cli
 ---
 
 # spur self - self-management verbs
 
-`spur self` hosts the four self-management verbs. Each verb is the canonical path for a command
-that also remains registered as a legacy top-level **hidden alias** (`spur init`, `spur migrate`,
+`spur self` hosts the self-management verbs. Each verb is the canonical path for a command
+that also remains registered as a legacy top-level **hidden alias** (`spur init`, `spur maintain`, `spur migrate`,
 `spur serve`, `spur status`) so existing scripts, workflow YAML, and habits keep working unchanged.
 Both paths share the same command builder: identical flags, output, and exit codes. The legacy
 top-level forms are omitted from `spur --help`, leaving `self` as the visible surface.
@@ -18,6 +18,7 @@ top-level forms are omitted from `spur --help`, leaving `self` as the visible su
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
 | `init` | Scaffold a new Spur project in the current directory | `--name <name>` `--force` `--minimal` `--json` |
+| `maintain` | Run database maintenance: PRAGMA optimize, WAL truncation, optional VACUUM | `--vacuum` `--json` |
 | `migrate` | Apply CLI-owned schema migrations | `--json` |
 | `serve` | Start the Spur web server (local fallback) | `--port <n>` `--host <addr>` `--no-open` `--cwd <path>` `--json` |
 | `status [path]` | Show project and git status for a Spur project | `--json` |
@@ -42,6 +43,19 @@ Materializes the `.spur/` directory tree with config, docs, rules, and workflow 
 (skip optional scaffolding), `--json` (machine-readable output). Post-scaffold validation probes
 (Phase 1.5 / 1.6) run immediately after this verb completes — see **[init.md](init.md)** for the
 probe protocol and rule-glob adaptation procedure.
+
+## `self maintain` - run database maintenance
+
+```bash
+spur self maintain                    # run PRAGMA optimize + wal_checkpoint(TRUNCATE)
+spur self maintain --vacuum           # deep maintenance: VACUUM + optimize + checkpoint
+spur self maintain --json             # machine-readable
+```
+
+Executes SQLite database maintenance operations on `.spur/spur.db`:
+- `PRAGMA optimize;` to refresh query planner statistics in `sqlite_stat1`.
+- `PRAGMA wal_checkpoint(TRUNCATE);` to checkpoint committed WAL frames and truncate WAL to 0 bytes.
+- `--vacuum` runs `VACUUM;` first for page compaction and B-tree defragmentation (requires 2x free disk space).
 
 ## `self migrate` - apply CLI-owned schema migrations
 

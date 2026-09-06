@@ -256,7 +256,7 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
 
     test('the census reaches every flag-declaring verb, not a sample', () => {
         const advertising = collectVerbBlocks().filter((b) => b.body.includes('SHARED_OPTIONS.jsonEnvelope'));
-        expect(advertising.length).toBe(69);
+        expect(advertising.length).toBe(70);
         expect(new Set(advertising.map((b) => `${b.noun} ${b.verb}`)).size).toBe(advertising.length);
     });
 

@@ -23,6 +23,7 @@ import { registerBuilderCommand } from './commands/builder';
 import { registerFeatureCommand } from './commands/feature';
 import { registerHistoryCommand } from './commands/history';
 import { registerInitCommand } from './commands/init';
+import { registerMaintainCommand } from './commands/maintain';
 import { registerMessageCommand } from './commands/message';
 import { registerMigrateCommand } from './commands/migrate';
 import { registerProjectsCommand } from './commands/projects';
@@ -161,11 +162,13 @@ async function runCommandDispatch(
     // so existing scripts, workflow YAML, and habits keep working unchanged.
     const selfCommand = program.command('self').summary('inspect and manage the Spur installation itself');
     registerInitCommand(selfCommand, context);
+    registerMaintainCommand(selfCommand, context);
     registerMigrateCommand(selfCommand, context);
     registerServeCommand(selfCommand, context);
     registerStatusCommand(selfCommand, context);
 
     registerInitCommand(program, context, { hidden: true });
+    registerMaintainCommand(program, context, { hidden: true });
     registerMigrateCommand(program, context, { hidden: true });
     registerServeCommand(program, context, { hidden: true });
     registerStatusCommand(program, context, { hidden: true });

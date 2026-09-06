@@ -115,10 +115,10 @@ spur <noun> [<verb>] [positionals] [--flags]
 - **`builder`** is the noun hosting the release plumbing — `spur builder bump-ver|drop-tags`
   (task 0617, ADR-051). Promoted verbatim from the internal `spur-dev release` script; frozen at
   these two verbs (see `docs/design/harness-surface-governance.md` §3).
-- **`self`** is the noun hosting the self-management verbs — `spur self init|migrate|serve|status`.
+- **`self`** is the noun hosting the self-management verbs — `spur self init|maintain|migrate|serve|status`.
   Each verb mounts the same command builder as its legacy top-level noun, so behavior, flags,
   output, and exit codes are identical on both paths.
-- The four legacy **hidden aliases** (`spur init`, `spur migrate`, `spur serve`, `spur status`) stay
+- The legacy **hidden aliases** (`spur init`, `spur maintain`, `spur migrate`, `spur serve`, `spur status`) stay
   registered at the top level for back-compat with existing scripts and workflow YAML. They are
   verb-less commands that accept flags and optional positionals directly, but they are omitted from
   the `spur --help` listing (commander's `hidden` option), leaving `self` as the visible surface.
@@ -1255,6 +1255,7 @@ Scaffold BDD `test.todo` stubs from task Acceptance Criteria into `<workspace>/t
 | `spur serve [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]` | Start the web server (local fallback) and serve the Spur Board SPA when static assets resolve. Options: `--port` (env PORT, default 3000), `--host` (env HOST, default localhost), `--no-open` skip browser, `--json` print {port,url,pid}. Board assets ship in the npm package as `web/` next to `spur.js` (`resolveWebDistPath`); without them `/board` returns JSON 404 and the server logs a warning. Hidden alias — canonical: `spur self serve`. |
 | `spur projects [add                                                           | remove                                                                                                                                                                                                                                                                                                                                                                                                     | list | start | stop] [args] [--json]` | Multi-project registry management: `add <path>` registers project, `remove <target>` unregisters, `list` shows registered projects and health status, `start <target>` spawns server on allocated port, `stop <target>` stops server process. `--json` shapes for scripting. |
 | `spur migrate [--json]`                                                       | Temporary helper: apply CLI-owned schema migrations; reports `{ ok, applied }`. Hidden alias — canonical: `spur self migrate`. |
+| `spur maintain [--vacuum] [--json]`                                           | Run database maintenance: PRAGMA optimize, WAL truncation, optional VACUUM compaction. Hidden alias — canonical: `spur self maintain`. |
 
 | `spur --help` / `spur --version` | Commander-rendered usage / binary version (ADR-014). |
 
