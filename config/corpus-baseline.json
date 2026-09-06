@@ -1,11 +1,5 @@
 {
     "note": "Machine-generated snapshot of observed corpus findings. Regenerate: bun run scripts/commands/regen-corpus-baseline.ts. Wave 2026-08-28 (ADR-092): sweep scope is the ACTIVE task folder only; docs/tasks{,2,3} are read-only history. Single-sided gate (ADR-090): vanished entries retire via regeneration, not gate failure. Retires the ADR-083 per-entry reason/since annotations. Dated decision note (0688 friction review, 2026-08-27): new task citations prefer path:symbol over path:line (docs/04_DESIGN.md §4.2, task 0694).",
-    "waiver": {
-        "owner": "spur-dev-maintainers",
-        "review_date": "2026-12-01",
-        "removal_criterion": "The corpus snapshot retires when its 299 entries have all been repaired (or accepted as real signal) and the active folder's sweep produces zero baseline-reconciled findings. Until then, the snapshot is a temporary waiver per ADR-093: a 4-month review window from the 0754 commit date, with objective removal tied to a zero-finding sweep. The single-sided snapshot mechanism (ADR-090) ensures a shrinking snapshot is a visible signal, not silent debt."
-    },
-    "generated_at": "2026-09-03",
     "entries": [
         {
             "kind": "feature",
@@ -153,26 +147,20 @@
         },
         {
             "kind": "feature",
-            "id": "D7",
-            "code": "L4.dogfood-missing",
-            "severity": "warning"
-        },
-        {
-            "kind": "feature",
-            "id": "D9",
+            "id": "D61",
             "code": "L4.evidence-not-recoverable",
             "severity": "warning"
         },
         {
             "kind": "feature",
-            "id": "D9",
+            "id": "D61",
             "code": "L4.scenario-unverified",
             "severity": "warning"
         },
         {
             "kind": "feature",
-            "id": "D9",
-            "code": "L4.uncovered-feature-scenario",
+            "id": "D7",
+            "code": "L4.dogfood-missing",
             "severity": "warning"
         },
         {
@@ -227,24 +215,6 @@
             "kind": "feature",
             "id": "E7",
             "code": "L4.orphan-scenarios",
-            "severity": "warning"
-        },
-        {
-            "kind": "feature",
-            "id": "E81",
-            "code": "L4.evidence-not-recoverable",
-            "severity": "warning"
-        },
-        {
-            "kind": "feature",
-            "id": "E81",
-            "code": "L4.scenario-unverified",
-            "severity": "warning"
-        },
-        {
-            "kind": "feature",
-            "id": "E91",
-            "code": "L4.scenario-unverified",
             "severity": "warning"
         },
         {
@@ -1569,7 +1539,19 @@
         },
         {
             "kind": "task",
+            "id": "0645",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
             "id": "0646",
+            "code": "L4.stale-line-anchor",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0655",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
@@ -1641,12 +1623,6 @@
         },
         {
             "kind": "task",
-            "id": "0689",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
             "id": "0690",
             "code": "L3.ac-empty",
             "severity": "error"
@@ -1701,38 +1677,8 @@
         },
         {
             "kind": "task",
-            "id": "0719",
-            "code": "L4.stale-line-anchor",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0741",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0745",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0751",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
             "id": "0751",
             "code": "L4.stale-line-anchor",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0753",
-            "code": "L3.unchecked-checklist",
             "severity": "warning"
         },
         {
@@ -1744,47 +1690,11 @@
         {
             "kind": "task",
             "id": "0755",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0755",
             "code": "L4.stale-line-anchor",
             "severity": "warning"
         },
         {
             "kind": "task",
-            "id": "0756",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0757",
-            "code": "L3.unchecked-checklist",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0758",
-            "code": "L4.prerequisite-not-done",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0759",
-            "code": "L4.prerequisite-not-done",
-            "severity": "warning"
-        },
-        {
-            "kind": "task",
-            "id": "0761",
-            "code": "L3.ac-empty",
-            "severity": "error"
-        },
-        {
-            "kind": "task",
             "id": "0761",
             "code": "L3.requirements-checkbox",
             "severity": "warning"
@@ -1792,13 +1702,73 @@
         {
             "kind": "task",
             "id": "0762",
-            "code": "L3.ac-empty",
+            "code": "L3.requirements-checkbox",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0767",
+            "code": "L3.solution-file-line",
             "severity": "error"
         },
         {
             "kind": "task",
-            "id": "0762",
-            "code": "L3.requirements-checkbox",
+            "id": "0767",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0768",
+            "code": "L3.solution-file-line",
+            "severity": "error"
+        },
+        {
+            "kind": "task",
+            "id": "0769",
+            "code": "L3.solution-file-line",
+            "severity": "error"
+        },
+        {
+            "kind": "task",
+            "id": "0769",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0770",
+            "code": "L3.solution-file-line",
+            "severity": "error"
+        },
+        {
+            "kind": "task",
+            "id": "0770",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0771",
+            "code": "L3.solution-file-line",
+            "severity": "error"
+        },
+        {
+            "kind": "task",
+            "id": "0771",
+            "code": "L4.prerequisite-not-done",
+            "severity": "warning"
+        },
+        {
+            "kind": "task",
+            "id": "0772",
+            "code": "L3.solution-file-line",
+            "severity": "error"
+        },
+        {
+            "kind": "task",
+            "id": "0772",
+            "code": "L4.prerequisite-not-done",
             "severity": "warning"
         }
     ]
