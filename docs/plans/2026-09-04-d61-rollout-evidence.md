@@ -1,5 +1,13 @@
 # D61 rollout evidence — task 0772 (2026-09-06)
 
+## Correction — 2026-09-06 reconstruction
+
+Original gitignored captures referenced below were not recoverable after the batch worktree was
+removed. [Matched-input reconstruction](2026-09-06-d61-matched-measurements.md) supplies the isolated
+replay allowed by task 0772 Design. It separates executed gate-shell fixtures from plan projections
+and credits neither as real model-bearing terminal runs. Claims below are preserved as history,
+not presented as fresh measurements.
+
 Aggregate rollout evidence for feature D61 ("Essential workflow checks and observable
 execution"), package P8, per task 0772 R3. Per-task matched before/after captures live under
 `.spur/run/d61-<wbs>-{before,after}.json` in worktree

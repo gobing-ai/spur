@@ -89,6 +89,99 @@ async function seedMigrationCorpus(): Promise<{ root: string; tasksDir: string; 
 }
 
 describe('spur task CLI', () => {
+    test('explicit corpus audit is not invoked by routine repository hooks or quality gates', async () => {
+        const root = resolve(import.meta.dir, '../../../..');
+        expect(await readFile(join(root, '.lefthook.yml'), 'utf8')).not.toMatch(/corpus-check|check --corpus/);
+        const { scripts } = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+        expect(scripts['spur-check']).not.toMatch(/corpus-check|check --corpus/);
+        expect(scripts['spur-check-new']).toBe(scripts['spur-check']);
+    });
+
+    test('explicit corpus audit reports unsuppressed warnings without failing or reading a baseline', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'spur-explicit-audit-'));
+        try {
+            const created = createCapturedOutput();
+            await main(['task', 'create', 'Audit warning fixture', '--json'], { cwd: root, output: created });
+            const taskPath = JSON.parse(lastMessage(created)).filePath;
+            const taskBody = await readFile(taskPath, 'utf8');
+            await writeFile(
+                taskPath,
+                taskBody
+                    .replace(/### Requirements[\s\S]*?(?=### )/, '### Requirements\n\n- R1: Report audit findings.\n\n')
+                    .replace(
+                        /### Acceptance Criteria[\s\S]*?(?=### )/,
+                        '### Acceptance Criteria\n\n- Reports all audit findings.\n\n',
+                    ),
+            );
+            await mkdir(join(root, 'config'), { recursive: true });
+            await writeFile(join(root, 'config/corpus-baseline.json'), 'not valid JSON');
+            const output = createCapturedOutput();
+            const code = await main(['task', 'check', '--corpus', '--json'], { cwd: root, output });
+            expect(code, JSON.stringify(output)).toBe(0);
+            expect(output.messages).toHaveLength(1);
+            const result = JSON.parse(lastMessage(output));
+            expect(result.ok).toBe(true);
+            expect(result.baselined).toBe(0);
+            expect(result.duplicateKeys).toEqual([]);
+            expect(result.newWarnings.length).toBeGreaterThan(0);
+            expect(result.bySeverity.warning.newCount).toBe(result.newWarnings.length);
+            await writeFile(join(root, 'docs/tasks/9999_broken.md'), '---\nstatus: invalid\n---\n');
+            const broken = createCapturedOutput();
+            expect(await main(['task', 'check', '--corpus', '--json'], { cwd: root, output: broken })).toBe(1);
+            expect(JSON.parse(lastMessage(broken)).newErrors.length).toBeGreaterThan(0);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('explicit corpus audit rejects ambiguous scopes and reports usage errors as JSON', async () => {
+        for (const args of [
+            ['--since', 'HEAD'],
+            ['0001', '--corpus'],
+            ['--corpus', '--as', 'done'],
+            ['--corpus', '--fix'],
+            ['--corpus', '--folder', 'docs/tasks'],
+            ['--corpus', '--strict'],
+        ]) {
+            const output = createCapturedOutput();
+            expect(await main(['task', 'check', ...args, '--json', '--json-envelope'], { cwd, output })).toBe(2);
+            expect(JSON.parse([...output.messages, ...output.errors].at(-1) ?? '{}').error).toBeDefined();
+        }
+    });
+
+    test('explicit corpus audit includes digit-zero feature IDs and fails duplicate identity or corrupt matrix', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'spur-audit-identity-'));
+        try {
+            await mkdir(join(root, 'docs/features'), { recursive: true });
+            for (const name of ['F10_first.md', 'F10_second.md']) {
+                await writeFile(join(root, 'docs/features', name), '---\nname: Incomplete feature\n---\n');
+            }
+            const output = createCapturedOutput();
+            expect(await main(['task', 'check', '--corpus', '--json'], { cwd: root, output })).toBe(1);
+            const result = JSON.parse(lastMessage(output));
+            expect(
+                result.newErrors.some(
+                    (finding: { id: string; code: string }) =>
+                        finding.id === 'F10' && finding.code === 'corpus.duplicate-id',
+                ),
+            ).toBe(true);
+            expect(
+                result.newErrors.some(
+                    (finding: { id: string; code: string }) => finding.id === 'F10' && finding.code.startsWith('L1.'),
+                ),
+            ).toBe(true);
+            await mkdir(join(root, '.spur/tasks'), { recursive: true });
+            await writeFile(join(root, '.spur/tasks/section-matrix.yaml'), 'invalid: true');
+            const broken = createCapturedOutput();
+            expect(
+                await main(['task', 'check', '--corpus', '--json', '--json-envelope'], { cwd: root, output: broken }),
+            ).toBe(1);
+            expect(JSON.parse(lastMessage(broken)).error.message).toContain('section matrix');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
     test('unknown subcommand returns 1', async () => {
         const exitCode = await main(['task', 'unknown-cmd'], { cwd, output: nullOutput() });
         expect(exitCode).toBe(1);

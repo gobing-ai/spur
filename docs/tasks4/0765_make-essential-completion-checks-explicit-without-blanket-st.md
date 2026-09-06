@@ -4,7 +4,7 @@ name: "Make essential completion checks explicit without blanket strictness"
 status: done
 template: feature-impl
 created_at: 2026-09-05T05:21:56.820Z
-updated_at: "2026-09-06T00:14:03.042Z"
+updated_at: "2026-09-06T15:48:46.382Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P1"]
@@ -96,7 +96,6 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 5. [x] R1: Run the focused tests below, applicable repository gate once for final inputs, normal task check and real task verification. Record one checker-policy audit under the policy in force; never regenerate a baseline to force green.
 
 ### Solution
-
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
 **Change map (R1 unsuppressible severity precedence + target-aware matrix):**
@@ -109,32 +108,20 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 | `packages/app/tests/services/planning-check-base.test.ts:355-460` | Added `describe('PlanningCheckService.summarizeWithStatus (D61 task 0765 — R1 unsuppressible codes)')` block with three regression tests: essential L1 schema error survives `severityOverrides: 'off'`, advisory L3 warning is still suppressed, and essential L4 malformed-verdict error survives `accepted`-map filtering at matching severity. Extended `TestCheckService.summarizeWithStatus` shim to the full 6-arg signature so the protected helper is reachable with overrides + accepted. | R1 — pin the precedence contract at the seam. |
 | `packages/app/tests/services/feature-check.test.ts:762-790,951-990` | Updated the `--as done` test fixture (`B_verifying.md`) to include a `## Tasks` section, satisfying the done-status matrix under the new target-aware selection. The semantic test (`goalErrors.length === 0`) is preserved — the one-active-goal rule still does not deny `--as done`. | D61 contract — `--as done` now selects the done matrix entry; the fixture reflects the new contract. |
 
+**Forced re-verification correction (2026-09-06):** the original implementation preserved warning severity for required completion findings and allowed declared-reference overrides. This pass repairs the shared summary in `packages/app/src/services/planning-check-base.ts:303`, with explicit reference/completion sets at `packages/app/src/services/planning-check-base.ts:33`. The regression failed before the fix and now passes. Task and feature consumer tests verify missing declared references, open children, hollow Testing and unverified scenarios block normal completion; style-only warnings still pass. `docs/04_DESIGN.md:2045` documents the corrected policy. Full gate: 7452 pass / 0 fail, 46 rules, lint/typechecks; build and test-cf exit 0. Earlier Solution/Review observations are historical and their claim that unresolved declared edges may be suppressed is superseded by this correction.
 ### Testing
-**Verdict: PASS** — implementation verified 2026-09-05; regression suite green at verify time; merged to main as `56e7e85cb`.
+**Pipeline verify results**
 
-**Per-Requirement Traceability**
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-| --- | --- | --- |
-| R1 — Normal checks preserve essential completion integrity | MET | Three new regressions in `packages/app/tests/services/planning-check-base.test.ts` (41 pass / 0 fail) prove the contract: (a) essential error survives `severityOverrides: 'off'`, (b) advisory warning still suppressed by `severityOverrides: 'off'`, (c) essential error survives `accepted`-map suppression at matching severity. Feature-level done-matrix covered by the updated `feature-check.test.ts` fixture (106 pass / 0 fail). |
+|-------------|--------|----------|
+| R1 | MET | Normal completion policy repaired at `packages/app/src/services/planning-check-base.ts:303`. From packages/app: `bun test tests/services/planning-check-base.test.ts tests/services/task-check.test.ts tests/services/feature-check.test.ts tests/services/done-transition-guard.test.ts --reporter=dots` exited 0 (343 pass, 0 fail); new regression failed before the fix. From apps/cli: `bun test tests/commands/task.test.ts tests/commands/workflow.test.ts tests/commands/workflow-version.test.ts --reporter=dots` exited 0 (293 pass, 0 fail). Fix-pass disclosure: verification run `.spur/run/0765-verify-answer.txt` lines 1-28; derived verdict `.spur/run/0765-verdict.json` replaced. |
 
-**Targeted tests (R1):**
-
-- `bun test packages/app/tests/services/planning-check-base.test.ts` → **41 pass / 0 fail** (38 existing + 3 new R1 regressions).
-- `bun test packages/app/tests/services/feature-check.test.ts` → **106 pass / 0 fail** (1 fixture updated for done-matrix).
-- `bun test packages/app/tests/services/` (63 files) → **1835 pass / 0 fail**.
-- `bun test packages/app/tests/ apps/cli/tests/` (176 files) → **3447 pass / 0 fail**.
-
-**Repository gate (final):**
-
-- `bun run lint` → exit 0 (biome check + typecheck).
-- `bun run typecheck` → exit 0 across all 7 workspaces.
-- `bun run format` → applied (2 files reformatted by biome, then re-lint clean).
-
-**Coverage claim:** the new contract is exercised by three regression tests in `planning-check-base.test.ts` covering (a) essential error survives `severityOverrides: 'off'`, (b) advisory warning still suppressed by `severityOverrides: 'off'`, (c) essential error survives `accepted`-map suppression at matching severity. The feature-level contract is exercised by the existing `--as done` direction-aware one-active-goal test (updated fixture satisfies the now-done-aware matrix selection).
-
-**Out of scope (deferred to 0766+):** removing `loadAcceptedFindings` from CLI task checks and the fallback done gate (task 0766). The current change keeps the `accepted` parameter on `summarizeWithStatus` so the legacy callers still work; 0766 will remove the parameter and the accepted-map plumbing.
-
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Normal checks preserve essential completion integrity | MET | command | Normal completion policy repaired at `packages/app/src/services/planning-check-base.ts:303`. From packages/app: `bun test tests/services/planning-check-base.test.ts tests/services/task-check.test.ts tests/services/feature-check.test.ts tests/services/done-transition-guard.test.ts --reporter=dots` exited 0 (343 pass, 0 fail); new regression failed before the fix. From apps/cli: `bun test tests/commands/task.test.ts tests/commands/workflow.test.ts tests/commands/workflow-version.test.ts --reporter=dots` exited 0 (293 pass, 0 fail). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->

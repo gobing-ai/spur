@@ -26,3 +26,4 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 - `2026-08-29-sp-dev-runall-feature-A6-dogfood.md`
 - `2026-09-02-dev-runall-feature-D8-dogfood.md`
 - `2026-09-04-sp-dev-verifyall-feature-D9-dogfood.md`
+- `2026-09-06-D61-closure-dogfood.md`

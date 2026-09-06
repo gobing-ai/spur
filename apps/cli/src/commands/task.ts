@@ -14,6 +14,7 @@ import {
     PlanningWriteService,
     readVerdictArtifact,
     resolvePlanningFolders,
+    runCorpusCheck,
     type SectionMatrix,
     SectionMutationError,
     TASK_LIFECYCLE_PROFILE,
@@ -1135,6 +1136,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     task.command('check')
         .summary('Validate a task file through the four-layer check (design §3).')
         .argument('[wbs]', 'Task WBS number (validates all tasks in the folder when omitted)')
+        .option('--corpus', 'Explicit unsuppressed audit of active tasks and features; warnings are advisory')
+        .option('--since <ref>', 'Scope the corpus fog comparison to changes since a git ref (requires --corpus)')
         .option(...SHARED_OPTIONS.strictTaskAll)
         .option(
             '--strict-core',
@@ -1156,6 +1159,45 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             // the default severity computation (no blanket elevation). The flag
             // exists so the testing→done lifecycle guard has a real, stable verb.
             const strict = options.strict === true;
+            if (
+                (options.since !== undefined && !options.corpus) ||
+                (options.corpus &&
+                    (wbs || options.as || options.fix || options.folder || strict || options.strictCore)) ||
+                options.since?.startsWith('-')
+            ) {
+                writeJsonError(
+                    context.output,
+                    options,
+                    '--corpus accepts only --since and JSON output options; --since requires --corpus and a git ref',
+                    'VALIDATION_FAILED',
+                );
+                context.setExitCode(2);
+                return;
+            }
+            if (options.corpus) {
+                try {
+                    const result = await runCorpusCheck(context.cwd, options.since);
+                    if (json) {
+                        context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
+                    } else {
+                        context.output.write(
+                            `corpus-check: ${result.newErrors.length} errors, ${result.newWarnings.length} warnings; no suppressions. Use --json for full findings.`,
+                        );
+                        for (const finding of result.newErrors) {
+                            writeJsonError(
+                                context.output,
+                                options,
+                                `${finding.kind}:${finding.id}:${finding.code}: ${finding.message}`,
+                            );
+                        }
+                    }
+                    if (!result.ok) context.setExitCode(1);
+                } catch (err) {
+                    writeJsonError(context.output, options, String(err));
+                    context.setExitCode(1);
+                }
+                return;
+            }
             // F92 R2: `--as <status>` — a target status projection. Validate against
             // canonical task statuses; reject contradictory combinations explicitly.
             const asStatus = options.as === undefined ? undefined : canonicalStatusOrRaw(options.as);

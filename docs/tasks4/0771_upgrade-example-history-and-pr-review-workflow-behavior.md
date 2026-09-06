@@ -4,7 +4,7 @@ name: "Upgrade example, history and PR-review workflow behavior"
 status: done
 template: feature-impl
 created_at: 2026-09-05T05:21:56.974Z
-updated_at: "2026-09-06T06:08:24.184Z"
+updated_at: "2026-09-06T15:48:50.106Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P7"]
@@ -20,7 +20,7 @@ Own basic.yaml, history-anatomy.yaml and pr-review.yaml. Current root package.js
 
 Dependencies: 0767, 0768. Detailed inputs and handoffs are frozen below.
 ### Requirements
-- [ ] **R1.** Example and specialist workflows preserve their useful behavior: fix trusted compound-command execution in basic while keeping bounded fixes; preserve history cache-hit avoidance, evidence validation and atomic publication; reuse head-pinned PR review results without duplicate requests or false CLEAN claims. Apply only behavior-supported simplifications and tag all three definitions version: "1" after verification.
+- [x] **R1.** Example and specialist workflows preserve their useful behavior: fix trusted compound-command execution in basic while keeping bounded fixes; preserve history cache-hit avoidance, evidence validation and atomic publication; reuse head-pinned PR review results without duplicate requests or false CLEAN claims. Apply only behavior-supported simplifications and tag all three definitions version: "1" after verification.
 
 Out of scope: new engines/dependencies/public nouns, broad historical-document cleanup, D9 fast activation, release, merge and external deployment. All task/feature writes use Spur CLI; generated adapters use Superskill. Refine does not author implementation evidence.
 ### Acceptance Criteria
@@ -92,14 +92,11 @@ Verification: `bun run spur-check` rc=0 (biome clean, typecheck, 44 rules, trans
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R9 | MET | basic.yaml executes the per-project gate via sh -c "$qualityGateCmd" (exit status preserved, soft-probe semantics kept, config/workflows/basic.yaml:50) with bounded retries and version: "1" identity tag; history-anatomy publishes only behind an anchored final-line PASS guard (config/workflows/history-anatomy.yaml:401) and cache hits avoid model work via helper-digest identity (plugins/sp/scripts/history-anatomy-cache.ts decideCache + probe --helper; logicDigest of the executing .mjs twin); pr-review reads the request record once (request extracts requestedAt/head to run-scoped .txt, config/workflows/pr-review.yaml request state) and wait/collect/status are head-pinned (requireExpectedHead fails loud on empty/missing --head, plugins/sp/scripts/pr-reviewing.ts:521) while TIMEOUT stays pending (exit 3) and FINDINGS/CLEAN/PENDING remain distinct (:766). |
+| R1 | MET | From packages/app: `bun test tests/workflow tests/services/corpus-check.test.ts tests/services/corpus-sweep.test.ts --reporter=dots` exited 0 (662 pass, 0 fail). From plugins/sp: `bun test tests/history-anatomy-cache.test.ts tests/pr-reviewing.test.ts --reporter=dots` exited 0 (130 pass). Three workflow validate commands exited 0; full build regenerated script twins. Compound gate commands, cache invalidation and head-pinned pending/clean/finding outcomes covered. Fix-pass disclosure: verification run `.spur/run/0771-verify-answer.txt` lines 1-28; derived verdict `.spur/run/0771-verdict.json` replaced. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R9 — Example and specialist workflows preserve their useful behavior | MET | test | Executed shell/branch behavior: basic-workflow.test.ts runs real sh -c gate commands with retry caps and exit-status propagation (4 pass); history-anatomy-cache.test.ts parses the actual YAML guard via require('yaml') and executes it through /bin/sh against spoofed verdict artifacts — exact PASS publishes, PASS-then-FAIL / not-Verdict / trailing text / missing file do not (71 pass); decideCache helper-digest tests lock changed-helper miss and pre-0771 one-time retro-invalidation; pr-reviewing.test.ts 59 pass including wait/collect/status exit-2 on missing --head, timeout-pending exit 3, FINDINGS/CLEAN/PENDING routing |
-| R9 — upgraded definitions validate with quoted version identity tags | MET | command | bun run apps/cli/src/index.ts workflow validate for basic, history-anatomy, pr-review each returns "workflow valid (explicit(1))" — /tmp/d61-0771-gate.txt evidence; version "1" is the behavior-neutral identity tag per embedded state-machine schema (0756) |
-| R9 — history invalid evidence cannot publish | MET | command | Anchored guard run against four spoof artifacts via Bun.spawnSync(['\/bin\/sh','-c',guard]) in test suite: no spoofed PASS publishes (history-anatomy-cache.test.ts validate publish guard describe); publication reachable only via stamp or refresh-provenance edges (skill-structure.test.ts 0660 R2/R6 invariants updated to the anchored guard literal) |
-| R9 — PR review head-pinned, deduplicated, honest about pending | MET | test | request extracts requestedAt/head exactly once (pr-review.yaml single extraction; test asserts 3 .txt references and 4 file.read.into-var actions, zero PAIR re-parses); isFresh('' since)=true preserves already-reviewed dedupe (requestedAt may be empty); wait TIMEOUT routes pending not failed; status without --head now exit 2 instead of silently reviewing current HEAD (0771 strictness, plugins/sp/tests/pr-reviewing.test.ts) |
+| R1 — Example and specialist workflows preserve their useful behavior | MET | command | From packages/app: `bun test tests/workflow tests/services/corpus-check.test.ts tests/services/corpus-sweep.test.ts --reporter=dots` exited 0 (662 pass, 0 fail). From plugins/sp: `bun test tests/history-anatomy-cache.test.ts tests/pr-reviewing.test.ts --reporter=dots` exited 0 (130 pass). Three workflow validate commands exited 0; full build regenerated script twins. Compound gate commands, cache invalidation and head-pinned pending/clean/finding outcomes covered. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->
@@ -109,6 +106,8 @@ Verification: `bun run spur-check` rc=0 (biome clean, typecheck, 44 rules, trans
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | tests-pass | — | `bun run spur-check` exited 0: 7452 pass, 0 fail; lint/typechecks and 44 pre-check + 2 post-check rules passed. Run evidence `.spur/run/d61-verifyall-gate.log` lines 1-359. |
+| P4 | design-conformance | — | DONE: trusted compound commands, bounded correction, anchored final verdict, helper-aware cache identity and head-pinned deduplicated review. |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - [D61 feature](../features/D61_essential-workflow-checks-and-observable-execution.md)

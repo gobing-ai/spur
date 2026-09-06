@@ -51,7 +51,7 @@ re-reading or re-tokenizing the task.
 | `batch-create` | Create many tasks from a validated JSON array | `--file <path>` `--folder` `--json` |
 | `record <wbs>` | Write `Testing` from a verify verdict (deterministic); bare-`## Review` fallback only; optional Solution + transition | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder` `--json` |
 | `verdict <wbs>` | Derive PASS/PARTIAL/FAIL/UNKNOWN from verify answer text → verdict JSON; see [answer-file shape](tasks/verbs.md#answer-file-shape-what---from-answer-parses) | `--from-answer <path>` `--folder` `--json` |
-| `check [wbs]` | Four-layer validation; the readiness matrix; `--fix` repairs structural findings in place | `--strict` `--as <status>` `--strict-core` `--fix` `--folder` `--json` |
+| `check [wbs]` | Four-layer validation; `--fix` repairs structure; `--corpus` is the explicit unsuppressed audit | `--strict` `--as <status>` `--strict-core` `--fix` `--folder` `--corpus` `--since <ref>` `--json` |
 | `resolve <file-path>` | Map a file path to its owning task WBS | `--strict` `--folder` `--json` |
 | `path <wbs>` | Map a WBS to its absolute task file path (inverse of `resolve`) | `--folder` `--json` |
 | `run-link <wbs>` | Record pipeline run provenance link for task | `--source <src>` `--run-id <id>` `--json` |

@@ -4,7 +4,7 @@ name: "Replace composition mirrors with live workflow facts and behavior checks"
 status: done
 template: feature-impl
 created_at: 2026-09-05T05:21:56.874Z
-updated_at: "2026-09-06T05:13:26.683Z"
+updated_at: "2026-09-06T15:48:47.593Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P3"]
@@ -103,14 +103,11 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Consumers already migrated to live facts (0775 slice): pipeline-budgets.ts:187, eval-pipeline.ts:128/:629 and real-run-cost.ts:35/:251 read config/workflows through the resolver plus extractResolvedWorkflowFacts — no snapshot/disposition loads remain (rg: 0 hits). Digest behavior byte-compatible: computeDefinitionDigest key-order-invariance test retained (composition-baseline.test.ts:26). JSON response fixture kept: json-envelope-adoption.test.ts green. Entry point gate deleted (scripts/commands/composition-entrypoint-check.ts removed; package.json 0 references). Unknown measured usage stays unknown: real-run-cost reports n/a with explicit reason, never 0; budget violations still fail (check-pipeline-budgets PASS, 5 pipelines, 0 violations = policy live). |
+| R1 | MET | From packages/app: `bun test tests/workflow tests/services/corpus-check.test.ts tests/services/corpus-sweep.test.ts --reporter=dots` exited 0 (662 pass, 0 fail). `bun run spur-check` exited 0: 7452 pass, 0 fail; lint/typechecks and 44 pre-check + 2 post-check rules passed. Run evidence `.spur/run/d61-verifyall-gate.log` lines 1-359. Live readers in pipeline-budgets/eval-pipeline/real-run-cost and composition-advisory use loaded definitions; canonical digest functions retained; retired snapshots absent and JSON compatibility fixture retained (fresh asset assertion exited 0). Fix-pass disclosure: verification run `.spur/run/0767-verify-answer.txt` lines 1-28; derived verdict `.spur/run/0767-verdict.json` replaced. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R4 — Baseline retirement preserves useful consumers | MET | test | Budgets/eval/cost consume live extractResolvedWorkflowFacts over all 11 shipped files incl. idea-pipeline (eval-pipeline loadWorkflowFacts sweep); composition-baseline.test.ts 48 tests across the 4 app targets green; digest byte-compat fixture retained; json-envelope-adoption response contract green |
-| Snapshots and regeneration-only machinery removed | MET | command | rg composition-entrypoint/workflow-composition-baseline.json over live surfaces: 0 hits in scripts/config/package.json (history docs only); scripts/commands/composition-entrypoint-check.ts deleted; spur-check chains shrunk (package.json:80-81); spur-check rc=0 |
-| No automatic regeneration accepts new debt during migration | MET | command | Both regenerator entrypoints stay absent; no replacement snapshot or disposition store exists (ADR-069 0767 amendment; design forbids one); ordinary prompt edits need no regeneration step — none exists |
-| Measured usage unknown stays unknown; violations remain failures | MET | command | d61-0767-before.json / after.json matched-input captures: budgets PASS (5 pipelines, 0 violations) before and after; real-run-cost absent terminal runs report n/a with explicit reason, never 0 |
+| R1 — Baseline retirement preserves useful consumers | MET | command | From packages/app: `bun test tests/workflow tests/services/corpus-check.test.ts tests/services/corpus-sweep.test.ts --reporter=dots` exited 0 (662 pass, 0 fail). `bun run spur-check` exited 0: 7452 pass, 0 fail; lint/typechecks and 44 pre-check + 2 post-check rules passed. Run evidence `.spur/run/d61-verifyall-gate.log` lines 1-359. Live readers in pipeline-budgets/eval-pipeline/real-run-cost and composition-advisory use loaded definitions; canonical digest functions retained; retired snapshots absent and JSON compatibility fixture retained (fresh asset assertion exited 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->
@@ -120,6 +117,8 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | tests-pass | — | `bun run spur-check` exited 0: 7452 pass, 0 fail; lint/typechecks and 44 pre-check + 2 post-check rules passed. Run evidence `.spur/run/d61-verifyall-gate.log` lines 1-359. |
+| P4 | design-conformance | — | DONE: live-definition consumers and digest helpers retained; exact-mirror/regenerator machinery removed. Measured usage remains separate from static action inventory. |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 

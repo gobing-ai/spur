@@ -4,7 +4,7 @@ name: "Migrate CLI/fallback accepted callers and dependent fixtures"
 status: done
 template: feature-impl
 created_at: 2026-09-05T15:33:42.921Z
-updated_at: "2026-09-06T01:13:06.127Z"
+updated_at: "2026-09-06T15:48:51.960Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P3"]
@@ -121,17 +121,7 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 7. [ ] Hand the migrated callers + fixtures to 0775 (snapshot + script removal + wrapup-pipeline default change + template/plugin guidance).
 
 ### Solution
-
-**Status (decomposition, 2026-09-05):** task 0774 is the second sub-task of decomposed 0766 R2 (caller-migration phase). Awaiting implementation run.
-
-Anticipated change anchors (populated during implementation):
-
-- `apps/cli/src/commands/task.ts:1286` — drop `accepted` from `svc.check()`.
-- `apps/cli/src/commands/task.ts:1628` — drop `accepted` from `svc.check()`.
-- `packages/app/src/index.ts:84` — remove `loadAcceptedFindings` named export.
-- `apps/cli/tests/commands/task.test.ts:1` — migrate dependent fixtures.
-- Internal loader at `packages/app/src/services/corpus-check.ts:656` — kept through this task; deleted by 0775.
-
+**Verified implementation (2026-09-06):** commit f19a393ed removed accepted-map inputs from CLI check and fallback completion, and removed the public loader export. `apps/cli/src/commands/task.ts:1212` and `apps/cli/src/commands/task.ts:1516` show the current caller options; neither includes accepted. The loader survived at f19a393ed in packages/app/src/services/corpus-check.ts line 656 for the subsequent 0775 deletion; it is now intentionally absent. CLI task/workflow/version suites: 293 pass / 0 fail. Shared precedence regressions and full gate pass (7452 tests, 46 rules). No fixture assertion was weakened; existing caller fixtures already cover unsuppressed findings.
 ### Testing
 **Pipeline verify results**
 
@@ -139,17 +129,17 @@ Anticipated change anchors (populated during implementation):
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | All three svc.check() sites stop passing accepted (per-wbs loop, folder loop, runDoneGateCheck); frozen contract untouched |
-| R2 | MET | Zero accepted refs in task.test.ts; suite green without the map |
-| R3 | MET | loadAcceptedFindings removed from packages/app barrel; internal loader kept for 0775; no other consumer |
-| R4 | MET | REQUIRED_FINDING_CODES precedence tests green in packages/app run; suppression guard short-circuits without map |
+| R1 | MET | From apps/cli: `bun test tests/commands/task.test.ts tests/commands/workflow.test.ts tests/commands/workflow-version.test.ts --reporter=dots` exited 0 (293 pass, 0 fail). `apps/cli/src/commands/task.ts:1212` and `apps/cli/src/commands/task.ts:1516` pass no accepted map. Shared required-code regression tests pass. Fix-pass disclosure: verification run `.spur/run/0774-verify-answer.txt` lines 1-34; derived verdict `.spur/run/0774-verdict.json` replaced. |
+| R2 | MET | From apps/cli: `bun test tests/commands/task.test.ts tests/commands/workflow.test.ts tests/commands/workflow-version.test.ts --reporter=dots` exited 0 (293 pass, 0 fail). Fixtures exercise unsuppressed CLI behavior; no assertion weakened. |
+| R3 | MET | `rg` confirms loadAcceptedFindings absent from app public exports and CLI; `git show f19a393ed:packages/app/src/services/corpus-check.ts` confirms the internal loader survived this intermediate task at line 656, before 0775 removed it. |
+| R4 | MET | `bun run spur-check` exited 0: 7452 pass, 0 fail; lint/typechecks and 44 pre-check + 2 post-check rules passed. Run evidence `.spur/run/d61-verifyall-gate.log` lines 1-359. Required errors cannot be hidden by overrides or legacy accepted entries, as tested by planning-check-base regression suite. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 | MET | test | apps/cli tests/commands/task.test.ts 172/172 exercises all three migrated call sites |
-| R2 | MET | test | 172/172 CLI task-check tests pass with zero accepted-key suppression behavior |
-| R3 | MET | command | bunx tsc --noEmit -p apps/cli exit 0 + 194/0 packages/app suite after barrel export removal (no dangling consumer) |
-| R4 | MET | test | 0765 REQUIRED_FINDING_CODES precedence coverage green in packages/app task-check run (194/0) |
+| R1 — The two CLI sites no longer pass accepted to svc.check | MET | command | From apps/cli: `bun test tests/commands/task.test.ts tests/commands/workflow.test.ts tests/commands/workflow-version.test.ts --reporter=dots` exited 0 (293 pass, 0 fail). `apps/cli/src/commands/task.ts:1212` and `apps/cli/src/commands/task.ts:1516` pass no accepted map. Shared required-code regression tests pass. |
+| R2 — Dependent fixtures migrate without incorrect demotion | MET | command | From apps/cli: `bun test tests/commands/task.test.ts tests/commands/workflow.test.ts tests/commands/workflow-version.test.ts --reporter=dots` exited 0 (293 pass, 0 fail). Fixtures exercise unsuppressed CLI behavior; no assertion weakened. |
+| R3 — bun test apps/cli/tests/commands/task.test.ts passes | MET | command | From apps/cli: `bun test tests/commands/task.test.ts tests/commands/workflow.test.ts tests/commands/workflow-version.test.ts --reporter=dots` exited 0 (293 pass, 0 fail). `apps/cli/src/commands/task.ts:1212` and `apps/cli/src/commands/task.ts:1516` pass no accepted map. Shared required-code regression tests pass. |
+| R4 — loadAcceptedFindings is removed from packages/app/src/index.ts | MET | command | `rg` confirms loadAcceptedFindings absent from app public exports and CLI; `git show f19a393ed:packages/app/src/services/corpus-check.ts` confirms the internal loader survived this intermediate task at line 656, before 0775 removed it. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->
@@ -159,6 +149,8 @@ Anticipated change anchors (populated during implementation):
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | tests-pass | — | `bun run spur-check` exited 0: 7452 pass, 0 fail; lint/typechecks and 44 pre-check + 2 post-check rules passed. Run evidence `.spur/run/d61-verifyall-gate.log` lines 1-359. |
+| P4 | design-conformance | — | DONE: caller and export migration. Historical intermediate loader retention verified against f19a393ed; later deletion belongs to 0775. Replaced stale anticipated Solution text with verified source evidence. |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 

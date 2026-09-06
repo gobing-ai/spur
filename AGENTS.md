@@ -156,11 +156,12 @@ bun run lint
 bun run test
 bun run test-cf
 bun run build
-bun run spur-check       # fast comprehensive gate (0775: the corpus sweep is retired)
+bun run spur-check       # fast comprehensive gate; no corpus sweep
 git status --short
 ```
 
-`spur-check-new` is now the identical chain (0775 retired the corpus sweep it used to add).
+`spur-check-new` is the identical chain. `bun run corpus-check` is an explicit unsuppressed audit
+for checker-policy changes (T10), not a routine step; ordinary corpus edits use affected-input checks (T11).
 Iterate with targeted tests and `spur task check <wbs>`; run the full gate once, not per edit.
 Never use `--no-verify` or silent
 suppressions to force green.

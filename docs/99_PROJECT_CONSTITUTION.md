@@ -3,9 +3,9 @@ name: Project Constitution
 doc: 99_PROJECT_CONSTITUTION
 owns: PROCESS — how the key files are maintained
 authority: authoritative-on-process
-version: 1.4.0
+version: 1.4.1
 created_at: 2026-05-31T17:30:43.643Z
-updated_at: 2026-08-28T00:00:00.000Z
+updated_at: 2026-09-06
 edit_rules: 99 §6.8
 sync: [T7]
 read_before: editing any numbered doc above
@@ -196,26 +196,23 @@ names the docs that must be touched **in the same commit / same change**:
 | T7 | The doc map or process changes | this file → re-sync `AGENTS.md` (§4.4) → propagate to sibling projects |
 | T8 | A multi-wave batch is planned | schedule "doc sync" as an **explicit work item** — same-commit discipline does not survive on memory alone |
 | T9 | A design or feature item is added/changed | the satellite **first** (`docs/design/<slug>.md` or `docs/features/<id>_<slug>.md`), **then** its index row in `04`/`05` — same change (§4.5 rule 5) |
-| T10 | A corpus check rule is added or tightened (a new `L*` finding code, or an existing one raised to `error`) | run the finding-rule unit gates (`bun run test`, inside `spur-check`) and reconcile the fallout **in the same change**: fix the newly-failing tasks/features (0775: the accepted-debt snapshot and `regen-corpus-baseline.ts` retired — findings surface directly; there is nothing to accept into) |
+| T10 | A corpus check rule is added or tightened (a new `L*` finding code, or an existing one raised to `error`) | Run focused finding-rule tests and one explicit unsuppressed audit (`bun run corpus-check`); record/reconcile exposed essential failures in the same change without waivers or regenerated acceptance. |
 
 **T10 — why it exists.** Corpus checks run *once*, at a transition, against the rules that existed
 that day. Nothing re-validates afterwards, so tightening a rule silently converts previously-legal
 closed work into non-compliant work — with no event anywhere. Task 0368 closed 2026-07-28; the rule
 that now flags it landed 2026-08-01 (`f373e90b`). Four days apart, invisible for ten.
 
-The finding-rule unit gates inside `spur-check` (post-0775 — the `corpus-check` sweep retired with
-its snapshot) make that fallout loud, so the only remaining
+The explicit unsuppressed audit makes that fallout visible, so the remaining
 question is *where* it gets reconciled. The answer is the tightening commit itself: its author knows
 why the rule changed, and the blast radius is smallest before anyone rebases onto it. Deferring the
 reconciliation means the next unrelated contributor inherits a red gate they did not cause and
 cannot judge.
 
-**T11 — sweep-once discipline (0688 review, 2026-08-27).** Iterating on a task uses the
-single-task gate — `spur task check <wbs>` — not the full gate. `bun run spur-check` runs
-**once**, at commit-prep, before a commit that touches the task/feature corpus. The 0688 session
-burned ~17 min across 17 sweeps because nothing named the single-task check as the iterate loop;
-the full gate is a commit gate, not a per-edit diagnostic. (0775 retired the ~29 s corpus sweep
-this rule originally targeted; the discipline now applies to the ~105 s `spur-check`.)
+**T11 — affected-input discipline (D61 correction, 2026-09-06).** Ordinary iteration and commit
+prep check the changed task/feature documents and their required linked evidence, not the corpus.
+Run the code-quality gate once for final code changes; do not add corpus audits to routine loops,
+batch wrapup or ordinary corpus-touch commits. T10 alone requires the explicit policy-change audit.
 
 ## 6. Edit principles per file
 

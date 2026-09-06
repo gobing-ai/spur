@@ -704,9 +704,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
 
         // No bare `always` transition may originate from approve — every exit must be
         // gated on the captured answer (bug-750: an always edge silently approves).
-        const approveFromBlocks = [
-            ...transitionBlocks.matchAll(/ {2}- from: approve\n(?:.*\n)*?(?= {2}- from:|Z)/g),
-        ].map((m) => m[0]);
+        const approveFromBlocks = transitionBlocks
+            .split(/^ +- from: /m)
+            .filter((block) => block.startsWith('approve\n'));
         expect(approveFromBlocks.length).toBe(3);
         for (const block of approveFromBlocks) {
             expect(block).not.toContain('kind: always');
@@ -755,9 +755,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const pureFixall = `input: /sp:dev-fixall "$${'{vars.qualityGateCmd}'}"`;
         expect(testFixBlock).toContain(pureFixall);
         // Green path: PASS probe → review without forcing a second full gate.
-        expect(taskPipeline).toContain('from: test\n    to: review\n');
+        expect(taskPipeline).toMatch(/from: test\n +to: review\n/);
         // Exhausted fix attempts land on the failed terminal state.
-        expect(taskPipeline).toContain('from: test-recheck\n    to: failed\n');
+        expect(taskPipeline).toMatch(/from: test-recheck\n +to: failed\n/);
     });
 
     test('R42 — skill description budgets stay within the 0187 aggregate/per-skill caps', () => {

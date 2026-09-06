@@ -170,7 +170,7 @@ transition to `done`.
 > The verify skill writes this shape automatically — operators only need it when hand-authoring
 > an answer file or debugging an UNKNOWN verdict.
 
-> **Finding-rule discipline (post-0775).** The corpus snapshot gate (`corpus-check` + `config/corpus-baseline.json`) is retired. Structural findings fail the per-task gate directly, and the residual corpus-gate behavior (fog range, ungraduated severity) is pinned by unit tests (`packages/app/tests/services/corpus-check.test.ts`) inside `bun run test` / `spur-check`. When introducing or tightening finding rules, fix newly-failing tasks/features in the same commit (constitution **T10**).
+> **Finding-rule discipline (ADR-108).** When checker policy changes, run focused tests and one explicit unsuppressed `bun run corpus-check` audit; record/reconcile essential failures without waivers (T10). Ordinary corpus commit prep checks changed tasks/features and their required linked evidence, not the corpus (T11). The baseline and regenerators remain deleted; tests are not a substitute for the explicit policy-change audit.
 >
 > **Transition-shim discipline (`transition-shim-check`, task 0541 / ADR-058).** Wired as an early step of `spur-check` / `spur-check-new` (second, after `link-check` and before `lint`) so a shim violation fails in ~0.3 s rather than after the test run. Two-sided against `config/transition-shims.json`: an `@transition-shim(<id>)` marker with no manifest entry fails as a **new unregistered shim**, **and** a listed entry whose marker is gone from source fails as a **stale entry**. Emptying the manifest is the definition of the agent-role transition being complete. A removal condition must be objectively checkable against the repository. Shapes: `docs/04_DESIGN.md` §2.5.
 
@@ -188,4 +188,3 @@ transition to `done`.
 > failure is not yours. This costs seconds and mutates nothing — do **not** `git stash` to get a
 > clean baseline on a shared working tree. Treat any failure that does *not* name a port/listen/`ps`
 > cause as yours until proven otherwise; the count is a moving baseline, not a constant.
-

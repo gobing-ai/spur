@@ -200,6 +200,8 @@ names the docs that must be touched **in the same commit / same change**:
 | T7 | The doc map or process changes | this file → re-sync `AGENTS.md` (§4.4) → propagate to sibling projects |
 | T8 | A multi-wave batch is planned | schedule "doc sync" as an **explicit work item** — same-commit discipline does not survive on memory alone |
 | T9 | A design or feature item is added/changed | the satellite **first** (`docs/design/<slug>.md` or `docs/features/<id>_<slug>.md`), **then** its index row in `04`/`05` — same change (§4.5 rule 5) |
+| T10 | Corpus checker policy changes | Run one explicit unsuppressed audit plus focused rule tests; record/reconcile exposed essential failures without waivers. |
+| T11 | Ordinary task/feature commit prep | Check changed documents and their required linked evidence, not the whole corpus. Never regenerate an acceptance baseline or add routine audit callers. |
 
 ## 6. Edit principles per file
 

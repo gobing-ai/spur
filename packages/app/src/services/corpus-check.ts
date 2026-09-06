@@ -1,27 +1,17 @@
 /**
- * Residual corpus-gate hosting after the snapshot retirement (task 0775).
- *
- * What survives here (post-0775) is:
- *
- *   - `ungraduatedFog` + `resolveFogRange` — the fog-of-war gate (0472),
- *     branch-scoped by git range so unrelated history cannot false-positive.
- *     No CLI surface remains after the whole-corpus sweep retired (0775);
- *     enforcement is review-time discipline (wayfinder SKILL.md).
- *   - `sectionLabels` + the tree readers — real-map section parsing the fog
- *     gate depends on.
- *   - `CorpusError`, `CorpusSeverity`, and the shared finding `key` — the
- *     finding identity contract shared with the per-transition checkers.
- *
- * The whole-corpus sweep, the accepted-baseline snapshot
- * (`config/corpus-baseline.json`), and its regeneration entrypoint were
- * deleted: ordinary commit-prep checks (T10/T11) now own corpus hygiene
- * through the per-task and per-feature gates, with no snapshot to accept
- * into (ADR-090 machinery retired with 0765/0775).
+ * Explicit unsuppressed corpus audit (ADR-108).
+ * Active tasks and features are checked; archived tasks only resolve references
+ * and duplicate identities. No baseline, acceptance ledger, or automatic caller.
+ * The legacy JSON count names remain for compatibility, with baselined always zero.
  */
 import { basename, dirname, join, relative, resolve } from 'node:path';
-import { resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
+import { bundledConfigRoot, resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
-import { type CorpusSeverity, key } from './planning-check-base';
+import { parse } from 'yaml';
+import { FeatureCheckService } from './feature-check';
+import { type CorpusSeverity, key, type SectionMatrix } from './planning-check-base';
+import { TaskCheckService } from './task-check';
+import { TaskLocator } from './task-locator';
 
 export type { CorpusSeverity };
 
@@ -35,6 +25,167 @@ export interface CorpusError {
 }
 
 export { key };
+
+async function loadTaskMatrix(projectRoot: string): Promise<SectionMatrix> {
+    const fs = createNodeFileSystem(projectRoot);
+    const candidates = [join(projectRoot, '.spur', 'tasks', 'section-matrix.yaml')];
+    const bundledRoot = bundledConfigRoot();
+    if (bundledRoot !== null) candidates.push(join(bundledRoot, 'tasks', 'section-matrix.yaml'));
+
+    let matrixPath: string | undefined;
+    for (const candidate of candidates) {
+        if (await fs.exists(candidate)) {
+            matrixPath = candidate;
+            break;
+        }
+    }
+    if (matrixPath === undefined) {
+        throw new Error('corpus-check: task section matrix is unavailable');
+    }
+
+    try {
+        const parsed = parse(await Bun.file(matrixPath).text());
+        if (typeof parsed !== 'object' || parsed === null || !('variants' in parsed)) {
+            throw new Error('missing variants object');
+        }
+        return parsed as SectionMatrix;
+    } catch (error) {
+        throw new Error(`corpus-check: could not parse task section matrix at ${matrixPath}: ${String(error)}`);
+    }
+}
+
+async function structuralSweep(projectRoot: string): Promise<{
+    findings: CorpusError[];
+    taskDirs: string[];
+    featuresDir: string;
+}> {
+    const fs = createNodeFileSystem(projectRoot);
+    const planning = await resolvePlanningFolders(fs);
+    const taskDirs = Object.keys(planning.foldersConfig.folders).map((dir) => fs.resolve(dir));
+    const activeTasksDir = fs.resolve(planning.foldersConfig.active_folder);
+    if (!taskDirs.includes(activeTasksDir)) taskDirs.unshift(activeTasksDir);
+    const featuresDir = fs.resolve(planning.featuresDir);
+    const locator = new TaskLocator({
+        fs,
+        tasksDir: activeTasksDir,
+        foldersConfig: planning.foldersConfig,
+    });
+    const taskService = new TaskCheckService(fs, await loadTaskMatrix(projectRoot), locator);
+    const findings: CorpusError[] = [];
+    for (const tasksDir of [activeTasksDir]) {
+        if (!(await fs.exists(tasksDir))) continue;
+        for (const fileName of await fs.readDir(tasksDir)) {
+            const wbs = fileName.match(/^(\d{4})_.+\.md$/)?.[1];
+            if (wbs === undefined) continue;
+            const result = await taskService.check(join(tasksDir, fileName), wbs);
+            for (const finding of result.findings) {
+                findings.push({
+                    kind: 'task',
+                    id: wbs,
+                    code: finding.code,
+                    severity: finding.severity,
+                    message: finding.message,
+                });
+            }
+        }
+    }
+
+    if (await fs.exists(featuresDir)) {
+        const featureService = new FeatureCheckService(fs);
+        for (const fileName of await fs.readDir(featuresDir)) {
+            const id = fileName.match(/^([A-Z][0-9]*)_.+\.md$/)?.[1];
+            if (id === undefined) continue;
+            const result = await featureService.check(join(featuresDir, fileName), id, {
+                featuresDir,
+                tasksDir: activeTasksDir,
+                tasksDirs: taskDirs,
+                runDir: fs.resolve('.spur/run'),
+            });
+            for (const finding of result.findings) {
+                findings.push({
+                    kind: 'feature',
+                    id,
+                    code: finding.code,
+                    severity: finding.severity,
+                    message: finding.message,
+                });
+            }
+        }
+    }
+
+    return { findings, taskDirs, featuresDir };
+}
+
+async function duplicateIds(cwd: string, taskDirs: string[], featuresDir: string): Promise<CorpusError[]> {
+    const fs = createNodeFileSystem(cwd);
+    const scan = async (
+        dir: string,
+        kind: 'task' | 'feature',
+    ): Promise<{ id: string; file: string; kind: typeof kind }[]> => {
+        let names: string[];
+        try {
+            names = await fs.readDir(dir);
+        } catch {
+            return [];
+        }
+        const pattern = kind === 'task' ? /^(\d{4})_/ : /^([A-Z][0-9]*)_/;
+        return names
+            .map((n) => ({ m: n.match(pattern), n }))
+            .filter((x): x is { m: RegExpMatchArray; n: string } => x.m !== null)
+            .map((x) => ({ id: x.m[1] as string, file: relative(cwd, join(dir, x.n)), kind }));
+    };
+
+    const all = [
+        ...(await Promise.all(taskDirs.map((dir) => scan(dir, 'task')))).flat(),
+        ...(await scan(featuresDir, 'feature')),
+    ];
+
+    const byId = new Map<string, string[]>();
+    for (const e of all) {
+        const k = `${e.kind}:${e.id}`;
+        byId.set(k, [...(byId.get(k) ?? []), e.file]);
+    }
+
+    const errors: CorpusError[] = [];
+    for (const [k, files] of byId) {
+        if (files.length < 2) continue;
+        const [kind, id] = k.split(':') as ['task' | 'feature', string];
+        errors.push({
+            kind,
+            id,
+            code: 'corpus.duplicate-id',
+            severity: 'error',
+            message: `${files.length} files claim ${kind} ${id}: ${files.join(' | ')} — one shadows the other in every lookup; renumber the later one via \`spur ${kind} create\``,
+        });
+    }
+    return errors;
+}
+
+/** Explicit audit only: no baseline or severity override can hide findings. */
+export async function runCorpusCheck(cwd: string, since?: string) {
+    const projectRoot = resolveProjectRoot(cwd);
+    const sweep = await structuralSweep(projectRoot);
+    const fog = await ungraduatedFog(projectRoot, { since });
+    const findings = [
+        ...sweep.findings,
+        ...(await duplicateIds(projectRoot, sweep.taskDirs, sweep.featuresDir)),
+        ...fog.map((finding) => ({ ...finding, severity: 'warning' as const })),
+    ];
+    const newErrors = findings.filter((finding) => finding.severity === 'error');
+    const newWarnings = findings.filter((finding) => finding.severity === 'warning');
+    return {
+        observed: findings.length,
+        baselined: 0,
+        newErrors,
+        newWarnings,
+        bySeverity: {
+            error: { observed: newErrors.length, baselined: 0, newCount: newErrors.length },
+            warning: { observed: newWarnings.length, baselined: 0, newCount: newWarnings.length },
+        },
+        duplicateKeys: [],
+        ok: newErrors.length === 0,
+    };
+}
 
 function resolveProjectRoot(cwd: string): string {
     const fs = createNodeFileSystem(cwd);

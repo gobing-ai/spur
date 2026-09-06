@@ -355,6 +355,37 @@ describe('PlanningCheckService.runL2', () => {
 // ─── D61 task 0765 — R1 unsuppressible severity precedence ───────────────
 
 describe('PlanningCheckService.summarizeWithStatus (D61 task 0765 — R1 unsuppressible codes)', () => {
+    test('normal completion rejects missing proof and declared references without rejecting style warnings', () => {
+        for (const kind of ['task', 'feature'] as const) {
+            const svc = new TestCheckService(simpleMatrix, kind);
+            for (const code of [FINDING_CODES.L4_SCENARIO_UNVERIFIED, FINDING_CODES.L4_FEATURE_NOT_FOUND]) {
+                const finding: CheckFindings = { layer: 'L4', code, severity: 'warning', section: '', message: code };
+                const result = svc.summarizeWithStatus('done', [finding], false, { [code]: 'off' });
+                expect(result.pass).toBe(false);
+                expect(result.findings[0]?.severity).toBe('error');
+            }
+            const advisory: CheckFindings = {
+                layer: 'L4',
+                code: FINDING_CODES.L4_SCENARIO_UNVERIFIED,
+                severity: 'warning',
+                section: '',
+                message: 'Pending implementation',
+            };
+            expect(svc.summarizeWithStatus('active', [advisory]).pass).toBe(true);
+            expect(
+                svc.summarizeWithStatus('done', [
+                    {
+                        layer: 'L3',
+                        code: FINDING_CODES.L3_SCOPE_DELINEATION,
+                        severity: 'warning',
+                        section: 'Scope',
+                        message: 'Style only',
+                    },
+                ]).pass,
+            ).toBe(true);
+        }
+    });
+
     test('essential L1 schema error survives severityOverrides: { code: off }', () => {
         const svc = new TestCheckService(simpleMatrix);
         const findings: CheckFindings[] = [

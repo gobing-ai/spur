@@ -78,7 +78,7 @@ export {
     resolveConfiguredTaskDirs,
 } from './services/anchor-qualifier';
 export type { CorpusSeverity } from './services/corpus-check';
-export { resolveFogRange } from './services/corpus-check';
+export { resolveFogRange, runCorpusCheck } from './services/corpus-check';
 export type {
     CorpusMigratorOptions,
     FileReport,

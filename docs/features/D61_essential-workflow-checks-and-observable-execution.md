@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D61"
 name: "Essential workflow checks and observable execution"
-status: active
+status: done
 priority: P1
 tags: []
 created_at: "2026-09-05T05:08:34.650Z"
-updated_at: "2026-09-06T00:49:08.268Z"
+updated_at: "2026-09-06T17:09:36.755Z"
 ---
 
 # D61: Essential workflow checks and observable execution
@@ -151,18 +151,18 @@ Feature: Essential workflow checks and observable execution
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0765 | Make essential completion checks explicit without blanket strictness | done |
-| 0766 | Retire routine corpus sweeps and suppression-based acceptance | todo |
-| 0767 | Replace composition mirrors with live workflow facts and behavior checks | todo |
-| 0768 | Unify workflow plan identity and readable execution progress | todo |
-| 0769 | Upgrade planning and evidence workflows without structural ceremony | todo |
-| 0770 | Upgrade lifecycle and wrapup workflows with truthful outcomes | todo |
-| 0771 | Upgrade example, history and PR-review workflow behavior | todo |
-| 0772 | Complete the final task-pipeline and packaged workflow rollout | todo |
-| 0773 | Audit and migrate config/corpus-baseline.json | wip |
-| 0774 | Migrate CLI/fallback accepted callers and dependent fixtures | todo |
-| 0775 | Delete corpus/composition baselines and snapshot tests | todo |
-| 0776 | Fix D61 pipeline execution blockers: stale executor doc and 0765 L4 preflight evidence | todo |
-| 0777 | D61 batch execution findings register — consolidated fixes for pipeline, env leak, evidence, and watcher reliability | todo |
+| 0766 | Retire routine corpus sweeps and suppression-based acceptance | done |
+| 0767 | Replace composition mirrors with live workflow facts and behavior checks | done |
+| 0768 | Unify workflow plan identity and readable execution progress | done |
+| 0769 | Upgrade planning and evidence workflows without structural ceremony | done |
+| 0770 | Upgrade lifecycle and wrapup workflows with truthful outcomes | done |
+| 0771 | Upgrade example, history and PR-review workflow behavior | done |
+| 0772 | Complete the final task-pipeline and packaged workflow rollout | done |
+| 0773 | Audit and migrate config/corpus-baseline.json | done |
+| 0774 | Migrate CLI/fallback accepted callers and dependent fixtures | done |
+| 0775 | Delete corpus/composition baselines and snapshot tests | done |
+| 0776 | Fix D61 pipeline execution blockers: stale executor doc and 0765 L4 preflight evidence | done |
+| 0777 | D61 batch execution findings register — consolidated fixes for pipeline, env leak, evidence, and watcher reliability | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -191,3 +191,5 @@ Next command: `/sp:dev-runall --feature D61 --auto` (the decomposition resolves 
 
 ## History
 - 2026-09-06T00:49:08.268Z backlog → active (system)
+- 2026-09-06T17:09:36.434Z active → verifying (system)
+- 2026-09-06T17:09:36.755Z verifying → done (system)

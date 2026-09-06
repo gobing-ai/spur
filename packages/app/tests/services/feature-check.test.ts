@@ -2091,6 +2091,7 @@ describe('FeatureCheckService', () => {
      */
     async function setupScenarioSatisfaction(opts: {
         taskStatus: string;
+        asStatus?: string;
         verdict?: {
             verdict: string;
             requirements?: Array<{ id: string; status: string; evidence?: string }>;
@@ -2165,6 +2166,7 @@ describe('FeatureCheckService', () => {
             featuresDir,
             tasksDir,
             runDir,
+            asStatus: opts.asStatus,
         });
         return { result, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
     }
@@ -2177,6 +2179,18 @@ describe('FeatureCheckService', () => {
         const unverified = result.findings.filter((f) => f.code === 'L4.scenario-unverified');
         expect(unverified).toHaveLength(0);
         cleanup();
+    });
+
+    test('D61: normal done check rejects an unverified scenario even when every linked task is done', async () => {
+        const { result, cleanup } = await setupScenarioSatisfaction({ taskStatus: 'done', asStatus: 'done' });
+        try {
+            expect(result.findings.find((f) => f.code === FINDING_CODES.L4_SCENARIO_UNVERIFIED)?.severity).toBe(
+                'error',
+            );
+            expect(result.pass).toBe(false);
+        } finally {
+            cleanup();
+        }
     });
 
     // ── 0398 R7: bracket-tagged verdict rows must still match their scenario ──

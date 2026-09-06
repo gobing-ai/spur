@@ -74,6 +74,11 @@ All product development work goes through the harness by default.
 Use `spur task path <wbs> --json` only when a filesystem consumer needs the absolute path. Both
 commands resolve across configured task folders. Reuse the first `show` response within the run.
 
+**Corpus checks (constitution T10/T11):** checker-policy changes require one explicit unsuppressed
+audit, recording/reconciling essential failures without waivers. Ordinary commit prep checks changed
+task/feature documents and their required linked evidence, not the whole corpus. Do not regenerate
+an acceptance baseline or insert audits into routine batch/wrapup loops.
+
 **Platform fallback:** Platforms without slash commands and/or subagents still use the harness.
 Install the plugin through Superskill for the target platform, then use skills `sp:spur-dev`,
 `sp:spur-cli`, `sp:code-verification` (and related) plus the `spur` CLI. Do not invent a parallel

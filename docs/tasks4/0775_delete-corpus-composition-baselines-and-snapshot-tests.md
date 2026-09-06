@@ -4,7 +4,7 @@ name: "Delete corpus/composition baselines and snapshot tests"
 status: done
 template: feature-impl
 created_at: 2026-09-05T15:33:43.063Z
-updated_at: "2026-09-06T03:29:22.536Z"
+updated_at: "2026-09-06T16:58:47.732Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P4"]
@@ -126,16 +126,11 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 6. [ ] Run `bun test packages/app/tests/workflow/composition-baseline.test.ts packages/app/tests/services/json-envelope-adoption.test.ts packages/app/tests/services/task-check.test.ts packages/app/tests/services/corpus-check.test.ts apps/cli/tests/commands/task.test.ts`, `spur task check 0775 --as testing`, and `spur feature check D61 --strict --json`. Capture results. Hand off to 0772 for the committed aggregate.
 
 ### Solution
-**Implemented (2026-09-05, worktree sp/runall-d61-8229).**
+**Correction, 2026-09-06, following operator-selected original ADR-108.** Baseline/regenerator deletion remains intact; explicit audit retirement was an implementation error and is corrected under 0766.
 
-Shipped anchors:
-
-- `scripts/commands/regen-corpus-baseline.ts`, `scripts/commands/regen-composition-baseline.ts`, `config/corpus-baseline.json`, `config/workflow-composition-baseline.json`, and the regen-only tests — deleted; `package.json` `corpus-check` / `regen-*` entries removed. `packages/app/tests/fixtures/json-raw-baseline.json` preserved (response-contract test green).
-- `packages/app/src/workflow/composition-baseline.ts` — live extractor (canonicalJsonStringify, computeDefinitionDigest, extractResolvedWorkflowFacts); consumers migrated: workflow-service validate (findings-only `--json`), proof-chain R7, scripts/commands (eval-pipeline, pipeline-budgets, real-run-cost) via documented deep-relative imports (root node_modules lacks the `@gobing-ai/spur-app` workspace link — §1.1 carve-out rationale inline).
-- `composition-entrypoint-check.ts` retained as the anti-resurrection gate: a stale baseline file or regen script reappearing fails `spur-check`.
-- R4 deviation (documented): default `featureGateCmd` = `bun run spur-check` (not the task's literal `$spurBin feature check`) — the evolved D61 contract; `config/workflows/wrapup-pipeline.yaml:77`, design satellite corpus-check contract, and `docs/04_DESIGN.md` gate-waiver rows updated in the same change; override seam `sh -c "$featureGateCmd"` preserved at `:243`.
-- Template §5 sub-condition: deliberate no-op — `config/templates/` never contained T10/T11 and grep confirms zero retired-mechanism references; retired-mechanism triggers must not propagate to new-project scaffolds. Live guidance (constitution T10/T11, AGENTS.md, 03_ARCHITECTURE, wayfinder, gate-checklists, execution-batch, pipeline-budgets notes) reworded instead.
-- `ungraduatedFog` + `resolveFogRange` retained in `corpus-check.ts` with honest post-0775 docstring: no CLI surface remains; enforcement is review-time discipline.
+- `config/workflows/wrapup-pipeline.yaml:86` sets the trusted default to the affected-feature check; existing caller overrides still flow through the same shell seam. The focused wrapup suite passes 21 tests, including execution of the default command with a stub CLI.
+- `docs/99_PROJECT_CONSTITUTION.md:199` and canonical templates now state T10 explicit unsuppressed policy-change audit and T11 affected-input ordinary commit prep; live lifecycle guidance matches. No routine audit caller or replacement waiver ledger was introduced.
+- Source/generated corpus and composition baselines and regenerators remain deleted. Digest helpers, live-definition consumers and the JSON response compatibility fixture remain intact. Final bundle and regression evidence is recorded by verification.
 ### Testing
 **Pipeline verify results**
 
@@ -143,10 +138,17 @@ Shipped anchors:
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | git status D rows for all four regenerator artifacts + regen-only tests; find -> 0 rows; json-raw-baseline.json preserved; anti-resurrection guard wired into spur-check (rc=0) |
-| R2 | MET | composition-baseline.test.ts 61 pass / 0 fail: ordering invariant, sha256 format + sensitivity, onExit walker, all-definitions sweep, live task-pipeline fields; proof-chain R7 live extraction (12 pass) |
-| R3 | MET | T10/T11 reworded in live constitution; grep config/templates/ corpus-check or regen -> 0 hits (template ends at T9, no-op documented); AGENTS.md + wayfinder + fit-and-tuning + gate-checklists + execution-batch consistent |
-| R4 | MET | wrapup-pipeline.yaml:77 default bun run spur-check — documented deviation (essential-workflow-checks.md + 04_DESIGN tombstone same change); override seam sh -c "$featureGateCmd" preserved at :243 |
+| R1 | MET | Final build:bundle and source/generated inventory assertions exit 0: corpus/composition baselines and regenerators absent; JSON compatibility fixture retained. Fix-pass artifacts: verification run `.spur/run/0775-verify-answer.txt` lines 1-40 replaced; CLI derives `.spur/run/0775-verdict.json` and records Testing. |
+| R2 | MET | Full closure gate exits 0, including focused live-composition, digest invariance, and JSON response compatibility behavior. No snapshot-equality assertions restored. |
+| R3 | MET | T10/T11 restored in constitution, canonical templates and lifecycle guidance; Superskill validation for spur-dev/spur-cli returns valid:true findings:[]. Explicit audit available only on demand; routine callers remain removed. |
+| R4 | MET | bun test tests/workflow/wrapup-pipeline.test.ts from packages/app exits 0 (21 pass). Default featureGateCmd executes only spur feature check D61 in fixture; explicit variable override still executes through unchanged sh -c seam. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Regenerator-only artifacts are removed | MET | command | Final build:bundle and source/generated inventory assertions exit 0: corpus/composition baselines and regenerators absent; JSON compatibility fixture retained. |
+| R2 — Snapshot-equality tests are replaced with focused behavior tests | MET | command | Full closure gate exits 0, including focused live-composition, digest invariance, and JSON response compatibility behavior. No snapshot-equality assertions restored. |
+| R3 — T10 and T11 are applied to canonical templates and plugin lifecycle guidance | MET | command | T10/T11 restored in constitution, canonical templates and lifecycle guidance; Superskill validation for spur-dev/spur-cli returns valid:true findings:[]. Explicit audit available only on demand; routine callers remain removed. |
+| R4 — wrapup-pipeline default featureGateCmd is updated with override preserved | MET | command | bun test tests/workflow/wrapup-pipeline.test.ts from packages/app exits 0 (21 pass). Default featureGateCmd executes only spur feature check D61 in fixture; explicit variable override still executes through unchanged sh -c seam. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->
@@ -156,6 +158,9 @@ Shipped anchors:
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | tests-pass | — | bun run spur-check exits 0: 7457 pass, 0 fail, 416 files; lint/typechecks and 44+2 rules pass. Verification run .spur/run/d61-closure-gate-final.log. |
+| P4 | design-conformance | — | Original ADR-108 intent restored; isolated historical reconstruction explicitly permitted by task Design and labeled without real-run claims. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 
 - [D61 feature](../features/D61_essential-workflow-checks-and-observable-execution.md)

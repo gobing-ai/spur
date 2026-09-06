@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.38.0
+version: 1.38.1
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-05
+updated_at: 2026-09-06
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -187,11 +187,10 @@ configuration — adding one edits YAML, not code. Flags and surface: `04 §1.1`
 
 ## 6. Workflows (`ts-dual-workflow-engine`, `spur workflow`)
 
-**D61 accepted design — not yet built (ADR-108):** shared planning-check services own state-aware
-essential errors; corpus audits become explicit and unsuppressed; workflow identity/progress reuse
-the existing resolver and projections. The migration contracts and eight-package order are in
-[`essential-workflow-checks.md`](design/essential-workflow-checks.md). Current runtime behavior below
-remains until the owning implementation packages land.
+**D61 implementation (ADR-108):** shared planning-check services own state-aware essential errors;
+corpus audits are explicit and unsuppressed; workflow identity/progress reuse the existing resolver
+and projections. The migration contracts are in
+[`essential-workflow-checks.md`](design/essential-workflow-checks.md).
 
 Two execution models behind one host (ADR-009):
 
@@ -635,8 +634,8 @@ linked task edges
 
 The per-task quality gate deliberately remains the fast `spur-check` chain. The wrap-up
 `feature-transition` action reads the sync result and runs trusted project command `featureGateCmd`
-(default `bun run spur-check` — the full repo gate; 0775 retired the corpus sweep this hop
-previously ran) when either `applied` is true or sync exits non-zero (a
+(default `$spurBin feature check "$feature"` — affected-feature integrity only)
+when either `applied` is true or sync exits non-zero (a
 conservative signal that an earlier hop may already have landed). The shell remains advisory: it
 emits an explicit feature-gate PASS or FAIL and exits 0 so the operator owns the recovery decision;
 a complete or partial feature transition cannot leave the feature gate unobserved.

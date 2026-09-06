@@ -153,6 +153,23 @@ CLI does.
 
 ## Gotchas
 
+### Bounded execution and recovery (0777)
+
+- During planning/refinement of corpus-scale work, record an execution budget, persisted-artifact
+  paths and requireDiff guidance in the task Design. For classification-only work, declare
+  `mutationPolicy: none`; its task/evidence change is the deliverable, not invented source edits.
+  Preserve partial artifacts at the budget boundary; resume only against the current task contract.
+- Before accepting a child/watcher result, compare its run ID with the dispatched run ID and check
+  current trace state through Spur. If using a run log as evidence, require its mtime to be at least
+  the dispatch time. A mismatch or stale timestamp is not completion evidence. Do not scrape terminals.
+  Bound each watch invocation to 10 minutes or 20 polls, whichever comes first; persist the last
+  confirmed identity/state and report a checkpoint before continuing. A watcher timeout does not
+  cancel the owned run or authorize launching a replacement.
+- Mark superseded scratch with `SUPERSEDED` and a pointer to the authoritative task Design. Never
+  let a scratch instruction override the live task, even when its old run is still readable.
+- Checker-policy changes require one explicit unsuppressed audit (T10); ordinary corpus commit
+  prep checks affected documents and linked evidence (T11), not the corpus. No acceptance snapshots.
+
 1. **Never skip a gate.** A clean `feature check` is the only proof the AC is valid; a
    passing `batch-create` is the only proof the decomposition is well-formed. Skip either and
    you ship corrupted corpus.

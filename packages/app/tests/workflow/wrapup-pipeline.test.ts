@@ -40,6 +40,7 @@ interface TransitionDef {
 
 interface WorkflowYaml {
     name: string;
+    vars?: Record<string, string>;
     version?: string;
     states: StateDef[];
     transitions: TransitionDef[];
@@ -92,6 +93,24 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8)', () => {
 
     test('identity: the definition carries an explicit version tag', () => {
         expect(def.version).toBe('1');
+    });
+
+    test('default feature gate checks only the selected feature and permits explicit override', () => {
+        expect(def.vars?.featureGateCmd).toBe('$spurBin feature check "$feature"');
+        const cwd = mkdtempSync(join(tmpdir(), 'wrapup-feature-gate-'));
+        try {
+            const stub = join(cwd, 'spur-stub');
+            writeFileSync(stub, '#!/bin/sh\nprintf "%s\\n" "$@"\n');
+            chmodSync(stub, 0o755);
+            const env = { ...process.env, spurBin: stub, feature: 'D61' };
+            const result = spawnSync('sh', ['-c', def.vars?.featureGateCmd ?? 'exit 99'], { env, encoding: 'utf8' });
+            expect(result.status).toBe(0);
+            expect(result.stdout).toBe('feature\ncheck\nD61\n');
+            const command = String(shellsOf(def, 'feature-transition')[0]?.options?.command ?? '');
+            expect(command).toContain('sh -c "$featureGateCmd"');
+        } finally {
+            cleanup(cwd);
+        }
     });
 
     test('0770 definitions are all explicitly versioned (identity tag, not absence)', () => {

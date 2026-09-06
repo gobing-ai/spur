@@ -4,7 +4,7 @@ name: "Unify workflow plan identity and readable execution progress"
 status: done
 template: feature-impl
 created_at: 2026-09-05T05:21:56.897Z
-updated_at: "2026-09-06T14:24:49.109Z"
+updated_at: "2026-09-06T15:48:48.214Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P4"]
@@ -130,27 +130,20 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 - Verification: `bun run spur-check` rc=0 (lint + typecheck + full suite; /tmp/t0768-gate.txt). Eval-pipeline nesting-guard 5s timeout is a standalone-pass flake.
 
 ### Testing
-
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | show/list/run/resume/traced all resolve through the shared resolver: apps/cli/src/commands/workflow.ts:1177 (show), packages/app/src/services/workflow-service.ts:1372 (list entries carry definitionDigest+version), :1484 (run stamps identity at creation via RunDao.stampRunIdentity json_set), :1041-1119 (resume persists-digest classification with three states). Envelopes gain definitionDigest and version without removing fields (apps/cli/tests/commands/workflow.test.ts 125 pass). Empty version rejected, unknown literal opaque (workflow-service list tests). Planning is pure rendering with no guards/actions/run mutations; stamp failure now fails run creation with negative test run-identity-3. |
-| R2 | MET | Same declared-step checklist plan before sync (workflow.ts:770) and async (workflow.ts:588 artifact pre-spawn with expected-digest worker gate :224). Step-reporter renders state/action/retry/skip lines with transition detail (packages/app/src/workflow/step-reporter.ts:69); progress projection reconciles recorded visits (packages/app/src/workflow/progress-projection.ts). Machine stdout preserved: planPreview human-branch only; quiet/silent/no-plan suppress display while identity still stamps. Artifact detail redacted via redactAndBound (workflow.ts:252). 136 app tests + 125 cli tests pass. |
+| R1 | MET | From apps/cli: `bun test tests/commands/task.test.ts tests/commands/workflow.test.ts tests/commands/workflow-version.test.ts --reporter=dots` exited 0 (293 pass, 0 fail). From packages/app: `bun test tests/services/workflow-service.test.ts --reporter=dots` exited 0 (103 pass); from packages/domain: run-dao-identity suite exited 0 (2 pass). `bun run apps/cli/src/index.ts workflow show config/workflows/task-pipeline.yaml --format todo --json` exited 0: version 1, sha256:6cc35ff83cd7d9fb7d392fb8e835ab2e180cd98a455f9c9a21d5c2d95a5d3042, 12 declared steps. Fix-pass disclosure: verification run `.spur/run/0768-verify-answer.txt` lines 1-30; derived verdict `.spur/run/0768-verdict.json` replaced. |
+| R2 | MET | From packages/app: `bun test tests/workflow tests/services/corpus-check.test.ts tests/services/corpus-sweep.test.ts --reporter=dots` exited 0 (662 pass, 0 fail). From apps/cli: `bun test tests/commands/task.test.ts tests/commands/workflow.test.ts tests/commands/workflow-version.test.ts --reporter=dots` exited 0 (293 pass, 0 fail). Declared plan at `packages/app/src/workflow/step-reporter.ts:274`; async pre-dispatch plan write at `apps/cli/src/commands/workflow.ts:600`; native host todo/Markdown fallback remains in the inline driver contract. Resume rejects unapproved digest drift and preserves stamped-null versus legacy-unknown identity. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-| --------------------- | -------- | --------------- | ---------- |
-| R6 — Progress is readable and truthful across execution surfaces | MET | test | Scenario-level roll-up of the row evidence below: readable progress (step-reporter renders state/action/retry/skip with transition detail, step-reporter.ts:69; projection marks unvisited/blocked truthfully) + truthful identity (run stamps persisted definitionDigest+version via RunDao.stampRunIdentity; stamp failure fails run creation, run-identity-3 negative test). Tests: step-reporter.test.ts + progress-projection.test.ts 33 pass; workflow.test.ts 125 pass. |
-| R5 — Planning and execution share workflow identity | MET | test | Show envelopes carry definitionDigest + version for todo and mermaid formats; list entries validated with digest equal to resolveWorkflowDefinition().digest; run result echoes persisted identity; resume classifies by metadata.workflowVersion key presence, never re-resolution. workflow-service.test.ts legacy-1, nostamp, run-identity-3; workflow.test.ts show envelope assertions (125 pass) |
-| R5 — empty version rejected, unknown literal opaque, plan executes no actions | MET | test | List test asserts invalid empty-version entry valid=false with error; opaque literal kept verbatim; renderRunPlan is pure with no engine or DB access; show is read-only through the same resolver. workflow-service.test.ts list entries |
-| R6 — operator identifies state, actions, retries, skips, outcome | MET | test | Step reporter emits started/finished/heartbeat lines with attempt counts; transition detail gated by render detail; projection marks unvisited branches unvisited and blocked/cancelled not done. step-reporter.test.ts + progress-projection.test.ts 33 pass |
-| R6 — native todo when available, Markdown fallback, conditional states not inevitable | MET | test | renderWorkflowTodo and renderRunPlan share buildWorkflowSteps with conditional/loop markers; parity test proves todo equals plan steps; inline-driver guidance consumes show --format todo --json once. step-reporter.test.ts parity |
-| R6 — machine stdout and quiet/silent/no-plan compatible | MET | command | planPreview written only in the human branch; JSON envelopes additive; --no-plan suppresses display while service-side stamping persists identity; artifact detail redacted via redactAndBound. bun test tests/commands/workflow.test.ts 125 pass; full gate spur-check rc=0 |
-
+|---------------------|--------|---------------|----------|
+| R1 — Planning and execution share workflow identity | MET | command | From apps/cli: `bun test tests/commands/task.test.ts tests/commands/workflow.test.ts tests/commands/workflow-version.test.ts --reporter=dots` exited 0 (293 pass, 0 fail). From packages/app: `bun test tests/services/workflow-service.test.ts --reporter=dots` exited 0 (103 pass); from packages/domain: run-dao-identity suite exited 0 (2 pass). `bun run apps/cli/src/index.ts workflow show config/workflows/task-pipeline.yaml --format todo --json` exited 0: version 1, sha256:6cc35ff83cd7d9fb7d392fb8e835ab2e180cd98a455f9c9a21d5c2d95a5d3042, 12 declared steps. |
+| R2 — Progress is readable and truthful across execution surfaces | MET | command | From packages/app: `bun test tests/workflow tests/services/corpus-check.test.ts tests/services/corpus-sweep.test.ts --reporter=dots` exited 0 (662 pass, 0 fail). From apps/cli: `bun test tests/commands/task.test.ts tests/commands/workflow.test.ts tests/commands/workflow-version.test.ts --reporter=dots` exited 0 (293 pass, 0 fail). Declared plan at `packages/app/src/workflow/step-reporter.ts:274`; async pre-dispatch plan write at `apps/cli/src/commands/workflow.ts:600`; native host todo/Markdown fallback remains in the inline driver contract. Resume rejects unapproved digest drift and preserves stamped-null versus legacy-unknown identity. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
 ### Review
 <!-- spur:record-review -->
 
@@ -159,8 +152,9 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | tests-pass | — | `bun run spur-check` exited 0: 7452 pass, 0 fail; lint/typechecks and 44 pre-check + 2 post-check rules passed. Run evidence `.spur/run/d61-verifyall-gate.log` lines 1-359. |
+| P4 | design-conformance | — | DONE: shared resolution, additive identity fields, async plan artifact, conditional inventory and actual progress. Existing explicit consent for digest-mismatch resume remains. |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-
 ### References
 
 - [D61 feature](../features/D61_essential-workflow-checks-and-observable-execution.md)

@@ -84,7 +84,7 @@ case "$1:$2" in
     mkdir -p .spur/run
     printf '{"wbs":"%s","verdict":"%s","requirements":[],"checks":[]}\n' "$3" "\${VERDICT:-PASS}" > ".spur/run/$3-verdict.json" ;;
   task:show)
-    printf '%s\n' '{"frontmatter":{"feature_id":null}}' ;;
+    printf '%s\n' '{"content":"ordinary implementation task","frontmatter":{"feature_id":null}}' ;;
   task:path)
     # 0751 R2: the fail-closed task lookup needs a resolvable spec. FIXTURE_TASK_SPEC
     # is seeded by runInlineSmoke; unset -> empty path -> the pipeline step must fail.

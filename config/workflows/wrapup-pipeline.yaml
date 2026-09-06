@@ -79,17 +79,11 @@ vars:
   __runId: ""
   mode: ""
   stepTimeoutMs: "1800000"
-  # Feature-level quality gate for the feature-transition hop (R1, task 0625;
-  # re-anchored by task 0775). The corpus sweep this hop previously ran was
-  # retired with its snapshot, so the gate is the full `spur-check` (~105 s):
-  # the only remaining repo-wide gate, and the states that run before this hop
-  # (`doc-sync`, `metrics-record`) write only markdown and task sections, which
-  # Biome skips (`ignoreUnknown: true`). Soft by design: the gate reports
-  # PASS/FAIL and lets the operator decide; it never hard-fails the wrap-up
-  # shell.
+  # Recheck the affected feature after sync (D61 / ADR-108), not the corpus
+  # or full code suite. Explicit caller overrides remain supported.
   # TRUSTED CONFIG ONLY — this string is executed via `sh -c` (same surface as
   # task-pipeline's qualityGateCmd). Never interpolate untrusted input into it.
-  featureGateCmd: "bun run spur-check"
+  featureGateCmd: '$spurBin feature check "$feature"'
   __hitlAnswer: ""
 
 states:
@@ -292,7 +286,7 @@ states:
       # back to the plain `spur feature sync` verb.
       # R1 (0625): a feature transition that changed state may have left
       # cross-task fallout the per-task fast gates never see. Run the
-      # feature-level gate (featureGateCmd — `spur-check` since 0775) after an
+      # affected-feature gate (featureGateCmd) after an
       # applied sync OR a non-zero exit that may follow a partial multi-hop
       # transition, then report PASS/FAIL. Soft by design: the operator
       # decides, and wrap-up never hard-fails here.

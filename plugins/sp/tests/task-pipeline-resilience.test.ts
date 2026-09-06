@@ -72,6 +72,35 @@ function runShell(command: string, cwd: string, env: Record<string, string>): { 
 }
 
 describe('0503 task-pipeline resilience', () => {
+    test('0777 mutation policy stops classification-only remediation before dispatch or source edits', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-mutation-policy-'));
+        try {
+            writeFileSync(join(dir, 'source.ts'), 'unchanged');
+            const spurBin = executable(
+                dir,
+                'spur',
+                'printf \'%s\\n\' \'{"content":"mutationPolicy: none\\n","frontmatter":{}}\'',
+            );
+            const action = commandFor('test-fix');
+            const result = runShell(action, dir, { spurBin, wbs: '0773', mutationPolicy: 'code' });
+            expect(result.exitCode).not.toBe(0);
+            expect(result.output).toContain('mutation policy');
+            expect(readFileSync(join(dir, 'source.ts'), 'utf8')).toBe('unchanged');
+            expect(PIPELINE.states.find((state) => state.id === 'test-fix')?.onEnter?.[0]?.kind).toBe('shell');
+            const allowed = executable(
+                dir,
+                'code-task',
+                'printf \'%s\\n\' \'{"content":"ordinary task","frontmatter":{}}\'',
+            );
+            expect(runShell(action, dir, { spurBin: allowed, wbs: '0777', mutationPolicy: 'code' }).exitCode).toBe(0);
+            expect(runShell(action, dir, { spurBin: allowed, wbs: '0777', mutationPolicy: 'none' }).exitCode).not.toBe(
+                0,
+            );
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     test('precheck remains deterministic, doctor-free, and count-only (0723)', () => {
         const precheck = PIPELINE.states.find((state) => state.id === 'precheck');
         const commands = precheck?.onEnter?.map((action) => action.options?.command ?? '') ?? [];

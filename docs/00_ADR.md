@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.36.0
+version: 1.36.1
 owner: Robin Min
-updated_at: 2026-09-05
+updated_at: 2026-09-06
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2260,6 +2260,13 @@ derived contracts in the same change. ADR-107's Option B closure and fast-mode e
 
 **Detail:** `docs/design/essential-workflow-checks.md`; approved proposal
 `docs/plans/2026-09-04-workflow-upgrade-brainstorm.md`.
+
+**Correction (2026-09-06, operator clarification).** The original decision at
+`f85094a7f16e24a9ac9b5a36b1a76b1525b2d5e5` remains authoritative: simplify corpus checking by
+removing automatic sweeps, suppression baselines and regenerators, not the explicit audit itself.
+The 0775 implementation and derived-doc retirement of that audit were incorrect. Restore the
+existing opt-in audit with visible errors/warnings and no accepted-debt filtering; ordinary task
+and wrapup gates check affected inputs. This correction adds no replacement snapshot or policy DSL.
 
 ## Amendments (task 0754, D8 Decision 8 closure)
 

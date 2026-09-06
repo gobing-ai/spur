@@ -4,7 +4,7 @@ name: "Upgrade lifecycle and wrapup workflows with truthful outcomes"
 status: done
 template: feature-impl
 created_at: 2026-09-05T05:21:56.947Z
-updated_at: "2026-09-06T07:29:45.532Z"
+updated_at: "2026-09-06T15:48:49.461Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P6"]
@@ -112,11 +112,11 @@ Evidence: `.spur/run/0770-verdict.json` (PASS, proof sha256 of gate log), `.spur
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — Lifecycle and wrapup outcomes remain authoritative | MET | All four definitions upgraded and validated (exit 0); behavior pinned by executed tests: lifecycle single-edge pins (lifecycle-adapter.test.ts, feature-lifecycle-adapter.test.ts), new wrapup-pipeline.test.ts (20 tests: malformed/unresolvable wrap input records FAIL, fail-edges declared first, sync `has("applied")` gate, explicit no-change PASS), feature-dev-definition.test.ts strict CLEAN-only blocking edge. Full gate: bun run spur-check exit 0, 7420 tests passed / 0 failed. |
+| R1 | MET | From packages/app: `bun test tests/workflow tests/services/corpus-check.test.ts tests/services/corpus-sweep.test.ts --reporter=dots` exited 0 (662 pass, 0 fail). Executed wrapup input/metrics shell fixtures and lifecycle request-transition tests pass; feature-dev requires collected CLEAN when requested, not request acceptance. Four owned definitions validate with version 1. `bun run spur-check` exited 0: 7452 pass, 0 fail; lint/typechecks and 44 pre-check + 2 post-check rules passed. Run evidence `.spur/run/d61-verifyall-gate.log` lines 1-359. Fix-pass disclosure: verification run `.spur/run/0770-verify-answer.txt` lines 1-28; derived verdict `.spur/run/0770-verdict.json` replaced. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R8 — Lifecycle and wrapup outcomes remain authoritative | MET | test | 625/625 packages/app workflow tests green including 20 new wrapup-pipeline.test.ts truthfulness pins (invalid input and failed required sync route to declared `failed` state, never success), lifecycle one-edge-per-pair pins green, feature-dev integration-review blocking edge requires collected CLEAN (request-state strings can never satisfy it). Matched-input digests: .spur/run/d61-0770-before.json vs d61-0770-after.json. |
+| R1 — Lifecycle and wrapup outcomes remain authoritative | MET | command | From packages/app: `bun test tests/workflow tests/services/corpus-check.test.ts tests/services/corpus-sweep.test.ts --reporter=dots` exited 0 (662 pass, 0 fail). Executed wrapup input/metrics shell fixtures and lifecycle request-transition tests pass; feature-dev requires collected CLEAN when requested, not request acceptance. Four owned definitions validate with version 1. `bun run spur-check` exited 0: 7452 pass, 0 fail; lint/typechecks and 44 pre-check + 2 post-check rules passed. Run evidence `.spur/run/d61-verifyall-gate.log` lines 1-359. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->
@@ -126,6 +126,8 @@ Evidence: `.spur/run/0770-verdict.json` (PASS, proof sha256 of gate log), `.spur
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | tests-pass | — | `bun run spur-check` exited 0: 7452 pass, 0 fail; lint/typechecks and 44 pre-check + 2 post-check rules passed. Run evidence `.spur/run/d61-verifyall-gate.log` lines 1-359. |
+| P4 | design-conformance | — | DONE: lifecycle edge uniqueness, malformed input failure, run-scoped captures and collected-review gating. External PR requests were mocked by tests; no messages were sent. |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 

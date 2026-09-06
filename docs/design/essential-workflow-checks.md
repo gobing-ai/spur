@@ -1,6 +1,6 @@
 # Essential workflow checks and observable execution
 
-**Feature:** D61 · **Status:** accepted design, not implemented · **Decision:** ADR-108.
+**Feature:** D61 · **Status:** done; 13 tasks verified PASS on 2026-09-06 · **Decision:** ADR-108.
 Operator approval covers the [discovery proposal and Design Summary](../plans/2026-09-04-workflow-upgrade-brainstorm.md).
 These contracts elaborate that approved design. They do not authorize skipping current gates before
 the replacement implementation lands.
@@ -32,11 +32,10 @@ Never certify post-record completion using a pre-record task check.
 
 ## Corpus-check contract
 
-0775 retired `bun run corpus-check`, `task check --corpus --json`, and the accepted-debt snapshot;
-corpus checks live on as the per-task gate plus the unit-tested corpus-gate behavior inside
-`spur-check` (`packages/app/tests/services/corpus-check.test.ts`). The retired scope — active task
-folder sweep, feature checks, cross-folder identity/reference resolution, `--since` fog comparison —
-is not reinstated; archived prose scanning stays unexpanded. Failed required integrity checks
+`bun run corpus-check` / `task check --corpus --json` are explicit, unsuppressed audits, not routine
+pipeline steps. The accepted-debt snapshot and regenerators remain deleted. Scope is the active task
+folder, feature checks, cross-folder identity/reference resolution and `--since` fog comparison;
+archived prose scanning stays unexpanded. Failed required integrity checks
 cannot produce a clean result. Fog prose heuristics are advisory unless a concrete broken required
 reference is established.
 
@@ -44,8 +43,8 @@ reference is established.
 - Exit 1: essential integrity error or failed required check; preserve CLI usage-error behavior.
 - No suppression: all findings remain visible; no accept-all regeneration.
 - Remove routine iteration, batch wrap and ordinary corpus-touch commit sweep callers.
-- Existing `spur-check-new` compositions may remain explicit audit entrypoints; routine defaults
-  must not select them. This is a deliberate audit, not a renamed hidden sweep.
+- `spur-check-new` remains the same code-quality chain as `spur-check`; the audit is invoked
+  deliberately with `corpus-check`, never appended to either routine chain.
 - Constitution T10 keeps one audit for checker-policy changes; T11 becomes affected-input ordinary
   commit validation. Newly introduced essential failures must be reconciled without accepting debt.
 

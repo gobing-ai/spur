@@ -30,6 +30,30 @@ export function key(e: { kind: string; id: string; code: string }): string {
     return `${e.kind}:${e.id}:${e.code}`;
 }
 
+const REQUIRED_REFERENCE_CODES: ReadonlySet<FindingCode> = new Set([
+    FINDING_CODES.L4_FEATURE_NOT_FOUND,
+    FINDING_CODES.L4_PARENT_NOT_FOUND,
+    FINDING_CODES.L4_DEPENDENCY_NOT_FOUND,
+    FINDING_CODES.L4_LINKED_TASK_PARSE_FAILED,
+]);
+
+const COMPLETION_FINDING_CODES: ReadonlySet<FindingCode> = new Set([
+    FINDING_CODES.L4_ORPHAN_SCENARIOS,
+    FINDING_CODES.L4_UNCOVERED_FEATURE_SCENARIO,
+    FINDING_CODES.L4_SCENARIO_UNVERIFIED,
+    FINDING_CODES.L4_VERIFYING_INCOMPLETE_TASKS,
+    FINDING_CODES.L4_VERDICT_ROWS_MATCH_NO_SCENARIO,
+    FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
+    FINDING_CODES.L4_EVIDENCE_NOT_RECOVERABLE,
+    FINDING_CODES.L4_DOGFOOD_MISSING,
+    FINDING_CODES.L4_TESTING_VERDICT_STUB,
+    FINDING_CODES.L4_UNCOVERED_TASK_SCENARIO,
+    FINDING_CODES.L3_REVIEW_TESTING_CONTRADICTION,
+    FINDING_CODES.L4_ROLLUP_SUBTASKS_OPEN,
+    FINDING_CODES.L4_ROLLUP_MISSING_ROSTER,
+    FINDING_CODES.L4_ROLLUP_ROSTER_NOT_DECLARED_DEPENDENCY,
+]);
+
 // R1 (D61 task 0765): the unsuppressible error set. These finding codes
 // represent structural / completion-integrity errors that cannot be downgraded
 // by `severityOverrides` or absorbed by `accepted`-map filtering. Defaults to
@@ -46,27 +70,11 @@ const REQUIRED_FINDING_CODES: ReadonlySet<FindingCode> = new Set<FindingCode>([
     FINDING_CODES.L3_REQUIREMENTS_EMPTY,
     FINDING_CODES.L3_AC_EMPTY,
     FINDING_CODES.L3_REQUIRED_SECTION_PLACEHOLDER,
-    // Edge-resolution errors are NOT unsuppressible: the design contract freezes
-    // them as error when the edge is present and unresolvable, but advisory when
-    // the edge is absent (e.g. an optional feature_id). `severityOverrides`
-    // remains free to escalate these from warning to error when the caller
-    // wants stricter behavior.
+    // Missing optional edges have separate advisory codes. These codes are
+    // emitted only when a declared reference cannot resolve.
+    ...REQUIRED_REFERENCE_CODES,
     FINDING_CODES.L4_PREREQUISITE_CYCLE,
-    FINDING_CODES.L4_ORPHAN_SCENARIOS,
-    FINDING_CODES.L4_UNCOVERED_FEATURE_SCENARIO,
-    FINDING_CODES.L4_SCENARIO_UNVERIFIED,
-    FINDING_CODES.L4_VERIFYING_INCOMPLETE_TASKS,
-    FINDING_CODES.L4_VERDICT_ROWS_MATCH_NO_SCENARIO,
-    FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
-    FINDING_CODES.L4_EVIDENCE_NOT_RECOVERABLE,
-    FINDING_CODES.L4_DOGFOOD_MISSING,
-    FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
-    FINDING_CODES.L4_TESTING_VERDICT_STUB,
-    FINDING_CODES.L4_UNCOVERED_TASK_SCENARIO,
-    FINDING_CODES.L3_REVIEW_TESTING_CONTRADICTION,
-    FINDING_CODES.L4_ROLLUP_SUBTASKS_OPEN,
-    FINDING_CODES.L4_ROLLUP_MISSING_ROSTER,
-    FINDING_CODES.L4_ROLLUP_ROSTER_NOT_DECLARED_DEPENDENCY,
+    ...COMPLETION_FINDING_CODES,
 ]);
 
 /** Whether a finding's code is unsuppressible — its severity was fixed at emit time. */
@@ -292,6 +300,9 @@ export abstract class PlanningCheckService {
         const effectiveFindings: CheckFindings[] = [];
         const notes: string[] = [];
         for (const f of findings) {
+            if (REQUIRED_REFERENCE_CODES.has(f.code) || (status === 'done' && COMPLETION_FINDING_CODES.has(f.code))) {
+                f.severity = 'error';
+            }
             const unsuppressible = isUnsuppressibleFinding(f.code);
             const override = overrides?.[f.code];
             if (override === 'off') {

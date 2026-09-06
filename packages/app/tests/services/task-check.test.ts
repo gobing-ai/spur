@@ -1226,17 +1226,18 @@ describe('TaskCheckService', () => {
         expect(cancelledErrors.length).toBeGreaterThan(0);
     });
 
-    test('L4: feature_id pointing to non-existent feature warns', async () => {
+    test('L4: feature_id pointing to non-existent feature blocks', async () => {
         const content = taskFm({ feature_id: 'F99' });
         const { fs, path, cleanup } = seedEnv({ taskContent: content });
         const svc = new TaskCheckService(fs, matrix);
         const result = await svc.check(path, '0001');
         cleanup();
 
-        const notFoundWarnings = result.findings.filter(
-            (f) => f.layer === 'L4' && f.severity === 'warning' && f.message.includes('not found'),
+        const notFoundErrors = result.findings.filter(
+            (f) => f.layer === 'L4' && f.severity === 'error' && f.message.includes('not found'),
         );
-        expect(notFoundWarnings.length).toBeGreaterThan(0);
+        expect(notFoundErrors.length).toBeGreaterThan(0);
+        expect(result.pass).toBe(false);
     });
 
     test('L4: missing feature_id warns (one direction)', async () => {
@@ -2037,7 +2038,7 @@ describe('TaskCheckService', () => {
         return taskFm({ feature_id: 'F1', parent_wbs: parentWbs, status, name: 'Child task' });
     }
 
-    test('roll-up: parent done while a child is open warns (drift down)', async () => {
+    test('roll-up: parent done while a child is open blocks (drift down)', async () => {
         const { fs, path, cleanup } = seedEnv({
             wbs: '0001',
             taskContent: parentBody({ wbs: '0001', status: 'done', withRoster: true }),
@@ -2047,10 +2048,11 @@ describe('TaskCheckService', () => {
         const result = await new TaskCheckService(fs, matrix).check(path, '0001');
         cleanup();
         const drift = result.findings.filter(
-            (f) => f.layer === 'L4' && f.severity === 'warning' && f.message.includes('still open'),
+            (f) => f.layer === 'L4' && f.severity === 'error' && f.message.includes('still open'),
         );
         expect(drift.length).toBeGreaterThan(0);
         expect(drift[0]?.message).toContain('0002');
+        expect(result.pass).toBe(false);
     });
 
     test('roll-up: all children done while parent open warns (drift up)', async () => {
@@ -3308,8 +3310,9 @@ describe('0625 R3 — hollow-Testing stub detection', () => {
 
         const stub = result.findings.filter((f) => f.code === FINDING_CODES.L4_TESTING_VERDICT_STUB);
         expect(stub).toHaveLength(1);
-        expect(stub[0]?.severity).toBe('warning');
+        expect(stub[0]?.severity).toBe('error');
         expect(stub[0]?.section).toBe('Testing');
+        expect(result.pass).toBe(false);
     });
 
     test('no stub finding when Testing carries a populated requirement table', async () => {

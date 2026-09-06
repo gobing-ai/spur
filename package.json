@@ -75,6 +75,7 @@
         "test-cf": "bun run --filter '@gobing-ai/spur-server' test-cf",
         "verify-gha-ci": "act -W .github/workflows/ci.yml -j verify",
         "test": "bun test --reporter=dots ./apps/cli ./apps/server ./apps/web ./packages ./plugins ./scripts",
+        "corpus-check": "bun run apps/cli/src/index.ts task check --corpus",
         "test:coverage": "bun test --coverage ./apps/cli ./apps/server ./apps/web ./packages ./plugins ./scripts",
         "check": "bun run lint && bun run test:coverage",
         "spur-check": "bun run link-check && bun run transition-shim-check && bun run script-contract-check && bun run inline-pipeline-parity-check && bun run dependency-drift-check && bun run importer-schema-check && bun run history-surface-freeze-check && bun run lint && bun run test-pre-check && bun run test && bun run test-post-check",

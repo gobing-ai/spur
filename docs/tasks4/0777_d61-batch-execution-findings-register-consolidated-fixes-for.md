@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "D61 batch execution findings register — consolidated fixes for pipeline, env leak, evidence, and watcher reliability"
-status: todo
+status: done
 template: issue
 created_at: 2026-09-06T00:03:27.768Z
-updated_at: "2026-09-06T15:27:43.117Z"
+updated_at: "2026-09-06T17:02:30.265Z"
 feature_id: D61
 ---
 
@@ -133,27 +133,53 @@ Order rationale: F1 unblocks the test gate the whole batch depends on; F3 unbloc
 **F10 — test-fix scope drift (verified).** Run `7DAE0A1A`'s test-fix hop edited six source files (planning-check-base + test, history-analysis-service, history-board-rollup, analytics index, tests/setup.ts) on task 0773 — a classification-only task whose charter states no code/config/corpus mutation may be invented. The edits were stashed as `stash@{0}` ("killed run 7DAE0A1A test-fix hop partial edits"). Root cause: the test-fix stage has no knowledge of the task's mutation policy; F1 made the test gate fail, and test-fix responded the only way it knows — editing code.
 
 ### Solution
+**Implemented and re-verified in the inline D61 closure pass, 2026-09-06.**
 
-Filled during implementation. Proposed change map (per Root Cause):
-
-- **F1:** `tests/setup.ts` — after `SPUR_SKIP_GLOBAL_CONFIG` guard: `delete process.env.SPUR_WORKFLOW_RUN_ACTIVE;` with a WHY comment (0610 R4 marker leaks to test gates; tests are top-level processes; refusal guard stays covered by the explicit-set refusal test in `apps/cli/tests/commands/workflow.test.ts`, 0753 R3). Draft available in `stash@{0}`. Follow-up (separate decision): narrow the marker to nested workflow invocations at the runner seam.
-- **F2:** `config/workflows/task-pipeline.yaml:68` — `omp-zai` → `pi-zai` (main copy done, uncommitted).
-- **F3:** `docs/tasks4/0765_*.md` Testing section via `spur task update --section Testing` — record the real verification evidence (command, 5429 passing tests at verify time, merge commit `56e7e85cb`, 2026-09-05). Escalate to artifact regeneration only if the check still refuses.
-- **F4 (implemented 2026-09-06):** run-start capability preflight in `apps/cli/src/commands/workflow.ts` — before plan display and any dispatch, each `agent.run` step that pins an executor and declares `requiresCapabilities` is evaluated via `evaluateCapabilities` against the `spurConfig.agent.executors` attestation (exposed through the new `@gobing-ai/spur-app/capability-attestation` subpath export); failures warn on stderr via `capabilityDiagnostic`. Advisory only — the fail-closed pre-spawn gate (0706 R5) still refuses dispatch.
-- **F10:** test-fix hop brief gains a mutation-policy clause sourced from the task's declared policy; `none` ⇒ halt-and-surface.
-
+- F1: existing test setup removes the inherited nested-workflow marker while explicit nested-run refusal remains enforced; final verification exercises both paths.
+- F2/F3: executor example uses pi-zai; requirement-grounded task verdict recovery replaces stale claimed evidence. Feature-wide strict PASS is checked after the covering tasks are recorded.
+- F4: existing workflow preflight warns on unattested named pins; run-start warning tests cover state-machine and transition-flow definitions. Dispatch still fails closed.
+- F5: `docs/04_DESIGN.md:2348` documents configured role/tier selection, separate capability attestation and no interactive model inheritance. Behavior is unchanged; no new operator model policy is inferred.
+- F6/F7/F9: `plugins/sp/skills/spur-dev/SKILL.md:156` adds corpus-work budgets, artifact/requireDiff handoff, identity+mtime checks before accepting watcher reports, 10-minute/20-poll checkpoints, and SUPERSEDED scratch guidance. Both changed skills pass Superskill validation.
+- F8: the earlier batch merge remains intact. Only one worktree exists; this closure performs no merge, rebase, force push or branch deletion.
+- F10: the first test-fix shell reads task mutationPolicy and refuses automatic remediation unless both task and run allow code. none/tests/unknown/ambiguous policies halt before agent dispatch; source edits cannot be invented for a classification-only task. `plugins/sp/tests/task-pipeline-resilience.test.ts:74` reproduces the old failure and verifies the guard; inline smoke fixtures now supply the real task-show content contract.
 ### Testing
+**Pipeline verify results**
 
-- F1: `SPUR_WORKFLOW_RUN_ACTIVE=1 bun run test` (repo root) — must pass; `cd apps/cli && bun test tests/commands/workflow.test.ts` — refusal guard must still fire when the marker is set explicitly by a real nested workflow; both sides of AC1.
-- F2: grep across both checkouts (AC2).
-- F3: `spur feature check D61 --strict --json` → pass=true, zero L4 findings (AC3).
-- F4 (verified 2026-09-06): `apps/cli/tests/commands/workflow-preflight.test.ts` — unattested pin warns naming executor + axis (state-machine and transition-flow shapes); attested pin stays silent (3 pass). Regression: `apps/cli` `bun test tests/commands/workflow.test.ts` 125 pass; `tsc --noEmit` clean; root `bun run test` exit 0 (7450 pass — the transition-flow case also keeps `apps/cli/src/commands/workflow.ts` above the per-file 90% function-coverage gate, which the first version dropped to 89.5%).
-- F10: synthetic run: classification-only task + failing test gate → test-fix halts, zero source edits (AC5).
-- Batch regression after F1 lands: `bun run spur-check` green on the worktree.
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | SPUR_WORKFLOW_RUN_ACTIVE=1 bun run test exits 0: 7457 pass, 0 fail (120.09s); explicit nested workflow refusal tests remain green. Run evidence .spur/run/d61-closure-nested-marker.log. Fix-pass artifacts: verification run `.spur/run/0777-verify-answer.txt` lines 1-48 created; CLI derives `.spur/run/0777-verdict.json` and records Testing. |
+| R2 | MET | Canonical executor example is pi-zai, not omp-zai. One worktree remains; built bundle is byte-identical. |
+| R3 | MET | Fresh source-local feature check D61 --strict --json exits 0, pass=true, zero findings, with no selector bypass. |
+| R4 | MET | Full gate covers workflow-preflight.test.ts warning before dispatch for unattested pins in both workflow dialects; attested executor stays silent. Existing dispatch capability gate stays fail-closed. |
+| R5 | MET | Existing auto routing is preserved as the no-change closure default and documented: configured role/tier/usable-executor resolution, then required capability attestation; no interactive session-model inheritance. No alternate model order or silent behavior change is introduced. |
+| R6 | MET | Lifecycle skill now requires a bounded execution budget, persisted artifact paths and requireDiff guidance at refinement for corpus-scale work. 0773 Design declares mutationPolicy: none and names recovery artifacts. Superskill validate spur-dev returns valid:true, no findings. |
+| R7 | MET | Lifecycle skill requires report/dispatched run-id equality, current Spur trace and log mtime at least dispatch time; watcher invocations checkpoint at 10 minutes or 20 polls. Guidance-only remedy per Design; no new watcher service or live watcher run is claimed. |
+| R8 | MET | git worktree list --porcelain shows only main; earlier batch merge 6c81e5cfe is retained. No duplicate replay/cherry-pick, rebase, merge or remote mutation was performed by this correction. |
+| R9 | MET | Lifecycle skill codifies SUPERSEDED scratch with authoritative task Design pointer. Missing historical scratch was not resurrected as current instructions; recovered artifacts explicitly label their provenance. |
+| R10 | MET | Regression test reproduces old mutation-policy failure then passes: task none plus run code halts the first test-fix action nonzero before agent dispatch; source stays unchanged. Code/code proceeds, run none halts. Inline smoke passes all 4 cases with the task-show content contract. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | SPUR_WORKFLOW_RUN_ACTIVE=1 bun run test exits 0: 7457 pass, 0 fail (120.09s); explicit nested workflow refusal tests remain green. Run evidence .spur/run/d61-closure-nested-marker.log. |
+| AC2 | MET | command | Canonical executor example is pi-zai, not omp-zai. One worktree remains; built bundle is byte-identical. |
+| AC3 | MET | command | Fresh source-local feature check D61 --strict --json exits 0, pass=true, zero findings, with no selector bypass. |
+| AC4 | MET | command | Full gate covers workflow-preflight.test.ts warning before dispatch for unattested pins in both workflow dialects; attested executor stays silent. Existing dispatch capability gate stays fail-closed. |
+| AC5 | MET | command | Regression test reproduces old mutation-policy failure then passes: task none plus run code halts the first test-fix action nonzero before agent dispatch; source stays unchanged. Code/code proceeds, run none halts. Inline smoke passes all 4 cases with the task-show content contract. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | tests-pass | — | bun run spur-check exits 0: 7457 pass, 0 fail, lint/typechecks and 44+2 rules; marker-inherited full suite also exits 0. |
+| P4 | design-conformance | — | Existing F1/F4 fixes verified; F6/F7/F9 guidance and F10 pre-dispatch restriction implemented; F5 no-change default documented. |
+| P4 | feature-strict | — | Source-local strict feature check D61 exits 0, findings:[]. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 
 - Run logs (`.spur/run/`): `7DAE0A1A-09ED-4DDE-991F-6996C3149FE8.log` (implement commit `8e0aa24f0` + test-fix exit 3), `2d33f201` (requireDiff wandering), `f4b2f664` (60m SIGTERM), `46734bfc` (30m timeout), `531e6c03` (Unknown agent omp-zai, verbatim registry list), `bda16b4d` (capability tripwire).
@@ -164,3 +190,6 @@ Filled during implementation. Proposed change map (per Root Cause):
 - Related: task 0776 (execution slice for F2+F3).
 
 ### History
+- 2026-09-06T16:43:34.242Z todo → wip (system)
+- 2026-09-06T17:02:29.905Z wip → testing (system)
+- 2026-09-06T17:02:30.265Z testing → done (system)
