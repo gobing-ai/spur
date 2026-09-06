@@ -6,7 +6,7 @@ status: done
 priority: P1
 tags: []
 created_at: "2026-09-05T05:08:34.650Z"
-updated_at: "2026-09-06T17:09:36.755Z"
+updated_at: "2026-09-06T17:30:38.761Z"
 ---
 
 # D61: Essential workflow checks and observable execution
@@ -166,6 +166,9 @@ Feature: Essential workflow checks and observable execution
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+**Current closure (2026-09-06):** implementation and verification completed in commit `5692bc2b3`. All 13 linked tasks, including 0766, are done; the strict feature gate passes. Pre-release verification and any final corrections are recorded in `docs/plans/2026-09-06-d61-release-readiness.md`. The planning text below is historical, not an instruction to rerun the completed implementation batch. D9 fast activation and publishing remain outside this feature.
+
+### Historical planning snapshot
 
 Approved by Robin after discovery; the same approved Design Summary governs the implementation package.
 
