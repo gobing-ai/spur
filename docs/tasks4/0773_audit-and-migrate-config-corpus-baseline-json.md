@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Audit and migrate config/corpus-baseline.json"
-status: todo
+status: testing
 template: feature-impl
 created_at: 2026-09-05T15:33:37.889Z
-updated_at: "2026-09-05T23:39:13.917Z"
+updated_at: "2026-09-06T00:51:36.768Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P2"]
@@ -26,11 +26,11 @@ Dependencies: 0765 (frozen `REQUIRED_FINDING_CODES` set + advisory-only `accepte
 
 ### Requirements
 
-- [ ] **R1.** Audit and classify every key in `config/corpus-baseline.json`. For each of the 299 keys, assign one of three classes: **(a)** real defect — a finding that exposes an affected integrity issue that must be repaired via Spur CLI before this task closes; **(b)** retired warning — a stylistic/document-quality finding the design contract retires (no repair, no migration, no regenerated acceptance); **(c)** acceptance-debt — a baseline entry that should never have been baselined under the 0765 unsuppressible-code policy (no repair, no migration, with an audit-trail note).
+- [x] **R1.** Audit and classify every key in `config/corpus-baseline.json`. For each of the 299 keys, assign one of three classes: **(a)** real defect — a finding that exposes an affected integrity issue that must be repaired via Spur CLI before this task closes; **(b)** retired warning — a stylistic/document-quality finding the design contract retires (no repair, no migration, no regenerated acceptance); **(c)** acceptance-debt — a baseline entry that should never have been baselined under the 0765 unsuppressible-code policy (no repair, no migration, with an audit-trail note).
 
-- [ ] **R2.** Migrate each classified key to its proper destination. Class (a) defects are fixed via Spur CLI mutations; the resulting corpus must be clean against the affected-input checks after the repair commits. Class (b) warnings are recorded in the classification report and dropped from any future baseline; they never reappear in any post-0775 acceptance ledger. Class (c) entries are recorded in the classification report and dropped, with one-line rationale naming which unsuppressible-code policy they violated.
+- [x] **R2.** Migrate each classified key to its proper destination. Class (a) defects are fixed via Spur CLI mutations; the resulting corpus must be clean against the affected-input checks after the repair commits. Class (b) warnings are recorded in the classification report and dropped from any future baseline; they never reappear in any post-0775 acceptance ledger. Class (c) entries are recorded in the classification report and dropped, with one-line rationale naming which unsuppressible-code policy they violated.
 
-- [ ] **R3.** Preserve existing scope and JSON shape inherited from 0766 R2. The classification report must include, per key: key string, classification (a/b/c), rationale, and migration action. The classification report is the audit trail for 0775's deletion step. Do NOT delete `config/corpus-baseline.json`, the loader, or the regenerator scripts in this task — those are 0775's scope.
+- [x] **R3.** Preserve existing scope and JSON shape inherited from 0766 R2. The classification report must include, per key: key string, classification (a/b/c), rationale, and migration action. The classification report is the audit trail for 0775's deletion step. Do NOT delete `config/corpus-baseline.json`, the loader, or the regenerator scripts in this task — those are 0775's scope.
 
 Out of scope: removing `accepted`-map callers from CLI/fallback paths (0774); deleting baseline files, regenerator scripts, or the loader export (0775); new engines/dependencies/public nouns, broad historical-document cleanup, D9 fast activation, release, merge and external deployment. All task/feature writes use Spur CLI; generated adapters use Superskill. Refine does not author implementation evidence.
 
@@ -169,9 +169,34 @@ Resume semantic: finish the second classification pass on top of `d61-0773-class
 - Re-verified fresh at run 3 close: report key set matches `config/corpus-baseline.json` key-for-key (299/299); `0774` check pass=true; `D61 --strict` finding set identical to the stored snapshot; envelopes carry definition digests, exit/outcome, invocation counts, `elapsedMs` (after) and output bytes, with token/cost null per Design.
 
 ### Testing
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | .spur/run/d61-0773-classification.json: totalKeys=299, byClass a:0/b:293/c:6; every row carries rationale+migrationAction; key set matches baseline key-for-key (review-verified) |
+| R2 | N/A | Vacuous: byClass.a=0 — no baseline key exposes an affected defect; no repair commits required (plan item 3 annotated) |
+| R3 | MET | Preserved scope: config/corpus-baseline.json = 299 entries, loadAcceptedFindings (corpus-check.ts:656) and regen-corpus-baseline.ts untouched; classification-only task |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 | MET | artifact | Every key classified with one-line rationale + migration action; report at .spur/run/d61-0773-classification.json |
+| R2 | N/A | artifact | No class (a) keys exist; affected-input checks trivially clean (nothing repaired) |
+| R3 | MET | artifact | All 293 (b) + 6 (c) recorded with rationales; (c) rows name the 0765 unsuppressible-code policy; migrationAction drop-with-policy-violation |
+| R4 | MET | diff | Baseline file, loader, and regenerator present and un-repaired for 0774 caller migration and 0775 deletion |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | qualityGate | — | bun run spur-check: 7387 tests / 0 fail, biome, typecheck, rules 44/44 + 2/2 after fixall commit f30e6e66e |
+| P4 | review | — | fresh-context reviewer: pass; 1 minor + 2 info, none gating (commit identity + artifact arithmetic verified) |
+| P4 | verification | — | spur task check 0773 PASS; requirement checkboxes ticked from verified evidence |
+| P4 | fix | — | bounded remediation: 1 fixall hop (f30e6e66e) repairing pre-existing rule violations confirmed on main be6e5304d |
 ### References
 
 - [D61 feature](../features/D61_essential-workflow-checks-and-observable-execution.md)
@@ -183,3 +208,5 @@ Resume semantic: finish the second classification pass on top of `d61-0773-class
 - Surface/process authority: docs/04_DESIGN.md and docs/99_PROJECT_CONSTITUTION.md; local source/test paths are named in Design.
 
 ### History
+- 2026-09-06T00:25:25.080Z todo → wip (system)
+- 2026-09-06T00:51:36.768Z wip → testing (system)
