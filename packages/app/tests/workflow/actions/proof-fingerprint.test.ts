@@ -110,23 +110,44 @@ describe('proof.fingerprint action', () => {
         expect(bad.error).toContain('var name must match');
     });
 
-    // A task with no feature is normal, and a missing spec must not manufacture a proof violation.
-    test('skips unreadable task/feature specs instead of failing', async () => {
-        const result = await runner.execute(
-            { var: 'd', taskFile: '/nonexistent/task.md', featureFile: '/nonexistent/feature.md' },
+    // 0785 R1: a task with no feature is normal (empty-string stays omitted), but an explicitly
+    // supplied spec that cannot be read must fail closed with a named error — a missing spec
+    // can no longer silently degrade the proof to tree-only.
+    test('supplied specs fail closed; empty-string stays omitted (0785 R1)', async () => {
+        const missing = await runner.execute(
+            { var: 'd', taskFile: 'nonexistent/task.md', featureFile: 'nonexistent/feature.md' },
             ctx,
         );
-        expect(result.ok).toBeTrue();
+        expect(missing.ok).toBeFalse();
+        expect(missing.error).toContain('taskFile does not exist');
+
+        // Empty-string compatibility: the pipeline's no-feature case supplies ''.
+        const empty = await runner.execute({ var: 'd', taskFile: '', featureFile: '' }, ctx);
+        expect(empty.ok).toBeTrue();
+
+        // Non-string option values are rejected by name before any digest.
+        const badType = await runner.execute({ var: 'd', featureFile: 42 }, ctx);
+        expect(badType.ok).toBeFalse();
+        expect(badType.error).toContain('featureFile must be a string');
     });
 
     test('folds spec content into the digest, so a spec edit changes it', async () => {
         const dir = await mkdtemp(join(tmpdir(), 'proof-fp-'));
         try {
+            // The tree half needs a git repo; the spec itself is ignored there (folded explicitly).
+            const { execSync } = require('node:child_process') as typeof import('node:child_process');
+            const { writeFileSync } = require('node:fs') as typeof import('node:fs');
+            writeFileSync(join(dir, '.gitignore'), 'task.md\n');
+            execSync(
+                'git init -q && git config user.email t@example.com && git config user.name t && git add -A && git commit -qm init',
+                { cwd: dir },
+            );
             const taskFile = join(dir, 'task.md');
             await writeFile(taskFile, '# 0001\n\n### Requirements\n- [ ] R1. original\n');
-            const before = await runner.execute({ var: 'd', taskFile }, ctx);
+            const dirCtx: ActionRunContext = { ...ctx, workdir: dir };
+            const before = await runner.execute({ var: 'd', taskFile: 'task.md' }, dirCtx);
             await writeFile(taskFile, '# 0001\n\n### Requirements\n- [ ] R1. edited\n');
-            const after = await runner.execute({ var: 'd', taskFile }, ctx);
+            const after = await runner.execute({ var: 'd', taskFile: 'task.md' }, dirCtx);
             expect(digestFor(before, 'd')).not.toBe(digestFor(after, 'd'));
         } finally {
             await rm(dir, { recursive: true, force: true });

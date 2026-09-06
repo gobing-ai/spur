@@ -16,7 +16,7 @@
 #     fail-closed on the captured record result + re-asserted verdict — never on a stub
 
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
-version: "1"
+version: "2"
 kind: state-machine
 name: docs-pipeline
 description: "Docs-only execution pipeline (precheck -> draft -> docs-review -> verify -> record -> done)"
@@ -43,6 +43,10 @@ vars:
   # `taskSpecPath` carries the task file path because `docs/tasks*` is excluded from the digest's
   # git-tree half (task 0704 R4); resolved per-run by the verify state's taskpath shell step.
   taskSpecPath: ""
+  # 0785 R2: linked feature spec path, resolved at verify entry. Empty (orphan task) means the
+  # feature spec is legitimately omitted from the digest inputs (empty-string compatibility);
+  # a declared feature whose path fails to resolve fails closed.
+  featureSpecPath: ""
   __hitlAnswer: ""
   # R8 (0366): injected by WorkflowAppService.run(); run-scopes every temporary capture.
   __runId: ""
@@ -149,12 +153,32 @@ states:
         options:
           path: .spur/run/${vars.__runId}-docs-taskpath.txt
           var: taskSpecPath
+      # 0785 R2: resolve the linked feature spec path so the digest covers it too. An orphan task
+      # (no feature_id) resolves to empty — legitimately omitted via empty-string compatibility;
+      # a declared feature whose spec path does not resolve fails closed instead of silently
+      # folding a stale spec into the proof.
+      - kind: shell
+        options:
+          command: >-
+            set -e;
+            FID="$($spurBin task show $wbs --json 2>/dev/null | jq -r '.feature_id // .frontmatter.feature_id // empty' 2>/dev/null)";
+            FPATH_OUT="";
+            if [ -n "$FID" ]; then
+              FPATH_OUT="$($spurBin feature show "$FID" --json | jq -r '.filePath // .path // empty')";
+              if [ -z "$FPATH_OUT" ]; then echo "docs-pipeline: feature $FID linked to task $wbs but its spec path did not resolve" >&2; exit 1; fi;
+            fi;
+            printf '%s' "$FPATH_OUT" > ".spur/run/$__runId-docs-featurepath.txt"
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.__runId}-docs-featurepath.txt
+          var: featureSpecPath
       # R4: canonical capture BEFORE the verifier runs. Same fingerprint input as the
       # re-capture below so the bracket compares like for like.
       - kind: proof.fingerprint
         options:
           var: proofDigest
           taskFile: ${vars.taskSpecPath}
+          featureFile: ${vars.featureSpecPath}
           input: /sp:dev-verify ${vars.wbs} --auto --fix none --focus all
           timeoutMs: ${vars.stepTimeoutMs}
       - kind: agent.run
@@ -191,6 +215,7 @@ states:
         options:
           var: proofDigestNow
           taskFile: ${vars.taskSpecPath}
+          featureFile: ${vars.featureSpecPath}
           input: /sp:dev-verify ${vars.wbs} --auto --fix none --focus all
           timeoutMs: ${vars.stepTimeoutMs}
 

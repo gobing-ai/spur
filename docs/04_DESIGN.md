@@ -39,7 +39,7 @@ When collaborating with the design team:
 | [`server-side-adjustment-feature-finalized.md`](design/server-side-adjustment-feature-finalized.md)     | Server/Web — finalized feature decisions for the above                                                                                                                                                                                                                                                                    | finalized                                                                                                                                                       |                                                                                                                               |             |
 | [`spur-team-mode-design.md`](design/spur-team-mode-design.md)                                           | Team mode — agent specs, inbox, `TeamService`                                                                                                                                                                                                                                                                             | design                                                                                                                                                          |                                                                                                                               |             |
 | [`workflow-observability.md`](design/workflow-observability.md)                                         | Workflow run observability plus D5's persisted progress projection                                                                                                                                                                                                                                                       | built (ADR-070)                                                                                                                                                  |                                                                                                                               |             |
-| [`workflow-composition-contract.md`](design/workflow-composition-contract.md)                           | D5 workflow composition baseline, split state/evidence effects, structured gate execution, digest-bound proof, and consolidation contract                                                                                                                                                                                 | infrastructure built; proof finality pending (ADR-071, 0703/0704)                                                                                               |                                                                                                                               |             |
+| [`workflow-composition-contract.md`](design/workflow-composition-contract.md)                           | D5 workflow composition, split state/evidence effects, structured gate execution, digest-bound proof chain (task + docs pipelines), physical path confinement and bound artifact registration (0785), and consolidation contract                                                                                                                                                             | shipped (ADR-071, 0703/0704/0769/0785)                                                                                                                           |                                                                                                                               |             |
 | [`workflow-shell-ownership.md`](design/workflow-shell-ownership.md)                                     | Shipped workflow shell-program ownership, including the wrap-up feature-sync extension plus trusted corpus-gate command (task 0625)                                                                                                                                                                                       | accepted; current through 0625                                                                                                                                  |                                                                                                                               |             |
 | [`dev-plan-design-doc-generation.md`](design/dev-plan-design-doc-generation.md)                         | `/sp:dev-plan` design-doc step — design by default / `--skip-design` only, seam heuristic (ties lean design), satellite + index authoring (0124)                                                                                                                                                                          | implemented                                                                                                                                                     |                                                                                                                               |             |
 | [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md)                     | Dev execution surface — unified `--agent <inline\                                                                                                                                                                                                                                                                         | auto\                                                                                                                                                           | name>` selector, interactive task-pipeline host driver (0503), named escalation triggers, and `sp:dogfood-testing` extraction | implemented |
@@ -2364,11 +2364,13 @@ demonstrate stands on its own and governs any future candidate. Composition, act
 
 **Vars.** `wbs`, `profile`, `spurBin`, `agent`, `implementAgent`, `stepTimeoutMs`, `implementTimeoutMs`,
 `maxImplementReqs`, `maxImplementPlanItems`, `qualityGateCmd`, `qualityGateMaxFixAttempts`, `gateProbeCmd`,
-`formatCmd`, `implementScopeGuard`, `mutationPolicy`, `__hitlAnswer`, plus the proof-chain trio (task 0703):
-`taskSpecPath` (task file resolved at `test` entry — `docs/tasks*` is excluded from the digest's
-git-tree half), `proofDigest` (canonical capture at quality-gate entry, re-captured at
-`test-recheck`), and `proofDigestNow` (live re-capture compared at verify entry and before
-`record`). Three are command-shaped (the per-project override
+`formatCmd`, `implementScopeGuard`, `mutationPolicy`, `__hitlAnswer`, plus the proof-chain inputs (task 0703,
+completed by 0785 R2): `taskSpecPath` (task file resolved at `test` entry — `docs/tasks*` is excluded from the digest's
+git-tree half), `featureSpecPath` (linked feature spec resolved at `test` entry from the task frontmatter; empty
+for orphan tasks = legitimately omitted — a declared feature whose path fails to resolve fails closed),
+`proofDigest` (canonical capture at quality-gate entry, re-captured at
+`test-recheck`), and `proofDigestNow` (live re-capture compared at verify entry; re-set by the bound artifact
+registration before `record`). Three are command-shaped (the per-project override
 surface): `qualityGateCmd` (default `bun run spur-check`) is single-sourced across the soft
 probe, the `/sp:dev-fixall` input and the recheck; `formatCmd` (default `bun run format`) is the
 post-implement auto-format; `gateProbeCmd` (default `bun run lint`) is the cheap red-detector run before
@@ -2442,15 +2444,25 @@ quality → review → verify chain certifies a fresh state. Gate run output is 
 prints at most the last 40 lines plus the log path — the durable full log on disk is never
 truncated, and the log path is also what `test-fix` consumes.
 
-**Completion gate (ADR-026; proof block per task 0703/ADR-071):** the `verify` step emits
-`.spur/run/<wbs>-verdict.json` whose `checks[]` carries a `proof-input-digest` row and whose
+**Completion gate (ADR-026; proof block per task 0703/ADR-071; binding + review evidence per task 0785):** the `verify`
+step emits `.spur/run/<wbs>-verdict.json` whose `checks[]` carries a `proof-input-digest` row and whose
 `proof` block names the digest (`capturePoint: quality-gate-entry`) with per-stage results for
-`qualityGate`, `review`, and `verification` — each carrying the same digest value. The
-`verify → record` transition is a shell guard asserting `.verdict = PASS` AND `.proof.digest` + all
-three stage digests equal `$proofDigest`, with a bounded `verify → test-fix` edge (repairable
+`qualityGate`, `review`, and `verification` — each carrying the same digest value. Since 0785 R4 the
+`review` stage's status is stamped `completed` only when the run-scoped marker
+`.spur/run/<runId>-review-proof.digest` (written by the review state right after its agent) names the current
+digest — otherwise `skipped`, and an unexecuted review is never reported completed. The
+`verify → record` transition is a shell guard asserting `.verdict = PASS`, `.proof.digest` + all
+three stage digests equal `$proofDigest`, `.proof.runId`/`.proof.definitionDigest` match the certifying run, and
+`stages.review.status = completed`, with a bounded `verify → test-fix` edge (repairable
 non-PASS, budget unexhausted) and an `always` sibling `verify → failed` — so a PARTIAL/FAIL,
 missing file, malformed JSON, or missing/mismatched proof evidence blocks `done` and always
-terminates. This is the spur-native replacement for rd3's default-on `--postflight-verify`.
+terminates. Record entry is gated by the bound `run.artifact` registration (0785 R3): the FIRST record
+action re-captures the proof inputs fresh over `taskSpecPath` + `featureSpecPath`, requires agreement with the
+run's declared digest, validates the raw proof block against the authoritative RunDao run row
+(`resumeDefinitionDigest`/`definitionDigest`) plus PASS/COMPLETED stage evidence and the review marker, and only
+then writes the artifact ledger row — before any `task record` or status mutation, so an unbound or forged
+completion can never cross the lifecycle boundary. This is the spur-native replacement for rd3's default-on
+`--postflight-verify`.
 **Canonical verdict contract (task 0592, F92):** the verify artifact is validated and aggregated
 by one runtime contract — `packages/app/src/services/verify-verdict.ts` owns the Zod schema
 (`verifyVerdictSchema`), the parser (`parseVerifyVerdict` / `readVerifyVerdict`, distinguishing

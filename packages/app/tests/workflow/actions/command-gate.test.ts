@@ -1,7 +1,8 @@
 import { describe, expect, spyOn, test } from 'bun:test';
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, type FileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { CommandGateActionRunner } from '../../../src/workflow/actions/command-gate';
 
 describe('CommandGateActionRunner', () => {
@@ -37,6 +38,67 @@ describe('CommandGateActionRunner', () => {
             run.mockRestore();
             ensureDir.mockRestore();
             write.mockRestore();
+        }
+    });
+
+    test('rejects a symlink escape beneath .spur/run/ before dispatch or write (0785 R2)', async () => {
+        const base = join(tmpdir(), `gate-escape-${crypto.randomUUID()}`);
+        const workdir = join(base, 'wt');
+        mkdirSync(join(workdir, '.spur', 'run'), { recursive: true });
+        const outside = join(base, 'outside');
+        mkdirSync(outside);
+        writeFileSync(join(outside, 'gate.status'), 'PASS\n');
+        symlinkSync(outside, join(workdir, '.spur', 'run', 'link'));
+        const executor = new NodeProcessExecutor();
+        const run = spyOn(executor, 'run').mockResolvedValue({
+            command: 'echo',
+            args: [],
+            durationMs: 0,
+            stdout: '',
+            stderr: '',
+            exitCode: 0,
+        });
+        const fs = createNodeFileSystem(workdir);
+        const write = spyOn(fs, 'writeFile').mockImplementation(async () => {});
+        try {
+            const result = await new CommandGateActionRunner(executor, fs).execute(
+                { executable: 'echo', resultFile: '.spur/run/link/gate.status' },
+                { runId: 'r1', stateOrNodeId: 's1', workdir, vars: {}, env: {} },
+            );
+            expect(result.ok).toBe(false);
+            expect(result.error).toContain('escapes');
+            expect(run).not.toHaveBeenCalled();
+            expect(write).not.toHaveBeenCalled();
+        } finally {
+            run.mockRestore();
+            write.mockRestore();
+            rmSync(base, { recursive: true, force: true });
+        }
+    });
+
+    test('refuses to skip confinement when the filesystem lacks realPath (0785 R2)', async () => {
+        const executor = new NodeProcessExecutor();
+        const run = spyOn(executor, 'run').mockResolvedValue({
+            command: 'echo',
+            args: [],
+            durationMs: 0,
+            stdout: '',
+            stderr: '',
+            exitCode: 0,
+        });
+        // Minimal contract stand-in WITHOUT realPath: confinement cannot be proven, so the gate
+        // must fail closed rather than degrade to the 0781 lexical check.
+        const fsNoRealPath = { ensureDir: async () => {}, writeFile: async () => {} } as unknown as FileSystem;
+        try {
+            const result = await new CommandGateActionRunner(executor, fsNoRealPath).execute(
+                { executable: 'echo', resultFile: '.spur/run/gate.status' },
+                { runId: 'r1', stateOrNodeId: 's1', workdir: process.cwd(), vars: {}, env: {} },
+            );
+            expect(result.ok).toBe(false);
+            expect(result.error).toContain('realPath');
+            expect(run).not.toHaveBeenCalled();
+        } finally {
+            run.mockRestore();
         }
     });
 

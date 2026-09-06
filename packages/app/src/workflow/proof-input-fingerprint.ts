@@ -1,9 +1,10 @@
 import crypto from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import {
     createNodeFileSystem,
+    type FileStat,
     type FileSystem,
     NodeProcessExecutor,
     type ProcessExecutor,
@@ -69,6 +70,91 @@ export class ProofCaptureError extends Error {
         super(message);
         this.name = 'ProofCaptureError';
     }
+}
+
+/**
+ * Result of validated proof-input spec reads (task 0785 R1).
+ *
+ * `ok: false` carries an actionable named error; the caller surfaces it instead of producing a
+ * digest. `ok: true` carries only the specs that were actually supplied and read — an omitted
+ * (`undefined`) or empty (`''`) path stays optional for compatibility, while any nonempty supplied
+ * path must resolve to a readable regular file under the workflow workdir or the read fails
+ * closed before any digest is computed.
+ */
+export type ProofInputContents =
+    | { ok: true; taskContent?: string; featureContent?: string }
+    | { ok: false; error: string };
+
+interface SpecReadOutcome {
+    content?: string;
+    error?: string;
+}
+
+/**
+ * Resolve and validate the optional task/feature spec inputs shared by `proof.fingerprint` and
+ * bound `run.artifact` (task 0785 R1).
+ *
+ * The pre-0785 `readOptional` helper treated an explicit missing path like omitted input, so a
+ * typo'd spec path silently degraded the digest to tree-only proof. Here only `undefined`/`''`
+ * mean omitted; anything else must be a string that resolves (relative paths resolve under the
+ * workflow workdir) to a readable regular file. Non-string option values are rejected by name.
+ */
+export async function readProofInputContents(
+    fileSystem: FileSystem,
+    workdir: string,
+    options: { taskFile?: unknown; featureFile?: unknown },
+): Promise<ProofInputContents> {
+    for (const name of ['taskFile', 'featureFile'] as const) {
+        const value = options[name];
+        if (value !== undefined && typeof value !== 'string') {
+            return { ok: false, error: `${name} must be a string when supplied (got ${typeof value})` };
+        }
+    }
+
+    const readOne = async (name: 'taskFile' | 'featureFile'): Promise<SpecReadOutcome> => {
+        const raw: string | undefined =
+            name === 'taskFile'
+                ? (options.taskFile as string | undefined)
+                : (options.featureFile as string | undefined);
+        // Empty-string compatibility: a caller with no linked feature supplies '' and the spec
+        // stays legitimately omitted rather than failing the capture.
+        if (raw === undefined || raw === '') return {};
+        const workdirAbs = resolve(workdir);
+        const resolved = resolve(workdirAbs, raw);
+        if (!(resolved === workdirAbs || resolved.startsWith(`${workdirAbs}${sep}`))) {
+            return { error: `${name} must resolve under the workflow workdir (${workdirAbs}): ${raw}` };
+        }
+        let stat: FileStat | null;
+        try {
+            stat = await fileSystem.stat(resolved);
+        } catch (error) {
+            return { error: `${name} could not be inspected: ${(error as Error).message}` };
+        }
+        if (stat === null) {
+            return {
+                error: `${name} does not exist: ${raw} (resolved ${resolved}) — an explicitly supplied spec must be readable, not silently omitted`,
+            };
+        }
+        if (!stat.isFile()) {
+            return { error: `${name} is not a regular file: ${resolved}` };
+        }
+        try {
+            return { content: await fileSystem.readFile(resolved) };
+        } catch (error) {
+            return { error: `${name} is not readable: ${(error as Error).message}` };
+        }
+    };
+
+    const task = await readOne('taskFile');
+    if (task.error !== undefined) return { ok: false, error: task.error };
+    const feature = await readOne('featureFile');
+    if (feature.error !== undefined) return { ok: false, error: feature.error };
+
+    return {
+        ok: true,
+        ...(task.content !== undefined ? { taskContent: task.content } : {}),
+        ...(feature.content !== undefined ? { featureContent: feature.content } : {}),
+    };
 }
 
 /**

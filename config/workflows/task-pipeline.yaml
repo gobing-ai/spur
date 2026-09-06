@@ -29,7 +29,7 @@ kind: state-machine
 name: task-pipeline
 # 0772 R2: explicit identity tag. Set only after the proof failure-path tests
 # passed; the engine treats unversioned external definitions as supported.
-version: "2"
+version: "3"
 description: "Standard task pipeline: precheck → implement → quality-gate (test/fix/recheck) → review → approve → verify → record → done"
 # Task entity lifecycle (owned by task-lifecycle.yaml):
 #   normal: backlog → todo → wip → testing → done
@@ -105,6 +105,10 @@ vars:
     proofDigest: ""
     proofDigestNow: ""
     taskSpecPath: ""
+    # 0785 R2: linked feature spec path, resolved at `test` entry from the task frontmatter.
+    # Empty (orphan task) means the feature spec is legitimately omitted from the digest inputs
+    # (empty-string compatibility); a declared feature whose path fails to resolve fails closed.
+    featureSpecPath: ""
     # 0710 R4: task priority tier (P0..P4) extracted from the task frontmatter at the
     # quality-gate stage. P0/P1 make the review/verify distinct-executor policy apply;
     # unknown/empty priority means fresh-context-only (executor reuse allowed).
@@ -394,6 +398,17 @@ states:
             options:
                 path: .spur/run/${vars.wbs}-priority.txt
                 var: taskPriority
+          # 0785 R2: resolve the task's linked feature spec path so the digest covers it too. An
+          # orphan task (no feature_id) resolves to empty — legitimately omitted via empty-string
+          # compatibility; a declared feature whose spec path does not resolve fails closed instead
+          # of silently folding a stale spec into the proof.
+          - kind: shell
+            options:
+                command: 'mkdir -p .spur/run; FID=$($spurBin task show $wbs --json 2>/dev/null | jq -r ".feature_id // .frontmatter.feature_id // empty" 2>/dev/null); FPATH_OUT=""; if [ -n "$FID" ]; then FPATH_OUT=$($spurBin feature show "$FID" --json | jq -r ".filePath // .path // empty"); if [ -z "$FPATH_OUT" ]; then echo "fail-closed proof chain (0785 R2): feature $FID linked to task $wbs but its spec path did not resolve" >&2; exit 1; fi; fi; printf "%s" "$FPATH_OUT" > ".spur/run/$wbs-featurepath.txt"'
+          - kind: file.read.into-var
+            options:
+                path: .spur/run/${vars.wbs}-featurepath.txt
+                var: featureSpecPath
           # R2 (0703, ADR-071): THE canonical proof capture. Placement is load-bearing: immediately before
           # the final evidence chain, after every implement mutation (including the post-implement format).
           # Capture-only here; `record` compares. A remediation pass re-captures at `test-recheck` (R4).
@@ -401,6 +416,7 @@ states:
             options:
                 var: proofDigest
                 taskFile: ${vars.taskSpecPath}
+                featureFile: ${vars.featureSpecPath}
           - kind: shell
             options:
                 command: >-
@@ -503,6 +519,7 @@ states:
             options:
                 var: proofDigest
                 taskFile: ${vars.taskSpecPath}
+                featureFile: ${vars.featureSpecPath}
           # 0587 R3: probe-then-full recheck. A red gateProbeCmd records FAIL and skips the full
           # gate (the measured waste is re-running a 110–140s gate to learn the tree is still red);
           # a green probe (or empty gateProbeCmd) falls through to the full-gate loop unchanged.
@@ -573,6 +590,14 @@ states:
                 priority: ${vars.taskPriority}
                 compareExecutorWith: implement
                 timeoutMs: ${vars.stepTimeoutMs}
+          # 0785 R4: the reviewer's completion evidence for THIS run — the current proof digest is
+          # written to a run-scoped marker by the review stage itself, not caller-stamped. The
+          # verify stamp marks review `completed` only when this marker equals the current digest;
+          # otherwise `skipped` (an honest downgrade, never a fake completed), and the bound
+          # `record` registration refuses a skipped review.
+          - kind: shell
+            options:
+                command: 'mkdir -p .spur/run; printf "%s" "$proofDigest" > ".spur/run/$__runId-review-proof.digest"; exit 0'
 
     - id: approve
       description: >
@@ -604,11 +629,12 @@ states:
       onEnter:
           # R2 (0703): midpoint bracket compare — refuse to spend verification on a state that no
           # longer matches the digest the quality/review evidence names. Reuses `proofDigestNow`:
-          # set here and re-set by the final compare at `record` entry.
+          # set here and re-set by the bound `run.artifact` registration at `record` entry (0785 R3).
           - kind: proof.fingerprint
             options:
                 var: proofDigestNow
                 taskFile: ${vars.taskSpecPath}
+                featureFile: ${vars.featureSpecPath}
                 expect: ${vars.proofDigest}
           - kind: agent.run
             options:
@@ -654,21 +680,32 @@ states:
           # workflow definition it executed — a stale-definition resume or a definition edited
           # between run and record cannot certify silently. `__definitionDigest` is injected at run
           # start (workflow-service.ts) and equals the digest stamped on the run row (task 0603).
+          # 0785 R4: review is stamped `completed` only when the run-scoped marker written by the
+          # review stage equals the current digest; otherwise `skipped` — an unexecuted review is
+          # never reported completed, and the verify→record guard plus the bound record registration
+          # refuse a skipped review (the D9 fast route stays dormant, honestly).
           # Also keeps the flat
           # `proof-input-digest` check row for consumers that read `checks[]`. Soft action + hard
           # guard: a missing/malformed stamp fails the `verify → record` guard below, not this step.
           - kind: shell
             options:
+                # One folded line: every content line sits at the block's base indentation so
+                # `>-` joins them with spaces. A more-indented continuation would preserve a
+                # literal newline and split the jq invocation from its program argument.
                 command: >-
                     V=".spur/run/$wbs-verdict.json";
+                    RV="skipped";
+                    if [ -f ".spur/run/$__runId-review-proof.digest" ] && [ "$(cat ".spur/run/$__runId-review-proof.digest")" = "$proofDigest" ]; then
+                    RV="completed";
+                    fi;
                     if [ -f "$V" ] && [ -n "$proofDigest" ]; then
-                      jq --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" --arg g "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)"
-                      '. + {proof: {digest: $d, runId: $r, definitionDigest: $dd, capturePoint: "quality-gate-entry", stages: {
-                        qualityGate: {status: $g, digest: $d},
-                        review: {status: "completed", digest: $d},
-                        verification: {status: .verdict, digest: $d}}}}
-                        | .checks += [{name: "proof-input-digest", status: "pass", evidence: $d}]'
-                      "$V" > "$V.tmp" && mv "$V.tmp" "$V";
+                    jq --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" --arg rv "$RV" --arg g "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)"
+                    '. + {proof: {digest: $d, runId: $r, definitionDigest: $dd, capturePoint: "quality-gate-entry", stages: {
+                    qualityGate: {status: $g, digest: $d},
+                    review: {status: $rv, digest: $d},
+                    verification: {status: .verdict, digest: $d}}}}
+                    | .checks += [{name: "proof-input-digest", status: "pass", evidence: $d}]'
+                    "$V" > "$V.tmp" && mv "$V.tmp" "$V";
                     fi;
                     exit 0
 
@@ -676,25 +713,33 @@ states:
       description: >
           Record pipeline results into the task file via `spur task record` —
           Testing/Review from the verdict, Solution backfilled from git diff as a
-          safety net, optional transition to testing. Post-record step conditionally syncs
-          feature status via the bounded `feature-sync-bounded` wrapper (task 0411
-          retry-suppression) if `feature_id` is present, or appends an orphan link proposal
-          to the run report if absent (task 0328 / ADR-0322).
+          safety net, optional transition to testing. Entry is gated by the bound
+          `run.artifact` registration (0785 R3): the verify verdict is ledger-registered
+          against a freshly captured proof digest — including review-completion marker
+          evidence (0785 R4) — before any task record or status mutation. Post-record step
+          conditionally syncs feature status via the bounded `feature-sync-bounded` wrapper
+          (task 0411 retry-suppression) if `feature_id` is present, or appends an orphan
+          link proposal to the run report if absent (task 0328 / ADR-0322).
       onEnter:
-          # Proof-state compare (task 0612, ADR-071; bracket closed against the pre-chain
-          # capture per task 0703) — FIRST action in the state, before any record write.
-          # Re-captures the digest and asserts it equals the value the evidence chain started
-          # from. A mismatch means a proof input changed after evidence was established; the
-          # default `fail` policy halts the sequence and routes the run to `failed` rather
-          # than crossing into `record`. Task-spec evidence writes (Testing/Review/Solution,
-          # R6) happen only in the actions AFTER this comparison, and the fingerprint scopes
-          # task content to the proof-input sections, so they cannot invalidate the certified
-          # input set.
-          - kind: proof.fingerprint
+          # 0785 R3: BOUND verify-verdict registration — FIRST action, before any task record or
+          # status mutation, replacing the redundant proof.fingerprint compare (the action itself
+          # freshly re-captures the proof inputs via its processExecutor seam). The action refuses
+          # — before the ledger write AND before `task record` — unless: the run's declared digest
+          # equals a fresh capture over the canonical task spec (+ linked feature when linked);
+          # the verdict artifact is canonical-valid PASS for this wbs; its raw proof block names
+          # the fresh digest, the certifying run id, and the run row's resume/definition digest;
+          # qualityGate and verification stages are PASS with that digest; review is completed and
+          # independently evidenced by the run-scoped marker `<runId>-review-proof.digest`
+          # (0785 R4). Task-spec evidence writes (Testing/Review/Solution, R6) happen only in the
+          # actions AFTER this registration, and the fingerprint scopes task content to the
+          # proof-input sections, so they cannot invalidate the certified input set.
+          - kind: run.artifact
             options:
-                var: proofDigestNow
+                path: .spur/run/${vars.wbs}-verdict.json
+                artifactKind: verify-verdict
+                proofBinding: current
                 taskFile: ${vars.taskSpecPath}
-                expect: ${vars.proofDigest}
+                featureFile: ${vars.featureSpecPath}
           - kind: shell
             options:
                 command: >-
@@ -759,17 +804,6 @@ states:
                       return "$RETRY_RC";
                     };
                     retry_transient $spurBin task update "$wbs" done --no-lifecycle
-          # D5-L: the verify verdict is this pipeline's proof of completion, so its ownership
-          # belongs to a deterministic primitive rather than an untracked file on disk.
-          # `run.artifact` records path + kind + runId only — never the body (ADR-069).
-          - kind: run.artifact
-            options:
-                path: .spur/run/${vars.wbs}-verdict.json
-                artifactKind: verify-verdict
-                # 0751 R4: bind the verdict to the run's captured proof digest. `record`
-                # re-captures `proofDigestNow` with expect=proofDigest, so the binding
-                # holds by construction here — making the option non-decorative.
-                proofBinding: current
           - kind: note
             options:
                 message: "Pipeline complete for task ${vars.wbs} (done gate cleared)."
@@ -947,6 +981,7 @@ transitions:
                   test "$(jq -r '.proof.digest // ""' "$V" 2>/dev/null)" = "$proofDigest" &&
                   test "$(jq -r '.proof.stages.qualityGate.digest // ""' "$V" 2>/dev/null)" = "$proofDigest" &&
                   test "$(jq -r '.proof.stages.review.digest // ""' "$V" 2>/dev/null)" = "$proofDigest" &&
+                  test "$(jq -r '.proof.stages.review.status // ""' "$V" 2>/dev/null)" = "completed" &&
                   test "$(jq -r '.proof.stages.verification.digest // ""' "$V" 2>/dev/null)" = "$proofDigest" &&
                   test "$(jq -r '.proof.runId // ""' "$V" 2>/dev/null)" = "$__runId" &&
                   test "$(jq -r '.proof.definitionDigest // ""' "$V" 2>/dev/null)" = "$__definitionDigest"

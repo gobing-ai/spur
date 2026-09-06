@@ -92,7 +92,10 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
         ),
         'builtin',
     );
-    host.registerAction(new RunArtifactActionRunner(options.getDb, fileSystem, options.artifactDao), 'builtin');
+    host.registerAction(
+        new RunArtifactActionRunner(options.getDb, fileSystem, options.artifactDao, options.processExecutor),
+        'builtin',
+    );
     host.registerAction(
         new ProofFingerprintActionRunner(fileSystem, options.processExecutor, options.observabilityBus),
         'builtin',

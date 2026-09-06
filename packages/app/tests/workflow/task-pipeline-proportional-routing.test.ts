@@ -127,10 +127,13 @@ describe('task-pipeline proportional routing (task 0759, S5)', () => {
         expect(recordCmd).toContain('.verdict');
         expect(recordCmd).toContain('= PASS');
 
-        // done requires proofBinding: current
-        const done = def.states.find((s) => s.id === 'done');
-        const artifact = done?.onEnter?.find((a) => a.kind === 'run.artifact');
-        expect(artifact?.options?.proofBinding).toBe('current');
+        // done-bound registration: the verify verdict is ledger-registered against a freshly
+        // captured proof digest at record ENTRY — before any task record or status mutation
+        // (0785 R3; moved out of done, where it ran after the status write).
+        const record = def.states.find((s) => s.id === 'record');
+        const firstRecordAction = record?.onEnter?.[0];
+        expect(firstRecordAction?.kind).toBe('run.artifact');
+        expect((firstRecordAction?.options as Record<string, unknown> | undefined)?.proofBinding).toBe('current');
     });
 
     test('R6: iterative bounds are unchanged (no unmeasured tuning)', () => {

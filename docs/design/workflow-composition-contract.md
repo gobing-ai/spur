@@ -1,7 +1,7 @@
 # Workflow composition contract
 
 **Area:** workflow definition composition, deterministic action ownership, pipeline promotion, and run artifacts.
-**Status:** composition/projection infrastructure built; proof-finality completion pending (ADR-071; tasks 0703/0704).
+**Status:** composition/projection infrastructure built; the digest-bound proof chain shipped for the task and docs pipelines (ADR-071; tasks 0703/0704/0769). Physical path confinement, spec-complete proof inputs, honest review-completion evidence, and bound artifact registration at record entry landed (task 0785).
 **Authority:** derived; decisions live in `00_ADR`, module boundaries in `03_ARCHITECTURE`.
 
 ## Target workflow inventory
@@ -131,7 +131,12 @@ Contract:
   observe-only and cannot establish PASS if it changes the proof-input digest.
 - `retry.maxAttempts` is a positive bounded integer. Only declared failure classes retry; each
   attempt is persisted separately.
-- `resultFile` must resolve beneath `.spur/run/`; absolute paths and parent traversal fail before execution.
+- `resultFile` must resolve beneath `.spur/run/`; absolute paths and parent traversal fail before
+  execution. Since task 0785 R2 the confinement is PHYSICAL, not just lexical: the project workdir
+  and the run directory are canonicalized with `realPath`, symlink escapes (a link resolving
+  outside the canonical `.spur/run` tree) and dangling links are rejected before `ensureDir`,
+  dispatch, or any write, and a filesystem without `realPath` support fails closed instead of
+  degrading to the lexical check.
 - The result token is exactly `PASS` or `FAIL`; raw stdout/stderr is bounded and remains diagnostic.
 - A failed final attempt fails the action. Empty, missing, or malformed result data never becomes PASS.
 
@@ -143,20 +148,41 @@ action has parity; they are not part of the final contract.
 ```yaml
 - kind: run.artifact
   options:
-    id: verify-verdict
-    path: .spur/run/${vars.__runId}-verdict.json
+    path: .spur/run/${vars.wbs}-verdict.json
     artifactKind: verify-verdict
     proofBinding: current
+    taskFile: ${vars.taskSpecPath}
+    featureFile: ${vars.featureSpecPath}
     requireExisting: true
 ```
 
 Contract:
 
-- `path` must resolve beneath the project `.spur/run/` directory.
+- `path` must resolve beneath the project `.spur/run/` directory, with the same physical
+  confinement as `command.gate` result files (task 0785 R2): lexical descent first, then
+  canonicalization of the workdir and run directory, rejection of symlink escapes and dangling
+  links before any read or ledger effect, and fail-closed behavior when `realPath` is unavailable.
 - `requireExisting: true` fails when the file is absent or not a regular file.
-- `proofBinding: current` resolves from the run's internal proof state; workflow vars cannot supply it.
-- The structured evidence file must carry the same `proofInputDigest`; the action compares it before recording.
-- `ArtifactDao` remains path-only (run id, kind, path). The bounded action result carries the compared digest.
+- `proofBinding: current` (task 0785 R3; previously decorative under 0751 R4) is enforced at the
+  write, BEFORE the ledger row exists. The action INDEPENDENTLY re-captures the proof inputs over
+  the canonical task spec (`taskFile`, required non-empty for the binding) and the linked feature
+  spec (`featureFile`, empty string = legitimately omitted), requires the run's declared digest
+  (`proofDigestNow` ?? `proofDigest`) to be well-formed AND equal to that fresh capture, and then
+  validates the raw proof block of the verdict artifact — which the canonical parser strips —
+  against the freshly captured digest, the certifying run id, and the run row's
+  `resumeDefinitionDigest`/`definitionDigest` from `RunDao` (authoritative DB identity, never
+  caller vars). `qualityGate` and `verification` stages must be PASS with that digest.
+- Review completion is evidenced twice (task 0785 R4): the raw `stages.review.status` must be
+  `completed` AND the run-scoped marker `.spur/run/<runId>-review-proof.digest` (written by the
+  review stage itself, not caller-stamped) must name the same digest. A skipped or stale review
+  never binds; the D9 fast route stays dormant, honestly.
+- The task pipeline invokes this registration as the FIRST action of its `record` state — before
+  any task record or status mutation — so a refusal aborts before both the ledger write and the
+  task lifecycle crossing (task 0785 R3/R5).
+- Unbound registration (no `proofBinding`) stays path-only: path + kind + run id, no proof
+  evidence demanded and none claimed (ADR-069).
+- `ArtifactDao` remains path-only (run id, kind, path). The bounded action result carries the
+  compared digest.
 - File bodies, stdout, stderr, prompts, and secrets are never copied into the metadata row.
 - This action does not define or replace the two-file run-record contract.
 
@@ -188,9 +214,17 @@ runs `--fix none` with a live digest compare at verify entry, remediation loops 
 bounded `verify → test-fix` edge (budget shared with the quality gate), `test-recheck` re-captures
 the digest, and the verdict artifact's proof block names one digest across quality, review, and
 verification. The `verify → record` and `record → done` guards fail closed on missing, malformed,
-or mismatched proof evidence. The docs pipeline still runs `--fix all` with a synthetic PASS and
-cannot claim the proof state until task 0704 lands; the composition baseline pins the task
-pipeline's `--fix none` invocation so a regression fails deterministically (R7).
+or mismatched proof evidence. Task 0785 completed the second half: proof inputs are spec-complete
+(the linked feature spec folds in beside the task spec, with empty-string compatibility for orphan
+tasks), review completion is stamped only from a run-scoped marker written by the review stage
+itself and is additionally required by the `verify → record` guard, and the completion boundary
+is the bound `run.artifact` registration at `record` entry — a fresh capture agreeing with the
+run's declared digest, the raw proof block, the authoritative RunDao identity, and the review
+marker, all before any ledger row or task record. The docs pipeline runs the same `--fix none`
+measured verification with its own digest bracket (task 0704/0769), and the retired composition
+baseline's job is done by structural test suites (`task-pipeline-proof-chain.test.ts`,
+`docs-pipeline-proof-chain.test.ts`, and the workflow action suites) rather than a manifest (task
+0775).
 
 ## Run-definition binding
 

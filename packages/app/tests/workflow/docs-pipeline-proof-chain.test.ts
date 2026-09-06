@@ -81,3 +81,52 @@ describe('docs-pipeline task-path lookup fails closed (task 0760 R1/R2)', () => 
         }
     });
 });
+
+// Task 0785 R2 (task-pipeline sibling): the linked feature spec joins the proof inputs wherever
+// the task spec does — resolved before the canonical capture, folded on both capture legs, and
+// legitimately omitted (empty string) for orphan tasks.
+describe('docs-pipeline proof-input completeness (task 0785 R2)', () => {
+    test('the workflow identity is bumped to version 2 (0785)', () => {
+        expect((DEF as unknown as { version: string }).version).toBe('2');
+    });
+
+    test('a featureSpecPath var exists and defaults to empty (orphan tasks stay compatible)', () => {
+        const vars = (DEF as unknown as { vars: Record<string, unknown> }).vars;
+        expect(vars.featureSpecPath).toBe('');
+    });
+
+    test('the verify state resolves the feature path before the canonical capture and folds it on both legs', () => {
+        const verify = DEF.states.find((st) => st.id === 'verify');
+        const actions = verify?.onEnter ?? [];
+        const kinds = actions.map((a) => a.kind);
+
+        const resolver = actions.find(
+            (a) => a.kind === 'shell' && String(a.options?.command ?? '').includes('-docs-featurepath.txt'),
+        );
+        expect(resolver).toBeDefined();
+        const command = String(resolver?.options?.command ?? '');
+        expect(command).toContain('.feature_id // .frontmatter.feature_id // empty');
+        expect(command).toContain('feature show');
+        expect(command).toContain('did not resolve');
+        expect(command).toContain('exit 1');
+
+        const featureRead = actions.find(
+            (a) =>
+                a.kind === 'file.read.into-var' &&
+                (a.options as Record<string, unknown> | undefined)?.var === 'featureSpecPath',
+        );
+        expect(featureRead).toBeDefined();
+
+        const captures = actions.filter((a) => a.kind === 'proof.fingerprint');
+        expect(captures).toHaveLength(2);
+        for (const capture of captures) {
+            const options = capture.options as Record<string, unknown>;
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+            expect(options.taskFile).toBe('${vars.taskSpecPath}');
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+            expect(options.featureFile).toBe('${vars.featureSpecPath}');
+        }
+        // Resolution + read precede the first capture.
+        expect(kinds.lastIndexOf('file.read.into-var')).toBeLessThan(kinds.indexOf('proof.fingerprint'));
+    });
+});

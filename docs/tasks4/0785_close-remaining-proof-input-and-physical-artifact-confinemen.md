@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Close remaining proof-input and physical artifact confinement gaps"
-status: todo
+status: done
 template: issue
 created_at: 2026-09-06T18:27:45.398Z
-updated_at: "2026-09-06T19:04:04.596Z"
+updated_at: "2026-09-06T22:35:26.054Z"
 feature_id: D6
 priority: P1
 dependencies: ["0781", "0784"]
@@ -15,11 +15,11 @@ dependencies: ["0781", "0784"]
 ### Background
 Audit 0781 F-07 remains present: proof-fingerprint.readOptional treats an explicit missing path like omitted input and resolves relative paths outside context.workdir; the 0781 path fix is lexical only. Installed FileSystem exposes optional synchronous realPath, but stat follows symlinks and has no isSymbolicLink method. run.artifact only checks a digest-shaped var and has no independent capture; its only shipped proofBinding=current caller is task-pipeline's done onEnter, after task update done. The canonical verdict parser does not retain a proof field; the actual pipeline stores proof.digest/runId/definitionDigest/stages in raw JSON. No shipped proof capture currently supplies featureFile. These facts constrain the repair below.
 ### Requirements
-- [ ] R1. A missing optional taskFile/featureFile (undefined or empty compatibility value) stays optional; any nonempty supplied path must be a readable regular file resolved under context.workdir or fail with a named error before a digest is produced. Reject invalid option types. All task/docs proof capture callers must include their canonical task spec and the linked feature spec when one exists.
-- [ ] R2. Both command.gate and run.artifact must reject physical escapes through an existing leaf/ancestor symlink, dangling symlinks or an outside .spur/run root before command/write/ledger effects. Preserve valid descendants, internal symlinks, missing output-leaf creation and injected filesystem testing. Missing realPath capability must fail closed rather than silently skip confinement.
-- [ ] R3. For the shipped verify-verdict current binding, independently capture the current inputs, validate the canonical verdict plus its raw proof block, and require matching task/run/definition/digest and stage evidence before any task record/done write or ledger record. A digest-shaped workflow var alone is insufficient; a forged matching var cannot bless stale artifact content.
-- [ ] R4. Record review completed only after that run actually completes review on the same digest; a skipped or stale review marker is not completed evidence. Keep ADR-107 Option B and current safety completion requirements unchanged.
-- [ ] R5. Keep unbound path-only artifact registration compatible. Other artifact kinds requesting current binding fail explicitly as unsupported in this task; do not invent a general proof envelope, new registry or a runtime sandbox. Preserve all proof guards and document the bounded local-filesystem threat model.
+- [x] R1. A missing optional taskFile/featureFile (undefined or empty compatibility value) stays optional; any nonempty supplied path must be a readable regular file resolved under context.workdir or fail with a named error before a digest is produced. Reject invalid option types. All task/docs proof capture callers must include their canonical task spec and the linked feature spec when one exists.
+- [x] R2. Both command.gate and run.artifact must reject physical escapes through an existing leaf/ancestor symlink, dangling symlinks or an outside .spur/run root before command/write/ledger effects. Preserve valid descendants, internal symlinks, missing output-leaf creation and injected filesystem testing. Missing realPath capability must fail closed rather than silently skip confinement.
+- [x] R3. For the shipped verify-verdict current binding, independently capture the current inputs, validate the canonical verdict plus its raw proof block, and require matching task/run/definition/digest and stage evidence before any task record/done write or ledger record. A digest-shaped workflow var alone is insufficient; a forged matching var cannot bless stale artifact content.
+- [x] R4. Record review completed only after that run actually completes review on the same digest; a skipped or stale review marker is not completed evidence. Keep ADR-107 Option B and current safety completion requirements unchanged.
+- [x] R5. Keep unbound path-only artifact registration compatible. Other artifact kinds requesting current binding fail explicitly as unsupported in this task; do not invent a general proof envelope, new registry or a runtime sandbox. Preserve all proof guards and document the bounded local-filesystem threat model.
 ### Acceptance Criteria
 ```gherkin
 Feature: Fail-closed proof and artifact inputs
@@ -81,17 +81,79 @@ Execution budget: one owned task at a time; checkpoint after 45 minutes or two u
 <!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
 
 ### Solution
+Closed the two remaining gaps (spec-blind proof inputs; unsigned artifact binding) through one
+confined read path and one bound write path, both physically anchored to the real `.spur/run` tree.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R2 — spec-complete proof inputs.**
+- `packages/app/src/workflow/proof-input-fingerprint.ts:84` — `ProofInputContents` union +
+  `SpecReadOutcome`; `readProofInputContents()` (exported, same file) reads the task file and the
+  optional linked feature spec through the injected `FileSystem` only: undefined/empty → omitted,
+  non-string values rejected by option name, lexical containment under `resolve(workdir)`,
+  stat→isFile→readFile failing closed. `computeProofInputFingerprint` folds both contents, so the
+  digest now covers every text the completion verdict certifies.
+- `packages/app/src/workflow/actions/proof-fingerprint.ts:59` — capture action consumes
+  `readProofInputContents`; local `readOptional` (write-capable, `path`-only) deleted.
+- `config/workflows/task-pipeline.yaml` — `featureSpecPath` var (line 111, default empty), resolve
+  shell + `file.read` at `test` entry (lines ~380–411; declared-but-unresolvable feature fails
+  closed, empty stays legitimate), `featureFile:` on all three capture legs (lines 419, 522, 637).
+- `config/workflows/docs-pipeline.yaml` — same var + resolver + read + two `featureFile` legs
+  (lines 49, 174, 181, 218). Version bumps: task-pipeline `3` (line 32), docs-pipeline `2` (line 19).
 
+**R1/R3 — physical path confinement (`packages/app/src/workflow/actions/run-path.ts`, new).**
+- `RunArtifactPathError` (line 9), `within()` (line 30), `resolveRunArtifactPath()` (line 37):
+  lexical descent under `resolve(workdir)` first (0781 rule, strict — `.spur/run` itself rejected),
+  then canonicalization: workdir realPath, `.spur/run` realPath must stay inside it, ascent to the
+  nearest existing ancestor with dangling-symlink rejection, anchor realPath containment, and
+  reconstruction of the missing suffix — result strictly inside the canonical run root. A
+  `FileSystem` without `realPath` fails closed; symlink escapes are rejected before `ensureDir`,
+  dispatch, or any write.
+- `command-gate.ts:120` and `run-artifact.ts:105,232` — every result/path traversal goes through
+  `resolveRunArtifactPath` before any effect; `ensureDir` now guards the parent of the normalized
+  file (never the target itself, so a file-named-directory cannot be created).
+
+**R3/R4/R5 — bound, honest artifact registration.**
+- `run-artifact.ts` `executeBound` — binding means: fresh `readProofInputContents` capture over
+  `taskFile` (required non-empty) + `featureFile` (empty = omitted); run's declared
+  `proofDigestNow ?? proofDigest` must match `PROOF_DIGEST_RE` and equal the fresh capture; verdict
+  path confined + existing regular file + canonical-verdict valid PASS for the same wbs; raw
+  `.proof` block (which the canonical parser strips) validated against the fresh digest, certifying
+  run id, and the `RunDao` row's `resumeDefinitionDigest ?? definitionDigest` (authoritative DB
+  identity — caller vars are never trusted); `qualityGate`/`verification` stages PASS with that
+  digest; `stages.review.status = completed` AND the run-scoped marker
+  `.spur/run/<runId>-review-proof.digest` names the same digest; only then `dao.record`. Any
+  refusal leaves the artifact ledger empty for the run.
+- `builtins.ts:96` — `RunArtifactActionRunner` receives `processExecutor` (no ambient executor).
+- `config/workflows/task-pipeline.yaml` — review state writes the completion marker right after its
+  agent (line 600); verify stamps `review: {status: $rv, ...}` conditionally on the marker
+  (line ~695: default `skipped`, never claimed-complete); the `verify → record` guard additionally
+  requires `.proof.stages.review.status = "completed"`; record's FIRST onEnter action is the bound
+  `run.artifact` (taskFile/featureFile) — before any `task record` or status mutation; the done-state
+  `run.artifact` was removed (binding is the record-entry boundary, not a done-state echo).
+
+Docs: `docs/design/workflow-composition-contract.md` (status line, command.gate confinement bullet,
+run.artifact contract rewritten to the enforced binding, proof-state paragraph de-staled) and
+`docs/04_DESIGN.md` (index row, proof-chain vars, completion-gate paragraph).
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/src/workflow/proof-input-fingerprint.ts — exported readProofInputContents(): undefined/empty stays omitted, non-string rejected by option name, lexical containment under resolve(workdir) (:122), stat→isFile→read fails closed (:138); digest folds both contents. task-pipeline.yaml carries taskFile on 4 legs + featureSpecPath resolver (declared-but-unresolvable fails closed); docs-pipeline.yaml 3 legs. |
+| R2 | MET | packages/app/src/workflow/actions/run-path.ts resolveRunArtifactPath (:37): lexical descent under workdir first, then realPath canonicalization; missing realPath fails closed (:42-44); dangling-symlink rejection; missing-leaf reconstruction; result strictly inside canonical .spur/run. Wired before any effect: command-gate.ts (2 call sites), run-artifact.ts (3). |
+| R3 | MET | run-artifact.ts executeBound (:159): fresh readProofInputContents capture (:188) must equal declared digest (PROOF_DIGEST_RE); canonical verdict PASS for same wbs + raw .proof block validated (runId, definitionDigest vs RunDao.traceRowById :323 / resumeDefinitionDigest :336 — caller vars never trusted); qualityGate/verification stage digests equal fresh capture; ledger untouched on any refusal. Tests: forged-var, mismatched-wbs/run/definition/stage cases all green. |
+| R4 | MET | task-pipeline.yaml:600 — run-scoped marker <runId>-review-proof.digest written right after review agent; :698 verify stamps review completed only when marker equals current digest (default skipped); verify→record guard requires proof.stages.review.status=completed (:732). Skipped/stale review is never completed evidence; ADR-107 Option B untouched. |
+| R5 | MET | run-artifact.ts :91 unsupported proofBinding refusal (only "current" defined, ADR-071); non-verify-verdict current binding refuses instead of inventing a schema (:167); unbound path-only registration preserved; no new registry/envelope/sandbox. Docs synced same-change: docs/design/workflow-composition-contract.md + docs/04_DESIGN.md. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 ### References
 - docs/plans/2026-09-06-workflow-conflict-audit.md — F-07; tasks 0751 and 0781.
 - docs/00_ADR.md — ADR-069/071, ADR-107 Option B, ADR-108; docs/design/workflow-composition-contract.md.
@@ -99,3 +161,6 @@ Execution budget: one owned task at a time; checkpoint after 45 minutes or two u
 - Installed @gobing-ai/ts-runtime src/file-system.ts:19 — installed FileSystem contract, optional realPath, no lstat.
 - Dependency 0784 supplies execution/launch identity separation; downstream 0786.
 ### History
+- 2026-09-06T22:00:27.194Z todo → wip (system)
+- 2026-09-06T22:35:25.070Z wip → testing (system)
+- 2026-09-06T22:35:26.054Z testing → done (system)

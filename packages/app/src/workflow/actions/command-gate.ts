@@ -1,4 +1,4 @@
-import { normalize, resolve, sep } from 'node:path';
+import { join, normalize } from 'node:path';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import {
     createNodeFileSystem,
@@ -8,6 +8,7 @@ import {
 } from '@gobing-ai/ts-runtime';
 import { splitLaunchCommand } from '../split-launch-command';
 import { childProcessEnv } from './child-env';
+import { resolveRunArtifactPath } from './run-path';
 
 const KIND = 'command.gate';
 
@@ -111,14 +112,16 @@ export class CommandGateActionRunner implements ActionRunner {
         }
 
         const workdir = context.workdir ?? process.cwd();
-        const allowedDir = resolve(workdir, '.spur', 'run');
-        const resolvedResultFile = resolve(workdir, resultFileRaw);
-        const normalized = normalize(resolvedResultFile);
-
-        if (!normalized.startsWith(`${allowedDir}${sep}`)) {
+        // 0785 R2: physical confinement (lexical descent + symlink escape rejection) is proven
+        // BEFORE ensureDir, dispatch, or any result-file write. The helper's lexical error keeps
+        // the 0781 message shape.
+        let normalized: string;
+        try {
+            normalized = await resolveRunArtifactPath(this.fileSystem, workdir, resultFileRaw);
+        } catch (error) {
             return {
                 ok: false,
-                error: `resultFile must resolve beneath .spur/run/ (got ${resultFileRaw})`,
+                error: `resultFile ${(error as Error).message}`,
             };
         }
 
@@ -136,7 +139,7 @@ export class CommandGateActionRunner implements ActionRunner {
 
         const env = childProcessEnv(context.vars);
 
-        await this.fileSystem.ensureDir(allowedDir);
+        await this.fileSystem.ensureDir(normalize(join(normalized, '..')));
 
         let lastStdout = '';
         let lastStderr = '';

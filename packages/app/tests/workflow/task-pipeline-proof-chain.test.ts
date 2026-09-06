@@ -205,11 +205,24 @@ describe('task-path lookup fails closed (task 0751 R2)', () => {
         expect(command).toContain('did not resolve');
     });
 
-    test('the done-state verdict artifact declares the enforced proof binding (0751 R4)', () => {
+    // 0785 R3: the bound registration moved from done into record — FIRST action there, before
+    // any task record or status mutation — and now demands the spec inputs it re-captures over.
+    // Done keeps no artifact registration: an unbound done would be a decorative echo.
+    test('the record-entry verdict registration declares the enforced proof binding (0751 R4 + 0785 R3)', () => {
+        const record = DEF.states.find((st) => st.id === 'record');
+        const first = record?.onEnter?.[0];
+        expect(first?.kind).toBe('run.artifact');
+        const options = first?.options as Record<string, unknown> | undefined;
+        expect(options?.proofBinding).toBe('current');
+        expect(options?.artifactKind).toBe('verify-verdict');
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+        expect(options?.taskFile).toBe('${vars.taskSpecPath}');
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+        expect(options?.featureFile).toBe('${vars.featureSpecPath}');
+        const recordShells = (record?.onEnter ?? []).filter((a) => a.kind === 'shell');
+        expect(recordShells.length).toBeGreaterThanOrEqual(2);
         const done = DEF.states.find((st) => st.id === 'done');
-        const artifact = done?.onEnter?.find((a) => a.kind === 'run.artifact');
-        expect(artifact).toBeDefined();
-        expect(artifact?.options?.proofBinding).toBe('current');
+        expect(done?.onEnter?.find((a) => a.kind === 'run.artifact')).toBeUndefined();
     });
 
     test('behavioral: an unresolved task path fails the rendered command', () => {
@@ -239,3 +252,92 @@ function mkdirRecursive(path: string): void {
     const { mkdirSync } = require('node:fs') as typeof import('node:fs');
     mkdirSync(path, { recursive: true });
 }
+
+// Task 0785: physical path confinement + spec-complete proof inputs + honest review evidence.
+// These are the structural pins for the three shipped seams: the linked feature spec joins the
+// digest inputs everywhere the task spec does, review completion is evidenced by a run-scoped
+// marker (never caller-claimed), and the bound ledger registration happens before record.
+describe('task-pipeline proof-input completeness and honest review evidence (task 0785)', () => {
+    const shellCommandsOf = (state: string): string[] =>
+        (DEF.states.find((s) => s.id === state)?.onEnter ?? [])
+            .filter((a) => a.kind === 'shell')
+            .map((a) => String((a.options as Record<string, unknown> | undefined)?.command ?? ''))
+            .map((c) => c.replace(/\n/g, ' '));
+
+    test('the workflow identity is bumped to version 3 (0785)', () => {
+        expect((DEF as unknown as { version: string }).version).toBe('3');
+    });
+
+    test('a featureSpecPath var exists and defaults to empty (orphan tasks stay compatible)', () => {
+        const vars = (DEF as unknown as { vars: Record<string, unknown> }).vars;
+        expect(vars.featureSpecPath).toBe('');
+    });
+
+    test('the test state resolves the linked feature spec path before the canonical capture (R2)', () => {
+        const commands = shellCommandsOf('test');
+        const resolver = commands.find((c) => c.includes('feature show') && c.includes('-featurepath.txt'));
+        expect(resolver).toBeDefined();
+        expect(resolver).toContain('.feature_id // .frontmatter.feature_id // empty');
+        // Fail closed when a declared feature's path does not resolve; empty stays legitimate.
+        expect(resolver).toContain('did not resolve');
+        expect(resolver).toContain('exit 1');
+        const test = DEF.states.find((s) => s.id === 'test');
+        const kinds = (test?.onEnter ?? []).map((a) => a.kind);
+        const reads = (test?.onEnter ?? []).filter((a) => a.kind === 'file.read.into-var');
+        const featureRead = reads.find(
+            (a) => (a.options as Record<string, unknown> | undefined)?.var === 'featureSpecPath',
+        );
+        expect(featureRead).toBeDefined();
+        // Resolution precedes the capture.
+        expect(kinds.lastIndexOf('file.read.into-var')).toBeLessThan(kinds.lastIndexOf('proof.fingerprint'));
+    });
+
+    test('every proof capture folds the feature spec alongside the task spec (R2)', () => {
+        for (const state of ['test', 'test-recheck', 'verify']) {
+            const captures = (DEF.states.find((s) => s.id === state)?.onEnter ?? []).filter(
+                (a) => a.kind === 'proof.fingerprint',
+            );
+            expect(captures.length, state).toBe(1);
+            const options = captures[0]?.options as Record<string, unknown> | undefined;
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+            expect(options?.taskFile, state).toBe('${vars.taskSpecPath}');
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+            expect(options?.featureFile, state).toBe('${vars.featureSpecPath}');
+        }
+        // The record-entry fingerprint compare is GONE — replaced by the bound run.artifact.
+        const recordCaptures = (DEF.states.find((s) => s.id === 'record')?.onEnter ?? []).filter(
+            (a) => a.kind === 'proof.fingerprint',
+        );
+        expect(recordCaptures).toHaveLength(0);
+    });
+
+    test('the review stage writes a run-scoped completion marker after its agent (R4)', () => {
+        const review = DEF.states.find((s) => s.id === 'review');
+        const kinds = (review?.onEnter ?? []).map((a) => a.kind);
+        expect(kinds).toEqual(['agent.run', 'shell']);
+        const marker = shellCommandsOf('review').find((c) => c.includes('-review-proof.digest'));
+        expect(marker).toBeDefined();
+        expect(marker).toContain('$__runId-review-proof.digest');
+        expect(marker).toContain('$proofDigest');
+    });
+
+    test('the verify stamp marks review completed only on a matching marker (R4)', () => {
+        const stamp = shellCommandsOf('verify').find((c) => c.includes('-verdict.json'));
+        expect(stamp).toBeDefined();
+        // Default is skipped — an unexecuted review is never reported completed.
+        expect(stamp).toContain('RV="skipped"');
+        expect(stamp).toContain('$__runId-review-proof.digest');
+        expect(stamp).toContain('--arg rv "$RV"');
+        expect(stamp).toContain('review: {status: $rv, digest: $d}');
+        expect(stamp).not.toContain('review: {status: "completed"');
+    });
+
+    test('the verify→record guard demands completed review evidence (R4/R5)', () => {
+        const guard = cmdOf('verify', 'record');
+        expect(guard).toContain('.proof.stages.review.status // ""\' "$V" 2>/dev/null)" = "completed"');
+        // The rest of the proof-block pinning stays intact.
+        expect(guard).toContain('.proof.stages.review.digest');
+        expect(guard).toContain('.proof.definitionDigest');
+        expect(guard).toContain('.proof.runId');
+    });
+});

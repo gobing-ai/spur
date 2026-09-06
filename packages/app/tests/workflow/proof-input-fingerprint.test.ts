@@ -1,11 +1,16 @@
 import { describe, expect, test } from 'bun:test';
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import {
     createGitAlternateTree,
     extractFeatureProofData,
     extractTaskProofData,
     ProofCaptureError,
     ProofInputFingerprint,
+    readProofInputContents,
 } from '../../src/workflow/proof-input-fingerprint';
 
 describe('ProofInputFingerprint', () => {
@@ -280,5 +285,100 @@ describe('git-tree capture fails closed (task 0751 R1)', () => {
             rejected = error;
         }
         expect(rejected).toBeInstanceOf(ProofCaptureError);
+    });
+});
+
+// Task 0785 R1: validated spec reads shared by proof.fingerprint and bound run.artifact.
+// Only undefined/'' mean omitted; any other supplied path must resolve to a readable regular
+// file under the workflow workdir or the read fails closed with a named error.
+describe('readProofInputContents (task 0785 R1)', () => {
+    function setup(): { workdir: string; cleanup: () => Promise<void> } {
+        const workdir = mkdtempSync(join(tmpdir(), 'proof-input-'));
+        return { workdir, cleanup: () => rm(workdir, { recursive: true, force: true }) };
+    }
+
+    test('omitted and empty-string inputs stay optional (compatibility)', async () => {
+        const { workdir, cleanup } = setup();
+        try {
+            const fs = createNodeFileSystem();
+            for (const options of [{}, { taskFile: undefined }, { taskFile: '', featureFile: '' }]) {
+                const res = await readProofInputContents(fs, workdir, options);
+                expect(res.ok).toBeTrue();
+                if (res.ok) {
+                    expect(res.taskContent).toBeUndefined();
+                    expect(res.featureContent).toBeUndefined();
+                }
+            }
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('reads supplied specs and returns their content', async () => {
+        const { workdir, cleanup } = setup();
+        try {
+            writeFileSync(join(workdir, 't.md'), 'task body');
+            writeFileSync(join(workdir, 'f.md'), 'feature body');
+            const res = await readProofInputContents(createNodeFileSystem(), workdir, {
+                taskFile: 't.md',
+                featureFile: join(workdir, 'f.md'),
+            });
+            expect(res.ok).toBeTrue();
+            if (res.ok) {
+                expect(res.taskContent).toBe('task body');
+                expect(res.featureContent).toBe('feature body');
+            }
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('a missing, non-regular, unreadable, or escaping spec fails closed with a named error', async () => {
+        const { workdir, cleanup } = setup();
+        try {
+            const fs = createNodeFileSystem();
+            const missing = await readProofInputContents(fs, workdir, { taskFile: 'nope.md' });
+            expect(missing.ok).toBeFalse();
+            if (!missing.ok) expect(missing.error).toContain('taskFile does not exist');
+
+            mkdirSync(join(workdir, 'adir'));
+            const dir = await readProofInputContents(fs, workdir, { taskFile: 'adir' });
+            expect(dir.ok).toBeFalse();
+            if (!dir.ok) expect(dir.error).toContain('not a regular file');
+
+            const locked = join(workdir, 'locked.md');
+            writeFileSync(locked, 'x');
+            chmodSync(locked, 0o000);
+            if (process.getuid?.() !== 0) {
+                const unreadable = await readProofInputContents(fs, workdir, { featureFile: 'locked.md' });
+                expect(unreadable.ok).toBeFalse();
+                if (!unreadable.ok) expect(unreadable.error).toContain('featureFile is not readable');
+            }
+            chmodSync(locked, 0o644);
+
+            const escaping = await readProofInputContents(fs, workdir, { taskFile: '../escape.md' });
+            expect(escaping.ok).toBeFalse();
+            if (!escaping.ok) expect(escaping.error).toContain('must resolve under the workflow workdir');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('non-string option values are rejected by name', async () => {
+        const { workdir, cleanup } = setup();
+        try {
+            const fs = createNodeFileSystem();
+            for (const [options, name] of [
+                [{ taskFile: 42 }, 'taskFile'],
+                [{ featureFile: ['x'] }, 'featureFile'],
+                [{ taskFile: true }, 'taskFile'],
+            ] as const) {
+                const res = await readProofInputContents(fs, workdir, options);
+                expect(res.ok).toBeFalse();
+                if (!res.ok) expect(res.error).toContain(`${name} must be a string`);
+            }
+        } finally {
+            await cleanup();
+        }
     });
 });

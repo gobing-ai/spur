@@ -165,14 +165,22 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
     test('R2: record writes via `spur task record` + post-record feature sync (task 0328)', () => {
         const record = yaml.states.find((s) => s.id === 'record');
         const cmds = (record?.onEnter ?? []).map((a) => String(a.options?.command ?? ''));
-        // Proof-state compare + record step + post-record feature sync (task 0328 / ADR-0322,
-        // task 0612 / ADR-071).
+        // Proof certification + record step + post-record feature sync (task 0328 / ADR-0322,
+        // task 0612 / ADR-071; 0785 R3 replaced the bare fingerprint compare with the bound
+        // run.artifact registration, which re-captures the proof inputs itself).
         expect(record?.onEnter ?? []).toHaveLength(3);
-        // The proof compare must be FIRST: it asserts no proof input changed since the verdict was
-        // established, so it has to run before any record write. Ordering is the guarantee here —
-        // a compare placed after `spur task record` would validate a tree the step just mutated.
-        expect(record?.onEnter?.[0]?.kind).toBe('proof.fingerprint');
-        expect(String(record?.onEnter?.[0]?.options?.expect ?? '')).toContain('proofDigest');
+        // Certification must be FIRST: it refuses unless the verdict artifact's proof block
+        // certifies a fresh capture over the canonical task spec (+ linked feature) — so it has
+        // to run before any record write. Ordering is the guarantee here — a certification
+        // placed after `spur task record` would validate a tree the step just mutated.
+        expect(record?.onEnter?.[0]?.kind).toBe('run.artifact');
+        // The registration binds the live verdict artifact to a fresh capture over the canonical
+        // inputs: proofBinding:current pins the digest to the run's captured proof, and the task
+        // spec (+ linked feature, 0785 R2) scope the fresh capture.
+        const registration = record?.onEnter?.[0]?.options ?? {};
+        expect(String(registration.proofBinding ?? '')).toBe('current');
+        expect(String(registration.taskFile ?? '')).toContain('taskSpecPath');
+        expect(String(registration.featureFile ?? '')).toContain('featureSpecPath');
         expect(
             cmds.some(
                 (c) =>

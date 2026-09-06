@@ -260,9 +260,10 @@ esac`,
             'gate-fake',
             `n=$(cat "$COUNTER" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$COUNTER"; if [ "$n" -eq 1 ]; then echo 'SQLiteError: database is locked' >&2; exit 1; fi; echo PASS`,
         );
-        // 0703 R2: test.onEnter now resolves the task-spec path in a first shell before the
-        // canonical proof.fingerprint capture, so the gate shell moved to shell index 1.
-        const command = commandFor('test', 1).replace('sleep 10', 'sleep 0');
+        // 0703 R2: test.onEnter resolves the task-spec path in a first shell before the gate;
+        // 0785 R2: a second lookup shell (linked feature-spec path) now precedes the capture,
+        // so the gate shell lives at shell index 2.
+        const command = commandFor('test', 2).replace('sleep 10', 'sleep 0');
         const result = runShell(command, dir, {
             wbs: '0503',
             qualityGateCmd: gate,
@@ -348,7 +349,8 @@ esac`,
 
         const dir = mkdtempSync(join(tmpdir(), 'spur-0772-summary-'));
         const noisyGate = executable(dir, 'gate-noisy', 'for i in $(seq 1 60); do echo "line-$i"; done; exit 1');
-        const command = commandFor('test', 1).replace('sleep 10', 'sleep 0');
+        // 0785 R2: gate shell is index 2 (after task-path and feature-spec lookups).
+        const command = commandFor('test', 2).replace('sleep 10', 'sleep 0');
         const red = runShell(command, dir, { wbs: '0772', qualityGateCmd: noisyGate });
 
         expect(red.exitCode).toBe(0);

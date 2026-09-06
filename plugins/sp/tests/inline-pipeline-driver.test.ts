@@ -113,6 +113,12 @@ function resolveSessionId(cwd: string): string {
 // ISO-8601 UTC stamp prefix — bare local-clock forms are prohibited.
 const isoStamp = (): string => `${new Date().toISOString()} `;
 
+// 0785 R2/R3: the smoke runs the real graph but not the real fingerprint built-in. Simulate a
+// stable capture token (the smoke tree never mutates between captures) in BOTH vars and env —
+// downstream shell actions and guards read env, later actions read vars — so the review-marker
+// write, the verify stamp merge, and the verify→record guard see a consistent non-empty digest.
+const FIXTURE_PROOF_DIGEST = 'fixture-0503-proof-digest';
+
 function runInlineSmoke(
     options: { verdict?: 'PASS' | 'FAIL'; failCheckAt?: number; unresolvableTask?: boolean } = {},
 ): SmokeResult {
@@ -188,6 +194,16 @@ function runInlineSmoke(
                 const path = action.options?.path;
                 if (key !== undefined && path !== undefined)
                     vars[key] = readFileSync(join(cwd, expand(path, vars)), 'utf8');
+                continue;
+            }
+            if (action.kind === 'proof.fingerprint') {
+                const key = action.options?.var;
+                if (key !== undefined) {
+                    vars[key] = FIXTURE_PROOF_DIGEST;
+                    env[key] = FIXTURE_PROOF_DIGEST;
+                }
+                const expectDigest = action.options?.expect;
+                if (expectDigest !== undefined) expect(expand(expectDigest, vars)).toBe(FIXTURE_PROOF_DIGEST);
                 continue;
             }
             if (action.kind === 'hitl.confirm') throw new Error('auto profile must route around HITL');

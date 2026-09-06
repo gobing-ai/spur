@@ -1,19 +1,11 @@
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import type { FileSystem, ProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { WorkflowObservabilityBus, WorkflowTripwireFiredEvent } from '../observability';
-import { computeProofInputFingerprint } from '../proof-input-fingerprint';
+import { computeProofInputFingerprint, readProofInputContents } from '../proof-input-fingerprint';
 import { evaluateTripWires } from '../tripwire';
 
 const KIND = 'proof.fingerprint';
 const VAR_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
-/** Resolve a task/feature file's content, or `undefined` when it cannot be read. */
-async function readOptional(fileSystem: FileSystem, path: string | undefined): Promise<string | undefined> {
-    if (path === undefined || path === '') return undefined;
-    const stat = await fileSystem.stat(path);
-    if (stat === null) return undefined;
-    return await fileSystem.readFile(path);
-}
 
 /**
  * Compute the `ProofInputFingerprint` digest into a workflow var, optionally asserting it is unchanged.
@@ -26,8 +18,12 @@ async function readOptional(fileSystem: FileSystem, path: string | undefined): P
  *   policy routes the run to `failed`. Absent or empty means capture-only — one action kind serves
  *   both edges of the bracket rather than two.
  * - `taskFile` / `featureFile` (string, optional): specs folded into the digest so it covers spec
- *   content, not only the working tree. Unreadable paths are skipped rather than failing the action:
- *   a task without a feature is normal, and a missing spec must not manufacture a proof violation.
+ *   content, not only the working tree. Since 0785 R1 an explicitly supplied nonempty path must
+ *   resolve to a readable regular file under the workflow workdir or the action fails with a named
+ *   error BEFORE any digest is produced — a missing spec can no longer silently degrade the proof
+ *   to tree-only. `undefined`/`''` stay optional: a task without a linked feature is normal, and
+ *   the pipeline supplies an empty `featureSpecPath` var in that case.
+ * - Invalid option types (non-string `taskFile`/`featureFile`) are rejected by name.
  *
  * Why this action exists (task 0612, ADR-071): `computeProofInputFingerprint` shipped with task 0603
  * and had **zero runtime call sites**, so "only `verified(D)` may cross the completion boundary" was
@@ -60,15 +56,17 @@ export class ProofFingerprintActionRunner implements ActionRunner {
             return { ok: false, error: `${KIND}: var name must match ${VAR_NAME_RE}, got "${varName}"` };
         }
 
-        const taskContent = await readOptional(this.fileSystem, options.taskFile as string | undefined);
-        const featureContent = await readOptional(this.fileSystem, options.featureFile as string | undefined);
+        const inputs = await readProofInputContents(this.fileSystem, context.workdir ?? '.', options);
+        if (!inputs.ok) {
+            return { ok: false, error: `${KIND}: ${inputs.error}` };
+        }
 
         let digest: string;
         try {
             digest = await computeProofInputFingerprint({
                 cwd: context.workdir ?? '.',
-                ...(taskContent !== undefined ? { taskContent } : {}),
-                ...(featureContent !== undefined ? { featureContent } : {}),
+                ...(inputs.taskContent !== undefined ? { taskContent: inputs.taskContent } : {}),
+                ...(inputs.featureContent !== undefined ? { featureContent: inputs.featureContent } : {}),
                 ...(this.processExecutor !== undefined ? { processExecutor: this.processExecutor } : {}),
                 fileSystem: this.fileSystem,
             });
