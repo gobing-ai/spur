@@ -79,6 +79,8 @@ Feature: Embedded job queue and scheduler
 | 0190 | Enable embedded job queue and scheduler in spur serve (worker loop + handler registry) | done |
 | 0200 | Job worker loop, handler registry, serve lifecycle wiring (0190 wave A) | done |
 | 0201 | Scheduler entries, job events, stats API, Jobs tab (0190 wave B) | done |
+| 0734 | Configurable scheduler jobs (interval + real cron) in ts-libs adapter and spur serve | done |
+| 0750 | Retire history.refresh.schedule_minutes in favor of bootstrap.scheduler.jobs | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

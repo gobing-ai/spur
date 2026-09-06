@@ -87,7 +87,7 @@ Feature: Workflow cost, deterministic ownership surface, and role-addressed coor
 | 0607 | Measure and reduce pipeline model-query cost and wall-clock | done |
 | 0608 | Decide and land the ownership surface for compound pipeline shell | done |
 | 0609 | Resolve role-addressed coordination for agent wait and message | done |
-| 0723 | Upgrade task-pipeline precheck for deterministic low-latency execution | todo |
+| 0723 | Upgrade task-pipeline precheck for deterministic low-latency execution | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

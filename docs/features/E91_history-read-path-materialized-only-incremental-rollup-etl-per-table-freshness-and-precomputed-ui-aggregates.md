@@ -303,6 +303,7 @@ Feature: History read path materialized-only: incremental rollup ETL, per-table 
 | 0744 | Sort and paginate session listing in SQL on both read paths | done |
 | 0745 | Verify the History surface is unchanged and record the latency result | done |
 | 0746 | Import ledger retention to reduce database size without affecting board reads | done |
+| 0763 | Bound the whole-corpus rollup derivations: candidate-set design for loop findings and ranked steps, and a covering index for source summary | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
