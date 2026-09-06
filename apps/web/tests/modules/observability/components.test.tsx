@@ -9,7 +9,6 @@ import ColumnCustomizer, {
     saveVisibleColumns,
     validateColumnKeys,
 } from '../../../src/modules/observability/ColumnCustomizer';
-import JobsTab from '../../../src/modules/observability/JobsTab';
 import {
     RETENTION_COPY,
     RetentionBadge,
@@ -214,9 +213,22 @@ function installObservabilityFetchMock(): string[] {
                 ],
             });
         }
+        if (url.includes('/jobs/schedules')) {
+            return jsonResponse({
+                schedules: [],
+            });
+        }
         if (url.includes('/jobs/stats')) {
             return jsonResponse({
                 stats: { pending: 2, processing: 1, completed: 3, failed: 0 },
+            });
+        }
+        if (url.includes('/jobs')) {
+            return jsonResponse({
+                jobs: [],
+                total: 0,
+                hasMore: false,
+                countsByStatus: { all: 0, pending: 0, processing: 0, completed: 0, failed: 0 },
             });
         }
         if (url.includes('/messages/inbox')) {
@@ -300,12 +312,9 @@ describe('observability components', () => {
         expect(getByRole('tab', { name: 'Jobs' }).getAttribute('aria-selected')).toBe('true');
         expect(getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('observability-tab-jobs');
 
-        await waitFor(() => expect(queryAllByText('job-1').length).toBeGreaterThan(0));
-        expect(getByText('Pending')).toBeDefined();
-        expect(getByText('2')).toBeDefined();
-        expect(calls.some((url) => url.includes('/jobs/stats'))).toBe(true);
-        expect(calls.some((url) => url.includes('prefix=queue'))).toBe(true);
-        expect(calls.some((url) => url.includes('prefix=scheduler'))).toBe(true);
+        await waitFor(() => expect(getByTestId('observability-jobs-tab')).toBeDefined());
+        expect(calls.some((url) => url.includes('/jobs'))).toBe(true);
+        expect(calls.some((url) => url.includes('/jobs/schedules'))).toBe(true);
 
         // Switch back to System Events
         fireEvent.click(getByRole('tab', { name: 'System Events' }));
@@ -1427,248 +1436,6 @@ describe('observability components', () => {
         await waitFor(() => expect(failed.getByRole('alert').textContent).toContain('tool-use fetch failed: 503'));
     });
 
-    test('jobs tab fetches queue and scheduler events via server-side prefix filter (R9)', async () => {
-        const calls = installObservabilityFetchMock();
-        render(<JobsTab />);
-
-        await waitFor(() => expect(calls.some((url) => url.includes('prefix=queue'))).toBe(true));
-        expect(calls.some((url) => url.includes('prefix=scheduler'))).toBe(true);
-        // No unfiltered history call - jobs tab never slices a client-side page.
-        expect(calls.some((url) => url.includes('/events/history?limit=50') && !url.includes('prefix='))).toBe(false);
-    });
-
-    test('jobs tab renders structured job fields not raw JSON blob (R2/R10)', async () => {
-        // Custom mock with failed/retrying events that carry attempt + error.
-        const calls: string[] = [];
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const url = input instanceof Request ? input.url : String(input);
-            calls.push(url);
-            if (url.includes('prefix=queue')) {
-                return jsonResponse({
-                    events: [
-                        {
-                            id: 'q1',
-                            eventName: 'queue.job.failed',
-                            occurredAt: '2026-07-04T20:10:00.000Z',
-                            actor: null,
-                            payload: { jobId: 'job-42', type: 'indexer', error: 'ECONNREFUSED', attempt: 3 },
-                        },
-                        {
-                            id: 'q2',
-                            eventName: 'queue.job.retrying',
-                            occurredAt: '2026-07-04T20:09:00.000Z',
-                            actor: null,
-                            payload: { jobId: 'job-42', type: 'indexer', attempt: 2, nextRetryAt: 1783267800000 },
-                        },
-                    ],
-                    count: 2,
-                    catalog: [],
-                });
-            }
-            if (url.includes('prefix=scheduler')) {
-                return jsonResponse({
-                    events: [
-                        {
-                            id: 's1',
-                            eventName: 'scheduler.job.executed',
-                            occurredAt: '2026-07-04T20:08:00.000Z',
-                            actor: null,
-                            payload: { name: 'cleanup', durationMs: 1250 },
-                        },
-                    ],
-                    count: 1,
-                    catalog: [],
-                });
-            }
-            if (url.includes('/jobs/stats')) {
-                return jsonResponse({ stats: { pending: 0, processing: 1, completed: 5, failed: 1 } });
-            }
-            return new Response('not found', { status: 404 });
-        }) as unknown as typeof fetch);
-
-        const { container, getByText, queryByText } = render(<JobsTab />);
-
-        // Job identity surfaces as a scannable field.
-        await waitFor(() => expect(getByText('job-42')).toBeDefined());
-        // State badge - "failed" state renders.
-        expect(getByText('failed')).toBeDefined();
-        // Attempt count surfaces as a first-class field.
-        expect(getByText('3')).toBeDefined();
-        // Failure reason surfaces as text, not buried in JSON.
-        expect(getByText('ECONNREFUSED')).toBeDefined();
-        // Scheduler duration surfaces.
-        expect(getByText('1.3s')).toBeDefined();
-        // Queue story duration is derived from the oldest to newest correlated event.
-        expect(getByText('60.0s')).toBeDefined();
-        const feedItems = container.querySelectorAll('[data-jobs-tab] ul > li');
-        expect(feedItems).toHaveLength(2);
-        expect(feedItems[0]?.textContent).toContain('job-42');
-        expect(feedItems[1]?.textContent).toContain('cleanup');
-        // Raw JSON blob should NOT be visible by default (collapsed in <details>).
-        expect(queryByText('"jobId"')).toBeNull();
-    });
-
-    test('jobs tab renders explicit empty state when no job events match (R5/R12)', async () => {
-        const calls: string[] = [];
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const url = input instanceof Request ? input.url : String(input);
-            calls.push(url);
-            if (url.includes('/events/history')) {
-                return jsonResponse({ events: [], count: 0, catalog: [] });
-            }
-            if (url.includes('/jobs/stats')) {
-                return jsonResponse({ stats: { pending: 0, processing: 0, completed: 0, failed: 0 } });
-            }
-            return new Response('not found', { status: 404 });
-        }) as unknown as typeof fetch);
-
-        const { getByText } = render(<JobsTab />);
-
-        await waitFor(() => expect(getByText(/No job events/)).toBeDefined());
-        // Stats cards still render even with empty event list.
-        expect(getByText('Pending')).toBeDefined();
-    });
-
-    test('jobs tab renders queue counters from /api/jobs/stats (R4/R11)', async () => {
-        const calls: string[] = [];
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const url = input instanceof Request ? input.url : String(input);
-            calls.push(url);
-            if (url.includes('/events/history')) {
-                return jsonResponse({ events: [], count: 0, catalog: [] });
-            }
-            if (url.includes('/jobs/stats')) {
-                return jsonResponse({ stats: { pending: 7, processing: 3, completed: 42, failed: 2 } });
-            }
-            return new Response('not found', { status: 404 });
-        }) as unknown as typeof fetch);
-
-        const { getByText } = render(<JobsTab />);
-
-        await waitFor(() => expect(getByText('Pending')).toBeDefined());
-        expect(getByText('7')).toBeDefined();
-        expect(getByText('3')).toBeDefined();
-        expect(getByText('42')).toBeDefined();
-        expect(getByText('2')).toBeDefined();
-    });
-
-    test('jobs tab queries include since parameter when timeRange is specified (J92 R3, R4)', async () => {
-        const calls: string[] = [];
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const url = input instanceof Request ? input.url : String(input);
-            calls.push(url);
-            if (url.includes('/events/history')) {
-                return jsonResponse({ events: [], count: 0, catalog: [] });
-            }
-            if (url.includes('/jobs/stats')) {
-                return jsonResponse({ stats: { pending: 1, processing: 0, completed: 0, failed: 0 } });
-            }
-            return new Response('not found', { status: 404 });
-        }) as unknown as typeof fetch);
-
-        const { getByText, rerender } = render(<JobsTab timeRange="1h" />);
-
-        await waitFor(() => expect(calls.some((u) => u.includes('prefix=queue') && u.includes('since='))).toBe(true));
-        expect(calls.some((u) => u.includes('prefix=scheduler') && u.includes('since='))).toBe(true);
-        const queueUrl = new URL(calls.find((u) => u.includes('prefix=queue')) ?? 'http://invalid');
-        const schedulerUrl = new URL(calls.find((u) => u.includes('prefix=scheduler')) ?? 'http://invalid');
-        expect(queueUrl.searchParams.get('limit')).toBe('50');
-        expect(schedulerUrl.searchParams.get('limit')).toBe('50');
-        expect(queueUrl.searchParams.get('since')).toBe(schedulerUrl.searchParams.get('since'));
-        expect(getByText('Current Queue State')).toBeDefined();
-        expect(getByText('Last 1h')).toBeDefined();
-
-        // Rerender with timeRange="all" -> omits since
-        calls.length = 0;
-        rerender(<JobsTab timeRange="all" />);
-        await waitFor(() => expect(calls.some((u) => u.includes('prefix=queue') && !u.includes('since='))).toBe(true));
-        expect(calls.some((u) => u.includes('prefix=scheduler') && !u.includes('since='))).toBe(true);
-        expect(getByText('All time')).toBeDefined();
-    });
-
-    test('jobs tab ignores a superseded range response even when fetch does not reject on abort (J92 R4)', async () => {
-        let releaseFirstStats!: (response: Response) => void;
-        const firstStats = new Promise<Response>((resolve) => {
-            releaseFirstStats = resolve;
-        });
-        const firstSignals: AbortSignal[] = [];
-        let statsCalls = 0;
-
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const request = input instanceof Request ? input : new Request(input);
-            const url = request.url;
-            if (url.includes('/jobs/stats')) {
-                statsCalls += 1;
-                if (statsCalls === 1) {
-                    firstSignals.push(request.signal);
-                    return firstStats;
-                }
-                return jsonResponse({ stats: { pending: 9, processing: 0, completed: 0, failed: 0 } });
-            }
-
-            const superseded = url.includes('since=');
-            if (superseded) firstSignals.push(request.signal);
-            if (url.includes('prefix=queue')) {
-                return jsonResponse({
-                    events: [
-                        {
-                            id: superseded ? 'old-event' : 'new-event',
-                            eventName: 'queue.job.completed',
-                            occurredAt: superseded ? '2026-07-04T20:00:00.000Z' : '2026-07-04T21:00:00.000Z',
-                            actor: null,
-                            payload: { jobId: superseded ? 'old-job' : 'new-job', type: 'test' },
-                        },
-                    ],
-                    count: 1,
-                    catalog: [],
-                });
-            }
-            if (url.includes('prefix=scheduler')) {
-                return jsonResponse({ events: [], count: 0, catalog: [] });
-            }
-            return new Response('not found', { status: 404 });
-        }) as unknown as typeof fetch);
-
-        const view = render(<JobsTab timeRange="1h" />);
-        await waitFor(() => expect(firstSignals).toHaveLength(3));
-
-        view.rerender(<JobsTab timeRange="all" />);
-        await waitFor(() => expect(view.getByText('new-job')).toBeDefined());
-        expect(firstSignals.every((signal) => signal.aborted)).toBe(true);
-
-        await act(async () => {
-            releaseFirstStats(jsonResponse({ stats: { pending: 1, processing: 0, completed: 0, failed: 0 } }));
-            await new Promise((resolve) => setTimeout(resolve, 0));
-        });
-
-        expect(view.queryByText('old-job')).toBeNull();
-        expect(view.getByText('new-job')).toBeDefined();
-    });
-
-    test('jobs tab reports a request error and recovers on the next range selection (J92 R2/R4/R6)', async () => {
-        let failStats = true;
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const url = input instanceof Request ? input.url : String(input);
-            if (url.includes('/jobs/stats')) {
-                if (failStats) return new Response('unavailable', { status: 503 });
-                return jsonResponse({ stats: { pending: 4, processing: 0, completed: 0, failed: 0 } });
-            }
-            if (url.includes('/events/history')) {
-                return jsonResponse({ events: [], count: 0, catalog: [] });
-            }
-            return new Response('not found', { status: 404 });
-        }) as unknown as typeof fetch);
-
-        const view = render(<JobsTab timeRange="1h" />);
-        await waitFor(() => expect(view.getByRole('alert').textContent).toContain('job stats fetch failed: 503'));
-
-        failStats = false;
-        view.rerender(<JobsTab timeRange="all" />);
-        await waitFor(() => expect(view.getByText('Current Queue State')).toBeDefined());
-        expect(view.queryByRole('alert')).toBeNull();
-        expect(view.getByText('4')).toBeDefined();
-    });
-
     // -----------------------------------------------------------------------
     // TasksTab (task 0377) - pipeline run list backed by run store
     // -----------------------------------------------------------------------
@@ -2627,56 +2394,6 @@ describe('System Events customizable columns, sorting, and cell polish (J92 R1-R
 });
 
 describe('J92 regression coverage', () => {
-    test('jobs tab hides prior range rows while the replacement request is pending (0654 R4)', async () => {
-        let statsCalls = 0;
-        let releaseSecondStats!: (response: Response) => void;
-        const secondStats = new Promise<Response>((resolve) => {
-            releaseSecondStats = resolve;
-        });
-
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const url = input instanceof Request ? input.url : String(input);
-            if (url.includes('/jobs/stats')) {
-                statsCalls += 1;
-                if (statsCalls === 2) return secondStats;
-                return jsonResponse({ stats: { pending: 1, processing: 0, completed: 0, failed: 0 } });
-            }
-            if (url.includes('prefix=queue')) {
-                const priorRange = url.includes('since=');
-                return jsonResponse({
-                    events: [
-                        {
-                            id: priorRange ? 'old-event' : 'new-event',
-                            eventName: 'queue.job.completed',
-                            occurredAt: priorRange ? '2026-07-04T20:00:00.000Z' : '2026-07-04T21:00:00.000Z',
-                            actor: null,
-                            payload: { jobId: priorRange ? 'old-job' : 'new-job', type: 'test' },
-                        },
-                    ],
-                    count: 1,
-                    catalog: [],
-                });
-            }
-            if (url.includes('prefix=scheduler')) {
-                return jsonResponse({ events: [], count: 0, catalog: [] });
-            }
-            return new Response('not found', { status: 404 });
-        }) as unknown as typeof fetch);
-
-        const view = render(<JobsTab timeRange="1h" />);
-        await waitFor(() => expect(view.getByText('old-job')).toBeDefined());
-
-        view.rerender(<JobsTab timeRange="all" />);
-        await waitFor(() => expect(statsCalls).toBe(2));
-        expect(view.queryByText('old-job')).toBeNull();
-        expect(view.getByText(/Loading jobs/)).toBeDefined();
-
-        await act(async () => {
-            releaseSecondStats(jsonResponse({ stats: { pending: 2, processing: 0, completed: 0, failed: 0 } }));
-        });
-        await waitFor(() => expect(view.getByText('new-job')).toBeDefined());
-    });
-
     test('optional Agent column leaves a missing executor blank (0653 R3)', async () => {
         window.localStorage.setItem(
             'spur:observability:columns:v1',
