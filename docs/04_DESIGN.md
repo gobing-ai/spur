@@ -1238,6 +1238,22 @@ Sync feature status with linked task states via conservative forward-only deriva
   fall back to plain `spur feature sync` in a seeded project. The shells remain advisory (`exit 0`);
   the wrap-up gate emits explicit PASS/FAIL while leaving recovery to the operator. An empty wrap-up
   feature id fails loud with exit 1.
+- Wrap-up validated inputs (task 0783; audit 0781 F-04): `task-resolve` validates `${vars.tasks}`
+  exactly once into a deduplicated, first-seen-order list of canonical four-digit task ids at
+  `.spur/run/<runId>-wrapup-tasks.json` — malformed JSON, non-array/non-string/whitespace entries,
+  unresolvable or nonterminal tasks, and a missing `__runId` all record FAIL. Every
+  post-resolution consumer (route writer, doc-sync prompt, metrics, operator notes, cleanup prompt,
+  route guards) reads that capture instead of raw `vars.tasks`; a missing or corrupted capture
+  refuses progression. Metrics revalidates the capture, requires well-shaped `task show` output,
+  serializes rows with `jq`, and records PASS only after every append succeeds (a missing verdict
+  is `UNKNOWN` telemetry). `feature-transition` classifies the sync result: PASS requires a valid
+  proposal whose `featureId` matches `${vars.feature}` with no `gateBlocked`/`requiresConfirm`,
+  where an applied sync is freshly observed at the proposal target, or an unapplied no-op is an
+  observed `from == to`. Gate-blocked, confirmation-required, mismatched, partial (observed
+  off-target), malformed-stdout, and non-zero results record FAIL; the affected-feature gate runs
+  only diagnostically and cannot convert a failed sync into success. Dead raw-input re-parsing,
+  the `RUN_ID="wrapup"` fallback, and soft-success comments are removed; route reason strings are
+  unchanged.
 
 Task frontmatter supports `feature_link_declined: true` to record explicit operator deferral.
 

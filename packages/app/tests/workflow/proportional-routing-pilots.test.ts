@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadWorkflowDefFromText } from '@gobing-ai/ts-dual-workflow-engine';
@@ -43,7 +43,10 @@ describe('proportional routing pilots (task 0758)', () => {
         test('task-resolve state writes bounded route reason', () => {
             const taskResolve = wrapupDef.states.find((s: StateDef) => s.id === 'task-resolve');
             expect(taskResolve).toBeDefined();
-            const shellAction = taskResolve?.onEnter?.find((a) => a.kind === 'shell');
+            // Since task 0783 the FIRST shell is validation (writes the resolve status), and the
+            // route writer is the second shell — it reads the validated run-scoped capture only.
+            const shellActions = taskResolve?.onEnter?.filter((a) => a.kind === 'shell') ?? [];
+            const shellAction = shellActions[shellActions.length - 1];
             expect(shellAction).toBeDefined();
             const cmd = String(shellAction?.options?.command ?? '');
             expect(cmd).toContain('fast:evidence complete+consistent');
@@ -180,17 +183,27 @@ describe('proportional routing pilots (task 0758)', () => {
  * writers the engine actually executes and checks the artifact each one leaves behind.
  */
 describe('route reason writers are run-attributed (0758 R4/R5)', () => {
-    const shellOf = (def: WorkflowYaml, stateId: string): string => {
+    // Since task 0783, task-resolve's FIRST shell validates and resolves the wrap input, and the
+    // SECOND shell writes the route reason from the validated run-scoped capture. Route reasons
+    // are only written for a PASSing resolve, so these writer tests resolve through a done stub.
+    const resolveShells = (def: WorkflowYaml, stateId: string): string[] => {
         const state = def.states.find((s: StateDef) => s.id === stateId);
-        const action = state?.onEnter?.find((a) => a.kind === 'shell');
-        return String(action?.options?.command ?? '');
+        return (state?.onEnter ?? []).filter((a) => a.kind === 'shell').map((a) => String(a.options?.command ?? ''));
     };
 
-    const runWriter = (command: string, vars: Record<string, string>): { cwd: string } => {
-        const cwd = mkdtempSync(join(tmpdir(), 'route-writer-'));
-        const res = spawnSync('sh', ['-c', command], { cwd, env: { ...process.env, ...vars } });
-        expect(res.status).toBe(0);
-        return { cwd };
+    const doneStubSpur = (cwd: string): string => {
+        const stub = join(cwd, 'stub-spur');
+        writeFileSync(stub, '#!/bin/sh\necho \'{"frontmatter":{"status":"done"}}\'\n');
+        chmodSync(stub, 0o755);
+        return stub;
+    };
+
+    const runResolveShells = (command: string[], vars: Record<string, string>, cwd: string): void => {
+        const spurBin = doneStubSpur(cwd);
+        for (const cmd of command) {
+            const res = spawnSync('sh', ['-c', cmd], { cwd, env: { ...process.env, ...vars, spurBin } });
+            expect(res.status).toBe(0);
+        }
     };
 
     const wrapupDef = loadWorkflowDefFromText(
@@ -198,11 +211,16 @@ describe('route reason writers are run-attributed (0758 R4/R5)', () => {
         join(WORKFLOWS_DIR, 'wrapup-pipeline.yaml'),
     ) as unknown as WorkflowYaml;
     test('wrapup-pipeline writes the reason under the run id and attributes the log line', () => {
-        const { cwd } = runWriter(shellOf(wrapupDef, 'task-resolve'), {
-            __runId: 'run_alpha',
-            mode: 'unknown',
-            tasks: '["0001"]',
-        });
+        const cwd = mkdtempSync(join(tmpdir(), 'route-writer-'));
+        runResolveShells(
+            resolveShells(wrapupDef, 'task-resolve'),
+            {
+                __runId: 'run_alpha',
+                mode: 'unknown',
+                tasks: '["0001"]',
+            },
+            cwd,
+        );
         expect(readFileSync(join(cwd, '.spur/run/run_alpha-route-reason.txt'), 'utf8').trim()).toBe(
             'safety:unknown evidence quality',
         );
@@ -213,16 +231,12 @@ describe('route reason writers are run-attributed (0758 R4/R5)', () => {
 
     test('a second wrapup run does not overwrite the first run route claim', () => {
         const cwd = mkdtempSync(join(tmpdir(), 'route-writer-'));
-        const cmd = shellOf(wrapupDef, 'task-resolve');
+        const shells = resolveShells(wrapupDef, 'task-resolve');
         for (const [id, mode] of [
             ['run_one', 'fast'],
             ['run_two', 'conflict'],
-        ]) {
-            const res = spawnSync('sh', ['-c', cmd], {
-                cwd,
-                env: { ...process.env, __runId: id, mode, tasks: '["0001"]' },
-            });
-            expect(res.status).toBe(0);
+        ] as const) {
+            runResolveShells(shells, { __runId: id, mode, tasks: '["0001"]' }, cwd);
         }
         expect(readFileSync(join(cwd, '.spur/run/run_one-route-reason.txt'), 'utf8').trim()).toBe(
             'fast:evidence complete+consistent',

@@ -147,6 +147,18 @@ roster verifies directly with zero execution model calls; `feature-verify` runs
 `feature check --as done --json` exactly once and sibling guards read only the captured
 `.status` decision. No `--strict` elevation, no whole-corpus scan, no new planning flag.
 
+**Implemented (task 0783, 2026-09-06):** `wrapup-pipeline.yaml` v2 consumes only validated inputs
+(audit 0781 F-04). Task resolution validates once into a run-scoped capture of canonical
+four-digit task ids (whitespace rejected, not trimmed; duplicates keep first-seen order); routing,
+doc-sync prompts, metrics, notes, and guards read the capture — never raw `vars.tasks` — and a
+missing or corrupted capture refuses progression. Metrics rows are jq-serialized and record PASS
+only after every append succeeds. Feature sync is truthful: gate-blocked rc=0,
+confirmation-required, mismatched, partial (observed off-target), malformed, and non-zero sync
+results record FAIL; an applied sync must be freshly observed at the proposal target and an
+unapplied no-op requires observed `from == to`; the affected-feature gate is diagnostic-only and
+cannot rescue a failed sync. Dead raw-input re-parsing, the `RUN_ID="wrapup"` fallback, and
+soft-success comments are removed; route reason strings stay byte-identical.
+
 Use the actual batch schema's Design/Plan/AC fields, retain exact feature scenario titles, and apply
 dependency ordering through CLI writes. Current YAML prose incorrectly excludes these schema fields;
 P5 repairs that prose. The running YAML is not hot-edited. Task batch creation is planning only.

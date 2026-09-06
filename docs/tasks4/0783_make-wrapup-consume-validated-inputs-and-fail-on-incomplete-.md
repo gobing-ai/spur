@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Make wrapup consume validated inputs and fail on incomplete synchronization"
-status: todo
+status: done
 template: issue
 created_at: 2026-09-06T18:27:45.332Z
-updated_at: "2026-09-06T19:03:57.906Z"
+updated_at: "2026-09-06T20:33:18.289Z"
 feature_id: D6
 priority: P1
 ---
@@ -14,11 +14,11 @@ priority: P1
 ### Background
 Audit 0781 F-04 remains present in wrapup-pipeline.yaml. The first reason action and later guards parse raw tasks separately; the validation regex accepts whitespace-only strings, and shell word splitting then executes zero lookups. Metrics ignores jq/lookup exit status and builds JSON by printf interpolation. feature-sync-bounded.ts explicitly exits 0 for blocked and suppressed-blocked proposals; applied alone cannot prove completion. Existing classifySyncResult checks gateBlocked before applied. Preserve that producer contract and correct the workflow consumer.
 ### Requirements
-- [ ] R1. Parse raw tasks once into a first-seen-order, deduplicated JSON array of canonical four-digit WBS strings. Reject malformed JSON, non-arrays, non-strings, whitespace, invalid WBS, missing __runId, failed/malformed task lookups, and nonterminal task status. Only a successfully validated [] may skip.
-- [ ] R2. Every route, model prompt, metrics consumer and operator note after resolution uses the normalized run-scoped capture, never raw tasks. A missing/corrupted capture or status refuses progression; preserve one doc-sync/learnings model hop on the safety route and keep fast activation dormant.
-- [ ] R3. Metrics revalidate the capture, require successful well-shaped task lookups, serialize each row with jq rather than interpolated printf JSON, and write PASS only after all required appends succeed. Missing verdict remains UNKNOWN telemetry, never proof of completion; existing valid prior rows survive failure.
-- [ ] R4. Required feature sync succeeds only with a valid matching proposal, no gateBlocked/requiresConfirm condition, and a freshly observed feature status equal to proposal.to. applied:false is a successful no-op only when from == to and that status is observed. Nonzero, malformed, partial, blocked or unreadable outcomes fail explicitly; an affected-feature check cannot convert failed sync into success.
-- [ ] R5. Remove dead duplicate raw-input parsing, fixed run-ID fallback and contradictory soft-success comments. Preserve prior artifacts, exact failure routing, explicit featureGateCmd overrides, and consent-only branch cleanup without Git operations.
+- [x] R1. Parse raw tasks once into a first-seen-order, deduplicated JSON array of canonical four-digit WBS strings. Reject malformed JSON, non-arrays, non-strings, whitespace, invalid WBS, missing __runId, failed/malformed task lookups, and nonterminal task status. Only a successfully validated [] may skip.
+- [x] R2. Every route, model prompt, metrics consumer and operator note after resolution uses the normalized run-scoped capture, never raw tasks. A missing/corrupted capture or status refuses progression; preserve one doc-sync/learnings model hop on the safety route and keep fast activation dormant.
+- [x] R3. Metrics revalidate the capture, require successful well-shaped task lookups, serialize each row with jq rather than interpolated printf JSON, and write PASS only after all required appends succeed. Missing verdict remains UNKNOWN telemetry, never proof of completion; existing valid prior rows survive failure.
+- [x] R4. Required feature sync succeeds only with a valid matching proposal, no gateBlocked/requiresConfirm condition, and a freshly observed feature status equal to proposal.to. applied:false is a successful no-op only when from == to and that status is observed. Nonzero, malformed, partial, blocked or unreadable outcomes fail explicitly; an affected-feature check cannot convert failed sync into success.
+- [x] R5. Remove dead duplicate raw-input parsing, fixed run-ID fallback and contradictory soft-success comments. Preserve prior artifacts, exact failure routing, explicit featureGateCmd overrides, and consent-only branch cleanup without Git operations.
 ### Acceptance Criteria
 ```gherkin
 Feature: Truthful wrapup outcomes
@@ -76,17 +76,70 @@ Execution budget: one owned task at a time; checkpoint after 45 minutes or two u
 <!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
 
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/tests/workflow/proportional-routing-pilots.test.ts:186` |
+| `packages/app/tests/workflow/proportional-routing-pilots.test.ts:191` |
+| `packages/app/tests/workflow/proportional-routing-pilots.test.ts:194` |
+| `packages/app/tests/workflow/proportional-routing-pilots.test.ts:214` |
+| `packages/app/tests/workflow/proportional-routing-pilots.test.ts:234` |
+| `packages/app/tests/workflow/proportional-routing-pilots.test.ts:238` |
+| `packages/app/tests/workflow/proportional-routing-pilots.test.ts:3` |
+| `packages/app/tests/workflow/proportional-routing-pilots.test.ts:46` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:151` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:176` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:182` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:196` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:199` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:2` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:212` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:219` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:231` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:238` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:260` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:282` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:286` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:300` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:439` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:444` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:468` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:558` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:606` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:609` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:614` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:784` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:9` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:98` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `config/workflows/wrapup-pipeline.yaml:154` — validation accepts only `type == "array" and all(.[]; type == "string" and test("^[0-9]{4}$"))` (whitespace/leading/trailing rejected, not trimmed); `:159` first-seen dedup via `reduce .[] as $w`; `:146-148` empty `__runId` refuses the legacy fixed-path fallback; `:160-175` per-member `task show` lookup requires exit-0 well-formed status in {done,cancelled}, else RESOLVE_RC=1 → `failed:` reason + FAIL status; only the validated capture publishes to `.spur/run/<runId>-wrapup-tasks.json`, so only a validated `[]` can skip. Tests: `packages/app/tests/workflow/wrapup-pipeline.test.ts:301` (malformed/non-array/non-string/whitespace-only/leading/trailing/non-canonical all FAIL), `:330` (duplicate valid ids keep first-seen order, not sorted). |
+| R2 | MET | `config/workflows/wrapup-pipeline.yaml:188-219` — route writer runs AFTER validation, refuses empty `__runId` (`:190-192`), short-circuits on FAIL resolve (`:195-197`), computes N from the validated capture only (`:199`, corrupt/missing → -1, no skip claim); route edges `:472-496` read `jq length .spur/run/$__runId-wrapup-tasks.json` (never raw `$tasks`), -1 satisfies no numeric edge → always-defense `failed`; doc-sync model prompt reads the capture `:235-241`; cleanup prompt `:424` and done operator note `:434` reference the validated list. Test: route reason writers run-attributed, second run does not overwrite first (`wrapup-pipeline.test.ts` 0758 R4/R5 group, passed this run). Residual (P4, by design): done-state checkpoint writer `:439` still echoes raw `$tasks` — the noncanonical terminal checkpoint writer 0784 owns per the frozen design; not one of R2's consumer classes. |
+| R3 | MET | `config/workflows/wrapup-pipeline.yaml:283-286` — metrics revalidates the capture with the same canonical-shape jq gate; `:287-296` requires well-shaped lookup (`(.frontmatter.status // .status) != null`), else METRICS_RC=1; `:295` rows serialized via `jq -cn --arg` (wbs/feature_id/status/verdict/timestamp), no interpolated printf; `:297-301` every append exit checked, PASS written only when METRICS_RC=0; missing verdict stays UNKNOWN telemetry. Tests: `wrapup-pipeline.test.ts:444-445` (asserts `jq -cn`, no interpolated printf JSON), `:517-535` (deliberate append failure records FAIL and prior valid rows survive), `:558` (missing verdict → UNKNOWN, never proof of completion). |
+| R4 | MET | `config/workflows/wrapup-pipeline.yaml:356-357` — fresh `feature show` OBSERVED status (unreadable sentinel otherwise); `:363-381` classification: nonzero rc fails, sync output must be an object with string proposal.featureId/from/to + boolean applied, featureId must match `$feature`, `gateBlocked=true` fails (`:371`), `requiresConfirm=true` fails (`:373`), applied=true requires OBSERVED == proposal.to (`:375-376`), applied=false requires from==to AND observed==to (`:377-379`); `:383-390` affected-feature gate runs diagnostically after applied/partial attempts but `:395-397` PASS requires SYNC_OK=1 AND gate != FAIL — a gate PASS can never convert a failed sync. Tests: `wrapup-pipeline.test.ts:610` (asserts `.proposal.gateBlocked` consumed), `:634` (gate-blocked rc=0 sync is failure, not no-change success — audit F-04), plus from==to observed no-op success path (`:401` output). |
+| R5 | MET | `config/workflows/wrapup-pipeline.yaml:75` — definition version "1" → "2"; pre-validation route-writer block with raw `echo "$tasks |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Invalid wrap input never succeeds | MET | test | `packages/app/tests/workflow/wrapup-pipeline.test.ts:301-330` — whitespace-only `["  "]`, leading/trailing whitespace, non-canonical entries all FAIL (never skip/PASS); first-seen order retained for duplicates; failed lookups record FAIL and preserve reason/status artifacts; only validated [] skips. Re-run this turn: 46 pass / 0 fail. |
+| Scenario: R2 — Blocked synchronization is not no-change success | MET | test | `packages/app/tests/workflow/wrapup-pipeline.test.ts:634` — gateBlocked rc=0 sync records FAIL with prior artifacts intact; `:373` requiresConfirm fails; partial applied=true with off-target observed fails (`wrapup-pipeline.yaml:375-376`); from==to observed no-op remains successful (`:401`). Re-run this turn: 46 pass / 0 fail. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - docs/plans/2026-09-06-workflow-conflict-audit.md — F-04; task 0770.
 - docs/00_ADR.md — ADR-022, ADR-107 Option B, ADR-108; docs/99_PROJECT_CONSTITUTION.md T10/T11.
@@ -94,3 +147,6 @@ Execution budget: one owned task at a time; checkpoint after 45 minutes or two u
 - packages/app/src/workflow/actions/file-read-into-var.ts; packages/domain/src/planning/schema.ts.
 - Task 0784 owns later terminal-checkpoint cleanup.
 ### History
+- 2026-09-06T20:19:28.324Z todo → wip (system)
+- 2026-09-06T20:33:17.492Z wip → testing (system)
+- 2026-09-06T20:33:18.289Z testing → done (system)
