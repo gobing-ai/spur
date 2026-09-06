@@ -12,7 +12,7 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "@gobing-ai/spur-domain": "workspace:0.3.73",
+        "@gobing-ai/spur-domain": "workspace:0.3.74",
         "@orpc/contract": "catalog:",
         "zod": "catalog:"
     },
@@ -20,5 +20,5 @@
         "@types/bun": "catalog:",
         "typescript": "catalog:"
     },
-    "version": "0.3.73"
+    "version": "0.3.74"
 }
