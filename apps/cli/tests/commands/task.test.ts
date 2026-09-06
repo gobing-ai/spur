@@ -10,7 +10,7 @@ import { existsSync, rmSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rename, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { TaskService, WbsCollisionError } from '@gobing-ai/spur-app';
+import { FINDING_CODES, TaskCandidateInvalidError, TaskService, WbsCollisionError } from '@gobing-ai/spur-app';
 import * as configModule from '@gobing-ai/spur-config/loader';
 import { apiErrorSchema } from '@gobing-ai/spur-contracts';
 import { main } from '../../src/index';
@@ -2867,6 +2867,99 @@ Only this section exists.
             expect(output.errors.length).toBeGreaterThan(0);
             expect(output.errors.join('')).toContain('wbs-collision');
             expect(output.errors.join('')).toContain('0003');
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    // F21 task 0787 R4/AC-R3: the create/batch-create failure surface emits ONE
+    // parseable result via writeCreateJsonError — raw `--json` gets the ADR-091
+    // `ok:false` payload on stdout, `--json --json-envelope` the canonical
+    // apiErrorSchema envelope (CLI-local code carried in details.cliCode), and
+    // non-JSON invocations keep stderr prose. candidate-invalid exits 1 and
+    // carries the checker findings. (The JSON-mode duplicate-WBS push is covered
+    // by the 0416 R6 test above.)
+    const candidateFindings = [
+        {
+            layer: 'L3' as const,
+            code: FINDING_CODES.L3_AC_EMPTY,
+            severity: 'error' as const,
+            section: 'Acceptance Criteria',
+            message: 'Acceptance Criteria has no criteria.',
+        },
+    ];
+
+    test('create exits 1 with candidate-invalid JSON carrying findings (F21 0787 R4)', async () => {
+        const spy = spyOn(TaskService.prototype, 'create').mockImplementation(async () => {
+            throw new TaskCandidateInvalidError('Bad candidate', candidateFindings);
+        });
+        try {
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'create', 'Bad candidate', '--json'], { cwd, output });
+            expect(exitCode).toBe(1);
+            expect(output.errors).toEqual([]);
+            expect(JSON.parse(lastMessage(output))).toMatchObject({
+                ok: false,
+                error: { code: 'candidate-invalid', findings: candidateFindings },
+            });
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('create --json --json-envelope emits an apiErrorSchema envelope with cliCode + findings (F21 0787 R4)', async () => {
+        const spy = spyOn(TaskService.prototype, 'create').mockImplementation(async () => {
+            throw new TaskCandidateInvalidError('Bad candidate', candidateFindings);
+        });
+        try {
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'create', 'Bad candidate', '--json', '--json-envelope'], {
+                cwd,
+                output,
+            });
+            expect(exitCode).toBe(1);
+            const parsed = apiErrorSchema.parse(JSON.parse(lastMessage(output)));
+            expect(parsed.ok).toBe(false);
+            expect(parsed.error.code).toBe('INTERNAL_ERROR');
+            expect(parsed.error.message).toContain('Bad candidate');
+            const details = parsed.error.details as Record<string, unknown>;
+            expect(details.cliCode).toBe('candidate-invalid');
+            expect(details.findings).toEqual(candidateFindings);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('create exits 1 with human-readable error on TaskCandidateInvalidError without --json (F21 0787 R4)', async () => {
+        const spy = spyOn(TaskService.prototype, 'create').mockImplementation(async () => {
+            throw new TaskCandidateInvalidError('Bad candidate', candidateFindings);
+        });
+        try {
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'create', 'Bad candidate'], { cwd, output });
+            expect(exitCode).toBe(1);
+            // Non-JSON path: stderr prose, stdout untouched.
+            expect(output.messages).toEqual([]);
+            expect(output.errors.join('')).toContain('rejected before persistence');
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('batch-create exits 1 with candidate-invalid JSON carrying findings (F21 0787 R4)', async () => {
+        const batchFile = join(cwd, 'batch-candidate-invalid.json');
+        await Bun.write(batchFile, JSON.stringify([{ name: 'Bad batch item' }]));
+        const spy = spyOn(TaskService.prototype, 'batchCreate').mockImplementation(async () => {
+            throw new TaskCandidateInvalidError('Bad batch item', candidateFindings, 'batch item 1/1');
+        });
+        try {
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'batch-create', '--file', batchFile, '--json'], { cwd, output });
+            expect(exitCode).toBe(1);
+            expect(JSON.parse(lastMessage(output))).toMatchObject({
+                ok: false,
+                error: { code: 'candidate-invalid', findings: candidateFindings },
+            });
         } finally {
             spy.mockRestore();
         }

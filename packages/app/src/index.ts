@@ -450,6 +450,7 @@ export {
     DuplicateFollowUpError,
     SectionMutationError,
     TASK_ACTION_COMMANDS,
+    TaskCandidateInvalidError,
     TaskService,
     WbsCollisionError,
 } from './services/task-service';

@@ -18,6 +18,7 @@ import {
     type SectionMatrix,
     SectionMutationError,
     TASK_LIFECYCLE_PROFILE,
+    TaskCandidateInvalidError,
     TaskCheckService,
     TaskLocator,
     TaskService,
@@ -133,6 +134,39 @@ function renderMigrationReport(report: MigrationReport, dryRun: boolean, corpusD
     return lines.join('\n');
 }
 
+/**
+ * Emit ONE parseable error result for a failed task create/batch-create under
+ * `--json` (F21 task 0787 R4): raw mode gets the ADR-091 `ok:false` payload on
+ * STDOUT — `writeJsonError`'s raw mode writes plain prose to stderr and leaves
+ * stdout empty, which automation reading stdout cannot parse — and enveloped
+ * mode gets the canonical error envelope with the CLI-local code carried in
+ * `details.cliCode`. Non-JSON invocations keep the stderr prose. Exit codes
+ * stay the caller's responsibility.
+ */
+function writeCreateJsonError(
+    context: CliContext,
+    options: { json?: boolean; jsonEnvelope?: boolean },
+    code: string,
+    message: string,
+    extra?: Record<string, unknown>,
+): void {
+    const text = typeof message === 'string' ? message : String(message);
+    if (options.json === true) {
+        const bare = text.startsWith('Error: ') ? text.slice('Error: '.length) : text;
+        context.output.write(
+            toEnvelopeJson(
+                { ok: false as const, error: { code, message: bare, ...(extra ?? {}) } },
+                {
+                    enveloped: options.jsonEnvelope,
+                    error: { code: 'INTERNAL_ERROR', message: bare, details: { cliCode: code, ...(extra ?? {}) } },
+                },
+            ),
+        );
+    } else {
+        context.output.error(text.startsWith('Error: ') ? text.slice('Error: '.length) : text);
+    }
+}
+
 /** Register the `spur task` command and its subcommands on the CLI program. */
 export function registerTaskCommand(program: Command, context: CliContext): void {
     const task = program.command('task').summary('manage tasks');
@@ -155,11 +189,11 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (title, options) => {
             if (options.template !== undefined && !(TASK_VARIANTS as readonly string[]).includes(options.template)) {
-                writeJsonError(
-                    context.output,
+                writeCreateJsonError(
+                    context,
                     options,
+                    'invalid-usage',
                     `Unknown template variant "${options.template}". Valid: ${TASK_VARIANTS.join(', ')}`,
-                    'VALIDATION_FAILED',
                 );
                 context.setExitCode(2);
                 return;
@@ -168,12 +202,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 options.dedupeWithin !== undefined &&
                 (!Number.isInteger(options.dedupeWithin) || options.dedupeWithin <= 0)
             ) {
-                writeJsonError(
-                    context.output,
-                    options,
-                    '--dedupe-within must be a positive integer',
-                    'VALIDATION_FAILED',
-                );
+                writeCreateJsonError(context, options, 'invalid-usage', '--dedupe-within must be a positive integer');
                 context.setExitCode(2);
                 return;
             }
@@ -271,8 +300,16 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         context.output.error(err.message);
                     }
                     context.setExitCode(3);
+                } else if (err instanceof TaskCandidateInvalidError) {
+                    // F21 task 0787 (R4): invalid candidate input → ONE parseable
+                    // `--json` error (raw or enveloped) carrying the checker
+                    // findings; exit 1 (usage errors are 2, collision/dedupe 3).
+                    writeCreateJsonError(context, options, 'candidate-invalid', err.message, {
+                        findings: err.findings,
+                    });
+                    context.setExitCode(1);
                 } else {
-                    writeJsonError(context.output, options, String(err));
+                    writeCreateJsonError(context, options, 'create-failed', String(err));
                     context.setExitCode(1);
                 }
             }
@@ -971,8 +1008,15 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         context.output.error(err.message);
                     }
                     context.setExitCode(3);
+                } else if (err instanceof TaskCandidateInvalidError) {
+                    // F21 task 0787 (R4): an invalid batch item is invalid input →
+                    // ONE parseable `--json` error carrying the checker findings.
+                    writeCreateJsonError(context, options, 'candidate-invalid', err.message, {
+                        findings: err.findings,
+                    });
+                    context.setExitCode(1);
                 } else {
-                    writeJsonError(context.output, options, String(err));
+                    writeCreateJsonError(context, options, 'batch-create-failed', String(err));
                     context.setExitCode(1);
                 }
             }
@@ -1301,9 +1345,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         const msg =
                             `Duplicate WBS ${first.wbs} found in ${dup.length} files:\n` +
                             dup.map((h) => `  ${h.filePath}`).join('\n');
-                        if (json) {
-                            results.push({ wbs: first.wbs, pass: false, status: 'duplicate', findings: [msg] });
-                        } else {
+                        results.push({ wbs: first.wbs, pass: false, status: 'duplicate', findings: [msg] });
+                        if (!json) {
                             context.output.error(msg);
                         }
                     }

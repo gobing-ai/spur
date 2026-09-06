@@ -6,12 +6,14 @@ import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { SectionMatrix } from '../../src/services/planning-check-base';
 import { PlanningWriteService } from '../../src/services/planning-write-service';
+import { TaskCheckService } from '../../src/services/task-check';
 import { TaskLocator } from '../../src/services/task-locator';
 import {
     DuplicateFollowUpError,
     sectionIsBare,
     TASK_ACTION_COMMANDS,
     type TaskActionJob,
+    TaskCandidateInvalidError,
     TaskService,
     WbsCollisionError,
 } from '../../src/services/task-service';
@@ -214,22 +216,43 @@ describe('TaskService', () => {
             expect(raw).toContain('### Design');
         });
 
-        test('a feature-spec task is created at todo with the HITL-review sections', async () => {
-            // WHY: §2.3 — a task with a real spec is ready to execute (todo), and
-            // todo is the HITL gate, so Design + Acceptance Criteria + Plan must be
-            // present (as guidance placeholders) for review before any code.
+        test('a feature-linked bare capture lands at backlog and passes `task check` (F21 0787)', async () => {
+            // WHY (F21 0787 R2 supersedes the old featureId⇒todo rule): a task with
+            // no spec is not implementation-ready even when feature-linked. Status
+            // is now GRANTED by the checker's own policy, so a bare capture stays
+            // `backlog` and creation + checking agree by construction.
             const result = await svc.create({ title: 'Spec task', featureId: 'A' });
             const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
             const raw = await fs.readFile(result.ref.filePath);
             const doc = MarkdownDocument.parse(raw, 'task');
-            expect(doc.frontmatterData?.status).toBe('todo');
-            expect(raw).toContain('### Acceptance Criteria');
-            expect(raw).toContain('### Design');
-            expect(raw).toContain('### Plan');
-            // F92 R1: todo's matrix entry (required ∪ optional) carries the full
-            // scaffold, so Solution is present as an empty optional placeholder —
-            // the matrix, not a hand-authored creation list, decides the headings.
-            expect(raw).toContain('### Solution');
+            expect(doc.frontmatterData?.status).toBe('backlog');
+            expect(doc.frontmatterData?.feature_id).toBe('A');
+            expect(doc.frontmatterData?.template).toBe('feature-impl');
+            // The persisted content passes the very same checker content policy.
+            // L4 (feature/dependency corpus edges) is creation-exempt by design —
+            // feature "A" does not exist in this fixture.
+            const checker = new TaskCheckService(fs, TEST_SECTION_MATRIX);
+            const checkResult = await checker.check(result.ref.filePath, result.ref.id);
+            expect(checkResult.findings.filter((f) => f.severity === 'error' && f.layer !== 'L4')).toEqual([]);
+        });
+
+        test('a bare create persists content that passes the shared checker with zero errors (F21 0787)', async () => {
+            const result = await svc.create({ title: 'Agreement probe' });
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const checker = new TaskCheckService(fs, TEST_SECTION_MATRIX);
+            const checkResult = await checker.check(result.ref.filePath, result.ref.id);
+            expect(checkResult.findings.filter((f) => f.severity === 'error')).toEqual([]);
+        });
+
+        test('titles with quotes, backslashes, and Unicode round-trip through the persisted frontmatter (F21 0787 R4)', async () => {
+            // The old hand-interpolated `name: "${title}"` corrupted such titles;
+            // frontmatter is now yaml-serialized from the object, sharing the
+            // emitter with the read-side parser.
+            const tricky = 'He said "hi" \\ C:\\temp — Ünïcode ✓';
+            const result = await svc.create({ title: tricky });
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const doc = MarkdownDocument.parse(await fs.readFile(result.ref.filePath), 'task');
+            expect(doc.frontmatterData?.name).toBe(tricky);
         });
 
         test('writes the template variant to frontmatter; bare → standard, feature → feature-impl', async () => {
@@ -259,7 +282,11 @@ describe('TaskService', () => {
                     variants: { review: { wip: { required: ['Background', 'Review'] } } },
                 },
                 resolveTemplateBodies: (variant) =>
-                    variant === 'review' ? { Review: '| Severity | File |\n| P1 | |' } : {},
+                    variant === 'review'
+                        ? {
+                              Review: '| Severity | File | Finding | Recommendation |\n| -------- | ---- | ------- | -------------- |\n| P1 | `src/a.ts:1` | missing guard | add a null check |',
+                          }
+                        : {},
                 writeService,
             });
             try {
@@ -371,7 +398,14 @@ describe('TaskService', () => {
         });
 
         test('filters by phase (legacy alias for status)', async () => {
-            await svc.create({ title: 'Phase test', status: 'wip' });
+            // Seeded file, not create(): since F21 0787 a bare create can no longer
+            // land at wip (status is granted by the checker); corpora reach wip via
+            // population + transitions, which a seed models directly.
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            await fs.writeFile(
+                join(tasksDir, '0901_phase-test.md'),
+                '---\nname: "Phase test"\nstatus: wip\n---\n\n## 0901. Phase test\n',
+            );
 
             const wip = await svc.list({ phase: 'wip' });
             expect(wip.some((t) => t.name === 'Phase test')).toBe(true);
@@ -492,7 +526,9 @@ describe('TaskService', () => {
             expect(thirdResult).toBeDefined();
             if (thirdResult === undefined) throw new Error('expected third batch result');
             const taggedTask = await fs.readFile(thirdResult.ref.filePath);
-            expect(taggedTask).toContain('tags: ["rd3-migration"]');
+            // F21 0787 R4: frontmatter is yaml-serialized from the object (block-list
+            // style) — assert the parsed value, not the serialization layout.
+            expect(MarkdownDocument.parse(taggedTask, 'task').frontmatterData?.tags).toEqual(['rd3-migration']);
             // Item 3 has parent_wbs: '0042' — wire-up attempts roster+transition on
             // a non-existent parent. Both fail; the per-parent errors are recorded
             // without aborting the batch (children are already on disk).
@@ -770,9 +806,146 @@ describe('TaskService', () => {
                 expect(MarkdownDocument.parse(raw, 'task').getSection('Requirements')).not.toContain(
                     'Keep empty until requirements are known',
                 );
-                // A specified batch item lands at todo (ready to execute).
-                expect(MarkdownDocument.parse(raw, 'task').frontmatterData?.status).toBe('todo');
+                // F21 0787 R2 supersedes "specified ⇒ todo": requirements alone are
+                // not implementation-ready (Design/Plan/AC are still placeholders),
+                // so the eligibility probe keeps the item at backlog.
+                expect(MarkdownDocument.parse(raw, 'task').frontmatterData?.status).toBe('backlog');
                 expect(parentsWired).toEqual([]); // no parent_wbs in this batch either
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
+        test('a complete-spec batch item is granted todo by the eligibility probe (F21 0787 R2)', async () => {
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-ready-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: dir,
+                writeService: new PlanningWriteService({ fs: isolateFs }),
+                sectionMatrix: TEST_SECTION_MATRIX,
+            });
+            try {
+                const batchFile = join(dir, 'batch-ready.json');
+                await isolateFs.writeFile(
+                    batchFile,
+                    JSON.stringify([
+                        {
+                            name: 'Fully specced',
+                            background: 'Context.',
+                            requirements: 'R1. First requirement.',
+                            design: 'Use the existing service.',
+                            plan: '- [ ] Step one',
+                            acceptance_criteria:
+                                'Given a batch file\nWhen an item carries a full spec\nThen it lands at todo',
+                        },
+                    ]),
+                );
+                const { children } = await isolateSvc.batchCreate(batchFile);
+                const first = children[0];
+                if (!first) throw new Error('Expected a result');
+                const raw = await isolateFs.readFile(first.ref.filePath);
+                expect(MarkdownDocument.parse(raw, 'task').frontmatterData?.status).toBe('todo');
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
+        test('a batch item with no explicit background keeps the variant template Background body (F21 0787 batch/create parity)', async () => {
+            // WHY: single `create --template review` seeds the variant template's
+            // own Background body (review's Review-Findings input table) beneath
+            // the capture line. batchCreate used to coerce a missing background to
+            // '', so the template-append guard (input.background === undefined)
+            // never fired and batch items silently lost it. Both capture paths
+            // must produce the same Background.
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-batchtpl-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: dir,
+                writeService: new PlanningWriteService({ fs: isolateFs }),
+                sectionMatrix: {
+                    variants: {
+                        review: {
+                            backlog: { required: ['Background'] },
+                            todo: { required: ['Background'] },
+                        },
+                    },
+                },
+                resolveTemplateBodies: (variant) =>
+                    variant === 'review'
+                        ? {
+                              Background:
+                                  '| Severity | Finding | Recommendation |\n| -------- | ------- | -------------- |\n| P1 | missing guard | add a null check |',
+                          }
+                        : {},
+            });
+            try {
+                const batchFile = join(dir, 'batch-template.json');
+                await isolateFs.writeFile(batchFile, JSON.stringify([{ name: 'Batch review', template: 'review' }]));
+                const { children } = await isolateSvc.batchCreate(batchFile);
+                const first = children[0];
+                if (first === undefined) throw new Error('expected batch child');
+                const batchRaw = await isolateFs.readFile(first.ref.filePath);
+
+                // Parity: the same candidate through single `create` seeds the
+                // identical template body under the (title-specific) capture line.
+                const single = await isolateSvc.create({ title: 'Single review', template: 'review' });
+                const singleRaw = await isolateFs.readFile(single.ref.filePath);
+                const backgroundOf = (raw: string): string => {
+                    const start = raw.indexOf('### Background');
+                    const end = raw.indexOf('### ', start + 1);
+                    return raw.slice(start, end === -1 ? undefined : end);
+                };
+                const templateBody =
+                    '| Severity | Finding | Recommendation |\n| -------- | ------- | -------------- |\n| P1 | missing guard | add a null check |';
+                expect(backgroundOf(batchRaw)).toContain(templateBody);
+                expect(backgroundOf(singleRaw)).toContain(templateBody);
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
+        test('a batch with one invalid candidate throws before any write and creates zero files (F21 0787 R2)', async () => {
+            // Both statuses require AC; item 2 never supplies one. Its probe falls
+            // to backlog (AC placeholder error fires there too) and the backlog
+            // validation STILL fails → the whole batch is rejected before the
+            // first WBS allocation or file write. AC is used because it is the
+            // one section whose placeholder is a hard L3 error when required.
+            const sparseMatrix: SectionMatrix = {
+                variants: {
+                    standard: {
+                        backlog: { required: ['Background', 'Acceptance Criteria'] },
+                        todo: { required: ['Background', 'Acceptance Criteria'] },
+                    },
+                },
+            };
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-badbatch-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: dir,
+                writeService: new PlanningWriteService({ fs: isolateFs }),
+                sectionMatrix: sparseMatrix,
+            });
+            try {
+                const batchFile = join(dir, 'batch-invalid.json');
+                await isolateFs.writeFile(
+                    batchFile,
+                    JSON.stringify([
+                        { name: 'Valid item', acceptance_criteria: 'Given a batch\nWhen valid\nThen written' },
+                        { name: 'Invalid item' },
+                    ]),
+                );
+                const err: unknown = await isolateSvc.batchCreate(batchFile).catch((e: unknown) => e);
+                expect(err).toBeInstanceOf(TaskCandidateInvalidError);
+                expect(err instanceof Error ? err.message : '').toMatch(/batch item 2\/2/);
             } finally {
                 rmSync(root, { recursive: true, force: true });
             }
@@ -941,9 +1114,21 @@ describe('TaskService', () => {
             });
 
             try {
-                await isolateSvc.create({ title: 'Backlog item', status: 'backlog' });
-                await isolateSvc.create({ title: 'In progress', status: 'wip' });
-                await isolateSvc.create({ title: 'Done item', status: 'done' });
+                // Seed files directly: since F21 0787 a bare create can no longer
+                // land at wip/done (status is granted by the checker), and refresh
+                // only counts what is on disk.
+                await isolateFs.writeFile(
+                    join(dir, '0001_backlog-item.md'),
+                    '---\nname: "Backlog item"\nstatus: backlog\n---\n\n## 0001. Backlog item\n',
+                );
+                await isolateFs.writeFile(
+                    join(dir, '0002_in-progress.md'),
+                    '---\nname: "In progress"\nstatus: wip\n---\n\n## 0002. In progress\n',
+                );
+                await isolateFs.writeFile(
+                    join(dir, '0003_done-item.md'),
+                    '---\nname: "Done item"\nstatus: done\n---\n\n## 0003. Done item\n',
+                );
 
                 const result = await isolateSvc.refresh();
 

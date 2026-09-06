@@ -292,6 +292,7 @@ export abstract class PlanningCheckService {
         overrides?: Record<string, 'error' | 'warning' | 'off'>,
         accepted?: ReadonlyMap<string, CorpusSeverity>,
         id?: string,
+        requiredList?: readonly string[],
     ): CheckResultBase {
         // R1 (D61 task 0765): essential / required-error codes are unsuppressible.
         // Their severity was fixed at emit time, so overrides that drop or
@@ -341,12 +342,34 @@ export abstract class PlanningCheckService {
                 break;
             }
         }
-        const requiredSections: string[] = [];
+        // F21 task 0787 (R3): when the caller supplies the resolved matrix
+        // entry's required list (TaskCheckService does), `requiredSections`
+        // reports the FULL obligation set for the effective (or `--as`) status —
+        // even when every section is present. The legacy finding-derived list
+        // was empty exactly when the check passed, which made `--json` check
+        // output useless for wiring the next obligation, and it could not
+        // represent a status whose obligations are all met. `missingSections`
+        // stays finding-driven (deduped, first-seen order). Callers that omit
+        // `requiredList` (FeatureCheckService, L1-fail paths) keep the legacy
+        // finding-derived derivation unchanged.
         const missingSections: string[] = [];
-        for (const f of effectiveFindings) {
-            if (f.layer === 'L2' && f.section && f.message.startsWith('Missing required')) {
-                requiredSections.push(f.section);
-                missingSections.push(f.section);
+        let requiredSections: string[];
+        if (requiredList !== undefined) {
+            requiredSections = [...requiredList];
+            const seen = new Set<string>();
+            for (const f of effectiveFindings) {
+                if (f.layer === 'L2' && f.section && f.message.startsWith('Missing required') && !seen.has(f.section)) {
+                    seen.add(f.section);
+                    missingSections.push(f.section);
+                }
+            }
+        } else {
+            requiredSections = [];
+            for (const f of effectiveFindings) {
+                if (f.layer === 'L2' && f.section && f.message.startsWith('Missing required')) {
+                    requiredSections.push(f.section);
+                    missingSections.push(f.section);
+                }
             }
         }
         return { status, findings: effectiveFindings, requiredSections, missingSections, pass: !hasError, notes };
