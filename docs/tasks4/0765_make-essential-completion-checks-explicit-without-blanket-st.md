@@ -4,7 +4,7 @@ name: "Make essential completion checks explicit without blanket strictness"
 status: done
 template: feature-impl
 created_at: 2026-09-05T05:21:56.820Z
-updated_at: "2026-09-05T07:06:01.888Z"
+updated_at: "2026-09-06T00:14:03.042Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P1"]
@@ -110,8 +110,13 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 | `packages/app/tests/services/feature-check.test.ts:762-790,951-990` | Updated the `--as done` test fixture (`B_verifying.md`) to include a `## Tasks` section, satisfying the done-status matrix under the new target-aware selection. The semantic test (`goalErrors.length === 0`) is preserved — the one-active-goal rule still does not deny `--as done`. | D61 contract — `--as done` now selects the done matrix entry; the fixture reflects the new contract. |
 
 ### Testing
+**Verdict: PASS** — implementation verified 2026-09-05; regression suite green at verify time; merged to main as `56e7e85cb`.
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Per-Requirement Traceability**
+
+| Requirement | Status | Evidence |
+| --- | --- | --- |
+| R1 — Normal checks preserve essential completion integrity | MET | Three new regressions in `packages/app/tests/services/planning-check-base.test.ts` (41 pass / 0 fail) prove the contract: (a) essential error survives `severityOverrides: 'off'`, (b) advisory warning still suppressed by `severityOverrides: 'off'`, (c) essential error survives `accepted`-map suppression at matching severity. Feature-level done-matrix covered by the updated `feature-check.test.ts` fixture (106 pass / 0 fail). |
 
 **Targeted tests (R1):**
 
@@ -129,7 +134,6 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 **Coverage claim:** the new contract is exercised by three regression tests in `planning-check-base.test.ts` covering (a) essential error survives `severityOverrides: 'off'`, (b) advisory warning still suppressed by `severityOverrides: 'off'`, (c) essential error survives `accepted`-map suppression at matching severity. The feature-level contract is exercised by the existing `--as done` direction-aware one-active-goal test (updated fixture satisfies the now-done-aware matrix selection).
 
 **Out of scope (deferred to 0766+):** removing `loadAcceptedFindings` from CLI task checks and the fallback done gate (task 0766). The current change keeps the `accepted` parameter on `summarizeWithStatus` so the legacy callers still work; 0766 will remove the parameter and the accepted-map plumbing.
-
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
