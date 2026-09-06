@@ -6,7 +6,7 @@ export interface SettingsModalProps {
 }
 
 /**
- * Settings modal placeholder (task 0773 / feature A7).
+ * Settings modal placeholder (task 0778 / feature A7).
  * Full settings persistence and configuration forms are deferred.
  */
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {

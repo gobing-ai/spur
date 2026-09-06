@@ -10,9 +10,10 @@ priority: P2
 tags: ["web", "layout", "sidebar"]
 ---
 
-## 0773. Left sidebar optimization: default folded state, dedicated utility footer, and module normalization
+## 0778. Left sidebar optimization: default folded state, dedicated utility footer, and module normalization
 
 ### Background
+
 Spur Board's left rail (`apps/web/src/components/LeftSidebar.tsx`) defaults to expanded, keeps the
 theme toggle in the expanded header only, and orders modules by an inconsistent `order` field. This
 task lands feature A7 scenarios **R1, R2, R3**.
@@ -35,7 +36,9 @@ task lands feature A7 scenarios **R1, R2, R3**.
 
 Two corrections to the parent design doc are folded into the Design below: the rail is **48px**, and
 `WebModule` needs a **new optional `description` field** before R6-style tooltips are possible.
+
 ### Requirements
+
 - **R1.** `apps/web/src/lib/layout-state.ts` `DEFAULTS.sidebarCollapsed` is `true`, so a clean or
   reset session mounts the board with the rail folded. Persisted explicit choices still win
   (`loadLayoutState` already prefers a stored boolean).
@@ -56,9 +59,11 @@ Two corrections to the parent design doc are folded into the Design below: the r
 - **R8.** The settings icon button opens a placeholder settings modal; it is never a dead control.
 
 **Out of scope:** settings persistence or real settings content (placeholder body only);
-`BoardLayout` spacing/border polish and Open Design verification (task 0775); the global agent bar
-(task 0774); any change to `--sidebar-w` (48px collapsed / 240px expanded stay as they are).
+`BoardLayout` spacing/border polish and Open Design verification (task 0780); the global agent bar
+(task 0779); any change to `--sidebar-w` (48px collapsed / 240px expanded stay as they are).
+
 ### Acceptance Criteria
+
 ```gherkin
 Feature: Spur Board layout optimization and global orchestrator agent interface
 
@@ -85,6 +90,7 @@ Feature: Spur Board layout optimization and global orchestrator agent interface
     And the history module is titled "Histories"
     And hovering over any module icon in folded mode displays an enhanced tooltip with its title and capability description
 ```
+
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
@@ -120,17 +126,19 @@ Feature: Spur Board layout optimization and global orchestrator agent interface
   `tests/components/ResponsiveAndTheme.test.tsx` *sidebar close button closes the drawer*).
   **Decision:** `BoardLayout` passes `collapsed={state.sidebarCollapsed && !mobileSidebarOpen}` —
   one expression, uses state that already exists, fixes the UX and the test together.
-- **Settings modal ownership — moved into this task.** Task 0775 R2 nominally owns
-  `SettingsModal.tsx`, but 0773 R2 ships the button that opens it; shipping a no-op control is worse
-  than a 15-line placeholder. **Decision:** 0773 creates `src/components/SettingsModal.tsx` (a thin
+- **Settings modal ownership — moved into this task.** Task 0780 R2 nominally owns
+  `SettingsModal.tsx`, but 0778 R2 ships the button that opens it; shipping a no-op control is worse
+  than a 15-line placeholder. **Decision:** 0778 creates `src/components/SettingsModal.tsx` (a thin
   `@/ui` `Modal` wrapper with placeholder copy) and owns the open/close state inside `LeftSidebar`.
-  0775 R2 is correspondingly narrowed to verifying and polishing it. Recorded in 0775's Q&A too.
+  0780 R2 is correspondingly narrowed to verifying and polishing it. Recorded in 0780's Q&A too.
 - **Default landing route is unaffected.** `defaultModule` is the first enabled module;
   `observability` is first today (`order: 0`) and first after renumbering (`order: 10`), so
   `/board` → `/board/observability` does not move.
 - **Deferred:** settings persistence and real settings content (no backend surface in A7 scope);
-  `⌘K` keyboard access to the rail (belongs with the agent bar in 0774, not the sidebar).
+  `⌘K` keyboard access to the rail (belongs with the agent bar in 0779, not the sidebar).
+
 ### Design
+
 **WHAT.** Fold the rail by default, give it a footer that survives collapse, and make module
 identity (order, label, capability blurb) declarative on the module descriptor rather than
 positional or hard-coded in the sidebar.
@@ -193,6 +201,7 @@ The label a tooltip shows and the label the expanded row shows are the same expr
 (`mod.sidebarLabel ?? mod.name`) — today's `title={mod.name}` divergence is fixed as part of R4.
 
 **Anti-patterns — do not implement.**
+
 - Do **not** change `--sidebar-w` (48px collapsed / 240px expanded) or any `board-layout.css` grid
   track; this task adds no CSS file changes at all.
 - Do **not** render `ThemeToggle` in both the header and the footer — three existing tests resolve
@@ -206,11 +215,13 @@ The label a tooltip shows and the label the expanded row shows are the same expr
 - Do **not** rename module `id` or `route` values; only `sidebarLabel` changes. Renaming `id`
   breaks `getModule`, the route tree, and `defaultModule`.
 
-**Handoff to dependents.** Task 0774 mounts `GlobalAgentBar` in `BoardLayout` and reads the active
-module's label — it consumes `sidebarLabel`/`name` as frozen here. Task 0775 owns all
+**Handoff to dependents.** Task 0779 mounts `GlobalAgentBar` in `BoardLayout` and reads the active
+module's label — it consumes `sidebarLabel`/`name` as frozen here. Task 0780 owns all
 `BoardLayout`/`board-layout.css` spacing and border polish plus the Open Design pass; this task
-deliberately leaves both untouched so 0775 has a clean surface.
+deliberately leaves both untouched so 0780 has a clean surface.
+
 ### Plan
+
 1. **R5/R4/R6 data** — add `readonly description?: string` to `WebModule`
    (`src/modules/types.ts`); apply the descriptor table (`order`, `sidebarLabel`, `description`) to
    all seven `src/modules/*/index.tsx`. No `discover.ts` / `registry.ts` edits.
@@ -244,7 +255,9 @@ deliberately leaves both untouched so 0775 has a clean surface.
    "Close navigation".
 9. **Verify** — from inside the workspace: `cd apps/web && bun test tests`, then repo-root
    `bun run autofix && bun run spur-check`.
+
 ### Solution
+
 - `apps/web/src/modules/types.ts:16`: added optional `readonly description?: string;` property to `WebModule` interface.
 - `apps/web/src/modules/observability/index.tsx:18`: set `order: 10`, `sidebarLabel: 'Observabilities'`, and added capability description.
 - `apps/web/src/modules/history/index.tsx:16`: set `order: 20`, `sidebarLabel: 'Histories'`, and added capability description.
@@ -263,10 +276,14 @@ deliberately leaves both untouched so 0775 has a clean surface.
 - `apps/web/tests/modules/discover.test.ts:271`: updated order expectation for observability module.
 - `apps/web/tests/modules/workspace/workspace.test.tsx:32`: updated order expectation for workspace module.
 - `apps/web/tests/modules/history/history-module.test.ts:26`: updated sidebarLabel and order expectation for history module.
+
 ### Testing
+
 - `cd apps/web && bun test tests/lib/layout-state.test.ts tests/components/BoardLayout.test.tsx tests/components/LeftSidebar.test.tsx tests/components/ResponsiveAndTheme.test.tsx`: 40 pass, 0 fail.
 - `cd apps/web && bun test tests`: 741 pass, 0 fail across 48 test files.
+
 ### Review
+
 - Functional Traceability: Verified all R1-R8 scenarios satisfied.
   - R1: Sidebar collapsed by default via `DEFAULTS.sidebarCollapsed = true`.
   - R2: Dedicated footer with `ThemeToggle` and `SettingsButton`.
@@ -289,16 +306,20 @@ deliberately leaves both untouched so 0775 has a clean surface.
 **Residual risk:** Low. Clean UI state changes; zero backend dependency; all existing tests passing.
 
 **Disposition:** Approved.
+
 ### References
+
 - Parent feature: `docs/features/A7_spur-board-layout-optimization-and-global-orchestrator-agent-interface.md` (scenarios R1, R2, R3)
 - Design doc: `docs/design/board-ui-layout-and-global-agent-bar.md` §3 (rail width corrected 56px → 48px here)
 - UI SSOT: root `DESIGN.md` — spacing 4px base, touch targets ≥40px
 - ADR-034 / task 0336: tooltips go through `@/ui`'s `Tooltip`, never a raw `className="tooltip …"`
-- Dependents: task 0774 (global agent bar in `BoardLayout`), task 0775 (layout polish, Open Design pass)
+- Dependents: task 0779 (global agent bar in `BoardLayout`), task 0780 (layout polish, Open Design pass)
 - Source surfaces: `apps/web/src/components/LeftSidebar.tsx`, `apps/web/src/components/BoardLayout.tsx`,
   `apps/web/src/lib/layout-state.ts`, `apps/web/src/modules/types.ts`, `apps/web/src/modules/*/index.tsx`,
   `apps/web/src/styles/board-layout.css` (read-only for this task)
+
 ### History
+
 - 2026-09-06T04:08:04.209Z todo → wip (system)
 - 2026-09-06T04:08:06.943Z wip → testing (system)
 - 2026-09-06T04:08:53.124Z testing → done (system)

@@ -15,7 +15,7 @@ const MODULE_CHIPS: Record<string, readonly string[]> = {
 };
 
 /**
- * Foldable global orchestrator agent prompt bar (feature A7 / task 0774).
+ * Foldable global orchestrator agent prompt bar (feature A7 / task 0779).
  *
  * Mounted globally by `BoardLayout` across all module routes.
  * Folded by default as a round spirit-icon dock at `bottom-6 right-6`;

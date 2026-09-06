@@ -8,10 +8,10 @@ updated_at: "2026-09-06T04:11:12.684Z"
 feature_id: A7
 priority: P2
 tags: ["web", "agent", "orchestrator"]
-dependencies: ["0773"]
+dependencies: ["0778"]
 ---
 
-## 0774. Global orchestrator agent interface: migrate floating prompt bar to top-level BoardLayout
+## 0779. Global orchestrator agent interface: migrate floating prompt bar to top-level BoardLayout
 
 ### Background
 The floating agent prompt bar lives inside the Features module, so the project-wide orchestrator
@@ -61,7 +61,7 @@ surface is reachable only from `/board/features`. This task lifts it to a global
 
 **Out of scope:** any agent dispatch, RPC call, SSE subscription, or backend endpoint (the bar stays
 a UI stub); migrating `FloatingActionProgress` (see Background correction 1); `⌘K` or any global
-keyboard shortcut; persisting the bar's open/closed state; layout/spacing polish (task 0775).
+keyboard shortcut; persisting the bar's open/closed state; layout/spacing polish (task 0780).
 ### Acceptance Criteria
 ```gherkin
 Feature: Spur Board layout optimization and global orchestrator agent interface
@@ -95,7 +95,7 @@ Feature: Spur Board layout optimization and global orchestrator agent interface
 - **Known overlap with `FloatingActionProgress`.** On a feature-detail route with a running action,
   its panel (`fixed bottom-4 right-4 z-40 w-80`) overlaps the agent dock (`bottom-6 right-6 z-30`,
   48×48). **Decision:** accept it — z-40 correctly wins, the collision is one route deep, and the
-  fix (a shared bottom-right stack) is a layout concern that belongs to task 0775 if it is worth
+  fix (a shared bottom-right stack) is a layout concern that belongs to task 0780 if it is worth
   doing at all. Recorded rather than silently designed around.
 - **Where in `BoardLayout` does it mount?** `.board-layout` is a 5-track CSS grid; a sixth flow
   child would open an implicit column. `GlobalAgentBar` is `position: fixed` in both states, so it
@@ -153,7 +153,7 @@ New ids, added by this task and by no other: `data-testid` `agent-bar-context`,
 `agent-bar-chips`, `agent-bar-drawer-toggle`, `agent-bar-drawer`.
 
 **Context label.** `activeModule?.sidebarLabel ?? activeModule?.name ?? 'Board'`, rendered as a
-`Badge` reading `Context: <label>`. Same precedence the sidebar uses after task 0773, so
+`Badge` reading `Context: <label>`. Same precedence the sidebar uses after task 0778, so
 `Observabilities`/`Histories` agree across both surfaces.
 
 **Chip map — keyed by module `id`, not label.**
@@ -190,12 +190,12 @@ telemetry and tool calls are not wired yet. Local state only — no store, no su
 - Do **not** change any `z-*` value in `apps/web`, and do not add a portal.
 - Do **not** add dispatch, `fetch`, oRPC, or SSE; the Send handler keeps clearing the field and
   showing the stub notice.
-- Do **not** persist the bar's open state to `layout-state.ts` — that file is task 0773's surface
+- Do **not** persist the bar's open state to `layout-state.ts` — that file is task 0778's surface
   and the bar is deliberately session-local.
 - Do **not** render `GlobalAgentBar` inside `.board-layout` or inside a module shell.
 - Do **not** rename the preserved test ids, aria-labels, or the notice string while moving the file.
 
-**Handoff.** Task 0775 owns any bottom-right stacking reconciliation between the agent dock and
+**Handoff.** Task 0780 owns any bottom-right stacking reconciliation between the agent dock and
 `FloatingActionProgress`, and all `board-layout.css` work. This task changes no CSS file.
 ### Plan
 1. **R1** — `git mv apps/web/src/modules/features/FloatingAgentBar.tsx
@@ -256,8 +256,8 @@ telemetry and tool calls are not wired yet. Local state only — no store, no su
 ### References
 - Parent feature: `docs/features/A7_spur-board-layout-optimization-and-global-orchestrator-agent-interface.md` (scenario R5; its scope line naming `FloatingActionProgress.tsx` is corrected in Background)
 - Design doc: `docs/design/board-ui-layout-and-global-agent-bar.md` §4 (context-vs-prop and the `FloatingActionProgress` premise are corrected here)
-- Depends on: task 0773 — `sidebarLabel` values (`Observabilities`, `Histories`) that the context pill mirrors
-- Dependent: task 0775 — bottom-right stacking and layout polish
+- Depends on: task 0778 — `sidebarLabel` values (`Observabilities`, `Histories`) that the context pill mirrors
+- Dependent: task 0780 — bottom-right stacking and layout polish
 - Origin of the stub: feature F84 R6 / F841 R3, R7, R8 (the preserved dock/bar geometry and the honesty notice)
 - Source surfaces: `apps/web/src/modules/features/FloatingAgentBar.tsx`, `apps/web/src/modules/features/FeaturesShell.tsx`,
   `apps/web/src/components/BoardLayout.tsx`, `apps/web/tests/modules/features/components.test.tsx`
