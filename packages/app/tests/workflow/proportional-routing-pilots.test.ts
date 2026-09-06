@@ -86,9 +86,9 @@ describe('proportional routing pilots (task 0758)', () => {
             expect(String(safetyEdge?.guard?.options?.command ?? '')).toContain('-gt 0');
             expect(String(safetyEdge?.guard?.options?.command ?? '')).toContain('$mode" != fast');
 
-            // 4. defense -> skipped
+            // 4. defense -> failed (0770: no resolve status must not claim a skip)
             const defenseEdge = resolveTransitions.find(
-                (t: TransitionDef) => t.to === 'skipped' && t.guard?.kind === 'always',
+                (t: TransitionDef) => t.to === 'failed' && t.guard?.kind === 'always',
             );
             expect(defenseEdge).toBeDefined();
         });
@@ -126,8 +126,14 @@ describe('proportional routing pilots (task 0758)', () => {
     describe('task-lifecycle version both-forms exercise (R7)', () => {
         test('unversioned and explicit version take identical routes but differ in digest', () => {
             const raw = readFileSync(join(WORKFLOWS_DIR, 'task-lifecycle.yaml'), 'utf8');
-            const unversionedDef = loadWorkflowDefFromText(raw, 'task-lifecycle.yaml');
-            const versionedDef = loadWorkflowDefFromText(`${raw}\nversion: "1.2.3"`, 'task-lifecycle-v.yaml');
+            // The shipped definition is explicitly versioned (0770); synthesize the
+            // unversioned twin by stripping the identity tag and re-versioning.
+            const unversionedText = raw.replace(/^version: "[^"]*"\n/m, '');
+            const unversionedDef = loadWorkflowDefFromText(unversionedText, 'task-lifecycle.yaml');
+            const versionedDef = loadWorkflowDefFromText(
+                `${unversionedText}\nversion: "1.2.3"`,
+                'task-lifecycle-v.yaml',
+            );
 
             // 1. Structure is identical
             const uYaml = unversionedDef as unknown as WorkflowYaml;

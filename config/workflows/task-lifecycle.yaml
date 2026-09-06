@@ -20,6 +20,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: task-lifecycle
+version: "1"
 description: >
   Task lifecycle FSM (design §2.3, §5.1). States are the canonical TaskStatus
   vocabulary (DD-01); transitions encode the §2.3 graph; guards invoke

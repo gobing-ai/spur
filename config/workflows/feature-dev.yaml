@@ -9,6 +9,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: feature-dev
+version: "1"
 description: >
   End-to-end FEATURE development loop: precheck → brainstorm → plan (decompose) →
   execute-tasks → feature-verify → done. Drives a whole feature (one description → a
@@ -143,18 +144,22 @@ states:
 
   - id: integration-review
     description: >
-      Advisory integration review (D5-P, feature R11). Spends one Codex review
-      on the current HEAD after the local gates and before wrap merge/cleanup.
+      Advisory integration review (D5-P, feature R11), upgraded by 0770 to a
+      truthful collect: ONE Codex review request per HEAD, then exactly ONE
+      `pr-reviewing.ts collect --head <captured-head>` against that same HEAD —
+      no wait loop, no polling. The request verdict (`REQUESTED` /
+      `ALREADY_REQUESTED` / `ALREADY_REVIEWED`) describes request state only;
+      it is NEVER clean evidence. The ONLY clean evidence is the collected
+      status (CLEAN / FINDINGS / PENDING) persisted run-scoped at
+      .spur/run/<runId>-integration-review-collect.status. A missing head SHA,
+      an invalid collect result, or head drift records collect FAIL.
 
-      D8 decision D1 (0753 R3): the nested `spur workflow run pr-review.yaml`
-      was refused by the SPUR_WORKFLOW_RUN_ACTIVE child guard and the refusal
-      was masked by `softFail: true`. The non-spawning replacement invokes
-      `pr-reviewing.ts request` directly — the same per-HEAD dedupe-or-request
-      logic `config/workflows/pr-review.yaml` uses internally — and writes its
-      own PASS/FAIL status. `ALREADY_REVIEWED` / `ALREADY_REQUESTED` / `REQUESTED`
-      all count as PASS (review is initiated for this HEAD); only a request
-      error counts as FAIL. `softFail` is gone: a real failure now records FAIL
-      loudly. `requireCleanReview=true` still turns that FAIL into a blocking edge.
+      D8 decision D1 (0753 R3): invoking `pr-reviewing.ts request` directly —
+      the same per-HEAD dedupe-or-request logic `config/workflows/pr-review.yaml`
+      uses internally. Request FAIL records FAIL in
+      .spur/run/<runId>-integration-review.status, loudly (no softFail).
+      `requireCleanReview=true` turns a non-clean COLLECTED verdict (including
+      collect FAIL) into the blocking edge declared first below.
     onEnter:
       - kind: shell
         options:
@@ -162,20 +167,33 @@ states:
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-integration-review.status" &&
             REQUEST_JSON=".spur/run/$__runId-integration-review.json" &&
+            COLLECT_JSON=".spur/run/$__runId-integration-review-collect.json" &&
+            COLLECT_STATUS=".spur/run/$__runId-integration-review-collect.status" &&
             PR_REQUEST_STATUS=".spur/run/$__runId-integration-review-pr-request.status" &&
             set +e &&
             bun "$(superskill script path sp pr-reviewing.ts)" request --base "$baseBranch" --json
             --status-file "$PR_REQUEST_STATUS" > "$REQUEST_JSON" 2>&1;
-            rc=$?; set -e &&
-            if [ "$rc" -eq 0 ]; then
+            request_rc=$?; set -e &&
+            if [ "$request_rc" -eq 0 ]; then
               printf 'PASS\n' > "$STATUS_FILE";
             else
               printf 'FAIL\n' > "$STATUS_FILE";
             fi &&
+            HEAD_SHA=$(jq -r '.head // empty' "$REQUEST_JSON" 2>/dev/null || true) &&
+            if [ -z "$HEAD_SHA" ]; then
+              echo "integration-review: request result carried no head SHA — collect not run, recorded FAIL" >&2;
+              printf 'FAIL\n' > "$COLLECT_STATUS";
+            else
+              set +e &&
+              bun "$(superskill script path sp pr-reviewing.ts)" collect --head "$HEAD_SHA" --json
+              --status-file "$COLLECT_STATUS" > "$COLLECT_JSON" 2>&1;
+              collect_rc=$?; set -e &&
+              echo "integration-review: collect rc=$collect_rc status=$(cat "$COLLECT_STATUS" 2>/dev/null || echo missing) — verdict captured to $COLLECT_JSON" >&2;
+            fi;
             exit 0
       - kind: note
         options:
-          message: "Integration review for feature ${vars.featureId} recorded at .spur/run/${vars.__runId}-integration-review.status (advisory unless requireCleanReview=true)."
+          message: "Integration review for feature ${vars.featureId}: request verdict at .spur/run/${vars.__runId}-integration-review.status (request state only — REQUESTED/ALREADY_* are NEVER clean evidence); collected verdict at .spur/run/${vars.__runId}-integration-review-collect.status (CLEAN/FINDINGS/PENDING — the only clean evidence). Advisory unless requireCleanReview=true."
 
   - id: done
     description: Terminal — feature planned, all tasks executed, and the feature verified.
@@ -246,18 +264,23 @@ transitions:
   - from: integration-review
     to: failed
     description: >
-      Review came back FAIL and this branch opted into a hard gate
-      (requireCleanReview=true). Ordered before the advisory edge so the strict
-      policy wins when both would match.
+      Collected verdict is not CLEAN (FINDINGS / PENDING / collect FAIL or
+      missing) and this branch opted into a hard gate (requireCleanReview=true).
+      Exactly one collect ran against the captured request HEAD — no wait loop —
+      so pending or findings stop the feature here with the actual reason.
+      Ordered before the advisory edge so the strict policy wins when both
+      would match.
     guard:
       kind: shell
       options:
-        command: 'test "$requireCleanReview" = true && test "$(cat .spur/run/$__runId-integration-review.status 2>/dev/null)" = FAIL'
+        command: 'test "$requireCleanReview" = true && test "$(cat .spur/run/$__runId-integration-review-collect.status 2>/dev/null)" != CLEAN'
   - from: integration-review
     to: done
     description: >
-      Review clean, pending, unavailable, or advisory — the feature is complete. A
-      non-clean advisory review never blocks a locally-verified feature (feature R11).
+      Collected CLEAN, or advisory mode (requireCleanReview != true) — the
+      feature is complete. A non-clean advisory collect never blocks a
+      locally-verified feature (feature R11); the note above preserves the
+      collected non-clean state in the run record instead of hiding it.
     guard:
       kind: always
   - from: feature-verify

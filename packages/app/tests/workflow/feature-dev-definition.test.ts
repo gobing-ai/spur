@@ -95,8 +95,10 @@ describe('feature-dev definition — integration review is non-spawning and reac
         const command = blocking?.guard?.options?.command ?? '';
         expect(command).toContain('requireCleanReview');
         expect(command).toContain('= true');
-        // A FAIL status alone must not be sufficient — the policy check is what gates it.
-        expect(command).toContain('FAIL');
+        // Only a non-clean COLLECTED verdict blocks (0770): FINDINGS / PENDING /
+        // collect FAIL / missing status — the request status is never evidence.
+        expect(command).toContain('!= CLEAN');
+        expect(command).toContain('integration-review-collect.status');
     });
 
     test('the advisory edge reaches done without requiring a clean review', () => {

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Upgrade lifecycle and wrapup workflows with truthful outcomes"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-05T05:21:56.947Z
-updated_at: "2026-09-05T15:39:37.090Z"
+updated_at: "2026-09-06T07:29:45.532Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P6"]
@@ -23,7 +23,7 @@ Dependencies: 0775, 0767, 0768 (0775 retires the corpus/composition baselines an
 
 ### Requirements
 
-- [ ] **R1.** Lifecycle and wrapup outcomes remain authoritative: preserve single-edge lifecycle transitions and normal target completion guards; reuse an existing feature/task roster; require a collected current-HEAD CLEAN result when requireCleanReview=true; reject malformed wrap input, isolate captures and report failed required sync as failure. Tag all four definitions version: "1" after their behavior checks.
+- [x] **R1.** Lifecycle and wrapup outcomes remain authoritative: preserve single-edge lifecycle transitions and normal target completion guards; reuse an existing feature/task roster; require a collected current-HEAD CLEAN result when requireCleanReview=true; reject malformed wrap input, isolate captures and report failed required sync as failure. Tag all four definitions version: "1" after their behavior checks.
 
 Out of scope: new engines/dependencies/public nouns, broad historical-document cleanup, D9 fast activation, release, merge and external deployment. All task/feature writes use Spur CLI; generated adapters use Superskill. Refine does not author implementation evidence.
 
@@ -88,26 +88,45 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 6. [ ] R1: Update live docs/skills, run applicable final gate and real verification; hand outcomes and matched measurements to 0772.
 
 ### Solution
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Truthful outcomes for lifecycle, feature-dev, and wrapup workflows (0770).**
 
-**Status (decomposition, 2026-09-05):** task 0770 is **blocked** on 0775 (third phase of decomposed 0766 R2), 0767 and 0768. The original batch halted at task 0766 (deferred); the per-fixture remediation plan decomposes 0766 into 0773/0774/0775, with 0775 being the predecessor this task now wires through. Once 0775/0767/0768 land, 0770 unblocks.
+Config definitions (all tagged `version: "1"` after tests passed):
 
-Anticipated change anchors (populated during implementation):
+- `config/workflows/wrapup-pipeline.yaml` — truthfulness upgrade: `terminalStates` += `failed`, `failureStates: [failed]`, `failed` state inserted after `skipped` (artifacts preserved, no rollback); task-resolve gains a SECOND shell that validates `vars.tasks` once as a JSON array of non-empty WBS strings (`r-bad` fixtures), fails loud on empty `__runId`, resolves every member via `$spurBin task show` requiring done/cancelled, dedupes first-seen, and writes run-scoped `.spur/run/$__runId-wrapup-{resolve.status,tasks.json}` (always exit 0; failed edge consumes FAIL); metrics-record consumes the normalized `wrapup-tasks.json` via `jq -r '.[]'` (never re-parses raw `$tasks`), any lookup failure records `wrapup-metrics.status` FAIL; feature-transition validates the sync result with `jq -e 'has("applied")'` and records `wrapup-sync.status` (explicit no-change PASS, invalid result FAIL); doc-sync learnings capture is run-scoped `.spur/run/${vars.__runId}-wrapup-learnings.md` across prompt/answerFile/expectFile/append reader; branch-cleanup description consent-only, no git operation in `done`; transitions: failed edges declared FIRST for task-resolve/metrics-record/feature-transition keyed on status files, sibling routing edges PASS-prefixed, always-defense now routes to `failed` (0758 pilot pin updated).
+- `config/workflows/feature-dev.yaml` — integration review is request + ONE collected verdict: shell runs `pr-reviewing.ts request`, captures `head` via `jq -r '.head // empty'`, then a single `collect --head "$HEAD_SHA"` (missing head → FAIL, no wait loop); writes `.spur/run/$__runId-integration-review{,-collect}.status`; blocking edge requires `requireCleanReview=true` AND `collect.status != CLEAN` (REQUESTED/ALREADY_* are request state, never clean evidence); advisory edge → done; note message states both artifact paths statically.
+- `config/workflows/task-lifecycle.yaml:23`, `config/workflows/feature-lifecycle.yaml:12` — explicit `version: "1"` identity tags (structure otherwise unchanged; single-edge pins intact).
 
-- `config/workflows/task-lifecycle.yaml:1` — single-edge transition guards.
-- `config/workflows/feature-lifecycle.yaml:1` — single-edge transition guards.
-- `config/workflows/feature-dev.yaml:1` — request-plus-collect CLEAN gating under requireCleanReview.
-- `config/workflows/wrapup-pipeline.yaml:82` — featureGateCmd default updated by 0775.
-- `config/templates/docs/99_PROJECT_CONSTITUTION.md:1` — T10/T11 applied by 0775.
+Tests:
 
+- `packages/app/tests/workflow/wrapup-pipeline.test.ts` (new, 20 tests) — behavior-tested shells (task-resolve validation: malformed JSON/empty runId/unresolvable task/normalization+dedupe; metrics-record: FAIL on missing row, exactly one row appended on success) plus structural pins (version tags ×4, failed state/edges ordering, consent-only branch cleanup, expectFile run-scoped learnings, `has("applied")` sync gate, terminal reachability).
+- `packages/app/tests/workflow/proportional-routing-pilots.test.ts` — defense edge pin: always-guard → `failed` with "0770: no resolve status must not claim a skip"; R7 both-forms test strips the new shipped `version: "1"` line before building the unversioned twin.
+- `packages/app/tests/workflow/feature-dev-definition.test.ts` — blocking edge pins `!= CLEAN` and the collect status file.
+
+Rationale: wrap-up previously absorbed failures as success (invalid input re-parsed as empty list by sibling guards, missing metrics rows vanished, failed sync printed-and-ignored, shared learnings path overwritten across runs). The fix validates input exactly once, feeds siblings only normalized run-scoped artifacts, and routes every failure through a declared-first `failed` edge.
+
+Evidence: `.spur/run/0770-verdict.json` (PASS, proof sha256 of gate log), `.spur/run/d61-0770-{before,after}.json` (definition digests + gate metrics for 0772).
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — Lifecycle and wrapup outcomes remain authoritative | MET | All four definitions upgraded and validated (exit 0); behavior pinned by executed tests: lifecycle single-edge pins (lifecycle-adapter.test.ts, feature-lifecycle-adapter.test.ts), new wrapup-pipeline.test.ts (20 tests: malformed/unresolvable wrap input records FAIL, fail-edges declared first, sync `has("applied")` gate, explicit no-change PASS), feature-dev-definition.test.ts strict CLEAN-only blocking edge. Full gate: bun run spur-check exit 0, 7420 tests passed / 0 failed. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R8 — Lifecycle and wrapup outcomes remain authoritative | MET | test | 625/625 packages/app workflow tests green including 20 new wrapup-pipeline.test.ts truthfulness pins (invalid input and failed required sync route to declared `failed` state, never success), lifecycle one-edge-per-pair pins green, feature-dev integration-review blocking edge requires collected CLEAN (request-state strings can never satisfy it). Matched-input digests: .spur/run/d61-0770-before.json vs d61-0770-after.json. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 
 - [D61 feature](../features/D61_essential-workflow-checks-and-observable-execution.md)
@@ -119,3 +138,6 @@ Anticipated change anchors (populated during implementation):
 - Surface/process authority: docs/04_DESIGN.md and docs/99_PROJECT_CONSTITUTION.md; local source/test paths are named in Design.
 
 ### History
+- 2026-09-06T07:28:17.593Z todo → wip (system)
+- 2026-09-06T07:28:18.040Z wip → testing (system)
+- 2026-09-06T07:29:45.532Z testing → done (system)

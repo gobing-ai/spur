@@ -17,7 +17,10 @@
 #          -> feature-transition (conditional: if vars.feature set)
 #          -> branch-cleanup (conditional: if vars.merge=true)
 #          -> done
-#        (task-resolve with empty list short-circuits to `skipped`).
+#        task-resolve with a VALIDATED empty list short-circuits to `skipped`;
+#        invalid wrap input, an unresolved/non-completed task, a failed metrics
+#        capture, a failed required sync, or a failed feature gate routes to
+#        `failed` (0770) instead of being absorbed by an always-defensive skip.
 #
 # Vars (passed as a JSON object via `--vars`):
 # tasks    — JSON array of WBS strings, passed as a JSON-encoded STRING value
@@ -39,21 +42,33 @@
 # a
 # single model query that both repairs doc drift (sp:doc-evolve) and captures
 #     working learnings (task 0607 R2 — one query answers both; count 2 -> 1).
-# - feature-transition is a soft shell (always exit 0) so a blocked feature sync
-#     does not abort wrap-up after learnings/metrics already landed.
+# - feature-transition is a soft shell (always exit 0); a failed required sync
+#     or feature gate records FAIL and routes to `failed` instead of claiming
+#     success (0770).
+# - 0770 truthful outcomes: vars.tasks is parsed and validated ONCE at
+#     task-resolve (JSON array of non-empty WBS strings, every member resolved
+#     via `task show` to a completed status); siblings consume the normalized
+#     run-scoped artifact and never re-parse raw input (malformed input can no
+#     longer be silently re-interpreted as an empty list). All captures are
+#     run-scoped under .spur/run/<runId>-wrapup-*; a lookup failure is
+#     recorded, never silently omitted as success.
 # - branch-cleanup HITL is exhaustive (yes/no/cancel → done; missing answer
-# defense).
+# defense) and consent-only: it records the decision, performs no git op.
 #   - Wrap-up never mutates task status (consumes completed work only).
 
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: wrapup-pipeline
+version: "1"
 description: "Post-execution wrap-up: doc-sync (doc drift + learning capture), metrics, feature-transition, branch-cleanup"
 iterationBound: 10
 initialState: start
 terminalStates:
   - done
   - skipped
+  - failed
+failureStates:
+  - failed
 vars:
   tasks: "[]"
   feature: ""
@@ -89,10 +104,17 @@ states:
 
   - id: task-resolve
     description: >
-      Validate the task list and evaluate closed proportional routing (0758 R1-R4).
-      Empty list -> skipped; tasks > 0 && mode == fast -> fast-path (metrics-record,
-      bypassing doc-sync); missing/unknown/conflict -> doc-sync (safety-path).
-      Writes bounded machine-readable reason to reasonFile.
+      Validate the task list ONCE and evaluate closed proportional routing (0758
+      R1-R4). Validation (0770): vars.tasks must be a JSON array of non-empty
+      WBS strings, deduplicated in first-seen order, and every member must
+      resolve via `spur task show` to a completed status (done/cancelled).
+      Invalid input or an unresolved/non-completed task records FAIL (reason
+      into the run-scoped reason file) and routes to `failed`; siblings consume
+      the normalized run-scoped artifact .spur/run/<runId>-wrapup-tasks.json
+      and never re-parse raw input. A validated empty list -> skipped;
+      tasks > 0 && mode == fast -> fast-path (metrics-record, bypassing
+      doc-sync); missing/unknown/conflict -> doc-sync (safety-path). Writes
+      bounded machine-readable reason to reasonFile.
     onEnter:
       - kind: note
         options:
@@ -125,6 +147,49 @@ states:
             printf '%s %s\n' "$RUN_ID" "$(cat "$REASON_FILE")"
             >> .spur/memory/wrapup-routes.log &&
             exit 0
+      # 0770 truthful input: parse and validate vars.tasks exactly once, here.
+      # Malformed JSON, a non-array, a non-string or empty entry, an unresolved
+      # task, or a task not at a completed status records FAIL (routed to
+      # `failed` by the first declared edge) and is never re-interpreted as an
+      # empty list by a later sibling guard. The normalized, deduplicated list
+      # is persisted run-scoped; metrics/doc siblings only ever read it.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            RUN_ID="$__runId" &&
+            if [ -z "$RUN_ID" ]; then
+              echo "task-resolve: __runId is empty — refusing the legacy fixed-path fallback" >&2;
+              exit 1;
+            fi &&
+            REASON_FILE=".spur/run/$RUN_ID-route-reason.txt" &&
+            STATUS_FILE=".spur/run/$RUN_ID-wrapup-resolve.status" &&
+            TASKS_FILE=".spur/run/$RUN_ID-wrapup-tasks.json" &&
+            if ! printf '%s' "$tasks" | jq -e 'type == "array" and all(.[]; type == "string" and length > 0)' > /dev/null 2>&1; then
+              echo "task-resolve: tasks must be a JSON array of non-empty WBS strings" >&2;
+              echo "failed:tasks is not a JSON array of non-empty WBS strings" > "$REASON_FILE";
+              printf 'FAIL\n' > "$STATUS_FILE";
+            else
+              printf '%s' "$tasks" | jq -c 'reduce .[] as $w ([]; if any(.[]; . == $w) then . else . + [$w] end)' > "$TASKS_FILE";
+              RESOLVE_RC=0;
+              for wbs in $(jq -r '.[]' "$TASKS_FILE"); do
+                TASK_JSON=$($spurBin task show "$wbs" --json 2>/dev/null || true);
+                TASK_STATUS=$(printf '%s' "$TASK_JSON" | jq -r '.frontmatter.status // .status // empty' 2>/dev/null || true);
+                if [ "$TASK_STATUS" != "done" ] && [ "$TASK_STATUS" != "cancelled" ]; then
+                  STATUS_DISPLAY="$TASK_STATUS";
+                  if [ -z "$STATUS_DISPLAY" ]; then STATUS_DISPLAY=unresolved; fi;
+                  echo "task-resolve: task $wbs did not resolve to a completed status (status=$STATUS_DISPLAY)" >&2;
+                  RESOLVE_RC=1;
+                fi;
+              done;
+              if [ "$RESOLVE_RC" -eq 0 ]; then
+                printf 'PASS\n' > "$STATUS_FILE";
+              else
+                echo "failed:unresolved or non-completed task (see $TASKS_FILE)" > "$REASON_FILE";
+                printf 'FAIL\n' > "$STATUS_FILE";
+              fi;
+            fi;
+            exit 0
 
   - id: doc-sync
     description: >
@@ -145,59 +210,72 @@ states:
             docs/00_ADR.md, docs/03_ARCHITECTURE.md, docs/04_DESIGN.md, docs/design/* per constitution edit
             rules; do not write task/feature corpus. THEN extract working learnings from tasks ${vars.tasks} —
             conventions, errors fixed, patterns, gotchas, grouped by date and task WBS — as raw markdown
-            (no fences) and END your final message with that markdown (it is captured to .spur/run/wrapup-learnings.md).
+            (no fences) and END your final message with that markdown (it is captured to the
+            run-scoped .spur/run/${vars.__runId}-wrapup-learnings.md).
           # Declared Layer-1 role (0538 R2): routing reason beside the agent:
           # pin.
           role: coder
-          answerFile: .spur/run/wrapup-learnings.md
-          expectFile: .spur/run/wrapup-learnings.md
+          answerFile: .spur/run/${vars.__runId}-wrapup-learnings.md
+          expectFile: .spur/run/${vars.__runId}-wrapup-learnings.md
           timeoutMs: ${vars.stepTimeoutMs}
       - kind: shell
         options:
           command: >-
-            mkdir -p .spur/memory &&
-            if test -s .spur/run/wrapup-learnings.md; then
-              cat .spur/run/wrapup-learnings.md >> .spur/memory/learnings.md &&
+            mkdir -p .spur/run .spur/memory &&
+            LEARNINGS_FILE=".spur/run/$__runId-wrapup-learnings.md" &&
+            if test -s "$LEARNINGS_FILE"; then
+              cat "$LEARNINGS_FILE" >> .spur/memory/learnings.md &&
               printf '\n' >> .spur/memory/learnings.md;
             else
-              echo "wrapup: learning capture missing or empty at $PWD/.spur/run/wrapup-learnings.md - append skipped" >&2;
+              echo "wrapup: learning capture missing or empty at $PWD/$LEARNINGS_FILE - append skipped" >&2;
             fi &&
             exit 0
 
   - id: metrics-record
     description: >
       Append one JSONL row per task to .spur/memory/wrapup-metrics.jsonl deterministically.
+      Reads ONLY the normalized run-scoped task list written by task-resolve (0770):
+      a lookup failure for any member records FAIL and routes to `failed` — a
+      missing metrics row is never silently absorbed as success.
     onEnter:
       - kind: shell
         options:
           command: >-
-            mkdir -p .spur/memory &&
-            printf '%s' "$tasks" | jq -r '(if type == "string" then (try fromjson catch .) else . end) | if type == "array" then .[] else empty end' |
-            while IFS= read -r wbs; do
-              if [ -n "$wbs" ]; then
-                task_json=$($spurBin task show "$wbs" --json 2>/dev/null || true);
-                if [ -n "$task_json" ]; then
-                  feat=$(printf '%s' "$task_json" | jq -r '.frontmatter.feature_id // .feature_id // empty' 2>/dev/null || true);
-                  stat=$(printf '%s' "$task_json" | jq -r '.frontmatter.status // .status // "unknown"' 2>/dev/null || true);
-                  verdict="UNKNOWN";
-                  if [ -f ".spur/run/$wbs-verdict.json" ]; then
-                    v=$(jq -r '.verdict // "UNKNOWN"' ".spur/run/$wbs-verdict.json" 2>/dev/null || true);
-                    if [ -n "$v" ]; then verdict="$v"; fi;
-                  fi;
-                  ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ");
-                  printf '{"wbs":"%s","feature_id":"%s","status":"%s","verdict":"%s","timestamp":"%s"}\n' "$wbs" "$feat" "$stat" "$verdict" "$ts" >> .spur/memory/wrapup-metrics.jsonl;
+            mkdir -p .spur/run .spur/memory &&
+            STATUS_FILE=".spur/run/$__runId-wrapup-metrics.status" &&
+            TASKS_FILE=".spur/run/$__runId-wrapup-tasks.json" &&
+            METRICS_RC=0 &&
+            for wbs in $(jq -r '.[]' "$TASKS_FILE" 2>/dev/null); do
+              task_json=$($spurBin task show "$wbs" --json 2>/dev/null || true);
+              if [ -n "$task_json" ]; then
+                feat=$(printf '%s' "$task_json" | jq -r '.frontmatter.feature_id // .feature_id // empty' 2>/dev/null || true);
+                stat=$(printf '%s' "$task_json" | jq -r '.frontmatter.status // .status // "unknown"' 2>/dev/null || true);
+                verdict="UNKNOWN";
+                if [ -f ".spur/run/$wbs-verdict.json" ]; then
+                  v=$(jq -r '.verdict // "UNKNOWN"' ".spur/run/$wbs-verdict.json" 2>/dev/null || true);
+                  if [ -n "$v" ]; then verdict="$v"; fi;
                 fi;
+                ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ");
+                printf '{"wbs":"%s","feature_id":"%s","status":"%s","verdict":"%s","timestamp":"%s"}\n' "$wbs" "$feat" "$stat" "$verdict" "$ts" >> .spur/memory/wrapup-metrics.jsonl;
+              else
+                echo "metrics-record: task $wbs did not resolve — recording FAIL instead of silently omitting its metrics row" >&2;
+                METRICS_RC=1;
               fi;
-            done &&
+            done;
+            if [ "$METRICS_RC" -eq 0 ]; then printf 'PASS\n' > "$STATUS_FILE"; else printf 'FAIL\n' > "$STATUS_FILE"; fi;
             exit 0
 
   - id: feature-transition
     description: >
       If vars.feature is set, sync feature status via bounded feature-sync-bounded
-      (0411). Soft shell — blocked/failed sync must not abort wrap-up after metrics.
-      Empty vars.feature is NOT a blocked sync but a mis-invocation (the engine only
-      enters this state when vars.feature is set) and fails loud (dogfood 2026-08-15,
-      feature I3: a silent exit 0 made the wrap look complete with no transition).
+      (0411). Soft shell — the run is never aborted after learnings/metrics
+      landed; instead (0770) a failed required sync or a failed feature gate
+      records FAIL in the run-scoped sync status and routes to `failed`, and a
+      successful sync that applied no transition is reported as an explicit
+      no-change. Empty vars.feature is NOT a blocked sync but a mis-invocation
+      (the engine only enters this state when vars.feature is set) and fails
+      loud (dogfood 2026-08-15, feature I3: a silent exit 0 made the wrap look
+      complete with no transition).
     onEnter:
       # Genuinely soft: the terminating `exit 0` must be reached on BOTH
       # branches, so
@@ -237,24 +315,41 @@ states:
             fi);
             SYNC_RC=$?;
             printf '%s\n' "$SYNC_OUTPUT";
-            APPLIED=$(printf '%s' "$SYNC_OUTPUT" | jq -r '.applied // false' 2>/dev/null || echo false);
+            if printf '%s' "$SYNC_OUTPUT" | jq -e 'has("applied")' > /dev/null 2>&1; then
+              APPLIED=$(printf '%s' "$SYNC_OUTPUT" | jq -r '.applied // false' 2>/dev/null || echo false);
+            else
+              APPLIED="invalid";
+            fi;
+            GATE="skipped";
             if [ "$APPLIED" = "true" ] || [ "$SYNC_RC" -ne 0 ]; then
               echo "feature-transition: sync applied or failed after a possible partial transition for $feature — running feature gate: $featureGateCmd";
               if sh -c "$featureGateCmd"; then
+                GATE="PASS";
                 echo "feature-transition: feature gate PASS for feature $feature";
               else
+                GATE="FAIL";
                 echo "feature-transition: feature gate FAIL for feature $feature — inspect findings before reporting the transition complete" >&2;
               fi;
             else
-              echo "feature-transition: sync did not apply a transition (rc=$SYNC_RC, applied=$APPLIED) — feature gate skipped";
+              echo "feature-transition: sync did not apply a transition (rc=$SYNC_RC, applied=$APPLIED) — feature gate skipped (explicit no-change)";
+            fi;
+            SYNC_STATUS="PASS";
+            if [ "$SYNC_RC" -ne 0 ] || [ "$GATE" = "FAIL" ] || [ "$APPLIED" = "invalid" ]; then SYNC_STATUS="FAIL"; fi;
+            if [ "$SYNC_STATUS" = "PASS" ]; then
+              printf 'PASS\n' > ".spur/run/$__runId-wrapup-sync.status";
+            else
+              printf 'FAIL\n' > ".spur/run/$__runId-wrapup-sync.status";
             fi;
             exit 0
 
   - id: branch-cleanup
     description: >
-      Irreversible HITL gate. If vars.merge=true, dispatch branch cleanup (merge or
-      delete). This gate ALWAYS pauses — even under --auto — because branch operations
-      are irreversible (Auto-Decision Principle #6). The operator must explicitly confirm.
+      Irreversible-operation HITL gate, consent-only (0770). If vars.merge=true,
+      branch cleanup (merge or delete) is a candidate — but this gate records
+      the operator decision and performs NO git operation itself; an operator
+      or a separate approved surface executes any actual merge/delete. This
+      gate ALWAYS pauses — even under --auto — because branch operations are
+      irreversible (Auto-Decision Principle #6).
     pause: true
     onEnter:
       - kind: hitl.confirm
@@ -263,12 +358,13 @@ states:
 
   - id: done
     description: >
-      Terminal — wrap-up complete. Output summary: tasks wrapped, learnings captured,
-      metrics recorded, feature advanced (if applicable), branch cleaned (if applicable).
+      Terminal — wrap-up complete. Summary: tasks wrapped, learnings captured,
+      metrics recorded, feature advanced or explicitly no-change (if applicable),
+      branch-cleanup decision recorded (consent-only; no git operation performed).
     onEnter:
       - kind: note
         options:
-          message: "Wrap-up pipeline complete for tasks: ${vars.tasks}. Learnings at .spur/memory/learnings.md, metrics at .spur/memory/wrapup-metrics.jsonl."
+          message: "Wrap-up pipeline complete for tasks: ${vars.tasks}. Learnings at .spur/memory/learnings.md, metrics at .spur/memory/wrapup-metrics.jsonl. Branch cleanup: consent recorded only (merge=${vars.merge}); no git operation performed by wrap-up."
       # Checkpoint write: record session state for resume (Phase 4, task 0171
       # R3)
       - kind: shell
@@ -278,6 +374,13 @@ states:
   - id: skipped
     description: Terminal — wrap-up skipped (empty task list or operator abort).
 
+  - id: failed
+    description: >
+      Terminal — wrap-up failed (0770): invalid wrap input, an unresolved or
+      non-completed task, a failed metrics capture, a failed required sync, or
+      a failed feature gate. Already-written artifacts (learnings, metrics
+      rows, route reason) are preserved; nothing is rolled back.
+
 transitions:
   # ── start -> task-resolve ──
   - from: start
@@ -286,7 +389,17 @@ transitions:
     guard:
       kind: always
 
-  # ── task-resolve: proportional route table (task 0758 R1-R4) ──
+  # ── task-resolve: validation fail + proportional route table (0758 R1-R4, 0770) ──
+  - from: task-resolve
+    to: failed
+    description: >
+      Validation FAIL (0770): malformed wrap input, a non-string/empty entry, an
+      unresolved or non-completed task, or an empty __runId. Declared before the
+      route edges so invalid input can never be absorbed by the empty-list skip.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-resolve.status 2>/dev/null)" = FAIL'
   - from: task-resolve
     to: skipped
     description: Task list is empty — skip wrap-up.
@@ -309,8 +422,10 @@ transitions:
       options:
         command: 'test "$(echo "$tasks" | jq length 2>/dev/null || echo 0)" -gt 0 && test "$mode" != fast'
   - from: task-resolve
-    to: skipped
-    description: Defense — task list unparseable; skip rather than fail with no-passing-transition.
+    to: failed
+    description: >
+      Defense (0770) — no PASS/FAIL resolve status (shell crashed or never ran):
+      route to `failed` rather than claiming a skip.
     guard:
       kind: always
 
@@ -321,47 +436,67 @@ transitions:
     guard:
       kind: always
 
-  # ── metrics-record: conditional routing based on feature and merge ──
-  # Declaration order matters: feature-transition is tried first (if feature is
-  # set),
-  # then branch-cleanup (if merge=true but no feature), then done (neither).
+  # ── metrics-record: fail edge, then conditional routing (feature → merge → done) ──
+  # Declaration order matters: the FAIL edge is tried first (0770), then
+  # feature-transition (if feature is set), then branch-cleanup (if merge=true
+  # but no feature), then done (neither). Routing edges additionally require
+  # the metrics status PASS so a missing status can never claim success.
+  - from: metrics-record
+    to: failed
+    description: >
+      Metrics capture failed for at least one task — a missing metrics row is
+      recorded as failure, never silently omitted as success (0770).
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-metrics.status 2>/dev/null)" = FAIL'
   - from: metrics-record
     to: feature-transition
-    description: Feature id is set — advance feature through legal lifecycle edges.
+    description: Metrics PASS and feature id is set — advance feature through legal lifecycle edges.
     guard:
       kind: shell
       options:
-        command: 'test -n "$feature"'
+        command: 'test "$(cat .spur/run/$__runId-wrapup-metrics.status 2>/dev/null)" = PASS && test -n "$feature"'
   - from: metrics-record
     to: branch-cleanup
-    description: No feature id, but merge is requested — go to branch cleanup.
+    description: Metrics PASS, no feature id, but merge is requested — go to branch cleanup.
     guard:
       kind: shell
       options:
-        command: 'test -z "$feature" && test "$merge" = true'
+        command: 'test "$(cat .spur/run/$__runId-wrapup-metrics.status 2>/dev/null)" = PASS && test -z "$feature" && test "$merge" = true'
   - from: metrics-record
     to: done
-    description: No feature id and no merge — wrap-up is done.
+    description: Metrics PASS, no feature id and no merge — wrap-up is done.
     guard:
       kind: shell
       options:
-        command: 'test -z "$feature" && test "$merge" != true'
+        command: 'test "$(cat .spur/run/$__runId-wrapup-metrics.status 2>/dev/null)" = PASS && test -z "$feature" && test "$merge" != true'
 
-  # ── feature-transition: -> branch-cleanup (if merge) or done ──
+  # ── feature-transition: fail edge, then branch-cleanup (if merge) or done ──
+  - from: feature-transition
+    to: failed
+    description: >
+      Required synchronization failed (0770): non-zero sync exit, an invalid
+      sync result, or a failed feature gate. The failed status carries the
+      actual reason; already-written learnings/metrics stay on disk.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-sync.status 2>/dev/null)" = FAIL'
   - from: feature-transition
     to: branch-cleanup
-    description: Feature advanced — merge is requested.
+    description: Sync PASS — merge is requested.
     guard:
       kind: shell
       options:
-        command: 'test "$merge" = true'
+        command: 'test "$(cat .spur/run/$__runId-wrapup-sync.status 2>/dev/null)" = PASS && test "$merge" = true'
   - from: feature-transition
     to: done
-    description: Feature advanced — no merge requested.
+    description: Sync PASS — no merge requested.
     guard:
       kind: shell
       options:
-        command: 'test "$merge" != true'
+        command: 'test "$(cat .spur/run/$__runId-wrapup-sync.status 2>/dev/null)" = PASS && test "$merge" != true'
 
   # ── branch-cleanup: HITL exhaustive routing (yes / no / cancel → done) ──
   # No irreversible git op is wired yet; confirmation is recorded, then wrap
