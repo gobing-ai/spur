@@ -159,6 +159,8 @@ export interface ImportAllOptions {
     dryRun?: boolean;
     /** Per-source timeout in ms (default {@link DEFAULT_SOURCE_TIMEOUT_MS}). */
     sourceTimeout?: number;
+    /** Skip incremental rollup refresh at the end of import (testing / batch callers). */
+    skipRollupRefresh?: boolean;
 }
 
 /** Options for {@link HistoryService.daily}. */
@@ -826,6 +828,17 @@ export class HistoryService {
                 attribution.linksAlreadyPresent += sourceAttribution.linksAlreadyPresent;
                 attribution.skippedEvidence += sourceAttribution.skippedEvidence;
                 attribution.ambiguousEvidence += sourceAttribution.ambiguousEvidence;
+            }
+        }
+
+        // Incrementally refresh board rollups so newly imported rows do not leave rollups stale
+        // and degrade web queries to raw table scans (Watermark Granularity).
+        if (opts.dryRun !== true && opts.skipRollupRefresh !== true) {
+            const db = await this.ctx.getDb();
+            try {
+                await refreshHistoryRollups(db);
+            } catch {
+                // Best-effort rollup refresh: an error must never abort or fail the import fan-out.
             }
         }
 

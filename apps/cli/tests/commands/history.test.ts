@@ -709,15 +709,21 @@ describe('history command', () => {
     });
 
     test('analyze subcommand formatted text output (non-json)', async () => {
+        const cwd = makeTmpCwd();
         const { output, lines } = capturingOutput();
-        const exitCode = await main(['history', 'analyze'], {
-            output,
-            dbUrl: ':memory:',
-        });
-        expect(exitCode).toBe(0);
-        const joined = lines.join('');
-        expect(joined).toContain('Total:');
-        expect(joined).toContain('$0.00');
+        try {
+            const exitCode = await main(['history', 'analyze'], {
+                output,
+                cwd,
+                dbUrl: ':memory:',
+            });
+            expect(exitCode).toBe(0);
+            const joined = lines.join('');
+            expect(joined).toContain('Total:');
+            expect(joined).toContain('$0.00');
+        } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
     });
 
     test('import subcommand formats warnings in text output', async () => {

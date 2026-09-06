@@ -1174,6 +1174,29 @@ describe('HistoryService', () => {
                 rmSync(dir, { recursive: true, force: true });
             }
         });
+
+        test('importAll incrementally refreshes rollups so rollups are fresh', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            const svc = new HistoryService(ctx);
+            const dir = mkdtempSync(join(tmpdir(), 'spur-import-fresh-'));
+            const file = join(dir, 'test.jsonl');
+            try {
+                const line = JSON.stringify({
+                    type: 'message',
+                    sessionId: 'sess-fresh-1',
+                    messageId: 'msg-fresh-1',
+                    ts: '2026-09-01T10:00:00Z',
+                    role: 'user',
+                    content: 'hello',
+                });
+                writeFileSync(file, `${line}\n`);
+                await svc.importAll({ sources: ['claude'], file, mode: 'force-file' });
+                expect(await historyBoardRollupsFresh(db)).toBe(true);
+            } finally {
+                rmSync(dir, { recursive: true, force: true });
+            }
+        });
     });
 
     // Task 0550 R3/R4: honest coverage — a refresh reports which sources it refreshed,
