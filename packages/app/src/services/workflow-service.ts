@@ -1,6 +1,6 @@
 import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, join, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { AGENT_ROLE_NAMES, type SpurConfig } from '@gobing-ai/spur-config';
 import { resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
@@ -11,6 +11,7 @@ import {
     createId,
     PhaseRunDao,
     RunDao,
+    type RunDefinitionSource,
     TaskRunLinkDao,
     TransitionRunDao,
 } from '@gobing-ai/spur-domain';
@@ -159,11 +160,14 @@ function withSelfPidRecording(inner: WorkflowPersistenceAdapter, db: DbAdapter):
 /**
  * The identity stamped onto every new run row at creation (0768 R1): the
  * canonical definition digest plus the definition's version literal (or `null`
- * for a known-unversioned definition).
+ * for a known-unversioned definition). `source` (0784 R1) pins the resolved
+ * launch file + layer + workdir so resume replays the launched definition
+ * instead of re-deriving it from `workflow_name`.
  */
 interface WorkflowRunIdentity {
     definitionDigest: string;
     workflowVersion: string | null;
+    source?: RunDefinitionSource;
 }
 
 /**
@@ -182,8 +186,14 @@ function withRunIdentityRecording(
     const stamp = async (runId: string): Promise<void> => {
         // json_set (via stampRunIdentity), not json_patch: RFC-7396 merge patch
         // deletes keys whose value is null, which would erase a known-unversioned
-        // workflowVersion instead of recording it.
-        await new RunDao(db).stampRunIdentity(runId, identity.definitionDigest, identity.workflowVersion);
+        // workflowVersion instead of recording it. The DAO merge is conditional on
+        // an absent digest, so identity is immutable once stamped (0784 R1).
+        await new RunDao(db).stampRunIdentity(
+            runId,
+            identity.definitionDigest,
+            identity.workflowVersion,
+            identity.source,
+        );
     };
     return new Proxy(inner, {
         get(target, prop, receiver) {
@@ -195,8 +205,12 @@ function withRunIdentityRecording(
             }
             if (prop === 'createOrAttachRun') {
                 return async (record: Parameters<WorkflowPersistenceAdapter['createOrAttachRun']>[0]) => {
+                    // 0784 R1: attaching an already-persisted run must retain its
+                    // recorded identity (or its documented pre-0768 legacy absence) —
+                    // stamp only a genuinely new row, never the attach target.
+                    const existing = await new RunDao(db).traceRowById(record.id);
                     const result = await target.createOrAttachRun(record);
-                    await stamp(result.id);
+                    if (existing === undefined) await stamp(result.id);
                     return result;
                 };
             }
@@ -646,6 +660,10 @@ export class WorkflowAppService {
             events: eventsBus,
             steeringController: opts.steeringController,
             extensions: { workflow, file: absolute },
+            // 0784 R1: pin the resolved launch source + workdir with the run
+            // identity (one json_set, before any action executes) so resume
+            // replays this exact definition even from another ambient cwd.
+            definitionSource: { path: absolute, layer: resolved.layer, workdir: this.ctx.cwd },
         });
         const runId = opts.runId ?? crypto.randomUUID();
         const isDry = opts.dryRun === true;
@@ -1037,29 +1055,99 @@ export class WorkflowAppService {
             throw new Error(`Run "${runId}" is not paused (or does not exist) - nothing to continue.`);
         }
 
-        // R5: Resume validates checkpoint freshness on the resume side (ADR-099).
-        await this.validateResumeCheckpointFreshness(runId, row);
-
-        // R1/R4: Shared resolve seam (project-first, validateSchema: true).
-        let resolved: ResolvedWorkflowDefinition;
-        try {
-            resolved = await resolveWorkflowDefinition(this.ctx.cwd, row.workflow_name, {
-                validateSchema: true,
-                embeddedSchemas: this.ctx.embeddedSchemas?.(),
-            });
-        } catch {
-            throw new Error(
-                `Cannot resume run "${runId}": workflow definition "${row.workflow_name}" not found in the workflow search paths.`,
-            );
-        }
-
-        // R3: Compare persisted definitionDigest against re-resolved definition.
+        // Parse persisted metadata FIRST (0784 R1): the recorded launch source
+        // decides how the definition is resolved, before any name-based lookup.
         let rawMeta: Record<string, unknown> = {};
         try {
             rawMeta = JSON.parse(row.metadata_json || '{}');
         } catch {
             rawMeta = {};
         }
+        const warnings: string[] = [];
+        const emitWarning = (message: string): void => {
+            warnings.push(message);
+            // Best-effort human visibility; a sink failure must not block resume.
+            try {
+                this.ctx.warn?.(message);
+            } catch {
+                // Warning delivery cannot change resume semantics.
+            }
+        };
+
+        // 0784 R1/R2: honor the recorded launch source. A present-but-malformed
+        // definitionSource fails rather than silently degrading to legacy lookup.
+        let pinned: RunDefinitionSource | null = null;
+        const rawSource: unknown = rawMeta.definitionSource;
+        if (rawSource !== undefined) {
+            if (rawSource === null || typeof rawSource !== 'object' || Array.isArray(rawSource)) {
+                throw new Error(
+                    `Cannot resume run "${runId}": recorded definitionSource metadata is malformed (expected {path, layer, workdir}). Resume refused.`,
+                );
+            }
+            const candidate = rawSource as Record<string, unknown>;
+            const sourcePath = candidate.path;
+            const sourceLayer = candidate.layer;
+            const sourceWorkdir = candidate.workdir;
+            if (
+                typeof sourcePath !== 'string' ||
+                sourcePath === '' ||
+                (sourceLayer !== 'project' && sourceLayer !== 'bundled') ||
+                typeof sourceWorkdir !== 'string' ||
+                sourceWorkdir === ''
+            ) {
+                throw new Error(
+                    `Cannot resume run "${runId}": recorded definitionSource metadata is malformed (expected an absolute path, a project|bundled layer, and a workdir). Resume refused.`,
+                );
+            }
+            pinned = { path: sourcePath, layer: sourceLayer, workdir: sourceWorkdir };
+        }
+
+        // Launch workdir grounds checkpoint artifacts, git freshness, and the
+        // engine resume snapshot (0784 R3) — never the ambient process cwd.
+        const launchWorkdir = pinned?.workdir ?? this.ctx.cwd;
+
+        // R5: Resume validates checkpoint freshness on the resume side (ADR-099).
+        await this.validateResumeCheckpointFreshness(runId, row, launchWorkdir);
+
+        // R1/R4 + 0784 R1/R2: resolve the launched definition. With a recorded
+        // source, verify the file still exists BEFORE invoking the resolver so a
+        // deleted source can never silently resolve a same-named replacement;
+        // require resolution to land exactly on the recorded path. Without one,
+        // retain legacy name-only lookup with an explicit degraded-identity warning.
+        let resolved: ResolvedWorkflowDefinition;
+        if (pinned !== null) {
+            const fs = createNodeFileSystem();
+            if (!fs.exists(pinned.path)) {
+                throw new Error(
+                    `Cannot resume run "${runId}": recorded launch source "${pinned.path}" no longer exists. Repair the source or start a new run; name-based fallback is refused.`,
+                );
+            }
+            resolved = await resolveWorkflowDefinition(pinned.workdir, pinned.path, {
+                validateSchema: true,
+                embeddedSchemas: this.ctx.embeddedSchemas?.(),
+            });
+            if (resolved.path !== pinned.path) {
+                throw new Error(
+                    `Cannot resume run "${runId}": definition resolved to "${resolved.path}" instead of the recorded launch source "${pinned.path}". Resume refused.`,
+                );
+            }
+        } else {
+            try {
+                resolved = await resolveWorkflowDefinition(this.ctx.cwd, row.workflow_name, {
+                    validateSchema: true,
+                    embeddedSchemas: this.ctx.embeddedSchemas?.(),
+                });
+            } catch {
+                throw new Error(
+                    `Cannot resume run "${runId}": workflow definition "${row.workflow_name}" not found in the workflow search paths.`,
+                );
+            }
+            emitWarning(
+                `Run "${runId}" resumed by workflow name "${row.workflow_name}" (no recorded launch source — pre-source-pin run); identity checks run against the name-resolved definition.`,
+            );
+        }
+
+        // R3: Compare persisted definitionDigest against re-resolved definition.
         const persistedDigest = typeof rawMeta.definitionDigest === 'string' ? rawMeta.definitionDigest : null;
         // 0768 R1: a row's identity era is read from the PRESENCE of the
         // metadata.workflowVersion key — never by re-resolving today's definition.
@@ -1091,6 +1179,29 @@ export class WorkflowAppService {
                     );
                 }
             }
+            // 0784 R2: consented drift is recorded and made visible — the launch
+            // identity stays immutable, the executed identity is stamped alongside
+            // it and carried into proof vars so mixed-definition execution cannot
+            // masquerade as single-definition evidence.
+            const db = await this.ctx.getDb();
+            await new RunDao(db).mergeMetadata(runId, {
+                resumeDefinitionDigest: resolved.digest,
+                resumeWorkflowVersion: workflowVersionLiteral(resolved.workflow),
+            });
+            emitWarning(
+                `Consented definition drift on resume of run "${runId}": launched ${persistedDigest}, executing ${resolved.digest}; launch identity preserved, proof vars carry the executed digest.`,
+            );
+        } else if (
+            ('resumeDefinitionDigest' in rawMeta || 'resumeWorkflowVersion' in rawMeta) &&
+            (persistedDigest === null || persistedDigest === resolved.digest)
+        ) {
+            // 0784 R2: an earlier consented drift no longer applies — clear the
+            // stale resume identity so diagnostics stay truthful.
+            const db = await this.ctx.getDb();
+            await new RunDao(db).mergeMetadata(runId, {
+                resumeDefinitionDigest: null,
+                resumeWorkflowVersion: null,
+            });
         }
 
         const svc = await this.createEngineService({
@@ -1102,11 +1213,19 @@ export class WorkflowAppService {
         // re-evaluation sees the override, not the stale headless default. The
         // engine's resumeRun merges options.vars over the persisted snapshot
         // (caller overrides win - ts-dual-workflow-engine service.ts:127).
+        // 0784 R2: on consented drift the executed digest overrides the proof
+        // binding var (__definitionDigest) for this resume only.
         const hitlVar = opts?.hitlVar ?? '__hitlAnswer';
-        const resumeVars = opts?.hitlAnswer !== undefined ? { [hitlVar]: opts.hitlAnswer } : undefined;
+        const resumeVars: Record<string, string> = {};
+        if (opts?.hitlAnswer !== undefined) resumeVars[hitlVar] = opts.hitlAnswer;
+        if (persistedDigest !== null && persistedDigest !== resolved.digest && 'resumeDefinitionDigest' in rawMeta) {
+            resumeVars.__definitionDigest = resolved.digest;
+        }
         const result = await svc.resumeRun(workflow, runId, {
-            workdir: this.ctx.cwd,
-            ...(resumeVars !== undefined ? { vars: resumeVars } : {}),
+            // 0784 R1/R3: resume inside the recorded launch workdir (legacy: the
+            // ambient service cwd), never the ambient process cwd.
+            workdir: launchWorkdir,
+            ...(Object.keys(resumeVars).length > 0 ? { vars: resumeVars } : {}),
             ...(eventsBus !== undefined
                 ? {
                       // R3 (0601): engine-native resume events carry workflow identity.
@@ -1121,6 +1240,8 @@ export class WorkflowAppService {
         // pre-0768 rows (unknown legacy identity).
         runResult.definitionDigest = persistedDigest;
         if (persistedVersion !== undefined) runResult.version = persistedVersion;
+        // 0784 R2: surface degraded/consented-drift resume diagnostics.
+        if (warnings.length > 0) (runResult as Record<string, unknown>).warnings = warnings;
         return runResult;
     }
 
@@ -1139,14 +1260,21 @@ export class WorkflowAppService {
     }
 
     /**
-     * Validate checkpoint freshness on resume (task 0752 / R5 / ADR-099).
-     * Refuses resume if an associated session checkpoint is stale or does not reflect the current run state.
+     * Validate checkpoint freshness on resume (task 0752 / R5 / ADR-099; reworked
+     * by 0784 R3). For every checkpoint associated with the resumed run: accept
+     * pending/running/approved as the nonterminal advisory projections of a paused
+     * engine run (consumer-local mapping — no new persisted enum), then validate
+     * workflow/WBS ownership, current HEAD (probed in the launch workdir only when
+     * the checkpoint participates in commit tracking) and workdir-resolved artifact
+     * existence. Missing/unreadable git freshness is a named refusal, never an
+     * empty-string fallback. A missing checkpoint is a supported engine-only resume.
      */
     private async validateResumeCheckpointFreshness(
         runId: string,
         row: { id: string; workflow_name: string; status: string; metadata_json?: string },
+        workdir: string,
     ): Promise<void> {
-        const sessionsDir = join(this.ctx.cwd, '.spur', 'memory', 'sessions');
+        const sessionsDir = join(workdir, '.spur', 'memory', 'sessions');
         const fs = createNodeFileSystem();
         let entries: string[];
         try {
@@ -1162,6 +1290,28 @@ export class WorkflowAppService {
             rawMeta = {};
         }
         const wbs = typeof rawMeta.wbs === 'string' ? rawMeta.wbs : undefined;
+
+        // HEAD is probed lazily (first commit-tracking checkpoint) and cached; a
+        // probe failure is a refusal, never an empty-string fallback (0784 R3).
+        const executor = this.ctx.processExecutor?.() ?? new NodeProcessExecutor();
+        let head: string | null = null;
+        const resolveHead = async (): Promise<string> => {
+            if (head !== null) return head;
+            const probe = await executor.run({
+                command: 'git',
+                args: ['rev-parse', 'HEAD'],
+                cwd: workdir,
+                forceBuffered: true,
+                rejectOnError: false,
+            });
+            if (probe.exitCode !== 0 || probe.stdout.trim() === '') {
+                throw new Error(
+                    `Cannot resume run "${runId}": checkpoint freshness requires the launch workdir's git HEAD, but "git rev-parse HEAD" failed in "${workdir}". Refusing rather than skipping the commit-drift check.`,
+                );
+            }
+            head = probe.stdout.trim();
+            return head;
+        };
 
         for (const name of entries) {
             const filePath = join(sessionsDir, name);
@@ -1191,12 +1341,29 @@ export class WorkflowAppService {
                         `Cannot resume run "${runId}": checkpoint is stale (workflow-mismatch: checkpoint workflow "${meta.workflow}" != "${row.workflow_name}").`,
                     );
                 }
-                if (meta.status !== '' && meta.status !== row.status) {
+                // 0784 R3: consumer-local status mapping. The persisted run row is
+                // authoritative; a checkpoint's status is advisory and must project
+                // a nonterminal engine state for the resume to proceed.
+                if (meta.status === '') {
                     throw new Error(
-                        `Cannot resume run "${runId}": checkpoint is stale (status-mismatch: checkpoint status "${meta.status}" does not match run status "${row.status}").`,
+                        `Cannot resume run "${runId}": checkpoint is stale (status-missing: checkpoint carries no status).`,
                     );
                 }
-                const staleness = checkpointStaleness(meta);
+                if (isTerminalCheckpointStatus(meta.status)) {
+                    throw new Error(
+                        `Cannot resume run "${runId}": checkpoint is stale (terminal: status=${meta.status}).`,
+                    );
+                }
+                if (meta.status !== 'pending' && meta.status !== 'running' && meta.status !== 'approved') {
+                    throw new Error(
+                        `Cannot resume run "${runId}": checkpoint is stale (unknown checkpoint status "${meta.status}" — expected pending/running/approved).`,
+                    );
+                }
+                const staleness = checkpointStaleness(meta, {
+                    ...(wbs !== undefined ? { taskWbs: wbs } : {}),
+                    ...(meta.sourceCommit === '' ? {} : { sourceCommit: await resolveHead() }),
+                    artifactExists: (p: string) => fs.exists(isAbsolute(p) ? p : join(workdir, p)) as boolean,
+                });
                 if (staleness.stale) {
                     throw new Error(`Cannot resume run "${runId}": checkpoint is stale (${staleness.reason}).`);
                 }
@@ -1423,6 +1590,8 @@ export class WorkflowAppService {
             steeringController?: WorkflowSteeringController;
             /** Workflow def + source file to load YAML extensions from (0533 R1). */
             extensions?: { workflow: WorkflowDef; file: string };
+            /** Resolved launch source recorded with the run identity (0784 R1). */
+            definitionSource?: RunDefinitionSource;
         } = {},
     ): Promise<EngineWorkflowService> {
         const processExec = this.ctx.processExecutor?.();
@@ -1487,9 +1656,12 @@ export class WorkflowAppService {
         if (opts.extensions !== undefined) {
             // 0768 R1: one identity merge (digest + version literal) at run creation;
             // a merge failure propagates and aborts the run before any action runs.
+            // 0784 R1: launch sites additionally pin path/layer/workdir in the same
+            // statement so resume can replay the launched definition exactly.
             persistence = withRunIdentityRecording(persistence, db, {
                 definitionDigest: computeDefinitionDigest(opts.extensions.workflow),
                 workflowVersion: workflowVersionLiteral(opts.extensions.workflow),
+                ...(opts.definitionSource !== undefined ? { source: opts.definitionSource } : {}),
             });
         }
         const adapter = bus

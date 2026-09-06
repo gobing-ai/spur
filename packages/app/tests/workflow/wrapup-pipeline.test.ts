@@ -148,7 +148,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     const def = loadDef('wrapup-pipeline');
 
     test('identity: the definition carries an explicit version tag', () => {
-        expect(def.version).toBe('2');
+        expect(def.version).toBe('3');
     });
 
     test('default feature gate checks only the selected feature and permits explicit override', () => {
@@ -170,16 +170,16 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     test('0770 definitions are all explicitly versioned (identity tag, not absence)', () => {
-        // Exact per-definition pins: a silent version bump fails here. feature-dev is '2' since
-        // task 0782 redefined it as existing-feature reuse (frozen design, see
-        // feature-dev-definition.test.ts and docs/design/essential-workflow-checks.md).
-        // wrapup-pipeline is '2' since task 0783 redefined its consumers (validated
-        // inputs, truthful sync outcomes).
+        // Exact per-definition pins: a silent version bump fails here. feature-dev is '3'
+        // since task 0782 redefined it as existing-feature reuse and 0784 removed its
+        // pseudo-checkpoint writer (frozen design, see feature-dev-definition.test.ts and
+        // docs/design/essential-workflow-checks.md). wrapup-pipeline is '3' since 0783
+        // redefined its consumers and 0784 removed its pseudo-checkpoint writer.
         const expectedVersions: Record<string, string> = {
             'task-lifecycle': '1',
             'feature-lifecycle': '1',
-            'feature-dev': '2',
-            'wrapup-pipeline': '2',
+            'feature-dev': '3',
+            'wrapup-pipeline': '3',
         };
         for (const [name, version] of Object.entries(expectedVersions)) {
             expect(loadDef(name).version).toBe(version);

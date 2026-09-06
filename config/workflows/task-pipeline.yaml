@@ -29,7 +29,7 @@ kind: state-machine
 name: task-pipeline
 # 0772 R2: explicit identity tag. Set only after the proof failure-path tests
 # passed; the engine treats unversioned external definitions as supported.
-version: "1"
+version: "2"
 description: "Standard task pipeline: precheck → implement → quality-gate (test/fix/recheck) → review → approve → verify → record → done"
 # Task entity lifecycle (owned by task-lifecycle.yaml):
 #   normal: backlog → todo → wip → testing → done
@@ -773,9 +773,10 @@ states:
           - kind: note
             options:
                 message: "Pipeline complete for task ${vars.wbs} (done gate cleared)."
-          # Checkpoint write: record session state for resume (0711 R1–R3) —
-          # canonical frontmatter contract; mirrors the Session Checkpoint
-          # Convention in plugins/sp/skills/spur-dev/references/cross-cutting.md.
+          # Checkpoint write: record session state for resume (0711 R1–R3;
+          # run-id/artifact binding corrected by 0784 R4) — canonical frontmatter
+          # contract; mirrors the Session Checkpoint Convention in
+          # plugins/sp/skills/spur-dev/references/cross-cutting.md.
           # Advisory only: the task file and the persisted run row stay authoritative.
           - kind: shell
             options:
@@ -783,7 +784,7 @@ states:
                 # command whose continuation lines look like argument lists (heredocs with
                 # `- item` entries trip it), so the checkpoint body is one printf with \n escapes.
                 command: >-
-                    mkdir -p .spur/memory/sessions; CP_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; CP_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"; CP_DIGEST="$(cut -d= -f2 .spur/run/$wbs-proofdigest.txt 2>/dev/null || echo '')"; CP_RUN="$SPUR_RUN_ID"; [ -z "$CP_RUN" ] && CP_RUN="$RUN_ID"; printf '%s\n' '---' 'schema_version: 1' "session_id: $(date -u +%Y-%m-%d)-$wbs" 'workflow: task-pipeline' "run_id: $CP_RUN" "task_wbs: $wbs" 'feature_id: ""' 'phase: done' 'status: done' 'last_gate: record' "source_commit: $CP_COMMIT" "digest: $CP_DIGEST" "generated_at: $CP_TS" "updated_at: $CP_TS" "next_action: none - task $wbs complete (terminal; advisory only)" 'artifacts:' '  - .spur/run/$wbs-verdict.json' '  - .spur/run/$wbs-test-gate.log' '---' '' '## Session Notes' '' "Terminal checkpoint for task $wbs (task-pipeline done)." 'Advisory only; the task file is authoritative.' > .spur/memory/sessions/$wbs-checkpoint.md; exit 0
+                    mkdir -p .spur/memory/sessions; CP_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; CP_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"; CP_DIGEST="$proofDigest"; CP_RUN="$__runId"; printf '%s\n' '---' 'schema_version: 1' "session_id: $(date -u +%Y-%m-%d)-$wbs" 'workflow: task-pipeline' "run_id: $CP_RUN" "task_wbs: $wbs" 'feature_id: ""' 'phase: done' 'status: done' 'last_gate: record' "source_commit: $CP_COMMIT" "digest: $CP_DIGEST" "generated_at: $CP_TS" "updated_at: $CP_TS" "next_action: none - task $wbs complete (terminal; advisory only)" 'artifacts:' "  - .spur/run/$wbs-verdict.json" "  - .spur/run/$wbs-test-gate.log" '---' '' '## Session Notes' '' "Terminal checkpoint for task $wbs (task-pipeline done)." 'Advisory only; the task file is authoritative.' > .spur/memory/sessions/$wbs-checkpoint.md; exit 0
 
     - id: failed
       description: >

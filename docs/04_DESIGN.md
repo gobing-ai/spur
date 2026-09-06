@@ -634,10 +634,14 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   [`design/workflow-observability.md`](design/workflow-observability.md).
   `--async` starts the run in a detached background process and returns the run id immediately.
 - `continue [run-id] [--yes]` — resume a paused (HITL) run (E3, design §6 / D04). Omit `run-id` to
-  discover the most-recent paused run and confirm (skipped with `--yes`). Resolves the run's
-  `workflow_name` back to its YAML, then `resumeRun`. Works for both lifecycle and pipeline runs;
-  exit 1 if no paused run, the run isn't paused, or it doesn't resolve to `done`. (A state pauses when
-  it declares `pause: true`; the workspace schema supports `pause`.)
+  discover the most-recent paused run and confirm (skipped with `--yes`). With a recorded launch
+  source (0784 R1), resume replays that exact recorded file from the recorded launch workdir — a
+  missing recorded source refuses rather than resolving a same-named replacement; pre-pin rows
+  resolve by `workflow_name` with an explicit degraded-identity warning (0784 R2). Checkpoint
+  freshness validates in the launch workdir; associated checkpoints must project a nonterminal
+  engine state (`pending`/`running`/`approved`). Then `resumeRun`. Works for both lifecycle and
+  pipeline runs; exit 1 if no paused run, the run isn't paused, or it doesn't resolve to `done`.
+  (A state pauses when it declares `pause: true`; the workspace schema supports `pause`.)
 - `cancel <run-id>` — mark a single non-terminal run failed; SIGTERM the worker process group when live. Idempotent: already-terminal runs report no change. Bulk/stale variant is `clean`.
 - `list` — list available workflow YAML files across project (`.spur/workflows/`) and global
   (`~/.config/spur/workflows/`) layers, grouped by source.
@@ -2603,6 +2607,14 @@ it cannot prove is a terminal checkpoint (R5). The plugin's
 `plugins/sp/scripts/stage-registry-adapter.ts` keeps a self-contained lean copy of this semantics —
 it installs into foreign repos and cannot import workspace packages — and a parity test pins the two
 together.
+
+**Resume-side checkpoint mapping (0784 R3).** On `workflow continue`, a checkpoint associated with
+the paused run is validated in the run's recorded launch workdir: `pending`/`running`/`approved`
+statuses are accepted as the nonterminal advisory projections of a paused engine (the engine
+persists no `paused` checkpoint status); terminal, missing, or unknown statuses refuse the resume
+with a named reason. Artifacts resolve relative to the launch workdir and git HEAD is probed there
+through the ProcessExecutor (a probe failure refuses — never an empty-string fallback); an engine
+run with no associated checkpoint remains a valid resume.
 
 **Verifier-owned verify answer file (task 0726, R3).** The verify step's `agent.run` declares
 `expectFile` instead of `answerFile`: the verifier writes `.spur/run/<wbs>-verify-answer.txt` itself

@@ -72,7 +72,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: wrapup-pipeline
-version: "2"
+version: "3"
 description: "Post-execution wrap-up: doc-sync (doc drift + learning capture), metrics, feature-transition, branch-cleanup"
 iterationBound: 10
 initialState: start
@@ -432,11 +432,6 @@ states:
       - kind: note
         options:
           message: "Wrap-up pipeline complete for the validated task list at .spur/run/${vars.__runId}-wrapup-tasks.json. Learnings at .spur/memory/learnings.md, metrics at .spur/memory/wrapup-metrics.jsonl. Branch cleanup: consent recorded only (merge=${vars.merge}); no git operation performed by wrap-up."
-      # Checkpoint write: record session state for resume (Phase 4, task 0171
-      # R3)
-      - kind: shell
-        options:
-          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: wrapup-pipeline done tasks=$tasks ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/wrapup-checkpoint.md'
 
   - id: skipped
     description: Terminal — wrap-up skipped (empty task list or operator abort).

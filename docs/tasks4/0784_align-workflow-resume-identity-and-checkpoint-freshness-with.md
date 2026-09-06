@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Align workflow resume identity and checkpoint freshness with persisted runs"
-status: todo
+status: done
 template: issue
 created_at: 2026-09-06T18:27:45.363Z
-updated_at: "2026-09-06T19:04:01.317Z"
+updated_at: "2026-09-06T21:19:50.781Z"
 feature_id: D6
 priority: P1
 dependencies: ["0782", "0783"]
@@ -15,11 +15,11 @@ dependencies: ["0782", "0783"]
 ### Background
 Audit 0781 F-05 is confirmed in WorkflowService.continuePaused: it resolves row.workflow_name, not the original explicit source; validateResumeCheckpointFreshness compares canonical pending/running against engine paused and calls checkpointStaleness without sourceCommit or a workdir-rooted probe. The resolver returns path/workflow/digest/layer, and RunDao.stampRunIdentity currently atomically writes only digest/version. FileSystem.realPath exists in the installed runtime. Three terminal writers (feature-dev, wrapup, idea) emit ignored one-line pseudo-checkpoints; task-pipeline's canonical writer quotes artifact variables literally. These are current source facts, not a request for a new checkpoint engine.
 ### Requirements
-- [ ] R1. Atomically retain resolved launch source and workdir with existing run identity before actions execute; resume exactly that existing source, including arbitrary filenames and bundled launches. Never fall back to another same-named file when a recorded source is missing. Preserve unrelated metadata and immutable launch digest/version on attachment and resume.
-- [ ] R2. Preserve legacy name-only resolution for rows with no source metadata, with explicit degraded-identity diagnostics. Definition drift still requires the existing explicit consent path. After consent, runtime proof vars and diagnostics identify the actual resumed definition while original launch identity remains unchanged; mixed-definition execution must not masquerade as single-definition verified evidence.
-- [ ] R3. For checkpoints associated with a paused run, accept pending/running/approved as nonterminal projections, then validate workflow/WBS ownership, current HEAD and workdir-resolved artifact existence. Missing or invalid required freshness evidence and stale inputs fail with a named reason; no checkpoint remains a supported engine-only resume path.
-- [ ] R4. Remove the three noncanonical terminal pseudo-checkpoint writes and correct the existing task-pipeline terminal writer's run-ID/artifact expansion. Preserve existing malformed files during cleanup and do not add new checkpoint cadence, status vocabulary or a second store.
-- [ ] R5. Demonstrate real local engine pause/resume in isolated DB and temporary Git fixtures: arbitrary source filename, different ambient cwd, bundled-source pinning, stale HEAD/artifact, legacy row, refused drift and consented drift. No live application runs may be used or mutated.
+- [x] R1. Atomically retain resolved launch source and workdir with existing run identity before actions execute; resume exactly that existing source, including arbitrary filenames and bundled launches. Never fall back to another same-named file when a recorded source is missing. Preserve unrelated metadata and immutable launch digest/version on attachment and resume.
+- [x] R2. Preserve legacy name-only resolution for rows with no source metadata, with explicit degraded-identity diagnostics. Definition drift still requires the existing explicit consent path. After consent, runtime proof vars and diagnostics identify the actual resumed definition while original launch identity remains unchanged; mixed-definition execution must not masquerade as single-definition verified evidence.
+- [x] R3. For checkpoints associated with a paused run, accept pending/running/approved as nonterminal projections, then validate workflow/WBS ownership, current HEAD and workdir-resolved artifact existence. Missing or invalid required freshness evidence and stale inputs fail with a named reason; no checkpoint remains a supported engine-only resume path.
+- [x] R4. Remove the three noncanonical terminal pseudo-checkpoint writes and correct the existing task-pipeline terminal writer's run-ID/artifact expansion. Preserve existing malformed files during cleanup and do not add new checkpoint cadence, status vocabulary or a second store.
+- [x] R5. Demonstrate real local engine pause/resume in isolated DB and temporary Git fixtures: arbitrary source filename, different ambient cwd, bundled-source pinning, stale HEAD/artifact, legacy row, refused drift and consented drift. No live application runs may be used or mutated.
 ### Acceptance Criteria
 ```gherkin
 Feature: Reliable workflow resume
@@ -81,17 +81,87 @@ Execution budget: one owned task at a time; checkpoint after 45 minutes or two u
 <!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
 
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/services/workflow-service.ts:1058` |
+| `packages/app/src/services/workflow-service.ts:1110` |
+| `packages/app/src/services/workflow-service.ts:1112` |
+| `packages/app/src/services/workflow-service.ts:1118` |
+| `packages/app/src/services/workflow-service.ts:1129` |
+| `packages/app/src/services/workflow-service.ts:1150` |
+| `packages/app/src/services/workflow-service.ts:1182` |
+| `packages/app/src/services/workflow-service.ts:1216` |
+| `packages/app/src/services/workflow-service.ts:1219` |
+| `packages/app/src/services/workflow-service.ts:1225` |
+| `packages/app/src/services/workflow-service.ts:1243` |
+| `packages/app/src/services/workflow-service.ts:1263` |
+| `packages/app/src/services/workflow-service.ts:1275` |
+| `packages/app/src/services/workflow-service.ts:1277` |
+| `packages/app/src/services/workflow-service.ts:1294` |
+| `packages/app/src/services/workflow-service.ts:1344` |
+| `packages/app/src/services/workflow-service.ts:1349` |
+| `packages/app/src/services/workflow-service.ts:1352` |
+| `packages/app/src/services/workflow-service.ts:14` |
+| `packages/app/src/services/workflow-service.ts:1593` |
+| `packages/app/src/services/workflow-service.ts:163` |
+| `packages/app/src/services/workflow-service.ts:1659` |
+| `packages/app/src/services/workflow-service.ts:1664` |
+| `packages/app/src/services/workflow-service.ts:170` |
+| `packages/app/src/services/workflow-service.ts:189` |
+| `packages/app/src/services/workflow-service.ts:208` |
+| `packages/app/src/services/workflow-service.ts:213` |
+| `packages/app/src/services/workflow-service.ts:3` |
+| `packages/app/src/services/workflow-service.ts:663` |
+| `packages/app/tests/services/workflow-service.test.ts:127` |
+| `packages/app/tests/services/workflow-service.test.ts:2824` |
+| `packages/app/tests/workflow/feature-dev-definition.test.ts:168` |
+| `packages/app/tests/workflow/feature-dev-definition.test.ts:2` |
+| `packages/app/tests/workflow/feature-dev-definition.test.ts:417` |
+| `packages/app/tests/workflow/workflow-resolver.test.ts:294` |
+| `packages/app/tests/workflow/workflow-resolver.test.ts:306` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:151` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:173` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:181` |
+| `packages/domain/src/dao/index.ts:17` |
+| `packages/domain/src/dao/run-dao.ts:133` |
+| `packages/domain/src/dao/run-dao.ts:145` |
+| `packages/domain/src/dao/run-dao.ts:163` |
+| `packages/domain/src/dao/run-dao.ts:165` |
+| `packages/domain/src/dao/run-dao.ts:170` |
+| `packages/domain/src/dao/run-dao.ts:9` |
+| `packages/domain/tests/dao/run-dao-identity.test.ts:43` |
+| `packages/domain/tests/dao/run-dao-identity.test.ts:46` |
+| `packages/domain/tests/dao/run-dao-identity.test.ts:56` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/domain/src/dao/run-dao.ts:14 RunDefinitionSource {path, layer, workdir}; packages/domain/src/dao/run-dao.ts:137-167 stampRunIdentity takes optional source and writes the three json_set paths in the SAME statement, conditional on $.definitionDigest being absent (identity immutable on attach/race). packages/app/src/services/workflow-service.ts:666 launch pins {path, layer, workdir} with run identity before actions; workflow-service.ts:211 attach path stamps only genuinely new rows (traceRowById first). Resume: workflow-service.ts:1122 refuses when the recorded source no longer exists (name-based fallback refused — no same-named impostor); workflow-service.ts:1131 refuses unless resolution lands exactly on the recorded path. Tests: workflow-service.test.ts "R1: resume replays the recorded arbitrary-filename source from another ambient cwd (impostor ignored)", "R1: a deleted recorded source refuses resume instead of resolving a same-named replacement", "R1: launch records definitionSource and resume leaves identity untouched", "R1: a bundled-layer launch pins the bundled path"; run-dao-identity.test.ts (4 pass, conditional stamp + attach preservation). |
+| R2 | MET | workflow-service.ts:1146 legacy name-only rows resume by name with explicit degraded-identity warning; workflow-service.ts:1100-1107 malformed present definitionSource refuses (never silent legacy). workflow-service.ts:1188-1192 consented drift merges resumeDefinitionDigest/resumeWorkflowVersion + warns naming both identities; workflow-service.ts:1222 overrides __definitionDigest proof var with the executed digest; workflow-service.ts:1212-1219 clears stale resume metadata when a later resume is unchanged; launch identity echo unchanged (runResult.definitionDigest = persistedDigest). Definition drift without consent still requires the pre-existing explicit consent path. Tests: "R2: legacy name-only rows ... degraded-identity warning", "R2: malformed definitionSource metadata refuses resume (never legacy fallback)", "R2: consented drift records resume identity + warns; launch digest echo unchanged", "R2: refused drift records no resume identity". |
+| R3 | MET | workflow-service.ts:1357 consumer-local mapping accepts pending/running/approved as nonterminal projections of paused; terminal/missing/unknown statuses refused with named reasons (workflow-service.ts:1345-1359). workflow-service.ts:1298-1306 HEAD probed via configured ProcessExecutor with cwd=launch workdir; probe failure is a named refusal, never an empty-string fallback. workflow-service.ts:1364-1365 checkpointStaleness receives taskWbs + sourceCommit + artifactExists resolving relative paths under the launch workdir. Missing checkpoint remains a valid engine-only resume. checkpoint-contract.ts untouched (pre-existing taskWbs/sourceCommit/artifactExists options reused — no new enum/store). Tests: "accepts a fresh checkpoint ... from another ambient cwd", "refuses a stale HEAD (commit drift)", "refuses a missing workdir-relative artifact", "refuses terminal, missing, and unknown checkpoint statuses", "refuses when git freshness is required but unavailable (no empty-string fallback)", "an engine run with NO associated checkpoint still resumes". |
+| R4 | MET | config/workflows/feature-dev.yaml, idea-pipeline.yaml, wrapup-pipeline.yaml: the three one-line pseudo-checkpoint shell writes deleted (versions incremented 2→3, 1→2, 1→2 from then-current). config/workflows/task-pipeline.yaml:787 canonical terminal writer corrected to CP_RUN="$__runId" and CP_DIGEST="$proofDigest" with double-quoted expandable artifact paths; terminal-only cadence and frontmatter contract preserved. Malformed-file cleanup/preservation contract untouched (checkpoint-contract.ts and parser unmodified). Guidance: plugins/sp/skills/spur-dev/references/cross-cutting.md:656-664 now distinguishes engine state from advisory checkpoint status and documents the single-writer cadence. Tests: feature-dev-definition.test.ts and wrapup-pipeline.test.ts updated (version pins + no pseudo-writer regressions), all green. |
+| R5 | MET | packages/app: bun test tests/services/workflow-service.test.ts tests/workflow/workflow-resolver.test.ts tests/workflow/checkpoint-contract.test.ts → 142 pass / 0 fail (404 expectations). packages/domain: bun test tests/dao/run-dao-identity.test.ts → 4 pass / 0 fail. All seven fixture classes present, execution-level with the actual engine over isolated DB + temporary Git fixtures: arbitrary source filename, different ambient cwd, bundled-source pinning, stale HEAD/artifact, legacy row, refused drift, consented drift. No live application runs used. Project gate bun run spur-check green on this exact tree (.spur/run/0784-test-gate.log, first attempt, exit 0). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Explicit-path runs resume the launched definition | MET | test | workflow-service.test.ts "R1: resume replays the recorded arbitrary-filename source from another ambient cwd (impostor ignored)" + "R1: a deleted recorded source refuses resume..." + "R2: consented drift records resume identity + warns; launch digest echo unchanged" |
+| Scenario: R2 — Checkpoint freshness respects run state and workdir | MET | test | workflow-service.test.ts "accepts a fresh checkpoint (matching HEAD, existing workdir-relative artifact) from another ambient cwd" + "refuses a stale HEAD (commit drift)" + "refuses a missing workdir-relative artifact"; malformed-file preservation contract unchanged (checkpoint-contract.test.ts green) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - docs/plans/2026-09-06-workflow-conflict-audit.md — F-05; task 0752 R5 and task 0768 identity obligations.
 - docs/00_ADR.md — ADR-070, ADR-099, ADR-108.
@@ -99,3 +169,6 @@ Execution budget: one owned task at a time; checkpoint after 45 minutes or two u
 - packages/domain/src/dao/run-dao.ts — stampRunIdentity; packages/app/src/services/verified-outcome.ts — single-definition evidence policy.
 - Dependencies 0782/0783; downstream 0785/0786.
 ### History
+- 2026-09-06T21:07:31.591Z todo → wip (system)
+- 2026-09-06T21:19:49.669Z wip → testing (system)
+- 2026-09-06T21:19:50.781Z testing → done (system)

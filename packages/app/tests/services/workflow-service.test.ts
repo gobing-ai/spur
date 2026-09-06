@@ -124,7 +124,10 @@ class TestProcessExecutor implements ProcessExecutor {
         }
 
         try {
-            const stdout = execSync(cmd, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+            // args-capable join: the '-c <script>' shape keeps its script-only form;
+            // multi-arg commands (e.g. git rev-parse HEAD) join command + args.
+            const joined = options.args?.[0] === '-c' ? cmd : [options.command, ...(options.args ?? [])].join(' ');
+            const stdout = execSync(joined, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
             return {
                 command: options.command,
                 args: options.args ?? [],
@@ -2814,6 +2817,410 @@ describe('workflow run identity (0768 R1)', () => {
             await expect(svc.continuePaused('drift-1')).rejects.toThrow(/drift detected/);
         } finally {
             await rm(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('workflow resume identity and checkpoint freshness (0784)', () => {
+    /** A pausing workflow whose SECOND pause would catch an impostor definition. */
+    const PAUSING_TWICE_YAML = `name: pauser-svc
+kind: state-machine
+initialState: start
+states:
+  - id: start
+  - id: gate
+    pause: true
+  - id: gate2
+    pause: true
+  - id: done
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: gate2
+    guard: { kind: always }
+  - from: gate2
+    to: done
+    guard: { kind: always }
+terminalStates:
+  - done
+`;
+
+    /** Canonical terminal checkpoint frontmatter builder (0711 schema). */
+    function checkpointYaml(overrides: Record<string, string>, artifacts: string[] = []): string {
+        const fields: Record<string, string> = {
+            schema_version: '1',
+            session_id: '2026-01-01-ck1',
+            workflow: 'pauser-svc',
+            run_id: 'ck-1',
+            task_wbs: '0784',
+            feature_id: '',
+            phase: 'gate',
+            status: 'running',
+            last_gate: '',
+            source_commit: '',
+            digest: '',
+            generated_at: '2026-01-01T00:00:00Z',
+            updated_at: '2026-01-01T00:00:00Z',
+            next_action: 'resume',
+            ...overrides,
+        };
+        const lines = Object.entries(fields).map(([k, v]) => `${k}: "${v}"`);
+        return `---\n${lines.join('\n')}\nartifacts:\n${artifacts
+            .map((a) => `  - ${a}`)
+            .join('\n')}\n---\n\n## Session Notes\n`;
+    }
+
+    test('R1: resume replays the recorded arbitrary-filename source from another ambient cwd (impostor ignored)', async () => {
+        const dirA = await mkdtemp(join(tmpdir(), 'spur-wf-0784a-'));
+        const dirB = await mkdtemp(join(tmpdir(), 'spur-wf-0784b-'));
+        const wfDirA = join(dirA, '.spur', 'workflows');
+        await mkdir(wfDirA, { recursive: true });
+        const arbitrary = join(wfDirA, 'weird-name-0784.yaml');
+        await writeFile(arbitrary, PAUSING_YAML);
+        // Impostor: same workflow NAME, an extra pause, in dirB's project search path.
+        const wfDirB = join(dirB, '.spur', 'workflows');
+        await mkdir(wfDirB, { recursive: true });
+        await writeFile(join(wfDirB, 'pauser-svc.yaml'), PAUSING_TWICE_YAML);
+        try {
+            const ctx = makeCtx(dirA);
+            const svc = new WorkflowAppService(ctx);
+            const runResult = await svc.run(arbitrary, { runId: 'pin-1' });
+            expect(runResult.status).toBe('paused');
+
+            const meta = JSON.parse((await new RunDao(await ctx.getDb()).traceRowById('pin-1'))?.metadata_json ?? '{}');
+            expect(meta.definitionSource).toEqual({ path: arbitrary, layer: 'project', workdir: dirA });
+
+            // Resume with ambient cwd = dirB (shared db): the name-based impostor
+            // would pause at gate2 — replaying the recorded source reaches done.
+            const svcB = new WorkflowAppService({ ...ctx, cwd: dirB });
+            const resumed = await svcB.continuePaused('pin-1');
+            expect(resumed.status).toBe('done');
+        } finally {
+            await rm(dirA, { recursive: true, force: true });
+            await rm(dirB, { recursive: true, force: true });
+        }
+    });
+
+    test('R1: a deleted recorded source refuses resume instead of resolving a same-named replacement', async () => {
+        const dirA = await mkdtemp(join(tmpdir(), 'spur-wf-0784a-'));
+        const dirB = await mkdtemp(join(tmpdir(), 'spur-wf-0784b-'));
+        const wfDirA = join(dirA, '.spur', 'workflows');
+        await mkdir(wfDirA, { recursive: true });
+        const arbitrary = join(wfDirA, 'weird-name-0784.yaml');
+        await writeFile(arbitrary, PAUSING_YAML);
+        // Same-named impostor present in the ambient cwd — must NOT be used.
+        const wfDirB = join(dirB, '.spur', 'workflows');
+        await mkdir(wfDirB, { recursive: true });
+        await writeFile(join(wfDirB, 'pauser-svc.yaml'), PAUSING_TWICE_YAML);
+        try {
+            const ctx = makeCtx(dirA);
+            const svc = new WorkflowAppService(ctx);
+            await svc.run(arbitrary, { runId: 'pin-2' });
+            await rm(arbitrary);
+
+            const svcB = new WorkflowAppService({ ...ctx, cwd: dirB });
+            await expect(svcB.continuePaused('pin-2')).rejects.toThrow(/recorded launch source .* no longer exists/);
+        } finally {
+            await rm(dirA, { recursive: true, force: true });
+            await rm(dirB, { recursive: true, force: true });
+        }
+    });
+
+    test('R1: launch records definitionSource and resume leaves identity untouched', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0784-id-'));
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        const wfPath = join(wfDir, 'pauser.yaml');
+        await writeFile(wfPath, PAUSING_YAML);
+        try {
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            await svc.run(wfPath, { runId: 'pin-3' });
+            const dao = new RunDao(await ctx.getDb());
+            const before = JSON.parse((await dao.traceRowById('pin-3'))?.metadata_json ?? '{}');
+            expect(before.definitionSource).toEqual({ path: wfPath, layer: 'project', workdir: dir });
+            expect(before.definitionDigest).toMatch(/^sha256:/);
+
+            await svc.continuePaused('pin-3');
+            const after = JSON.parse((await dao.traceRowById('pin-3'))?.metadata_json ?? '{}');
+            // The resume ATTACHED the persisted row: identity stayed exactly as launched.
+            expect(after.definitionDigest).toBe(before.definitionDigest);
+            expect(after.definitionSource).toEqual(before.definitionSource);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R2: legacy name-only rows (no launch source) resume by name with a degraded-identity warning', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0784-legacy-'));
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        await writeFile(join(wfDir, 'pauser.yaml'), PAUSING_YAML);
+        try {
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            await svc.run(join(wfDir, 'pauser.yaml'), { runId: 'legacy-pin-1' });
+
+            // Rewrite as a pre-0784/pre-0768 row: no definitionSource, no identity.
+            const db = await ctx.getDb();
+            await db.run(
+                "UPDATE runs SET metadata_json = json_remove(json_remove(json_remove(metadata_json, '$.definitionSource'), '$.definitionDigest'), '$.workflowVersion') WHERE id = ?",
+                'legacy-pin-1',
+            );
+
+            const resumed = await svc.continuePaused('legacy-pin-1');
+            expect(resumed.status).toBe('done');
+            const warnings = (resumed as unknown as { warnings?: string[] }).warnings ?? [];
+            expect(warnings.some((w) => /resumed by workflow name/.test(w))).toBe(true);
+            // The attach must NOT have stamped identity onto the legacy row.
+            const meta = JSON.parse((await new RunDao(db).traceRowById('legacy-pin-1'))?.metadata_json ?? '{}');
+            expect(meta.definitionDigest).toBeUndefined();
+            expect(meta.definitionSource).toBeUndefined();
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R2: malformed definitionSource metadata refuses resume (never legacy fallback)', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0784-bad-'));
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        await writeFile(join(wfDir, 'pauser.yaml'), PAUSING_YAML);
+        try {
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            await svc.run(join(wfDir, 'pauser.yaml'), { runId: 'badpin-1' });
+            const db = await ctx.getDb();
+            await db.run(
+                "UPDATE runs SET metadata_json = json_set(metadata_json, '$.definitionSource', json_quote('bogus')) WHERE id = ?",
+                'badpin-1',
+            );
+
+            await expect(svc.continuePaused('badpin-1')).rejects.toThrow(/definitionSource metadata is malformed/);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R2: consented drift records resume identity + warns; launch digest echo unchanged', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0784-drift-'));
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        const wfPath = join(wfDir, 'pauser.yaml');
+        await writeFile(wfPath, PAUSING_YAML);
+        try {
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            await svc.run(wfPath, { runId: 'drift-pin-1' });
+            await writeFile(wfPath, `${PAUSING_YAML}description: edited after launch\n`);
+
+            const resumed = await svc.continuePaused('drift-pin-1'); // hitlResponder defaults to yes
+            expect(resumed.status).toBe('done');
+            const db = await ctx.getDb();
+            const meta = JSON.parse((await new RunDao(db).traceRowById('drift-pin-1'))?.metadata_json ?? '{}');
+            // Launch identity immutable; executed identity recorded alongside.
+            expect(meta.definitionDigest).toMatch(/^sha256:/);
+            expect(meta.resumeDefinitionDigest).toMatch(/^sha256:/);
+            expect(meta.resumeDefinitionDigest).not.toBe(meta.definitionDigest);
+            const warnings = (resumed as unknown as { warnings?: string[] }).warnings ?? [];
+            expect(warnings.some((w) => /Consented definition drift/.test(w))).toBe(true);
+            // The result echoes the LAUNCH digest, not the executed one.
+            expect(resumed.definitionDigest).toBe(meta.definitionDigest);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R2: refused drift records no resume identity', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0784-drift2-'));
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        const wfPath = join(wfDir, 'pauser.yaml');
+        await writeFile(wfPath, PAUSING_YAML);
+        try {
+            const noCtx = {
+                ...makeCtx(dir),
+                hitlResponder: () => ({ respond: async () => ({ value: 'no' }) }),
+            };
+            const svc = new WorkflowAppService(noCtx);
+            await svc.run(wfPath, { runId: 'drift-pin-2' });
+            await writeFile(wfPath, `${PAUSING_YAML}description: edited after launch\n`);
+            await expect(svc.continuePaused('drift-pin-2')).rejects.toThrow(/drift detected/);
+            const meta = JSON.parse(
+                (await new RunDao(await noCtx.getDb()).traceRowById('drift-pin-2'))?.metadata_json ?? '{}',
+            );
+            expect(meta.resumeDefinitionDigest).toBeUndefined();
+            expect(meta.resumeWorkflowVersion).toBeUndefined();
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    describe('R3: paused-run checkpoint mapping and workdir-grounded freshness', () => {
+        async function seedGitWorkdir(): Promise<{ dir: string; head: string }> {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0784-git-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            await writeFile(join(wfDir, 'pauser.yaml'), PAUSING_YAML);
+            await writeFile(join(dir, 'seed.txt'), 'seed\n');
+            execSync('git init -q', { cwd: dir });
+            execSync('git add -A', { cwd: dir });
+            execSync('git -c user.email=t@t.local -c user.name=t -c commit.gpgsign=false commit -qm init', {
+                cwd: dir,
+            });
+            const head = execSync('git rev-parse HEAD', { cwd: dir, encoding: 'utf8' }).trim();
+            return { dir, head };
+        }
+
+        async function pauseIn(dir: string, runId: string) {
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            await svc.run(join(dir, '.spur', 'workflows', 'pauser.yaml'), { runId });
+            return { ctx, svc };
+        }
+
+        async function writeCheckpoint(dir: string, content: string): Promise<void> {
+            const sessionsDir = join(dir, '.spur', 'memory', 'sessions');
+            await mkdir(sessionsDir, { recursive: true });
+            await writeFile(join(sessionsDir, '2026-01-01-ck1.md'), content);
+        }
+
+        test('accepts a fresh checkpoint (matching HEAD, existing workdir-relative artifact) from another ambient cwd', async () => {
+            const { dir, head } = await seedGitWorkdir();
+            const dirB = await mkdtemp(join(tmpdir(), 'spur-wf-0784-cwd-'));
+            await mkdir(join(dir, 'artifacts'), { recursive: true });
+            await writeFile(join(dir, 'artifacts', 'plan.md'), 'plan\n');
+            try {
+                await writeCheckpoint(
+                    dir,
+                    checkpointYaml({ run_id: 'ck-1', source_commit: head }, ['artifacts/plan.md']),
+                );
+                const { ctx } = await pauseIn(dir, 'ck-1');
+                // Resume with ambient cwd = dirB: artifact + HEAD must resolve under dirA.
+                const svcB = new WorkflowAppService({ ...ctx, cwd: dirB });
+                const resumed = await svcB.continuePaused('ck-1');
+                expect(resumed.status).toBe('done');
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+                await rm(dirB, { recursive: true, force: true });
+            }
+        });
+
+        test('refuses a stale HEAD (commit drift)', async () => {
+            const { dir } = await seedGitWorkdir();
+            try {
+                await writeCheckpoint(dir, checkpointYaml({ run_id: 'ck-2', source_commit: 'b'.repeat(40) }));
+                const { svc } = await pauseIn(dir, 'ck-2');
+                await expect(svc.continuePaused('ck-2')).rejects.toThrow(/commit-drift/);
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+
+        test('refuses a missing workdir-relative artifact', async () => {
+            const { dir, head } = await seedGitWorkdir();
+            try {
+                await writeCheckpoint(
+                    dir,
+                    checkpointYaml({ run_id: 'ck-3', source_commit: head }, ['artifacts/gone.md']),
+                );
+                const { svc } = await pauseIn(dir, 'ck-3');
+                await expect(svc.continuePaused('ck-3')).rejects.toThrow(/missing-artifact/);
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+
+        test('refuses terminal, missing, and unknown checkpoint statuses', async () => {
+            const { dir } = await seedGitWorkdir();
+            try {
+                await writeCheckpoint(dir, checkpointYaml({ run_id: 'ck-4', status: 'done' }));
+                const { svc } = await pauseIn(dir, 'ck-4');
+                await expect(svc.continuePaused('ck-4')).rejects.toThrow(/terminal: status=done/);
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+
+        test('refuses an unknown checkpoint status (no paused enum leak)', async () => {
+            const { dir } = await seedGitWorkdir();
+            try {
+                await writeCheckpoint(dir, checkpointYaml({ run_id: 'ck-5', status: 'paused' }));
+                const { svc } = await pauseIn(dir, 'ck-5');
+                await expect(svc.continuePaused('ck-5')).rejects.toThrow(/unknown checkpoint status/);
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+
+        test('refuses a missing checkpoint status', async () => {
+            const { dir } = await seedGitWorkdir();
+            try {
+                await writeCheckpoint(dir, checkpointYaml({ run_id: 'ck-6', status: '' }));
+                const { svc } = await pauseIn(dir, 'ck-6');
+                await expect(svc.continuePaused('ck-6')).rejects.toThrow(/status-missing/);
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+
+        test('refuses when git freshness is required but unavailable (no empty-string fallback)', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0784-nogit-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            await writeFile(join(wfDir, 'pauser.yaml'), PAUSING_YAML);
+            try {
+                await writeCheckpoint(dir, checkpointYaml({ run_id: 'ck-7', source_commit: 'c'.repeat(40) }));
+                const { svc } = await pauseIn(dir, 'ck-7');
+                await expect(svc.continuePaused('ck-7')).rejects.toThrow(/git rev-parse HEAD/);
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+
+        test('an engine run with NO associated checkpoint still resumes (engine-only resume stays valid)', async () => {
+            const { dir } = await seedGitWorkdir();
+            try {
+                const { svc } = await pauseIn(dir, 'ck-8');
+                const resumed = await svc.continuePaused('ck-8');
+                expect(resumed.status).toBe('done');
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+    });
+
+    test('R1: a bundled-layer launch pins the bundled path', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0784-bnd-'));
+        const fakeRoot = await mkdtemp(join(tmpdir(), 'spur-wf-0784-bndroot-'));
+        const fakeWfDir = join(fakeRoot, 'workflows');
+        await mkdir(fakeWfDir, { recursive: true });
+        const bundledPath = join(fakeWfDir, 'pinned-b.yaml');
+        await writeFile(bundledPath, PAUSING_YAML.replace('name: pauser-svc', 'name: pauser-b'));
+        const spy = spyOn(loaderModule, 'bundledConfigRoot').mockReturnValue(fakeRoot);
+        try {
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            // Project-relative form: dir has no such file, so the two-tier
+            // resolver falls through to the (spied) bundled root.
+            const runResult = await svc.run('.spur/workflows/pinned-b.yaml', {
+                runId: 'bnd-1',
+            });
+            expect(runResult.status).toBe('paused');
+            const meta = JSON.parse((await new RunDao(await ctx.getDb()).traceRowById('bnd-1'))?.metadata_json ?? '{}');
+            expect(meta.definitionSource.layer).toBe('bundled');
+            expect(meta.definitionSource.path).toBe(bundledPath);
+            spy.mockRestore();
+
+            // Resume resolves through the recorded bundled path, not a re-search.
+            const resumed = await svc.continuePaused('bnd-1');
+            expect(resumed.status).toBe('done');
+        } finally {
+            spy.mockRestore();
+            await rm(dir, { recursive: true, force: true });
+            await rm(fakeRoot, { recursive: true, force: true });
         }
     });
 });

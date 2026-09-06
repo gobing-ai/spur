@@ -21,7 +21,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: feature-dev
-version: "2"
+version: "3"
 description: >
   Existing-feature execution loop: precheck → execute-tasks → feature-verify → done.
   Drives a WHOLE feature whose accepted AC and task roster already exist — the caller
@@ -247,11 +247,6 @@ states:
 
   - id: done
     description: Terminal — the existing feature's roster executed and the feature verified.
-    # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
-    onEnter:
-      - kind: shell
-        options:
-          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: feature-dev done featureId=$featureId ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/$featureId-checkpoint.md'
 
   - id: failed
     description: Terminal — the roster contract was rejected at precheck, a task failed verification, or the feature check did not pass.

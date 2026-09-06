@@ -40,10 +40,10 @@ describe('RunDao.stampRunIdentity (0768)', () => {
         expect(meta.workflowVersion).toBeNull();
     });
 
-    test('preserves sibling metadata and overwrites a prior identity in place', async () => {
+    test('preserves sibling metadata and fills an absent identity in place', async () => {
         const db = await setup();
         const dao = new RunDao(db);
-        await insertRunRow(db, 'r2', '{"dryRun":true,"definitionDigest":"sha256:old","workflowVersion":"0.1.0"}');
+        await insertRunRow(db, 'r2', '{"dryRun":true}');
 
         await dao.stampRunIdentity('r2', 'sha256:new', '1.0.0');
 
@@ -52,5 +52,47 @@ describe('RunDao.stampRunIdentity (0768)', () => {
         expect(meta.dryRun).toBe(true);
         expect(meta.definitionDigest).toBe('sha256:new');
         expect(meta.workflowVersion).toBe('1.0.0');
+    });
+
+    test('refuses to overwrite an already-stamped digest (0784 R1 identity immutability)', async () => {
+        const db = await setup();
+        const dao = new RunDao(db);
+        await insertRunRow(db, 'r3', '{"definitionDigest":"sha256:launch","workflowVersion":"0.1.0"}');
+
+        // An attach/race re-resolution must never rewrite the launch identity.
+        await dao.stampRunIdentity('r3', 'sha256:later', '9.9.9', {
+            path: '/tmp/other.yaml',
+            layer: 'project',
+            workdir: '/tmp',
+        });
+
+        const row = await dao.traceRowById('r3');
+        const meta = JSON.parse(row?.metadata_json ?? '{}');
+        expect(meta.definitionDigest).toBe('sha256:launch');
+        expect(meta.workflowVersion).toBe('0.1.0');
+        expect(meta.definitionSource).toBeUndefined();
+    });
+
+    test('stamps the launch source alongside the digest in one merge (0784 R1)', async () => {
+        const db = await setup();
+        const dao = new RunDao(db);
+        await insertRunRow(db, 'r4', '{"dryRun":false}');
+
+        await dao.stampRunIdentity('r4', 'sha256:launch', null, {
+            path: '/repo/.spur/workflows/my-pipeline.yaml',
+            layer: 'project',
+            workdir: '/repo',
+        });
+
+        const row = await dao.traceRowById('r4');
+        const meta = JSON.parse(row?.metadata_json ?? '{}');
+        expect(meta.definitionDigest).toBe('sha256:launch');
+        expect(meta.workflowVersion).toBeNull();
+        expect(meta.dryRun).toBe(false);
+        expect(meta.definitionSource).toEqual({
+            path: '/repo/.spur/workflows/my-pipeline.yaml',
+            layer: 'project',
+            workdir: '/repo',
+        });
     });
 });

@@ -14,7 +14,12 @@ export { InboxRecentDao, type InboxRecentRow } from './inbox-recent-dao';
 export { type CreatePhaseRunInput, PhaseRunDao, type PhaseRunRecord } from './phase-run-dao';
 export { type CreatePlanningEventInput, PlanningEventDao, type PlanningEventRow } from './planning-event-dao';
 export { RuleEvalRunDao, type RuleEvalRunRow, RuleRunDao, type RuleRunRow } from './rule-run-dao';
-export { type CreateRunInput, RunDao, type RunRecord } from './run-dao';
+export {
+    type CreateRunInput,
+    RunDao,
+    type RunDefinitionSource,
+    type RunRecord,
+} from './run-dao';
 export {
     type InsertRunSessionInput,
     RunSessionDao,

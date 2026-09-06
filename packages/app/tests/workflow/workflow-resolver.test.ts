@@ -291,7 +291,8 @@ Stale session notes
                 /checkpoint is stale/,
             );
 
-            // Now update the checkpoint to non-terminal and matching status ("paused")
+            // Now update the checkpoint to a nonterminal projection ("running" — 0784
+            // consumer-local mapping; the engine persists no paused checkpoint status)
             await writeFile(
                 checkpointPath,
                 `---
@@ -302,7 +303,7 @@ run_id: r5-stale-run
 task_wbs: "0752"
 feature_id: ""
 phase: gate
-status: paused
+status: running
 last_gate: gate
 source_commit: ""
 digest: sha256:fake

@@ -652,21 +652,35 @@ Field semantics (enforced by `parseCheckpointMetadata` / `checkpointStaleness`):
   up once retention expires.
 - `source_commit` pins repository HEAD at write time; drift staleness is reported, not hidden.
 - `artifacts` lists referenced run files; a missing artifact makes the checkpoint stale.
-- Writers: write after every HITL gate decision, phase transition, and terminal state; overwrite
-  the same file on resume (`session_id` = `<date>-<wbs-or-feature>`).
+
+**Writer cadence (0784 R4).** There is exactly one canonical writer: the `task-pipeline` done
+state's terminal checkpoint (`status: done`, real HEAD, run id from `$__runId`, and `$wbs`-expanded
+artifact paths). It is a plain `shell` step — checkpoints are working memory, not CLI-gated corpus.
+The `feature-dev`, `wrapup-pipeline`, and `idea-pipeline` pipelines used to echo pseudo-checkpoints
+("checkpoint: <workflow> done ...") that violated the canonical schema; those writers were removed
+in 0784 — the persisted run row is the authoritative terminal record, and a non-canonical echo
+cannot be resumed, routed, or reclaimed safely.
+
+**Engine state vs checkpoint status (0784 R3).** The persisted run row's status is authoritative;
+a checkpoint's `status` is an advisory projection written by consumers. On resume
+(`workflow continue`), a checkpoint associated with the paused run must project a nonterminal
+engine state — `pending`, `running`, or `approved` are accepted; `done`/`failed`/`cancelled`/
+`skipped`, a missing status, or any unknown value refuse the resume with a named reason. The
+engine owns no persisted `paused` checkpoint status.
 
 **Write checkpoints after:**
 
-- Every HITL gate decision (approved/rejected/deferred).
-- Every phase transition in `task-pipeline`, `feature-dev`, `idea-pipeline`, and
-  `wrapup-pipeline`.
-- Every terminal state (`done`, `failed`, `cancelled`, `skipped`).
+- Terminal task completion in `task-pipeline` (the canonical writer above).
+- Any additional consumer-specific checkpoints you genuinely need for local resume; keep the
+  canonical schema — non-canonical files are ignored by routing and cleanup.
 
 **Read checkpoints when:**
 
 - `/sp:dev-run --continue` or `/sp:dev-runall --continue` is used.
 - The operator asks to resume a task or feature.
-- A workflow run is paused and later continued (`spur workflow continue <run-id>`).
+- A workflow run is paused and later continued (`spur workflow continue <run-id>`). Resume
+  validates freshness in the run's recorded launch workdir (0784 R1/R3): artifacts resolve relative
+  to that workdir, and git HEAD is probed there — never in the ambient process cwd.
 
 **Rules:**
 
@@ -678,7 +692,8 @@ Field semantics (enforced by `parseCheckpointMetadata` / `checkpointStaleness`):
 - **Retention.** Terminal checkpoints older than `workflowLogRetentionDays` with no active run are
   reclaimed by `spur workflow clean` (task 0711 R5–R8); non-terminal checkpoints are always kept.
 - **Not a validated corpus.** Checkpoints are working memory. They are overwritten when a session
-  resumes and re-checkpoints. They are NOT authoritative task state — the task file is.
+  resumes and re-checkpoints. They are NOT authoritative task state — the task file and the
+  persisted run row are.
 - **One file per session.** The `session_id` is `<date>-<wbs-or-feature>`. A resumed session
   overwrites the same file.
 - **Operator-readable.** The YAML frontmatter is machine-parseable; the body is free-form markdown

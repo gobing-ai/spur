@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -165,7 +165,7 @@ describe('feature-dev definition — existing-feature reuse contract (0782)', ()
     });
 
     test('the behavior change increments the quoted version (frozen design)', () => {
-        expect(DEF.version).toBe('2');
+        expect(DEF.version).toBe('3');
     });
 
     test('the duplicate doctor is gone — precheck validates identity/roster instead', () => {
@@ -414,9 +414,9 @@ describe('feature-dev execution — existing-feature reuse (0782 scenarios)', ()
             );
             // Integration review ran once against the run and the feature completed.
             expect(h.reviewCalls()).toBe(2);
-            expect(readFileSync(join(h.workdir, '.spur/memory/sessions/F1-checkpoint.md'), 'utf8')).toContain(
-                'checkpoint: feature-dev done',
-            );
+            // 0784: the pseudo-checkpoint writer is gone — the persisted run row is the
+            // authoritative terminal record; no F1-checkpoint.md is emitted.
+            expect(existsSync(join(h.workdir, '.spur/memory/sessions/F1-checkpoint.md'))).toBe(false);
         } finally {
             h.cleanup();
         }

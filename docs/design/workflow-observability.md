@@ -260,6 +260,23 @@ before D5 can ship. A continue/replay operation retains the launch digest. If th
 definition differs, the projection emits `definition-drift`; it never overwrites the launch value.
 Legacy rows without the key return `definitionDigest: null` plus `definition-digest-missing`.
 
+### Launch source pinning (0784 R1)
+
+Launches additionally record the resolved source in the same identity merge (one `json_set`, no
+partial rows): `metadata_json.definitionSource = {path, layer, workdir}` — the absolute launched
+file, the resolver layer (`project` | `bundled`), and the launch working directory. `RunDao.
+stampRunIdentity` is conditional on an absent `definitionDigest`, so an attach/race can never
+overwrite a stamped digest — or a legacy row's documented absence — with a later resolution.
+
+Resume (`workflow continue`) honors the pin before any name-based lookup: it verifies the recorded
+file still exists (a missing source refuses; no same-named replacement is resolved), requires
+resolution to land exactly on the recorded path, and grounds checkpoint artifacts, git HEAD, and
+the engine resume snapshot in the recorded `workdir`. Pre-pin rows resume by `workflow_name` with
+an explicit degraded-identity warning (0784 R2). Consented definition drift merges
+`resumeDefinitionDigest`/`resumeWorkflowVersion` alongside the immutable launch identity, and the
+resume's `__definitionDigest` var carries the executed digest so proof bindings cannot read as the
+launch digest.
+
 ### Snapshot and follow
 
 The read-side follower uses the existing System Event ledger only as a wake-up channel:

@@ -46,7 +46,7 @@
 # Seeded by `spur init`; adapt the agent.run inputs to your project's command set.
 
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
-version: "1"
+version: "2"
 kind: state-machine
 name: idea-pipeline
 description: "Idea to feature + AC + task batch: discovery, idea-eval, feature-create, ac-generate, feature-check, system-design, decompose, batch-create, handoff"
@@ -498,10 +498,6 @@ states:
         options:
           path: .spur/run/${vars.__runId}-idea-handoff.md
           artifactKind: idea-handoff
-      # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
-      - kind: shell
-        options:
-          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: idea-pipeline handoff feature=$featureId ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/idea-checkpoint.md'
 
   - id: cancelled
     description: Terminal — pipeline cancelled by operator or error.

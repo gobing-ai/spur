@@ -6,6 +6,20 @@ import { createId } from './base';
 /** Workflow run row stored by the CLI persistence layer. */
 export type RunRecord = typeof runs.$inferSelect;
 
+/**
+ * Resolved launch source recorded alongside run identity (0784 R1): resume must
+ * replay this exact file from this exact workdir instead of re-deriving a path
+ * from `workflow_name` (which can silently resolve a same-named replacement).
+ */
+export interface RunDefinitionSource {
+    /** Absolute path of the launched definition file. */
+    path: string;
+    /** Resolver layer the launch resolved through. */
+    layer: 'project' | 'bundled';
+    /** Absolute working directory the run was launched from. */
+    workdir: string;
+}
+
 /** Input accepted by RunDao.create. */
 export interface CreateRunInput {
     workspaceId?: string;
@@ -116,23 +130,44 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
     }
 
     /**
-     * Record the workflow run identity (0768) into metadata_json. Uses json_set
-     * instead of json_patch: RFC-7396 merge patch DELETES keys whose patch value
-     * is null, but a known-unversioned run must record workflowVersion as JSON
-     * null so resume can distinguish it from a pre-0768 row with no key.
+     * Record the workflow run identity (0768) — and, when supplied, the resolved
+     * launch source (0784 R1) — into metadata_json. Uses json_set instead of
+     * json_patch: RFC-7396 merge patch DELETES keys whose patch value is null,
+     * but a known-unversioned run must record workflowVersion as JSON null so
+     * resume can distinguish it from a pre-0768 row with no key.
+     *
+     * The merge is CONDITIONAL on `$.definitionDigest` being absent (0784 R1):
+     * identity is immutable once stamped, so an attach/race can never overwrite
+     * the original launch digest — or its documented legacy absence — with a
+     * later resolution. The definitionSource object is written as three flat
+     * json_set paths in the SAME statement, so a row can never be half-sourced.
      */
-    stampRunIdentity(runId: string, definitionDigest: string, workflowVersion: string | null): Promise<void> {
+    stampRunIdentity(
+        runId: string,
+        definitionDigest: string,
+        workflowVersion: string | null,
+        source?: RunDefinitionSource,
+    ): Promise<void> {
+        const sourceSet =
+            source === undefined
+                ? ''
+                : `,
+                 '$.definitionSource.path', ?4,
+                 '$.definitionSource.layer', ?5,
+                 '$.definitionSource.workdir', ?6`;
         return this.adapter.run(
             `UPDATE runs
              SET metadata_json = json_set(
                  COALESCE(NULLIF(metadata_json, ''), '{}'),
                  '$.definitionDigest', ?1,
-                 '$.workflowVersion', ?2
+                 '$.workflowVersion', ?2${sourceSet}
              )
-             WHERE id = ?3`,
+             WHERE id = ?3
+               AND json_type(COALESCE(NULLIF(metadata_json, ''), '{}'), '$.definitionDigest') IS NULL`,
             definitionDigest,
             workflowVersion,
             runId,
+            ...(source !== undefined ? [source.path, source.layer, source.workdir] : []),
         );
     }
 
