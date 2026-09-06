@@ -1307,4 +1307,25 @@ describe('HistoryService', () => {
             }
         });
     });
+
+    describe('maintain', () => {
+        test('runs maintenance via HistoryService', async () => {
+            const ctx = makeCtx();
+            const svc = new HistoryService(ctx);
+            const result = await svc.maintain();
+            expect(result.optimized).toBe(true);
+            expect(result.checkpointed).toBe(true);
+            expect(result.vacuumed).toBe(false);
+            expect(result.bytesBefore).toBeGreaterThan(0);
+        });
+
+        test('runs vacuum maintenance via HistoryService', async () => {
+            const ctx = makeCtx();
+            const svc = new HistoryService(ctx);
+            const result = await svc.maintain({ vacuum: true });
+            expect(result.optimized).toBe(true);
+            expect(result.checkpointed).toBe(true);
+            expect(result.vacuumed).toBe(true);
+        });
+    });
 });

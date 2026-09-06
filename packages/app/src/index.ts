@@ -193,6 +193,8 @@ export type {
     ArtifactResolution,
     DailyOptions,
     DailyResult,
+    DatabaseMaintenanceOptions,
+    DatabaseMaintenanceResult,
     FanOutResult,
     HistoryAnalyzeResult,
     HistoryImportResult,

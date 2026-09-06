@@ -27,6 +27,8 @@ import {
     computeDerived,
     countCheckpointsBySource,
     countToolCallsSince,
+    type DatabaseMaintenanceOptions,
+    type DatabaseMaintenanceResult,
     type DriftRow,
     dataWindow,
     derivedWarnings,
@@ -40,6 +42,7 @@ import {
     listAttributionSessions,
     loops,
     type MessageRollupRow,
+    maintainDatabase,
     materializeWatermarkExclude,
     messageRollup,
     narrowArtifact,
@@ -86,6 +89,8 @@ import { deriveVerifiedOutcome } from './verified-outcome';
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
+
+export type { DatabaseMaintenanceOptions, DatabaseMaintenanceResult } from '@gobing-ai/spur-domain';
 
 /**
  * Result of a history import operation — the importer result extended additively
@@ -600,6 +605,19 @@ export class HistoryService {
     async resetHistory(): Promise<HistoryResetResult> {
         const db = await this.ctx.getDb();
         return resetHistoryTables(db);
+    }
+
+    /**
+     * Run database maintenance: PRAGMA optimize, PRAGMA wal_checkpoint(TRUNCATE),
+     * and optional VACUUM defragmentation.
+     */
+    async maintain(opts: DatabaseMaintenanceOptions = {}): Promise<DatabaseMaintenanceResult> {
+        const db = await this.ctx.getDb();
+        const dbPath = this.ctx.cwd ? join(this.ctx.cwd, '.spur', 'spur.db') : undefined;
+        return maintainDatabase(db, {
+            ...opts,
+            ...(dbPath && opts.dbPath === undefined ? { dbPath } : {}),
+        });
     }
 
     async analyze(selector: ArtifactSelector, opts: AnalyzeOptions = {}): Promise<HistoryAnalyzeResult> {

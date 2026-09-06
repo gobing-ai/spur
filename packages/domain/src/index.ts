@@ -23,6 +23,7 @@ export {
     updatePendingQueueJob,
 } from './db';
 export * from './envelope';
+export * from './maintenance';
 export {
     AGENT_INSTANCES_DDL_DRAFT,
     AGENT_INSTANCES_MIGRATION_ID_DRAFT,

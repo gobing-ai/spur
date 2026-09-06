@@ -86,12 +86,26 @@ export async function estimateReclaimableBytes(db: DbAdapter): Promise<number> {
 }
 
 /** Current database size in bytes (`page_count * page_size`), same as the board-read helper. */
-async function databaseBytes(db: DbAdapter): Promise<number> {
+export async function databaseBytes(db: DbAdapter): Promise<number> {
     const [pageCount, pageSize] = await Promise.all([
         db.queryFirst<{ page_count: number }>('PRAGMA page_count'),
         db.queryFirst<{ page_size: number }>('PRAGMA page_size'),
     ]);
     return (pageCount?.page_count ?? 0) * (pageSize?.page_size ?? 0);
+}
+
+/**
+ * Check if the filesystem containing `dbPath` has at least `requiredBytes` free space.
+ * Degrades to true if statfs is unavailable (e.g. in-memory DB or virtual filesystem).
+ */
+export function hasSufficientDiskSpace(dbPath: string, requiredBytes: number): boolean {
+    try {
+        const fs = statfsSync(dbPath);
+        const freeBytes = fs.bavail * fs.bsize;
+        return freeBytes >= requiredBytes;
+    } catch {
+        return true;
+    }
 }
 
 /**
@@ -145,18 +159,14 @@ export async function compactDatabase(
         }
 
         // Free-disk precondition: VACUUM writes a full copy of the file; running out mid-way
-        // is the one way this operation can hurt. statfs gives the filesystem's free blocks.
-        try {
-            const fs = statfsSync(opts.dbPath);
-            const freeBytes = fs.bavail * fs.bsize;
-            if (freeBytes < bytesBefore * 2) {
-                return { ran: false, skippedReason: 'insufficient-disk', bytesBefore, bytesAfter: bytesBefore };
-            }
-        } catch {
-            // statfs unavailable (e.g. in-memory test DB) — do not block compaction for it.
+        // is the one way this operation can hurt.
+        if (!hasSufficientDiskSpace(opts.dbPath, bytesBefore * 2)) {
+            return { ran: false, skippedReason: 'insufficient-disk', bytesBefore, bytesAfter: bytesBefore };
         }
 
         await db.exec('VACUUM');
+        // Truncate the WAL immediately: VACUUM writes the entire database into WAL in WAL mode.
+        await db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
         const bytesAfter = await databaseBytes(db);
         await db.run("INSERT INTO spur_retention_meta (kind, ran_at) VALUES ('compaction', ?)", now.getTime());
         return { ran: true, bytesBefore, bytesAfter };
