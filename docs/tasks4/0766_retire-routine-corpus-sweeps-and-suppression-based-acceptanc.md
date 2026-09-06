@@ -4,7 +4,7 @@ name: "Retire routine corpus sweeps and suppression-based acceptance"
 status: done
 template: feature-impl
 created_at: 2026-09-05T05:21:56.849Z
-updated_at: "2026-09-06T17:14:07.925Z"
+updated_at: "2026-09-06T17:34:49.427Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P2"]
@@ -99,11 +99,11 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 5. [ ] R1/R2: Run final focused tests, normal affected task/feature checks and exactly one final checker-policy audit; capture its exit/status/counts and any genuine unresolved failure. Run real task verification; never certify a nonzero audit as PASS.
 
 ### Solution
-
 **Status (superseded by decomposition, 2026-09-05):** task 0766 is **superseded** by three sub-tasks: **0773** (audit and migrate `config/corpus-baseline.json`), **0774** (migrate CLI/fallback `accepted` callers and dependent fixtures), and **0775** (delete regenerator scripts + snapshots + replace snapshot-equality tests + apply T10/T11 + update `wrapup-pipeline` default `featureGateCmd`). The decomposition records carry the live work; consult `spur task show 0773 --json`, `0774`, `0775` for scoped-down requirements, design and acceptance criteria. Downstream tasks 0767, 0769 and 0770 depend on **0775** instead of this task. Closure, 2026-09-06: all three children done — 0773 `cbf4d20b6`…`23ebf5d42`, 0774 `f19a393ed`+`7e66efa7a`, 0775 `fc4a8a3a9`.
 
 The original scope of 0766 (R1 routine-sweep retirement + R2 unsuppressed audit + corpus/composition snapshot deletion) is preserved across the three sub-tasks without loss of contract. Frozen contracts handed off from 0765 are unchanged: `REQUIRED_FINDING_CODES` in `packages/app/src/services/planning-check-base.ts:40` is the unsuppressible set, and `accepted`-map suppression on `summarizeWithStatus()` was preserved for advisory warnings only through 0774's caller migration, then removed entirely in 0775.
 
+**Pre-release correction (2026-09-06):** `packages/app/src/services/corpus-check.ts:168` now forwards the existing optional-comparison reporting callback; `apps/cli/src/commands/task.ts:1179` routes diagnostics to stderr. Unavailable Git comparisons explicitly report SKIPPED without changing the JSON result or exit policy. `apps/cli/tests/commands/task.test.ts:128` reproduces the former silent skip and passes after the fix; the CLI task and JSON-envelope inventory suites pass together (172 tests). No checker severity or audit scope changed.
 ### Testing
 **Pipeline verify results**
 
@@ -111,13 +111,13 @@ The original scope of 0766 (R1 routine-sweep retirement + R2 unsuppressed audit 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Routine package gates, wrapup and .lefthook.yml do not invoke corpus-check; the explicit audit is separate. The post-merge regression failed before removing the remaining automatic caller and passes afterward. Final comprehensive gate exits 0 (7458 tests); wrapup suite 21 pass. Fix-pass artifacts: verification run `.spur/run/0766-verify-answer.txt` replaced; CLI derives `.spur/run/0766-verdict.json` and records Testing. |
-| R2 | MET | Restored source-local task check --corpus and bun run corpus-check without baseline reads, suppressions or severity overrides. CLI regression tests pass: warnings-only exit 0, integrity errors exit 1, duplicates and corrupt matrix fail, invalid scopes exit 2. Real unsuppressed audit exits 1 with 880 observations (436 errors, 444 warnings), not a fabricated clean corpus. ADR-108 correction follows operator-selected f85094a7f. |
+| R1 | MET | Routine hooks/workflows and package gates contain no automatic audit caller; the regression in apps/cli/tests/commands/task.test.ts passes. Wrapup uses the affected feature. Final comprehensive gate: 7458 pass, zero fail, lint/typechecks and 44+2 rules pass. |
+| R2 | MET | Explicit unsuppressed audit retains its JSON shape, scope and exit policy. CLI regression proves warnings-only exit 0 and integrity failure exit 1. Optional comparison now reports SKIPPED through packages/app/src/services/corpus-check.ts:168 and apps/cli/src/commands/task.ts:1179. Regression apps/cli/tests/commands/task.test.ts:128 failed before and passes after. Live audit: 869 observations, 436 errors, 433 warnings, baselined 0; expected exit 1, with missing --since ref explicitly reported on stderr. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — Routine work does not scan the whole corpus | MET | command | Routine package gates, wrapup and .lefthook.yml do not invoke corpus-check. New red-to-green regression pins absence of automatic hook callers. Final comprehensive gate exits 0 (7458 tests); wrapup suite 21 pass. |
-| R2 — Explicit corpus audits remain useful without suppressions | MET | command | Restored source-local task check --corpus and bun run corpus-check without baseline reads, suppressions or severity overrides. CLI regression tests pass: warnings-only exit 0, integrity errors exit 1, duplicates and corrupt matrix fail, invalid scopes exit 2. Real unsuppressed audit exits 1 with 880 observations (436 errors, 444 warnings), not a fabricated clean corpus. ADR-108 correction follows operator-selected f85094a7f. |
+| R1 — Routine work does not scan the whole corpus | MET | test | apps/cli/tests/commands/task.test.ts routine-caller regression; full gate .spur/run/d61-release-final-gate.log exits 0. Existing wrapup affected-feature and override tests pass. |
+| R2 — Explicit corpus audits remain useful without suppressions | MET | command | Source-local task check --corpus --since D61-unavailable-comparison --json: exit 1 for real required errors, single JSON stdout, explicit SKIPPED on stderr; .spur/run/d61-release-audit.json and .spur/run/d61-release-audit.stderr. CLI/envelope suites: 172 pass; corpus/fog suite: 25 pass. No baseline suppression, severity change, or historical corpus cleanup. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 

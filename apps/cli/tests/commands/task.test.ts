@@ -125,6 +125,7 @@ describe('spur task CLI', () => {
             expect(result.duplicateKeys).toEqual([]);
             expect(result.newWarnings.length).toBeGreaterThan(0);
             expect(result.bySeverity.warning.newCount).toBe(result.newWarnings.length);
+            expect(output.errors.join('\n')).toContain('fog check SKIPPED (not a git repository)');
             await writeFile(join(root, 'docs/tasks/9999_broken.md'), '---\nstatus: invalid\n---\n');
             const broken = createCapturedOutput();
             expect(await main(['task', 'check', '--corpus', '--json'], { cwd: root, output: broken })).toBe(1);

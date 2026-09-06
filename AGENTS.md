@@ -162,6 +162,7 @@ git status --short
 
 `spur-check-new` is the identical chain. `bun run corpus-check` is an explicit unsuppressed audit
 for checker-policy changes (T10), not a routine step; ordinary corpus edits use affected-input checks (T11).
+Optional Git-comparison skips are explicit on stderr; audit JSON stdout remains one document.
 Iterate with targeted tests and `spur task check <wbs>`; run the full gate once, not per edit.
 Never use `--no-verify` or silent
 suppressions to force green.

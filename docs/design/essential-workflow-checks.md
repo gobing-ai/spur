@@ -39,6 +39,9 @@ archived prose scanning stays unexpanded. Failed required integrity checks
 cannot produce a clean result. Fog prose heuristics are advisory unless a concrete broken required
 reference is established.
 
+The optional Git comparison reports its range or an explicit `SKIPPED` reason on stderr.
+JSON stdout remains one document; an unavailable optional comparison does not hide a required-check failure.
+
 - Exit 0: no essential error; warnings may exist.
 - Exit 1: essential integrity error or failed required check; preserve CLI usage-error behavior.
 - No suppression: all findings remain visible; no accept-all regeneration.

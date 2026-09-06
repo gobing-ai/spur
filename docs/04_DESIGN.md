@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.66.1
+version: 1.67.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-09-06
@@ -2040,6 +2040,11 @@ Source: delivery §1.1, design §10.
 
 | `spur task verifyall-aggregate`        | `--from-file <path>` `--json`                                                                                                             | 0/1     | Read a JSON array of `{wbs, outcome[, reason]}` and emit the deterministic batch verdict; NOT-STARTED excluded from the rollup. Default input `.spur/run/verifyall-batch-input.json`. Replaces agent-discretion rollup prose (task 0341). |
 | `spur task run-link <wbs>`             | `--source <src>` `--run-id <id>` `--json`                                                                                                | 0/1     | Record a pipeline provenance run-link for a task (used by `--next` auto chains to satisfy the testing→done guard). Idempotent: re-run prints already-exists and skips. `--source` default `chain`; `--run-id` auto-generated when omitted. Shared ensure helper with `task record` (task 0436). |
+
+**Explicit audit diagnostics (0766, 2026-09-06).** The optional Git fog comparison reports its
+evaluated range or an explicit `SKIPPED` reason on stderr (including non-Git/shallow checkouts and
+unresolvable `--since` refs). This does not change audit severity, exit policy or the single JSON
+document on stdout; required structural-check failures still fail the audit.
 
 **D61 completion policy (0765 re-verification, 2026-09-06).** Normal task and feature checks
 reject unresolved declared feature/parent/dependency references. At effective `done`, required

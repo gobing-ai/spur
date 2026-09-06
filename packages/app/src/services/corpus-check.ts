@@ -162,10 +162,10 @@ async function duplicateIds(cwd: string, taskDirs: string[], featuresDir: string
 }
 
 /** Explicit audit only: no baseline or severity override can hide findings. */
-export async function runCorpusCheck(cwd: string, since?: string) {
+export async function runCorpusCheck(cwd: string, since?: string, report?: (message: string) => void) {
     const projectRoot = resolveProjectRoot(cwd);
     const sweep = await structuralSweep(projectRoot);
-    const fog = await ungraduatedFog(projectRoot, { since });
+    const fog = await ungraduatedFog(projectRoot, { since, report });
     const findings = [
         ...sweep.findings,
         ...(await duplicateIds(projectRoot, sweep.taskDirs, sweep.featuresDir)),

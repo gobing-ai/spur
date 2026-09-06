@@ -1176,7 +1176,11 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             }
             if (options.corpus) {
                 try {
-                    const result = await runCorpusCheck(context.cwd, options.since);
+                    const result = await runCorpusCheck(
+                        context.cwd,
+                        options.since,
+                        context.output.error.bind(context.output),
+                    );
                     if (json) {
                         context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     } else {
