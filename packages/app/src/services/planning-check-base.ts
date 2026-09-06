@@ -121,6 +121,12 @@ export interface CheckResultBase {
     missingSections: string[];
     /** Whether the check passed (no hard errors). */
     pass: boolean;
+    /**
+     * Diagnostic notes for the caller (e.g. an override that targeted an
+     * unsuppressible finding and was refused). Library code never writes to
+     * stdout/stderr; these surface the same info through the result object.
+     */
+    notes: string[];
 }
 
 /** Doc kind passed to {@link MarkdownDocument.parse}. */
@@ -284,20 +290,21 @@ export abstract class PlanningCheckService {
         // downgrade them are refused and the accepted-map cannot absorb them.
         // Advisory findings keep the legacy override + accepted path.
         const effectiveFindings: CheckFindings[] = [];
+        const notes: string[] = [];
         for (const f of findings) {
             const unsuppressible = isUnsuppressibleFinding(f.code);
             const override = overrides?.[f.code];
             if (override === 'off') {
                 if (unsuppressible) {
-                    process.stderr.write(`summarize: override 'off' refused for unsuppressible ${f.code}\n`);
+                    notes.push(`summarize: override 'off' refused for unsuppressible ${f.code}`);
                 } else {
                     continue; // dropped before pass gate or strict elevation sees it (R4)
                 }
             }
             if (override === 'error' || override === 'warning') {
                 if (unsuppressible) {
-                    process.stderr.write(
-                        `summarize: severity override for unsuppressible ${f.code} ignored (required severity preserved)\n`,
+                    notes.push(
+                        `summarize: severity override for unsuppressible ${f.code} ignored (required severity preserved)`,
                     );
                 } else {
                     f.severity = override;
@@ -331,6 +338,6 @@ export abstract class PlanningCheckService {
                 missingSections.push(f.section);
             }
         }
-        return { status, findings: effectiveFindings, requiredSections, missingSections, pass: !hasError };
+        return { status, findings: effectiveFindings, requiredSections, missingSections, pass: !hasError, notes };
     }
 }

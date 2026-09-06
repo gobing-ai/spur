@@ -146,6 +146,7 @@ export {
     historyBoardSkillBreakdownFromRollup,
     historyBoardSourcesFromRollup,
     historyBoardSummaryFromRollup,
+    markHistoryBoardRollupsRefreshed,
     ROLLUP_DEFINITION_VERSION,
     ROLLUP_SOURCE_TABLES,
     refreshHistoryBoardRollupsIncremental,

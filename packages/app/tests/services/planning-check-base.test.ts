@@ -366,15 +366,17 @@ describe('PlanningCheckService.summarizeWithStatus (D61 task 0765 — R1 unsuppr
                 message: 'schema bad',
             },
         ];
-        const origWrite = process.stderr.write;
-        process.stderr.write = () => true;
         const result = svc.summarizeWithStatus('testing', findings, false, {
             [FINDING_CODES.L1_SCHEMA_VALIDATION]: 'off',
         });
-        process.stderr.write = origWrite;
         expect(result.findings).toHaveLength(1);
         expect(result.findings[0]?.severity).toBe('error');
         expect(result.pass).toBe(false);
+        // The refused override is surfaced as a result note, not a stderr write
+        // (library code must not write to process stderr).
+        expect(result.notes).toEqual([
+            `summarize: override 'off' refused for unsuppressible ${FINDING_CODES.L1_SCHEMA_VALIDATION}`,
+        ]);
     });
 
     test('advisory L3 warning is still suppressed by severityOverrides: { code: off }', () => {

@@ -5,6 +5,7 @@ import {
     type DbAdapter,
     historyBoardHistoryVersion,
     historyBoardRollupsFresh,
+    markHistoryBoardRollupsRefreshed,
     refreshHistoryBoardRollupsIncremental,
 } from '@gobing-ai/spur-domain';
 
@@ -61,13 +62,7 @@ export async function refreshHistoryRollups(db: DbAdapter): Promise<HistoryRollu
     await refreshHistoryBoardRollupsIncremental(db);
 
     const historyVersion = await historyBoardHistoryVersion(db);
-    await db.run(
-        `INSERT INTO history_board_rollup_meta (id, history_version, refreshed_at)
-         VALUES (1, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET history_version = excluded.history_version, refreshed_at = excluded.refreshed_at`,
-        historyVersion,
-        new Date().toISOString(),
-    );
+    await markHistoryBoardRollupsRefreshed(db, historyVersion);
 
     const waste = await cacheWasteAggregate(db, ALL_HISTORY);
     return { status: 'refreshed', historyVersion, cacheWasteSteps: waste?.steps ?? 0 };

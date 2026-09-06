@@ -244,6 +244,22 @@ export async function historyBoardHistoryVersion(db: DbAdapter): Promise<string>
 }
 
 /**
+ * Record the refreshed rollup watermark for a corpus version. Upserts so a
+ * warm-cache refresh that races a cold-start rebuild never leaves a stale row;
+ * the incremental refresh path in the history analysis service calls this after
+ * {@link refreshHistoryBoardRollupsIncremental} completes.
+ */
+export async function markHistoryBoardRollupsRefreshed(db: DbAdapter, historyVersion: string): Promise<void> {
+    await db.run(
+        `INSERT INTO history_board_rollup_meta (id, history_version, refreshed_at)
+         VALUES (1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET history_version = excluded.history_version, refreshed_at = excluded.refreshed_at`,
+        historyVersion,
+        new Date().toISOString(),
+    );
+}
+
+/**
  * Aggregate `history_skill_call` into the materialized skill rollup seed, bucketing
  * `started_at` to the board's shared minute floor so the read layer can re-bucket to
  * any requested interval. All-time (unfiltered): the Summary read layer applies the
