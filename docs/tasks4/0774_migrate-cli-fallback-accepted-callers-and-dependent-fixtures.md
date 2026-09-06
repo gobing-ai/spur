@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Migrate CLI/fallback accepted callers and dependent fixtures"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-05T15:33:42.921Z
-updated_at: "2026-09-05T15:38:39.557Z"
+updated_at: "2026-09-06T01:13:06.127Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P3"]
@@ -26,13 +26,13 @@ Dependencies: 0773 (audit + repaired corpus), 0765 (frozen `REQUIRED_FINDING_COD
 
 ### Requirements
 
-- [ ] **R1.** Migrate the two CLI/fallback sites in `apps/cli/src/commands/task.ts` (~line 1286, ~1628) so they no longer pass `accepted` to `svc.check()`. Preserve the 0765 frozen contract: `REQUIRED_FINDING_CODES` precedence is unchanged; `accepted`-map suppression on `summarizeWithStatus()` remains active for advisory warnings only.
+- [x] **R1.** Migrate the two CLI/fallback sites in `apps/cli/src/commands/task.ts` (~line 1286, ~1628) so they no longer pass `accepted` to `svc.check()`. Preserve the 0765 frozen contract: `REQUIRED_FINDING_CODES` precedence is unchanged; `accepted`-map suppression on `summarizeWithStatus()` remains active for advisory warnings only.
 
-- [ ] **R2.** Migrate dependent test fixtures so no current finding is incorrectly demoted when the `accepted` parameter is removed. The CLI task-check corpus (`bun test apps/cli/tests/commands/task.test.ts`) must pass with zero `accepted`-key suppression behavior. Tests that previously relied on baseline-suppressed findings are migrated to either (a) genuine repair (via Spur CLI) or (b) explicit expectation of the unsuppressed finding per the 0765 contract.
+- [x] **R2.** Migrate dependent test fixtures so no current finding is incorrectly demoted when the `accepted` parameter is removed. The CLI task-check corpus (`bun test apps/cli/tests/commands/task.test.ts`) must pass with zero `accepted`-key suppression behavior. Tests that previously relied on baseline-suppressed findings are migrated to either (a) genuine repair (via Spur CLI) or (b) explicit expectation of the unsuppressed finding per the 0765 contract.
 
-- [ ] **R3.** Remove the `loadAcceptedFindings` export from `packages/app/src/index.ts` and from any internal module surface that no longer needs it after the caller migration. The internal loader at `packages/app/src/services/corpus-check.ts:656` remains in place — its deletion is 0775's scope.
+- [x] **R3.** Remove the `loadAcceptedFindings` export from `packages/app/src/index.ts` and from any internal module surface that no longer needs it after the caller migration. The internal loader at `packages/app/src/services/corpus-check.ts:656` remains in place — its deletion is 0775's scope.
 
-- [ ] **R4.** Update affected tests so the gate behavior matches the 0765 `REQUIRED_FINDING_CODES` precedence: a finding whose code is in `REQUIRED_FINDING_CODES` always surfaces at full severity regardless of any legacy `accepted` entry.
+- [x] **R4.** Update affected tests so the gate behavior matches the 0765 `REQUIRED_FINDING_CODES` precedence: a finding whose code is in `REQUIRED_FINDING_CODES` always surfaces at full severity regardless of any legacy `accepted` entry.
 
 Out of scope: deleting `config/corpus-baseline.json`, the regenerator scripts, the composition-baseline snapshot, or the regenerator export (0775); new engines/dependencies/public nouns, broad historical-document cleanup, D9 fast activation, release, merge and external deployment. All task/feature writes use Spur CLI; generated adapters use Superskill. Refine does not author implementation evidence.
 
@@ -133,9 +133,33 @@ Anticipated change anchors (populated during implementation):
 - Internal loader at `packages/app/src/services/corpus-check.ts:656` — kept through this task; deleted by 0775.
 
 ### Testing
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | All three svc.check() sites stop passing accepted (per-wbs loop, folder loop, runDoneGateCheck); frozen contract untouched |
+| R2 | MET | Zero accepted refs in task.test.ts; suite green without the map |
+| R3 | MET | loadAcceptedFindings removed from packages/app barrel; internal loader kept for 0775; no other consumer |
+| R4 | MET | REQUIRED_FINDING_CODES precedence tests green in packages/app run; suppression guard short-circuits without map |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 | MET | test | apps/cli tests/commands/task.test.ts 172/172 exercises all three migrated call sites |
+| R2 | MET | test | 172/172 CLI task-check tests pass with zero accepted-key suppression behavior |
+| R3 | MET | command | bunx tsc --noEmit -p apps/cli exit 0 + 194/0 packages/app suite after barrel export removal (no dangling consumer) |
+| R4 | MET | test | 0765 REQUIRED_FINDING_CODES precedence coverage green in packages/app task-check run (194/0) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 
 - [D61 feature](../features/D61_essential-workflow-checks-and-observable-execution.md)
@@ -148,3 +172,6 @@ Anticipated change anchors (populated during implementation):
 - Surface/process authority: docs/04_DESIGN.md and docs/99_PROJECT_CONSTITUTION.md; local source/test paths are named in Design.
 
 ### History
+- 2026-09-06T01:02:44.223Z todo → wip (system)
+- 2026-09-06T01:11:54.609Z wip → testing (system)
+- 2026-09-06T01:13:06.127Z testing → done (system)
