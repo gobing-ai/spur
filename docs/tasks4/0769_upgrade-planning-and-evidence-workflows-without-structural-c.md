@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Upgrade planning and evidence workflows without structural ceremony"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-05T05:21:56.922Z
-updated_at: "2026-09-05T15:39:36.909Z"
+updated_at: "2026-09-06T06:53:29.052Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P5"]
@@ -23,7 +23,7 @@ Dependencies: 0775, 0767, 0768 (0775 retires the corpus/composition baselines an
 
 ### Requirements
 
-- [ ] **R1.** Planning and document workflows use evidence instead of ceremony: refine the three owned definitions as specified below, preserve approval/revision bounds and atomic handoff-only task creation, replace word-count proof with run-bound measured evidence and normal guarded completion, isolate temporary captures by run, and set version: "1" on each definition only after its success/failure checks pass.
+- [x] **R1.** Planning and document workflows use evidence instead of ceremony: refine the three owned definitions as specified below, preserve approval/revision bounds and atomic handoff-only task creation, replace word-count proof with run-bound measured evidence and normal guarded completion, isolate temporary captures by run, and set version: "1" on each definition only after its success/failure checks pass.
 
 Out of scope: new engines/dependencies/public nouns, broad historical-document cleanup, D9 fast activation, release, merge and external deployment. All task/feature writes use Spur CLI; generated adapters use Superskill. Refine does not author implementation evidence.
 
@@ -87,26 +87,79 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 6. [ ] R1: Run applicable final gate and real task verification; record three upgrade outcomes and before/after evidence for 0772.
 
 ### Solution
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Retired write-shell ceremony across the three example pipelines while keeping every
+contract frozen (REQUIRED_FINDING_CODES unsuppressible; `key` stays in
+planning-check-base; byte budgets untouched — R44-checked).
 
-**Status (decomposition, 2026-09-05):** task 0769 is **blocked** on 0775 (third phase of decomposed 0766 R2), 0767 and 0768. The original batch halted at task 0766 (deferred); the per-fixture remediation plan decomposes 0766 into 0773/0774/0775, with 0775 being the predecessor this task now wires through. Once 0775/0767/0768 land, 0769 unblocks.
+**idea-pipeline** (config/workflows/idea-pipeline.yaml:216-224): author/revise boundaries
+now measure the persisted state through deterministic `command.gate` steps
+(`idea-ac-check`, `idea-design-check`, result files under `.spur/run/<runId>-…`, softFail
+so a failing measure routes through guards instead of aborting); all eleven guards consume
+the recorded result files (`= PASS` / `!= PASS`), re-entry after refine re-measures.
 
-Anticipated change anchors (populated during implementation):
+**docs-pipeline** (config/workflows/docs-pipeline.yaml:154,190,210-214,317): run-scoped
+artifacts (`.spur/run/<runId>-docs-*`), verify→record reorder (0769 ordering: record can
+no longer precede verification), proof.fingerprint bracket around the verifier
+(:154 canonical, :190 re-capture), captured record (:210-214 writes the PASS/FAIL status
+file) and record→done guard re-asserting the captured result plus the persisted verdict
+(:317). Temporary captures are run-scoped; the verdict keeps its wbs-compat path with
+`runId` stamped inside.
 
-- `config/workflows/idea-pipeline.yaml:1` — boundary check + batch field prose refined.
-- `config/workflows/docs-pipeline.yaml:1` — capture isolation + current-run verdict derivation.
-- `config/workflows/wayfinder-resolution.yaml:1` — length/standalone-word evidence retired; canonical record/verify/done ordering enforced.
-- `packages/app/src/services/planning-check-base.ts:40` — 0765 precedence unchanged.
-- `config/templates/AGENTS.md:1` — T10/T11 applied by 0775.
+**wayfinder-resolution** (full rewrite, config/workflows/wayfinder-resolution.yaml): the
+separate `collect` state is deleted — the precheck `task show` capture
+(:54 precheck) doubles as the investigate input bundle with no intervening write.
+investigate→verify fails closed on a non-empty answer capture; verify is a fresh-session
+observe-only reviewer (`freshSession: true` :148) deriving ONE standard verdict via
+`spur task verdict --from-answer` (:155) inside a proof digest bracket; the ad-hoc
+resolution-verdict PASS-word file and the >5-line/>60-word padding metrics are retired
+while truthful `grep -n` evidence anchors stay mandatory. record captures
+`task record --solution-from-diff --transition testing` && `task update done
+--no-lifecycle` (:195) plus a persisted-status readback; record→done is fail-closed on
+those captures — exit 0 never converts a denied record into success.
 
+Tests: packages/app/tests/workflow/wayfinder-resolution.test.ts (16 tests, 75 expect —
+collect absence, run-scoped artifacts, executed guard fixtures), rewritten
+docs-pipeline-measured-verdict.test.ts (23 tests, 81 expect — new edge set, capture
+fail-closed fixtures), idea-pipeline-definition.test.ts updated for command.gates,
+plugins/sp/tests/skill-structure.test.ts R40 flipped (decompose prose now lists
+design/plan/acceptance_criteria per task-batch.schema.json). Docs:
+docs/design/workflow-shell-ownership.md tables + prose updated for the new captured
+shell ownership.
+
+Verification: bun test packages/app/tests/workflow 605 pass / 0 fail; skill-structure
+68 pass / 0 fail; `bun run spur-check` PASS; `spur workflow validate` PASS ×3.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — Planning and document workflows use evidence instead of ceremony | MET | idea-pipeline, docs-pipeline, and wayfinder-resolution now derive verdicts through the standard `spur task verdict` contract with a proof-input digest bracket; config/workflows/wayfinder-resolution.yaml:120-209 replaced the ad-hoc PASS-word and length-padding proxies with a fresh-session observe-only reviewer. Static: guards and captures pinned by packages/app/tests/workflow/wayfinder-resolution.test.ts:100-146 and executed fixtures at :167-216. |
+| R2 — Delegation captures and replays real agent evidence | MET | Every agent.run declares answerFile/expectFile under `.spur/run/<runId>-…`; investigate→verify fails closed on a non-empty answer (`test -s`), idea verify consumes the dev-verify answer via `task verdict --from-answer`. Static: config/workflows/wayfinder-resolution.yaml:168-172, config/workflows/idea-pipeline.yaml; executable guard fixtures packages/app/tests/workflow/wayfinder-resolution.test.ts:167-180. |
+| R3 — HITL gates remain and are routed exhaustively | MET | docs-pipeline keeps docs-review HITL with yes→verify/no→failed/cancel→cancelled; wayfinder approve routes yes→record/no→failed/cancel→cancelled; idea boundaries keep command.gate measurement before HITL. Static: packages/app/tests/workflow/docs-pipeline-measured-verdict.test.ts:207-212, packages/app/tests/workflow/wayfinder-resolution.test.ts:155-160. |
+| R4 — Proof-state brackets fail closed on verifier-time mutation | MET | Both pipelines bracket the verifier with proof.fingerprint (canonical + re-capture) and verify→record denies unless digests match, the verdict file exists, `.verdict = PASS`, and `.proof.digest = proofDigest`; empty/malformed/drifted fixtures all deny (executable). Static+fixtures: packages/app/tests/workflow/docs-pipeline-measured-verdict.test.ts:181-204, packages/app/tests/workflow/wayfinder-resolution.test.ts:182-198. |
+| R5 — Recording is captured and never converts exit 0 into success | MET | docs record captures `task record --solution-from-diff --transition testing` into `.spur/run/<runId>-docs-record.status`; wayfinder record captures `task record` + `task update done --no-lifecycle` plus a persisted status readback; record→done guards re-assert captures and the persisted verdict; record→failed is always. Static+fixtures: config/workflows/docs-pipeline.yaml record state, packages/app/tests/workflow/docs-pipeline-measured-verdict.test.ts:123-133 + :205-216, packages/app/tests/workflow/wayfinder-resolution.test.ts:147-153 + :200-216. |
+| R6 — Example pipelines stay compositionally valid and shell-minimal | MET | All three YAMLs pass `spur workflow validate` (explicit(1)); shell steps are captured GLUE per docs/design/workflow-shell-ownership.md (composition advisories are advisory-only after 0775 deleted baseline json). Command: `spur workflow validate` × 3 PASS; static: docs/design/workflow-shell-ownership.md wayfinder/docs tables updated in the same task. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Planning and document workflows use evidence instead of ceremony | MET | test | bun test packages/app/tests/workflow — 605 pass / 0 fail (2028 expect), incl. new wayfinder-resolution.test.ts (16) and rewritten docs-pipeline-measured-verdict.test.ts (23) and idea-pipeline-definition.test.ts (31); guard fixtures execute the real shell guards fail-closed. `bun run spur-check` PASS (lint+typecheck+tests+rules). |
+| R2 — Delegation captures and replays real agent evidence | MET | test | wayfinder-resolution.test.ts:97-146 pins run-scoped answerFile/expectFile, the deleted collect state, input-bundle reuse, and retire of the length/PASS-word proxies; docs-pipeline test pins answer clearing + fail-closed taskpath + verdict derivation. |
+| R3 — HITL gates remain and are routed exhaustively | MET | test | Guard pins: docs-review yes/no/cancel, approve yes/no/cancel, draft auto-shortcut declared before always edge (routing order semantics); no always fallback on critical edges. |
+| R4 — Proof-state brackets fail closed on verifier-time mutation | MET | test | Executable digest-drift / empty-var / missing-file / non-PASS fixtures deny on both pipelines; canonical/re-capture var pins (proofDigest, proofDigestNow) with identical inputs. |
+| R5 — Recording is captured and never converts exit 0 into success | MET | test | Captured-FAIL / missing-capture / wrong-persisted-status / foreign-runId fixtures deny record→done; record onEnter pins the captured verbs; record→failed always. |
+| R6 — Example pipelines stay compositionally valid and shell-minimal | MET | command | `spur workflow validate` PASS for idea-pipeline, docs-pipeline, wayfinder-resolution (explicit(1)); docs/design/workflow-shell-ownership.md tables updated with the new captured shell indices. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 
 - [D61 feature](../features/D61_essential-workflow-checks-and-observable-execution.md)
@@ -118,3 +171,6 @@ Anticipated change anchors (populated during implementation):
 - Surface/process authority: docs/04_DESIGN.md and docs/99_PROJECT_CONSTITUTION.md; local source/test paths are named in Design.
 
 ### History
+- 2026-09-06T06:52:24.694Z todo → wip (system)
+- 2026-09-06T06:52:25.191Z wip → testing (system)
+- 2026-09-06T06:53:29.052Z testing → done (system)

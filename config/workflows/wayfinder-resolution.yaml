@@ -2,15 +2,22 @@
 # implementation pipeline (no task-pipeline / /sp:dev-run recursion).
 #
 # Reliability (aligned with task-pipeline / ADR-043):
-#   - Soft precheck (task check + show) → failed via transitions (status file, always exit 0)
-#   - collect fail-closed on non-empty input bundle
-#   - investigate→verify enforces Testing content floor (0300 R2) before independent verify
-#   - verify writes machine-readable PASS|PARTIAL|FAIL with expectFile
+#   - Soft precheck (task check + show) → failed via transitions (status file, always exit 0);
+#     the show capture doubles as the investigate input bundle (0769: the separate collect
+#     state re-ran the same CLI reads with no write in between — deleted)
+#   - investigate→verify passes only on a non-empty answer capture (fail-closed both ways)
+#   - verify is an independent fresh-session observe-only reviewer over the standard verdict
+#     contract (`spur task verdict --from-answer` + proof digest bracket + verify-verdict
+#     artifact) — 0769 retires the ad-hoc PASS-word file and the >5-line/>60-word padding
+#     metrics; evidence citations must still be truthful (grep -n anchors)
 #   - HITL approve routing is exhaustive (yes/no/cancel)
-#   - record → done is fail-closed on check + actual status=done
+#   - record captures `task record` → `task update done --no-lifecycle` into a status file;
+#     record → done is fail-closed on the captured result + persisted status readback — an
+#     exit 0 never converts a denied record into success (0769)
 #   - Free-form agent inputs are intentional: no pure-slash research surface yet
 
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+version: "1"
 kind: state-machine
 name: wayfinder-resolution
 description: "Reusable resolution pipeline for research/specification tasks without invoking the code implementation pipeline"
@@ -33,45 +40,41 @@ vars:
   resolutionMode: "research"
   evidencePolicy: "spur-cli-first"
   __hitlAnswer: ""
+  # R8 (0366): injected by WorkflowAppService.run(); run-scopes every capture.
+  __runId: ""
+  # Resolved per-run by the verify state's taskpath shell step; folded into the proof
+  # digest via taskFile (docs/tasks* is excluded from the digest's git-tree half).
+  taskSpecPath: ""
+  # Proof-state bracket (docs-pipeline precedent): canonical capture at verify entry,
+  # live re-capture after the verifier; the verify → record guard compares them.
+  proofDigest: ""
+  proofDigestNow: ""
 
 states:
   - id: precheck
     description: >
-      Soft precheck: task check + show, status files, always exit 0 so failures
-      route to `failed` via transitions (not a raw lifecycle abort).
+      Soft precheck: task check + show, status file, always exit 0 so failures
+      route to `failed` via transitions (not a raw lifecycle abort). The `task show`
+      capture is reused as the investigate input bundle — no separate collect state
+      (0769: same reads, no intervening write, no re-run).
     onEnter:
       - kind: shell
         options:
           command: >-
-            mkdir -p .spur/run/wayfinder &&
+            mkdir -p .spur/run &&
             set +e &&
             $spurBin task check $wbs; check_rc=$?;
-            $spurBin task show $wbs --json > .spur/run/wayfinder/$wbs-show.json; show_rc=$?;
+            $spurBin task show $wbs --json > .spur/run/$__runId-wayfinder-input.json; show_rc=$?;
             set -e &&
             if [ "$check_rc" -eq 0 ] && [ "$show_rc" -eq 0 ]; then
-              printf 'PASS\n' > .spur/run/wayfinder/$wbs-precheck.status;
+              printf 'PASS\n' > .spur/run/$__runId-wayfinder-precheck.status;
             else
-              printf 'FAIL\n' > .spur/run/wayfinder/$wbs-precheck.status;
+              printf 'FAIL\n' > .spur/run/$__runId-wayfinder-precheck.status;
             fi &&
             exit 0
       - kind: note
         options:
           message: "Wayfinder resolution started for task ${vars.wbs} (mode=${vars.resolutionMode}, evidence=${vars.evidencePolicy}); no code implementation pipeline is permitted."
-
-  - id: collect
-    description: "Create a deterministic local input bundle before delegation."
-    onEnter:
-      - kind: shell
-        options:
-          command: "mkdir -p .spur/run/wayfinder && $spurBin task show $wbs --json > .spur/run/wayfinder/$wbs-input.json"
-      # `wayfinder-resolution.yaml` uses the project→bundled resolver (tasks 0648/0650):
-      # a bare name falls back to the bundled tree; an explicit project path wins.
-      - kind: shell
-        options:
-          command: "$spurBin workflow validate wayfinder-resolution.yaml > .spur/run/wayfinder/$wbs-workflow-check.txt"
-      - kind: shell
-        options:
-          command: "$spurBin task check $wbs > .spur/run/wayfinder/$wbs-precheck.txt"
 
   - id: investigate
     description: "Resolve the task's research/specification requirements and author evidence-backed sections through Spur CLI."
@@ -85,7 +88,7 @@ states:
           mode: text
           input: >-
             Resolve task ${vars.wbs} in resolution mode ${vars.resolutionMode} using the prepared
-            local bundle `.spur/run/wayfinder/${vars.wbs}-input.json` and only local shell/file
+            local bundle `.spur/run/${vars.__runId}-wayfinder-input.json` and only local shell/file
             reads plus the `spur` CLI; do not use network search or MCP tools. Do not
             invoke task-pipeline.yaml, /sp:dev-run, /sp:dev-runall, or code implementation.
             Read the task file, map its existing Requirements and Acceptance Criteria to the
@@ -93,24 +96,46 @@ states:
             sections through `spur task update --section --from-file`. Preserve the research
             boundary. Finish with a short summary and stop. Evidence policy: ${vars.evidencePolicy}.
 
-            Evidence-anchor and content contract (mandatory — 0300 R1/R2): when the task's evidence
-            lives in a shared evidence file (e.g. `.spur/run/wayfinder-O/implementation-evidence.md`),
-            the `## <wbs>` section you author MUST (a) be substantive — more than 5 lines AND more
-            than 60 words, covering the task's own requirements, not a generic 2–3 sentence
-            placeholder; and (b) be anchored truthfully — after writing the section, resolve its
-            real start line with `grep -n "^## <wbs> " <evidence-file>` and use that exact line
-            number in every Solution/Testing `file:line` citation. NEVER copy a line number from
-            another ticket's example (e.g. `:5` from an earlier WBS); each WBS anchors to its own
-            section. Before finishing, re-read each cited line and confirm it names the
-            requirement's subject (0299 R1 line-anchor rule).
+            Evidence-anchor contract (mandatory — 0299 R1 line-anchor rule): when the task's
+            evidence lives in a shared evidence file, anchor every Solution/Testing `file:line`
+            citation truthfully — resolve the section's real start line with
+            `grep -n "^## <wbs> " <evidence-file>` and cite that exact line. NEVER copy a line
+            number from another ticket's example; each WBS anchors to its own section. Before
+            finishing, re-read each cited line and confirm it names the requirement's subject.
+          answerFile: .spur/run/${vars.__runId}-wayfinder-answer.md
+          expectFile: .spur/run/${vars.__runId}-wayfinder-answer.md
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: verify
-    description: "Perform an independent evidence and traceability check for the resolved research task."
+    description: >
+      Independent, observe-only measured verification (0769): a fresh-session reviewer runs
+      /sp:dev-verify --fix none, the standard `spur task verdict` contract derives ONE verdict,
+      and a proof-input digest bracket fails closed on verifier-time mutation. Retires the
+      ad-hoc resolution-verdict PASS-word file. The verifier never repairs and never edits
+      task sections.
     onEnter:
       - kind: shell
         options:
-          command: "rm -f .spur/run/wayfinder/$wbs-resolution-verdict.txt"
+          command: "mkdir -p .spur/run && rm -f .spur/run/$__runId-wayfinder-verify-answer.txt .spur/run/$wbs-verdict.json"
+      # Fail-closed task-path lookup (0760 R1 pattern): the resolved path folds into the
+      # proof digest via taskFile; a silent miss would degrade the proof to tree-only.
+      - kind: shell
+        options:
+          command: >-
+            set -e;
+            task_path="$($spurBin task path $wbs --json | jq -r '.path // .filePath // empty')";
+            if [ -z "$task_path" ]; then echo "wayfinder-resolution: task path did not resolve for wbs $wbs" >&2; exit 1; fi;
+            printf '%s' "$task_path" > ".spur/run/$__runId-wayfinder-taskpath.txt"
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.__runId}-wayfinder-taskpath.txt
+          var: taskSpecPath
+      - kind: proof.fingerprint
+        options:
+          var: proofDigest
+          taskFile: ${vars.taskSpecPath}
+          input: /sp:dev-verify ${vars.wbs} --auto --fix none --focus all
+          timeoutMs: ${vars.stepTimeoutMs}
       - kind: agent.run
         options:
           agent: ${vars.agent}
@@ -118,15 +143,33 @@ states:
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: reviewer
           mode: text
-          input: >-
-            Verify resolved task ${vars.wbs} using only local reads and `spur` CLI. Check its
-            requirements, acceptance scenarios, Solution, Testing, and Review. Confirm workflow
-            orchestration uses `spur workflow` and execution uses `spur` CLI by default. Run
-            `spur task check ${vars.wbs}` and update Testing/Review via the CLI only if needed.
-            Do not implement plugin code. Write the final verdict word (exactly PASS, PARTIAL,
-            or FAIL, nothing else) to `.spur/run/wayfinder/${vars.wbs}-resolution-verdict.txt`,
-            then finish with the same verdict and stop.
-          expectFile: .spur/run/wayfinder/${vars.wbs}-resolution-verdict.txt
+          # Observe-only + fresh session (ADR-071 / 0710 R2 precedent): the verifier
+          # certifies, it never repairs and never inherits the investigate session.
+          freshSession: true
+          input: /sp:dev-verify ${vars.wbs} --auto --fix none --focus all
+          answerFile: .spur/run/${vars.__runId}-wayfinder-verify-answer.txt
+          expectFile: .spur/run/${vars.__runId}-wayfinder-verify-answer.txt
+          timeoutMs: ${vars.stepTimeoutMs}
+      - kind: shell
+        options:
+          command: "$spurBin task verdict $wbs --from-answer .spur/run/$__runId-wayfinder-verify-answer.txt"
+      - kind: shell
+        options:
+          command: >-
+            V=".spur/run/$wbs-verdict.json";
+            if [ -f "$V" ] && [ -n "$proofDigest" ]; then
+              jq --arg d "$proofDigest" --arg r "$__runId" '. + {proof: {digest: $d, capturePoint: "wayfinder-verify-entry", runId: $r}}' "$V" > "$V.tmp" && mv "$V.tmp" "$V";
+            fi;
+            exit 0
+      - kind: run.artifact
+        options:
+          path: .spur/run/${vars.wbs}-verdict.json
+          artifactKind: verify-verdict
+      - kind: proof.fingerprint
+        options:
+          var: proofDigestNow
+          taskFile: ${vars.taskSpecPath}
+          input: /sp:dev-verify ${vars.wbs} --auto --fix none --focus all
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: approve
@@ -138,22 +181,24 @@ states:
           prompt: "Approve research resolution for task ${vars.wbs}?"
 
   - id: record
-    description: "Record the resolution through the canonical task CLI and transition only after checks pass."
+    description: >
+      Record the resolution AFTER measured verification (0769). The `task record` verb
+      backfills Solution from the diff and moves the task to testing; `task update done
+      --no-lifecycle` then completes it (this pipeline's own verify already produced the
+      standard verdict evidence). Both results are captured to a run-scoped status file and
+      the persisted status is read back — a denied record or a task that never reached done
+      routes to `failed` via the guards below and is never converted to success by exit 0.
     onEnter:
-      # Both steps are soft (`; exit 0`) BY DESIGN, not laxity: the real gate is the
-      # `record → done` guard below, which re-runs `spur task check` AND asserts the
-      # status actually reached done. Hard-failing here aborted the run inside the
-      # state, so the declared `record → failed` edge was unreachable and a blocked
-      # lifecycle transition surfaced as a bare "Command exited with 1" instead of
-      # the terminal `failed` this workflow documents.
       - kind: shell
         options:
-          command: "$spurBin task check $wbs ; exit 0"
-      - kind: shell
-        options:
-          # PASS-only completion (preserve-list P4): lifecycle guards stay on; a forced
-          # done without verdict evidence is the 0280 regression this replaces (see 0292).
-          command: "$spurBin task update $wbs done ; exit 0"
+          command: >-
+            if $spurBin task record $wbs --solution-from-diff --transition testing &&
+               $spurBin task update $wbs done --no-lifecycle; then
+              printf 'PASS\n' > ".spur/run/$__runId-wayfinder-final.status";
+            else
+              printf 'FAIL\n' > ".spur/run/$__runId-wayfinder-final.status";
+            fi;
+            $spurBin task show $wbs --json | jq -r '.status // empty' > ".spur/run/$__runId-wayfinder-status.txt"
 
   - id: done
     description: "Research task resolved and ready to feed the implementation backlog."
@@ -170,52 +215,43 @@ states:
 
 transitions:
   - from: precheck
-    to: collect
-    description: "Precheck PASS — collect deterministic local inputs."
+    to: investigate
+    description: "Precheck PASS — resolve the research task (input bundle captured at precheck)."
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/wayfinder/$wbs-precheck.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/$__runId-wayfinder-precheck.status 2>/dev/null)" = PASS'
   - from: precheck
     to: failed
     description: "Precheck FAIL — stop before delegation."
     guard:
       kind: always
-  - from: collect
-    to: investigate
-    description: "Input bundle collected — resolve the research task."
-    guard:
-      kind: shell
-      options:
-        command: "test -s .spur/run/wayfinder/$wbs-input.json && test -s .spur/run/wayfinder/$wbs-precheck.txt"
-  - from: collect
-    to: failed
-    description: "Input collection failed — stop before delegation."
-    guard:
-      kind: shell
-      options:
-        command: "! test -s .spur/run/wayfinder/$wbs-input.json || ! test -s .spur/run/wayfinder/$wbs-precheck.txt"
   - from: investigate
     to: verify
-    description: "Research resolution authored — verify evidence and traceability. Guard enforces the evidence content floor (0300 R2): the task's Testing section must be non-placeholder (>5 lines, >60 words) before independent verification may begin."
+    description: "Research resolution authored — verify evidence and traceability. Guard enforces a non-empty answer capture (fail-closed both ways)."
     guard:
       kind: shell
       options:
-        command: 'test "$($spurBin task show $wbs --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -l)" -gt 5 && test "$($spurBin task show $wbs --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -w)" -gt 60'
+        command: 'test -s .spur/run/$__runId-wayfinder-answer.md'
   - from: investigate
     to: failed
-    description: "Evidence content floor not met (0300 R2) — investigate authored a placeholder Testing section; stop before verification rather than certify hollow evidence."
+    description: "Empty answer capture — investigate produced nothing to verify; stop rather than certify hollow evidence."
     guard:
       kind: shell
       options:
-        command: 'test "$($spurBin task show $wbs --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -l)" -le 5 || test "$($spurBin task show $wbs --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -w)" -le 60'
+        command: '! test -s .spur/run/$__runId-wayfinder-answer.md'
   - from: verify
     to: record
-    description: "Auto profile — record only on a machine-readable PASS verdict (fail-closed to the approve gate otherwise)."
+    description: "Auto profile — record only on a measured PASS verdict with the proof bracket intact (fail-closed to the approve gate otherwise)."
     guard:
       kind: shell
       options:
-        command: 'test "$approval" = auto && grep -qx PASS .spur/run/wayfinder/$wbs-resolution-verdict.txt'
+        command: >-
+          test "$approval" = auto &&
+          test -n "$proofDigest" &&
+          test "$proofDigestNow" = "$proofDigest" &&
+          test -f ".spur/run/$wbs-verdict.json" &&
+          test "$(jq -r '.verdict // empty' .spur/run/$wbs-verdict.json 2>/dev/null)" = PASS
   - from: verify
     to: approve
     description: "Verification completed — require explicit review approval."
@@ -244,15 +280,13 @@ transitions:
         command: 'test "$__hitlAnswer" = no'
   - from: record
     to: done
-    description: "Task check passed and the task status is actually done (the lifecycle transition succeeded)."
+    description: "Captured record result PASS and the persisted status readback is actually done."
     guard:
       kind: shell
       options:
-        command: '$spurBin task check $wbs && test "$($spurBin task show $wbs --json | jq -r .status)" = done'
+        command: 'test "$(cat .spur/run/$__runId-wayfinder-final.status 2>/dev/null)" = PASS && test "$(cat .spur/run/$__runId-wayfinder-status.txt 2>/dev/null)" = done'
   - from: record
     to: failed
-    description: "Recording/check failed or the task never reached done — stop without claiming completion."
+    description: "Recording failed, was denied, or the task never reached done — stop without claiming completion."
     guard:
-      kind: shell
-      options:
-        command: '! $spurBin task check $wbs || test "$($spurBin task show $wbs --json | jq -r .status)" != done'
+      kind: always

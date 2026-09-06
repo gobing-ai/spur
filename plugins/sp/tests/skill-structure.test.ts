@@ -654,10 +654,15 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             expect(decompose).toContain(field);
         }
         expect(decompose).toContain('Schema-permitted fields per entry');
-        expect(decompose).toContain(
+        // 0769: the prose was repaired — design/plan/acceptance_criteria ARE schema-permitted
+        // (task-batch.schema.json) and normal default planning fills them; refine deepens.
+        for (const field of ['design', 'plan', 'acceptance_criteria']) {
+            expect(decompose).toContain(`\`${field}\``);
+        }
+        expect(decompose).toContain('the per-task refine step after batch-create still deepens them');
+        expect(decompose).not.toContain(
             'Acceptance Criteria, Design, and Plan sections are filled in by the per-task refine step',
         );
-        expect(decompose).not.toContain('acceptance_criteria');
     });
 
     test('R41 — task-pipeline approve gate routes three HITL outcomes with no always fallback (0182 R1)', () => {

@@ -81,8 +81,10 @@ describe('idea-pipeline definition — pre-approval bypass ordering (R4/R5 of 03
         // Guards reference vars by name so values reach the shell as env, never as command text
         // (task 0435) — the invariant asserted is still "both conditions, ANDed". 0515 adds the
         // feature check so stale/invalidated AC cannot reach decompose on the auto-approved path.
+        // 0769: the check is measured once by the idea-design-check command.gate at the end of
+        // system-design; the guard consumes the recorded run-scoped result file.
         expect(guard?.options?.command).toBe(
-            `test "$profile" = auto && test "$design_approved" = true && $spurBin feature check "$featureId"`,
+            `test "$profile" = auto && test "$design_approved" = true && test "$(cat .spur/run/$__runId-idea-design-check.status 2>/dev/null)" = PASS`,
         );
     });
 
@@ -263,24 +265,72 @@ describe('idea-pipeline definition — design-review feedback contract (0515 R2)
         expect(prompt).toContain('Operator feedback');
     });
 
-    test('both design exits run spur feature check before decomposition', () => {
+    test('both design exits route through the recorded design check before decomposition', () => {
         const auto = DEF.transitions[edgeIndex('system-design', 'decompose')]?.guard?.options?.command ?? '';
         const interactive = DEF.transitions[edgeIndex('design-approval', 'decompose')]?.guard?.options?.command ?? '';
+        const rejected = DEF.transitions[edgeIndex('design-approval', 'feature-check')]?.guard?.options?.command ?? '';
 
-        expect(auto).toContain('$spurBin feature check "$featureId"');
+        // 0769: every sibling exit consumes the same recorded idea-design-check status.
+        const passCheck = 'test "$(cat .spur/run/$__runId-idea-design-check.status 2>/dev/null)" = PASS';
+        const failCheck = 'test "$(cat .spur/run/$__runId-idea-design-check.status 2>/dev/null)" != PASS';
+        expect(auto).toContain(passCheck);
         expect(interactive).toContain('$__hitlAnswer');
-        expect(interactive).toContain('$spurBin feature check "$featureId"');
+        expect(interactive).toContain(passCheck);
+        expect(rejected).toContain(failCheck);
     });
 
-    test('approve with a failing feature check routes back through the AC gate, not a dead end', () => {
+    test('feature check is measured once per boundary by command.gates that record run-scoped PASS/FAIL', () => {
+        const gates: Array<{
+            state: string;
+            executable: string;
+            args: string[];
+            resultFile: string;
+            softFail?: boolean;
+        }> = [];
+        for (const s of DEF.states) {
+            for (const a of s.onEnter ?? []) {
+                if (a.kind === 'command.gate') {
+                    const o = a.options as {
+                        executable: string;
+                        args: string[];
+                        resultFile: string;
+                        softFail?: boolean;
+                    };
+                    gates.push({
+                        state: s.id,
+                        executable: o.executable,
+                        args: o.args,
+                        resultFile: o.resultFile,
+                        softFail: o.softFail,
+                    });
+                }
+            }
+        }
+
+        // 0769: exactly one measured check per author/revise boundary (evidence, not ceremony).
+        expect(gates.map((g) => g.state).sort()).toEqual(['ac-generate', 'system-design']);
+        for (const g of gates) {
+            expect(g.softFail).toBe(true);
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+            expect(g.executable).toBe('${vars.spurBin}');
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+            expect(g.args).toEqual(['feature', 'check', '${vars.featureId}']);
+            expect(g.resultFile).toMatch(/^\.spur\/run\/\$\{vars\.__runId\}-idea-(ac|design)-check\.status$/);
+        }
+        // Guards must consume the recorded result — no transition re-runs the CLI.
+        const guardCommands = DEF.transitions.map((t) => t.guard?.options?.command ?? '').join('\n');
+        expect(guardCommands).not.toContain('$spurBin feature check');
+    });
+
+    test('approve with a failing design check routes back through the AC gate, not a dead end', () => {
         const guard = DEF.transitions[edgeIndex('design-approval', 'feature-check')]?.guard?.options?.command ?? '';
 
         // P3-1 (0515): `yes && check` failing previously matched no edge → engine
-        // fail('no-passing-transition'). The negated guard mirrors the system-design
-        // auto path: a rejected-by-AC design loops into feature-check, which routes
-        // to ac-generate under the capped retry loop instead of killing the run.
+        // fail('no-passing-transition'). 0769: the negation consumes the recorded
+        // idea-design-check status — a rejected-by-AC design loops into feature-check, which
+        // routes to ac-generate under the capped retry loop instead of killing the run.
         expect(guard).toContain('$__hitlAnswer');
-        expect(guard).toContain('! $spurBin feature check "$featureId"');
+        expect(guard).toContain('!= PASS');
     });
 
     test('system-design fails closed when the Proposed design section is unpopulated', () => {

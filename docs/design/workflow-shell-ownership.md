@@ -114,17 +114,25 @@ program deliberately sequences two independently-owned capabilities.
 
 ### wayfinder-resolution.yaml
 
+0769 deleted the `collect` state (its `task show` capture now happens once at `precheck` and
+serves as the investigate input bundle) and replaced the ad-hoc resolution-verdict PASS-word
+and the >5-line/>60-word Testing-length proxies with the standard verdict contract.
+
 | Program | Disposition | Reason |
 | --- | --- | --- |
-| `precheck:onEnter:0` | GLUE | soft probe combining `task check` + `task show` → status file; two existing verbs |
-| `collect:onEnter:0` | GLUE | `task show` → input file |
-| `collect:onEnter:1` | SIMPLE | single `workflow validate` call |
-| `collect:onEnter:2` | SIMPLE | single `task check` call |
-| `verify:onEnter:0` | GLUE | `rm -f` a scratch verdict file |
-| `record:onEnter:0` | GLUE | `task check ; exit 0` soft probe (boundary idiom) |
-| `record:onEnter:1` | GLUE | `task update done ; exit 0` soft probe (boundary idiom) |
+| `precheck:onEnter:0` | GLUE | soft probe combining `task check` + `task show` → status file + run-scoped input bundle (reused by investigate — no separate collect re-run) |
+| `verify:onEnter:0` | GLUE | `rm -f` stale answer + stale verdict before the fresh-session verifier |
+| `verify:onEnter:1` | GLUE | task path extraction (feeds the proof capture; `docs/tasks*` excluded from the digest's git-tree half) |
+| `verify:onEnter:5` | SIMPLE | single `task verdict --from-answer` |
+| `verify:onEnter:6` | GLUE | proof-digest + runId injection into verdict json (jq mutation; workflow-local proof wiring) |
+| `record:onEnter:0` | GLUE | captured `task record --solution-from-diff --transition testing` → `task update done --no-lifecycle` → persisted-status readback; guards consume the captured result (0769: exit 0 never converts a denied record to done) |
 
 ### idea-pipeline.yaml (13 compound)
+
+0769: the feature check is measured exactly once per author/revise boundary by the
+`idea-ac-check` (end of ac-generate) and `idea-design-check` (end of system-design)
+`command.gate` actions — not shell, so they carry no row below — and every sibling guard
+consumes the recorded run-scoped PASS/FAIL instead of re-running `spur feature check`.
 
 | Program | Disposition | Reason |
 | --- | --- | --- |
@@ -147,18 +155,25 @@ program deliberately sequences two independently-owned capabilities.
 Docs-only certification is **measured** since task 0704: the pipeline dispatches read-only
 `/sp:dev-verify ${wbs} --auto --fix none --focus all` with an answer file, derives the one
 standard verdict via `spur task verdict`, and brackets the verifier with a proof-input digest
-capture/re-capture whose comparison gates `verify → done`. The former synthetic PASS writer in
-`done` is gone — no state manufactures a verdict, and non-PASS/malformed/mismatched evidence
-routes to `failed`.
+capture/re-capture whose comparison gates `verify → record`. Task 0769 moved recording after
+verification (precheck → draft → docs-review → verify → record → done): a pre-verification
+record could write UNKNOWN/old Testing evidence. `verify → record` opens only on measured PASS
+with an intact bracket; `record → done` re-asserts the captured record result and the persisted
+verdict/digest, and `record → failed` always — a denied record is never converted to success by
+an exit 0. The former synthetic PASS writer in `done` is gone — no state manufactures a verdict,
+and non-PASS/malformed/mismatched evidence routes to `failed`. Temporary captures are
+run-scoped (`.spur/run/<runId>-docs-*`); the verdict artifact keeps its wbs-named compatibility
+path with `runId` stamped inside.
 
 | Program | Disposition | Reason |
 | --- | --- | --- |
 | `precheck:onEnter:2` | GLUE | combines two status files into one PASS/FAIL |
 | `draft:onEnter:1` | SIMPLE | single `task update wip --no-lifecycle` |
-| `record:onEnter:0` | SIMPLE | single `task record --solution-from-diff` |
-| `verify:onEnter:0` | GLUE | task path extraction (feeds the proof capture; `docs/tasks*` excluded from the digest's git-tree half) |
-| `verify:onEnter:4` | SIMPLE | single `task verdict --from-answer` |
-| `verify:onEnter:5` | GLUE | proof-digest injection into verdict json (jq mutation; workflow-local proof wiring) |
+| `record:onEnter:0` | GLUE | captured `task record --solution-from-diff --transition testing` → status file; `record → failed` consumes the capture (0769) |
+| `verify:onEnter:0` | GLUE | `rm -f` stale answer before the fresh-session verifier (0769) |
+| `verify:onEnter:1` | GLUE | task path extraction (feeds the proof capture; `docs/tasks*` excluded from the digest's git-tree half) |
+| `verify:onEnter:5` | SIMPLE | single `task verdict --from-answer` |
+| `verify:onEnter:6` | GLUE | proof-digest + runId injection into verdict json (jq mutation; workflow-local proof wiring) |
 | `done:onEnter:0` | SIMPLE | single `task update done --no-lifecycle` |
 
 ### task-pipeline.yaml
