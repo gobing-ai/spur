@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-09-06T03:19:34.027Z"
-updated_at: "2026-09-06T04:26:56.443Z"
+updated_at: "2026-09-06T05:03:55.074Z"
 ---
 
 # A7: Spur Board layout optimization and global orchestrator agent interface
@@ -22,9 +22,12 @@ Provide an optimized, distraction-free board workspace across all Spur Board mod
   - Rich tooltips for each module item in the left rail when collapsed, displaying module name and capability summary.
   - Global layout container (`BoardLayout.tsx`), responsive drawer handling, and header/canvas spacing refinement.
   - Prototyping and visual alignment leveraging Open Design workspace.
-  - Migrating the floating agent panel (`FloatingAgentBar.tsx` / `FloatingActionProgress.tsx`) out of `FeaturesShell.tsx` and into `BoardLayout.tsx` as a top-level global component.
+  - Migrating the floating agent panel (`FloatingAgentBar.tsx`) out of `FeaturesShell.tsx` and into `BoardLayout.tsx` as a top-level global component (`GlobalAgentBar`).
   - Designing the frontend interaction interface between the user and the backend orchestrator coding agent with reserved slots for prompt input, status dock icon, drawer expansion, active module context, and streamed telemetry.
 - Out:
+  - Migrating `FloatingActionProgress.tsx` — verified (task 0779) to render from `FeatureDetail.tsx`,
+    not `FeaturesShell.tsx`, and to be bound to `useFeatureActionProgress(featureId)`. It is
+    feature-detail-scoped job telemetry, not a global surface, and it stays where it is.
   - Backend coding agent execution pipelines or live agent dispatch from the floating bar (UI only in this phase).
   - Modifications to backend oRPC router endpoints, database schemas, or CLI feature commands.
   - Settings backend persistence or full settings configuration dialog implementation beyond the frontend trigger and placeholder modal.

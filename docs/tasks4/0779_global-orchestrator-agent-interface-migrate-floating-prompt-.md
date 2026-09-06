@@ -4,7 +4,7 @@ name: "Global orchestrator agent interface: migrate floating prompt bar to top-l
 status: done
 template: feature-impl
 created_at: 2026-09-06T03:28:02.371Z
-updated_at: "2026-09-06T04:11:12.684Z"
+updated_at: "2026-09-06T04:59:44.936Z"
 feature_id: A7
 priority: P2
 tags: ["web", "agent", "orchestrator"]
@@ -253,6 +253,20 @@ telemetry and tool calls are not wired yet. Local state only — no store, no su
 **Residual risk:** Low. UI-only component migration; 100% test pass rate.
 
 **Disposition:** Approved.
+
+#### Re-verification — 2026-09-05 (`/sp:dev-verifyall --feature A7 --force --focus all --fix all`)
+
+R1–R6 re-confirmed: `rg -n "FloatingAgentBar" apps/web` returns nothing; `GlobalAgentBar.tsx`
+preserves `agent-bar-dock` / `agent-bar` / `agent-bar-input` and the `z-30` dock and bar classes,
+and adds `agent-bar-context` / `agent-bar-chips` / `agent-bar-drawer-toggle` / `agent-bar-drawer`;
+`BoardLayout.tsx:162` mounts it once as a sibling after `.board-layout`. No z-index edits anywhere.
+SECUA clean — no `dangerouslySetInnerHTML`, `innerHTML`, `eval`, or network call on this surface.
+
+| Priority | Finding | Evidence | Disposition |
+| --- | --- | --- | --- |
+| P4 | `handleChipClick` focuses the textarea via `document.querySelector('[data-testid="agent-bar-input"]')` — production behavior reads a test attribute | `apps/web/src/components/GlobalAgentBar.tsx:43` | **Accepted** — the test id is contractually frozen by this task's Design, and the ref-based fix requires adding ref forwarding to the shared `@/ui` `Textarea` primitive, outside A7's frozen surface |
+
+**Verdict:** PASS.
 ### References
 - Parent feature: `docs/features/A7_spur-board-layout-optimization-and-global-orchestrator-agent-interface.md` (scenario R5; its scope line naming `FloatingActionProgress.tsx` is corrected in Background)
 - Design doc: `docs/design/board-ui-layout-and-global-agent-bar.md` §4 (context-vs-prop and the `FloatingActionProgress` premise are corrected here)

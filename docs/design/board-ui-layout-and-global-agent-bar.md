@@ -27,7 +27,7 @@ This design establishes a clean, responsive layout foundation with a default-fol
 ```text
 ┌─ BoardApp ────────────────────────────────────────────────────────────────────────────────────────┐
 │ ┌─ BoardLayout ─────────────────────────────────────────────────────────────────────────────────┐ │
-│ │ ┌─ LeftSidebar (Folded by default, w-[56px] rail; expandable to w-[240px]) ────────────────┐  │ │
+│ │ ┌─ LeftSidebar (Folded by default, 48px rail; expandable to w-[240px]) ───────────────────┐  │ │
 │ │ │  [Header: Fold Button, ProjectSwitcher (expanded), Mobile Close]                         │  │ │
 │ │ │  [Nav: Observabilities, Histories, Features, Tasks, Workspace, Inbox, Teams]             │  │ │
 │ │ │  [Footer (border-t): ThemeToggle, SettingsButton (vertical rail when folded)]             │  │ │
@@ -69,11 +69,11 @@ This design establishes a clean, responsive layout foundation with a default-fol
 ### 3.2 Dedicated Sidebar Footer
 - A dedicated footer container (`border-t border-spur-border bg-spur-surface shrink-0`) is anchored at the bottom of the sidebar.
 - **Expanded state (`w-[240px]`)**:
-  - Horizontal flex layout with comfortable padding (`p-2.5 flex items-center justify-between gap-2`).
+  - Horizontal flex layout on the shell's 12px chrome rhythm (`p-3 flex items-center justify-between gap-2`).
   - Contains:
     1. Theme switcher button (`ThemeToggle`) with label/tooltip.
     2. Settings icon button (`SettingsButton`) triggering the global settings modal.
-- **Collapsed rail state (`w-[56px]`)**:
+- **Collapsed rail state (48px — `--sidebar-w` in `board-layout.css`)**:
   - Vertical flex layout (`py-2 flex flex-col items-center gap-2`).
   - Contains:
     1. Theme switcher icon button.
@@ -110,11 +110,15 @@ This design establishes a clean, responsive layout foundation with a default-fol
 ### 4.2 Reserved Orchestrator Capabilities
 The component acts as the visual frontend interface for the project orchestrator coding agent:
 1. **Module Context Awareness**:
-   - Consumes `ActiveModuleContext` from `BoardLayout`.
+   - Receives the active module as a **prop** from `BoardLayout`. Consuming `ActiveModuleContext`
+     would close an import cycle (`BoardLayout` must import `GlobalAgentBar` to mount it), so the
+     context is left in place unread — see task 0779 Q&A.
    - Injects the active module tag into prompts and displays a visible pill (e.g. `[Context: Observabilities]`).
 2. **Status Docking**:
-   - Collapsed: Circular spirit dock (`bottom-6 right-6`) with pulsing halo when agent activity is in progress.
-   - Keyboard trigger: Accessible via `⌘K` or click.
+   - Collapsed: Circular spirit dock (`bottom-6 right-6`).
+   - *Deferred (not shipped in A7):* pulsing activity halo — there is no activity signal to drive it
+     until dispatch exists; and the `⌘K` keyboard trigger — a document-level listener needs conflict
+     review against module shortcuts. Click is the only trigger today (task 0779 Q&A).
 3. **Execution & Drawer Slots**:
    - Expandable drawer toggle allowing the user to view recent thoughts, tool call executions, and plan progress.
    - Honest status notice for un-wired backend endpoints with graceful stub messaging.

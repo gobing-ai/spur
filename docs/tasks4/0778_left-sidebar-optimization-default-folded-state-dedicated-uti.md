@@ -4,7 +4,7 @@ name: "Left sidebar optimization: default folded state, dedicated utility footer
 status: done
 template: feature-impl
 created_at: 2026-09-06T03:28:02.303Z
-updated_at: "2026-09-06T04:08:53.124Z"
+updated_at: "2026-09-06T04:59:44.642Z"
 feature_id: A7
 priority: P2
 tags: ["web", "layout", "sidebar"]
@@ -307,6 +307,20 @@ deliberately leaves both untouched so 0780 has a clean surface.
 
 **Disposition:** Approved.
 
+#### Re-verification — 2026-09-05 (`/sp:dev-verifyall --feature A7 --force --focus all --fix all`)
+
+R1–R8 re-confirmed against the current tree: `layout-state.ts:17` `sidebarCollapsed: true`;
+`types.ts:13` `description?: string`; all seven descriptors carry `order` 10–70, the frozen
+`sidebarLabel` set (`Observabilities`, `Histories`), and a capability line; `LeftSidebar.tsx`
+renders `sidebar-footer` with a single `ThemeToggle` + `sidebar-settings`, collapse-conditional
+`overflow-visible`, and a two-line `Tooltip` per rail item; `BoardLayout.tsx:144` passes
+`collapsed={state.sidebarCollapsed && !mobileSidebarOpen}`.
+
+| Priority | Finding | Evidence | Disposition |
+| --- | --- | --- | --- |
+| P2 | `every-export-has-tsdoc` failed on three exports added by the v2 storage-migration follow-up (`68f3445e5`), turning `spur-check`'s post-check gate red | `apps/web/src/lib/layout-state.ts:1,5,17` | **Fixed** under `--fix all` — TSDoc added to `STORAGE_KEY`, `LEGACY_STORAGE_KEY`, `DEFAULTS`; rule preset now clean |
+
+**Verdict:** PASS (post-fix).
 ### References
 
 - Parent feature: `docs/features/A7_spur-board-layout-optimization-and-global-orchestrator-agent-interface.md` (scenarios R1, R2, R3)

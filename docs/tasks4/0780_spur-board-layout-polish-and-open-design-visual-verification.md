@@ -4,7 +4,7 @@ name: "Spur Board layout polish and Open Design visual verification"
 status: done
 template: feature-impl
 created_at: 2026-09-06T03:28:02.402Z
-updated_at: "2026-09-06T04:25:14.541Z"
+updated_at: "2026-09-06T05:07:13.402Z"
 feature_id: A7
 priority: P2
 tags: ["web", "layout", "open-design"]
@@ -263,36 +263,18 @@ Evaluated against root `DESIGN.md` (Open Design active context returned `active:
 | Two-ladder Token Architecture | Dark / Light | **accepted-gap** | `.task-kanban` and `.inbox` scope DESIGN.md Linear palette while other modules use shared `@theme`; preserved intentionally per ADR/Q&A. |
 | Responsive Breakpoint System | Dark / Light | **accepted-gap** | Single `max-width: 767px` mobile breakpoint used for application board layout vs. multi-tier marketing page breakpoints in DESIGN.md. |
 ### Testing
-#### Verification Commands & Results
 
-1. **Focused Component & Layout Tests:**
-   ```bash
-   cd apps/web && bun test tests/components/LeftSidebar.test.tsx tests/components/GlobalAgentBar.test.tsx tests/components/BoardLayout.test.tsx
-   ```
-   - `LeftSidebar.test.tsx`: 10/10 passed (33 expects, 0 failures).
-   - `GlobalAgentBar.test.tsx`: 8/8 passed (32 expects, 0 failures).
-   - `BoardLayout.test.tsx`: 15/15 passed (61 expects, 0 failures), including single-backdrop invariant.
 
-2. **Web Workspace Suite:**
-   ```bash
-   cd apps/web && bun test
-   ```
-   - 48 test files, all tests passed with zero regressions.
+#### Re-verification run — 2026-09-05
 
-3. **Typecheck & Lint Autofix:**
-   ```bash
-   bun run autofix
-   ```
-   - Biome check: checked 898 files, 0 errors, 0 warnings.
-   - Typecheck: all 7 workspaces (`spur-config`, `spur-domain`, `spur-contracts`, `spur`, `spur-app`, `spur-web`, `spur-server`) passed with code 0.
+```bash
+cd apps/web && bun test tests      # 749 pass, 0 fail, 49 files
+bun run spur-check                 # FAILED first — 3x every-export-has-tsdoc (exit 1)
+bun run autofix                    # biome clean; typecheck 0 across all 7 workspaces
+bun run spur-check                 # 7401 pass, 0 fail, 409 files; rule preset: all 2 rules passed
+```
 
-4. **Monorepo Quality Gate:**
-   ```bash
-   bun run spur-check
-   ```
-   - All pre-checks green (link-check, transition-shim-check, script-contract-check, inline-pipeline-parity-check, composition-entrypoint-check, dependency-drift-check, importer-schema-check, history-surface-freeze-check).
-   - Monorepo unit test suite: 7399 passed across 409 files (29,598 expectations, 0 failures).
-   - Recommended post-check: all rules passed with zero violations.
+The first `spur-check` failure and its fix are recorded in `## Review` (R6).
 ### Review
 - Functional Traceability: Verified all R1–R6 scenarios satisfied.
   - R1: Deleted duplicate CSS ::before/::after scrims; single z-40 backdrop dismisses drawer cleanly.
@@ -314,6 +296,42 @@ Evaluated against root `DESIGN.md` (Open Design active context returned `active:
 **Residual risk:** Low. UI-only visual polish and defect fixes; 100% test pass rate across 7399 tests.
 
 **Disposition:** Approved.
+
+#### Re-verification — 2026-09-05 (`/sp:dev-verifyall --feature A7 --force --focus all --fix all`)
+
+R1–R5 re-confirmed: `board-layout.css` declares no `::before` / `::after` scrim; `.mobile-bar`
+padding is `0.75rem`; `LeftSidebar` footer is `p-3`; the design doc §5 token tables match
+`global.css` exactly (`@theme` `#0f1117`/`#1a1d27`/`#334155`/`#6366f1`, light
+`#ffffff`/`#f8fafc`/`#e2e8f0`/`#4f46e5`, scoped ladder `#010102`/`#0f1011`/`#141516`/`#18191a`,
+hairline `#23252a`, accent `#5e6ad2`) and neither `#161922` nor `#252936` survives anywhere in it.
+
+| Priority | Finding | Evidence | Disposition |
+| --- | --- | --- | --- |
+| P2 | **R6 did not hold at re-verify time.** `bun run spur-check` exited 1 — the `recommended-post-check` rule preset raised three `every-export-has-tsdoc` ERRORs. The task's original `## Testing` recorded the gate as green; a later in-scope follow-up commit (`68f3445e5`) reddened it | `apps/web/src/lib/layout-state.ts:1,5,17` | **Fixed** under `--fix all` (the file is task 0778's surface; the finding is mirrored there). Gate re-run green |
+
+**Verdict:** PASS (post-fix).
+
+#### Residual-drift sweep — 2026-09-05 (closing A7 before commit)
+
+R4 was written as "§5 carries the real token values", so the sweep it authorized stopped at §5.
+Auditing the whole A7 doc surface found five further stale claims of the same class — the design
+doc and the feature file still described superseded or never-shipped behavior. All fixed:
+
+| # | Stale claim | Location | Correction |
+| --- | --- | --- | --- |
+| 1 | Rail is `w-[56px]` (2 places) | design doc §2 diagram, §3.2 | 48px — the shipped `--sidebar-w`; 0778 recorded the correction in its own Design but never propagated it |
+| 2 | Footer padding `p-2.5` | design doc §3.2 | `p-3` — normalized by this task's R2 |
+| 3 | Agent bar "consumes `ActiveModuleContext`" | design doc §4.2 | Receives the active module as a **prop**; the context would close an import cycle (0779 Q&A) |
+| 4 | Pulsing activity halo + `⌘K` listed as capabilities | design doc §4.2 | Marked **deferred, not shipped in A7** — no activity signal and no shortcut-conflict review (0779 Q&A) |
+| 5 | Feature Scope migrates `FloatingActionProgress.tsx` | `docs/features/A7_….md` Scope | Moved to **Out** with the verified reason: it renders from `FeatureDetail.tsx`, not `FeaturesShell.tsx` (0779 Background) |
+
+Also: the A7 design satellite was never registered in `docs/04_DESIGN.md` §0 despite the planning
+contract requiring `docs/design/<slug>.md` **+ 04 index**. Row added at `docs/04_DESIGN.md:63`.
+
+Gates after the sweep: `spur-check` green (7401 pass / 0 fail, both rules clean), `corpus-check` OK
+(0 new), `spur feature check A7 --strict` pass with zero findings.
+
+**Verdict:** PASS.
 ### References
 - Parent feature: `docs/features/A7_spur-board-layout-optimization-and-global-orchestrator-agent-interface.md` (scenarios R4, R6)
 - Design doc: `docs/design/board-ui-layout-and-global-agent-bar.md` — §5 is corrected by this task (R4)
