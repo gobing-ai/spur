@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: "Retire routine corpus sweeps and suppression-based acceptance"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-05T05:21:56.849Z
-updated_at: "2026-09-05T15:39:53.681Z"
+updated_at: "2026-09-06T14:15:22.627Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P2"]
 dependencies: ["0765"]
+done_forced: "true"
+done_reason: "Superseded by decomposition: 0773/0774/0775 delivered R1+R2 and are done with their own verdict artifacts (0773 cbf4d20b6..23ebf5d42, 0774 f19a393ed+7e66efa7a, 0775 fc4a8a3a9); no direct verify on this shell task — evidence in Solution/Testing/Review"
 ---
 
 ## 0766. Retire routine corpus sweeps and suppression-based acceptance
@@ -23,9 +25,9 @@ Dependencies: 0765. Detailed inputs and handoffs are frozen below.
 
 ### Requirements
 
-- [ ] **R1.** Routine work does not scan the whole corpus: remove default sweep invocations from task iteration, wrapup and ordinary corpus-touch commit guidance; retain affected task/feature and completion-boundary checks. Keep corpus-check and spur-check-new as explicit audit entrypoints only. Update constitution T10/T11, AGENTS and their canonical templates in the same change.
+- [x] **R1.** Routine work does not scan the whole corpus: remove default sweep invocations from task iteration, wrapup and ordinary corpus-touch commit guidance; retain affected task/feature and completion-boundary checks. Keep corpus-check and spur-check-new as explicit audit entrypoints only. Update constitution T10/T11, AGENTS and their canonical templates in the same change. *(delivered by 0773/0775 — see Solution closure note)*
 
-- [ ] **R2.** Explicit corpus audits remain useful without suppressions: preserve existing scope and JSON shape; report all observations, exit 1 on essential errors/required-check failure and 0 on warnings alone. Remove accepted-map readers, the corpus snapshot and its regenerator entirely. Repair newly exposed real affected integrity defects through Spur CLI; never erase findings, fabricate proof or bulk-reformat historical prose to obtain green.
+- [x] **R2.** Explicit corpus audits remain useful without suppressions: preserve existing scope and JSON shape; report all observations, exit 1 on essential errors/required-check failure and 0 on warnings alone. Remove accepted-map readers, the corpus snapshot and its regenerator entirely. Repair newly exposed real affected integrity defects through Spur CLI; never erase findings, fabricate proof or bulk-reformat historical prose to obtain green. *(delivered by 0773/0774/0775 — see Solution closure note)*
 
 Out of scope: new engines/dependencies/public nouns, broad historical-document cleanup, D9 fast activation, release, merge and external deployment. All task/feature writes use Spur CLI; generated adapters use Superskill. Refine does not author implementation evidence.
 
@@ -97,19 +99,32 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 5. [ ] R1/R2: Run final focused tests, normal affected task/feature checks and exactly one final checker-policy audit; capture its exit/status/counts and any genuine unresolved failure. Run real task verification; never certify a nonzero audit as PASS.
 
 ### Solution
-<!-- Filled during implementation: file:line change map and concise rationale. -->
 
-**Status (superseded by decomposition, 2026-09-05):** task 0766 is **superseded** by three sub-tasks: **0773** (audit and migrate `config/corpus-baseline.json`), **0774** (migrate CLI/fallback `accepted` callers and dependent fixtures), and **0775** (delete regenerator scripts + snapshots + replace snapshot-equality tests + apply T10/T11 + update `wrapup-pipeline` default `featureGateCmd`). This task's status remains `todo` because it is not implemented; the decomposition records (per the per-fixture remediation plan) carry the live work. Readers should consult `spur task show 0773 --json`, `spur task show 0774 --json`, and `spur task show 0775 --json` for the scoped-down requirements, design and acceptance criteria. Downstream tasks 0767, 0769 and 0770 now depend on **0775** instead of this task.
+**Status (superseded by decomposition, 2026-09-05):** task 0766 is **superseded** by three sub-tasks: **0773** (audit and migrate `config/corpus-baseline.json`), **0774** (migrate CLI/fallback `accepted` callers and dependent fixtures), and **0775** (delete regenerator scripts + snapshots + replace snapshot-equality tests + apply T10/T11 + update `wrapup-pipeline` default `featureGateCmd`). The decomposition records carry the live work; consult `spur task show 0773 --json`, `0774`, `0775` for scoped-down requirements, design and acceptance criteria. Downstream tasks 0767, 0769 and 0770 depend on **0775** instead of this task. Closure, 2026-09-06: all three children done — 0773 `cbf4d20b6`…`23ebf5d42`, 0774 `f19a393ed`+`7e66efa7a`, 0775 `fc4a8a3a9`.
 
-The original scope of 0766 (R1 routine-sweep retirement + R2 unsuppressed audit + corpus/composition snapshot deletion) is preserved across the three sub-tasks without loss of contract. Frozen contracts handed off from 0765 are unchanged: `REQUIRED_FINDING_CODES` in `packages/app/src/services/planning-check-base.ts:40` is the unsuppressible set, and `accepted`-map suppression on `summarizeWithStatus()` is preserved for advisory warnings only through 0774's caller migration (and removed entirely in 0775).
+The original scope of 0766 (R1 routine-sweep retirement + R2 unsuppressed audit + corpus/composition snapshot deletion) is preserved across the three sub-tasks without loss of contract. Frozen contracts handed off from 0765 are unchanged: `REQUIRED_FINDING_CODES` in `packages/app/src/services/planning-check-base.ts:40` is the unsuppressible set, and `accepted`-map suppression on `summarizeWithStatus()` was preserved for advisory warnings only through 0774's caller migration, then removed entirely in 0775.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Superseded — no direct test run.** This task was decomposed into 0773/0774/0775 before implementation; all three children are done with recorded verdict artifacts and their own tracked Testing sections:
+
+- 0773 `cbf4d20b6`…`23ebf5d42` — corpus-baseline audit + migration (fixture: 15,976B, 32.6s run)
+- 0774 `f19a393ed`+`7e66efa7a` — CLI/fallback caller migration + fixture updates
+- 0775 `fc4a8a3a9` — regenerator/snapshot deletion, `featureGateCmd` default update
+
+Verification is carried by the children's evidence plus `spur feature check D61 --strict` (traceability across the decomposition is asserted there, including this task's scenarios R2/R3).
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Disposition: superseded → delivered by children** (no direct pipeline verify on this task; evidence is per-child)
+
+| Priority | Dimension | Location | Finding |
+| ---------- | ----------- | ---------- | ---------- |
+| P4 | traceability | docs/tasks4/0773,0774,0775 | scope R1+R2 delivered: 0773 `cbf4d20b6`…`23ebf5d42`, 0774 `f19a393ed`+`7e66efa7a`, 0775 `fc4a8a3a9`; each child done with recorded verdict artifact |
+| P4 | contract | packages/app/src/services/corpus-check.ts | `REQUIRED_FINDING_CODES` (planning-check-base.ts:40) unchanged; suppression removed in 0775; no residual risk against this task |
+| P4 | verification | spur task check 0773/0774/0775 | children PASS with own Testing evidence; feature-level traceability asserted by `spur feature check D61 --strict` |
+
+Requirements checkboxes ticked as delivered-by-children (see Solution closure note).
 
 ### References
 
@@ -122,3 +137,5 @@ The original scope of 0766 (R1 routine-sweep retirement + R2 unsuppressed audit 
 - Surface/process authority: docs/04_DESIGN.md and docs/99_PROJECT_CONSTITUTION.md; local source/test paths are named in Design.
 
 ### History
+
+- 2026-09-06T14:15:22.566Z todo → done (system)
