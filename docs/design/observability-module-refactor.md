@@ -33,7 +33,7 @@ graph TD
     end
 
     subgraph Storage ["packages/domain & SQLite"]
-        TableEvents[("system_events Table<br/>(telemetry log, 7d quota)")]
+        TableEvents[("system_events Table<br/>(telemetry log, 10,000 row/prefix quota)")]
         TableQueue[("queue_jobs Table<br/>(source of truth, 30d retention)")]
     end
 
@@ -86,19 +86,21 @@ In `apps/web/src/modules/observability/tabs.ts`:
 
 ### 2.5 Active Schedules Card
 - Exposes registered built-in and bootstrap cron jobs via `GET /api/jobs/schedules`.
-- Computes `nextFireAt` via `@gobing-ai/ts-infra`'s `nextCronTime`.
+- Computes `nextFireAt` for interval built-in entries; cron entries render `cron (unknown)` if `nextFireAt` is null.
 - Displays name, cron string, cadence description, next-fire time, and latest execution status in a card above the Jobs table.
 
 ### 2.6 Job Detail Slide-Over Drawer
 - Clicking a job row opens `JobDetailDrawer` keyed by `jobId`.
-- Fetches detailed `queue.job.*` lifecycle events (`queue.job.enqueued` → `queue.job.started` → `queue.job.completed`/`failed`) from `/api/events/history?runId=<jobId>`.
+- Fetches detailed `queue.job.*` lifecycle events from `/api/events/history?prefix=queue` correlated by payload `jobId`.
+- Synthesizes `queue.job.started` derived from `startedAt` (`processing_at`) as no direct start event exists in the catalog.
+- If no lifecycle events are recorded in `system_events` (diagnostic tier by default), renders an informative note rather than an error.
 - Displays formatted payload parameters and highlighted error stack traces without exposing raw unstructured JSON in table rows.
 
 ### 2.7 Failure-First Filtering & Retention Transparency
 - Jobs tab header displays status filter chips with counts: `All (N)`, `Failed (N)` (red pill), `Running (N)` (pulsing blue pill), `Completed (N)`.
 - If `failedCount > 0`, a warning banner surfaces: `⚠️ N jobs failed in this window. [Filter to Failed]`.
 - Inline error preview: failed rows display `last_error` inline in a badge with an expandable tooltip.
-- Retention badge in the controls bar: `ℹ️ Retention: events retained 7d, jobs retained 30d`.
+- Retention badge in the controls bar: `ℹ️ Retention: events capped at 10,000 rows per prefix · terminal jobs pruned after 30d`.
 
 ---
 
@@ -121,7 +123,7 @@ export interface ObservabilitySummaryResponse {
         timestamp: string;
         total: number;
         byPrefix: Record<string, number>; // e.g. { agent: 12, workflow: 5, queue: 8 }
-        bySeverity: { info: number; warning: number; error: number };
+        bySeverity: { info: number; warning: number; error: number; unknown: number };
     }>;
     topEventTypes: Array<{
         name: string;
