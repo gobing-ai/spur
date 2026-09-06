@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.36.1
+version: 1.37.0
 owner: Robin Min
 updated_at: 2026-09-06
 read_before: any structural change; before diverging from a decision
@@ -2243,7 +2243,7 @@ runs solely to satisfy the rollout branch.
 
 ## ADR-108: Essential Workflow Gates and Explicit Corpus Audits
 
-**Status:** Accepted (design; implementation pending) · **Date:** 2026-09-05 · **Feature:** D61
+**Status:** Accepted · **Date:** 2026-09-05 · **Feature:** D61
 
 **Decision.** Preserve essential integrity and evidence checks at affected write/completion boundaries;
 move whole-corpus checks to explicit audits and retire suppression snapshots and exact workflow
@@ -2267,6 +2267,11 @@ removing automatic sweeps, suppression baselines and regenerators, not the expli
 The 0775 implementation and derived-doc retirement of that audit were incorrect. Restore the
 existing opt-in audit with visible errors/warnings and no accepted-debt filtering; ordinary task
 and wrapup gates check affected inputs. This correction adds no replacement snapshot or policy DSL.
+
+**Delivery correction (2026-09-06, task 0781).** D61's essential-check and snapshot-retirement
+implementation shipped; the design-only status was stale. Subsequent workflow audit findings remain
+separate repair work, not evidence that every surrounding workflow is defect-free. ADR-107's
+Option B activation boundary is unchanged.
 
 ## Amendments (task 0754, D8 Decision 8 closure)
 

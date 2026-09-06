@@ -6,14 +6,17 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-08-20T00:08:14.252Z"
-updated_at: "2026-08-30T19:42:38.148Z"
+updated_at: "2026-09-06T18:43:32.842Z"
 ---
 
 # D6: Workflow cost, deterministic ownership surface, and role-addressed coordination
 
 ## Goal
+
 Close the three requests from the original workflow-refactor brief that feature D5 could not carry: actively **reduce** model-query cost and pipeline wall-clock (D5 only ever promised non-regression), decide the **public CLI surface** that lets compound shell move into owned capabilities (D5 put new verbs out of scope), and resolve **role-addressed coordination** for `spur agent wait` / `spur message` (D5 R6 deferred it with no follow-up tracked).
+
 ## Scope
+
 **Provenance.** These three items come from the operator's original `/sp:dev-idea` brief that produced D5. A 2026-08-19 coverage audit of that brief against D5 (R1–R12) and the whole task corpus found them to be the only requests with no covering task. Everything else in the brief is covered by D5, or was scoped out there for a stated reason that still holds.
 
 In scope:
@@ -28,6 +31,7 @@ Out of scope:
 - EventBus or `system_events` as a workflow mutation/control authority — ADR-070 and D5 R4 already settled that events are read-side wakeups only, and the original brief's "leverage event pub/sub to make the workflow more reliable and dynamic" is answered by that decision, not reopened here.
 - Broadcast or fan-out message addressing; only exact-one role resolution is in question.
 - Changing the proof-state invariant (ADR-071) or any post-verification mutation rule.
+
 ## Acceptance Criteria
 ```gherkin
 Feature: Workflow cost, deterministic ownership surface, and role-addressed coordination
@@ -78,6 +82,70 @@ Feature: Workflow cost, deterministic ownership surface, and role-addressed coor
     Then the outcome is either shipped role addressing with exact-one resolution, a persisted occupant pin, and ADR-051 consent, or a dated decision record closing the question
     And a decision to keep identity pinning authoritative states the reason rather than lapsing silently
     And no broadcast or fan-out addressing is introduced under either outcome
+
+  Scenario: R7 — Artifact paths stay beneath the run directory
+    Given an action path pointing at a sibling prefix or the run directory itself
+    When command.gate or run.artifact executes
+    Then the action refuses before executing a command or recording an artifact
+    And valid descendant paths remain supported
+  Scenario: R8 — Large CLI output survives a pipe
+    Given a CLI JSON response larger than 65536 bytes
+    When a subprocess consumer reads stdout to completion
+    Then the response parses as the complete JSON value
+    And the command exit code is preserved
+  Scenario: R9 — Findings remain actionable and truthful
+    Given the current workflow definitions and D8 D9 D61 obligations
+    When the audit is recorded
+    Then simple repairs carry fresh checks and larger repairs have scoped tasks
+    And delivery projections distinguish shipped work from newly discovered gaps
+
+  Scenario: R10 — Existing feature work avoids duplicate planning
+    Given a valid feature with accepted AC and an existing task roster
+    When feature-dev starts
+    Then the existing roster is reused without brainstorm or decomposition
+    And invalid feature input fails before model dispatch
+  Scenario: R11 — Feature verification runs once
+    Given a completed feature batch
+    When the essential feature completion check fails
+    Then one check invocation is recorded and the workflow fails without requesting review
+
+  Scenario: R12 — Invalid wrap input never succeeds
+    Given whitespace-only task IDs or missing or malformed normalized input
+    When wrapup resolves or records metrics
+    Then it fails rather than skipping work or writing PASS
+  Scenario: R13 — Blocked synchronization is not no-change success
+    Given a required feature sync with applied false and an unreached target
+    When wrapup handles the result
+    Then it reports failure and preserves prior artifacts
+    And an actual from-equals-to no-op remains successful
+
+  Scenario: R14 — Explicit-path runs resume the launched definition
+    Given a paused run launched from an arbitrary filename
+    When it resumes without source drift
+    Then its original definition is found and resumed
+    And altered definitions require explicit consent
+  Scenario: R15 — Checkpoint freshness respects run state and workdir
+    Given a valid paused checkpoint with unchanged HEAD and existing workdir-relative artifacts
+    When resume is requested from another ambient directory
+    Then the checkpoint is accepted
+    And stale HEAD or missing artifacts are rejected with a named reason
+
+  Scenario: R16 — Declared missing proof inputs fail closed
+    Given an explicitly supplied missing task spec or a workdir-relative spec
+    When proof capture executes
+    Then the missing spec fails without a digest
+    And the relative spec is read under the workflow workdir
+  Scenario: R17 — Artifacts cannot escape through symlinks or claim false binding
+    Given an artifact path escaping through a symlink or carrying mismatched proof
+    When the action tries to write or record it
+    Then it fails before the external write or ledger record
+    And unexecuted review is never reported completed
+
+  Scenario: R18 — Capability guidance follows current corpus and record owners
+    Given the canonical expert-spur and task-record guidance
+    When their instructions are checked against T11 and TaskRecordService
+    Then ordinary batch edits do not trigger a corpus sweep
+    And guarded record-to-done support is documented correctly
 ```
 ## Tasks
 
@@ -88,11 +156,18 @@ Feature: Workflow cost, deterministic ownership surface, and role-addressed coor
 | 0608 | Decide and land the ownership surface for compound pipeline shell | done |
 | 0609 | Resolve role-addressed coordination for agent wait and message | done |
 | 0723 | Upgrade task-pipeline precheck for deterministic low-latency execution | done |
+| 0781 | Close bounded workflow audit defects and track remaining repairs | done |
+| 0782 | Reuse existing feature plans and rosters before workflow dispatch | todo |
+| 0783 | Make wrapup consume validated inputs and fail on incomplete synchronization | todo |
+| 0784 | Align workflow resume identity and checkpoint freshness with persisted runs | todo |
+| 0785 | Close remaining proof-input and physical artifact confinement gaps | todo |
+| 0786 | Remove stale corpus-sweep and task-record instructions from canonical capability sources | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
 
 ## History
+
 - 2026-08-20T02:09:16.114Z backlog → active (system)
 - 2026-08-20T21:53:35.698Z active → verifying (system)
 - 2026-08-20T21:55:08.156Z verifying → done (system)

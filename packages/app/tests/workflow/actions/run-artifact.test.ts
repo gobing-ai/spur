@@ -7,6 +7,17 @@ import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { RunArtifactActionRunner } from '../../../src/workflow/actions/run-artifact';
 
 describe('RunArtifactActionRunner', () => {
+    test('rejects sibling prefixes and the run directory even without an existence probe (0781)', async () => {
+        for (const path of ['.spur/run-other/verdict.json', '.spur/run/../run-other/verdict.json', '.spur/run']) {
+            const result = await new RunArtifactActionRunner().execute(
+                { path, artifactKind: 'test', requireExisting: false },
+                { runId: 'r1', stateOrNodeId: 's1', workdir: process.cwd(), vars: {}, env: {} },
+            );
+            expect(result.ok).toBe(false);
+            expect(result.error).toContain('must resolve beneath .spur/run/');
+        }
+    });
+
     async function setupDb() {
         const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(adapter);

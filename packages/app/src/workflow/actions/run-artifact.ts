@@ -1,4 +1,4 @@
-import { normalize, resolve } from 'node:path';
+import { normalize, resolve, sep } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import { ArtifactDao } from '@gobing-ai/spur-domain';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
@@ -65,7 +65,7 @@ export class RunArtifactActionRunner implements ActionRunner {
         const resolvedPath = resolve(workdir, pathRaw);
         const normalized = normalize(resolvedPath);
 
-        if (!normalized.startsWith(allowedDir)) {
+        if (!normalized.startsWith(`${allowedDir}${sep}`)) {
             return {
                 ok: false,
                 error: `path must resolve beneath .spur/run/ (got ${pathRaw})`,

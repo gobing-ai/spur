@@ -214,6 +214,6 @@ export async function runCli(): Promise<number> {
 }
 
 if (import.meta.main) {
-    const exitCode = await runCli();
-    process.exit(exitCode);
+    // main() closes its runtime and DB; natural shutdown also drains buffered pipe output.
+    process.exitCode = await runCli();
 }

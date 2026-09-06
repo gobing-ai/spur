@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.38.1
+version: 1.39.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-09-06
@@ -1158,7 +1158,8 @@ the bounded `verify → test-fix` hop (budget shared with the quality gate), and
 re-captures the digest so the re-entered chain certifies a fresh state. The verdict artifact
 carries a proof block naming one digest across quality, review, and verification; `verify → record`
 and `record → done` guards refuse missing, malformed, or mismatched proof evidence. The docs
-pipeline remains on `--fix all` with a synthetic PASS pending task 0704.
+pipeline also uses measured, read-only verification (`--fix none`) before record, with a
+proof bracket and the standard verdict artifact (tasks 0704/0769).
 
 Only `verified(D)` may cross the completion boundary, and the boundary re-captures D immediately
 before transition. This statically disqualified the former `task-pipeline2.yaml`: both its
@@ -1169,7 +1170,7 @@ chain.
 
 Enforceable invariants:
 
-1. Every resolved action in a reviewed pipeline declares both state and evidence effects in the checked baseline.
+1. Resolved action effects come from live definitions and the effect classifier, not a composition snapshot (ADR-108).
 2. Unknown action kinds and editing-capable model actions are `stateEffect: may-write`, never implicitly `read`.
 3. Quality, review, and final verification evidence must carry the same current proof-input digest.
 4. Any state write, possible state write, or digest mismatch clears all earlier proof stages.
@@ -1188,7 +1189,8 @@ candidate was **deleted rather than promoted** (ADR-076 accepted 2026-08-20): it
 and declared a fifth model query against the canonical pipeline's four, so promoting it would have
 added cost against a goal of reducing it.
 
-The migration order keeps rollback local; step 5 remains open under tasks 0703/0704:
+The historical migration order kept rollback local; tasks 0703/0704 and the D61 rollout are
+delivered. This sequence records that migration, not an instruction to recreate retired baselines:
 
 1. Baseline every reviewed graph and freeze pipeline2 promotion.
 2. Build projection, gate, artifact, and proof-state prerequisites without migrating a pipeline.
@@ -1197,6 +1199,9 @@ The migration order keeps rollback local; step 5 remains open under tasks 0703/0
 5. Refactor task execution and redesign residual completeness around proof preservation.
 6. Promote the safe delta only after clean comparator, artifact, gate, query-count, and exit parity plus operator approval.
 7. Migrate idea last and invoke PR review once per stable integration HEAD after local gates.
+
+The 2026-09-06 audit (task 0781) tracks remaining execution defects in tasks 0782–0786;
+delivery of the migration does not certify those follow-up paths as defect-free.
 
 Role selection stays on `agent.run`. Identity-pinned wait/message operations continue to address an
 exact occupant; a role never becomes a mutable coordination address. PR-review pending/unavailable

@@ -1,10 +1,45 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { CommandGateActionRunner } from '../../../src/workflow/actions/command-gate';
 
 describe('CommandGateActionRunner', () => {
+    test('rejects sibling prefixes and the run directory before dispatch (0781)', async () => {
+        const executor = new NodeProcessExecutor();
+        const fs = createNodeFileSystem();
+        const run = spyOn(executor, 'run').mockResolvedValue({
+            command: 'echo',
+            args: [],
+            durationMs: 0,
+            stdout: '',
+            stderr: '',
+            exitCode: 0,
+        });
+        const ensureDir = spyOn(fs, 'ensureDir').mockImplementation(async () => {});
+        const write = spyOn(fs, 'writeFile').mockImplementation(async () => {});
+        try {
+            for (const resultFile of [
+                '.spur/run-other/gate.status',
+                '.spur/run/../run-other/gate.status',
+                '.spur/run',
+            ]) {
+                const result = await new CommandGateActionRunner(executor, fs).execute(
+                    { executable: 'echo', resultFile },
+                    { runId: 'r1', stateOrNodeId: 's1', workdir: process.cwd(), vars: {}, env: {} },
+                );
+                expect(result.ok).toBe(false);
+                expect(result.error).toContain('must resolve beneath .spur/run/');
+            }
+            expect(run).not.toHaveBeenCalled();
+            expect(write).not.toHaveBeenCalled();
+        } finally {
+            run.mockRestore();
+            ensureDir.mockRestore();
+            write.mockRestore();
+        }
+    });
+
     test('rejects command option', async () => {
         const runner = new CommandGateActionRunner();
         const res = await runner.execute(

@@ -1,4 +1,4 @@
-import { normalize, resolve } from 'node:path';
+import { normalize, resolve, sep } from 'node:path';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import {
     createNodeFileSystem,
@@ -115,7 +115,7 @@ export class CommandGateActionRunner implements ActionRunner {
         const resolvedResultFile = resolve(workdir, resultFileRaw);
         const normalized = normalize(resolvedResultFile);
 
-        if (!normalized.startsWith(allowedDir)) {
+        if (!normalized.startsWith(`${allowedDir}${sep}`)) {
             return {
                 ok: false,
                 error: `resultFile must resolve beneath .spur/run/ (got ${resultFileRaw})`,
