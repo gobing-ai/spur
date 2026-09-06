@@ -1047,14 +1047,20 @@ describe('history report render-time narrowing (0564 R3)', () => {
         expect(exitCode).toBe(0);
         const joined = lines.join('');
         expect(joined).toContain('Narrowed report — top 2');
-        expect(joined).toContain('Session leaderboard (2):');
-        // Re-sliced depth: top two rows survive, deeper rows are gone.
-        expect(joined).toContain('s0');
-        expect(joined).toContain('s1');
-        expect(joined).not.toContain('s2');
-        expect(joined).toContain('t0');
-        expect(joined).toContain('t1');
-        expect(joined).not.toContain('t2');
+        // Re-sliced depth: top two rows survive, deeper rows are gone. Assert on
+        // the body only — the banner/footer echo the artifact path, whose random
+        // mkdtemp suffix can itself contain 's2'/'t2' (CI flake, 2026-09-06).
+        const body = joined
+            .split('\n')
+            .filter((line) => !line.includes(artifactPath))
+            .join('\n');
+        expect(body).toContain('Session leaderboard (2):');
+        expect(body).toContain('s0');
+        expect(body).toContain('s1');
+        expect(body).not.toContain('s2');
+        expect(body).toContain('t0');
+        expect(body).toContain('t1');
+        expect(body).not.toContain('t2');
     });
 
     test('an unusable --top exits 1 instead of silently rendering the full artifact', async () => {
