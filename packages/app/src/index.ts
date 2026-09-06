@@ -81,7 +81,6 @@ export type { BaselineEntry, CorpusCheckResult, CorpusSeverity } from './service
 export {
     baselineSeverity,
     collectObservedFindings,
-    loadAcceptedFindings,
     reconcileBaseline,
     resolveFogRange,
     runCorpusCheck,

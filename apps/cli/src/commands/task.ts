@@ -10,7 +10,6 @@ import {
     type EntityRef,
     ensurePipelineRunLink,
     evaluateDoneTransition,
-    loadAcceptedFindings,
     type MigrationReport,
     PlanningWriteService,
     readVerdictArtifact,
@@ -1283,7 +1282,6 @@ export function registerTaskCommand(program: Command, context: CliContext): void
 
                 const svc = await makeCheckService(context);
                 const planningFolders = await resolvePlanningFolders(context.fs);
-                const accepted = await loadAcceptedFindings(context.cwd);
                 const activeFolder = planningFolders.foldersConfig.active_folder;
                 // Normalize every explicit override so relative and absolute spellings of the
                 // same folder are identical downstream (project-root derivation, line anchors) —
@@ -1325,7 +1323,6 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                             strict,
                             asStatus,
                             severityOverrides: planningFolders.severityOverrides,
-                            accepted,
                             fix: options.fix === true,
                         });
                         results.push(result);
@@ -1349,7 +1346,6 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                             strict,
                             asStatus,
                             severityOverrides: planningFolders.severityOverrides,
-                            accepted,
                             fix: options.fix === true,
                         });
                         results.push(result);
@@ -1625,14 +1621,12 @@ async function runDoneGateCheck(
         return false; // missing task — let updateStatus throw the real error
     }
     const svc = new TaskCheckService(context.fs, await loadSectionMatrix(context.cwd), await makeTaskLocator(context));
-    const accepted = await loadAcceptedFindings(context.cwd);
     // Default severity (not --strict, not --strict-core) — hard-core L3/L2-gate
     // errors are already errors in the base computation. Never pass strict:true.
     const result = await svc.check(hit.filePath, wbs, {
         strict: false,
         asStatus: targetStatus,
         severityOverrides: planningFolders.severityOverrides,
-        accepted,
     });
     return result.pass;
 }
