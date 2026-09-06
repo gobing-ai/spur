@@ -37,7 +37,7 @@ bootstrap:
       # alone never does. Checkpoint resume + the rollup-freshness short-circuit
       # keep a no-op tick cheap (I81).
       - name: history-refresh
-        cron: "*/10 7-23 * * *"
+        cron: "*/15 7-23 * * *"
         command: bun apps/cli/src/index.ts --no-logo history daily
 
       # 05:00 daily: full-corpus import (checkpoint resume self-heals gaps),
