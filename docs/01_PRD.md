@@ -2,9 +2,9 @@
 doc: 01_PRD
 owns: WHAT — product vision, users, scope (in / out / deferred)
 authority: authoritative-on-scope
-version: 1.7.0
+version: 1.8.0
 owner: Robin Min
-updated_at: 2026-09-05
+updated_at: 2026-09-06
 read_before: adding a command or feature
 edit_rules: 99 §6.2
 sync: [T1, T4, T6]
@@ -79,6 +79,10 @@ around them.
 Scope tables own **membership** only; delivery status per capability lives in `05_FEATURES`.
 
 ### 5.1 In scope (committed product surface)
+
+F21 adds consistent task creation/checking and default implementation-ready CLI preparation with
+an explicit capture opt-out (ADR-109). Scope includes batch/planning handoff and recoverable
+creation failures; automatic task implementation and model execution inside HTTP writes are excluded.
 
 | Capability                                                 | Command                                            | Backed by                                  |
 | ---------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------ |

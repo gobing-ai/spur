@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.37.0
+version: 1.38.0
 owner: Robin Min
 updated_at: 2026-09-06
 read_before: any structural change; before diverging from a decision
@@ -2290,3 +2290,10 @@ stage cites these notes (not the original body) when scoring authority/derived-d
 | 099 | Resume-side freshness: the digest comparison introduced by task 0752 catches a version or definition edit between run and resume. This ADR's freshness contract is now exercised by the engine, not just documented. |
 | 100 | Verified-outcome binding: the prove-digest stamped into `.spur/run/<wbs>-verdict.json` binds the certifying run to its verdict (task 0751 R4). The `proofBinding: current` guard refuses missing or stale binding. |
 | 102 | Docs anchor: the capability-attestation section in `docs/04_DESIGN.md:2451` is now labeled with this ADR (was mislabeled as ADR-101 — a history-refresh ADR — and corrected in 0754 R2). |
+
+## ADR-109: Task Creation Prepares Specifications by Default
+
+- **Status:** Accepted for implementation · **Date:** 2026-09-06 · **Feature:** F21 · **Amends:** ADR-020
+- **Decision:** Default task CLI creation invokes the existing ready-preparation competency, with an explicit capture opt-out. Shared task writers remain deterministic; host planning prepares content inline and avoids a second model pass. Structural validity, specification readiness and execution prerequisites remain distinct.
+- **Why:** A newly created task should not require a separate manual refinement action, and shared writers must not acquire hidden agent execution.
+- **Detail:** `03 §12.4`; [task creation surface](design/task-creation-readiness.md). Approved design only; delivery is tracked by F21.

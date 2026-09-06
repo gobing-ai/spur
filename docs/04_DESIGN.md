@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.67.0
+version: 1.68.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-09-06
@@ -2014,6 +2014,12 @@ shipped (`05 §9` tracks status).
 | 7.8 `sp:dev-*` command operations        | Dev-\* operation map (13 ops: 9 `Skill()`-backed + 4 inline; `implement` is a sub-mode of `run`; `dev-dogfood` → `sp:dogfood-testing`) | `plugins/sp/skills/spur-dev/references/dev-operations.md`                                                            |
 
 ### 7.1 `spur task` commands
+
+| Planned extension | Status |
+| --- | --- |
+| [Task creation and readiness](design/task-creation-readiness.md) | Approved design; F21 / ADR-109; not yet shipped |
+
+The command table below continues to describe the current registrations.
 
 Core CRUD and utility verbs. Every subcommand supports `--json` (ADR-010 invariant).
 Source: delivery §1.1, design §10.

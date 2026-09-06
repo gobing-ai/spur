@@ -2,7 +2,7 @@
 doc: 02_ROADMAP
 owns: WHEN — phases, current vs deferred, sequencing
 authority: derived
-version: 1.7.0
+version: 1.8.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-09-06
@@ -128,6 +128,10 @@ that run by occupant pin without scraping a terminal.
 ## Phase 3 — Workflow & Constraint Depth
 
 Deepen the two engines from MVP to production parity.
+
+- [ ] F21 task creation/readiness enhancement follows the current D6 workflow repair batch
+  (0782–0786): two sequential tasks, deterministic creation/check correctness then the complete
+  ready-by-default creation and planning flow ([design](design/task-creation-readiness.md), ADR-109).
 
 - [x] D61: essential workflow gates, explicit corpus audits, snapshot retirement, and versioned
   observable execution across eleven definitions; surrounding workflows before task-pipeline

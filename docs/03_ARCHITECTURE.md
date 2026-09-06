@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.39.0
+version: 1.40.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-09-06
@@ -601,6 +601,15 @@ task ## Acceptance Criteria (subset coverage)
   P1–P4 table) hard-gates. Tightening follows compliance data, not aspiration.
 
 ### 12.4 Boundaries
+
+**Approved extension, not yet shipped (ADR-109, F21).** Task creation orchestration in
+`packages/app` will reuse the canonical ready competency and existing AgentService execution.
+TaskService and PlanningWriteService remain deterministic for CLI, HTTP and internal callers.
+Single creation preserves a capture identity across preparation failure; batch preparation and
+candidate validation finish before the batch write boundary. Host planning prepares inline and
+uses the deterministic batch path, while handoff checks current preparation evidence separately
+from structural validation and execution prerequisites. Concrete shapes live in the
+[task creation satellite](design/task-creation-readiness.md).
 
 - `apps/cli` task/feature commands stay transport wrappers (ADR-021) over `packages/app`
   services.
