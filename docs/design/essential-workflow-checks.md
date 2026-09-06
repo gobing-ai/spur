@@ -129,6 +129,12 @@ Task 0723 is done and its doctor-free, count-only precheck is present in the cur
 consumes that implementation; it has no unfinished 0723 prerequisite. D9 fast routes remain dormant without the existing ≥5 real terminal runs
 and ≥80% mapped run coverage per workflow. No manufacturing runs to bypass that decision.
 
+**Implemented (task 0772, 2026-09-06):** all eleven canonical definitions carry `version: "1"`,
+canonical and bundled copies are byte-identical, and no retired corpus/composition asset remains
+in generated output. The task-pipeline quality gate emits a bounded summary (green: status,
+attempts, log path, bytes; red: last 40 lines plus path) with the full log preserved on disk.
+Rollout evidence: `docs/plans/2026-09-04-d61-rollout-evidence.md`.
+
 Use the actual batch schema's Design/Plan/AC fields, retain exact feature scenario titles, and apply
 dependency ordering through CLI writes. Current YAML prose incorrectly excludes these schema fields;
 P5 repairs that prose. The running YAML is not hot-edited. Task batch creation is planning only.

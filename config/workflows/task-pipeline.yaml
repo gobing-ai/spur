@@ -27,6 +27,9 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: task-pipeline
+# 0772 R2: explicit identity tag. Set only after the proof failure-path tests
+# passed; the engine treats unversioned external definitions as supported.
+version: "1"
 description: "Standard task pipeline: precheck → implement → quality-gate (test/fix/recheck) → review → approve → verify → record → done"
 # Task entity lifecycle (owned by task-lifecycle.yaml):
 #   normal: backlog → todo → wip → testing → done
@@ -415,7 +418,12 @@ states:
               sleep 10;
               gate_attempt=$((gate_attempt + 1));
             done &&
-            cat "$LOG_FILE" &&
+            if [ "$gate_rc" -eq 0 ]; then
+              printf 'quality gate PASS (attempts: %s; log: %s; bytes: %s)\n' "$gate_attempt" "$LOG_FILE" "$(wc -c < "$LOG_FILE" | tr -d "[:space:]")";
+            else
+              printf 'quality gate FAIL — last 40 lines follow (full log: %s)\n' "$LOG_FILE";
+              tail -n 40 "$LOG_FILE";
+            fi &&
             FINDINGS_FILE=".spur/run/$wbs-test-gate.findings" &&
             set +e; grep -oE '[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+' "$LOG_FILE" | sort -u | head -20 | tr '\n' ' ' > "$FINDINGS_FILE"; set -e &&
             if [ "$gate_rc" -eq 0 ]; then
@@ -520,7 +528,12 @@ states:
                 gate_attempt=$((gate_attempt + 1));
               done;
             fi &&
-            cat "$LOG_FILE" &&
+            if [ "$gate_rc" -eq 0 ]; then
+              printf 'quality gate PASS (attempts: %s; log: %s; bytes: %s)\n' "$gate_attempt" "$LOG_FILE" "$(wc -c < "$LOG_FILE" | tr -d "[:space:]")";
+            else
+              printf 'quality gate FAIL — last 40 lines follow (full log: %s)\n' "$LOG_FILE";
+              tail -n 40 "$LOG_FILE";
+            fi &&
             set +e; grep -oE '[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+' "$LOG_FILE" | sort -u | head -20 | tr '\n' ' ' > "$FINDINGS_FILE"; set -e &&
             if [ "$gate_rc" -eq 0 ]; then
               printf 'PASS\n' > "$STATUS_FILE";

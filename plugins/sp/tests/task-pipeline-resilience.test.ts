@@ -298,4 +298,47 @@ esac`,
         expect(result.output).not.toContain('precheck: NOTE');
         expect(result.output).not.toContain('precheck: WARNING');
     });
+
+    // 0772 R1: gate output is a bounded summary — green gates print status/attempt/path/
+    // bytes, red gates print at most the last 40 lines plus the log path; the durable full
+    // log on disk is never truncated and the old full-log `cat` echo is gone.
+    test('quality gate output is a bounded summary; full log stays on disk (0772 R1)', () => {
+        for (const stateId of ['test', 'test-recheck']) {
+            const shells =
+                PIPELINE.states
+                    .find((state) => state.id === stateId)
+                    ?.onEnter?.filter((action) => action.kind === 'shell') ?? [];
+            for (const { options } of shells) {
+                const command = options?.command ?? '';
+                if (command.includes('test-gate.status')) {
+                    expect(command).not.toMatch(/cat "\$LOG_FILE" *&&/);
+                    expect(command).toContain('tail -n 40 "$LOG_FILE"');
+                }
+            }
+        }
+
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0772-summary-'));
+        const noisyGate = executable(dir, 'gate-noisy', 'for i in $(seq 1 60); do echo "line-$i"; done; exit 1');
+        const command = commandFor('test', 1).replace('sleep 10', 'sleep 0');
+        const red = runShell(command, dir, { wbs: '0772', qualityGateCmd: noisyGate });
+
+        expect(red.exitCode).toBe(0);
+        expect(red.output).toContain(
+            'quality gate FAIL — last 40 lines follow (full log: .spur/run/0772-test-gate.log)',
+        );
+        expect(red.output).toContain('line-60');
+        expect(red.output).not.toContain('line-1\n');
+        expect(readFileSync(join(dir, '.spur/run/0772-test-gate.status'), 'utf8').trim()).toBe('FAIL');
+        const log = readFileSync(join(dir, '.spur/run/0772-test-gate.log'), 'utf8');
+        expect(log).toContain('line-1');
+        expect(log).toContain('line-60');
+
+        const greenGate = executable(dir, 'gate-green', 'echo gate-ok; exit 0');
+        const green = runShell(command, dir, { wbs: '0772', qualityGateCmd: greenGate });
+
+        expect(green.exitCode).toBe(0);
+        expect(green.output).toContain('quality gate PASS (attempts: 1; log: .spur/run/0772-test-gate.log; bytes:');
+        expect(green.output).not.toContain('gate-ok\n');
+        expect(readFileSync(join(dir, '.spur/run/0772-test-gate.status'), 'utf8').trim()).toBe('PASS');
+    });
 });

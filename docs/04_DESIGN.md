@@ -2390,7 +2390,10 @@ architecture, task 0227); `verify` → `/sp:dev-verify --fix none` (→ `sp:code
 mode) — observe-only per task 0703/ADR-071: a repairable non-PASS routes once through the bounded
 `verify → test-fix` edge (budget shared with the quality gate via
 `.spur/run/<wbs>-test-fix-attempt`), and `test-recheck` re-captures `proofDigest` so the re-entered
-quality → review → verify chain certifies a fresh state.
+quality → review → verify chain certifies a fresh state. Gate run output is a bounded summary
+(task 0772 R1): a green gate prints status, attempt count, log path, and byte size; a red gate
+prints at most the last 40 lines plus the log path — the durable full log on disk is never
+truncated, and the log path is also what `test-fix` consumes.
 
 **Completion gate (ADR-026; proof block per task 0703/ADR-071):** the `verify` step emits
 `.spur/run/<wbs>-verdict.json` whose `checks[]` carries a `proof-input-digest` row and whose

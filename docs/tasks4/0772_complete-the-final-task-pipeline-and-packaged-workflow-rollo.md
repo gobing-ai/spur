@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Complete the final task-pipeline and packaged workflow rollout"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-05T05:21:57.000Z
-updated_at: "2026-09-05T05:42:44.915Z"
+updated_at: "2026-09-06T07:49:27.752Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P8"]
@@ -20,11 +20,11 @@ Own task-pipeline.yaml last, after 0769/0770/0771. Task 0723 is done and the cur
 
 Dependencies: 0769, 0770, 0771. Detailed inputs and handoffs are frozen below.
 ### Requirements
-- [ ] **R1.** The task pipeline is upgraded last without weakening proof: consume completed 0723 precheck and preceding D61 contracts; reduce redundant checks/log echoes while preserving quality gate, review, read-only verification, task-spec-inclusive fingerprints and run/definition-bound PASS evidence. Keep fast mode dormant under D9 coverage rules.
+- [x] **R1.** The task pipeline is upgraded last without weakening proof: consume completed 0723 precheck and preceding D61 contracts; reduce redundant checks/log echoes while preserving quality gate, review, read-only verification, task-spec-inclusive fingerprints and run/definition-bound PASS evidence. Keep fast mode dormant under D9 coverage rules.
 
-- [ ] **R2.** All shipped definitions and generated assets complete the migration: tag task-pipeline version: "1", verify all eleven canonical and bundled versions match, remove retired assets through bundle generation, and synchronize canonical skills/templates/authority. Unversioned external definitions remain supported.
+- [x] **R2.** All shipped definitions and generated assets complete the migration: tag task-pipeline version: "1", verify all eleven canonical and bundled versions match, remove retired assets through bundle generation, and synchronize canonical skills/templates/authority. Unversioned external definitions remain supported.
 
-- [ ] **R3.** Savings are measured against comparable verified outcomes: assemble matched before/after invocation, elapsed-time and output-volume evidence with source/run provenance. Unknown tokens/cost stay unknown; simulated branch tests and static counts never count as real terminal outcomes. Complete applicable repository gates and real task verification.
+- [x] **R3.** Savings are measured against comparable verified outcomes: assemble matched before/after invocation, elapsed-time and output-volume evidence with source/run provenance. Unknown tokens/cost stay unknown; simulated branch tests and static counts never count as real terminal outcomes. Complete applicable repository gates and real task verification.
 
 Out of scope: new engines/dependencies/public nouns, broad historical-document cleanup, D9 fast activation, release, merge and external deployment. All task/feature writes use Spur CLI; generated adapters use Superskill. Refine does not author implementation evidence.
 ### Acceptance Criteria
@@ -102,30 +102,39 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 
 6. [ ] R1/R2/R3: Run bun run spur-check, bun run test-cf and required build/package checks for final inputs; avoid duplicating lint/type/tests already covered by spur-check. Follow current checker-policy audit obligations, normal task/feature checks and real task verification; report unavailable usage honestly.
 ### Solution
+**Final rollout of the D61 task-pipeline and packaged workflows (0772).**
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
-**Status (corpus fix, 2026-09-05):** task 0772 Solution is **planned**, awaiting implementation run. The 2026-09-05 batch halted at the precheck of 0772 because the Solution section lacked `path:line` citations; the corpus fix below restores precheck-pass before implementation.
-
-Anticipated change anchors (populated during implementation):
-
-- `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:1` — proof failure-path tests (required for `version: "1"`).
-- `packages/app/tests/workflow/task-pipeline-proportional-routing.test.ts:1` — proportional routing tests.
-- `packages/app/tests/workflow/proof-input-fingerprint.test.ts:1` — proof-input-fingerprint owner tests.
-- `packages/app/tests/services/done-transition-guard.test.ts:1` — extended for bounded status/attempt/path summary.
-- `plugins/sp/tests/task-pipeline-resilience.test.ts:1` — extended for inline-pipeline parity.
-- `scripts/commands/bundle-config.ts:1` — narrow fix if its copy leaves deleted config assets; verify stale corpus/composition files disappear from generated output.
-- `apps/cli/config/workflows/<each>.yaml:1` (11 names: basic, docs-pipeline, feature-dev, feature-lifecycle, history-anatomy, idea-pipeline, pr-review, task-lifecycle, task-pipeline, wayfinder-resolution, wrapup-pipeline) — bundle-rebuilt comparison vs `config/workflows/`.
-- `docs/plans/2026-09-04-d61-rollout-evidence.md:1` — committed aggregate of per-task measurements.
-
+- `config/workflows/task-pipeline.yaml` — `version: "1"` identity tag (config/workflows/task-pipeline.yaml:32); `test` and `test-recheck` gate shells now emit a bounded summary instead of echoing the full gate log: green gates print `quality gate PASS (attempts: N; log: path; bytes: M)`, red gates print at most the last 40 lines plus the log path (`tail -n 40`). The durable full log at `.spur/run/<wbs>-test-gate.log` is never truncated and stays the `test-fix` input. Guards, proof chain, 0723 precheck, fix/recheck bounds, and SQLite retry are untouched; fast mode stays dormant (`mode: ""`, no production fast caller).
+- `plugins/sp/tests/task-pipeline-resilience.test.ts` — new pin "quality gate output is a bounded summary; full log stays on disk (0772 R1)": structural (no `cat "$LOG_FILE"` echo, `tail -n 40` present in both gate shells) plus behavioral red/green gate runs asserting the summary lines, the 40-line window, and intact on-disk logs.
+- Bundle migration (R2): rebuilt via `bun run --filter @gobing-ai/spur build:bundle`; all eleven canonical definitions (basic, docs-pipeline, feature-dev, feature-lifecycle, history-anatomy, idea-pipeline, pr-review, task-lifecycle, task-pipeline, wayfinder-resolution, wrapup-pipeline) carry quoted `version: "1"` and are byte-identical to `apps/cli/config/workflows/`; bundled workflows dir contains exactly 11 files — no retired corpus/composition asset. Unversioned external definitions remain supported (workflow-version suite).
+- Docs (same commit): `docs/04_DESIGN.md` documents the bounded gate output; `docs/design/essential-workflow-checks.md` records P8 implemented status.
+- Evidence (R3): `docs/plans/2026-09-04-d61-rollout-evidence.md` aggregates the sixteen `.spur/run/d61-*-{before,after}.json` fixtures with source/run provenance; token/cost are null with recorded reason; static and fixture evidence is labeled and excluded from real-run coverage; D9 activation thresholds are honestly unmet and no runs were manufactured.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1. The task pipeline is upgraded last without weakening proof: consume completed 0723 precheck and preceding D61 contracts; reduce redundant checks/log echoes while preserving quality gate, review, read-only verification, task-spec-inclusive fingerprints and run/definition-bound PASS evidence. Keep fast mode dormant under D9 coverage rules. | MET | Gate echo replaced with bounded summary (status/attempts/path/bytes on green, 40-line tail + path on red) in `config/workflows/task-pipeline.yaml` test and test-recheck shells; guards, proof chain, precheck, fix/recheck and SQLite retry untouched; fast mode stays `mode: ""` with no production fast caller. |
+| R2. All shipped definitions and generated assets complete the migration: tag task-pipeline version: "1", verify all eleven canonical and bundled versions match, remove retired assets through bundle generation, and synchronize canonical skills/templates/authority. Unversioned external definitions remain supported. | MET | `version: "1"` added to task-pipeline; `bun run --filter @gobing-ai/spur build:bundle` rebuild: 11/11 canonical vs bundled byte-identical, bundled dir exactly 11 files, no retired corpus/composition assets; workflow-version tests 6 pass (unversioned external still supported); `docs/04_DESIGN.md` + `docs/design/essential-workflow-checks.md` synced same change. |
+| R3. Savings are measured against comparable verified outcomes: assemble matched before/after invocation, elapsed-time and output-volume evidence with source/run provenance. Unknown tokens/cost stay unknown; simulated branch tests and static counts never count as real terminal outcomes. Complete applicable repository gates and real task verification. | MET | `docs/plans/2026-09-04-d61-rollout-evidence.md` aggregates `.spur/run/d61-*-{before,after}.json` fixtures with digests, exit codes, elapsed, output bytes; tokens/cost null with reason; static/fixture evidence labeled; `spur-check` exit 0 (7421 pass) + `test-cf` exit 0. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R10 — The task pipeline is upgraded last without weakening proof | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts` 11 pass incl. new pin "quality gate output is a bounded summary; full log stays on disk (0772 R1)" (green summary line, red 40-line tail, no `cat "$LOG_FILE"` echo, durable log intact); proof-chain targets 70 pass (`task-pipeline-proof-chain`, `task-pipeline-proportional-routing`, `proof-input-fingerprint`, `done-transition-guard`). Static: `config/workflows/task-pipeline.yaml` bounded-summary blocks + `version: "1"` tag; proof guards and dormant fast mode unchanged. |
+| R11 — All shipped definitions and generated assets complete the migration | MET | command | `bun run --filter @gobing-ai/spur build:bundle` exit 0; per-name `diff -q` 11/11 byte-identical canonical vs `apps/cli/config/workflows/`, all `version: "1"`, bundled workflows dir = 11 files with no retired assets; `apps/cli/tests/commands/workflow-version.test.ts` 6 pass, `workflow.test.ts` 125 pass, `bundle-config`/`verify-pack` 6 pass. Static: same-commit doc sync in `docs/design/essential-workflow-checks.md` + `docs/04_DESIGN.md`. |
+| R12 — Savings are measured against comparable verified outcomes | MET | command | `bun run spur-check` exit 0 (7421 pass / 0 fail) and `bun run test-cf` exit 0 on the post-0772 tree. Static: `docs/plans/2026-09-04-d61-rollout-evidence.md` + `.spur/run/d61-0772-{before,after}.json` (digests, command provenance, elapsed + output bytes where measured; token/cost null with reason; D9 thresholds honestly unmet, no manufactured runs). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - [D61 feature](../features/D61_essential-workflow-checks-and-observable-execution.md)
 - [ADR-108](../00_ADR.md#adr-108-essential-workflow-gates-and-explicit-corpus-audits)
@@ -136,3 +145,6 @@ Anticipated change anchors (populated during implementation):
 - Surface/process authority: docs/04_DESIGN.md and docs/99_PROJECT_CONSTITUTION.md; local source/test paths are named in Design.
 
 ### History
+- 2026-09-06T07:46:40.065Z todo → wip (system)
+- 2026-09-06T07:46:45.349Z wip → testing (system)
+- 2026-09-06T07:49:27.752Z testing → done (system)
