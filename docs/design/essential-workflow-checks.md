@@ -137,6 +137,16 @@ in generated output. The task-pipeline quality gate emits a bounded summary (gre
 attempts, log path, bytes; red: last 40 lines plus path) with the full log preserved on disk.
 Rollout evidence: `docs/plans/2026-09-04-d61-rollout-evidence.md`.
 
+**Implemented (task 0782, 2026-09-06):** `feature-dev.yaml` v2 reuses an existing feature's
+accepted AC and task roster instead of re-planning. Brainstorm/plan states are deleted; the
+precheck validates the essential roster contract through CLI reads (identity, nonempty array,
+unique WBS identities, known statuses, no backlog/wip/testing/blocked member) and freezes the
+sorted todo list at `.spur/run/<runId>-feature-dev-tasks.txt`; execution dispatches exactly
+`/sp:dev-runall --tasks <frozen list>` (profile controls `--auto`); a nonempty all-terminal
+roster verifies directly with zero execution model calls; `feature-verify` runs
+`feature check --as done --json` exactly once and sibling guards read only the captured
+`.status` decision. No `--strict` elevation, no whole-corpus scan, no new planning flag.
+
 Use the actual batch schema's Design/Plan/AC fields, retain exact feature scenario titles, and apply
 dependency ordering through CLI writes. Current YAML prose incorrectly excludes these schema fields;
 P5 repairs that prose. The running YAML is not hot-edited. Task batch creation is planning only.

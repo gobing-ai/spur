@@ -1483,7 +1483,7 @@ config/
     recommended-post-check.yaml     # stricter dev gate (coverage)
   workflows/
     basic.yaml                      # canonical implement → check → fix loop
-    feature-dev.yaml                # agent-driven feature loop with pre/test/post gates
+    feature-dev.yaml                # existing-feature reuse loop: roster-contract precheck → frozen-list runall → one-shot completion check (0782)
     task-lifecycle.yaml             # task status state-machine (ADR-022)
     feature-lifecycle.yaml          # feature status state-machine (ADR-022)
     task-pipeline.yaml              # task execution pipeline with guards

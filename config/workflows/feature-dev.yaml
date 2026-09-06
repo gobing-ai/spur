@@ -1,37 +1,57 @@
-# Feature development loop — brainstorm → plan → execute-tasks → feature-verify → done.
+# Feature development loop — existing-feature reuse: precheck → execute-tasks →
+# feature-verify → integration-review → done.
+#
+# 0782 (feature D6): the caller supplies a featureId whose AC are already accepted and whose
+# task roster already exists. This definition REUSES them — the brainstorm/plan states and
+# their edges are deleted, so no model hop ever re-plans or re-decomposes an existing feature
+# (explicit planning stays at /sp:dev-plan and /sp:dev-idea, outside this consumer).
 #
 # Reliability (aligned with task-pipeline / ADR-043):
-#   - Soft precheck (featureId non-empty + agent doctor) → failed via transitions
+#   - Soft precheck (feature identity + roster structural contract) → failed via transitions,
+#     never a raw lifecycle abort. The doctor probe is gone: the precheck now performs the
+#     essential feature/roster validation itself; task execution owns executor availability.
 #   - Every agent.run input is a pure slash command (no free-form pipeline essays)
 #   - featureId must be supplied by the caller (workflow vars are not agent-mutated)
-#   - feature-verify is fail-closed on `spur feature check --strict`
+#   - feature-verify runs `feature check --as done --json` EXACTLY ONCE (0782 R3): the shell
+#     captures the exit code and JSON result, writes the decision to a .status sibling, and
+#     the guards only read that status — no sibling guard re-runs the check.
+#   - A nonempty all-terminal roster routes straight to feature-verify with zero execution
+#     model calls (0782 R2).
 
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: feature-dev
-version: "1"
+version: "2"
 description: >
-  End-to-end FEATURE development loop: precheck → brainstorm → plan (decompose) →
-  execute-tasks → feature-verify → done. Drives a whole feature (one description → a
-  feature with BDD AC → many tasks → all tasks done → feature verified), NOT a single
-  task — for one deliverable use task-pipeline.yaml directly.
+  Existing-feature execution loop: precheck → execute-tasks → feature-verify → done.
+  Drives a WHOLE feature whose accepted AC and task roster already exist — the caller
+  supplies featureId, this loop reuses the roster and runs it to verified completion.
+  For planning a NEW feature use /sp:dev-plan / /sp:dev-idea; for one deliverable use
+  task-pipeline.yaml directly.
 
-  The engine has no native for-each over a dynamic task list, so the execute-tasks step
-  DELEGATES the fan-out: a single agent.run instructs the agent to run every pending task
-  under the feature through task-pipeline.yaml, enumerated via `spur task list --feature`.
-  This mirrors how /sp:dev-run --mode full delegates its inner work loop (ADR-022: orchestration
-  is configuration — zero new engine code).
+  The engine has no native for-each over a dynamic task list, so execution DELEGATES the
+  fan-out: the precheck resolves the linked roster via `spur feature show` + `spur task
+  list --feature` (captured once under .spur/run/<runId>-feature-dev-{feature,roster}.json),
+  validates the essential structural contract (identity, roster shape, duplicate/mismatched
+  identities, refinement-blocking statuses), and freezes the sorted todo WBS list into
+  .spur/run/<runId>-feature-dev-tasks.txt. The execute-tasks step reads that frozen list
+  into a var (file.read.into-var) and dispatches ONE pure-slash /sp:dev-runall --tasks run
+  with it — the child never re-enumerates membership (0782 R2).
 
-  Shape: precheck → brainstorm → plan → execute-tasks[-auto](delegated loop) → feature-verify → done
-         (precheck/plan failure or a non-PASS feature check short-circuits to `failed`).
+  Shape: precheck → execute-tasks[-auto](delegated frozen batch) → feature-verify →
+  integration-review → done
+         (precheck failure, a non-PASS completion check, or a blocking review short-circuits
+         to `failed`; a nonempty all-terminal roster skips execution entirely).
 
   Vars (passed as a JSON object via `--vars`):
-    featureId — the feature ID this loop drives (required), e.g. `--vars '{"featureId":"B3"}'`
+    featureId — the existing feature ID this loop drives (required), e.g. `--vars '{"featureId":"B3"}'`
     agent     — agent the agent.run steps invoke; override `--vars '{"agent":"claude"}'`
-    profile   — `auto` selects execute-tasks-auto (`/sp:dev-runall … --auto`); otherwise
+    profile   — `auto` selects execute-tasks-auto (`/sp:dev-runall --tasks … --auto`); otherwise
                 interactive execute-tasks (no --auto, per-task HITL remains)
+    featureTaskIds — frozen todo WBS list projected from the roster file at run time; declared
+                empty so template resolution cannot throw before the read lands (0782 design)
     spurBin   — PATH-independent spur invocation (CLI overrides at run start; literal fallback)
-    stepTimeoutMs — agent.run budget (ms) for brainstorm/plan/runall
+    stepTimeoutMs — agent.run budget (ms) for the runall dispatch
 
   Reliability (ADR-043): every agent.run input is a pure slash command. featureId must be
   supplied by the caller (workflow vars cannot be mutated by the agent). profile is wired
@@ -47,6 +67,7 @@ vars:
   featureId: ""
   agent: "auto"
   profile: "standard"
+  featureTaskIds: ""
   spurBin: "spur"
   stepTimeoutMs: "1800000"
   # Integration review (D5-P, feature R11). Advisory by default: a pending, timed-out, or
@@ -60,87 +81,116 @@ vars:
 states:
   - id: precheck
     description: >
-      Soft precheck: non-empty featureId + agent doctor. Always exit 0 so failures
-      route to `failed` via transitions (not a raw lifecycle abort).
+      Soft precheck (0782 R1): resolve the supplied feature and its linked task roster via
+      existing CLI reads, then validate the essential structural contract — non-empty
+      featureId/runId, a feature-show JSON whose identity matches, a nonempty array roster
+      with unique non-empty WBS identities and known statuses, no backlog/wip/testing/blocked
+      member (planning/refine/resume handoff), and at least one linked task. Rejects fail
+      closed with an actionable handoff BEFORE any model dispatch; nothing is auto-created
+      or re-planned. Always exit 0 so failures route to `failed` via transitions.
     onEnter:
       - kind: shell
         options:
           command: >-
-            mkdir -p .spur/run &&
-            set +e &&
-            test -n "$featureId"; id_rc=$?;
-            $spurBin agent doctor $agent; doctor_rc=$?;
-            set -e &&
-            if [ "$id_rc" -eq 0 ] && [ "$doctor_rc" -eq 0 ]; then
-              printf 'PASS\n' > ".spur/run/$__runId-feature-dev-precheck.status";
+            mkdir -p .spur/run;
+            FEATURE_JSON=".spur/run/$__runId-feature-dev-feature.json";
+            ROSTER_JSON=".spur/run/$__runId-feature-dev-roster.json";
+            TASKS_TXT=".spur/run/$__runId-feature-dev-tasks.txt";
+            PRECHECK_STATUS=".spur/run/$__runId-feature-dev-precheck.status";
+            rm -f "$PRECHECK_STATUS";
+            set +e;
+            test -n "$featureId" && test -n "$__runId";
+            id_rc=$?;
+            if [ "$id_rc" -eq 0 ]; then $spurBin feature show "$featureId" --json > "$FEATURE_JSON" 2>&1; show_rc=$?; else show_rc=1; fi;
+            if [ "$id_rc" -eq 0 ] && [ "$show_rc" -eq 0 ] && jq -e --arg id "$featureId" 'type == "object" and .id == $id' "$FEATURE_JSON" > /dev/null 2>&1; then $spurBin task list --feature "$featureId" --json > "$ROSTER_JSON" 2>&1; list_rc=$?; else list_rc=1; fi;
+            if [ "$id_rc" -ne 0 ] || [ "$show_rc" -ne 0 ] || [ "$list_rc" -ne 0 ]; then
+              echo "feature-dev precheck: missing featureId/runId, unknown feature '$featureId', or unreadable roster (rc $id_rc/$show_rc/$list_rc) — supply an existing planned feature via /sp:dev-plan or /sp:dev-idea; nothing was auto-created or re-planned" >&2;
+              printf 'FAIL\n' > "$PRECHECK_STATUS";
+            elif ! jq -e 'type == "array" and length > 0' "$ROSTER_JSON" > /dev/null 2>&1; then
+              echo "feature-dev precheck: roster at $ROSTER_JSON is malformed, not an array, or empty — plan the feature first via /sp:dev-plan; refusing to replan or run an empty batch" >&2;
+              printf 'FAIL\n' > "$PRECHECK_STATUS";
+            elif ! jq -e 'all(.[]; (.wbs | type == "string" and length > 0)) and ([.[].wbs] | length == (unique | length)) and all(.[]; .status == "todo" or .status == "done" or .status == "cancelled" or .status == "backlog" or .status == "wip" or .status == "testing" or .status == "blocked")' "$ROSTER_JSON" > /dev/null 2>&1; then
+              echo "feature-dev precheck: roster has empty/duplicate/mismatched WBS identities or unknown statuses at $ROSTER_JSON — repair the task corpus; refusing to batch a broken roster" >&2;
+              printf 'FAIL\n' > "$PRECHECK_STATUS";
+            elif [ "$(jq '[.[] | select(.status == "backlog" or .status == "wip" or .status == "testing" or .status == "blocked")] | length' "$ROSTER_JSON")" -gt 0 ]; then
+              echo "feature-dev precheck: linked task(s) are backlog/wip/testing/blocked — refine or resume them through their own task pipelines before batching; refusing to launch overlapping work" >&2;
+              printf 'FAIL\n' > "$PRECHECK_STATUS";
             else
-              printf 'FAIL\n' > ".spur/run/$__runId-feature-dev-precheck.status";
-            fi &&
+              printf '%s' "$(jq -r '[.[] | select(.status == "todo") | .wbs] | sort | join(",")' "$ROSTER_JSON")" > "$TASKS_TXT";
+              printf 'PASS\n' > "$PRECHECK_STATUS";
+            fi;
             exit 0
       - kind: note
         options:
-          message: "Feature-dev start for feature ${vars.featureId}."
-
-  - id: brainstorm
-    description: >
-      Validate / expand the feature with BDD AC via pure slash /sp:dev-brainstorm.
-      Caller must pass vars.featureId (required for plan/runall).
-    onEnter:
-      - kind: agent.run
-        options:
-          agent: ${vars.agent}
-          input: /sp:dev-brainstorm --feature ${vars.featureId}
-          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
-          role: planner
-          timeoutMs: ${vars.stepTimeoutMs}
-
-  - id: plan
-    description: >
-      Decompose the validated feature into a CLI-validated task batch via pure slash
-      /sp:dev-plan. The batch-create gate rejects a malformed decomposition.
-    onEnter:
-      - kind: agent.run
-        options:
-          agent: ${vars.agent}
-          input: /sp:dev-plan --feature ${vars.featureId}
-          # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
-          role: planner
-          timeoutMs: ${vars.stepTimeoutMs}
+          message: "Feature-dev start for existing feature ${vars.featureId} (0782 reuse path): roster resolved under .spur/run/${vars.__runId}-feature-dev-roster.json; frozen todo list at .spur/run/${vars.__runId}-feature-dev-tasks.txt."
 
   # Two pure-slash execute hops so vars.profile actually controls --auto (ADR-043).
   # Engine templates cannot branch a single input string on profile; declaration-order
-  # transitions pick the correct hop (auto first, then interactive fallback).
+  # transitions pick the correct hop (auto first, then interactive fallback). Each hop first
+  # reads the FROZEN todo list produced by precheck into featureTaskIds, then dispatches the
+  # explicit list — the runall child never re-enumerates membership (0782 R2).
   - id: execute-tasks-auto
     description: >
-      profile=auto — drive every pending task via pure slash /sp:dev-runall --auto
-      (skips per-task HITL inside task-pipeline).
+      profile=auto — dispatch the frozen todo WBS list via pure slash
+      /sp:dev-runall --tasks <list> --auto (skips per-task HITL inside task-pipeline).
     onEnter:
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.__runId}-feature-dev-tasks.txt
+          var: featureTaskIds
+          trim: true
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: /sp:dev-runall --feature ${vars.featureId} --auto
+          input: /sp:dev-runall --tasks ${vars.featureTaskIds} --auto
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: execute-tasks
     description: >
-      Interactive — drive every pending task via pure slash /sp:dev-runall without
-      --auto (per-task HITL approve gates remain available).
+      Interactive — dispatch the frozen todo WBS list via pure slash
+      /sp:dev-runall --tasks <list> without --auto (per-task HITL approve gates remain
+      available).
     onEnter:
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.__runId}-feature-dev-tasks.txt
+          var: featureTaskIds
+          trim: true
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: /sp:dev-runall --feature ${vars.featureId}
+          input: /sp:dev-runall --tasks ${vars.featureTaskIds}
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: feature-verify
     description: >
-      Certify the feature is complete: `spur feature check ${featureId} --strict` validates the
-      AC, traceability, and that all linked tasks are done. A clean strict check is the only
-      proof the feature is shippable.
+      Certify the feature is complete (0782 R3): run `spur feature check --as done --json`
+      EXACTLY ONCE, capture the exit code and JSON result at
+      .spur/run/<runId>-feature-dev-verify.json, and decide PASS/FAIL into the .status
+      sibling. PASS requires exit 0, a nonempty result array, and every returned scope
+      pass === true. The guards below only read the captured status — no sibling guard
+      re-runs the check. No --strict elevation, no whole-corpus scan.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run;
+            VERIFY_JSON=".spur/run/$__runId-feature-dev-verify.json";
+            VERIFY_STATUS=".spur/run/$__runId-feature-dev-verify.status";
+            VERIFY_TMP=".spur/run/$__runId-feature-dev-verify.status.tmp";
+            rm -f "$VERIFY_STATUS";
+            set +e;
+            $spurBin feature check "$featureId" --as done --json > "$VERIFY_JSON" 2>&1;
+            check_rc=$?;
+            set -e;
+            if [ "$check_rc" -eq 0 ] && jq -e 'type == "array" and length > 0 and all(.[]; .pass == true)' "$VERIFY_JSON" > /dev/null 2>&1; then printf 'PASS\n' > "$VERIFY_TMP" && mv -f "$VERIFY_TMP" "$VERIFY_STATUS"; else printf 'FAIL\n' > "$VERIFY_TMP" && mv -f "$VERIFY_TMP" "$VERIFY_STATUS"; fi
+      - kind: note
+        options:
+          message: "Feature verification for ${vars.featureId}: decision at .spur/run/${vars.__runId}-feature-dev-verify.status (evidence at .spur/run/${vars.__runId}-feature-dev-verify.json) — exactly one `feature check --as done --json` invocation per run (0782 R3)."
 
   - id: integration-review
     description: >
@@ -196,7 +246,7 @@ states:
           message: "Integration review for feature ${vars.featureId}: request verdict at .spur/run/${vars.__runId}-integration-review.status (request state only — REQUESTED/ALREADY_* are NEVER clean evidence); collected verdict at .spur/run/${vars.__runId}-integration-review-collect.status (CLEAN/FINDINGS/PENDING — the only clean evidence). Advisory unless requireCleanReview=true."
 
   - id: done
-    description: Terminal — feature planned, all tasks executed, and the feature verified.
+    description: Terminal — the existing feature's roster executed and the feature verified.
     # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
     onEnter:
       - kind: shell
@@ -204,39 +254,37 @@ states:
           command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: feature-dev done featureId=$featureId ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/$featureId-checkpoint.md'
 
   - id: failed
-    description: Terminal — plan rejected, a task failed verification, or the feature check did not pass.
+    description: Terminal — the roster contract was rejected at precheck, a task failed verification, or the feature check did not pass.
 
 transitions:
+  # ── precheck routing (0782 R1/R2) — declaration order matters: the all-terminal
+  # direct-verify edge is tried FIRST so a fully-terminal roster reaches completion
+  # verification with zero execution model calls; then the profile hops; then the
+  # failure fallback. ──
   - from: precheck
-    to: brainstorm
-    description: Precheck PASS — begin brainstorm.
+    to: feature-verify
+    description: Roster PASS and every linked task is already terminal — verify the feature directly, zero execution model calls.
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/$__runId-feature-dev-precheck.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat ".spur/run/$__runId-feature-dev-precheck.status" 2>/dev/null)" = PASS && test -f ".spur/run/$__runId-feature-dev-feature.json" && test ! -s ".spur/run/$__runId-feature-dev-tasks.txt"'
+  - from: precheck
+    to: execute-tasks-auto
+    description: Roster PASS with todo work; profile=auto — batch the frozen list with --auto (no per-task HITL).
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat ".spur/run/$__runId-feature-dev-precheck.status" 2>/dev/null)" = PASS && test -s ".spur/run/$__runId-feature-dev-tasks.txt" && test "$profile" = auto'
+  - from: precheck
+    to: execute-tasks
+    description: Roster PASS with todo work; interactive — batch the frozen list without --auto.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat ".spur/run/$__runId-feature-dev-precheck.status" 2>/dev/null)" = PASS && test -s ".spur/run/$__runId-feature-dev-tasks.txt"'
   - from: precheck
     to: failed
-    description: Precheck FAIL (missing featureId and/or doctor red) — stop.
-    guard:
-      kind: always
-
-  # Linear prefix: brainstorm → plan → execute-tasks
-  - from: brainstorm
-    to: plan
-    description: Feature validated; decompose it into tasks
-    guard:
-      kind: always
-
-  - from: plan
-    to: execute-tasks-auto
-    description: Tasks created; profile=auto — batch with --auto (no per-task HITL).
-    guard:
-      kind: shell
-      options:
-        command: 'test "$profile" = auto'
-  - from: plan
-    to: execute-tasks
-    description: Tasks created; interactive — batch without --auto.
+    description: Precheck FAIL (missing identity, malformed/empty roster, duplicate identities, or refinement-blocking statuses) — stop before any model dispatch.
     guard:
       kind: always
 
@@ -251,16 +299,16 @@ transitions:
     guard:
       kind: always
 
-  # ── feature-verify gate: strict check certifies done, else fail ──
-  # Declaration order: the pass guard is tried FIRST.
+  # ── feature-verify gate: the captured one-shot check decision certifies review, else
+  # fail. Declaration order: the pass guard is tried FIRST. The check itself is NOT
+  # re-run here (0782 R3) — the shell decision file is the only evidence. ──
   - from: feature-verify
     to: integration-review
-    description: Strict feature check passed — spend one integration review on this stable HEAD.
+    description: Captured completion check is PASS — spend one integration review on this stable HEAD.
     guard:
       kind: shell
       options:
-        command: "$spurBin feature check $featureId --strict"
-
+        command: 'test "$(cat ".spur/run/$__runId-feature-dev-verify.status" 2>/dev/null)" = PASS'
   - from: integration-review
     to: failed
     description: >
@@ -285,8 +333,6 @@ transitions:
       kind: always
   - from: feature-verify
     to: failed
-    description: Strict feature check failed — block before done; investigate incomplete tasks or AC.
+    description: Completion check missing, malformed, or non-PASS (or its evidence failed to persist) — block BEFORE integration review; no review is requested (0782 R3).
     guard:
-      kind: shell
-      options:
-        command: '! $spurBin feature check $featureId --strict'
+      kind: always

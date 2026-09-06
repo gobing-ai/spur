@@ -114,8 +114,17 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8)', () => {
     });
 
     test('0770 definitions are all explicitly versioned (identity tag, not absence)', () => {
-        for (const name of ['task-lifecycle', 'feature-lifecycle', 'feature-dev', 'wrapup-pipeline']) {
-            expect(loadDef(name).version).toBe('1');
+        // Exact per-definition pins: a silent version bump fails here. feature-dev is '2' since
+        // task 0782 redefined it as existing-feature reuse (frozen design, see
+        // feature-dev-definition.test.ts and docs/design/essential-workflow-checks.md).
+        const expectedVersions: Record<string, string> = {
+            'task-lifecycle': '1',
+            'feature-lifecycle': '1',
+            'feature-dev': '2',
+            'wrapup-pipeline': '1',
+        };
+        for (const [name, version] of Object.entries(expectedVersions)) {
+            expect(loadDef(name).version).toBe(version);
         }
     });
 

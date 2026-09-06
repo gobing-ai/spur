@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Reuse existing feature plans and rosters before workflow dispatch"
-status: todo
+status: done
 template: issue
 created_at: 2026-09-06T18:27:45.282Z
-updated_at: "2026-09-06T19:03:55.166Z"
+updated_at: "2026-09-06T19:54:32.981Z"
 feature_id: D6
 priority: P1
 ---
@@ -14,10 +14,10 @@ priority: P1
 ### Background
 Audit 0781 F-03, rechecked against feature-dev.yaml: precheck only tests nonempty featureId and runs agent doctor; every success enters brainstorm then plan; feature-verify executes the same strict command in two guards. Task 0770 Design and D6 scenarios R10/R11 require reuse and one completion decision. Five current D6 pending tasks already have accepted task identities; rerunning feature creation/decomposition would duplicate work. This is a task-local correction to an existing-feature consumer, not a new planning mode.
 ### Requirements
-- [ ] R1. Before any model dispatch, resolve the supplied feature and its linked task roster through existing CLI reads and validate the feature's essential structural contract. Reject missing identity, malformed/non-array roster, duplicate/mismatched identities, an empty roster, and any backlog/wip/testing/blocked task with an actionable handoff; do not auto-create or replan.
-- [ ] R2. Reuse accepted AC and the resolved roster. Dispatch the explicit frozen todo WBS list to the existing runall operation; ignore done/cancelled members. A nonempty all-terminal roster goes straight to completion verification with zero model calls for execution. Preserve profile-controlled auto versus interactive task execution.
-- [ ] R3. Execute feature check --as done --json exactly once at feature-verify, capture its exit and JSON result, and let sibling guards read that decision. Missing/malformed/non-PASS evidence fails before integration review. Do not add --strict warning elevation or a whole-corpus scan.
-- [ ] R4. Preserve the existing collected-HEAD review policy and phase boundary. No new planning flag or implicit brainstorm/decomposition; explicit planning remains /sp:dev-plan or /sp:dev-idea outside this consumer.
+- [x] R1. Before any model dispatch, resolve the supplied feature and its linked task roster through existing CLI reads and validate the feature's essential structural contract. Reject missing identity, malformed/non-array roster, duplicate/mismatched identities, an empty roster, and any backlog/wip/testing/blocked task with an actionable handoff; do not auto-create or replan.
+- [x] R2. Reuse accepted AC and the resolved roster. Dispatch the explicit frozen todo WBS list to the existing runall operation; ignore done/cancelled members. A nonempty all-terminal roster goes straight to completion verification with zero model calls for execution. Preserve profile-controlled auto versus interactive task execution.
+- [x] R3. Execute feature check --as done --json exactly once at feature-verify, capture its exit and JSON result, and let sibling guards read that decision. Missing/malformed/non-PASS evidence fails before integration review. Do not add --strict warning elevation or a whole-corpus scan.
+- [x] R4. Preserve the existing collected-HEAD review policy and phase boundary. No new planning flag or implicit brainstorm/decomposition; explicit planning remains /sp:dev-plan or /sp:dev-idea outside this consumer.
 ### Acceptance Criteria
 Ready-depth verification cases supplement the stable feature-mapped titles below; keep their identities unchanged.
 
@@ -75,17 +75,38 @@ Execution budget: one owned task at a time; checkpoint after 45 minutes or two u
 <!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
 
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/tests/workflow/feature-dev-definition.test.ts:12` |
+| `packages/app/tests/workflow/feature-dev-definition.test.ts:133` |
+| `packages/app/tests/workflow/feature-dev-definition.test.ts:2` |
+| `packages/app/tests/workflow/feature-dev-definition.test.ts:31` |
+| `packages/app/tests/workflow/feature-dev-definition.test.ts:5` |
+| `packages/app/tests/workflow/feature-dev-definition.test.ts:59` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:117` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | config/workflows/feature-dev.yaml:90-124 — precheck onEnter resolves feature + roster via CLI JSON; rejects missing featureId/runId, unknown feature, non-array/empty roster, empty/duplicate WBS identities, unknown statuses, any backlog/wip/testing/blocked member; nothing auto-created. Tests: feature-dev-definition.test.ts R1 failure-path executions (dispatch/model-call counters zero on failure). |
+| R2 | MET | feature-dev.yaml:98/133 frozen sort |
+| R3 | MET | feature-dev.yaml:171-198 — feature check "$featureId" --as done --json invoked exactly once in feature-verify onEnter; captured at .spur/run/<runId>-feature-dev-verify.json + atomic tmp->mv .status (PASS = exit 0 && nonempty array && all pass===true); guards :310-316/:334-338 read ONLY captured .status. No --strict, no whole-corpus scan. Tests: exactly-one-invocation on failure; malformed evidence fails closed; advisory warnings alone do not fail. |
+| R4 | MET | feature-dev.yaml:1-12/66-84 brainstorm/plan states and edges deleted (runall dispatch keeps pinned executor role per ADR-043); version 1->2 (:26); integration-review collected-HEAD policy unchanged; no new flag/noun. Docs same-change: docs/04_DESIGN.md + docs/design/essential-workflow-checks.md; version pins updated in wrapup-pipeline.test.ts. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 ### References
 - docs/plans/2026-09-06-workflow-conflict-audit.md — F-03.
 - docs/00_ADR.md — ADR-022, ADR-043, ADR-107 Option B, ADR-108.
@@ -93,3 +114,6 @@ Execution budget: one owned task at a time; checkpoint after 45 minutes or two u
 - config/workflows/feature-dev.yaml; packages/app/src/workflow/actions/file-read-into-var.ts.
 - Task 0770 (delivered obligation); task 0784 (downstream checkpoint cleanup).
 ### History
+- 2026-09-06T19:36:57.828Z todo → wip (system)
+- 2026-09-06T19:54:31.773Z wip → testing (system)
+- 2026-09-06T19:54:32.981Z testing → done (system)
