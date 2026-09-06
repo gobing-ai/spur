@@ -1626,7 +1626,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
 
                         if (callRows.length > 0) {
                             const totalSampleTokens = callRows.reduce(
-                                (acc, r) => acc + r.inputTokens + r.outputTokens,
+                                (acc, r) => acc + (r.inputTokens ?? 0) + (r.outputTokens ?? 0),
                                 0,
                             );
                             avgTokens = Math.max(1, Math.round(totalSampleTokens / callRows.length));
@@ -1634,7 +1634,10 @@ export class LiveHistoryBoardService implements HistoryBoardService {
 
                         repeatedCalls = callRows.map((row) => {
                             const category = toolCategory(row.toolName);
-                            const billedTokens = row.inputTokens + row.outputTokens;
+                            const freshInputTokens = row.inputTokens ?? 0;
+                            const cacheReadTokens = row.cacheReadTokens ?? 0;
+                            const outputTokens = row.outputTokens ?? 0;
+                            const billedTokens = freshInputTokens + outputTokens;
                             return {
                                 seq: row.toolSeq,
                                 toolSeq: row.toolSeq,
@@ -1642,22 +1645,22 @@ export class LiveHistoryBoardService implements HistoryBoardService {
                                 toolName: row.toolName,
                                 category,
                                 status: row.status === 'ok' ? 'ok' : row.status === 'error' ? 'error' : 'unknown',
-                                durationMs: row.durationMs,
+                                durationMs: row.durationMs ?? null,
                                 durationSource: row.durationMs !== null ? 'measured' : 'unmeasured',
-                                resultBytes: row.resultBytes,
-                                argsRaw: row.argsRaw,
-                                argsDigest: row.argsDigest,
-                                errorText: row.errorText,
-                                callId: row.callId,
+                                resultBytes: row.resultBytes ?? null,
+                                argsRaw: row.argsRaw ?? null,
+                                argsDigest: row.argsDigest ?? null,
+                                errorText: row.errorText ?? null,
+                                callId: row.callId ?? null,
                                 messageHash: row.messageHash,
                                 sessionId: row.sessionId,
                                 source: row.source,
-                                model: row.model,
+                                model: row.model ?? null,
                                 tokens: {
                                     billedTokens,
-                                    freshInputTokens: row.inputTokens,
-                                    cacheReadTokens: row.cacheReadTokens,
-                                    outputTokens: row.outputTokens,
+                                    freshInputTokens,
+                                    cacheReadTokens,
+                                    outputTokens,
                                     cacheSavedTokens: 0,
                                 },
                             };
