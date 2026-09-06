@@ -332,3 +332,271 @@ export async function enqueueCoalesced(db: DbAdapter, spec: CoalescedEnqueueSpec
     }
     return { status: 'enqueued', jobId: fallback.id, payload: spec.payload };
 }
+
+/** Specification for querying queue jobs with pagination and filtering. */
+export interface QueueJobQuerySpec {
+    status?: 'pending' | 'processing' | 'completed' | 'failed';
+    since?: string | number;
+    limit?: number;
+    offset?: number;
+}
+
+/** Normalized queue job representation for queries. */
+export interface QueueJobRecord {
+    id: string;
+    type: string;
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    attempts: number;
+    maxRetries: number;
+    queuedAt: string;
+    startedAt: string | null;
+    endedAt: string | null;
+    durationMs: number | null;
+    lastError: string | null;
+    payload: Record<string, unknown> | null;
+}
+
+/** Result shape for queryQueueJobs. */
+export interface QueueJobQueryResult {
+    jobs: QueueJobRecord[];
+    total: number;
+    hasMore: boolean;
+    countsByStatus: {
+        all: number;
+        pending: number;
+        processing: number;
+        completed: number;
+        failed: number;
+    };
+}
+
+/**
+ * Query queue_jobs rows with status/since filtering and newest-first ordering.
+ */
+export async function queryQueueJobs(db: DbAdapter, spec: QueueJobQuerySpec = {}): Promise<QueueJobQueryResult> {
+    const limit = Math.min(500, Math.max(1, spec.limit ?? 100));
+    const offset = Math.max(0, spec.offset ?? 0);
+    let sinceMs: number | undefined;
+    if (spec.since !== undefined) {
+        sinceMs = typeof spec.since === 'number' ? spec.since : Date.parse(spec.since);
+        if (Number.isNaN(sinceMs)) sinceMs = undefined;
+    }
+
+    try {
+        // 1. countsByStatus over since window (ignoring status filter)
+        const countConditions: string[] = ['1=1'];
+        const countParams: unknown[] = [];
+        if (sinceMs !== undefined) {
+            countConditions.push('created_at >= ?');
+            countParams.push(sinceMs);
+        }
+
+        const countRows = await db.queryAll<{ status: string; cnt: number }>(
+            `SELECT status, COUNT(*) AS cnt
+             FROM queue_jobs
+             WHERE ${countConditions.join(' AND ')}
+             GROUP BY status`,
+            ...countParams,
+        );
+
+        const countsByStatus = {
+            all: 0,
+            pending: 0,
+            processing: 0,
+            completed: 0,
+            failed: 0,
+        };
+
+        for (const row of countRows) {
+            const count = Number(row.cnt);
+            countsByStatus.all += count;
+            if (row.status === 'pending') countsByStatus.pending = count;
+            else if (row.status === 'processing') countsByStatus.processing = count;
+            else if (row.status === 'completed') countsByStatus.completed = count;
+            else if (row.status === 'failed') countsByStatus.failed = count;
+        }
+
+        // 2. Query jobs with status and since filter, limit + 1 probe
+        const queryConditions: string[] = ['1=1'];
+        const queryParams: unknown[] = [];
+
+        if (spec.status !== undefined) {
+            queryConditions.push('status = ?');
+            queryParams.push(spec.status);
+        }
+        if (sinceMs !== undefined) {
+            queryConditions.push('created_at >= ?');
+            queryParams.push(sinceMs);
+        }
+
+        queryParams.push(limit + 1);
+        queryParams.push(offset);
+
+        const rows = await db.queryAll<{
+            id: string;
+            type: string;
+            payload: string | null;
+            status: 'pending' | 'processing' | 'completed' | 'failed';
+            attempts: number;
+            max_retries: number;
+            created_at: number;
+            updated_at: number;
+            next_retry_at: number | null;
+            last_error: string | null;
+            processing_at: number | null;
+            expires_at: number | null;
+        }>(
+            `SELECT id, type, payload, status, attempts, max_retries,
+                    created_at, updated_at, next_retry_at, last_error,
+                    processing_at, expires_at
+             FROM queue_jobs
+             WHERE ${queryConditions.join(' AND ')}
+             ORDER BY created_at DESC, id DESC
+             LIMIT ? OFFSET ?`,
+            ...queryParams,
+        );
+
+        const hasMore = rows.length > limit;
+        const pageRows = hasMore ? rows.slice(0, limit) : rows;
+
+        const jobs: QueueJobRecord[] = pageRows.map((r) => {
+            const queuedAt = new Date(r.created_at).toISOString();
+            const startedAt = r.processing_at ? new Date(r.processing_at).toISOString() : null;
+            const endedAt =
+                r.status === 'completed' || r.status === 'failed' ? new Date(r.updated_at).toISOString() : null;
+            const durationMs = startedAt && endedAt && r.processing_at != null ? r.updated_at - r.processing_at : null;
+
+            let parsedPayload: Record<string, unknown> | null = null;
+            if (r.payload) {
+                try {
+                    const parsed = JSON.parse(r.payload);
+                    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                        parsedPayload = parsed as Record<string, unknown>;
+                    }
+                } catch {
+                    parsedPayload = null;
+                }
+            }
+
+            return {
+                id: r.id,
+                type: r.type,
+                status: r.status,
+                attempts: r.attempts,
+                maxRetries: r.max_retries,
+                queuedAt,
+                startedAt,
+                endedAt,
+                durationMs,
+                lastError: r.last_error ?? null,
+                payload: parsedPayload,
+            };
+        });
+
+        const total = spec.status !== undefined ? (countsByStatus[spec.status] ?? 0) : countsByStatus.all;
+
+        return {
+            jobs,
+            total,
+            hasMore,
+            countsByStatus,
+        };
+    } catch (error) {
+        if (error instanceof Error && error.message.includes('no such table: queue_jobs')) {
+            return {
+                jobs: [],
+                total: 0,
+                hasMore: false,
+                countsByStatus: { all: 0, pending: 0, processing: 0, completed: 0, failed: 0 },
+            };
+        }
+        throw error;
+    }
+}
+
+/** Result shape for queueJobKpis. */
+export interface QueueJobKpisResult {
+    activeJobs: number;
+    completedJobs: number;
+    failedJobs: number;
+    successRatePct: number;
+    recentJobErrors: Array<{
+        id: string;
+        name: string;
+        occurredAt: string;
+        message: string;
+    }>;
+}
+
+/**
+ * Aggregate queue job KPIs and recent failed jobs across a time window.
+ */
+export async function queueJobKpis(db: DbAdapter, sinceMs: number, untilMs: number): Promise<QueueJobKpisResult> {
+    try {
+        const countsRows = await db.queryAll<{ status: string; cnt: number }>(
+            `SELECT status, COUNT(*) AS cnt
+             FROM queue_jobs
+             WHERE created_at >= ?1 AND created_at < ?2
+             GROUP BY status`,
+            sinceMs,
+            untilMs,
+        );
+
+        let pending = 0;
+        let processing = 0;
+        let completed = 0;
+        let failed = 0;
+        for (const row of countsRows) {
+            const count = Number(row.cnt);
+            if (row.status === 'pending') pending = count;
+            else if (row.status === 'processing') processing = count;
+            else if (row.status === 'completed') completed = count;
+            else if (row.status === 'failed') failed = count;
+        }
+
+        const activeJobs = pending + processing;
+        const totalTerminal = completed + failed;
+        const successRatePct = totalTerminal > 0 ? Math.round((completed / totalTerminal) * 100) : 0;
+
+        const errorRows = await db.queryAll<{
+            id: string;
+            type: string;
+            updated_at: number;
+            last_error: string | null;
+        }>(
+            `SELECT id, type, updated_at, last_error
+             FROM queue_jobs
+             WHERE status = 'failed' AND created_at >= ?1 AND created_at < ?2
+             ORDER BY updated_at DESC, id DESC
+             LIMIT 10`,
+            sinceMs,
+            untilMs,
+        );
+
+        const recentJobErrors = errorRows.map((r) => ({
+            id: r.id,
+            name: r.type,
+            occurredAt: new Date(r.updated_at).toISOString(),
+            message: r.last_error ?? 'Job failed with no error message',
+        }));
+
+        return {
+            activeJobs,
+            completedJobs: completed,
+            failedJobs: failed,
+            successRatePct,
+            recentJobErrors,
+        };
+    } catch (error) {
+        if (error instanceof Error && error.message.includes('no such table: queue_jobs')) {
+            return {
+                activeJobs: 0,
+                completedJobs: 0,
+                failedJobs: 0,
+                successRatePct: 0,
+                recentJobErrors: [],
+            };
+        }
+        throw error;
+    }
+}

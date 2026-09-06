@@ -36,6 +36,7 @@ export const contract = {
 export type SpurContract = typeof contract;
 export { featureCreateInputSchema, featureListResponseSchema, featureShowResponseSchema } from './feature';
 export * from './history';
+export * from './observability';
 // Shared transport envelope schemas (apiSuccessSchema / apiErrorSchema / pagination) —
 // public so the CLI can adopt them as its `--json-envelope` standard (ADR-091, task 0693).
 export * from './shared';

@@ -19,6 +19,12 @@ export {
     type PendingQueueJob,
     type QueueConsumer,
     type QueueConsumerConfig,
+    type QueueJobKpisResult,
+    type QueueJobQueryResult,
+    type QueueJobQuerySpec,
+    type QueueJobRecord,
+    queryQueueJobs,
+    queueJobKpis,
     type ServerQueueConsumer,
     updatePendingQueueJob,
 } from './db';

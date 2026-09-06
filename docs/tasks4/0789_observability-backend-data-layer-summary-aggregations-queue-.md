@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Observability backend data layer: summary aggregations, queue_jobs query, and schedule endpoints"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-06T21:42:07.700Z
-updated_at: "2026-09-06T22:00:38.847Z"
+updated_at: "2026-09-06T22:52:44.509Z"
 feature_id: J93
 priority: P2
 tags: ["observability", "server", "domain", "contracts"]
@@ -66,32 +66,32 @@ See `### Q&A` D4 for the frozen resolution. The satellite's `system_events (7d q
 
 ### Requirements
 
-- [ ] R1. `packages/contracts/src/observability.ts` exports Zod schemas **and** inferred types for
+- [x] R1. `packages/contracts/src/observability.ts` exports Zod schemas **and** inferred types for
       `ObservabilitySummaryResponse`, `QueueJobRow`, `QueueJobListResponse`,
       `SchedulerScheduleRow`, and `SchedulerSchedulesResponse`, re-exported from
       `packages/contracts/src/index.ts` via `export * from './observability'`. These are **DTO
       schemas only** — they are NOT added to the oRPC `contract` object (J93 routes are Hono).
-- [ ] R2. `SystemEventDao.eventSummary(spec)` (`packages/domain/src/dao/system-event-dao.ts`)
+- [x] R2. `SystemEventDao.eventSummary(spec)` (`packages/domain/src/dao/system-event-dao.ts`)
       returns KPI totals, time-bucketed volume by prefix, per-bucket severity counts, and top event
       types, computed entirely in SQL over `occurred_at` / `event_name` with severity read via
       `json_extract(payload_json, '$.presentation.severity')`. It returns **no raw event rows**.
-- [ ] R3. `queryQueueJobs(adapter, spec)` in `packages/domain/src/db.ts` returns newest-first
+- [x] R3. `queryQueueJobs(adapter, spec)` in `packages/domain/src/db.ts` returns newest-first
       `queue_jobs` rows filtered by `status` and `since`, with `queuedAt` / `startedAt` / `endedAt`
       as ISO strings and `durationMs` computed in the query layer, plus `total`, `hasMore`, and
       `countsByStatus` for all five buckets (`all`, `pending`, `processing`, `completed`, `failed`).
-- [ ] R4. `GET /api/observability/summary?since=&until=&bucket=` returns 200 with an
+- [x] R4. `GET /api/observability/summary?since=&until=&bucket=` returns 200 with an
       `ObservabilitySummaryResponse` body; malformed `since`/`until` return 400 with a
       `{ error, code }` body, matching the `UNKNOWN_PREFIX` / `MALFORMED_CURSOR` style already used
       at `apps/server/src/modules/events/index.ts:285,300`.
-- [ ] R5. `GET /api/jobs?status=&since=&limit=&offset=` returns a `QueueJobListResponse`; an
+- [x] R5. `GET /api/jobs?status=&since=&limit=&offset=` returns a `QueueJobListResponse`; an
       unknown `status` value returns 400 rather than silently dropping the filter. `limit` is
       clamped (default 100, max 500). The existing `/api/jobs/stats` route keeps its response shape.
-- [ ] R6. `GET /api/jobs/schedules` returns a `SchedulerSchedulesResponse` listing every registered
+- [x] R6. `GET /api/jobs/schedules` returns a `SchedulerSchedulesResponse` listing every registered
       entry (both built-ins plus each `bootstrap.scheduler.jobs` entry) with `name`, `cron`,
       human-readable `cadence`, `nextFireAt`, `lastFiredAt`, and `lastStatus` derived from the newest
       matching `queue_jobs` row. `nextFireAt` is exact for interval entries; cron entries follow the
       D4 decision below.
-- [ ] R7. Domain and server tests cover: summary aggregation over seeded events (including non-v2
+- [x] R7. Domain and server tests cover: summary aggregation over seeded events (including non-v2
       rows with no extractable severity), `status`/`since`/pagination filtering, timing computation
       for each lifecycle state, the schedules snapshot with zero and with configured jobs, and the
       400 branches in R4/R5. Both `bun run test` and `bun run test-cf` stay green.
@@ -338,17 +338,66 @@ registration to the newest matching `queue_jobs` row by `type` for `lastFiredAt`
    Worker build.
 
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `apps/server/src/modules/jobs/index.ts:1` |
+| `apps/server/src/modules/jobs/index.ts:16` |
+| `apps/server/src/modules/jobs/index.ts:32` |
+| `apps/server/src/modules/jobs/index.ts:6` |
+| `apps/server/src/modules/observability/index.ts:2` |
+| `apps/server/src/modules/observability/index.ts:230` |
+| `apps/server/src/modules/observability/index.ts:343` |
+| `apps/server/src/modules/observability/index.ts:349` |
+| `apps/server/src/modules/observability/index.ts:361` |
+| `apps/server/src/serve.ts:142` |
+| `apps/server/src/serve.ts:168` |
+| `apps/server/src/serve.ts:179` |
+| `apps/server/src/serve.ts:196` |
+| `apps/server/src/serve.ts:203` |
+| `apps/server/src/serve.ts:34` |
+| `apps/server/tests/modules/jobs/index.test.ts:84` |
+| `apps/server/tests/modules/observability/index.test.ts:455` |
+| `packages/contracts/src/index.ts:39` |
+| `packages/domain/src/dao/index.ts:27` |
+| `packages/domain/src/dao/system-event-dao.ts:157` |
+| `packages/domain/src/dao/system-event-dao.ts:508` |
+| `packages/domain/src/db.ts:335` |
+| `packages/domain/src/index.ts:22` |
+| `packages/domain/tests/dao/system-event-dao.test.ts:1185` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/contracts/src/observability.ts:1-120; packages/contracts/src/index.ts:18; packages/contracts/tests/observability.test.ts:1-143 |
+| R2 | MET | packages/domain/src/dao/system-event-dao.ts:446-608; packages/domain/tests/dao/system-event-dao.test.ts:1210-1282 |
+| R3 | MET | packages/domain/src/db.ts:413-529; packages/domain/tests/dao/queue-jobs-query.test.ts:1-177 |
+| R4 | MET | apps/server/src/modules/observability/index.ts:252-297; apps/server/tests/modules/observability/index.test.ts:153-228 |
+| R5 | MET | apps/server/src/modules/jobs/index.ts:22-68; apps/server/tests/modules/jobs/index.test.ts:109-143 |
+| R6 | MET | apps/server/src/modules/jobs/schedule-registry.ts:1-74; apps/server/src/serve.ts:147-190; apps/server/src/modules/jobs/index.ts:70-123; apps/server/tests/modules/jobs/index.test.ts:193-235 |
+| R7 | MET | All unit tests pass; bun run test-cf passed; bun run lint passed clean with zero warnings |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R4 — Server-side observability summary aggregation endpoint | MET | test | apps/server/tests/modules/observability/index.test.ts:153-228 |
+| R6 — Server-side jobs query endpoint with timing calculations and status filtering | MET | test | apps/server/tests/modules/jobs/index.test.ts:109-143 |
+| R7 — Active cron schedule visibility and next-fire calculation | MET | test | apps/server/tests/modules/jobs/index.test.ts:193-235 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | lint | — | biome check . --error-on-warnings && bun run typecheck |
+| P4 | unit-tests | — | contracts, domain, server tests passed |
+| P4 | cf-tests | — | bun run test-cf passed |
 ### References
 
 - Parent feature: `docs/features/J93_observability-module-refactor-summary-tab-4h-range-default-queue-jobs-table-and-schedule-tracing.md` (scenarios R4, R6, R7)
@@ -367,3 +416,6 @@ registration to the newest matching `queue_jobs` row by `type` for `lastFiredAt`
 - ADR-021 (thin transports), ADR-005
 
 ### History
+- 2026-09-06T22:52:09.144Z todo → wip (system)
+- 2026-09-06T22:52:22.423Z wip → testing (system)
+- 2026-09-06T22:52:44.509Z testing → done (system)

@@ -29,6 +29,11 @@ export {
 } from './run-session-dao';
 export {
     type CreateSystemEventInput,
+    type EventSummaryRecentError,
+    type EventSummaryResult,
+    type EventSummarySpec,
+    type EventSummaryTopType,
+    type EventSummaryVolumeBucket,
     ROUTING_SUMMARY_DEFAULT_WINDOW_MS,
     type RoutingSummaryPair,
     type RoutingSummaryQuery,

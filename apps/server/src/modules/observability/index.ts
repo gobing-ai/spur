@@ -1,5 +1,6 @@
 import type { ToolUseEvent } from '@gobing-ai/spur-app';
-import { type RoutingSummaryQuery, roleTokenSummary } from '@gobing-ai/spur-domain';
+import type { ObservabilitySummaryResponse } from '@gobing-ai/spur-contracts';
+import { queueJobKpis, type RoutingSummaryQuery, roleTokenSummary } from '@gobing-ai/spur-domain';
 import type { Context, Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import { enqueueSseFrame, sendSseKeepalive } from '../sse/stream-helpers';
@@ -226,13 +227,126 @@ function handleRoutingSummary(ctx: ServerContext) {
     };
 }
 
+function handleObservabilitySummary(ctx: ServerContext) {
+    return async (c: Context) => {
+        try {
+            const sinceParam = c.req.query('since');
+            const untilParam = c.req.query('until');
+            const bucketParam = c.req.query('bucket');
+
+            let untilMs = Date.now();
+            if (untilParam !== undefined && untilParam !== '') {
+                untilMs = Date.parse(untilParam);
+                if (Number.isNaN(untilMs)) {
+                    return c.json(
+                        {
+                            error: `malformed until: "${untilParam}" is not a valid ISO timestamp`,
+                            code: 'MALFORMED_TIMESTAMP',
+                        },
+                        400,
+                    );
+                }
+            }
+
+            let sinceMs = untilMs - 4 * 60 * 60_000;
+            if (sinceParam !== undefined && sinceParam !== '') {
+                sinceMs = Date.parse(sinceParam);
+                if (Number.isNaN(sinceMs)) {
+                    return c.json(
+                        {
+                            error: `malformed since: "${sinceParam}" is not a valid ISO timestamp`,
+                            code: 'MALFORMED_TIMESTAMP',
+                        },
+                        400,
+                    );
+                }
+            }
+
+            if (untilMs < sinceMs) {
+                return c.json(
+                    {
+                        error: 'until timestamp must not precede since timestamp',
+                        code: 'MALFORMED_RANGE',
+                    },
+                    400,
+                );
+            }
+
+            let bucketMs: number | undefined;
+            if (bucketParam !== undefined && bucketParam !== '') {
+                const parsed = Number(bucketParam);
+                if (!Number.isNaN(parsed) && parsed > 0) {
+                    bucketMs = parsed;
+                }
+            }
+
+            const since = new Date(sinceMs).toISOString();
+            const until = new Date(untilMs).toISOString();
+
+            const dao = await ctx.systemEventDao();
+            const db = await ctx.getDb();
+
+            const [eventSummary, jobKpis] = await Promise.all([
+                dao.eventSummary({ since, until, bucketMs }),
+                queueJobKpis(db, sinceMs, untilMs),
+            ]);
+
+            const combinedErrors = [
+                ...eventSummary.recentErrors.map((e) => ({
+                    id: e.id,
+                    source: 'event' as const,
+                    name: e.name,
+                    occurredAt: e.occurredAt,
+                    message: e.message,
+                    ...(e.refId ? { refId: e.refId } : {}),
+                })),
+                ...jobKpis.recentJobErrors.map((j) => ({
+                    id: j.id,
+                    source: 'job' as const,
+                    name: j.name,
+                    occurredAt: j.occurredAt,
+                    message: j.message,
+                })),
+            ]
+                .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))
+                .slice(0, 10);
+
+            const payload: ObservabilitySummaryResponse = {
+                window: {
+                    since,
+                    until,
+                    range: c.req.query('range') ?? 'custom',
+                },
+                kpis: {
+                    totalEvents: eventSummary.totalEvents,
+                    activeJobs: jobKpis.activeJobs,
+                    completedJobs: jobKpis.completedJobs,
+                    failedJobs: jobKpis.failedJobs,
+                    successRatePct: jobKpis.successRatePct,
+                    errorEventCount: eventSummary.errorEventCount,
+                    warningEventCount: eventSummary.warningEventCount,
+                },
+                eventVolumeBuckets: eventSummary.eventVolumeBuckets,
+                topEventTypes: eventSummary.topEventTypes,
+                recentErrors: combinedErrors,
+            };
+
+            return c.json(payload);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return c.json({ error: message }, 500);
+        }
+    };
+}
+
 /**
- * Observability HTTP surfaces (tasks 0243, 0245–0247, 0552).
+ * Observability HTTP surfaces (tasks 0243, 0245–0247, 0552, 0789).
  *
  * - GET /api/observability/processes — serve-rooted process inventory
  * - GET /api/observability/tool-use — token-ledger tail (+ cursor `before`)
  * - GET /api/observability/tool-use/stream — SSE live appends (fs.watch)
  * - GET /api/observability/routing-summary — routing aggregate + per-role token totals (0552)
+ * - GET /api/observability/summary — summary aggregations, KPIs, volume buckets (0789)
  */
 export const observabilityModule: ServerModule = {
     name: 'observability',
@@ -244,5 +358,6 @@ export const observabilityModule: ServerModule = {
         app.get('/api/observability/tool-use', handleToolUseGet(ctx));
         app.get('/api/observability/tool-use/stream', handleToolUseStream(ctx));
         app.get('/api/observability/routing-summary', handleRoutingSummary(ctx));
+        app.get('/api/observability/summary', handleObservabilitySummary(ctx));
     },
 };

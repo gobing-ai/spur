@@ -1182,4 +1182,102 @@ describe('SystemEventDao.routingSummary (task 0546)', () => {
 
         adapter.close();
     });
+
+    test('eventSummary computes KPI totals, dense buckets, unknown severity, and top events', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        const since = '2026-09-06T12:00:00.000Z';
+        const until = '2026-09-06T13:00:00.000Z';
+
+        // 1. Task event with error severity
+        await dao.insert({
+            id: 'sev-1',
+            event_name: 'task.failed',
+            occurred_at: '2026-09-06T12:05:00.000Z',
+            payload_json: JSON.stringify({
+                presentation: { severity: 'error', summary: 'Task failed in precheck' },
+            }),
+            run_id: 'run-001',
+        });
+
+        // 2. Agent event with info severity
+        await dao.insert({
+            id: 'sev-2',
+            event_name: 'agent.invoke.start',
+            occurred_at: '2026-09-06T12:15:00.000Z',
+            payload_json: JSON.stringify({
+                presentation: { severity: 'info', summary: 'Agent started' },
+            }),
+            run_id: 'run-001',
+        });
+
+        // 3. Queue event with warning severity
+        await dao.insert({
+            id: 'sev-3',
+            event_name: 'queue.job.retry',
+            occurred_at: '2026-09-06T12:25:00.000Z',
+            payload_json: JSON.stringify({
+                presentation: { severity: 'warning', summary: 'Job retrying' },
+            }),
+            run_id: 'job-001',
+        });
+
+        // 4. Legacy / non-v2 row with no presentation.severity
+        await dao.insert({
+            id: 'sev-4',
+            event_name: 'system.startup',
+            occurred_at: '2026-09-06T12:35:00.000Z',
+            payload_json: JSON.stringify({ legacy: true }),
+        });
+
+        const summary = await dao.eventSummary({ since, until, bucketMs: 900_000 }); // 15-min buckets -> 4 buckets
+
+        expect(summary.totalEvents).toBe(4);
+        expect(summary.errorEventCount).toBe(1);
+        expect(summary.warningEventCount).toBe(1);
+
+        // Dense buckets: 4 buckets of 15m spanning 12:00 to 13:00
+        expect(summary.eventVolumeBuckets).toHaveLength(4);
+        expect(summary.eventVolumeBuckets[0]?.total).toBe(1); // 12:05 task.failed
+        expect(summary.eventVolumeBuckets[0]?.byPrefix.task).toBe(1);
+        expect(summary.eventVolumeBuckets[0]?.bySeverity.error).toBe(1);
+
+        expect(summary.eventVolumeBuckets[1]?.total).toBe(2); // 12:15 agent.invoke.start + 12:25 queue.job.retry
+        expect(summary.eventVolumeBuckets[1]?.byPrefix.agent).toBe(1);
+        expect(summary.eventVolumeBuckets[1]?.byPrefix.queue).toBe(1);
+        expect(summary.eventVolumeBuckets[1]?.bySeverity.info).toBe(1);
+        expect(summary.eventVolumeBuckets[1]?.bySeverity.warning).toBe(1);
+
+        expect(summary.eventVolumeBuckets[2]?.total).toBe(1); // 12:35 system.startup (unknown sev)
+        expect(summary.eventVolumeBuckets[2]?.byPrefix.system).toBe(1);
+        expect(summary.eventVolumeBuckets[2]?.bySeverity.unknown).toBe(1);
+
+        expect(summary.eventVolumeBuckets[3]?.total).toBe(0); // 12:45-13:00 empty
+
+        // Top event types
+        expect(summary.topEventTypes).toHaveLength(4);
+        expect(summary.topEventTypes.map((t) => t.name)).toContain('task.failed');
+        expect(summary.topEventTypes.find((t) => t.name === 'task.failed')?.prefix).toBe('task');
+
+        // Recent errors
+        expect(summary.recentErrors).toHaveLength(1);
+        expect(summary.recentErrors[0]?.name).toBe('task.failed');
+        expect(summary.recentErrors[0]?.message).toBe('Task failed in precheck');
+        expect(summary.recentErrors[0]?.refId).toBe('run-001');
+
+        // Empty window returns zeros not nulls
+        const emptySummary = await dao.eventSummary({
+            since: '2025-01-01T00:00:00.000Z',
+            until: '2025-01-01T01:00:00.000Z',
+        });
+        expect(emptySummary.totalEvents).toBe(0);
+        expect(emptySummary.errorEventCount).toBe(0);
+        expect(emptySummary.warningEventCount).toBe(0);
+        expect(emptySummary.recentErrors).toEqual([]);
+        expect(emptySummary.topEventTypes).toEqual([]);
+
+        adapter.close();
+    });
 });

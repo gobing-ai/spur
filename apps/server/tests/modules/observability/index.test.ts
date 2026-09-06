@@ -452,4 +452,108 @@ describe('observability routing-summary (task 0552)', () => {
         const body = (await res.json()) as { error?: string };
         expect(body.error).toContain('ledger unavailable');
     });
+
+    describe('GET /api/observability/summary (task 0789)', () => {
+        test('returns 200 with complete summary payload and validates schema', async () => {
+            const app = new Hono();
+            const ctx = {
+                systemEventDao: async () => ({
+                    eventSummary: async (spec: { since: string; until: string }) => ({
+                        window: { since: spec.since, until: spec.until },
+                        totalEvents: 10,
+                        errorEventCount: 2,
+                        warningEventCount: 1,
+                        eventVolumeBuckets: [
+                            {
+                                timestamp: spec.since,
+                                total: 5,
+                                byPrefix: { task: 5 },
+                                bySeverity: { info: 3, warning: 1, error: 1, unknown: 0 },
+                            },
+                        ],
+                        topEventTypes: [{ name: 'task.updated', prefix: 'task', count: 5, latestAt: spec.since }],
+                        recentErrors: [
+                            { id: 'err-1', name: 'task.failed', occurredAt: spec.since, message: 'Gate red' },
+                        ],
+                    }),
+                }),
+                getDb: async () => ({
+                    queryAll: async () => [],
+                }),
+            } as unknown as ServerContext;
+            observabilityModule.mount(app, ctx);
+
+            const res = await app.request(
+                '/api/observability/summary?since=2026-09-06T12:00:00.000Z&until=2026-09-06T16:00:00.000Z',
+            );
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as {
+                kpis: { totalEvents: number; errorEventCount: number };
+                recentErrors: unknown[];
+            };
+            expect(body.kpis.totalEvents).toBe(10);
+            expect(body.kpis.errorEventCount).toBe(2);
+            expect(body.recentErrors).toHaveLength(1);
+        });
+
+        test('rejects malformed since or until with 400', async () => {
+            const app = new Hono();
+            const ctx = {
+                systemEventDao: async () => ({}),
+                getDb: async () => ({}),
+            } as unknown as ServerContext;
+            observabilityModule.mount(app, ctx);
+
+            const resSince = await app.request('/api/observability/summary?since=not-a-date');
+            expect(resSince.status).toBe(400);
+            const errSince = (await resSince.json()) as { error: string; code: string };
+            expect(errSince.code).toBe('MALFORMED_TIMESTAMP');
+
+            const resUntil = await app.request(
+                '/api/observability/summary?since=2026-09-06T12:00:00.000Z&until=invalid',
+            );
+            expect(resUntil.status).toBe(400);
+            const errUntil = (await resUntil.json()) as { error: string; code: string };
+            expect(errUntil.code).toBe('MALFORMED_TIMESTAMP');
+
+            const resRange = await app.request(
+                '/api/observability/summary?since=2026-09-06T16:00:00.000Z&until=2026-09-06T12:00:00.000Z',
+            );
+            expect(resRange.status).toBe(400);
+            const errRange = (await resRange.json()) as { error: string; code: string };
+            expect(errRange.code).toBe('MALFORMED_RANGE');
+        });
+
+        test('window with no data returns zeroed payload, not 500', async () => {
+            const app = new Hono();
+            const ctx = {
+                systemEventDao: async () => ({
+                    eventSummary: async (spec: { since: string; until: string }) => ({
+                        window: { since: spec.since, until: spec.until },
+                        totalEvents: 0,
+                        errorEventCount: 0,
+                        warningEventCount: 0,
+                        eventVolumeBuckets: [],
+                        topEventTypes: [],
+                        recentErrors: [],
+                    }),
+                }),
+                getDb: async () => ({
+                    queryAll: async () => [],
+                }),
+            } as unknown as ServerContext;
+            observabilityModule.mount(app, ctx);
+
+            const res = await app.request(
+                '/api/observability/summary?since=2026-09-06T12:00:00.000Z&until=2026-09-06T16:00:00.000Z',
+            );
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as {
+                kpis: { totalEvents: number; activeJobs: number; successRatePct: number };
+            };
+            expect(body.kpis.totalEvents).toBe(0);
+            expect(body.kpis.activeJobs).toBe(0);
+            expect(body.kpis.successRatePct).toBe(0);
+        });
+    });
 });

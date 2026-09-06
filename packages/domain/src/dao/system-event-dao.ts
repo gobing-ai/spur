@@ -154,6 +154,44 @@ export interface RoutingSummaryQuery {
  */
 export const ROUTING_SUMMARY_DEFAULT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
+export interface EventSummarySpec {
+    since: string;
+    until?: string;
+    bucketMs?: number;
+}
+
+export interface EventSummaryVolumeBucket {
+    timestamp: string;
+    total: number;
+    byPrefix: Record<string, number>;
+    bySeverity: { info: number; warning: number; error: number; unknown: number };
+}
+
+export interface EventSummaryTopType {
+    name: string;
+    prefix: string;
+    count: number;
+    latestAt: string;
+}
+
+export interface EventSummaryRecentError {
+    id: string;
+    name: string;
+    occurredAt: string;
+    message: string;
+    refId?: string;
+}
+
+export interface EventSummaryResult {
+    window: { since: string; until: string };
+    totalEvents: number;
+    errorEventCount: number;
+    warningEventCount: number;
+    eventVolumeBuckets: EventSummaryVolumeBucket[];
+    topEventTypes: EventSummaryTopType[];
+    recentErrors: EventSummaryRecentError[];
+}
+
 /** Column list every {@link SystemEventDao.query} projection returns, in row order. */
 const SYSTEM_EVENT_COLUMNS =
     'id, event_name, occurred_at, actor, payload_json, run_id, entity_kind, entity_id, sequence';
@@ -462,6 +500,203 @@ export class SystemEventDao {
         } catch (error) {
             if (error instanceof Error && error.message.includes('no such table: system_events')) {
                 return { window: { since, until }, pairs: [] };
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Compute aggregated KPI totals, time-bucketed event volume, top event types,
+     * and recent event errors across a time window.
+     *
+     * Computed entirely in SQL over occurred_at / event_name with severity extracted
+     * via json_extract(payload_json, '$.presentation.severity').
+     */
+    async eventSummary(spec: EventSummarySpec): Promise<EventSummaryResult> {
+        const until = spec.until ?? new Date().toISOString();
+        const since = spec.since;
+        const sinceMs = Date.parse(since);
+        const untilMs = Date.parse(until);
+
+        if (Number.isNaN(sinceMs) || Number.isNaN(untilMs) || untilMs <= sinceMs) {
+            return {
+                window: { since, until },
+                totalEvents: 0,
+                errorEventCount: 0,
+                warningEventCount: 0,
+                eventVolumeBuckets: [],
+                topEventTypes: [],
+                recentErrors: [],
+            };
+        }
+
+        const width = untilMs - sinceMs;
+        let bucketMs =
+            spec.bucketMs && spec.bucketMs > 0
+                ? spec.bucketMs
+                : width <= 3_600_000
+                  ? 60_000
+                  : width <= 21_600_000
+                    ? 300_000
+                    : width <= 86_400_000
+                      ? 900_000
+                      : width <= 604_800_000
+                        ? 3_600_000
+                        : 86_400_000;
+
+        while (Math.ceil((untilMs - sinceMs) / bucketMs) > 240) {
+            bucketMs *= 2;
+        }
+
+        const bucketCount = Math.max(1, Math.ceil((untilMs - sinceMs) / bucketMs));
+        const buckets: EventSummaryVolumeBucket[] = [];
+        for (let i = 0; i < bucketCount; i++) {
+            buckets.push({
+                timestamp: new Date(sinceMs + i * bucketMs).toISOString(),
+                total: 0,
+                byPrefix: {},
+                bySeverity: { info: 0, warning: 0, error: 0, unknown: 0 },
+            });
+        }
+
+        try {
+            // 1. KPI and severity totals
+            const totalsRow = await this.db.queryFirst<{
+                total: number;
+                error_count: number | null;
+                warning_count: number | null;
+            }>(
+                `SELECT
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN sev = 'error' THEN 1 ELSE 0 END) AS error_count,
+                    SUM(CASE WHEN sev = 'warning' THEN 1 ELSE 0 END) AS warning_count
+                FROM (
+                    SELECT COALESCE(json_extract(payload_json, '$.presentation.severity'), 'unknown') AS sev
+                    FROM system_events
+                    WHERE occurred_at >= ?1 AND occurred_at < ?2
+                )`,
+                since,
+                until,
+            );
+
+            // 2. Volume buckets
+            const bucketRows = await this.db.queryAll<{
+                bucket_idx: number;
+                prefix: string;
+                sev: string;
+                cnt: number;
+            }>(
+                `SELECT
+                    CAST((strftime('%s', occurred_at) * 1000 - ?1) / ?2 AS INTEGER) AS bucket_idx,
+                    CASE WHEN instr(event_name, '.') > 0 THEN substr(event_name, 1, instr(event_name, '.') - 1) ELSE event_name END AS prefix,
+                    COALESCE(json_extract(payload_json, '$.presentation.severity'), 'unknown') AS sev,
+                    COUNT(*) AS cnt
+                FROM system_events
+                WHERE occurred_at >= ?3 AND occurred_at < ?4
+                GROUP BY bucket_idx, prefix, sev`,
+                sinceMs,
+                bucketMs,
+                since,
+                until,
+            );
+
+            for (const row of bucketRows) {
+                const idx = Number(row.bucket_idx);
+                if (idx >= 0 && idx < buckets.length) {
+                    const b = buckets[idx];
+                    if (b !== undefined) {
+                        const cnt = Number(row.cnt);
+                        b.total += cnt;
+                        b.byPrefix[row.prefix] = (b.byPrefix[row.prefix] ?? 0) + cnt;
+                        if (row.sev === 'info' || row.sev === 'warning' || row.sev === 'error') {
+                            b.bySeverity[row.sev] += cnt;
+                        } else {
+                            b.bySeverity.unknown += cnt;
+                        }
+                    }
+                }
+            }
+
+            // 3. Top event types
+            const topRows = await this.db.queryAll<{
+                name: string;
+                prefix: string;
+                count: number;
+                latest_at: string;
+            }>(
+                `SELECT
+                    event_name AS name,
+                    CASE WHEN instr(event_name, '.') > 0 THEN substr(event_name, 1, instr(event_name, '.') - 1) ELSE event_name END AS prefix,
+                    COUNT(*) AS count,
+                    MAX(occurred_at) AS latest_at
+                FROM system_events
+                WHERE occurred_at >= ?1 AND occurred_at < ?2
+                GROUP BY event_name
+                ORDER BY count DESC, event_name ASC
+                LIMIT 10`,
+                since,
+                until,
+            );
+
+            // 4. Recent event errors
+            const recentRows = await this.db.queryAll<{
+                id: string;
+                name: string;
+                occurred_at: string;
+                message: string | null;
+                ref_id: string | null;
+            }>(
+                `SELECT
+                    id,
+                    event_name AS name,
+                    occurred_at,
+                    COALESCE(
+                        json_extract(payload_json, '$.presentation.summary'),
+                        json_extract(payload_json, '$.presentation.title'),
+                        json_extract(payload_json, '$.error'),
+                        event_name
+                    ) AS message,
+                    run_id AS ref_id
+                FROM system_events
+                WHERE occurred_at >= ?1 AND occurred_at < ?2
+                  AND COALESCE(json_extract(payload_json, '$.presentation.severity'), '') = 'error'
+                ORDER BY occurred_at DESC, id DESC
+                LIMIT 10`,
+                since,
+                until,
+            );
+
+            return {
+                window: { since, until },
+                totalEvents: Number(totalsRow?.total ?? 0),
+                errorEventCount: Number(totalsRow?.error_count ?? 0),
+                warningEventCount: Number(totalsRow?.warning_count ?? 0),
+                eventVolumeBuckets: buckets,
+                topEventTypes: topRows.map((r) => ({
+                    name: r.name,
+                    prefix: r.prefix,
+                    count: Number(r.count),
+                    latestAt: r.latest_at,
+                })),
+                recentErrors: recentRows.map((r) => ({
+                    id: r.id,
+                    name: r.name,
+                    occurredAt: r.occurred_at,
+                    message: String(r.message ?? r.name),
+                    ...(r.ref_id ? { refId: r.ref_id } : {}),
+                })),
+            };
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: system_events')) {
+                return {
+                    window: { since, until },
+                    totalEvents: 0,
+                    errorEventCount: 0,
+                    warningEventCount: 0,
+                    eventVolumeBuckets: buckets,
+                    topEventTypes: [],
+                    recentErrors: [],
+                };
             }
             throw error;
         }

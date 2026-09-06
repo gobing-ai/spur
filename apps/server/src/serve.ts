@@ -31,6 +31,7 @@ import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime
 import { createApp, serverBootstrapConfig } from './bootstrap';
 import { createServerContext, type ServerContext, type ServerScheduler } from './context';
 import { registerSystemEventTap } from './modules/events/system-event-tap';
+import { type SchedulerScheduleRegistration, setRegisteredSchedules } from './modules/jobs/schedule-registry';
 import { openUrl } from './open-url';
 
 /**
@@ -138,6 +139,9 @@ export function registerSchedulerEntries(
     ctx: ServerContext,
     jobs: readonly SchedulerJobConfig[] = [],
 ): void {
+    const registrations: SchedulerScheduleRegistration[] = [];
+    const now = Date.now();
+
     const register = (cron: string, name: string, action: () => Promise<void>): void => {
         scheduler.register(cron, async () => {
             const startedAt = Date.now();
@@ -161,10 +165,24 @@ export function registerSchedulerEntries(
         const queue = await ctx.jobQueue();
         await queue.enqueue(SYSTEM_EVENTS_PRUNE_JOB, { source: 'scheduler' }, { maxRetries: 1 });
     });
+    registrations.push({
+        name: SYSTEM_EVENTS_PRUNE_JOB,
+        schedule: SYSTEM_EVENTS_PRUNE_CRON,
+        source: 'builtin',
+        registeredAt: now,
+    });
+
     register(SMOKE_CRON, SMOKE_JOB, async () => {
         const queue = await ctx.jobQueue();
         await queue.enqueue(SMOKE_JOB, { source: 'scheduler' }, { maxRetries: 1 });
     });
+    registrations.push({
+        name: SMOKE_JOB,
+        schedule: SMOKE_CRON,
+        source: 'builtin',
+        registeredAt: now,
+    });
+
     // Configured declarative jobs (task 0734): one queue entry per job, using the
     // validated cron string or the interval form. A tick is a normal non-coalesced
     // enqueue of `scheduler.custom`; the queue's existing retry/attempt policy owns
@@ -175,7 +193,15 @@ export function registerSchedulerEntries(
             const queue = await ctx.jobQueue();
             await queue.enqueue(SCHEDULER_CUSTOM_JOB, { name: job.name, command: job.command });
         });
+        registrations.push({
+            name: job.name,
+            schedule,
+            source: 'config',
+            registeredAt: now,
+        });
     }
+
+    setRegisteredSchedules(registrations);
 }
 
 /** Parse and validate the queue payload for a board-triggered task workflow action. */
