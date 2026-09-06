@@ -10,7 +10,11 @@ import ColumnCustomizer, {
     validateColumnKeys,
 } from '../../../src/modules/observability/ColumnCustomizer';
 import JobsTab from '../../../src/modules/observability/JobsTab';
-import { timeRangeSince } from '../../../src/modules/observability/ObservabilityFilters';
+import {
+    RETENTION_COPY,
+    RetentionBadge,
+    timeRangeSince,
+} from '../../../src/modules/observability/ObservabilityFilters';
 import ObservabilityShell from '../../../src/modules/observability/ObservabilityShell';
 import ProcessListTab from '../../../src/modules/observability/ProcessListTab';
 import SystemEventsTab, {
@@ -260,7 +264,15 @@ describe('observability components', () => {
         const chip = getByTestId('observability-liveness-chip');
         expect(chip).toBeDefined();
 
+        const summaryTab = getByRole('tab', { name: 'Summary' });
+        expect(summaryTab.getAttribute('aria-selected')).toBe('true');
+        expect(summaryTab.getAttribute('aria-controls')).toBe('observability-tab-panel-summary');
+        expect(getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('observability-tab-summary');
+        expect(getByTestId('observability-summary-tab')).toBeDefined();
+
+        // Switch to System Events tab
         const systemEventsTab = getByRole('tab', { name: 'System Events' });
+        fireEvent.click(systemEventsTab);
         expect(systemEventsTab.getAttribute('aria-selected')).toBe('true');
         expect(systemEventsTab.getAttribute('aria-controls')).toBe('observability-tab-panel-system-events');
         expect(getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('observability-tab-system-events');
@@ -2113,11 +2125,12 @@ describe('system event tooltip footer (R5, 0601)', () => {
 });
 
 describe('ObservabilityFilters and TimeRange (J92 R1-R7)', () => {
-    test('timeRangeSince computes deterministic ISO lower bounds for all presets (J92 R1/R6)', () => {
+    test('timeRangeSince computes deterministic ISO lower bounds for all presets (J92 R1/R6, J93 R3)', () => {
         const fixedNow = 1700000000000;
         expect(timeRangeSince('30s', fixedNow)).toBe(new Date(fixedNow - 30_000).toISOString());
         expect(timeRangeSince('5m', fixedNow)).toBe(new Date(fixedNow - 300_000).toISOString());
         expect(timeRangeSince('1h', fixedNow)).toBe(new Date(fixedNow - 3600_000).toISOString());
+        expect(timeRangeSince('4h', fixedNow)).toBe(new Date(fixedNow - 14_400_000).toISOString());
         expect(timeRangeSince('24h', fixedNow)).toBe(new Date(fixedNow - 86400_000).toISOString());
         expect(timeRangeSince('7d', fixedNow)).toBe(new Date(fixedNow - 604800_000).toISOString());
         expect(timeRangeSince('all', fixedNow)).toBeUndefined();
@@ -2133,11 +2146,13 @@ describe('ObservabilityFilters and TimeRange (J92 R1-R7)', () => {
             '30s',
             '5m',
             '1h',
+            '4h',
             '24h',
             '7d',
             'All',
         ]);
         expect(view.getByRole('button', { name: '24h' }).getAttribute('aria-pressed')).toBe('true');
+        expect(view.getByTestId('observability-retention-badge')).toBeDefined();
         expect(ranges.parentElement?.className).toContain('flex-wrap');
         expect(view.getByLabelText('Toggle filter panel')).toBeDefined();
         expect(view.getByRole('button', { name: 'Pause live event stream' })).toBeDefined();
@@ -2187,11 +2202,16 @@ describe('ObservabilityFilters and TimeRange (J92 R1-R7)', () => {
         expect(queryAllByText('task.created').length).toBe(0);
     });
 
-    test('ObservabilityShell persists selected timeRange across tab switching (J92 R5)', async () => {
+    test('ObservabilityShell persists selected timeRange across tab switching (J92 R5, J93 R3)', async () => {
         installObservabilityFetchMock();
         const { getByRole, queryAllByText, container } = render(<ObservabilityShell />);
 
+        // Switch to System Events
+        fireEvent.click(getByRole('tab', { name: 'System Events' }));
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
+
+        // Default range is 4h (task 0790 R3)
+        expect(getByRole('button', { name: '4h' }).getAttribute('aria-pressed')).toBe('true');
 
         // Switch time range to 1h
         const btn1h = getByRole('button', { name: '1h' });
@@ -2208,6 +2228,15 @@ describe('ObservabilityFilters and TimeRange (J92 R1-R7)', () => {
 
         // Range button remains 1h pressed
         expect(getByRole('button', { name: '1h' }).getAttribute('aria-pressed')).toBe('true');
+    });
+
+    test('RetentionBadge renders truthful copy and excludes false 7d event purge claim (task 0790 R5)', () => {
+        const { getByTestId } = render(<RetentionBadge />);
+        const badge = getByTestId('observability-retention-badge');
+        expect(badge.textContent).toContain(RETENTION_COPY);
+        expect(badge.textContent).toContain('10,000');
+        expect(badge.textContent).toContain('30d');
+        expect(badge.textContent).not.toContain('7d');
     });
 });
 

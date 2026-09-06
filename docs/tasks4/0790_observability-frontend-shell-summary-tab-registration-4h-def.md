@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Observability frontend shell: Summary tab registration, 4h default range, and retention badge"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-06T21:42:37.707Z
-updated_at: "2026-09-06T22:07:11.994Z"
+updated_at: "2026-09-06T22:55:54.162Z"
 feature_id: J93
 priority: P2
 tags: ["observability", "web", "ui"]
@@ -62,29 +62,29 @@ updated in this task.
 
 ### Requirements
 
-- [ ] R1. `apps/web/src/modules/observability/tabs.ts` registers `{ id: 'summary', label: 'Summary',
+- [x] R1. `apps/web/src/modules/observability/tabs.ts` registers `{ id: 'summary', label: 'Summary',
       component: SummaryTab }` as the **first** entry of `OBSERVABILITY_TABS`, giving the order
       `summary, system-events, jobs, routing`. The existing three entries keep their `id` and
       `label` verbatim.
-- [ ] R2. `ObservabilityTimeRange` in `tabs.ts:7` becomes
+- [x] R2. `ObservabilityTimeRange` in `tabs.ts:7` becomes
       `'30s' | '5m' | '1h' | '4h' | '24h' | '7d' | 'all'`.
-- [ ] R3. `ObservabilityShell.tsx:17` defaults `timeRange` to `'4h'`. The default **tab** needs no
+- [x] R3. `ObservabilityShell.tsx:17` defaults `timeRange` to `'4h'`. The default **tab** needs no
       code change — `:16` already derives it from `OBSERVABILITY_TABS[0]`, which R1 makes `summary`.
-- [ ] R4. `ObservabilityFilters.tsx` adds `'4h'` to `TIME_RANGES` in position between `'1h'` and
+- [x] R4. `ObservabilityFilters.tsx` adds `'4h'` to `TIME_RANGES` in position between `'1h'` and
       `'24h'`, and `TIME_RANGE_MS['4h'] = 4 * 60 * 60_000` (14,400,000). `timeRangeSince('4h')`
       consequently returns `now - 14_400_000` with no change to its body.
-- [ ] R5. `ObservabilityFilters.tsx` exports a `RetentionBadge` component rendering the **truthful**
+- [x] R5. `ObservabilityFilters.tsx` exports a `RetentionBadge` component rendering the **truthful**
       copy `Retention: events capped at 10,000 rows per prefix · terminal jobs pruned after 30d`
       (with an `ℹ️` affordance and `data-testid="observability-retention-badge"`), and renders it in
       the `ObservabilityFilters` controls bar. The numbers are imported/derived, not re-typed as
       literals in JSX where they can drift.
-- [ ] R6. `apps/web/src/modules/observability/SummaryTab.tsx` exists as a
+- [x] R6. `apps/web/src/modules/observability/SummaryTab.tsx` exists as a
       `ComponentType<ObservabilityTabProps>` placeholder — correct props, module framing, and an
       empty-state panel — so the registry in R1 compiles and the tab renders. It contains **no** KPI
       cards, charts, or fetching; task 0791 replaces its body.
-- [ ] R7. `RoutingTab.tsx`, `SystemEventsTab.tsx`, and `JobsTab.tsx` are unmodified except where a
+- [x] R7. `RoutingTab.tsx`, `SystemEventsTab.tsx`, and `JobsTab.tsx` are unmodified except where a
       compile error forces it; `routing-tab.test.tsx` passes untouched.
-- [ ] R8. Tests updated/added under `apps/web/tests/modules/observability/`: the exact-list assertion
+- [x] R8. Tests updated/added under `apps/web/tests/modules/observability/`: the exact-list assertion
       at `tabs.test.ts:30` becomes `['summary', 'system-events', 'jobs', 'routing']`; a shell test
       asserts `summary` is the active tab on mount; `components.test.tsx:2116` gains a `'4h'`
       `timeRangeSince` case; and a new case asserts the retention badge renders the corrected copy.
@@ -274,17 +274,63 @@ inline the numbers at the JSX site.
 7. **(R8)** Run the gate from inside the workspace: `cd apps/web && bun test tests/modules/observability`,
    then the repo gate `bun run lint`, `bun run test`, `bun run build`.
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `apps/web/src/modules/observability/ObservabilityFilters.tsx:104` |
+| `apps/web/src/modules/observability/ObservabilityFilters.tsx:31` |
+| `apps/web/src/modules/observability/ObservabilityFilters.tsx:356` |
+| `apps/web/src/modules/observability/ObservabilityFilters.tsx:37` |
+| `apps/web/src/modules/observability/ObservabilityShell.tsx:17` |
+| `apps/web/src/modules/observability/tabs.ts:4` |
+| `apps/web/src/modules/observability/tabs.ts:42` |
+| `apps/web/src/modules/observability/tabs.ts:8` |
+| `apps/web/tests/modules/observability/components.test.tsx:13` |
+| `apps/web/tests/modules/observability/components.test.tsx:2128` |
+| `apps/web/tests/modules/observability/components.test.tsx:2133` |
+| `apps/web/tests/modules/observability/components.test.tsx:2149` |
+| `apps/web/tests/modules/observability/components.test.tsx:2155` |
+| `apps/web/tests/modules/observability/components.test.tsx:2205` |
+| `apps/web/tests/modules/observability/components.test.tsx:2209` |
+| `apps/web/tests/modules/observability/components.test.tsx:2213` |
+| `apps/web/tests/modules/observability/components.test.tsx:2232` |
+| `apps/web/tests/modules/observability/components.test.tsx:267` |
+| `apps/web/tests/modules/observability/components.test.tsx:275` |
+| `apps/web/tests/modules/observability/tabs.test.ts:30` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | apps/web/src/modules/observability/tabs.ts:3,42; apps/web/tests/modules/observability/tabs.test.ts:30 |
+| R2 | MET | apps/web/src/modules/observability/tabs.ts:8 |
+| R3 | MET | apps/web/src/modules/observability/ObservabilityShell.tsx:17; apps/web/tests/modules/observability/components.test.tsx:2203 |
+| R4 | MET | apps/web/src/modules/observability/ObservabilityFilters.tsx:31,38; apps/web/tests/modules/observability/components.test.tsx:2128 |
+| R5 | MET | apps/web/src/modules/observability/ObservabilityFilters.tsx:109-122,376; apps/web/tests/modules/observability/components.test.tsx:2215-2222 |
+| R6 | MET | apps/web/src/modules/observability/SummaryTab.tsx:1-26; apps/web/tests/modules/observability/components.test.tsx:267 |
+| R7 | MET | RoutingTab.tsx, SystemEventsTab.tsx, JobsTab.tsx untouched; routing-tab.test.tsx passes 11/11 tests |
+| R8 | MET | tabs.test.ts passes 5/5 tests; components.test.tsx passes all 124 tests in apps/web |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Summary tab as the first and default view | MET | test | apps/web/tests/modules/observability/tabs.test.ts:30; apps/web/tests/modules/observability/components.test.tsx:263-267 |
+| R3 — 4h time range preset and module-wide default | MET | test | apps/web/tests/modules/observability/components.test.tsx:2128,2203 |
+| R9 — Status filter chips, inline error preview, and retention notice | MET | test | apps/web/tests/modules/observability/components.test.tsx:2147,2215-2222 |
+| R10 — Routing tab preserved unchanged | MET | test | apps/web/tests/modules/observability/routing-tab.test.tsx:1-50 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | lint | — | biome check . --error-on-warnings && bun run typecheck |
+| P4 | unit-tests | — | cd apps/web && bun test tests/modules/observability passed 124/124 |
 ### References
 - Parent feature: `docs/features/J93_observability-module-refactor-summary-tab-4h-range-default-queue-jobs-table-and-schedule-tracing.md` (scenarios R1, R3, R9-badge, R10)
 - Design satellite: `docs/design/observability-module-refactor.md` §2.1, §2.2, §2.7 — ⚠️ §2.7 and the mermaid `system_events (7d quota)` node are factually wrong; `### Q&A` D3 records the corrected copy and the satellite fix owed at wrap
@@ -299,3 +345,6 @@ inline the numbers at the JSX site.
 - `packages/domain/src/retention.ts:25,221` — `QUEUE_JOB_RETENTION_DAYS = 30` and the terminal-row purge
 - `apps/web/src/modules/history/HistoryShell.tsx:64` — the `'4h'` default this task mirrors
 ### History
+- 2026-09-06T22:55:39.396Z todo → wip (system)
+- 2026-09-06T22:55:46.563Z wip → testing (system)
+- 2026-09-06T22:55:54.162Z testing → done (system)

@@ -1,10 +1,11 @@
 import type { ComponentType } from 'react';
 import JobsTab from './JobsTab';
 import RoutingTab from './RoutingTab';
+import SummaryTab from './SummaryTab';
 import SystemEventsTab from './SystemEventsTab';
 
 /** Time range filter presets supported across observability tabs. */
-export type ObservabilityTimeRange = '30s' | '5m' | '1h' | '24h' | '7d' | 'all';
+export type ObservabilityTimeRange = '30s' | '5m' | '1h' | '4h' | '24h' | '7d' | 'all';
 
 /** Real-time SSE connection and throughput status reported by active tabs. */
 export type ObservabilityLiveness = {
@@ -38,6 +39,7 @@ export interface ObservabilityTab {
  * jobs, and routing. Legacy tasks and tool-using tabs removed.
  */
 export const OBSERVABILITY_TABS: readonly ObservabilityTab[] = [
+    { id: 'summary', label: 'Summary', component: SummaryTab },
     { id: 'system-events', label: 'System Events', component: SystemEventsTab },
     { id: 'jobs', label: 'Jobs', component: JobsTab },
     { id: 'routing', label: 'Routing', component: RoutingTab },

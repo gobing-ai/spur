@@ -28,12 +28,13 @@ export interface ObservabilityFiltersProps {
     actions?: ReactNode;
 }
 
-export const TIME_RANGES: readonly ObservabilityTimeRange[] = ['30s', '5m', '1h', '24h', '7d', 'all'];
+export const TIME_RANGES: readonly ObservabilityTimeRange[] = ['30s', '5m', '1h', '4h', '24h', '7d', 'all'];
 
 export const TIME_RANGE_MS: Record<ObservabilityTimeRange, number | null> = {
     '30s': 30_000,
     '5m': 5 * 60_000,
     '1h': 60 * 60_000,
+    '4h': 4 * 60 * 60_000,
     '24h': 24 * 60 * 60_000,
     '7d': 7 * 24 * 60 * 60_000,
     all: null,
@@ -97,6 +98,26 @@ export function SegmentedToggle<T extends string>({
                 );
             })}
         </fieldset>
+    );
+}
+
+/**
+ * Truthful retention policy copy (task 0790; feature J93 R9 / D3):
+ * - 10,000 from DEFAULT_SYSTEM_EVENT_RETENTION_QUOTA (packages/app/src/services/system-event-retention.ts:11)
+ * - 30 from QUEUE_JOB_RETENTION_DAYS (packages/domain/src/retention.ts:25,221)
+ */
+export const RETENTION_COPY = 'Retention: events capped at 10,000 rows per prefix · terminal jobs pruned after 30d';
+
+export function RetentionBadge() {
+    return (
+        <span
+            data-testid="observability-retention-badge"
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-base-content/15 bg-base-100 text-base-content/70 whitespace-nowrap"
+            title={RETENTION_COPY}
+        >
+            <span aria-hidden="true">ℹ️</span>
+            <span>{RETENTION_COPY}</span>
+        </span>
     );
 }
 
@@ -331,6 +352,8 @@ export default function ObservabilityFilters({
                         </div>
                     </div>
                 </details>
+
+                <RetentionBadge />
 
                 {/* Live Stream Pause/Resume Button */}
                 <button

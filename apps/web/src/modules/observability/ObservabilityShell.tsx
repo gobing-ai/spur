@@ -14,7 +14,7 @@ import {
  */
 export default function ObservabilityShell() {
     const [activeId, setActiveId] = useState<string>(OBSERVABILITY_TABS[0]?.id ?? '');
-    const [timeRange, setTimeRange] = useState<ObservabilityTimeRange>('24h');
+    const [timeRange, setTimeRange] = useState<ObservabilityTimeRange>('4h');
     const [liveness, setLiveness] = useState<ObservabilityLiveness>({
         status: 'connecting',
         rate: 0,

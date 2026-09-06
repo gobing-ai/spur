@@ -27,7 +27,7 @@ describe('OBSERVABILITY_TABS', () => {
         // J92 consolidation: Observability registers exactly system-events, jobs, and routing.
         // Legacy tasks and tool-using are removed.
         const ids = OBSERVABILITY_TABS.map((t) => t.id);
-        expect(ids).toEqual(['system-events', 'jobs', 'routing']);
+        expect(ids).toEqual(['summary', 'system-events', 'jobs', 'routing']);
         expect(ids).not.toContain('tasks');
         expect(ids).not.toContain('tool-using');
         expect(ids).not.toContain('inbox');
