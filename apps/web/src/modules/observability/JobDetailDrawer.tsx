@@ -160,14 +160,14 @@ export default function JobDetailDrawer({ job, onClose, onNavigate }: JobDetailD
                     </div>
                     <div className="flex items-center gap-2">
                         {onNavigate && (
-                            <button
-                                type="button"
-                                className="btn btn-xs btn-outline gap-1"
+                            <Button
+                                variant="outline"
+                                size="xs"
                                 data-testid="navigate-system-events-btn"
                                 onClick={() => onNavigate({ tab: 'system-events', runId: job.id })}
                             >
                                 View in System Events
-                            </button>
+                            </Button>
                         )}
                         <Button
                             variant="ghost"

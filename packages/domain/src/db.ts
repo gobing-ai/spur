@@ -600,3 +600,38 @@ export async function queueJobKpis(db: DbAdapter, sinceMs: number, untilMs: numb
         throw error;
     }
 }
+
+export async function queryScheduleLastExecution(
+    db: DbAdapter,
+    source: 'builtin' | 'config',
+    name: string,
+): Promise<{ status: 'pending' | 'processing' | 'completed' | 'failed'; updated_at: number } | null> {
+    try {
+        if (source === 'builtin') {
+            const row = await db.queryFirst<{
+                status: 'pending' | 'processing' | 'completed' | 'failed';
+                updated_at: number;
+            }>(
+                `SELECT status, updated_at FROM queue_jobs WHERE type = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+                name,
+            );
+            return row ?? null;
+        }
+        const row = await db.queryFirst<{
+            status: 'pending' | 'processing' | 'completed' | 'failed';
+            updated_at: number;
+        }>(
+            `SELECT status, updated_at FROM queue_jobs
+             WHERE type = 'scheduler.custom'
+               AND json_extract(payload, '$.name') = ?
+             ORDER BY created_at DESC, id DESC LIMIT 1`,
+            name,
+        );
+        return row ?? null;
+    } catch (error) {
+        if (error instanceof Error && error.message.includes('no such table: queue_jobs')) {
+            return null;
+        }
+        throw error;
+    }
+}

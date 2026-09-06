@@ -124,16 +124,16 @@ describe('jobs stats count scheduler.custom rows without an API change (task 073
             expect(dataFailed.total).toBe(1);
             expect(dataFailed.countsByStatus.all).toBe(2);
 
-            // 2. Pagination with limit=1
-            const resPaged = await app.fetch(new Request('http://localhost/api/jobs?limit=1'));
+            // 2. Pagination with limit=1 and offset=1
+            const resPaged = await app.fetch(new Request('http://localhost/api/jobs?limit=1&offset=1'));
             expect(resPaged.status).toBe(200);
             const dataPaged = (await resPaged.json()) as {
                 jobs: Array<{ id: string }>;
                 hasMore: boolean;
             };
             expect(dataPaged.jobs).toHaveLength(1);
-            expect(dataPaged.jobs[0]?.id).toBe('j-2'); // newest first
-            expect(dataPaged.hasMore).toBe(true);
+            expect(dataPaged.jobs[0]?.id).toBe('j-1');
+            expect(dataPaged.hasMore).toBe(false);
 
             // 3. Unknown status returns 400
             const resBogus = await app.fetch(new Request('http://localhost/api/jobs?status=bogus'));
@@ -172,7 +172,7 @@ describe('jobs stats count scheduler.custom rows without an API change (task 073
             const dataEmpty = (await resEmpty.json()) as { schedules: unknown[] };
             expect(dataEmpty.schedules).toEqual([]);
 
-            // 2. Register a built-in and a config cron job
+            // 2. Register built-in and config jobs covering minutes, seconds, ms, and pending status
             const now = Date.now();
             setRegisteredSchedules([
                 {
@@ -180,6 +180,24 @@ describe('jobs stats count scheduler.custom rows without an API change (task 073
                     schedule: '300000',
                     source: 'builtin',
                     registeredAt: now - 60_000,
+                },
+                {
+                    name: 'fast-ticker',
+                    schedule: '5000',
+                    source: 'builtin',
+                    registeredAt: now - 1000,
+                },
+                {
+                    name: 'raw-ms-ticker',
+                    schedule: '500',
+                    source: 'builtin',
+                    registeredAt: now - 100,
+                },
+                {
+                    name: 'pending-job',
+                    schedule: '60000',
+                    source: 'builtin',
+                    registeredAt: now - 10_000,
                 },
                 {
                     name: 'daily-job',
@@ -197,6 +215,14 @@ describe('jobs stats count scheduler.custom rows without an API change (task 073
                 now - 45_000,
             );
 
+            // Seed a pending row for pending-job
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at)
+                 VALUES ('job-pending-1', 'pending-job', '{}', 'pending', 1, 3, ?, ?)`,
+                now - 5000,
+                now - 5000,
+            );
+
             const res = await app.fetch(new Request('http://localhost/api/jobs/schedules'));
             expect(res.status).toBe(200);
             const data = (await res.json()) as {
@@ -211,15 +237,27 @@ describe('jobs stats count scheduler.custom rows without an API change (task 073
                 }>;
             };
 
-            expect(data.schedules).toHaveLength(2);
+            expect(data.schedules).toHaveLength(5);
 
-            // Built-in interval entry
+            // Built-in interval entry (minutes)
             const prune = data.schedules.find((s) => s.name === 'system.events.prune');
             expect(prune?.cadence).toBe('every 5 minutes');
             expect(prune?.nextFireAt).not.toBeNull();
             expect(prune?.lastStatus).toBe('completed');
             expect(prune?.lastFiredAt).toBe(new Date(now - 45_000).toISOString());
             expect(prune?.source).toBe('builtin');
+
+            // Built-in interval entry (seconds)
+            const ticker = data.schedules.find((s) => s.name === 'fast-ticker');
+            expect(ticker?.cadence).toBe('every 5 seconds');
+
+            // Built-in interval entry (ms)
+            const msTicker = data.schedules.find((s) => s.name === 'raw-ms-ticker');
+            expect(msTicker?.cadence).toBe('every 500 ms');
+
+            // Built-in pending entry maps to 'processing'
+            const pendingJob = data.schedules.find((s) => s.name === 'pending-job');
+            expect(pendingJob?.lastStatus).toBe('processing');
 
             // Config cron entry per D4: nextFireAt is null
             const daily = data.schedules.find((s) => s.name === 'daily-job');
@@ -233,5 +271,29 @@ describe('jobs stats count scheduler.custom rows without an API change (task 073
             db.close();
             rmSync(cwd, { recursive: true, force: true });
         }
+    });
+
+    test('handles internal errors with 500 status', async () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-0789-err-'));
+        const ctx = createServerContext((await import('../../middleware/helpers')).mockRuntime(), {
+            cwd,
+            fs: createNodeFileSystem(cwd),
+            dbUrl: ':memory:',
+            jobQueueEnabled: true,
+            eventsBus: new EventBus<Record<string, (event: unknown) => void>>(),
+        });
+        const app = new Hono();
+        (ctx as unknown as { getDb: () => Promise<unknown> }).getDb = async () => {
+            throw new Error('boom');
+        };
+        jobsModule.mount(app, ctx);
+
+        const resJobs = await app.fetch(new Request('http://localhost/api/jobs'));
+        expect(resJobs.status).toBe(500);
+
+        const resSched = await app.fetch(new Request('http://localhost/api/jobs/schedules'));
+        expect(resSched.status).toBe(500);
+
+        rmSync(cwd, { recursive: true, force: true });
     });
 });

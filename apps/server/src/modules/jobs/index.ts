@@ -1,5 +1,5 @@
 import type { SchedulerLastStatus, SchedulerScheduleRow } from '@gobing-ai/spur-contracts';
-import { queryQueueJobs } from '@gobing-ai/spur-domain';
+import { queryQueueJobs, queryScheduleLastExecution } from '@gobing-ai/spur-domain';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
@@ -92,43 +92,7 @@ export const jobsModule: ServerModule = {
 
                 const schedules = await Promise.all(
                     registrations.map(async (reg) => {
-                        let matchingRow:
-                            | {
-                                  status: 'pending' | 'processing' | 'completed' | 'failed';
-                                  updated_at: number;
-                              }
-                            | undefined;
-
-                        try {
-                            if (reg.source === 'builtin') {
-                                const row = await db.queryFirst<{
-                                    status: 'pending' | 'processing' | 'completed' | 'failed';
-                                    updated_at: number;
-                                }>(
-                                    `SELECT status, updated_at FROM queue_jobs WHERE type = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
-                                    reg.name,
-                                );
-                                matchingRow = row ?? undefined;
-                            } else {
-                                const row = await db.queryFirst<{
-                                    status: 'pending' | 'processing' | 'completed' | 'failed';
-                                    updated_at: number;
-                                }>(
-                                    `SELECT status, updated_at FROM queue_jobs
-                                     WHERE type = 'scheduler.custom'
-                                       AND json_extract(payload, '$.name') = ?
-                                     ORDER BY created_at DESC, id DESC LIMIT 1`,
-                                    reg.name,
-                                );
-                                matchingRow = row ?? undefined;
-                            }
-                        } catch (error) {
-                            if (error instanceof Error && error.message.includes('no such table: queue_jobs')) {
-                                matchingRow = undefined;
-                            } else {
-                                throw error;
-                            }
-                        }
+                        const matchingRow = await queryScheduleLastExecution(db, reg.source, reg.name);
 
                         const lastFiredAt = matchingRow ? new Date(matchingRow.updated_at).toISOString() : null;
                         let lastStatus: SchedulerLastStatus = 'none';

@@ -24,6 +24,7 @@ export {
     type QueueJobQuerySpec,
     type QueueJobRecord,
     queryQueueJobs,
+    queryScheduleLastExecution,
     queueJobKpis,
     type ServerQueueConsumer,
     updatePendingQueueJob,

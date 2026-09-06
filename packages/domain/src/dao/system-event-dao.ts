@@ -154,12 +154,18 @@ export interface RoutingSummaryQuery {
  */
 export const ROUTING_SUMMARY_DEFAULT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * Query parameters specifying the time window and bucketing interval for event summary aggregation.
+ */
 export interface EventSummarySpec {
     since: string;
     until?: string;
     bucketMs?: number;
 }
 
+/**
+ * Aggregated event volume in a single time bucket broken down by prefix and severity.
+ */
 export interface EventSummaryVolumeBucket {
     timestamp: string;
     total: number;
@@ -167,6 +173,9 @@ export interface EventSummaryVolumeBucket {
     bySeverity: { info: number; warning: number; error: number; unknown: number };
 }
 
+/**
+ * Aggregate summary for a top occurring event type.
+ */
 export interface EventSummaryTopType {
     name: string;
     prefix: string;
@@ -174,6 +183,9 @@ export interface EventSummaryTopType {
     latestAt: string;
 }
 
+/**
+ * Representation of a recently failed event.
+ */
 export interface EventSummaryRecentError {
     id: string;
     name: string;
@@ -182,6 +194,9 @@ export interface EventSummaryRecentError {
     refId?: string;
 }
 
+/**
+ * Comprehensive summary result containing window info, KPIs, volume buckets, top types, and recent errors.
+ */
 export interface EventSummaryResult {
     window: { since: string; until: string };
     totalEvents: number;

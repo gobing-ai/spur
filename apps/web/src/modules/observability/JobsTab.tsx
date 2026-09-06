@@ -235,12 +235,12 @@ export default function JobsTab({ timeRange = '4h', onNavigate }: ObservabilityT
                                 type="button"
                                 onClick={() => setStatusFilter(chip.id)}
                                 data-testid={`status-chip-${chip.id}`}
-                                className={`btn btn-xs rounded-full gap-1.5 transition-colors ${
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full transition-colors cursor-pointer ${
                                     active
                                         ? chip.id === 'failed'
-                                            ? 'btn-error text-error-content'
-                                            : 'btn-neutral'
-                                        : 'btn-ghost border border-base-content/10'
+                                            ? 'bg-error text-error-content'
+                                            : 'bg-neutral text-neutral-content'
+                                        : 'bg-base-100 text-base-content/70 hover:bg-base-200 border border-base-content/10'
                                 }`}
                             >
                                 <span>{chip.label}</span>
@@ -269,7 +269,7 @@ export default function JobsTab({ timeRange = '4h', onNavigate }: ObservabilityT
                     </span>
                     <button
                         type="button"
-                        className="btn btn-xs btn-error btn-outline"
+                        className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-error text-error hover:bg-error hover:text-error-content transition-colors cursor-pointer"
                         data-testid="filter-to-failed-btn"
                         onClick={() => setStatusFilter('failed')}
                     >
