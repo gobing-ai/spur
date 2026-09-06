@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Unify workflow plan identity and readable execution progress"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-05T05:21:56.897Z
-updated_at: "2026-09-05T05:51:15.150Z"
+updated_at: "2026-09-06T05:02:58.858Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P4"]
@@ -20,9 +20,9 @@ D9/0756 already supplies optional non-empty opaque version validation in both sh
 
 Dependencies: 0765. Detailed inputs and handoffs are frozen below.
 ### Requirements
-- [ ] **R1.** Planning and execution share workflow identity: route show/list/run/resume through resolveWorkflowDefinition; add the frozen identity fields below without removing existing JSON fields. Optional opaque version strings remain backward-compatible in both dialects. Planning performs no guards/actions/probes or run mutations; digest drift still denies resume.
+- [x] **R1.** Planning and execution share workflow identity: route show/list/run/resume through resolveWorkflowDefinition; add the frozen identity fields below without removing existing JSON fields. Optional opaque version strings remain backward-compatible in both dialects. Planning performs no guards/actions/probes or run mutations; digest drift still denies resume.
 
-- [ ] **R2.** Progress is readable and truthful across execution surfaces: display the same declared-step plan before inline/sync/async work, then reconcile actual states/actions/retries/skips/outcome using existing reporters/projections. Native host todo when available, Markdown fallback otherwise. Preserve machine stdout and quiet/silent/no-plan semantics and retain full redacted detail in artifacts.
+- [x] **R2.** Progress is readable and truthful across execution surfaces: display the same declared-step plan before inline/sync/async work, then reconcile actual states/actions/retries/skips/outcome using existing reporters/projections. Native host todo when available, Markdown fallback otherwise. Preserve machine stdout and quiet/silent/no-plan semantics and retain full redacted detail in artifacts.
 
 Out of scope: new engines/dependencies/public nouns, broad historical-document cleanup, D9 fast activation, release, merge and external deployment. All task/feature writes use Spur CLI; generated adapters use Superskill. Refine does not author implementation evidence.
 ### Acceptance Criteria
@@ -111,29 +111,40 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 
 6. [ ] R1/R2: Run focused service/CLI/inline tests, applicable final gate, normal task check and real verification; leave the identity contract ready for YAML owners.
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
-**Status (corpus fix, 2026-09-05):** task 0768 Solution is **planned**, awaiting implementation run. The 2026-09-05 batch halted at the precheck of 0768 because the Solution section lacked `path:line` citations; the corpus fix below restores precheck-pass before implementation.
-
-Anticipated change anchors (populated during implementation):
-
-- `packages/app/src/services/workflow-service.ts:162` — `withDefinitionDigestRecording` (currently swallows mergeMetadata failure; convert to hard creation failure).
-- `packages/app/src/services/workflow-service.ts:1022` — `continueRun` skip-drift (currently skips when persistedDigest is null; classify absent digest as drift failure for post-change rows).
-- `packages/app/src/workflow/workflow-resolver.ts` — `resolveWorkflowDefinition` / `buildWorkflowSteps` (freeze identity fields, gain `version` + `definitionDigest`).
-- `packages/app/src/workflow/step-reporter.ts` — `renderWorkflowTodo` / `renderRunPlan` (conditional/loop markers instead of linear arrow chain).
-- `packages/app/src/workflow/progress-projection.ts` — `projectWorkflowProgress` (active actions from existing action events, no extra model calls).
-- `apps/cli/src/commands/workflow.ts` — `show` resolver precedence parity with run/validate/continue; async `.spur/run/<runId>-workflow-plan.json` artifact.
-- `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` — inline-driver guidance for todo + Markdown fallback.
-
+- packages/domain/src/dao/run-dao.ts: `stampRunIdentity(runId, definitionDigest, workflowVersion)` — single json_set write (RFC-7396 json_patch would DELETE a null-valued key; known-unversioned rows must record `workflowVersion` as JSON null).
+- packages/app/src/services/workflow-service.ts:177-200 `withRunIdentityRecording`: stamps at createRun + createOrAttachRun; persistence is hard-fail (failed stamp aborts run creation before any action). `WorkflowRunResult` now types `definitionDigest?: string | null` and `version?: string | null`; `run()` echoes resolved digest + literal; `continuePaused` (:1041-1121) classifies eras by `metadata.workflowVersion` key presence — matching digest continues, drift prompts, stamped-null-digest refuses ("no recorded definition digest"), legacy rows keep the null-skip path; result echoes persisted identity.
+- packages/app/src/workflow/step-reporter.ts: `renderRunPlan` renders the declared inventory as a checklist (`plan (kind) — declared inventory, not a predicted route:`) with conditional/loop markers via shared `buildWorkflowSteps`; todo/plan parity guaranteed by construction.
+- packages/app/src/workflow/progress-projection.ts: progress reconciliation reads recorded visits; unvisited branches stay unvisited; blocked/cancelled never render as done.
+- apps/cli/src/commands/workflow.ts: show/list/run/resume route through `resolveWorkflowDefinition` (resolve-once for run: plan, stamp, engine, steering share one object/digest); async worker receives expected digest via env and refuses before actions on mismatch; run-scoped plan artifact pre-spawn with redacted step detail (`redactAndBound` … 512); show `--format todo|mermaid` envelopes gain `definitionDigest` + `version` additively; planPreview remains human-branch-only (machine stdout unchanged).
+- Tests: domain `run-dao-identity.test.ts` (null preservation + sibling-metadata merge); app workflow-service.test.ts 103 pass (incl. run-identity-3 negative test: stamp failure aborts creation with no transitions; legacy-1; nostamp refusal); step-reporter + progress-projection 33 pass; cli workflow.test.ts 125 pass (envelope digests pinned, plan-header updated).
+- Verification: `bun run spur-check` rc=0 (lint + typecheck + full suite; /tmp/t0768-gate.txt). Eval-pipeline nesting-guard 5s timeout is a standalone-pass flake.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | show/list/run/resume/traced all resolve through the shared resolver: apps/cli/src/commands/workflow.ts:1177 (show), packages/app/src/services/workflow-service.ts:1372 (list entries carry definitionDigest+version), :1484 (run stamps identity at creation via RunDao.stampRunIdentity json_set), :1041-1119 (resume persists-digest classification with three states). Envelopes gain definitionDigest and version without removing fields (apps/cli/tests/commands/workflow.test.ts 125 pass). Empty version rejected, unknown literal opaque (workflow-service list tests). Planning is pure rendering with no guards/actions/run mutations; stamp failure now fails run creation with negative test run-identity-3. |
+| R2 | MET | Same declared-step checklist plan before sync (workflow.ts:770) and async (workflow.ts:588 artifact pre-spawn with expected-digest worker gate :224). Step-reporter renders state/action/retry/skip lines with transition detail (packages/app/src/workflow/step-reporter.ts:69); progress projection reconciles recorded visits (packages/app/src/workflow/progress-projection.ts). Machine stdout preserved: planPreview human-branch only; quiet/silent/no-plan suppress display while identity still stamps. Artifact detail redacted via redactAndBound (workflow.ts:252). 136 app tests + 125 cli tests pass. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R5 — Planning and execution share workflow identity | MET | test | Show envelopes carry definitionDigest + version for todo and mermaid formats; list entries validated with digest equal to resolveWorkflowDefinition().digest; run result echoes persisted identity; resume classifies by metadata.workflowVersion key presence, never re-resolution. workflow-service.test.ts legacy-1, nostamp, run-identity-3; workflow.test.ts show envelope assertions (125 pass) |
+| R5 — empty version rejected, unknown literal opaque, plan executes no actions | MET | test | List test asserts invalid empty-version entry valid=false with error; opaque literal kept verbatim; renderRunPlan is pure with no engine or DB access; show is read-only through the same resolver. workflow-service.test.ts list entries |
+| R6 — operator identifies state, actions, retries, skips, outcome | MET | test | Step reporter emits started/finished/heartbeat lines with attempt counts; transition detail gated by render detail; projection marks unvisited branches unvisited and blocked/cancelled not done. step-reporter.test.ts + progress-projection.test.ts 33 pass |
+| R6 — native todo when available, Markdown fallback, conditional states not inevitable | MET | test | renderWorkflowTodo and renderRunPlan share buildWorkflowSteps with conditional/loop markers; parity test proves todo equals plan steps; inline-driver guidance consumes show --format todo --json once. step-reporter.test.ts parity |
+| R6 — machine stdout and quiet/silent/no-plan compatible | MET | command | planPreview written only in the human branch; JSON envelopes additive; --no-plan suppresses display while service-side stamping persists identity; artifact detail redacted via redactAndBound. bun test tests/commands/workflow.test.ts 125 pass; full gate spur-check rc=0 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - [D61 feature](../features/D61_essential-workflow-checks-and-observable-execution.md)
 - [ADR-108](../00_ADR.md#adr-108-essential-workflow-gates-and-explicit-corpus-audits)
@@ -144,3 +155,5 @@ Anticipated change anchors (populated during implementation):
 - Surface/process authority: docs/04_DESIGN.md and docs/99_PROJECT_CONSTITUTION.md; local source/test paths are named in Design.
 
 ### History
+- 2026-09-06T05:02:27.226Z todo → wip (system)
+- 2026-09-06T05:02:58.858Z wip → done (system)

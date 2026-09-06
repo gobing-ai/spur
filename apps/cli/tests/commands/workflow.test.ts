@@ -563,7 +563,7 @@ terminalStates:
         // equality, and that the correlated run header led the output.
         expect(output.messages).toContain('workflow done: cli-test-flow -> done');
         expect(output.messages[0]).toBe('Run: plain-run');
-        expect(output.messages.some((message) => message.startsWith('plan:'))).toBe(true);
+        expect(output.messages.some((message) => message.startsWith('plan ('))).toBe(true);
         await rm(dir, { recursive: true, force: true });
     });
 
@@ -2454,6 +2454,8 @@ transitions:
             name: 'cli-todo-flow',
             kind: 'state-machine',
             format: 'todo',
+            definitionDigest: 'sha256:671f9be44a311087ce05057074e7b8b5ca0ccdd4bc2ecc5b79f8d5ccfa1620ac',
+            version: null,
             steps: [
                 {
                     id: 'start',
@@ -2506,6 +2508,8 @@ transitions:
             name: 'cli-test-flow',
             kind: 'state-machine',
             format: 'mermaid',
+            definitionDigest: 'sha256:2cd0a58183d3f75b3fc783e28e1adbe566da06af53938ecb067b738196e3774b',
+            version: null,
             diagram: renderWorkflowMermaid(await loadWorkflowDef(wf, { validateSchema: true })),
         });
         await rm(dir, { recursive: true, force: true });

@@ -75,6 +75,45 @@ describe('projectWorkflowProgress', () => {
         db.close();
     });
 
+    test('surfaces workflowVersion as version: literal, known-null, and legacy-absent (0768 R1)', async () => {
+        const db = await setupDb();
+        const now = Date.now();
+        const digest = computeDefinitionDigest(testWorkflowDef);
+
+        await db.run(
+            "INSERT INTO runs (id, workflow_name, status, started_at, metadata_json, created_at, updated_at) VALUES ('r-ver', 'test-pipeline', 'running', '2026-08-19T00:00:00Z', ?, ?, ?)",
+            JSON.stringify({ definitionDigest: digest, workflowVersion: '2.0.0' }),
+            now,
+            now,
+        );
+        await db.run(
+            "INSERT INTO runs (id, workflow_name, status, started_at, metadata_json, created_at, updated_at) VALUES ('r-null', 'test-pipeline', 'running', '2026-08-19T00:00:00Z', ?, ?, ?)",
+            JSON.stringify({ definitionDigest: digest, workflowVersion: null }),
+            now,
+            now,
+        );
+        await db.run(
+            "INSERT INTO runs (id, workflow_name, status, started_at, metadata_json, created_at, updated_at) VALUES ('r-legacy', 'test-pipeline', 'running', '2026-08-19T00:00:00Z', ?, ?, ?)",
+            JSON.stringify({ definitionDigest: digest }),
+            now,
+            now,
+        );
+
+        // Post-0768 row with a versioned definition: the literal surfaces.
+        const versioned = await projectWorkflowProgress('r-ver', { db, workflowDef: testWorkflowDef });
+        expect(versioned.version).toBe('2.0.0');
+
+        // Post-0768 row for a known-unversioned definition: version is explicitly null.
+        const unversioned = await projectWorkflowProgress('r-null', { db, workflowDef: testWorkflowDef });
+        expect(unversioned.version).toBeNull();
+
+        // Pre-0768 legacy row (no workflowVersion key): version stays absent.
+        const legacy = await projectWorkflowProgress('r-legacy', { db, workflowDef: testWorkflowDef });
+        expect('version' in legacy).toBe(false);
+
+        db.close();
+    });
+
     test('returns definition-drift when recorded digest does not match current definition', async () => {
         const db = await setupDb();
         const now = Date.now();

@@ -19,6 +19,12 @@ export interface WorkflowProgressProjection {
     status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'unknown';
     /** Recorded definition digest stamped at run initiation. */
     definitionDigest: string | null;
+    /**
+     * Workflow version identity persisted at run creation (0768 R1). A string is
+     * the declared version literal; `null` = known-unversioned definition. The key
+     * is ABSENT for pre-0768 rows (unknown legacy identity).
+     */
+    version?: string | null;
     /** Currently active state if determinable from transitions. */
     currentState: string | null;
     /** State-level progress records. */
@@ -204,6 +210,14 @@ export async function projectWorkflowProgress(
     }
 
     const recordedDigest = typeof rawMeta.definitionDigest === 'string' ? rawMeta.definitionDigest : null;
+    // 0768 R1: workflowVersion presence distinguishes identity-stamped rows from
+    // pre-0768 legacy rows; its value (string|null) distinguishes versioned from
+    // known-unversioned definitions.
+    const recordedVersion =
+        'workflowVersion' in rawMeta &&
+        (typeof rawMeta.workflowVersion === 'string' || rawMeta.workflowVersion === null)
+            ? (rawMeta.workflowVersion as string | null)
+            : undefined;
 
     let normalizedStatus: WorkflowProgressProjection['status'] = 'unknown';
     const statusLower = (runRow.status ?? '').toLowerCase();
@@ -265,6 +279,7 @@ export async function projectWorkflowProgress(
             workflow: workflowName,
             status: normalizedStatus,
             definitionDigest: recordedDigest,
+            ...(recordedVersion !== undefined ? { version: recordedVersion } : {}),
             currentState,
             states: [],
             transitions,
@@ -479,6 +494,7 @@ export async function projectWorkflowProgress(
         workflow: smDef.name || workflowName,
         status: normalizedStatus,
         definitionDigest: recordedDigest,
+        ...(recordedVersion !== undefined ? { version: recordedVersion } : {}),
         currentState,
         states: statesProgress,
         transitions,

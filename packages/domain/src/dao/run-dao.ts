@@ -115,6 +115,27 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
         return this.mergeMetadata(runId, metadata);
     }
 
+    /**
+     * Record the workflow run identity (0768) into metadata_json. Uses json_set
+     * instead of json_patch: RFC-7396 merge patch DELETES keys whose patch value
+     * is null, but a known-unversioned run must record workflowVersion as JSON
+     * null so resume can distinguish it from a pre-0768 row with no key.
+     */
+    stampRunIdentity(runId: string, definitionDigest: string, workflowVersion: string | null): Promise<void> {
+        return this.adapter.run(
+            `UPDATE runs
+             SET metadata_json = json_set(
+                 COALESCE(NULLIF(metadata_json, ''), '{}'),
+                 '$.definitionDigest', ?1,
+                 '$.workflowVersion', ?2
+             )
+             WHERE id = ?3`,
+            definitionDigest,
+            workflowVersion,
+            runId,
+        );
+    }
+
     /** Merge a terminal workflow failure reason without replacing existing metadata. */
     stampFailureReason(runId: string, reason: string): Promise<void> {
         return this.adapter.run(

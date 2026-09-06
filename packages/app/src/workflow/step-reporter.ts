@@ -172,6 +172,8 @@ export interface WorkflowStep {
     conditional: boolean;
     /** transition-flow only; absent for state-machine steps. */
     nodeType?: 'action' | 'gate' | 'parallel' | 'decision';
+    /** Declared description text (0768 R2); absent when the definition declares none. */
+    description?: string;
 }
 
 /**
@@ -200,6 +202,9 @@ export function buildWorkflowSteps(def: WorkflowDef): WorkflowStep[] {
                     incoming.length > 0 &&
                     incoming.every((e) => e.condition !== undefined),
                 nodeType: node.type ?? 'action',
+                ...(typeof node.description === 'string' && node.description !== ''
+                    ? { description: node.description }
+                    : {}),
             };
         });
     }
@@ -217,6 +222,9 @@ export function buildWorkflowSteps(def: WorkflowDef): WorkflowStep[] {
             loopBack: incoming.some((t) => (order.get(t.from) ?? -1) >= (order.get(state.id) ?? 0)),
             conditional:
                 state.id !== def.initialState && incoming.length > 0 && incoming.every((t) => t.guard !== undefined),
+            ...(typeof state.description === 'string' && state.description !== ''
+                ? { description: state.description }
+                : {}),
         };
     });
 }
@@ -235,32 +243,40 @@ export function renderWorkflowTodo(def: WorkflowDef): string {
         lines.push('Declared step inventory in declaration order, not a predicted execution path.', '');
     }
     for (const step of buildWorkflowSteps(def)) {
-        const markers = [
-            step.initial ? 'initial' : undefined,
-            step.terminal ? 'terminal' : undefined,
-            step.failure ? 'failure' : undefined,
-            step.pause ? 'pause' : undefined,
-            step.loopBack ? 'loop-back' : undefined,
-            step.conditional ? 'conditional' : undefined,
-            step.nodeType !== undefined && step.nodeType !== 'action' ? step.nodeType : undefined,
-        ].filter((m): m is string => m !== undefined);
-        lines.push(markers.length > 0 ? `- [ ] ${step.id} — ${markers.join(' · ')}` : `- [ ] ${step.id}`);
+        lines.push(formatWorkflowStepLine(step));
     }
     return lines.join('\n');
 }
 
+/** One checklist line for a declared step: checkbox + id + structural markers (0768 R2). */
+function formatWorkflowStepLine(step: WorkflowStep): string {
+    const markers = [
+        step.initial ? 'initial' : undefined,
+        step.terminal ? 'terminal' : undefined,
+        step.failure ? 'failure' : undefined,
+        step.pause ? 'pause' : undefined,
+        step.loopBack ? 'loop-back' : undefined,
+        step.conditional ? 'conditional' : undefined,
+        step.nodeType !== undefined && step.nodeType !== 'action' ? step.nodeType : undefined,
+    ].filter((m): m is string => m !== undefined);
+    return markers.length > 0 ? `- [ ] ${step.id} — ${markers.join(' · ')}` : `- [ ] ${step.id}`;
+}
+
 /**
- * Render a one-line run plan from a parsed workflow definition: the states (or
- * nodes, for transition-flow) the run will attempt, in declared order. Derived
- * from the shared {@link buildWorkflowSteps} builder (0695 R1/R5) so the plan
- * preview and the todo projection can never disagree about what the steps are;
- * built from the DEFINITION, not a run result — the preview answers "what does
- * this workflow define", before any execution.
+ * Render the pre-execution run plan (0768 R2): a declared-step checklist — NOT
+ * an arrow chain, which would imply an inevitable route. Derived from the
+ * shared {@link buildWorkflowSteps} builder (0695 R1/R5) with the same
+ * conditional/loop markers as the todo projection, so the plan shown before a
+ * run can never disagree with the todo projection about what the steps are;
+ * built from the DEFINITION, not a run result — the plan answers "what does
+ * this workflow declare", before any execution.
  */
 export function renderRunPlan(def: WorkflowDef): string {
-    return `plan: ${buildWorkflowSteps(def)
-        .map((s) => s.id)
-        .join(' → ')}`;
+    const kind = def.kind ?? 'state-machine';
+    return [
+        `plan (${kind}) — declared inventory, not a predicted route:`,
+        ...buildWorkflowSteps(def).map(formatWorkflowStepLine),
+    ].join('\n');
 }
 
 /** Format a millisecond duration as a compact `Ns` / `Nm Ns` string. */

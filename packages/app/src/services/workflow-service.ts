@@ -157,20 +157,33 @@ function withSelfPidRecording(inner: WorkflowPersistenceAdapter, db: DbAdapter):
 }
 
 /**
- * Merge workflow definition digest onto the run row at creation (task 0603).
+ * The identity stamped onto every new run row at creation (0768 R1): the
+ * canonical definition digest plus the definition's version literal (or `null`
+ * for a known-unversioned definition).
  */
-function withDefinitionDigestRecording(
+interface WorkflowRunIdentity {
+    definitionDigest: string;
+    workflowVersion: string | null;
+}
+
+/**
+ * Stamp workflow identity onto the run row at creation (tasks 0603/0768). The
+ * digest + version literal are written in ONE json_set call so a row can never
+ * be half-identified. Persistence is NOT best-effort (0768): a run that starts
+ * without its identity would resume through the unguarded null-digest path and
+ * read as pre-0768 legacy, so a failed identity merge fails run creation
+ * before any action executes.
+ */
+function withRunIdentityRecording(
     inner: WorkflowPersistenceAdapter,
     db: DbAdapter,
-    definitionDigest?: string,
+    identity: WorkflowRunIdentity,
 ): WorkflowPersistenceAdapter {
-    if (!definitionDigest) return inner;
     const stamp = async (runId: string): Promise<void> => {
-        try {
-            await new RunDao(db).mergeMetadata(runId, { definitionDigest });
-        } catch {
-            // definition digest persistence is best-effort; the run proceeds regardless.
-        }
+        // json_set (via stampRunIdentity), not json_patch: RFC-7396 merge patch
+        // deletes keys whose value is null, which would erase a known-unversioned
+        // workflowVersion instead of recording it.
+        await new RunDao(db).stampRunIdentity(runId, identity.definitionDigest, identity.workflowVersion);
     };
     return new Proxy(inner, {
         get(target, prop, receiver) {
@@ -218,9 +231,14 @@ export interface CompositionFinding {
 
 /**
  * Result of a workflow run operation: the engine's run result, widened with an
- * index signature so it serializes cleanly via `toJson`.
+ * index signature so it serializes cleanly via `toJson`. run()/continuePaused()
+ * additionally echo the run's PERSISTED identity (0768).
  */
 export type WorkflowRunResult = EngineWorkflowRunResult & {
+    /** sha256 digest recorded in the run row's metadata (null for legacy rows). */
+    definitionDigest?: string | null;
+    /** Workflow version literal recorded at creation; absent for pre-0768 rows. */
+    version?: string | null;
     readonly [key: string]: unknown;
 };
 
@@ -240,6 +258,13 @@ export interface WorkflowRunOptions {
     recordSelfPid?: boolean;
     /** Synchronous in-process steering only; intentionally never serialized for detached runs. */
     steeringController?: WorkflowSteeringController;
+    /**
+     * Pre-resolved definition + digest (0768 R1). When provided, run() uses this
+     * exact resolution for the engine, the identity stamp, and the plan preview
+     * instead of re-resolving the file — the launcher and the run share one
+     * resolved identity.
+     */
+    resolvedDefinition?: ResolvedWorkflowDefinition;
 }
 
 /** A paused run discovered for `spur workflow continue` (E3). */
@@ -332,6 +357,10 @@ export interface WorkflowListEntry {
     source: 'project' | 'global';
     valid: boolean;
     error?: string;
+    /** Declared version literal, or null for a known-unversioned definition (0768 R1). */
+    version?: string | null;
+    /** Canonical definition digest, identical to what a run of this file stamps (0768 R1). */
+    definitionDigest?: string;
 }
 
 /** Result of a workflow list operation — available workflow files. */
@@ -368,6 +397,10 @@ export interface WorkflowTraceEntry {
     nextAction?: SystemEventAction;
     /** Terminal failure reason (e.g. `no-passing-transition`) when the engine recorded one. */
     failureReason?: string;
+    /** Declared version literal or null; absent for pre-0768 rows (unknown identity, 0768 R1). */
+    version?: string | null;
+    /** Persisted definition digest from run metadata (0768 R1). */
+    definitionDigest?: string;
 }
 
 /** Result of a trace listing (no run-id). */
@@ -597,10 +630,15 @@ export class WorkflowAppService {
         // Explicit `validateSchema: true` matches `validate()` so the two verbs cannot
         // diverge on whether schema validation is on (task 0431 R4/R5). Loaded first
         // so YAML-declared extensions can be registered on the host (0533 R1).
-        const resolved = await resolveWorkflowDefinition(this.ctx.cwd, file, {
-            validateSchema: true,
-            embeddedSchemas: this.ctx.embeddedSchemas?.(),
-        });
+        // 0768 R1: a pre-resolved definition from the caller (async launcher / sync
+        // CLI resolve-once) is reused verbatim so plan, identity stamp, and engine
+        // share one resolution.
+        const resolved =
+            opts.resolvedDefinition ??
+            (await resolveWorkflowDefinition(this.ctx.cwd, file, {
+                validateSchema: true,
+                embeddedSchemas: this.ctx.embeddedSchemas?.(),
+            }));
         const absolute = resolved.path;
         const workflow = resolved.workflow;
         const svc = await this.createEngineService({
@@ -669,6 +707,11 @@ export class WorkflowAppService {
         // the task. Idempotent: a re-run with the same runId does not duplicate.
         await this.maybeLinkPipelineRun(file, runId, opts);
         const runResult = result as WorkflowRunResult;
+        // 0768 R1: surface the run's identity on the result. A fresh run is always
+        // identity-stamped, so version is the literal or null (known-unversioned) —
+        // never absent; absence is reserved for pre-0768 rows.
+        runResult.definitionDigest = resolved.digest;
+        runResult.version = workflowVersionLiteral(workflow);
         if (warnings.length > 0) {
             // 0485 R2: retain warnings in the serializable result and emit them
             // through the composition-root sink for human/server observability.
@@ -1018,6 +1061,21 @@ export class WorkflowAppService {
             rawMeta = {};
         }
         const persistedDigest = typeof rawMeta.definitionDigest === 'string' ? rawMeta.definitionDigest : null;
+        // 0768 R1: a row's identity era is read from the PRESENCE of the
+        // metadata.workflowVersion key — never by re-resolving today's definition.
+        // Pre-0768 rows (no key) keep the null-digest skip; a post-0768 row with an
+        // absent digest cannot be compared against any baseline, so resume is
+        // refused outright — allowing it would silently resume unguarded forever.
+        const identityStamped = 'workflowVersion' in rawMeta;
+        const persistedVersion =
+            identityStamped && (typeof rawMeta.workflowVersion === 'string' || rawMeta.workflowVersion === null)
+                ? (rawMeta.workflowVersion as string | null)
+                : undefined;
+        if (identityStamped && persistedDigest === null) {
+            throw new Error(
+                `Cannot resume run "${runId}": workflow definition drift detected (identity-stamped run has no recorded definition digest, currently ${resolved.digest}). Resume refused.`,
+            );
+        }
         if (persistedDigest !== null && persistedDigest !== resolved.digest) {
             if (opts?.allowDigestMismatch !== true && opts?.force !== true) {
                 const prompt = `Workflow definition drift detected for run "${runId}": launched with ${persistedDigest}, currently ${resolved.digest}. Continue with modified definition?`;
@@ -1057,7 +1115,13 @@ export class WorkflowAppService {
                 : {}),
         });
         await this.stampFailureReason(runId, result);
-        return result as WorkflowRunResult;
+        const runResult = result as WorkflowRunResult;
+        // 0768 R1: echo the run's PERSISTED identity (not the re-resolved one) so
+        // callers see what the run was launched with; version stays absent for
+        // pre-0768 rows (unknown legacy identity).
+        runResult.definitionDigest = persistedDigest;
+        if (persistedVersion !== undefined) runResult.version = persistedVersion;
+        return runResult;
     }
 
     /**
@@ -1158,7 +1222,7 @@ export class WorkflowAppService {
             layers.push({ id: 'project', path: absPath });
             scannedPaths.add(absPath);
             try {
-                const found = await scanWorkflowFiles(absPath, 'project');
+                const found = await scanWorkflowFiles(absPath, 'project', (filePath) => this.loadListEntry(filePath));
                 entries.push(...found);
             } catch {
                 // Directory doesn't exist — skip gracefully
@@ -1171,7 +1235,7 @@ export class WorkflowAppService {
             if (scannedPaths.has(absPath)) continue;
             layers.push({ id: 'global', path: absPath });
             try {
-                const found = await scanWorkflowFiles(absPath, 'global');
+                const found = await scanWorkflowFiles(absPath, 'global', (filePath) => this.loadListEntry(filePath));
                 entries.push(...found);
             } catch {
                 // Directory doesn't exist — skip gracefully
@@ -1308,6 +1372,50 @@ export class WorkflowAppService {
         };
     }
 
+    /**
+     * Resolve one workflow file for `list` through the SAME shared resolver as
+     * show/run/resume (0768 R1), so a valid entry carries the identity a run of
+     * it would stamp: version (literal or null) + canonical definition digest.
+     * On resolution failure the light-parse name/kind are kept best-effort for
+     * the invalid entry, with the resolver's error message — no invented valid
+     * identity.
+     */
+    private async loadListEntry(filePath: string): Promise<WorkflowListEntryIdentity> {
+        try {
+            const resolved = await resolveWorkflowDefinition(this.ctx.cwd, filePath, {
+                validateSchema: true,
+                embeddedSchemas: this.ctx.embeddedSchemas?.(),
+            });
+            return {
+                name: resolved.workflow.name,
+                kind: resolved.workflow.kind ?? 'state-machine',
+                valid: true,
+                version: workflowVersionLiteral(resolved.workflow),
+                definitionDigest: resolved.digest,
+            };
+        } catch (error) {
+            const meta = await extractWorkflowMeta(filePath);
+            return {
+                name: meta.name,
+                kind: meta.kind,
+                valid: false,
+                error: error instanceof Error ? error.message : String(error),
+            };
+        }
+    }
+
+    /**
+     * Record the async run's plan artifact path in run metadata (0768 R2). The
+     * artifact itself is written by the CLI launcher before the worker starts;
+     * this stamps the pointer so trace/progress can surface it. Best-effort:
+     * the worker has already been spawned, so a metadata failure must not undo
+     * a registered run.
+     */
+    async stampPlanArtifactPath(runId: string, planArtifactPath: string): Promise<void> {
+        const db = await this.ctx.getDb();
+        await new RunDao(db).mergeMetadata(runId, { planArtifactPath });
+    }
+
     private async createEngineService(
         opts: {
             recordSelfPid?: boolean;
@@ -1377,8 +1485,12 @@ export class WorkflowAppService {
             persistence = withSelfPidRecording(persistence, db);
         }
         if (opts.extensions !== undefined) {
-            const digest = computeDefinitionDigest(opts.extensions.workflow);
-            persistence = withDefinitionDigestRecording(persistence, db, digest);
+            // 0768 R1: one identity merge (digest + version literal) at run creation;
+            // a merge failure propagates and aborts the run before any action runs.
+            persistence = withRunIdentityRecording(persistence, db, {
+                definitionDigest: computeDefinitionDigest(opts.extensions.workflow),
+                workflowVersion: workflowVersionLiteral(opts.extensions.workflow),
+            });
         }
         const adapter = bus
             ? new ObservableWorkflowAdapter(
@@ -1415,6 +1527,16 @@ export class WorkflowAppService {
 // ---------------------------------------------------------------------------
 // Module-level helpers (not exported)
 // ---------------------------------------------------------------------------
+
+/**
+ * A definition's public version identity (0768): the declared non-empty
+ * `version` literal, or `null` for a known-unversioned definition. `undefined`
+ * is reserved for pre-0768 rows with no recorded identity and is never derived
+ * from a definition.
+ */
+function workflowVersionLiteral(workflow: WorkflowDef): string | null {
+    return typeof workflow.version === 'string' && workflow.version !== '' ? workflow.version : null;
+}
 
 interface ShellCommandEntry {
     /** State or node id where the command was found. */
@@ -1800,7 +1922,17 @@ async function outputArtifactForRun(cwd: string, runId: string): Promise<string 
  * Walk a directory (following symlinks) for .yaml/.yml files and extract name + kind.
  * Gracefully skips unparseable files (adds them with valid=false + error message).
  */
-async function scanWorkflowFiles(rootPath: string, source: 'project' | 'global'): Promise<WorkflowListEntry[]> {
+/**
+ * Per-file identity payload for `list`, produced by the shared resolver (0768 R1).
+ */
+type WorkflowListEntryIdentity = Pick<WorkflowListEntry, 'name' | 'kind' | 'valid'> &
+    Partial<Pick<WorkflowListEntry, 'error' | 'version' | 'definitionDigest'>>;
+
+async function scanWorkflowFiles(
+    rootPath: string,
+    source: 'project' | 'global',
+    loadEntry: (filePath: string) => Promise<WorkflowListEntryIdentity>,
+): Promise<WorkflowListEntry[]> {
     const entries: WorkflowListEntry[] = [];
     const fs = createNodeFileSystem();
 
@@ -1821,8 +1953,8 @@ async function scanWorkflowFiles(rootPath: string, source: 'project' | 'global')
                 await walk(fullPath);
             } else if (st.isFile() && (name.endsWith('.yaml') || name.endsWith('.yml'))) {
                 const displayPath = fullPath.startsWith(rootPath) ? fullPath.slice(rootPath.length + 1) : fullPath;
-                const meta = await extractWorkflowMeta(fullPath);
-                entries.push({ ...meta, path: displayPath, source });
+                const entry = await loadEntry(fullPath);
+                entries.push({ ...entry, path: displayPath, source });
             }
         }
     }
@@ -1882,11 +2014,21 @@ function rowToTraceEntry(
 ): WorkflowTraceEntry {
     let isDryRun = false;
     let failureReason: string | undefined;
+    let version: string | null | undefined;
+    let definitionDigest: string | undefined;
     try {
         const meta = JSON.parse(row.metadata_json);
         isDryRun = meta.dryRun === true;
         if (typeof meta.failureReason === 'string' && meta.failureReason !== '') {
             failureReason = meta.failureReason;
+        }
+        // 0768 R1: identity is surfaced only when actually recorded — the key's
+        // presence separates post-0768 rows (version: literal|null) from legacy rows.
+        if ('workflowVersion' in meta && (typeof meta.workflowVersion === 'string' || meta.workflowVersion === null)) {
+            version = meta.workflowVersion as string | null;
+        }
+        if (typeof meta.definitionDigest === 'string' && meta.definitionDigest !== '') {
+            definitionDigest = meta.definitionDigest;
         }
     } catch {
         // metadata_json unparseable — treat as not dry-run
@@ -1903,6 +2045,8 @@ function rowToTraceEntry(
         durationMs: durationBetween(row.started_at, row.completed_at),
         outcome: traceOutcome(row.status),
         ...(failureReason !== undefined ? { failureReason } : {}),
+        ...(version !== undefined ? { version } : {}),
+        ...(definitionDigest !== undefined ? { definitionDigest } : {}),
     };
     const nextAction = traceNextAction(entry);
     if (nextAction !== undefined) entry.nextAction = nextAction;

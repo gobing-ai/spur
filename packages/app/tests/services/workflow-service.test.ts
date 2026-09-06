@@ -11,10 +11,34 @@ import type { AgentService } from '../../src/services/agent-service';
 import type { RuleService } from '../../src/services/rule-service';
 import {
     resolveOutputLogConfig,
+    resolveWorkflowDefinition,
     resolveWorkflowFile,
     resolveWorkflowLogRetentionDays,
     WorkflowAppService,
 } from '../../src/services/workflow-service';
+
+const PAUSING_YAML = `name: pauser-svc
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: note
+        options:
+          message: go
+  - id: gate
+    pause: true
+  - id: done
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: done
+    guard: { kind: always }
+terminalStates:
+  - done
+`;
 
 const MINIMAL_WORKFLOW_YAML = `name: test-flow
 kind: state-machine
@@ -664,7 +688,19 @@ describe('WorkflowAppService', () => {
             );
             await writeFile(
                 join(wfDir, 'ci.yaml'),
-                'name: ci-pipeline\nkind: transition-flow\nstates: []\ntransitions: []\n',
+                [
+                    'name: ci-pipeline',
+                    'kind: transition-flow',
+                    'initialNode: start',
+                    'nodes:',
+                    '  - id: start',
+                    '  - id: done',
+                    'edges:',
+                    '  - from: start',
+                    '    to: done',
+                    'terminalNodes:',
+                    '  - done',
+                ].join('\n'),
             );
 
             const svc = new WorkflowAppService(makeCtx(dir));
@@ -675,10 +711,37 @@ describe('WorkflowAppService', () => {
             expect(names).toEqual(['ci-pipeline', 'test-flow']);
             const kinds = result.entries.map((e) => e.kind).sort();
             expect(kinds).toEqual(['state-machine', 'transition-flow']);
+            // 0768 R1: every valid entry carries run identity — version (null =
+            // known-unversioned) + the canonical digest a run of the file would stamp.
             for (const entry of result.entries) {
                 expect(entry.valid).toBe(true);
                 expect(entry.source).toBe('project');
+                expect(entry.version).toBeNull();
+                expect(entry.definitionDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
             }
+            const basic = result.entries.find((e) => e.name === 'test-flow');
+            const resolved = await resolveWorkflowDefinition(dir, join(wfDir, 'basic.yaml'));
+            expect(basic?.definitionDigest).toBe(resolved.digest);
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('a versioned definition lists its version literal; an empty version is an invalid entry (0768 R1)', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-list-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            await writeFile(join(wfDir, 'v1.yaml'), `version: "1.2.0"\n${MINIMAL_WORKFLOW_YAML}`);
+            await writeFile(join(wfDir, 'empty.yaml'), `version: ''\n${MINIMAL_WORKFLOW_YAML}`);
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.list([join(dir, '.spur', 'workflows')]);
+
+            expect(result.totalFiles).toBe(2);
+            const versioned = result.entries.find((e) => e.name === 'test-flow' && e.path.endsWith('v1.yaml'));
+            expect(versioned?.valid).toBe(true);
+            expect(versioned?.version).toBe('1.2.0');
+            const empty = result.entries.find((e) => e.path.endsWith('empty.yaml'));
+            expect(empty?.valid).toBe(false);
+            expect(empty?.error).toContain('version');
             await rm(dir, { recursive: true, force: true });
         });
 
@@ -983,28 +1046,6 @@ describe('WorkflowAppService', () => {
 
     describe('continue — HITL resume (0063, E3)', () => {
         // A workflow that PAUSES at `gate` (E3) so there is a paused run to resume.
-        const PAUSING_YAML = `name: pauser-svc
-kind: state-machine
-initialState: start
-states:
-  - id: start
-    onEnter:
-      - kind: note
-        options:
-          message: go
-  - id: gate
-    pause: true
-  - id: done
-transitions:
-  - from: start
-    to: gate
-    guard: { kind: always }
-  - from: gate
-    to: done
-    guard: { kind: always }
-terminalStates:
-  - done
-`;
 
         /** Seed a project with the pausing workflow under `.spur/workflows/` (so name→file resolves). */
         async function seedPausing(): Promise<{ svc: WorkflowAppService; dir: string }> {
@@ -2591,6 +2632,186 @@ describe('definitionDigest merge on run creation (task 0603)', () => {
             const meta = JSON.parse(row?.metadata_json ?? '{}');
             expect(meta.dryRun).toBe(true);
             expect(meta.definitionDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+            // 0768 R1: the same creation merge also stamps the version identity.
+            expect(meta.workflowVersion).toBeNull();
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('workflow run identity (0768 R1)', () => {
+    const VERSIONED_WORKFLOW_YAML = [
+        'name: identity-wf',
+        'version: "3.1.4"',
+        'kind: state-machine',
+        'initialState: start',
+        'states:',
+        '  - id: start',
+        '  - id: done',
+        'transitions:',
+        '  - from: start',
+        '    to: done',
+        'terminalStates:',
+        '  - done',
+    ].join('\n');
+
+    test('run creation stamps the version literal for a versioned definition', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-identity-'));
+        const wfPath = join(dir, 'identity.yaml');
+        await writeFile(wfPath, VERSIONED_WORKFLOW_YAML);
+        try {
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            const res = await svc.run(wfPath, { runId: 'run-identity-1', dryRun: true });
+            expect(res.status).toBe('done');
+
+            const db = await ctx.getDb();
+            const meta = JSON.parse((await new RunDao(db).traceRowById('run-identity-1'))?.metadata_json ?? '{}');
+            expect(meta.workflowVersion).toBe('3.1.4');
+            expect(meta.definitionDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('run result and trace entry surface the run identity', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-identity-'));
+        const wfPath = join(dir, 'identity.yaml');
+        await writeFile(wfPath, VERSIONED_WORKFLOW_YAML);
+        try {
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            const res = await svc.run(wfPath, { runId: 'run-identity-2', dryRun: true });
+            expect(res.status).toBe('done');
+            expect(res.definitionDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+            expect(res.version).toBe('3.1.4');
+
+            const trace = await svc.trace('run-identity-2');
+            expect<unknown>(trace.run.definitionDigest).toBe(res.definitionDigest);
+            expect<unknown>(trace.run.version).toBe('3.1.4');
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a failed identity merge fails run creation before any action executes', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-identity-'));
+        const wfPath = join(dir, 'identity.yaml');
+        await writeFile(wfPath, VERSIONED_WORKFLOW_YAML);
+        try {
+            const ctx = makeCtx(dir);
+            const realDb = await ctx.getDb();
+            const svc = new WorkflowAppService({
+                ...ctx,
+                getDb: async () =>
+                    new Proxy(realDb as object, {
+                        get(target, prop, receiver) {
+                            if (prop === 'run') {
+                                return async (sql: string, ...params: unknown[]) => {
+                                    if (sql.includes('json_set') && sql.includes('$.definitionDigest')) {
+                                        throw new Error('simulated identity merge failure');
+                                    }
+                                    return (target as { run: (s: string, ...p: unknown[]) => Promise<void> }).run(
+                                        sql,
+                                        ...params,
+                                    );
+                                };
+                            }
+                            return Reflect.get(target, prop, receiver);
+                        },
+                    }) as typeof realDb,
+            });
+            await expect(svc.run(wfPath, { runId: 'run-identity-3' })).rejects.toThrow(
+                'simulated identity merge failure',
+            );
+            // The run never started: no identity, no done status, no transitions.
+            const row = await new RunDao(realDb).traceRowById('run-identity-3');
+            const meta = JSON.parse(row?.metadata_json ?? '{}');
+            expect(meta.definitionDigest).toBeUndefined();
+            expect(meta.workflowVersion).toBeUndefined();
+            expect(['done', 'failed', 'paused']).not.toContain(row?.status);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('legacy pre-0768 rows (no workflowVersion key, no digest) keep the null-skip on resume', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-identity-'));
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        await writeFile(join(wfDir, 'pauser.yaml'), PAUSING_YAML);
+        try {
+            // One ctx for service and direct db access: makeCtx memoizes a per-call
+            // in-memory db, so a second call would UPDATE a different empty database.
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            const runResult = await svc.run(join(wfDir, 'pauser.yaml'), { runId: 'legacy-1' });
+            expect(runResult.status).toBe('paused');
+
+            // Rewrite the row as a pre-0768 row: NO workflowVersion key, NO digest.
+            const db = await ctx.getDb();
+            await db.run(
+                "UPDATE runs SET metadata_json = json_remove(json_remove(metadata_json, '$.workflowVersion'), '$.definitionDigest') WHERE id = ?",
+                'legacy-1',
+            );
+
+            const resumed = await svc.continuePaused('legacy-1');
+            expect(resumed.status).toBe('done');
+            // Legacy rows surface an absent version and a null digest.
+            expect(resumed.version).toBeUndefined();
+            expect(resumed.definitionDigest).toBeNull();
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a post-0768 row with an absent digest is refused on resume', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-identity-'));
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        await writeFile(join(wfDir, 'pauser.yaml'), PAUSING_YAML);
+        try {
+            // One ctx for service and direct db access (see the legacy-row test above).
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            const runResult = await svc.run(join(wfDir, 'pauser.yaml'), { runId: 'nostamp-1' });
+            expect(runResult.status).toBe('paused');
+
+            // Post-0768 row (workflowVersion key present) whose digest went missing.
+            const db = await ctx.getDb();
+            await db.run(
+                "UPDATE runs SET metadata_json = json_remove(metadata_json, '$.definitionDigest') WHERE id = ?",
+                'nostamp-1',
+            );
+
+            await expect(svc.continuePaused('nostamp-1')).rejects.toThrow(/no recorded definition digest/);
+            // The run stays paused: the refusal did not mutate it.
+            expect((await svc.latestPausedRun())?.runId).toBe('nostamp-1');
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('digest drift on a post-0768 paused run still denies resume (refusal path)', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-identity-'));
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        const wfPath = join(wfDir, 'pauser.yaml');
+        await writeFile(wfPath, PAUSING_YAML);
+        try {
+            const noCtx = {
+                ...makeCtx(dir),
+                hitlResponder: () => ({ respond: async () => ({ value: 'no' }) }),
+            };
+            const svc = new WorkflowAppService(noCtx);
+            const runResult = await svc.run(wfPath, { runId: 'drift-1' });
+            expect(runResult.status).toBe('paused');
+
+            // Edit the definition after launch: the digest no longer matches.
+            await writeFile(wfPath, `${PAUSING_YAML}description: edited after launch\n`);
+
+            await expect(svc.continuePaused('drift-1')).rejects.toThrow(/drift detected/);
         } finally {
             await rm(dir, { recursive: true, force: true });
         }

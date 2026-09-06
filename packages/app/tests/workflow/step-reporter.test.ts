@@ -284,7 +284,7 @@ describe('renderStepLine', () => {
 });
 
 describe('renderRunPlan', () => {
-    test('state-machine def lists states in declared order', () => {
+    test('state-machine def renders a declared-step checklist, not an arrow chain (0768 R2)', () => {
         const def = {
             kind: 'state-machine',
             name: 'task-pipeline',
@@ -292,10 +292,17 @@ describe('renderRunPlan', () => {
             states: [{ id: 'precheck' }, { id: 'implement' }, { id: 'done' }],
             transitions: [],
         } as unknown as StateMachineWorkflowDef;
-        expect(renderRunPlan(def)).toBe('plan: precheck → implement → done');
+        expect(renderRunPlan(def)).toBe(
+            [
+                'plan (state-machine) — declared inventory, not a predicted route:',
+                '- [ ] precheck — initial',
+                '- [ ] implement',
+                '- [ ] done',
+            ].join('\n'),
+        );
     });
 
-    test('transition-flow def lists nodes in declared order', () => {
+    test('transition-flow def renders nodes as a declared-step checklist (0768 R2)', () => {
         const def = {
             kind: 'transition-flow',
             name: 'flow',
@@ -303,7 +310,31 @@ describe('renderRunPlan', () => {
             nodes: [{ id: 'start' }, { id: 'work' }, { id: 'end' }],
             edges: [],
         } as unknown as TransitionFlowWorkflowDef;
-        expect(renderRunPlan(def)).toBe('plan: start → work → end');
+        expect(renderRunPlan(def)).toBe(
+            [
+                'plan (transition-flow) — declared inventory, not a predicted route:',
+                '- [ ] start — initial',
+                '- [ ] work',
+                '- [ ] end',
+            ].join('\n'),
+        );
+    });
+
+    test('plan markers stay structural: conditional/loop-back surface without implying inevitability (0768 R2)', () => {
+        const def: StateMachineWorkflowDef = {
+            kind: 'state-machine',
+            name: 'sm',
+            initialState: 'a',
+            states: [{ id: 'a' }, { id: 'b' }],
+            transitions: [{ from: 'a', to: 'b', guard: { kind: 'always' } }],
+        };
+        expect(renderRunPlan(def)).toBe(
+            [
+                'plan (state-machine) — declared inventory, not a predicted route:',
+                '- [ ] a — initial',
+                '- [ ] b — conditional',
+            ].join('\n'),
+        );
     });
 });
 describe('buildWorkflowSteps', () => {
@@ -364,6 +395,35 @@ describe('buildWorkflowSteps', () => {
         expect(steps[2]).toMatchObject({ nodeType: 'decision', conditional: true });
         expect(steps[3]).toMatchObject({ nodeType: 'parallel', conditional: false });
         expect(steps[4]).toMatchObject({ terminal: true, pause: true });
+    });
+});
+
+describe('buildWorkflowSteps — declared descriptions (0768 R2)', () => {
+    test('state/state-node description flows into the step without removing structural fields', () => {
+        const sm: StateMachineWorkflowDef = {
+            kind: 'state-machine',
+            name: 'sm',
+            initialState: 'a',
+            terminalStates: ['b'],
+            states: [{ id: 'a', description: 'Run preflight checks' }, { id: 'b' }],
+            transitions: [{ from: 'a', to: 'b' }],
+        };
+        const steps = buildWorkflowSteps(sm);
+        expect(steps[0]?.description).toBe('Run preflight checks');
+        expect(steps[0]?.initial).toBe(true);
+        expect(steps[1]?.description).toBeUndefined();
+        const tf: TransitionFlowWorkflowDef = {
+            kind: 'transition-flow',
+            name: 'tf',
+            initialNode: 'x',
+            terminalNodes: ['y'],
+            nodes: [{ id: 'x', type: 'gate', description: 'Quality gate' }, { id: 'y' }],
+            edges: [{ from: 'x', to: 'y' }],
+        };
+        const tSteps = buildWorkflowSteps(tf);
+        expect(tSteps[0]?.description).toBe('Quality gate');
+        expect(tSteps[0]?.nodeType).toBe('gate');
+        expect(tSteps[1]?.description).toBeUndefined();
     });
 });
 
@@ -442,12 +502,12 @@ describe('renderRunPlan (builder parity, 0695 R5)', () => {
             states: [{ id: 'a' }, { id: 'b' }],
             transitions: [{ from: 'a', to: 'b', guard: { kind: 'always' } }],
         };
-        expect(renderRunPlan(sm)).toBe(
-            `plan: ${buildWorkflowSteps(sm)
-                .map((s) => s.id)
-                .join(' → ')}`,
-        );
-        expect(renderRunPlan(sm)).toBe('plan: a → b');
+        // 0768 R2: the plan is the checklist projection of the same shared builder —
+        // every builder step appears as one checkbox line, in declaration order.
+        const smPlanLines = renderRunPlan(sm).split('\n').slice(1);
+        // The todo body (header + disclaimer + blank = 4 lines) must match the plan body.
+        expect(smPlanLines).toEqual(renderWorkflowTodo(sm).split('\n').slice(4));
+        expect(smPlanLines).toEqual(['- [ ] a — initial', '- [ ] b — conditional']);
         const tf: TransitionFlowWorkflowDef = {
             kind: 'transition-flow',
             name: 'tf',
@@ -455,10 +515,9 @@ describe('renderRunPlan (builder parity, 0695 R5)', () => {
             nodes: [{ id: 'x' }, { id: 'y' }],
             edges: [{ from: 'x', to: 'y' }],
         };
-        expect(renderRunPlan(tf)).toBe(
-            `plan: ${buildWorkflowSteps(tf)
-                .map((s) => s.id)
-                .join(' → ')}`,
-        );
+        const tfPlanLines = renderRunPlan(tf).split('\n').slice(1);
+        // The todo body (header + blank = 2 lines) must match the plan body.
+        expect(tfPlanLines).toEqual(renderWorkflowTodo(tf).split('\n').slice(2));
+        expect(tfPlanLines).toEqual(['- [ ] x — initial', '- [ ] y']);
     });
 });

@@ -9,11 +9,14 @@ import {
     createWorkflowEventIdentity,
     decorateWorkflowEvent,
     EscalationPacketSink,
+    type ResolvedWorkflowDefinition,
+    redactAndBound,
     renderActionHeartbeat,
     renderRunPlan,
     renderStepLine,
     renderWorkflowTodo,
     resolveOutputLogConfig,
+    resolveWorkflowDefinition,
     resolveWorkflowFile,
     resolveWorkflowLogRetentionDays,
     type SteeringAck,
@@ -34,7 +37,6 @@ import {
 import type { SpurConfig } from '@gobing-ai/spur-config';
 import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import type { ActionCost } from '@gobing-ai/spur-domain';
-import { loadWorkflowDef, type WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
@@ -86,13 +88,24 @@ function clearWorkflowRunActive(): void {
  * Launch a long-lived async workflow worker via ProcessExecutor + nohup.
  * Avoids direct child_process.spawn (no-direct-process-spawn).
  */
-async function spawnAsyncWorkflowWorker(spurBin: string, cmd: string[]): Promise<void> {
+async function spawnAsyncWorkflowWorker(
+    spurBin: string,
+    cmd: string[],
+    extraEnv?: Record<string, string>,
+): Promise<void> {
     const line = [spurBin, ...cmd].map(shQuote).join(' ');
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(process.env)) {
         if (value !== undefined) env[key] = value;
     }
     env.SPUR_ASYNC_WORKER = '1';
+    // 0768 R2: the launcher resolves the definition BEFORE the worker starts and
+    // ships the expected digest across the process boundary; the worker re-resolves
+    // and refuses to act on a mismatch (drift between launcher resolution and the
+    // worker's own resolution fails the run before any action).
+    for (const [key, value] of Object.entries(extraEnv ?? {})) {
+        env[key] = value;
+    }
     await new NodeProcessExecutor().run({
         command: process.platform === 'win32' ? 'cmd' : '/bin/sh',
         args:
@@ -202,6 +215,68 @@ export async function waitForRunRegistration(
             await sleep(pollMs);
         }
     }
+}
+
+/** Run-scoped plan artifact path for an async run (0768 R2). */
+export function workflowPlanArtifactPath(runId: string): string {
+    return join('.spur', 'run', `${runId}-workflow-plan.json`);
+}
+
+/**
+ * Verify the worker's own resolution against the expected digest shipped by the
+ * async launcher (0768 R2). Returns the refusal message, or null when the run
+ * may start. A missing resolution counts as a mismatch: the worker cannot prove
+ * it is executing what the launcher planned.
+ */
+export function expectedDigestMismatch(
+    resolvedDigest: string | undefined,
+    expectedDigest: string | undefined,
+): string | null {
+    if (expectedDigest === undefined) return null;
+    if (resolvedDigest !== expectedDigest) {
+        return (
+            'workflow run: refusing to start — resolved definition digest ' +
+            `${resolvedDigest ?? '<resolution failed>'} differs from the expected digest ` +
+            `${expectedDigest} sent by the async launcher`
+        );
+    }
+    return null;
+}
+
+/**
+ * Write the run-scoped plan artifact `.spur/run/<runId>-workflow-plan.json`
+ * BEFORE an async worker starts (0768 R2): the show-compatible todo projection
+ * plus the runId. Step descriptions pass through the same redaction + bounding
+ * as other observability surfaces. Throws on write failure — the caller must
+ * not start actions when the artifact cannot be written.
+ */
+export async function writeWorkflowPlanArtifact(
+    cwd: string,
+    runId: string,
+    resolved: ResolvedWorkflowDefinition,
+    secretValues: readonly string[],
+): Promise<string> {
+    const def = resolved.workflow;
+    const payload = toJson({
+        runId,
+        name: def.name,
+        kind: def.kind ?? 'state-machine',
+        format: 'todo',
+        version: def.version ?? null,
+        definitionDigest: resolved.digest,
+        steps: buildWorkflowSteps(def).map((step) => ({
+            ...step,
+            ...(step.description !== undefined
+                ? { description: redactAndBound(step.description, secretValues, 512) }
+                : {}),
+        })),
+    });
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    const artifactsDir = join(cwd, '.spur', 'run');
+    await mkdir(artifactsDir, { recursive: true });
+    const artifactPath = join(artifactsDir, `${runId}-workflow-plan.json`);
+    await writeFile(artifactPath, payload);
+    return artifactPath;
 }
 
 /**
@@ -510,9 +585,39 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 if (options.log === false) {
                     cmd.push('--no-log');
                 }
+                // 0768 R2: the launcher resolves the definition and writes the
+                // run-scoped plan artifact BEFORE the worker starts. A resolution
+                // failure or an artifact-write failure must not start actions, so
+                // both abort the async launch here.
+                let resolvedDefinition: ResolvedWorkflowDefinition;
+                let planArtifactPath: string;
                 try {
-                    // Detached via ProcessExecutor + nohup (SPUR_ASYNC_WORKER set in env).
-                    await spawnAsyncWorkflowWorker(spurBin, cmd);
+                    resolvedDefinition = await resolveWorkflowDefinition(context.cwd, file, {
+                        embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
+                    });
+                    planArtifactPath = await writeWorkflowPlanArtifact(
+                        context.cwd,
+                        runId,
+                        resolvedDefinition,
+                        configuredSecretValues(context.env),
+                    );
+                } catch (error) {
+                    writeJsonError(
+                        context.output,
+                        options,
+                        `workflow run --async: ${error instanceof Error ? error.message : String(error)}`,
+                        'VALIDATION_FAILED',
+                    );
+                    context.setExitCode(1);
+                    return;
+                }
+                try {
+                    // Detached via ProcessExecutor + nohup (SPUR_ASYNC_WORKER set in env);
+                    // the expected digest crosses the process boundary so the worker can
+                    // verify its own resolution before acting (0768 R2).
+                    await spawnAsyncWorkflowWorker(spurBin, cmd, {
+                        SPUR_EXPECTED_DEFINITION_DIGEST: resolvedDefinition.digest,
+                    });
                 } catch {
                     // If spawn throws, fall through to the sync path so the workflow still runs.
                     markWorkflowRunActive();
@@ -522,6 +627,8 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                             runId,
                             vars: { spurBin: resolveSpurBin(), ...parseVars(options.vars) },
                             dryRun: options.dryRun || undefined,
+                            // 0768 R1: the fallback run reuses the launcher's resolution.
+                            resolvedDefinition,
                         });
                     } finally {
                         clearWorkflowRunActive();
@@ -559,11 +666,19 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     context.setExitCode(1);
                     return;
                 }
-                const asyncResult = { runId, status: 'started', workflowName: file };
+                // 0768 R2: stamp the plan-artifact pointer onto the run row so
+                // trace/progress can surface it. Best-effort — the worker is
+                // already running, so a metadata failure must not undo registration.
+                try {
+                    await makeSvc(options.json).stampPlanArtifactPath(runId, planArtifactPath);
+                } catch {
+                    // Metadata stamp failure cannot unstart the run.
+                }
+                const asyncResult = { runId, status: 'started', workflowName: file, planArtifactPath };
                 if (json) context.output.write(toEnvelopeJson(asyncResult, { enveloped: options.jsonEnvelope }));
                 else if (!silent) {
                     context.output.write(
-                        `Started async run: ${runId}\nMonitor with: spur workflow trace ${runId} --follow`,
+                        `Started async run: ${runId}\nPlan: ${planArtifactPath}\nMonitor with: spur workflow trace ${runId} --follow`,
                     );
                 }
                 context.setExitCode(0);
@@ -615,20 +730,46 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 traceWriter = new WorkflowTraceWriter(context.cwd, runId);
                 traceWriter.attach(bus);
             }
-            // Plan preview (R2): rendered once from the parsed definition, shared by the
-            // human renderer and the consolidated run log. Advisory — a parse failure
-            // must not block the run.
-            let planPreview: string | undefined;
-            if (options.plan !== false) {
+            // Plan preview (R2/0768): rendered once from the resolved definition,
+            // shared by the human renderer and the consolidated run log. Resolution
+            // happens ONCE here (0768 R1) and is handed to the run so plan, identity
+            // stamp, and engine share one resolution. Advisory for the launcher — a
+            // resolution failure must not block the run (the engine surfaces it).
+            // As WORKER (SPUR_EXPECTED_DEFINITION_DIGEST set), resolution is NOT
+            // advisory: the launcher's expected digest must match this process's own
+            // resolution before any action starts (0768 R2).
+            const expectedDigest = process.env.SPUR_EXPECTED_DEFINITION_DIGEST;
+            let resolvedDefinition: ResolvedWorkflowDefinition | undefined;
+            if (options.plan !== false || expectedDigest !== undefined) {
                 try {
-                    const resolved = resolveWorkflowFile(context.cwd, file);
-                    if (resolved.path !== null) {
-                        const def = await loadWorkflowDef(resolved.path, { validateSchema: false });
-                        planPreview = renderRunPlan(def);
+                    resolvedDefinition = await resolveWorkflowDefinition(context.cwd, file, {
+                        embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
+                    });
+                } catch (error) {
+                    if (expectedDigest !== undefined) {
+                        // Worker: fail BEFORE actions — the launcher could not have
+                        // planned for a definition this process cannot resolve.
+                        writeJsonError(
+                            context.output,
+                            options,
+                            `workflow run: refusing to start — ${error instanceof Error ? error.message : String(error)}`,
+                            'VALIDATION_FAILED',
+                        );
+                        context.setExitCode(1);
+                        return;
                     }
-                } catch {
-                    // Preview is advisory — a parse failure must not block the run.
+                    // Launcher: preview is advisory.
                 }
+            }
+            const mismatch = expectedDigestMismatch(resolvedDefinition?.digest, expectedDigest);
+            if (mismatch !== null) {
+                writeJsonError(context.output, options, mismatch, 'VALIDATION_FAILED');
+                context.setExitCode(1);
+                return;
+            }
+            let planPreview: string | undefined;
+            if (options.plan !== false && resolvedDefinition !== undefined) {
+                planPreview = renderRunPlan(resolvedDefinition.workflow);
             }
             // Consolidated all-in-one run log (feature D2 / task 0426): a read-only
             // subscriber on the bus that appends `.spur/run/<RUNID>.log` from creation
@@ -698,20 +839,14 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             const steeringController =
                 options.steer === true
                     ? await (async () => {
-                          // R3 (0601): identity is derived once from the parsed def so
-                          // steering acks carry workflowName + nodeLabel. A parse failure
-                          // degrades to undecorated acks (steering must still work).
+                          // R3 (0601): identity is derived once from the resolved def so
+                          // steering acks carry workflowName + nodeLabel (0768 R1: the
+                          // resolve-once result is reused — no second parse). An absent
+                          // resolution degrades to undecorated acks (steering must still
+                          // work).
                           let identity: { workflowName: string; nodeLabels: ReadonlyMap<string, string> } | undefined;
-                          try {
-                              const resolved = resolveWorkflowFile(context.cwd, file);
-                              if (resolved.path !== null) {
-                                  const def = await loadWorkflowDef(resolved.path, {
-                                      validateSchema: false,
-                                  });
-                                  identity = createWorkflowEventIdentity(def);
-                              }
-                          } catch {
-                              // steering identity is advisory, never a blocker
+                          if (resolvedDefinition !== undefined) {
+                              identity = createWorkflowEventIdentity(resolvedDefinition.workflow);
                           }
                           return new WorkflowSteeringController(
                               (ack) => {
@@ -756,6 +891,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     // signal the live process group (set by the --async launcher).
                     recordSelfPid: process.env.SPUR_ASYNC_WORKER === '1',
                     ...(steeringController !== undefined ? { steeringController } : {}),
+                    // 0768 R1: plan preview, identity stamp, and engine share the one
+                    // resolution made above (resolve-once).
+                    ...(resolvedDefinition !== undefined ? { resolvedDefinition } : {}),
                 });
             } finally {
                 clearWorkflowRunActive();
@@ -1036,10 +1174,16 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 context.setExitCode(1);
                 return;
             }
-            const filePath = resolved.path;
-            let def: WorkflowDef;
+            // 0768 R1: `show` resolves through the SAME shared resolver as run/resume,
+            // so the displayed identity (digest + version) is exactly what a run of
+            // this file would stamp. Error envelopes are preserved: file-not-found
+            // stays NOT_FOUND above; a read/parse/schema/version failure stays
+            // VALIDATION_FAILED with the resolver's message.
+            let resolvedDefinition: ResolvedWorkflowDefinition;
             try {
-                def = await loadWorkflowDef(filePath, { validateSchema: true });
+                resolvedDefinition = await resolveWorkflowDefinition(context.cwd, file, {
+                    embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
+                });
             } catch (err) {
                 writeJsonError(
                     context.output,
@@ -1050,6 +1194,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 context.setExitCode(1);
                 return;
             }
+            const def = resolvedDefinition.workflow;
             if (options.json) {
                 if (options.format === 'todo') {
                     context.output.write(
@@ -1057,6 +1202,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                             name: def.name,
                             kind: def.kind ?? 'state-machine',
                             format: 'todo',
+                            // 0768 R1 identity: declared version literal or null
+                            // (known-unversioned); canonical definition digest.
+                            version: resolvedDefinition.workflow.version ?? null,
+                            definitionDigest: resolvedDefinition.digest,
                             steps: buildWorkflowSteps(def),
                         }),
                     );
@@ -1066,6 +1215,8 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                             name: def.name,
                             kind: def.kind ?? 'state-machine',
                             format: 'mermaid',
+                            version: resolvedDefinition.workflow.version ?? null,
+                            definitionDigest: resolvedDefinition.digest,
                             diagram: renderWorkflowMermaid(def),
                         }),
                     );
