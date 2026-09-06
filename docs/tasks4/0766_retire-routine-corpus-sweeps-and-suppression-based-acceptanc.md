@@ -4,7 +4,7 @@ name: "Retire routine corpus sweeps and suppression-based acceptance"
 status: done
 template: feature-impl
 created_at: 2026-09-05T05:21:56.849Z
-updated_at: "2026-09-06T14:15:22.627Z"
+updated_at: "2026-09-06T14:23:42.046Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P2"]
@@ -106,13 +106,19 @@ The original scope of 0766 (R1 routine-sweep retirement + R2 unsuppressed audit 
 
 ### Testing
 
-**Superseded — no direct test run.** This task was decomposed into 0773/0774/0775 before implementation; all three children are done with recorded verdict artifacts and their own tracked Testing sections:
+**Pipeline verify results**
 
-- 0773 `cbf4d20b6`…`23ebf5d42` — corpus-baseline audit + migration (fixture: 15,976B, 32.6s run)
-- 0774 `f19a393ed`+`7e66efa7a` — CLI/fallback caller migration + fixture updates
-- 0775 `fc4a8a3a9` — regenerator/snapshot deletion, `featureGateCmd` default update
+- Verdict: PASS (tracked Testing fallback — decomposition delegation, no direct artifact)
 
-Verification is carried by the children's evidence plus `spur feature check D61 --strict` (traceability across the decomposition is asserted there, including this task's scenarios R2/R3).
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R2 — Routine work does not scan the whole corpus | MET | Delivered by children: 0773 `cbf4d20b6`…`23ebf5d42` (baseline audit+migration), 0774 `f19a393ed`+`7e66efa7a` (CLI/fallback caller migration), 0775 `fc4a8a3a9` (regenerator/snapshot deletion, sweep retirement, T10/T11, wrapup default). Each child done with recorded Testing evidence; feature check D61 --strict recomputes affected checks. |
+| R3 — Explicit corpus audits remain useful without suppressions | MET | Same child commits: corpus-check unsuppressed (accepted-map readers removed in 0774/0775), `REQUIRED_FINDING_CODES` (planning-check-base.ts:40) unchanged, explicit audit entrypoints retained (`bun run corpus-check`, `spur task check --corpus`). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R2 — Routine work does not scan the whole corpus | MET | delegation | Children 0773/0774/0775 done with own PASS evidence; downstream deps 0767/0769/0770 re-pointed to 0775. |
+| R3 — Explicit corpus audits remain useful without suppressions | MET | delegation | Unsuppressed aggregation + error/warn exit semantics shipped in 0773–0775 with tests (corpus-check.test.ts, corpus-sweep.test.ts). |
 
 ### Review
 

@@ -68,7 +68,7 @@ vars:
   # overridden. The `--agent` flag (execution-batch.md §3.2) forwards into BOTH
   # `agent` and `implementAgent`, so a pinned `--agent X` reaches implement too. To
   # pin ONLY implement while other hops keep the default, pass
-  # `--vars '{"implementAgent":"omp-zai"}'`.
+  # `--vars '{"implementAgent":"pi-zai"}'`.
   implementAgent: "auto"
   # Step-level timeout for agentic hops (review / verify / test-fix) in ms.
   # Soft quality-gate shells are unbounded by this var (host shell only).
