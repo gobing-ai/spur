@@ -1084,7 +1084,7 @@ finality in the canonical task/docs pipelines (ADR-071; tasks 0703/0704).
 | Add a generalized workflow DSL, progress store, and event-driven controller | duplicates engine, persistence, and replay authority | largest one-way change and migration surface | rejected |
 | Extend existing app capabilities, engine action seam, persistence rows, and read projection | localizes changes behind proven owners | incremental, fixtureable, and reversible per pipeline | recommended |
 
-The selected option has the smallest new interface: a checked composition baseline, two narrowly
+The selected option has the smallest new interface: two narrowly
 owned deterministic action capabilities, a proof-input fingerprint, and a read projection. It adds
 no package, transport, data store, or public CLI surface.
 
@@ -1107,8 +1107,8 @@ workflow YAML
   ├─ workflow-local extension ──→ policy unique to one graph
   └─ agent.run ──→ model judgment through existing role/executor resolution
 
-resolved workflow + composition baseline
-  └─ static contract checker ──→ field-level graph/effect/artifact/caller diff
+resolved workflow
+  └─ static contract checker (composition baseline retired, task 0767; facts read live via extractResolvedWorkflowFacts) ──→ field-level graph/effect/artifact/caller diff
 
 repository snapshot + normative task/feature sections
   └─ ProofInputFingerprint ──→ digest carried by gate/review/verify evidence

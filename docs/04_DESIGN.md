@@ -2634,7 +2634,7 @@ therefore never receives a second planning graph.
 
 The **source file is deliberately retained** at `config/workflows/planning-pipeline.yaml`: deleting
 it is gated on operator acceptance of ADR-072, which is also what resolves ADR-029's deferred
-consolidation question. Until then it stays schema-valid and covered by the composition baseline,
+consolidation question. Until then it stays schema-valid and schema-valid (composition baseline retired, task 0767),
 but nothing ships or invokes it.
 
 ### 7.6 Task DTOs (oRPC contract)

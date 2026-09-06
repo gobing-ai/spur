@@ -998,6 +998,16 @@ sub-threshold classified programs need no entry. agent.run severity bands are fr
 <200 low / ≤1000 medium / >1000 chars. The advisory appears in `workflow validate --json` as
 `composition {findings[], suppressed}` and on stderr in human mode; it never changes exit status.
 
+**Amendment (2026-09-05, D61 / task 0767):** the exact-mirroring portion of the 0614 amendment is
+**retired** (per ADR-108): the disposition store (`config/workflow-composition-baseline.json`),
+its snapshot equality/regeneration machinery, and the regenerator atomicity gate
+(`composition-entrypoint-check`) are removed. The ownership/advisory contracts remain: R1/R2
+measures, the frozen `>5` threshold, and the R3 advisory posture (warn-only, never blocks, not in
+`spur-check`) are unchanged; findings are computed from live resolved definitions and can no
+longer be hidden by a recorded disposition. Proof digest helpers
+(`canonicalJsonStringify`/`computeDefinitionDigest`/`extractResolvedWorkflowFacts`) remain in
+`packages/app/src/workflow/composition-baseline.ts` for import compatibility.
+
 ## ADR-070: Workflow Progress Reprojects Persisted Execution Truth
 
 **Status:** Accepted · **Date:** 2026-08-19 · **Feature:** D5

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Replace composition mirrors with live workflow facts and behavior checks"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-05T05:21:56.874Z
-updated_at: "2026-09-05T15:39:36.731Z"
+updated_at: "2026-09-06T05:13:26.683Z"
 feature_id: D61
 priority: P1
 tags: ["workflow-upgrade", "P3"]
@@ -23,7 +23,7 @@ Dependencies: 0775 (which deletes the corpus/composition baselines and the regen
 
 ### Requirements
 
-- [ ] **R1.** Baseline retirement preserves useful consumers: migrate inventory, pipeline budgets, evaluation, real-run cost and advisory readers to live resolved definitions while preserving proof-digest behavior and the JSON response fixture. Remove the composition snapshot, exact-mirror equality/regeneration machinery and now-empty entrypoint gate after migration. Unknown measured usage stays unknown and actual budget violations remain failures.
+- [x] **R1.** Baseline retirement preserves useful consumers: migrate inventory, pipeline budgets, evaluation, real-run cost and advisory readers to live resolved definitions while preserving proof-digest behavior and the JSON response fixture. Remove the composition snapshot, exact-mirror equality/regeneration machinery and now-empty entrypoint gate after migration. Unknown measured usage stays unknown and actual budget violations remain failures.
 
 Out of scope: new engines/dependencies/public nouns, broad historical-document cleanup, D9 fast activation, release, merge and external deployment. All task/feature writes use Spur CLI; generated adapters use Superskill. Refine does not author implementation evidence.
 
@@ -90,25 +90,37 @@ Execution evidence handoff: before changing an owned checker/workflow, save a bo
 5. [ ] R1: Run consumer, digest, budget and JSON tests plus applicable final gate; normal task check and real verification must pass. Hand live-definition measurements to 0772.
 
 ### Solution
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
-**Status (decomposition, 2026-09-05):** task 0767 is **blocked** on 0775 (the third phase of decomposed 0766 R2, which retires the corpus/composition baselines and the regenerator-only machinery). 0775 must complete first because this task deletes the composition snapshot, exact-mirror equality/regeneration machinery and now-empty entrypoint gate that 0775 itself does not touch. Once 0775 lands, 0767/0768 unblock in parallel.
-
-Anticipated change anchors (populated during implementation; see 0775 for snapshot deletion anchors):
-
-- `packages/app/src/workflow/composition-baseline.ts:1` — digest + canonical helpers retained for import compatibility.
-- `packages/app/tests/workflow/composition-baseline.test.ts:1` — replaced by 0775's focused behavior tests.
-- `config/workflow-composition-baseline.json:1` — deleted by 0775.
-- `scripts/commands/regen-composition-baseline.ts:1` — deleted by 0775.
-
+- Consumers already on live facts (0775 slice, verified this task): `scripts/commands/pipeline-budgets.ts:187`, `eval-pipeline.ts:128/:629` (loadWorkflowFacts sweep over all 11 shipped files incl. idea-pipeline), `real-run-cost.ts:35/:251` (directory inventory; usage stays DAO-derived). No snapshot or disposition reads remain.
+- `packages/app/src/workflow/composition-baseline.ts` retains exactly the three import-compatible helpers: `canonicalJsonStringify`, `computeDefinitionDigest`, `extractResolvedWorkflowFacts`; digest byte-compat covered by the key-order-invariance fixture (composition-baseline.test.ts:26).
+- Deleted `scripts/commands/composition-entrypoint-check.ts` (guarded only the retired regenerators); removed its package.json script entry and both spur-check/spur-check-new chain references — no replacement empty gate.
+- Docs synced in same change: ADR-069 amendment (2026-09-05, 0767 — exact-mirroring portion retired; ownership/advisory contracts R1/R2/R3 unchanged), `docs/03_ARCHITECTURE.md` §20.2 ownership topology (facts read live via extractResolvedWorkflowFacts), `docs/04_DESIGN.md` composition references (retired, task 0767).
+- Evidence handoff: `.spur/run/d61-0767-before.json` / `d61-0767-after.json` — matched-input captures (task-pipeline.yaml + pipeline-budgets.json digests, invocation exits, output bytes, outcome lines); token/cost null with explicit unknown-reason; absent terminal runs report n/a, never 0.
+- Verification: `bun run spur-check` rc=0 (/tmp/d61-0767-gate.txt); app targets 48 pass (composition-baseline, composition-advisory, task-pipeline-proof-chain, json-envelope-adoption); scripts tests 41 pass (pipeline-budgets, eval-pipeline, real-run-cost).
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Consumers already migrated to live facts (0775 slice): pipeline-budgets.ts:187, eval-pipeline.ts:128/:629 and real-run-cost.ts:35/:251 read config/workflows through the resolver plus extractResolvedWorkflowFacts — no snapshot/disposition loads remain (rg: 0 hits). Digest behavior byte-compatible: computeDefinitionDigest key-order-invariance test retained (composition-baseline.test.ts:26). JSON response fixture kept: json-envelope-adoption.test.ts green. Entry point gate deleted (scripts/commands/composition-entrypoint-check.ts removed; package.json 0 references). Unknown measured usage stays unknown: real-run-cost reports n/a with explicit reason, never 0; budget violations still fail (check-pipeline-budgets PASS, 5 pipelines, 0 violations = policy live). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R4 — Baseline retirement preserves useful consumers | MET | test | Budgets/eval/cost consume live extractResolvedWorkflowFacts over all 11 shipped files incl. idea-pipeline (eval-pipeline loadWorkflowFacts sweep); composition-baseline.test.ts 48 tests across the 4 app targets green; digest byte-compat fixture retained; json-envelope-adoption response contract green |
+| Snapshots and regeneration-only machinery removed | MET | command | rg composition-entrypoint/workflow-composition-baseline.json over live surfaces: 0 hits in scripts/config/package.json (history docs only); scripts/commands/composition-entrypoint-check.ts deleted; spur-check chains shrunk (package.json:80-81); spur-check rc=0 |
+| No automatic regeneration accepts new debt during migration | MET | command | Both regenerator entrypoints stay absent; no replacement snapshot or disposition store exists (ADR-069 0767 amendment; design forbids one); ordinary prompt edits need no regeneration step — none exists |
+| Measured usage unknown stays unknown; violations remain failures | MET | command | d61-0767-before.json / after.json matched-input captures: budgets PASS (5 pipelines, 0 violations) before and after; real-run-cost absent terminal runs report n/a with explicit reason, never 0 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 
 - [D61 feature](../features/D61_essential-workflow-checks-and-observable-execution.md)
@@ -120,3 +132,5 @@ Anticipated change anchors (populated during implementation; see 0775 for snapsh
 - Surface/process authority: docs/04_DESIGN.md and docs/99_PROJECT_CONSTITUTION.md; local source/test paths are named in Design.
 
 ### History
+- 2026-09-06T05:12:45.217Z todo → wip (system)
+- 2026-09-06T05:13:26.683Z wip → done (system)
