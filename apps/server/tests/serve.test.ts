@@ -1122,7 +1122,7 @@ describe('startServer', () => {
         }
     });
 
-    test('keepAlive parks the start callback on an unresolved promise', async () => {
+    test('keepAlive parks the server after the start callback resolves', async () => {
         installProcessMocks();
         Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
         let startSettled = false;
@@ -1132,11 +1132,19 @@ describe('startServer', () => {
                 void inner.then(() => {
                     startSettled = true;
                 });
-                await Promise.race([inner, new Promise<void>((resolve) => setTimeout(resolve, 40))]);
+                await inner;
             }) as unknown as StartServerDeps['runNodeApplication'],
         });
-        await startServer({ port: 4402, host: '127.0.0.1', openBrowser: false, keepAlive: true }, deps);
-        expect(startSettled).toBe(false);
+        // The user callback must settle so the runtime plugin chain can reach the
+        // scheduler plugin (task 0734); the keep-alive parks startServer itself.
+        const raced = await Promise.race([
+            startServer({ port: 4402, host: '127.0.0.1', openBrowser: false, keepAlive: true }, deps).then(
+                () => 'resolved' as const,
+            ),
+            new Promise((resolve) => setTimeout(() => resolve('pending' as const), 40)),
+        ]);
+        expect(startSettled).toBe(true);
+        expect(raced).toBe('pending');
     });
 
     test('history refresh job handler is registered (consumed by the queue worker)', async () => {

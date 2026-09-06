@@ -586,10 +586,15 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 // browser lands on a JSON 404 that looks like a broken install.
                 await deps.openUrl(webDistPath ? `${url}/board` : `${url}/api/health`);
             }
-
-            if (options.keepAlive !== false) {
-                await new Promise<void>(() => {});
-            }
         },
     });
+
+    // Keep the process alive AFTER the user callback resolves. The callback must
+    // return so the runtime's plugin chain can finish — the scheduler plugin
+    // starts the adapter there (task 0734), and a never-resolving callback
+    // starved it, leaving every registered cron entry dead (Sep 2 – Sep 6 2026).
+    // Bun.serve alone does not hold the loop for the CLI `serve` command path.
+    if (options.keepAlive !== false) {
+        await new Promise<void>(() => {});
+    }
 }
