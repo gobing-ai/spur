@@ -1,4 +1,7 @@
+/** localStorage key for the current (v2) persisted board layout state. */
 export const STORAGE_KEY = 'spur-board-layout-v2';
+
+/** Pre-v2 localStorage key, read once during migration then discarded. */
 export const LEGACY_STORAGE_KEY = 'spur-board-layout';
 
 /** Persisted board layout dimensions and collapse state. */
@@ -10,6 +13,7 @@ export interface LayoutState {
     rightPanelCollapsed: boolean;
 }
 
+/** Layout a clean or reset session mounts with — rail folded, right panel closed (A7 R1). */
 export const DEFAULTS: LayoutState = {
     version: 2,
     sidebarWidth: 240,
