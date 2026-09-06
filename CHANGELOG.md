@@ -1,5 +1,78 @@
 # Changelog
 
+## [0.3.74] - 2026-09-06
+
+### Added
+
+- 0777 F4 run-start capability preflight for pinned executors (bcc889720)
+- 0774 drop accepted plumbing from CLI task-check callers (f19a393ed)
+- ship D61 essential workflow checks in corpus-check (5692bc2b3)
+- implement maintainDatabase with optimize, wal checkpoint, and vacuum (65cf51695)
+- add D61 entry and update INDEX (1e7d507f0)
+- add gain ratio line overlay to summary token activity charts (fd813b3dc)
+- resolve auto bucket to 1m for 4h time range (fd794b4c2)
+- update overview section title to include gain ratio (ead760e92)
+- specify feature A7 for board layout and orchestrator panel (8208bf940)
+- batch-create D61 implementation tasks 0765-0772 (22e913f8a)
+- add spur self maintain command, scheduler jobs, and documentation (817e16284)
+- 0765 essential completion checks explicit, no blanket strictness (56e7e85cb)
+- 0766 decomposition — supersede 0766 with 0773/0774/0775 (7a9ac3454)
+- 0775 retire corpus/composition baselines and snapshot acceptance (fc4a8a3a9)
+- 0771 upgrade basic, history-anatomy, and pr-review workflow behavior (76aa8732a)
+- optimize Spur Board layout and global orchestrator panel (738f34c19)
+- 0772 bounded gate output, versioned bundle, D61 rollout evidence (ddb10b535)
+- 0767 retire composition mirror remnants; live facts only (dececdc6f)
+- 0770 truthful lifecycle and wrapup outcomes (c29acc4ea)
+- 0768 unify plan identity and readable execution progress (19f376ec5)
+- 0769 retire write-shell ceremony across example pipelines (6d7bf8ce1)
+
+### Changed
+
+- optimize timeline and tool sequence forensic queries (f5ed73b85)
+- bound loop detail queries and eliminate links subquery in insights (9f6372b99)
+- eliminate loop query subquery overhead in insights and decouple summary load (5ab1c7780)
+- refresh board rollups after import to avoid full-table scans (9838286d4)
+- serve summary and sessions from rollups when populated (35cef7146)
+- wire incremental rollup refreshes in history analysis service (bd0d45660)
+
+### Fixed
+
+- close D61 follow-ups 0766/0768 evidence backfill and 0776 blocker fixes (809fc0781)
+- default nullish token and duration fields in insights repeatedCalls (4a0739e23)
+- 0766 report skipped audit comparisons (7fe75daad)
+- attribute session models accurately and optimize timeline query indexing (9520a3976)
+- resolve domain raw SQL boundaries, rollup fallback, and typecheck issues (ad3c3480d)
+- repair pre-existing rule violations surfaced by 0773 quality gate (f30e6e66e)
+- default layout stylesheet variables to folded state (35a3266d9)
+- default sidebar to folded with v2 storage migration (68f3445e5)
+
+### Other
+
+- merge main into sp/runall-d61-8229 (end-of-batch reconciliation) (6c81e5cfe)
+- update the spur config file (be6e5304d)
+- repair 0765 L4 verdict evidence; add 0776/0777 findings tasks (d5a8e8fd8)
+- update corpus baseline snapshot (d347daee2)
+- sync feature A7 status to done (054537e8d)
+- add executionCapabilities to pi-dsv4-flash-volc (1567c5059)
+- add executionCapabilities to pi-dsv4-flash-volc (b36193142)
+- attest executionCapabilities for pi-zai executor (cbf4d20b6)
+- add :line numbers to 0771/0772 file:line citations (1870dcbde)
+- add file:line citations to 0768/0771/0772 Solution sections (f049333a7)
+- finalize 0765 lifecycle — Solution file:line refs + Review priority findings table (37e5c2ec2)
+- finalize 0765 lifecycle — Solution file:line refs + Review priority findings table (6d6d6c34f)
+- renumber A7 tasks from 0773-0775 to 0778-0780 (a3415137f)
+- add tsdoc to layout-state exports (fdcacae5b)
+- add essential-workflow-checks design package (3f15d0d94)
+- record A7 re-verification and sync layout design docs (fd960a93a)
+- refresh task tables across existing features (5ab1f0460)
+- record D61 brainstorm and implementation handoff (180abe645)
+- D61 task 0766+ — batch halt deferral notes (3685a1d7f)
+- close 0766 as superseded by 0773/0774/0775 decomposition (daffbbec5)
+- 0773 finalize implement stage — validate artifacts, tick plan, finalize evidence envelopes (8e0aa24f0)
+- 0773 record — Testing evidence, verdict artifact, verified requirement ticks (23ebf5d42)
+- 0774 record — verify verdict PASS, Testing/Review from artifact (7e66efa7a)
+- record D61 release readiness (0772) (d41ee3749)
+
 ## [0.3.73] - 2026-09-04
 
 ### Added
