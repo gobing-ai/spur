@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { Button, Modal } from '@/ui';
 
 export interface SettingsModalProps {
@@ -10,7 +11,9 @@ export interface SettingsModalProps {
  * Full settings persistence and configuration forms are deferred.
  */
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
-    return (
+    if (!open) return null;
+
+    const modalContent = (
         <Modal open={open} onClose={onClose} aria-labelledby="settings-modal-title">
             <div className="flex items-center justify-between pb-3 border-b border-spur-border">
                 <h3 id="settings-modal-title" className="text-base font-semibold text-spur-text">
@@ -31,4 +34,6 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             </div>
         </Modal>
     );
+
+    return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 }

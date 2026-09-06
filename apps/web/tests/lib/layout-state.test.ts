@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { loadLayoutState, resetLayoutState, saveLayoutState } from '../../src/lib/layout-state';
+import {
+    LEGACY_STORAGE_KEY,
+    loadLayoutState,
+    resetLayoutState,
+    STORAGE_KEY,
+    saveLayoutState,
+} from '../../src/lib/layout-state';
 
 // mock localStorage
 const store = new Map<string, string>();
@@ -48,7 +54,7 @@ describe('layout-state', () => {
         restoreStorage();
     });
 
-    test('saveLayoutState persists to localStorage', () => {
+    test('saveLayoutState persists to localStorage under STORAGE_KEY', () => {
         mockStorage();
         saveLayoutState({
             sidebarWidth: 300,
@@ -56,16 +62,17 @@ describe('layout-state', () => {
             sidebarCollapsed: true,
             rightPanelCollapsed: false,
         });
-        const raw = store.get('spur-board-layout');
+        const raw = store.get(STORAGE_KEY);
         expect(raw).toBeDefined();
         if (!raw) return;
         const parsed = JSON.parse(raw);
+        expect(parsed.version).toBe(2);
         expect(parsed.sidebarWidth).toBe(300);
         expect(parsed.sidebarCollapsed).toBe(true);
         restoreStorage();
     });
 
-    test('loadLayoutState restores persisted values', () => {
+    test('loadLayoutState restores persisted values from v2 storage', () => {
         mockStorage();
         saveLayoutState({
             sidebarWidth: 280,
@@ -76,19 +83,46 @@ describe('layout-state', () => {
         const state = loadLayoutState();
         expect(state.sidebarWidth).toBe(280);
         expect(state.rightPanelWidth).toBe(350);
+        expect(state.sidebarCollapsed).toBe(false);
+        restoreStorage();
+    });
+
+    test('loadLayoutState migrates legacy unversioned state to v2 with sidebarCollapsed=true', () => {
+        mockStorage();
+        store.set(
+            LEGACY_STORAGE_KEY,
+            JSON.stringify({
+                sidebarWidth: 280,
+                rightPanelWidth: 350,
+                sidebarCollapsed: false,
+                rightPanelCollapsed: false,
+            }),
+        );
+        const state = loadLayoutState();
+        // Preserves custom panel widths
+        expect(state.sidebarWidth).toBe(280);
+        expect(state.rightPanelWidth).toBe(350);
+        // Enforces folded default per A7 requirement 1.2
+        expect(state.sidebarCollapsed).toBe(true);
+        expect(state.rightPanelCollapsed).toBe(false);
+        // Legacy key cleaned up and v2 key written
+        expect(store.get(LEGACY_STORAGE_KEY)).toBeUndefined();
+        expect(store.get(STORAGE_KEY)).toBeDefined();
         restoreStorage();
     });
 
     test('loadLayoutState handles corrupt JSON gracefully', () => {
         mockStorage();
-        store.set('spur-board-layout', '{broken');
+        store.set(STORAGE_KEY, '{broken');
         const state = loadLayoutState();
         expect(state.sidebarWidth).toBe(240); // default
+        expect(state.sidebarCollapsed).toBe(true);
         restoreStorage();
     });
 
-    test('resetLayoutState removes the key', () => {
+    test('resetLayoutState removes both v2 and legacy keys', () => {
         mockStorage();
+        store.set(LEGACY_STORAGE_KEY, '{"sidebarWidth":200}');
         saveLayoutState({
             sidebarWidth: 300,
             rightPanelWidth: 400,
@@ -96,7 +130,8 @@ describe('layout-state', () => {
             rightPanelCollapsed: false,
         });
         resetLayoutState();
-        expect(store.get('spur-board-layout')).toBeUndefined();
+        expect(store.get(STORAGE_KEY)).toBeUndefined();
+        expect(store.get(LEGACY_STORAGE_KEY)).toBeUndefined();
         restoreStorage();
     });
 });
