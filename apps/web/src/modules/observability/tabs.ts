@@ -14,11 +14,17 @@ export type ObservabilityLiveness = {
     lastEventAt: string | null;
 };
 
+/** Cross-tab navigation intent emitted by Summary hotspot activators (task 0791 R6). */
+export type ObservabilityNavIntent =
+    | { tab: 'jobs'; jobId?: string }
+    | { tab: 'system-events'; eventName?: string; runId?: string };
+
 /** Common props passed from ObservabilityShell to each tab view. */
 export interface ObservabilityTabProps {
     onLivenessChange?: (next: ObservabilityLiveness) => void;
     timeRange?: ObservabilityTimeRange;
     onTimeRangeChange?: (next: ObservabilityTimeRange) => void;
+    onNavigate?: (intent: ObservabilityNavIntent) => void;
 }
 
 /**

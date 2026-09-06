@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Observability Summary tab: KPI metrics, event volume trend charts, and error hotspots"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-06T21:43:07.713Z
-updated_at: "2026-09-06T22:07:29.756Z"
+updated_at: "2026-09-06T23:00:34.054Z"
 feature_id: J93
 priority: P2
 tags: ["observability", "web", "ui", "charts"]
@@ -58,34 +58,34 @@ server-side), `successRatePct` is `0` (never `NaN`/`null`) when no jobs complete
 `bySeverity` carries a fourth `unknown` bucket for rows with no v2 `presentation.severity`. This tab
 renders those states directly and must not re-derive or special-case them.
 ### Requirements
-- [ ] R1. `apps/web/src/modules/observability/SummaryTab.tsx` replaces 0790's placeholder body,
+- [x] R1. `apps/web/src/modules/observability/SummaryTab.tsx` replaces 0790's placeholder body,
       keeping the `export default function SummaryTab(props: ObservabilityTabProps)` signature. It
       self-fetches `GET /api/observability/summary` via
       `fetchWithTimeout(new Request(resolveApiUrl(…), { signal }))` with the
       `AbortController` + monotonic `fetchIdRef` guard used by `JobsTab.tsx:244-256`, re-fetching
       whenever `props.timeRange` changes and discarding out-of-order responses.
-- [ ] R2. Four KPI cards render — **Total Events**, **Active In-Flight Jobs**, **Success Rate**,
+- [x] R2. Four KPI cards render — **Total Events**, **Active In-Flight Jobs**, **Success Rate**,
       **Error / Warning Count** — each with a `Sparkline` (`history/charts.tsx`) over the window's
       buckets and a period-over-period delta badge. `successRatePct: 0` renders as `0%`, never as
       blank, `NaN`, or a divide-by-zero artifact.
-- [ ] R3. A `StackedColumnsChart` (`history/charts.tsx:153`) renders `eventVolumeBuckets` as event
+- [x] R3. A `StackedColumnsChart` (`history/charts.tsx:153`) renders `eventVolumeBuckets` as event
       volume over time stacked by event prefix, with a stable prefix→color mapping shared with the
       severity bar and the top-types table.
-- [ ] R4. A severity distribution bar renders proportional `info` / `warning` / `error` counts, and
+- [x] R4. A severity distribution bar renders proportional `info` / `warning` / `error` counts, and
       renders the `unknown` bucket from 0789 as a distinct neutral segment rather than folding it
       into `info`.
-- [ ] R5. Two hotspot panels render: a **top event types** table (`name`, `prefix`, `count`,
+- [x] R5. Two hotspot panels render: a **top event types** table (`name`, `prefix`, `count`,
       `latestAt`) and a **recent failures** feed. Each failure row is an activator that switches the
       shell to the Jobs tab (`source: 'job'`) or the System Events tab (`source: 'event'`).
-- [ ] R6. `ObservabilityTabProps` (`apps/web/src/modules/observability/tabs.ts:17-21`) gains one
+- [x] R6. `ObservabilityTabProps` (`apps/web/src/modules/observability/tabs.ts:17-21`) gains one
       optional member `onNavigate?: (intent: ObservabilityNavIntent) => void`, and
       `ObservabilityShell.tsx` passes a handler that sets `activeId`. This is the **only** edit this
       task makes to `tabs.ts` or `ObservabilityShell.tsx`; the registry, its order, and the
       `useState` defaults are untouched.
-- [ ] R7. Loading and error states match the History module's language: a skeleton while pending, and
+- [x] R7. Loading and error states match the History module's language: a skeleton while pending, and
       on failure the `bg-error/10 border border-error/20 text-error` panel idiom of
       `history/SummaryTab.tsx:575-579` carrying the failure text. An aborted fetch is not an error.
-- [ ] R8. `apps/web/tests/modules/observability/summary-tab.test.tsx` covers: loading → loaded
+- [x] R8. `apps/web/tests/modules/observability/summary-tab.test.tsx` covers: loading → loaded
       transition, the four KPI values, delta badge sign for up/down/absent-previous, stacked-chart
       series derived from `byPrefix`, the `unknown` severity segment, failure-row navigation firing
       `onNavigate` with the right tab id, the error panel on a rejected fetch, and an empty window
@@ -283,17 +283,50 @@ this is what keeps the component mountable in isolation in tests.
 8. Run the gate from inside the workspace: `cd apps/web && bun test tests/modules/observability`,
    then `bun run lint`, `bun run test`, `bun run build` at the repo root.
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `apps/web/src/modules/observability/ObservabilityShell.tsx:131` |
+| `apps/web/src/modules/observability/ObservabilityShell.tsx:32` |
+| `apps/web/src/modules/observability/ObservabilityShell.tsx:5` |
+| `apps/web/src/modules/observability/SummaryTab.tsx:1` |
+| `apps/web/src/modules/observability/SummaryTab.tsx:110` |
+| `apps/web/src/modules/observability/SummaryTab.tsx:16` |
+| `apps/web/src/modules/observability/SummaryTab.tsx:284` |
+| `apps/web/src/modules/observability/SummaryTab.tsx:346` |
+| `apps/web/src/modules/observability/tabs.ts:17` |
+| `apps/web/src/modules/observability/tabs.ts:27` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | apps/web/src/modules/observability/SummaryTab.tsx:128-197 self-fetches GET /api/observability/summary with AbortController, monotonic fetchIdRef, and period-over-period Promise.all |
+| R2 | MET | apps/web/src/modules/observability/SummaryTab.tsx:324-386 renders 4 KPI cards (Total Events, Active Jobs, Success Rate, Errors/Warnings) with Sparklines and DeltaBadge |
+| R3 | MET | apps/web/src/modules/observability/SummaryTab.tsx:389-411 StackedColumnsChart stacked by event prefix with stable PREFIX_COLORS |
+| R4 | MET | apps/web/src/modules/observability/SummaryTab.tsx:413-446 4-segment severity distribution bar including distinct neutral unknown segment |
+| R5 | MET | apps/web/src/modules/observability/SummaryTab.tsx:449-556 Top event types table and recent failures feed triggering onNavigate with job/event destination |
+| R6 | MET | apps/web/src/modules/observability/tabs.ts:16-25 ObservabilityNavIntent and optional onNavigate member on ObservabilityTabProps; ObservabilityShell.tsx:103-108 handleNavigate wired to setActiveId |
+| R7 | MET | apps/web/src/modules/observability/SummaryTab.tsx:294-322 loading skeleton and error panel matching History module pattern |
+| R8 | MET | apps/web/tests/modules/observability/summary-tab.test.tsx:1-258 passes 7/7 comprehensive tests covering all R1-R7 behaviors |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R2 — Summary tab KPI metrics and trend charts | MET | test | apps/web/tests/modules/observability/summary-tab.test.tsx:1-258 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+<!-- spur:record-review -->
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (pipeline verify step — verdict: PASS)
 
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | lint | — | biome check . --error-on-warnings && bun run typecheck |
+| P4 | unit-tests | — | cd apps/web && bun test tests/modules/observability passed 131/131 |
 ### References
 - Parent feature: `docs/features/J93_observability-module-refactor-summary-tab-4h-range-default-queue-jobs-table-and-schedule-tracing.md` (scenario R2)
 - Design satellite: `docs/design/observability-module-refactor.md` §2.1, §3.1 (`ObservabilitySummaryResponse`)
@@ -306,3 +339,6 @@ this is what keeps the component mountable in isolation in tests.
 - `apps/web/src/lib/rpc-client.ts:32,44` — `resolveApiUrl`, `fetchWithTimeout`
 - `apps/web/src/modules/observability/ObservabilityFilters.tsx:42` — `timeRangeSince`
 ### History
+- 2026-09-06T23:00:12.645Z todo → wip (system)
+- 2026-09-06T23:00:29.821Z wip → testing (system)
+- 2026-09-06T23:00:34.054Z testing → done (system)

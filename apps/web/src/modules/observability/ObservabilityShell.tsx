@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import {
     OBSERVABILITY_TABS,
     type ObservabilityLiveness,
+    type ObservabilityNavIntent,
     type ObservabilityTab,
     type ObservabilityTimeRange,
 } from './tabs';
@@ -26,6 +27,10 @@ export default function ObservabilityShell() {
 
     const handleLivenessChange = useCallback((next: ObservabilityLiveness) => {
         setLiveness(next);
+    }, []);
+
+    const handleNavigate = useCallback((intent: ObservabilityNavIntent) => {
+        setActiveId(intent.tab);
     }, []);
 
     // Derive display chip from current tab + reported liveness.
@@ -123,6 +128,7 @@ export default function ObservabilityShell() {
                         onLivenessChange={handleLivenessChange}
                         timeRange={timeRange}
                         onTimeRangeChange={setTimeRange}
+                        onNavigate={handleNavigate}
                     />
                 ) : null}
             </div>
