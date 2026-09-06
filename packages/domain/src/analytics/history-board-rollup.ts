@@ -2061,3 +2061,38 @@ export async function refreshHistoryBoardRollupsIncremental(db: DbAdapter): Prom
 
 // Re-export from here so ROLLUP_DEFINITION_VERSION is reachable at the frozen location.
 export { ROLLUP_DEFINITION_VERSION } from './rollup-watermark';
+
+/** Tables probed to check if rollup data rows exist. */
+export type HistoryBoardRollupProbeTable =
+    | 'history_board_message_5m'
+    | 'history_board_session_stats'
+    | 'history_board_loop_findings';
+
+/** Record the updated rollup meta row after a refresh. */
+export async function recordHistoryBoardRollupMeta(
+    db: DbAdapter,
+    historyVersion: string,
+    refreshedAt: string = new Date().toISOString(),
+): Promise<void> {
+    await db.run(
+        `INSERT INTO history_board_rollup_meta (id, history_version, refreshed_at)
+         VALUES (1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET history_version = excluded.history_version, refreshed_at = excluded.refreshed_at`,
+        historyVersion,
+        refreshedAt,
+    );
+}
+
+/** Check whether a rollup table has at least one materialized row. */
+export async function hasHistoryBoardRollupRows(db: DbAdapter, table: HistoryBoardRollupProbeTable): Promise<boolean> {
+    const validTables: Record<HistoryBoardRollupProbeTable, true> = {
+        history_board_message_5m: true,
+        history_board_session_stats: true,
+        history_board_loop_findings: true,
+    };
+    if (!validTables[table]) {
+        throw new Error(`Invalid rollup probe table: ${table}`);
+    }
+    const row = await db.queryFirst<{ ok: number }>(`SELECT 1 AS ok FROM ${table} LIMIT 1`);
+    return row?.ok === 1;
+}

@@ -15,6 +15,7 @@
 
 import { type MarkdownDocument, UNIVERSAL_SECTIONS } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { echoError } from '@gobing-ai/ts-utils';
 import type { z } from 'zod';
 
 import { ALL_FINDING_CODES, FINDING_CODES, type FindingCode, isFindingCode } from './finding-codes';
@@ -289,15 +290,15 @@ export abstract class PlanningCheckService {
             const override = overrides?.[f.code];
             if (override === 'off') {
                 if (unsuppressible) {
-                    process.stderr.write(`summarize: override 'off' refused for unsuppressible ${f.code}\n`);
+                    echoError(`summarize: override 'off' refused for unsuppressible ${f.code}`);
                 } else {
                     continue; // dropped before pass gate or strict elevation sees it (R4)
                 }
             }
             if (override === 'error' || override === 'warning') {
                 if (unsuppressible) {
-                    process.stderr.write(
-                        `summarize: severity override for unsuppressible ${f.code} ignored (required severity preserved)\n`,
+                    echoError(
+                        `summarize: severity override for unsuppressible ${f.code} ignored (required severity preserved)`,
                     );
                 } else {
                     f.severity = override;

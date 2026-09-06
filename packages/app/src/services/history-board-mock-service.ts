@@ -390,51 +390,64 @@ export class MockHistoryBoardService implements HistoryBoardService {
             '1d': 86_400_000,
         }[bucket];
         const dimension = filter?.dimension ?? 'model';
-        const buckets: Record<string, { total: number; cacheRead: number; series: Record<string, number> }> = {};
-        const modelBuckets: Record<string, { total: number; cacheRead: number; series: Record<string, number> }> = {};
-        const sourceBuckets: Record<string, { total: number; cacheRead: number; series: Record<string, number> }> = {};
-        const toolBuckets: Record<string, { total: number; cacheRead: number; series: Record<string, number> }> = {};
-        const skillBuckets: typeof buckets = {};
+        interface MockBucketPoint {
+            total: number;
+            cacheRead: number;
+            output: number;
+            series: Record<string, number>;
+        }
+        const ensureBucket = (map: Record<string, MockBucketPoint>, key: string): MockBucketPoint => {
+            let entry = map[key];
+            if (!entry) {
+                entry = { total: 0, cacheRead: 0, output: 0, series: {} };
+                map[key] = entry;
+            }
+            return entry;
+        };
+
+        const buckets: Record<string, MockBucketPoint> = {};
+        const modelBuckets: Record<string, MockBucketPoint> = {};
+        const sourceBuckets: Record<string, MockBucketPoint> = {};
+        const toolBuckets: Record<string, MockBucketPoint> = {};
+        const skillBuckets: Record<string, MockBucketPoint> = {};
 
         for (const s of matching) {
             const bKey = new Date(Math.floor(s.start / bucketInterval) * bucketInterval).toISOString();
-            if (!buckets[bKey]) buckets[bKey] = { total: 0, cacheRead: 0, output: 0, series: {} };
-            if (!modelBuckets[bKey]) modelBuckets[bKey] = { total: 0, cacheRead: 0, output: 0, series: {} };
-            if (!sourceBuckets[bKey]) sourceBuckets[bKey] = { total: 0, cacheRead: 0, output: 0, series: {} };
-            if (!toolBuckets[bKey]) toolBuckets[bKey] = { total: 0, cacheRead: 0, output: 0, series: {} };
-            if (!skillBuckets[bKey]) skillBuckets[bKey] = { total: 0, cacheRead: 0, output: 0, series: {} };
+            const b = ensureBucket(buckets, bKey);
+            const mb = ensureBucket(modelBuckets, bKey);
+            const sb = ensureBucket(sourceBuckets, bKey);
+            const tb = ensureBucket(toolBuckets, bKey);
+            const kb = ensureBucket(skillBuckets, bKey);
 
-            buckets[bKey].total += s.tokens.billedTokens;
-            buckets[bKey].cacheRead += s.tokens.cacheReadTokens;
-            buckets[bKey].output += s.tokens.outputTokens;
-            modelBuckets[bKey].total += s.tokens.billedTokens;
-            modelBuckets[bKey].cacheRead += s.tokens.cacheReadTokens;
-            modelBuckets[bKey].output += s.tokens.outputTokens;
-            sourceBuckets[bKey].total += s.tokens.billedTokens;
-            sourceBuckets[bKey].cacheRead += s.tokens.cacheReadTokens;
-            sourceBuckets[bKey].output += s.tokens.outputTokens;
-            toolBuckets[bKey].total += s.tokens.billedTokens;
-            toolBuckets[bKey].cacheRead += s.tokens.cacheReadTokens;
-            toolBuckets[bKey].output += s.tokens.outputTokens;
-            skillBuckets[bKey].total += s.tokens.billedTokens;
-            skillBuckets[bKey].cacheRead += s.tokens.cacheReadTokens;
-            skillBuckets[bKey].output += s.tokens.outputTokens;
+            b.total += s.tokens.billedTokens;
+            b.cacheRead += s.tokens.cacheReadTokens;
+            b.output += s.tokens.outputTokens;
+            mb.total += s.tokens.billedTokens;
+            mb.cacheRead += s.tokens.cacheReadTokens;
+            mb.output += s.tokens.outputTokens;
+            sb.total += s.tokens.billedTokens;
+            sb.cacheRead += s.tokens.cacheReadTokens;
+            sb.output += s.tokens.outputTokens;
+            tb.total += s.tokens.billedTokens;
+            tb.cacheRead += s.tokens.cacheReadTokens;
+            tb.output += s.tokens.outputTokens;
+            kb.total += s.tokens.billedTokens;
+            kb.cacheRead += s.tokens.cacheReadTokens;
+            kb.output += s.tokens.outputTokens;
 
-            modelBuckets[bKey].series[s.model] = (modelBuckets[bKey].series[s.model] ?? 0) + s.tokens.billedTokens;
-            sourceBuckets[bKey].series[s.source] = (sourceBuckets[bKey].series[s.source] ?? 0) + s.tokens.billedTokens;
+            mb.series[s.model] = (mb.series[s.model] ?? 0) + s.tokens.billedTokens;
+            sb.series[s.source] = (sb.series[s.source] ?? 0) + s.tokens.billedTokens;
 
             const toolWeight = Object.values(s.toolMix).reduce((sum, count) => sum + count, 0);
             for (const [tool, count] of Object.entries(s.toolMix)) {
-                toolBuckets[bKey].series[tool] =
-                    (toolBuckets[bKey].series[tool] ?? 0) +
-                    (toolWeight > 0 ? (s.tokens.billedTokens * count) / toolWeight : 0);
+                tb.series[tool] =
+                    (tb.series[tool] ?? 0) + (toolWeight > 0 ? (s.tokens.billedTokens * count) / toolWeight : 0);
             }
 
             const skillWeight = Object.values(s.skillMix).reduce((sum, count) => sum + count, 0);
             for (const [skill, count] of Object.entries(s.skillMix)) {
-                skillBuckets[bKey].series[skill] =
-                    (skillBuckets[bKey].series[skill] ?? 0) +
-                    (skillWeight > 0 ? (s.tokens.billedTokens * count) / skillWeight : 0);
+                kb.series[skill] =
+                    (kb.series[skill] ?? 0) + (skillWeight > 0 ? (s.tokens.billedTokens * count) / skillWeight : 0);
             }
 
             const dimensions: Array<[string, number]> =
@@ -454,11 +467,11 @@ export class MockHistoryBoardService implements HistoryBoardService {
                         : weight > 0
                           ? (s.tokens.billedTokens * count) / weight
                           : 0;
-                buckets[bKey].series[key] = (buckets[bKey].series[key] ?? 0) + tokens;
+                b.series[key] = (b.series[key] ?? 0) + tokens;
             }
         }
 
-        const toTimeSeries = (map: typeof buckets) =>
+        const toTimeSeries = (map: Record<string, MockBucketPoint>) =>
             Object.entries(map)
                 .sort(([a], [b]) => a.localeCompare(b))
                 .map(([bKey, bVal]) => {

@@ -44,6 +44,7 @@ import {
     type HistoryBoardSourceRollupRow,
     type HistoryBoardSummaryRollup,
     type HistoryDimension,
+    hasHistoryBoardRollupRows,
     historyBoardBucketsFromRollup,
     historyBoardDatabaseBytes,
     historyBoardDimensionDailyFromMart,
@@ -932,10 +933,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         if (path === 'mart') {
             return await this.summaryFromMart(db, sel, bucket, dimension);
         }
-        const hasRollupData =
-            fresh ||
-            (await db.queryFirst<{ ok: number }>('SELECT 1 AS ok FROM history_board_message_5m LIMIT 1'))?.ok === 1;
-        if (hasRollupData) {
+        if (fresh) {
             const rows = await historyBoardSummaryFromRollup(db, sel, bucket, dimension);
             const extras = await computeSummaryExtras(db, sel, bucket, dimension, false, rows.buckets);
             return projectSummary(rows, extras);
@@ -1503,10 +1501,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         const sel = toArtifactSelector(input.filter);
         const page = input.page ?? 1;
         const pageSize = input.pageSize ?? 20;
-        const hasSessionRollup =
-            (await historyBoardRollupsFresh(db)) ||
-            (await db.queryFirst<{ ok: number }>('SELECT 1 AS ok FROM history_board_session_stats LIMIT 1'))?.ok === 1;
-        if (hasSessionRollup) {
+        if (await historyBoardRollupsFresh(db)) {
             const result = await historyBoardSessionsFromRollup(db, sel, {
                 page,
                 pageSize,
@@ -1592,10 +1587,8 @@ export class LiveHistoryBoardService implements HistoryBoardService {
 
         const sel = toArtifactSelector(filter);
         const rollupsFresh = await historyBoardRollupsFresh(db);
-        const hasRollupRows = await db.queryFirst<{ ok: number }>(
-            'SELECT 1 AS ok FROM history_board_loop_findings LIMIT 1',
-        );
-        const useRollup = rollupsFresh || hasRollupRows?.ok === 1;
+        const hasRollupRows = await hasHistoryBoardRollupRows(db, 'history_board_loop_findings');
+        const useRollup = rollupsFresh || hasRollupRows;
         const effectiveSel = rollupsFresh ? sel : boundStaleSelector(sel);
         const [loopRows, cacheWasteRows, sessionRows, largeSteps, slowStepsRows, modelCompRows] = useRollup
             ? await Promise.all([
