@@ -152,7 +152,7 @@ describe('LiveHistoryBoardService', () => {
         const summary1h = await svc.getSummary({ range: '1h' });
         expect(summary1h.cacheEfficiency.bySource).toBeDefined();
 
-        // 4H range resolves to 3m bucket interval
+        // 4H range resolves to 1m bucket interval
         const summary4h = await svc.getSummary({ range: '4h' });
         expect(summary4h.cacheEfficiency.bySource).toBeDefined();
     });

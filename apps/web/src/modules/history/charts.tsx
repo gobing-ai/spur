@@ -5,7 +5,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
 export function resolveAutoBucket(range: string): '1m' | '3m' | '5m' | '10m' | '30m' | '1h' | '4h' | '1d' {
     if (range === '1h') return '1m';
-    if (range === '4h') return '3m';
+    if (range === '4h') return '1m';
     if (range === '24h') return '10m';
     if (range === '7d') return '30m';
     return '1d';

@@ -183,7 +183,7 @@ function resolveBucket(bucket: string | undefined, range: HistoryRange = '4h'): 
         return bucket as DomainHistoryBucket;
     }
     if (range === '1h') return '1m';
-    if (range === '4h') return '3m';
+    if (range === '4h') return '1m';
     if (range === '24h') return '10m';
     if (range === '7d') return '30m';
     return '1d';

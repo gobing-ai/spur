@@ -372,7 +372,7 @@ export class MockHistoryBoardService implements HistoryBoardService {
                 ? filter?.range === '1h'
                     ? '1m'
                     : filter?.range === '4h'
-                      ? '3m'
+                      ? '1m'
                       : filter?.range === '24h'
                         ? '10m'
                         : filter?.range === '7d'

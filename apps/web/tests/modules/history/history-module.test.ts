@@ -36,7 +36,7 @@ describe('History Board Web Module', () => {
 
     test('resolveAutoBucket maps time range to bucket granularity', () => {
         expect(resolveAutoBucket('1h')).toBe('1m');
-        expect(resolveAutoBucket('4h')).toBe('3m');
+        expect(resolveAutoBucket('4h')).toBe('1m');
         expect(resolveAutoBucket('24h')).toBe('10m');
         expect(resolveAutoBucket('7d')).toBe('30m');
         expect(resolveAutoBucket('30d')).toBe('1d');
