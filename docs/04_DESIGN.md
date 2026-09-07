@@ -2930,6 +2930,11 @@ human-only; optional `presentation.correlators` / `actionLabel` / `agent` and th
 [`system-events-human-table.md`](design/system-events-human-table.md). `context` stays closed. No new CLI
 noun. Tooltip remediation and raw ids stay out of the table.
 
+**J31 Observabilities polish (proposed; ADR-110).** Header/sidebar naming alignment, shell-level
+time-range selector for all tabs (Routing wires `since` into `routing-summary`), and catalog-open
+event ingestion with a generic-entry catch-all live in
+[`observabilities-module-polish.md`](design/observabilities-module-polish.md).
+
 **Routing decision attribution (task 0545).** Agent-run lifecycle rows carry the routing decision as
 envelope metadata — no new table or column. `agent.invoke.start` / `agent.invoke.exit` payloads gain
 a `routing` block (`role?`, `tier`, `executor`, `source`) merged at the per-run invoke bridge in
