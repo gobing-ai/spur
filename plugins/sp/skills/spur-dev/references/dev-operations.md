@@ -237,11 +237,11 @@ must not be changed without updating the backing skill.
 - **Inputs:**
   - `--feature <id>` **or** `--tasks <selector>` (required — at least one). `--feature` is sugar for `--tasks feature:<id>` (shared selector grammar: explicit WBS list, `feature:<id>`, `ready`, status pseudo-list — [execution-batch.md](execution-batch.md) Step 1). If both are present, `--tasks` wins (one-line note in the report).
   - Shared refine flags (passed through to each per-task refine): `--focus <mode>`, `--description <text>`, `--depth <standard|ready>`, `--agent <inline|auto|name>`, `--auto`.
-  - Batch-only flags: `--keep-going` (continue independents after a failure; default halt), `--status <s>` (filter resolved membership; default **`backlog,todo`** — planning-side fill candidates), `--json` (machine-readable batch report).
+  - Batch-only flags: `--keep-going` (continue independents after a failure; default halt), `--status <s>` (filter resolved membership; default **`backlog` + `todo`** — planning-side fill candidates. The filter is applied in-agent against the frozen set; `spur task list --status` takes exactly one canonical status per call (see `execution-batch.md` Step 1).), `--json` (machine-readable batch report).
 - **Backing:** `sp:spur-dev` skill, `refineall` operation (orchestrates; per-task body is the single-task `refine` operation — never a second refine implementation).
 - **Behavior:**
   1. Resolve + **freeze** the set at kickoff (never re-query membership mid-batch).
-  2. Apply `--status` filter (default `backlog,todo`). Tasks already `done`/`cancelled`/`testing` are excluded unless the operator widens `--status`. Report each exclusion with reason.
+  2. Apply `--status` filter (default `backlog` + `todo`; applied in-agent against the frozen set; `spur task list --status` takes exactly one canonical status per call — see `execution-batch.md` Step 1). Tasks already `done`/`cancelled`/`testing` are excluded unless the operator widens `--status`. Report each exclusion with reason.
   3. Topo-sort by `dependencies[]` (Kahn, WBS-ascending tie-break). Cycle → abort entire batch before any refine. Out-of-set deps: `done` → allow; else → block subtree (same as runall).
   4. For each WBS in order: invoke single-task refine with shared flags **including `--depth`**. Under `--auto` + **`--depth standard`** (default), the per-task **L3 pre-synthesis SKIP gate** still applies. Under **`--depth ready`**, each task runs the implement-ready checklist (no L3-only SKIP).
   5. Failure policy: **stop-the-batch** (default) or `--keep-going` (skip in-batch dependents of a failed refine; continue independents).

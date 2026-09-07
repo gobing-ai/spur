@@ -23,7 +23,7 @@ operation, applied to a resolved set (typically every task under a feature). Pas
 | `--agent` `<inline\|auto\|name>` | Who runs the model-bearing refinement. | omit |
 | `--auto` | Skip objective HITL gates. | off |
 | `--keep-going` | Continue past per-task failures. | off |
-| `--status` `<s>` | Only refine tasks in a status. | backlog,todo |
+| `--status` `<s>` | Only refine tasks in these statuses (applied in-agent to the frozen set). | `backlog` + `todo` |
 | `--json` | Emit structured JSON. | off |
 | `--worktree` `[<name>]` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. Bare `--worktree` creates a fresh tree; `--worktree <name>` adopts an existing worktree by name/path/branch. | off |
 
@@ -39,7 +39,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 Flags: `--feature` (sugar for `feature:<id>`), `--tasks <selector>`, shared refine flags
 (`--focus`, `--description`, `--depth`, `--agent`, `--auto`),
 plus `--keep-going`,
-`--status` (default `backlog,todo`),
+`--status` (default `backlog` + `todo`),
 `--json`, `--worktree` `[<name>]` (run the batch in an isolated git worktree — FF-merge onto the base ref on
 full success, retain intact on any failure/halt/non-FF; bare form creates a fresh tree, `<name>`
 form adopts an existing worktree by name/path/branch; see `execution-batch.md` § Worktree
