@@ -655,6 +655,35 @@ describe('spur task CLI', () => {
         expect(output.errors.join('\n')).toContain('Solution must contain at least one `file:line` citation');
     });
 
+    test('update --section Notes is byte-identical on a second identical write', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Notes round trip'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const taskPath = createdPath(cOut);
+        const bodyFile = join(cwd, 'notes-round-trip.md');
+        await writeFile(bodyFile, 'Round-trip notes body.\n');
+
+        expect(
+            await main(['task', 'update', wbs, '--section', 'Notes', '--from-file', bodyFile], {
+                cwd,
+                output: createCapturedOutput(),
+            }),
+        ).toBe(0);
+        const afterFirst = await readFile(taskPath, 'utf8');
+        const notesOf = (raw: string) => raw.slice(raw.indexOf('### Notes'));
+        expect(notesOf(afterFirst)).toMatch(/^### Notes\n\nRound-trip notes body\.\n\n/);
+
+        expect(
+            await main(['task', 'update', wbs, '--section', 'Notes', '--from-file', bodyFile], {
+                cwd,
+                output: createCapturedOutput(),
+            }),
+        ).toBe(0);
+        const afterSecond = await readFile(taskPath, 'utf8');
+        // Frontmatter `updated_at` advances on every write; the Notes spelling must not.
+        expect(notesOf(afterSecond)).toBe(notesOf(afterFirst));
+    });
+
     // ── list ──
     test('list renders a status-grouped board with all columns', async () => {
         const output = createCapturedOutput();
@@ -720,6 +749,7 @@ describe('spur task CLI', () => {
             expect(board).not.toContain(col);
         }
     });
+
     test('resolve maps a task file path to its WBS', async () => {
         const cOut = createCapturedOutput();
         await main(['task', 'create', '--skip-ready', 'Resolve me'], { cwd, output: cOut });

@@ -379,12 +379,12 @@ export class MarkdownDocument {
         const cleaned = this.stripSameLevelHeadings(body);
         const section = this.findSection(name);
         if (section !== undefined) {
-            // Guarantee a trailing newline so the next section heading stays at
-            // line-start; otherwise a body without one (or one whose final line
-            // was a stripped same-level heading) fuses with the following
-            // section's heading and swallows it on re-parse.
-            const withTrailer = cleaned.endsWith('\n') ? cleaned : `${cleaned}\n`;
-            section.modifiedText = `${section.headingLine}\n${withTrailer}`;
+            // Match insertSection spacing: one blank line after the heading and
+            // a body trailer that leaves one blank line before the next heading.
+            // trim() makes the spelling idempotent; fenced interiors are untouched.
+            const trimmed = cleaned.trim();
+            section.modifiedText =
+                trimmed.length > 0 ? `${section.headingLine}\n\n${trimmed}\n\n` : `${section.headingLine}\n\n`;
             return;
         }
         this.insertSection(name, cleaned);

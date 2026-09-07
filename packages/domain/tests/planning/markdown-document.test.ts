@@ -244,6 +244,70 @@ describe('MarkdownDocument', () => {
         });
     });
 
+    describe('replaceSection() spacing matches insertSection (R9)', () => {
+        test('leaves one blank line after the heading and before the next heading', () => {
+            const doc = MarkdownDocument.parse(TASK_FILE, 'task');
+            doc.replaceSection('Background', 'New background content.');
+            const out = doc.serialize();
+            expect(out).toMatch(/### Background\n\nNew background content\.\n\n### Requirements/);
+        });
+
+        test('is idempotent on an identical rewrite', () => {
+            const doc = MarkdownDocument.parse(TASK_FILE, 'task');
+            doc.replaceSection('Background', 'Same body.');
+            const first = doc.serialize();
+            const again = MarkdownDocument.parse(first, 'task');
+            again.replaceSection('Background', 'Same body.');
+            expect(again.serialize()).toBe(first);
+        });
+
+        test('preserves a fenced code block verbatim, including interior blank lines', () => {
+            const fence = ['Intro.', '', '```md', '### Not a heading', '', 'inside', '```', '', 'Outro.'].join('\n');
+            const doc = MarkdownDocument.parse(TASK_FILE, 'task');
+            doc.replaceSection('Background', fence);
+            const out = doc.serialize();
+            expect(out).toContain('```md\n### Not a heading\n\ninside\n```');
+            const reparsed = MarkdownDocument.parse(out, 'task');
+            expect(reparsed.sectionNames).not.toContain('Not a heading');
+            reparsed.replaceSection('Background', fence);
+            expect(reparsed.serialize()).toBe(out);
+        });
+
+        test('blanking History as the last section does not accumulate EOF blank lines', () => {
+            const content = [
+                '---',
+                'name: History last',
+                'status: wip',
+                '---',
+                '',
+                '## 0102. History last',
+                '',
+                '### Background',
+                '',
+                'Keep me.',
+                '',
+                '### History',
+                '',
+                'Old history.',
+                '',
+            ].join('\n');
+            const doc = MarkdownDocument.parse(content, 'task');
+            doc.replaceSection('History', 'First write.');
+            const first = doc.serialize();
+            expect(first).toMatch(/### History\n\nFirst write\.\n\n$/);
+            const again = MarkdownDocument.parse(first, 'task');
+            again.replaceSection('History', 'First write.');
+            expect(again.serialize()).toBe(first);
+            const blanked = MarkdownDocument.parse(first, 'task');
+            blanked.replaceSection('History', '   ');
+            const empty = blanked.serialize();
+            expect(empty).toMatch(/### History\n\n$/);
+            const emptyAgain = MarkdownDocument.parse(empty, 'task');
+            emptyAgain.replaceSection('History', '');
+            expect(emptyAgain.serialize()).toBe(empty);
+        });
+    });
+
     // -----------------------------------------------------------------------
     // replaceMarkerRegion() (R3 — auto-gen marker region)
     // -----------------------------------------------------------------------

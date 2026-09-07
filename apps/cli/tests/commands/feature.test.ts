@@ -159,7 +159,7 @@ describe('spur feature CLI', () => {
 
         const shown = createCapturedOutput();
         await main(['feature', 'show', id], { cwd, output: shown });
-        expect(shown.messages.join('')).toContain('## Goal\nCLI-written goal.\n');
+        expect(shown.messages.join('')).toContain('## Goal\n\nCLI-written goal.\n');
     });
 
     test('update --section without --from-file exits 2', async () => {
