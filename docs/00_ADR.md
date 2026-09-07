@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.38.0
+version: 1.39.0
 owner: Robin Min
-updated_at: 2026-09-06
+updated_at: 2026-09-07
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2304,3 +2304,16 @@ stage cites these notes (not the original body) when scoring authority/derived-d
 - **Decision:** Both `system_events` persistence paths (server tap, CLI emitter) persist every emitted event name, synthesizing a generic catalog entry for names absent from `BASE_CATALOG` (derived prefix, generic renderer, default tier, standard redaction, per-prefix quota bound at the persist site (the resolver enumerates catalog prefixes only)). The catalog stops being an ingestion gate and remains the presentation/promotion layer: cataloged names keep their presenters, tiers, and payload policies.
 - **Why:** Catalog-closed ingestion silently drops any event nobody registered — including upstream ts-libs emissions (e.g. ts-infra `db.*`) and future drift — making the observability board incomplete by construction. The ts-infra EventBus has no wildcard subscription, so the catch-all intercepts at the emit seam (idempotent `emit` wrap at the tap/ledger attach points) rather than subscribing.
 - **Detail:** [observabilities module polish](design/observabilities-module-polish.md). Accepted limitation: uncataloged events are history-visible on refresh, not live-streamed, until ts-infra grows an `onAny`/wildcard seam (upstream follow-up).
+
+## ADR-111: Quota-Driven Config Updates Survive Event-History Retention
+
+**Status:** Accepted (design) · **Date:** 2026-09-07 · **Feature:** B5
+
+**Decision.** Deliver quota-driven executor configuration updates through a durable latest-observation
+record per project/executor; retain YAML as the execution-availability authority.
+
+**Why.** A prunable observability ledger cannot guarantee delivery of a pending configuration update.
+
+**Detail:** [executor availability](design/executor-availability.md); `03 §25`.
+
+**Approval (2026-09-07).** Robin approved the proposed design and continuation to task decomposition.
