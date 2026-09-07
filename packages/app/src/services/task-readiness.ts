@@ -48,7 +48,7 @@ export interface ReadyCheckRow {
     evidence: string;
 }
 
-/** Default agent budget for creation preparation (10 minutes, config-overridable via flags). */
+/** Agent budget for creation preparation (15 minutes). Callers may override via `timeoutMs`; no CLI flag exposes it yet. */
 export const DEFAULT_READY_PREPARE_TIMEOUT_MS = 900_000;
 
 /** Recovery command for one unready task — the canonical ready competency. */
