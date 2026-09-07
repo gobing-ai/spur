@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.3.75] - 2026-09-06
+
+### Added
+
+- scheduler: prevent duplicate scheduler.custom job execution and sweep orphans at startup (472b63faf)
+- f21: task 0788 pipeline complete — ready-by-default task creation across CLI and planning (2ea0fc518)
+- f21: task 0787 pipeline complete — task creation/checking agree on valid persisted content (272451a8d)
+- observability: redesign Jobs tab with truthful queue_jobs table and detail drawer (task 0792) (0a910eca3)
+- observability: implement Summary tab KPI metrics, charts, and hotspots (task 0791) (992ce6937)
+- observability: register Summary tab, 4h default range, and retention badge (task 0790) (eb18a2b8f)
+- observability: implement backend data layer, queue_jobs query, and schedule endpoints (task 0789) (a3ba00ed1)
+- d6: tasks 0782–0786 pipeline complete (runall batch d6x1) (5d18b9b7b, 02abe6a73, b8bc8fe5d, bdcd44387, b43d4eab8)
+
+### Fixed
+
+- web: harden SummaryTab render against malformed summary payloads (3d90322e3)
+- observability: resolve pre-check and post-check rule violations and test coverage (f0c330233)
+- server: start scheduler by letting the start callback resolve (task 0734 regression) (d05753172)
+- workflow: close bounded audit defects and track follow-ups (954bb559f)
+
+### Changed
+
+- app: skip provenance alignment on no-op history imports (c7e18447b)
+
+### Other
+
+- planning: add J31 observabilities polish feature and design (cc4c6efb0)
+- authority: record ADR-109 and align F21 scope across docs (f4a94aca1)
+- design: add task-creation readiness design package (fed22c41b)
+- plans: record F21 task-creation readiness brainstorm (9d62823dc)
+- tasks: add F21 and delivery tasks 0787-0788; freeze 0782–0786 implementation contracts (befdeb5cc, 52eff03b4, 2c5600f2d, d5809b017, 645201780, ac18b378d, 98d3982e8)
+- features: transition feature J93 to done via feature sync (ccf224059)
+- observability: align design satellite with truthful implementation premises (J93 wrap) (7e73a0c24)
+- tasks: re-verify J93 with repaired evidence anchors and re-recorded Testing sections (aa64901fd)
+- tasks: refresh D6 task evidence for ADR-108 store retirement and add D6 verifyall dogfood report (ec716ae33)
+- d6: runall batch d6x1 wrapup — doc sync, learnings, metrics, feature transition (16ff3e579)
+- f21: wrapup doc-sync drift repair and learnings + metrics artifacts (runall batch f21-7d20) (eb571ec40, 176366029)
+- merge branch sp/runall-f21-7d20 (tasks 0787+0788) (a343bf7aa)
+- config: update the spur config file (f70408fa8)
+- tasks: record F21 verifyall evidence for tasks 0787-0788 (4e12bd478)
+- app: correct readiness prepare budget comment (d6223dc0d)
+
 ## [0.3.74] - 2026-09-06
 
 ### Added
