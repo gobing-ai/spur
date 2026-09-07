@@ -54,8 +54,10 @@ One shared capability in `packages/app`, consumed at both persistence seams:
   owning them, so no double-write (R8).
 - CLI: `SystemEventEmitter.emit` drops the unregistered-name no-op and persists through the same
   generic-entry path; the CLI ledger attach installs the same catch-all wrapper.
-- Retention: uncataloged prefixes resolve through the existing per-prefix quota fallback
-  (documented default), so no new config shape (R10).
+- Retention: `resolveRetentionQuotas` enumerates catalog prefixes only, so an uncataloged prefix is
+  unbounded until the persist site adds it. Bound it there — append
+  `{ prefix, quota: config.default ?? DEFAULT_SYSTEM_EVENT_RETENTION_QUOTA }` to the quota list when
+  the prefix is absent, then prune scoped to that prefix. Still no new config shape (R10).
 - Failure isolation is unchanged: catch-all persist errors are logged and swallowed, never thrown
   to the producer (R9).
 
