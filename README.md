@@ -62,9 +62,13 @@ your supported coding agents without cloning this repo:
 ```bash
 # install superskill, we will use it to install claude code style plugin
 bun add -g @gobing-ai/superskill
+# or
+npm install -g @gobing-ai/superskill
 
 # install plugin sp via npm tarball
-superskill install sp --marketplace ~/.bun/install/global/node_modules/@gobing-ai/spur
+superskill install sp --marketplace $(bun pm bin -g)/@gobing-ai/spur
+# or
+superskill install sp --marketplace $(npm root -g)/@gobing-ai/spur
 
 # install plugin sp via github URL
 superskill install sp --marketplace https://github.com/gobing-ai/spur
