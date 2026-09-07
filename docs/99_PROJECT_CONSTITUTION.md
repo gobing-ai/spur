@@ -3,9 +3,9 @@ name: Project Constitution
 doc: 99_PROJECT_CONSTITUTION
 owns: PROCESS — how the key files are maintained
 authority: authoritative-on-process
-version: 1.4.1
+version: 1.5.0
 created_at: 2026-05-31T17:30:43.643Z
-updated_at: 2026-09-06
+updated_at: 2026-09-07
 edit_rules: 99 §6.8
 sync: [T7]
 read_before: editing any numbered doc above
@@ -252,6 +252,11 @@ Entry template:
 
 **Detail:** <pointer into 03/04/plans — depth never lives here.>
 ```
+
+**Admission test (ADR-112).** An entry belongs here only when the decision binds more than one
+feature, module, or pipeline, or changes a repo-wide invariant. Single-feature design choices —
+even approved, important ones — live in the feature's `docs/design/` satellite and feature file.
+When in doubt, keep it out: a missing ADR is recoverable, a diluted register is not.
 
 1. **One decision per entry.** If a draft contains a principle *and* a deferred design *and* a
    mechanism choice *and* implementation tips — split it: decision(s) here, mechanism in `03`,

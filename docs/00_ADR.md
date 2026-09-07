@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.39.0
+version: 1.40.0
 owner: Robin Min
 updated_at: 2026-09-07
 read_before: any structural change; before diverging from a decision
@@ -12,7 +12,10 @@ sync: [T1, T2]
 
 # 00 ADR — Spur
 
-Spur's cross-cutting decisions. Mechanisms and surface details live in `03`/`04`.
+Spur's cross-cutting decisions — choices that bind more than one feature, module, or pipeline, or
+that change a repo-wide invariant. Single-feature design choices, however important, live in that
+feature's `docs/design/` satellite and feature file, not here (admission test: ADR-112). Mechanisms
+and surface details live in `03`/`04`.
 
 Historical entries were compacted in place on 2026-08-09 with operator approval. Numbers, dates,
 statuses, and decision outcomes remain stable; future changes follow the append-only rules in `99 §6.1`.
@@ -2317,3 +2320,21 @@ record per project/executor; retain YAML as the execution-availability authority
 **Detail:** [executor availability](design/executor-availability.md); `03 §25`.
 
 **Approval (2026-09-07).** Robin approved the proposed design and continuation to task decomposition.
+
+## ADR-112: 00 Records Cross-Cutting Decisions — Feature Designs Stay in Their Satellites
+
+**Status:** Accepted · **Date:** 2026-09-07
+
+**Decision.** An entry is admitted to this file only when the decision binds more than one feature,
+module, or pipeline, or changes a repo-wide invariant. A choice whose blast radius is one feature is
+recorded in that feature's `docs/design/` satellite and feature file instead — importance is not the
+test, blast radius is. Feature-scoped entries already admitted (ADR-109, ADR-110, ADR-111) stay in
+place under the append-only rule (`99 §6.1` rule 3): their numbers, dates, and cross-references
+remain stable, and their decisions remain binding. No renumbering, no reclamation.
+
+**Why.** If every approved feature design earns an ADR, this file stops being the cross-cutting
+decision register and becomes a second design index — readers can no longer find the decisions that
+bind everything.
+
+**Detail:** admission enforced by the `99 §6.1` admission test; feature design depth lives in
+`docs/design/` satellites.
