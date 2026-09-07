@@ -2293,7 +2293,7 @@ stage cites these notes (not the original body) when scoring authority/derived-d
 
 ## ADR-109: Task Creation Prepares Specifications by Default
 
-- **Status:** Accepted for implementation · **Date:** 2026-09-06 · **Feature:** F21 · **Amends:** ADR-020
+- **Status:** Implemented (F21 task 0788) · **Date:** 2026-09-06 · **Feature:** F21 · **Amends:** ADR-020
 - **Decision:** Default task CLI creation invokes the existing ready-preparation competency, with an explicit capture opt-out. Shared task writers remain deterministic; host planning prepares content inline and avoids a second model pass. Structural validity, specification readiness and execution prerequisites remain distinct.
 - **Why:** A newly created task should not require a separate manual refinement action, and shared writers must not acquire hidden agent execution.
-- **Detail:** `03 §12.4`; [task creation surface](design/task-creation-readiness.md). Approved design only; delivery is tracked by F21.
+- **Detail:** `03 §12.4`; [task creation surface](design/task-creation-readiness.md). Delivered by task 0788: `create`/`batch-create` prepare to ready depth by default (`preparation-failed` JSON error branch carries the stage and recovery command), `--skip-ready` captures without model execution, and the idea pipeline gained the `ready-prepare` stage writing the ready-evidence sidecar.

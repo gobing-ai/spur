@@ -17,6 +17,7 @@ import {
     normalizeAcFence,
     parseChecklist,
     SECTION_GUIDANCE,
+    serializeTaskFrontmatter,
     stripAcFence,
     TASK_CANONICAL_SECTIONS,
     type TaskBatchItem,
@@ -27,9 +28,9 @@ import {
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { GuardDeniedError } from '../errors';
 import { ensurePipelineRunLink, TASK_FORWARD_CHAIN } from './pipeline-run-link';
-import type { SectionMatrix } from './planning-check-base';
+import type { CheckFindings, SectionMatrix } from './planning-check-base';
 import type { EntityRef, PlanningEventName, PlanningWriteService, WriteResult } from './planning-write-service';
-import { hasSolutionFileLineCitation } from './task-check';
+import { hasSolutionFileLineCitation, TaskCheckService } from './task-check';
 import { TaskLocator } from './task-locator';
 import {
     escapeTablePipe,
@@ -132,6 +133,49 @@ export class WbsCollisionError extends Error {
         this.attemptedPath = attemptedPath;
     }
 }
+
+/**
+ * Error thrown by `create`/`batchCreate` (F21 task 0787 R2/R4) when a candidate
+ * task fails the SAME content policy `spur task check` enforces (L1 schema + L2
+ * matrix + L3 format), BEFORE any WBS allocation or file write. The
+ * machine-readable `findings` ride on the error so the CLI can emit one
+ * parseable result under `--json`.
+ */
+export class TaskCandidateInvalidError extends Error {
+    readonly findings: CheckFindings[];
+    constructor(title: string, findings: CheckFindings[], context?: string) {
+        const where = context !== undefined ? ` (${context})` : '';
+        const detail = findings
+            .filter((f) => f.severity === 'error')
+            .map((f) => `${f.layer}${f.section !== '' ? `/${f.section}` : ''}: ${f.message}`)
+            .join('; ');
+        super(
+            `candidate task "${title}"${where} rejected before persistence — it would fail \`spur task check\`: ${detail}`,
+        );
+        this.name = 'TaskCandidateInvalidError';
+        this.findings = findings;
+    }
+}
+
+/**
+ * Resolved shape of a candidate task awaiting its WBS (F21 task 0787). Everything
+ * create/batchCreate need to render the file, decided BEFORE the create lock so
+ * content validation cannot race allocation. `fm` is the frontmatter OBJECT —
+ * serialized at render time by `serializeTaskFrontmatter`, never hand-interpolated (R4).
+ */
+interface TaskCandidateShape {
+    readonly variant: string;
+    readonly status: string;
+    readonly fm: Record<string, unknown>;
+    readonly taskBodies: Partial<Record<TaskSection, string>>;
+}
+
+/**
+ * Synthetic WBS for candidate validation renders (F21 task 0787). No L1/L2/L3
+ * content rule reads the wbs value (only the `## <wbs>. <title>` heading), so a
+ * probe at `0000` is byte-equivalent for policy purposes to the final render.
+ */
+const CANDIDATE_PROBE_WBS = '0000';
 
 /**
  * Result of a section mutation (R3). `list` is read-only and returns no
@@ -487,6 +531,168 @@ export class TaskService {
         return null;
     }
 
+    // ── candidate construction + content-policy validation (F21 task 0787) ──
+
+    /**
+     * Resolve everything about a candidate that does not depend on the allocated
+     * WBS: variant, task-specific bodies, Background, status, and the frontmatter
+     * object (F21 task 0787 R2/R4).
+     *
+     * Background precedence: supplied → feature-derived → a capture line quoting
+     * the title, so a bare record's REQUIRED Background is substantive provenance
+     * rather than a placeholder the checker would have to reject.
+     *
+     * Status policy (R2): an explicit status wins; otherwise the candidate is
+     * granted `todo` exactly when it passes the checker's own content policy
+     * (L1+L2+L3, no L4) evaluated AS `todo` — "creation and checking agree" by
+     * construction. Bare/partial captures stay `backlog` (§2.3: backlog = still
+     * preparing, todo = ready to start).
+     */
+    private async resolveCandidateShape(input: {
+        title: string;
+        featureId?: string;
+        parentWbs?: string;
+        template?: string;
+        explicitStatus?: string;
+        background?: string;
+        requirements?: string;
+        design?: string;
+        plan?: string;
+        acceptanceCriteria?: string;
+        priority?: string;
+        tags?: string[];
+    }): Promise<TaskCandidateShape> {
+        // A feature link defaults the variant to `feature-impl`; otherwise `standard`.
+        // An explicit template always wins.
+        const variant = input.template ?? (input.featureId !== undefined ? 'feature-impl' : DEFAULT_TASK_VARIANT);
+
+        let background = input.background ?? '';
+        if (background === '' && input.featureId !== undefined) {
+            background = await this.deriveBackground(input.featureId);
+        }
+
+        const taskBodies: Partial<Record<TaskSection, string>> = {};
+        if (background !== '') taskBodies.Background = background;
+        if ((input.requirements ?? '').trim() !== '') {
+            taskBodies.Requirements = bulletizeRequirements(input.requirements ?? '');
+        }
+        if ((input.design ?? '').trim() !== '') {
+            taskBodies.Design = (input.design ?? '').trim();
+        }
+        if ((input.plan ?? '').trim() !== '') {
+            taskBodies.Plan = (input.plan ?? '').trim();
+        }
+        if ((input.acceptanceCriteria ?? '').trim() !== '') {
+            taskBodies['Acceptance Criteria'] = normalizeAcFence((input.acceptanceCriteria ?? '').trim());
+        }
+        if (taskBodies.Background === undefined) {
+            taskBodies.Background = `Captured from the creation title: "${input.title}".`;
+        }
+        // A variant template's own Background body (e.g. review's
+        // `#### Review Findings` input table) is INPUT seeded beneath the
+        // capture line — the old create let it survive whenever no explicit
+        // background overrode it, and template-as-skeleton keeps that. A
+        // supplied/feature-derived background still wins outright.
+        const templateBackground = this.ctx.resolveTemplateBodies?.(variant).Background;
+        if (
+            input.background === undefined &&
+            input.featureId === undefined &&
+            templateBackground !== undefined &&
+            templateBackground.trim() !== ''
+        ) {
+            taskBodies.Background = `${taskBodies.Background}\n\n${templateBackground}`;
+        }
+
+        // created_at/updated_at are pre-formatted ISO strings captured once so the
+        // probe render, the final render, and the persisted file carry identical
+        // frontmatter (the read side parses them with the same yaml library).
+        const now = new Date().toISOString();
+        const fmFor = (status: string): Record<string, unknown> => ({
+            schema_version: 1,
+            name: input.title,
+            status,
+            template: variant,
+            created_at: now,
+            updated_at: now,
+            ...(input.featureId !== undefined ? { feature_id: input.featureId } : {}),
+            ...(input.parentWbs !== undefined ? { parent_wbs: input.parentWbs } : {}),
+            ...(input.priority !== undefined ? { priority: input.priority } : {}),
+            ...(input.tags !== undefined && input.tags.length > 0 ? { tags: input.tags } : {}),
+        });
+
+        let status: string;
+        if (input.explicitStatus !== undefined) {
+            status = input.explicitStatus;
+        } else {
+            // Todo-eligibility probe (R2): render the candidate AS `todo` with the
+            // synthetic probe WBS and let the checker's policy decide. A candidate
+            // whose todo-required bodies (Background/AC/Design/Plan per the matrix)
+            // are still placeholders is not implementation-ready → `backlog`.
+            const probe = buildTaskSkeleton({
+                wbs: CANDIDATE_PROBE_WBS,
+                title: input.title,
+                frontmatter: serializeTaskFrontmatter(fmFor('todo')),
+                sections: this.sectionsForStatus(variant, 'todo'),
+                bodies: this.bodiesFor(variant, taskBodies),
+            });
+            const probeFindings = this.checkCandidateContent(probe, CANDIDATE_PROBE_WBS, 'todo');
+            status = probeFindings.some((f) => f.severity === 'error') ? 'backlog' : 'todo';
+        }
+
+        return { variant, status, fm: fmFor(status), taskBodies };
+    }
+
+    /**
+     * Run the shared content policy — L1 schema + L2 matrix + L3 format, the
+     * same rules `spur task check` enforces, no L4 — over a candidate document
+     * (F21 task 0787 R2). L4 needs the persisted file and real corpus edges, and
+     * genuine missing-feature/dependency diagnostics must stay visible on the
+     * persisted task rather than fail its creation.
+     */
+    private checkCandidateContent(raw: string, wbs: string, asStatus: string): CheckFindings[] {
+        const matrix = this.ctx.sectionMatrix;
+        if (matrix === undefined) {
+            throw new Error(
+                `no section-matrix available for candidate validation (status=${asStatus}); ` +
+                    'a canonical section-matrix.yaml is required for task creation (F92 R1)',
+            );
+        }
+        const checker = new TaskCheckService(this.ctx.fs, matrix);
+        return checker.checkContentPolicy(raw, wbs, { asStatus }).findings;
+    }
+
+    /**
+     * Render the full file content for a resolved candidate at `wbs`. The
+     * frontmatter is serialized from the OBJECT via `serializeTaskFrontmatter`
+     * (R4) — the yaml emitter and MarkdownDocument.parse share the library, so
+     * quotes/backslashes/colons/newlines/Unicode in titles round-trip exactly.
+     */
+    private renderCandidate(title: string, wbs: string, shape: TaskCandidateShape): string {
+        return buildTaskSkeleton({
+            wbs,
+            title,
+            frontmatter: serializeTaskFrontmatter(shape.fm),
+            sections: this.sectionsForStatus(shape.variant, shape.status),
+            bodies: this.bodiesFor(shape.variant, shape.taskBodies),
+        });
+    }
+
+    /**
+     * Reject a candidate whose final content would fail `spur task check` BEFORE
+     * any WBS allocation or file write (F21 task 0787 R2/R4). The probe render
+     * uses the synthetic WBS — validated content and written content differ only
+     * in the heading wbs, which no L1/L2/L3 rule reads.
+     *
+     * @throws {TaskCandidateInvalidError} carrying the error findings.
+     */
+    private validateCandidateOrThrow(title: string, shape: TaskCandidateShape): void {
+        const probe = this.renderCandidate(title, CANDIDATE_PROBE_WBS, shape);
+        const findings = this.checkCandidateContent(probe, CANDIDATE_PROBE_WBS, shape.status);
+        if (findings.some((f) => f.severity === 'error')) {
+            throw new TaskCandidateInvalidError(title, findings);
+        }
+    }
+
     // ── create ──
 
     async create(params: {
@@ -510,24 +716,21 @@ export class TaskService {
     }): Promise<WriteResult> {
         const folder = this.ctx.tasksDir;
 
-        // Feature-derived Background is independent of the allocated WBS, so it
-        // can be computed before the lock to keep the critical section short.
-        let background = '';
-        if (params.featureId !== undefined) {
-            background = await this.deriveBackground(params.featureId);
-        }
-
-        // A feature link defaults the variant to `feature-impl`; otherwise `standard`.
-        // An explicit --template always wins.
-        const variant = params.template ?? (params.featureId !== undefined ? 'feature-impl' : DEFAULT_TASK_VARIANT);
+        // F21 task 0787 (R2): resolve the full candidate shape (variant, status,
+        // bodies, frontmatter) and validate its content policy BEFORE the create
+        // lock — a candidate that would fail `spur task check` is rejected before
+        // any WBS allocation or file write.
+        const shape = await this.resolveCandidateShape({
+            title: params.title,
+            featureId: params.featureId,
+            parentWbs: params.parentWbs,
+            template: params.template,
+            explicitStatus: params.status,
+        });
+        this.validateCandidateOrThrow(params.title, shape);
 
         // WBS allocation + write run inside the create-lock so concurrent
         // creates cannot allocate the same number and clobber each other.
-        // A task created with a feature link signals intent-to-execute → 'todo'
-        // (the HITL-review stage); a bare capture stays 'backlog' (§2.3 semantics:
-        // backlog = still preparing, todo = ready to start). Explicit status wins.
-        const status = params.status ?? (params.featureId !== undefined ? 'todo' : 'backlog');
-
         return this.writeService.createAllocated(folder, async () => {
             // Dedup guard (task 0341 R4, extended to unscoped creates): when a dedupe
             // window is requested, refuse creation if an existing task in the same
@@ -545,32 +748,7 @@ export class TaskService {
             const slug = this.slugify(params.title);
             const { wbs, filePath } = await this.allocateWbsChecked(slug);
 
-            const now = new Date().toISOString();
-
-            // Matrix + buildTaskSkeleton is the ONE creation layout producer (F92 R1):
-            // the section headings come from the canonical section-matrix entry and
-            // template bodies (if any) come via bodiesFor — the template never owns
-            // document layout.
-            const frontmatter = [
-                'schema_version: 1',
-                `name: "${params.title}"`,
-                `status: ${status}`,
-                `template: ${variant}`,
-                `created_at: ${now}`,
-                `updated_at: ${now}`,
-                params.featureId !== undefined ? `feature_id: ${params.featureId}` : null,
-                params.parentWbs !== undefined ? `parent_wbs: "${params.parentWbs}"` : null,
-            ]
-                .filter(Boolean)
-                .join('\n');
-
-            const content = buildTaskSkeleton({
-                wbs,
-                title: params.title,
-                frontmatter,
-                sections: this.sectionsForStatus(variant, status),
-                bodies: this.bodiesFor(variant, background !== '' ? { Background: background } : {}),
-            });
+            const content = this.renderCandidate(params.title, wbs, shape);
 
             const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
             return { ref, content };
@@ -1294,12 +1472,47 @@ export class TaskService {
         }
 
         const items: TaskBatchItem[] = result.data;
+        // F21 task 0787 (R2): resolve + content-validate EVERY candidate before
+        // the first write — a batch with one invalid item leaves no task files
+        // and performs no parent mutation. The write loop below only allocates
+        // WBS and renders already-validated shapes; the rollback stays for I/O
+        // failures (WBS collision, disk).
+        const prepared: Array<{ item: TaskBatchItem; shape: TaskCandidateShape }> = [];
+        for (const [index, item] of items.entries()) {
+            const shape = await this.resolveCandidateShape({
+                title: item.name,
+                featureId: item.feature_id ?? undefined,
+                parentWbs: item.parent_wbs ?? undefined,
+                template: item.template,
+                explicitStatus: undefined,
+                background: item.background,
+                requirements: item.requirements,
+                design: item.design,
+                plan: item.plan,
+                acceptanceCriteria: item.acceptance_criteria,
+                priority: item.priority,
+                tags: item.tags,
+            });
+            try {
+                this.validateCandidateOrThrow(item.name, shape);
+            } catch (err) {
+                if (err instanceof TaskCandidateInvalidError) {
+                    throw new TaskCandidateInvalidError(
+                        item.name,
+                        err.findings,
+                        `batch item ${index + 1}/${items.length}`,
+                    );
+                }
+                throw err;
+            }
+            prepared.push({ item, shape });
+        }
         const writeResults: WriteResult[] = [];
         const createdRefs: EntityRef[] = [];
 
         try {
-            for (const item of items) {
-                const wr = await this.createBatchItem(item);
+            for (const { item, shape } of prepared) {
+                const wr = await this.createBatchItem(item, shape);
                 writeResults.push(wr);
                 createdRefs.push(wr.ref);
             }
@@ -1377,79 +1590,17 @@ export class TaskService {
         return out;
     }
 
-    private async createBatchItem(item: TaskBatchItem): Promise<WriteResult> {
+    private async createBatchItem(item: TaskBatchItem, shape: TaskCandidateShape): Promise<WriteResult> {
         const folder = this.ctx.tasksDir;
 
-        // Feature-derived Background is WBS-independent — compute before the lock.
-        let background = item.background ?? '';
-        if (!background && item.feature_id !== undefined && item.feature_id !== null) {
-            background = await this.deriveBackground(item.feature_id);
-        }
-
-        // A batch item with a real spec (background/requirements/design/plan/AC) is
-        // ready to execute → 'todo'; otherwise 'backlog' (§2.3 semantics).
-        const hasSpec =
-            background !== '' ||
-            (item.requirements ?? '').trim() !== '' ||
-            (item.design ?? '').trim() !== '' ||
-            (item.plan ?? '').trim() !== '' ||
-            (item.acceptance_criteria ?? '').trim() !== '';
-        const status = hasSpec ? 'todo' : 'backlog';
-
-        // Explicit item template wins; a feature link defaults to `feature-impl`, else `standard`.
-        const variant =
-            item.template ??
-            (item.feature_id !== undefined && item.feature_id !== null ? 'feature-impl' : DEFAULT_TASK_VARIANT);
-
         // Allocate + write inside the create-lock (race-safe WBS allocation).
+        // Content was resolved and content-validated up-front by batchCreate
+        // (F21 task 0787 R2) — rendering here only stamps the real allocated WBS.
         return this.writeService.createAllocated(folder, async () => {
             const slug = this.slugify(item.name);
             const { wbs, filePath } = await this.allocateWbsChecked(slug);
 
-            const now = new Date().toISOString();
-
-            // Matrix + buildTaskSkeleton is the ONE creation layout producer (F92 R1):
-            // headings come from the matrix entry; template bodies (if any) come via
-            // bodiesFor — never template-as-skeleton rendering.
-            const fmLines = [
-                'schema_version: 1',
-                `name: "${item.name}"`,
-                `status: ${status}`,
-                `template: ${variant}`,
-                `created_at: ${now}`,
-                `updated_at: ${now}`,
-                item.feature_id !== undefined ? `feature_id: ${item.feature_id}` : null,
-                item.parent_wbs !== undefined ? `parent_wbs: "${item.parent_wbs}"` : null,
-                item.priority !== undefined ? `priority: ${item.priority}` : null,
-                item.tags !== undefined && item.tags.length > 0
-                    ? `tags: [${item.tags.map((t) => `"${t}"`).join(', ')}]`
-                    : null,
-            ]
-                .filter(Boolean)
-                .join('\n');
-
-            const taskBodies: Partial<Record<TaskSection, string>> = {};
-            if (background !== '') taskBodies.Background = background;
-            if ((item.requirements ?? '').trim() !== '') {
-                taskBodies.Requirements = bulletizeRequirements(item.requirements ?? '');
-            }
-            if ((item.design ?? '').trim() !== '') {
-                taskBodies.Design = (item.design ?? '').trim();
-            }
-            if ((item.plan ?? '').trim() !== '') {
-                taskBodies.Plan = (item.plan ?? '').trim();
-            }
-            if ((item.acceptance_criteria ?? '').trim() !== '') {
-                taskBodies['Acceptance Criteria'] = normalizeAcFence((item.acceptance_criteria ?? '').trim());
-            }
-
-            const content = buildTaskSkeleton({
-                wbs,
-                title: item.name,
-                frontmatter: fmLines,
-                sections: this.sectionsForStatus(variant, status),
-                bodies: this.bodiesFor(variant, taskBodies),
-            });
+            const content = this.renderCandidate(item.name, wbs, shape);
 
             const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
             return { ref, content };

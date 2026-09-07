@@ -24,8 +24,6 @@
 {"wbs":"0474","feature_id":"E1","status":"done","verdict":"PASS","timestamp":"2026-08-08T12:50:15Z"}
 {"wbs":"0480","feature_id":"H1","status":"done","verdict":"PASS","timestamp":"2026-08-08T20:37:12Z"}
 {"wbs":"0482","feature_id":"H1","status":"done","verdict":"PASS","timestamp":"2026-08-08T20:37:12Z"}
-{"wbs":"0480","feature_id":"H1","status":"done","verdict":"PASS","timestamp":"2026-08-08T20:37:12Z"}
-{"wbs":"0482","feature_id":"H1","status":"done","verdict":"PASS","timestamp":"2026-08-08T20:37:12Z"}
 {"wbs":"0487","feature_id":"N","status":"done","verdict":"PASS","timestamp":"2026-08-09T19:50:49Z"}
 {"wbs":"0505","feature_id":"E","status":"done","verdict":"PASS","timestamp":"2026-08-11T05:04:37Z"}
 {"wbs":"0506","feature_id":"E","status":"done","verdict":"PASS","timestamp":"2026-08-11T07:46:26Z"}
@@ -54,12 +52,9 @@
 {"wbs":"0572","feature_id":"B3","status":"done","verdict":"PASS","timestamp":"2026-08-16T22:45:39.492Z"}
 {"wbs":"0569","feature_id":"I5","status":"done","verdict":"PASS","timestamp":"2026-08-16T23:54:16.429Z"}
 Captured to `.spur/run/wrapup-metrics.jsonl` — jq-validated, 2 rows:
-
 ```jsonl
-{"wbs":"0569","feature_id":"I5","status":"done","verdict":"PASS","timestamp":"2026-08-16T23:54:16.429Z"}
 {"wbs":"0575","feature_id":null,"status":"done","verdict":"PASS","timestamp":"2026-08-17T04:59:14Z"}
 ```
-
 0575: `feature_id` null (none assigned — noted in task file as deferred), status `done`, verdict `PASS` from the pipeline verdict artifact. Rebuilt the file strictly after finding leaked transcript prose from an earlier run merged into the previous row's line, which broke JSONL parsing.{"wbs":"0576","feature_id":"E5","status":"done","verdict":"PASS","timestamp":"2026-08-17T19:40:00Z"}
 {"wbs":"0577","feature_id":"E5","status":"done","verdict":"PASS","timestamp":"2026-08-17T19:40:00Z"}
 {"wbs":"0578","feature_id":"E5","status":"done","verdict":"PASS","timestamp":"2026-08-17T21:45:00Z"}
@@ -67,11 +62,7 @@ Captured to `.spur/run/wrapup-metrics.jsonl` — jq-validated, 2 rows:
 {"wbs":"0579","feature_id":"E5","status":"done","verdict":"PASS","timestamp":"2026-08-17T21:45:00Z"}
 {"wbs":"0581","feature_id":"E5","status":"done","verdict":"PASS","timestamp":"2026-08-17T21:45:00Z"}
 Validated, 3 rows in `.spur/run/wrapup-metrics.jsonl`:
-
-```jsonl
 {"wbs":"0587","feature_id":"H1","status":"done","verdict":"PASS","timestamp":"2026-08-18T16:49:45.000Z"}
-```
-
 Verdict `PASS` sourced from the task's pipeline verdict artifact (`# Testing → Pipeline verify results`); `status: done`, `feature_id: H1`. Appended to the existing 2-row file.{"wbs":"0613","feature_id":"A3","status":"done","verdict":"PASS","timestamp":"2026-08-21T20:39:50Z"}
 {"wbs":"0614","feature_id":"A3","status":"done","verdict":"PASS","timestamp":"2026-08-21T20:39:50Z"}
 {"wbs":"0615","feature_id":"A3","status":"done","verdict":"PASS","timestamp":"2026-08-21T20:39:50Z"}
@@ -115,3 +106,5 @@ Verdict `PASS` sourced from the task's pipeline verdict artifact (`# Testing →
 {"wbs":"0784","feature_id":"D6","status":"done","verdict":"PASS","timestamp":"2026-09-06T22:53:02Z"}
 {"wbs":"0785","feature_id":"D6","status":"done","verdict":"PASS","timestamp":"2026-09-06T22:53:02Z"}
 {"wbs":"0786","feature_id":"D6","status":"done","verdict":"PASS","timestamp":"2026-09-06T22:53:02Z"}
+{"wbs":"0787","feature_id":"F21","status":"done","verdict":"PASS","timestamp":"2026-09-07T01:37:42Z"}
+{"wbs":"0788","feature_id":"F21","status":"done","verdict":"PASS","timestamp":"2026-09-07T01:37:42Z"}

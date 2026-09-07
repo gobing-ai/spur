@@ -412,6 +412,29 @@ export {
 } from './services/task-check';
 export type { TaskFileHit, TaskFolderSource } from './services/task-locator';
 export { TaskLocator } from './services/task-locator';
+export {
+    computePlanningDigest,
+    DEFAULT_READY_PREPARE_TIMEOUT_MS,
+    extractBatchArray,
+    PLANNING_DIGEST_SECTIONS,
+    prepareBatchTaskReady,
+    prepareCreatedTaskReady,
+    READY_CHECKLIST_IDS,
+    READY_DONE,
+    READY_SKIPPED,
+    type ReadinessOutcome,
+    type ReadyAgentPort,
+    type ReadyCheckRow,
+    type ReadyEvidenceArtifact,
+    type ReadyEvidenceTask,
+    type ReadyPostCheck,
+    type ReadyTaskPort,
+    readyRefineAllCommand,
+    readyRefineCommand,
+    TaskPreparationError,
+    type TaskPreparationStage,
+    verifyReadyChecks,
+} from './services/task-readiness';
 export type {
     RecordOptions,
     RecordResult,
@@ -450,6 +473,7 @@ export {
     DuplicateFollowUpError,
     SectionMutationError,
     TASK_ACTION_COMMANDS,
+    TaskCandidateInvalidError,
     TaskService,
     WbsCollisionError,
 } from './services/task-service';

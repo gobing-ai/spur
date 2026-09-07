@@ -462,6 +462,9 @@ async function createFixture(templateName: string, run: EvalRun): Promise<string
             '--folder',
             run.tasksDir,
             '--allow-duplicate-name',
+            // 0788 ready-by-default: fixtures are synthetic pipeline inputs, never
+            // authored content — readiness preparation must not run per fixture.
+            '--skip-ready',
             '--json',
         ],
         { cwd: run.projectDir },

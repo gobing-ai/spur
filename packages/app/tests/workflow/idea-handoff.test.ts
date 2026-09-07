@@ -1,9 +1,77 @@
 import { describe, expect, test } from 'bun:test';
 import { createNodeFileSystem, type PipeProcess, type ProcessExecutor } from '@gobing-ai/ts-runtime';
+import { computePlanningDigest } from '../../src/services/task-readiness';
 import { finalizeIdeaHandoff } from '../../src/workflow/idea-handoff';
 
 describe('finalizeIdeaHandoff', () => {
     const fs = createNodeFileSystem();
+
+    const READY_IDS = ['requirements', 'design', 'plan', 'ac', 'decisions', 'dependencies', 'premises'] as const;
+
+    /** Write task docs + a ready-evidence sidecar for `runId`; returns wbs→filePath. */
+    async function writeReadyFixture(
+        runId: string,
+        wbss: string[],
+        opts?: { status?: string; digestOverride?: (body: string) => string; omitSidecar?: boolean },
+    ): Promise<Record<string, string>> {
+        const runDir = '.spur/run';
+        const paths: Record<string, string> = {};
+        const tasks = [];
+        for (const wbs of wbss) {
+            const body = `---\nstatus: todo\nwbs: ${wbs}\n---\n\n## Background\n\nPrepared background.\n\n## Acceptance Criteria\n\n- [ ] Scenario one.\n`;
+            const p = `${runDir}/${runId}-${wbs}.md`;
+            await fs.writeFile(p, body);
+            paths[wbs] = p;
+            tasks.push({
+                wbs,
+                status: opts?.status ?? 'ready',
+                planningDigest: opts?.digestOverride ? opts.digestOverride(body) : computePlanningDigest(body),
+                checks: READY_IDS.map((id) => ({ id, pass: true, evidence: `${id} verified` })),
+            });
+        }
+        if (opts?.omitSidecar !== true) {
+            await fs.writeFile(`${runDir}/${runId}-idea-ready.json`, JSON.stringify({ runId, depth: 'ready', tasks }));
+        }
+        return paths;
+    }
+
+    function evidenceAwareExecutor(paths: Record<string, string>, checkExitCode = 0): ProcessExecutor {
+        return {
+            run: async (opts) => {
+                const args = opts.args ?? [];
+                if (args.includes('path')) {
+                    const wbs = args[args.indexOf('path') + 1] ?? '';
+                    return {
+                        command: opts.command,
+                        args,
+                        durationMs: 1,
+                        exitCode: 0,
+                        stdout: JSON.stringify({ wbs, filePath: paths[wbs] }),
+                        stderr: '',
+                    };
+                }
+                if (args.includes('check')) {
+                    return {
+                        command: opts.command,
+                        args,
+                        durationMs: 1,
+                        exitCode: checkExitCode,
+                        stdout: '',
+                        stderr: checkExitCode === 0 ? '' : 'failed',
+                    };
+                }
+                return { command: opts.command, args, durationMs: 1, exitCode: 0, stdout: 'ok', stderr: '' };
+            },
+            runStreaming: () => ({}) as unknown as PipeProcess,
+        };
+    }
+
+    async function cleanupRun(runId: string, _wbss: string[], extra: string[]): Promise<void> {
+        const runDir = '.spur/run';
+        for (const f of [...extra, `${runDir}/${runId}-idea-ready.json`]) {
+            await Promise.resolve(fs.deleteFile(f)).catch(() => {});
+        }
+    }
 
     test('returns error when required files are missing', async () => {
         const res = await finalizeIdeaHandoff({
@@ -27,19 +95,14 @@ describe('finalizeIdeaHandoff', () => {
         await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify(batch));
         await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify(result));
         await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify(order));
+        const paths = await writeReadyFixture(runId, result.wbs);
 
         const executedCommands: Array<{ command: string; args?: string[] }> = [];
+        const base = evidenceAwareExecutor(paths);
         const mockExecutor: ProcessExecutor = {
             run: async (opts) => {
                 executedCommands.push({ command: opts.command, args: opts.args });
-                return {
-                    command: opts.command,
-                    args: opts.args ?? [],
-                    durationMs: 1,
-                    exitCode: 0,
-                    stdout: 'ok',
-                    stderr: '',
-                };
+                return base.run(opts);
             },
             runStreaming: () => ({}) as unknown as PipeProcess,
         };
@@ -56,20 +119,24 @@ describe('finalizeIdeaHandoff', () => {
 
         expect(executedCommands.some((c) => c.args?.includes('deps') && c.args?.includes('0602'))).toBe(true);
         expect(executedCommands.some((c) => c.args?.includes('refresh'))).toBe(true);
+        // Exit 0 alone is not readiness: each task was resolved to its file for
+        // digest + evidence verification before the deterministic check.
+        expect(executedCommands.filter((c) => c.args?.includes('path')).length).toBe(2);
 
         const report = await fs.readFile(res.reportPath);
         expect(report).toContain('Feature: D5');
         expect(report).toContain('0601');
         expect(report).toContain('0602');
 
-        // Cleanup
-        await fs.deleteFile(`${runDir}/${runId}-idea-task-batch.json`);
-        await fs.deleteFile(`${runDir}/${runId}-idea-batch-create-result.json`);
-        await fs.deleteFile(`${runDir}/${runId}-idea-task-order.json`);
-        await fs.deleteFile(res.reportPath);
+        await cleanupRun(runId, result.wbs, [
+            `${runDir}/${runId}-idea-task-batch.json`,
+            `${runDir}/${runId}-idea-batch-create-result.json`,
+            `${runDir}/${runId}-idea-task-order.json`,
+            res.reportPath,
+        ]);
     });
 
-    test('recommends refineall when any task check fails', async () => {
+    test('recommends refineall when a deterministic task check fails despite good evidence', async () => {
         const runId = 'test-idea-run-fail';
         const featureId = 'D5';
         const runDir = '.spur/run';
@@ -82,45 +149,62 @@ describe('finalizeIdeaHandoff', () => {
         await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify(batch));
         await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify(result));
         await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify(order));
-
-        const mockExecutor: ProcessExecutor = {
-            run: async (opts) => {
-                if (opts.args?.includes('check')) {
-                    return {
-                        command: opts.command,
-                        args: opts.args ?? [],
-                        durationMs: 1,
-                        exitCode: 1,
-                        stdout: '',
-                        stderr: 'failed',
-                    };
-                }
-                return {
-                    command: opts.command,
-                    args: opts.args ?? [],
-                    durationMs: 1,
-                    exitCode: 0,
-                    stdout: 'ok',
-                    stderr: '',
-                };
-            },
-            runStreaming: () => ({}) as unknown as PipeProcess,
-        };
+        const paths = await writeReadyFixture(runId, result.wbs);
 
         const res = await finalizeIdeaHandoff({
             runId,
             featureId,
-            processExecutor: mockExecutor,
+            processExecutor: evidenceAwareExecutor(paths, 1),
         });
 
         expect(res.ok).toBe(true);
         expect(res.nextCommand).toContain('/sp:dev-refineall --feature D5 --auto --depth ready');
+        const report = await fs.readFile(res.reportPath);
+        expect(report).toContain('UNREADY');
+        expect(report).toContain('/sp:dev-refine 0601 --auto --depth ready');
 
-        // Cleanup
-        await fs.deleteFile(`${runDir}/${runId}-idea-task-batch.json`);
-        await fs.deleteFile(`${runDir}/${runId}-idea-batch-create-result.json`);
-        await fs.deleteFile(`${runDir}/${runId}-idea-task-order.json`);
-        await fs.deleteFile(res.reportPath);
+        await cleanupRun(runId, result.wbs, [
+            `${runDir}/${runId}-idea-task-batch.json`,
+            `${runDir}/${runId}-idea-batch-create-result.json`,
+            `${runDir}/${runId}-idea-task-order.json`,
+            res.reportPath,
+        ]);
+    });
+
+    test('stale planning digest degrades to a precise refine action even when check passes', async () => {
+        const runId = 'test-idea-run-stale';
+        const featureId = 'D5';
+        const runDir = '.spur/run';
+        await fs.ensureDir(runDir);
+
+        const batch = [{ name: 'Task A' }];
+        const result = { wbs: ['0601'] };
+        const order = [{ name: 'Task A' }];
+
+        await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify(batch));
+        await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify(result));
+        await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify(order));
+        const paths = await writeReadyFixture(runId, result.wbs, {
+            digestOverride: () => 'deadbeef'.repeat(8),
+        });
+
+        const res = await finalizeIdeaHandoff({
+            runId,
+            featureId,
+            processExecutor: evidenceAwareExecutor(paths),
+        });
+
+        expect(res.ok).toBe(true);
+        expect(res.nextCommand).toContain('/sp:dev-refineall --feature D5 --auto --depth ready');
+        const report = await fs.readFile(res.reportPath);
+        expect(report).toContain('planning digest stale');
+
+        await cleanupRun(runId, result.wbs, [
+            `${runDir}/${runId}-idea-task-batch.json`,
+            `${runDir}/${runId}-idea-batch-create-result.json`,
+            `${runDir}/${runId}-idea-task-order.json`,
+            res.reportPath,
+        ]);
     });
 
     test('handles batch mismatch and duplicate names gracefully', async () => {
@@ -280,19 +364,14 @@ describe('finalizeIdeaHandoff', () => {
         await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify(batch));
         await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify(result));
         await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify(order));
+        const paths = await writeReadyFixture(runId, result.wbs);
 
         const executedCommands: Array<{ command: string; args?: string[] }> = [];
+        const base = evidenceAwareExecutor(paths);
         const mockExecutor: ProcessExecutor = {
             run: async (opts) => {
                 executedCommands.push({ command: opts.command, args: opts.args });
-                return {
-                    command: opts.command,
-                    args: opts.args ?? [],
-                    durationMs: 1,
-                    exitCode: 0,
-                    stdout: 'ok',
-                    stderr: '',
-                };
+                return base.run(opts);
             },
             runStreaming: () => ({}) as unknown as PipeProcess,
         };
@@ -317,7 +396,7 @@ describe('finalizeIdeaHandoff', () => {
         await fs.deleteFile(`${runDir}/${runId}-idea-task-batch.json`);
         await fs.deleteFile(`${runDir}/${runId}-idea-batch-create-result.json`);
         await fs.deleteFile(`${runDir}/${runId}-idea-task-order.json`);
-        await fs.deleteFile(res.reportPath);
+        await cleanupRun(runId, result.wbs, [res.reportPath]);
     });
 
     test('R1b: single-word spurBin keeps byte-identical argv', async () => {
@@ -329,19 +408,14 @@ describe('finalizeIdeaHandoff', () => {
         await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify([{ name: 'Task A' }]));
         await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify({ wbs: ['0601'] }));
         await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify([{ name: 'Task A' }]));
+        const paths = await writeReadyFixture(runId, ['0601']);
 
         const executedCommands: Array<{ command: string; args?: string[] }> = [];
+        const base = evidenceAwareExecutor(paths);
         const mockExecutor: ProcessExecutor = {
             run: async (opts) => {
                 executedCommands.push({ command: opts.command, args: opts.args });
-                return {
-                    command: opts.command,
-                    args: opts.args ?? [],
-                    durationMs: 1,
-                    exitCode: 0,
-                    stdout: 'ok',
-                    stderr: '',
-                };
+                return base.run(opts);
             },
             runStreaming: () => ({}) as unknown as PipeProcess,
         };
@@ -365,7 +439,7 @@ describe('finalizeIdeaHandoff', () => {
         await fs.deleteFile(`${runDir}/${runId}-idea-task-batch.json`);
         await fs.deleteFile(`${runDir}/${runId}-idea-batch-create-result.json`);
         await fs.deleteFile(`${runDir}/${runId}-idea-task-order.json`);
-        await fs.deleteFile(res.reportPath);
+        await cleanupRun(runId, ['0601'], [res.reportPath]);
     });
 
     test('R4: a rejected spurBin fails closed before any subprocess is spawned', async () => {
@@ -523,7 +597,9 @@ describe('finalizeIdeaHandoff', () => {
         await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify([{ name: 'Task A' }]));
         await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify({ wbs: ['0601'] }));
         await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify([{ name: 'Task A' }]));
+        const paths = await writeReadyFixture(runId, ['0601']);
 
+        const base = evidenceAwareExecutor(paths);
         const mockExecutor: ProcessExecutor = {
             run: async (opts) => {
                 if (opts.args?.includes('check')) {
@@ -536,14 +612,7 @@ describe('finalizeIdeaHandoff', () => {
                         stderr: '',
                     };
                 }
-                return {
-                    command: opts.command,
-                    args: opts.args ?? [],
-                    durationMs: 1,
-                    exitCode: 0,
-                    stdout: 'ok',
-                    stderr: '',
-                };
+                return base.run(opts);
             },
             runStreaming: () => ({}) as unknown as PipeProcess,
         };

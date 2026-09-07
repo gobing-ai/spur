@@ -15,6 +15,7 @@
  * owns matrix resolution. Keeps domain free of app/config imports.
  */
 
+import { stringify as stringifyYaml } from 'yaml';
 import { z } from 'zod';
 import { MarkdownDocument, TASK_CANONICAL_SECTIONS } from './markdown-document';
 
@@ -139,6 +140,20 @@ export function buildTaskSkeleton(options: TaskSkeletonOptions): string {
     }
 
     return `${lines.join('\n').trimEnd()}\n`;
+}
+
+/**
+ * Serialize a task frontmatter OBJECT to the YAML block that sits between the
+ * `---` fences (fences excluded). F21 task 0787 R4: this is the single writer
+ * for creation frontmatter. Hand-interpolated `name: "${title}"` broke on
+ * quotes, backslashes, and colons; the `yaml` emitter picks a scalar style
+ * that parses back to exactly the input value, and the read side
+ * (MarkdownDocument.parse) uses the same library — writer and reader cannot
+ * drift. Key order = insertion order, so output is deterministic. Long plain
+ * scalars are not folded (`lineWidth: 0`) so the block stays diff-friendly.
+ */
+export function serializeTaskFrontmatter(data: Record<string, unknown>): string {
+    return stringifyYaml(data, { lineWidth: 0 });
 }
 
 /**

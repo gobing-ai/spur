@@ -417,10 +417,15 @@ describe('createServerContext', () => {
                 foldersConfig: { active_folder: tasksDir, folders: { [tasksDir]: { baseCounter: 0 } } },
             },
             // F92 R1: the section matrix is now required for task creation — provide one.
+            // F21 0787: the todo-eligibility probe also resolves the `todo` entry.
             sectionMatrix: {
                 variants: {
                     standard: {
                         backlog: { required: ['Background'], optional: ['Requirements', 'Acceptance Criteria'] },
+                        todo: {
+                            required: ['Background', 'Acceptance Criteria', 'Design', 'Plan'],
+                            optional: ['Q&A', 'Requirements', 'Solution', 'Testing', 'Review'],
+                        },
                     },
                 },
             },

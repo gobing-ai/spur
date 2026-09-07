@@ -324,6 +324,8 @@ describe('nesting guard', () => {
         }
     });
 
+    // Drives a real `--dry` evalPipeline (worktree spawn + report write) — ~4.5s on this
+    // machine, over bun's 5s default under load. The test asserts flag inheritance, not speed.
     test('a first-level run sets the flag so children inherit it', async () => {
         const prior = process.env.SPUR_EVAL_PIPELINE_ACTIVE;
         delete process.env.SPUR_EVAL_PIPELINE_ACTIVE;
@@ -334,5 +336,5 @@ describe('nesting guard', () => {
             if (prior === undefined) delete process.env.SPUR_EVAL_PIPELINE_ACTIVE;
             else process.env.SPUR_EVAL_PIPELINE_ACTIVE = prior;
         }
-    });
+    }, 20000);
 });

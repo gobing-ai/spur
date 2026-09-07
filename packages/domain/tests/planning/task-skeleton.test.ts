@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
+import { MarkdownDocument } from '../../src/planning/markdown-document';
 import {
     buildTaskSkeleton,
     extractTemplateBodies,
     renderTaskTemplate,
     SECTION_GUIDANCE,
     sectionMatrixSchema,
+    serializeTaskFrontmatter,
 } from '../../src/planning/task-skeleton';
 
 describe('buildTaskSkeleton', () => {
@@ -186,5 +188,33 @@ describe('renderTaskTemplate', () => {
         });
         expect(result).toContain('# Fix $& handling');
         expect(result).toContain("Costs $1 and $' per run");
+    });
+});
+
+describe('serializeTaskFrontmatter (F21 0787 R4)', () => {
+    const roundTrip = (data: Record<string, unknown>) =>
+        MarkdownDocument.parse(`---\n${serializeTaskFrontmatter(data)}---\n`, 'task').frontmatterData;
+
+    test('round-trips values the old hand-interpolation corrupted', () => {
+        // WHY: creation used to emit `name: "${title}"` directly; a title with a
+        // quote, backslash, or colon broke the YAML (or the value). Serialization
+        // shares the read-side yaml emitter/parser, so tricky values survive.
+        const data = {
+            schema_version: 1,
+            name: 'He said "hi"',
+            other: 'C:\\temp',
+            third: 'a: b',
+            uni: '日本語',
+            nl: 'line1\nline2',
+            tags: ['rd3-migration', 'f21'],
+        };
+        expect(roundTrip(data)).toEqual(data);
+    });
+
+    test('never wraps long scalar values (lineWidth: 0) so the read side sees one line', () => {
+        const long = 'a very long title that would otherwise be folded by the yaml emitter at its default width';
+        const raw = serializeTaskFrontmatter({ name: long });
+        expect(raw).not.toMatch(/-\s*$/m); // no folded continuation lines
+        expect(roundTrip({ name: long })?.name).toBe(long);
     });
 });

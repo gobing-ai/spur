@@ -574,11 +574,59 @@ export class TaskCheckService extends PlanningCheckService {
                 options?.severityOverrides,
                 options?.accepted,
                 wbs,
+                entry?.required,
             ),
             repairs,
         };
     }
 
+    /**
+     * Content-policy validation for a NOT-yet-persisted candidate task document
+     * (F21 task 0787 R2): L1 schema → L2 matrix → L3 format — the SAME rules
+     * `spur task check` enforces — with L4 traceability deliberately excluded.
+     * L4 needs the persisted file and real corpus edges (feature dirs, sibling
+     * tasks), and genuine missing-feature / dependency diagnostics must stay
+     * visible on the persisted task rather than fail its creation. Synchronous
+     * and fs-free, so creation can judge a candidate before the write lock
+     * commits: a task is granted `todo` exactly when THIS policy passes
+     * evaluated as `todo`, which is what makes creation and checking agree.
+     */
+    checkContentPolicy(
+        raw: string,
+        wbs: string,
+        options?: {
+            strict?: boolean;
+            /**
+             * Evaluate the matrix/L3 policy AS this status (F92 R2 semantics).
+             * Creation passes the candidate's own status; the todo-eligibility
+             * probe passes `todo`. Omitted → the candidate's frontmatter status.
+             */
+            asStatus?: string;
+            severityOverrides?: Record<string, 'error' | 'warning' | 'off'>;
+        },
+    ): { doc: MarkdownDocument | null; findings: CheckFindings[]; entry?: MatrixEntry } {
+        const findings: CheckFindings[] = [];
+        const doc = this.runL1(raw, wbs, findings);
+        if (doc === null) {
+            return { doc: null, findings };
+        }
+        const fm = doc.frontmatterData ?? {};
+        const effectiveStatus = options?.asStatus ?? (fm.status as string) ?? 'backlog';
+        const variant = (fm.template as string) ?? DEFAULT_TASK_VARIANT;
+        const entry = this.resolveMatrixEntry(variant, effectiveStatus);
+        this.runL2(doc, entry, findings, raw);
+        this.runL3(doc, entry, effectiveStatus, findings);
+        const { findings: effectiveFindings } = this.summarizeWithStatus(
+            effectiveStatus,
+            findings,
+            options?.strict,
+            options?.severityOverrides,
+            undefined,
+            wbs,
+            entry?.required,
+        );
+        return { doc, findings: effectiveFindings, entry };
+    }
     // ── L3: Format rules ──
     private runL3(
         doc: MarkdownDocument,
@@ -586,13 +634,20 @@ export class TaskCheckService extends PlanningCheckService {
         status: string,
         findings: CheckFindings[],
     ): void {
-        // ── Task 0339 (R3): a placeholder-only body (HTML comments, `> TBD`,
-        // whitespace) means the task has no real requirements or contract — fail
-        // before format rules run. Fires only when the section heading exists;
-        // a missing section is L2's job (matrix-driven presence). L2 drives
-        // presence, this drives substance.
+        // ── F21 task 0787 (R1): a placeholder-only body (HTML comments, `> TBD`,
+        // whitespace) is an obligation only where the Section-Status-Matrix
+        // declares the section REQUIRED at the effective status. A fresh capture
+        // legitimately carries the guidance-comment scaffold in optional sections
+        // (Requirements, AC at backlog) — the old unconditional errors made
+        // `create` → `check` disagree: creation shipped the scaffold, checking
+        // failed on it. Required sections keep the hard error (a todo candidate
+        // with placeholder-only Background/AC/Design/Plan is not ready), and the
+        // same required-set drives the Testing/Solution scaffold check below.
+        // Fires only when the section heading exists; a missing section is L2's
+        // job (matrix-driven presence). L2 drives presence, this drives substance.
+        const requiredAtStatus = new Set(entry?.required ?? []);
         const reqBodyRaw = doc.getSection('Requirements');
-        if (reqBodyRaw !== null && isPlaceholderBody(reqBodyRaw)) {
+        if (requiredAtStatus.has('Requirements') && reqBodyRaw !== null && isPlaceholderBody(reqBodyRaw)) {
             findings.push({
                 layer: 'L3',
                 code: FINDING_CODES.L3_REQUIREMENTS_EMPTY,
@@ -602,7 +657,11 @@ export class TaskCheckService extends PlanningCheckService {
             });
         }
         const acBodyRaw = doc.getSection('Acceptance Criteria');
-        if (acBodyRaw !== null && isPlaceholderBody(stripAcFence(acBodyRaw))) {
+        if (
+            requiredAtStatus.has('Acceptance Criteria') &&
+            acBodyRaw !== null &&
+            isPlaceholderBody(stripAcFence(acBodyRaw))
+        ) {
             findings.push({
                 layer: 'L3',
                 code: FINDING_CODES.L3_AC_EMPTY,
@@ -789,9 +848,8 @@ export class TaskCheckService extends PlanningCheckService {
         // Same shape as L3.requirements-empty / L3.ac-empty, and an error for the same reason:
         // `testing → done` is gated by `spur task check --strict-core`, so this blocks the
         // transition until the section is filled instead of discovering it months later.
-        const requiredSections = new Set(entry?.required ?? []);
         for (const sectionName of ['Testing', 'Solution'] as const) {
-            if (!requiredSections.has(sectionName)) continue;
+            if (!requiredAtStatus.has(sectionName)) continue;
             const body = doc.getSection(sectionName);
             if (body === null || !isPlaceholderBody(body)) continue;
             findings.push({

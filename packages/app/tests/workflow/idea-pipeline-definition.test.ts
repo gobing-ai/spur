@@ -399,15 +399,45 @@ describe('idea-pipeline definition — task ordering, roster refresh, handoff re
         expect(batchRunCmd).toContain('$__runId-idea-batch-create.done');
     });
 
-    test('handoff-finalize sits between batch-create-run success and terminal handoff', () => {
-        const toFinalize = edgeIndex('batch-create-run', 'handoff-finalize');
+    test('batch-create-run success flows through ready-prepare to finalize, then terminal handoff', () => {
+        const toPrepare = edgeIndex('batch-create-run', 'ready-prepare');
+        const prepareToFinalize = edgeIndex('ready-prepare', 'handoff-finalize');
         const toHandoff = edgeIndex('handoff-finalize', 'handoff');
 
-        expect(toFinalize).toBeGreaterThanOrEqual(0);
+        expect(toPrepare).toBeGreaterThanOrEqual(0);
+        expect(prepareToFinalize).toBeGreaterThanOrEqual(0);
         expect(toHandoff).toBeGreaterThanOrEqual(0);
-        // success edge stays guarded on the done sentinel; the terminal edge is unconditional
-        expect(DEF.transitions[toFinalize]?.guard?.options?.command).toContain('idea-batch-create.done');
+        // success edge stays guarded on the done sentinel; finalize entry and the
+        // terminal edge are unconditional (evidence absence degrades, never blocks)
+        expect(DEF.transitions[toPrepare]?.guard?.options?.command).toContain('idea-batch-create.done');
+        expect(DEF.transitions[prepareToFinalize]?.guard?.kind).toBe('always');
         expect(DEF.transitions[toHandoff]?.guard?.kind).toBe('always');
+    });
+
+    test('ready-prepare writes and validates the run-scoped ready evidence sidecar (0788)', () => {
+        const prepare = DEF.states.find((s) => s.id === 'ready-prepare');
+        const agent = (prepare?.onEnter ?? []).find((a) => a.kind === 'agent.run');
+        const shell = (prepare?.onEnter ?? []).find((a) => a.kind === 'shell');
+
+        expect(agent?.options?.input).toContain('\u0024{vars.__runId}-idea-ready.json');
+        expect(agent?.options?.input).toContain('computePlanningDigest');
+        expect(agent?.options?.input).toContain('planningDigest');
+        // Fail-closed shape validation; absence is normalized to an empty sidecar so
+        // the handoff degrades to refineall instead of failing the run.
+        expect(shell?.options?.command).toContain('$__runId-idea-ready.json');
+        expect(shell?.options?.command).toContain('jq -e');
+        expect(shell?.options?.command).toContain('.status == "ready"');
+        expect(shell?.options?.command).toContain('planningDigest');
+    });
+
+    test('batch-create-run creates with --skip-ready; preparation is the ready-prepare stage (0788)', () => {
+        expect(batchRunCmd).toContain('--skip-ready');
+    });
+
+    test('seeded fallback NEXT is gated on ready evidence, not just task checks (0788)', () => {
+        expect(finalizeCmd).toContain('--slurpfile k "$READY"');
+        expect(finalizeCmd).toContain('.status != "ready"');
+        expect(finalizeCmd).toContain('length == 0');
     });
 
     test('handoff-finalize applies ordering through spur task deps and refreshes the roster (R1/R2)', () => {

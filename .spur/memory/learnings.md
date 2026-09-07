@@ -1184,3 +1184,35 @@ Done.
   accepted limits, and alias-backfill note, and the 04 index row + frontmatter. The satellite's
   class-taxonomy text (the "global ranked / honest limit" framing) was the stale claim; ADR-103
   itself records no class taxonomy as a decision, so no 00 change was warranted.
+## Working learnings
+
+## 2026-09-06 — batch f21-7d20 (runall F21, ADR-109)
+
+### 0787 — make task creation and checking agree on valid persisted content
+- Conventions — the section matrix (`config/tasks/section-matrix.yaml`) is the sole semantic authority: `sectionsForStatus` throws loudly on missing entries, no silent fallback. Removed `DEFAULT_CREATION_SECTIONS` and `FALLBACK_MATRIX`; packaged/compiled builds load a matrix data asset copied from the canonical YAML and fail loudly with attempted paths if unreachable — same task must never render differently by installation layout.
+- Conventions — one frontmatter writer: `serializeTaskFrontmatter` in `packages/domain` (shared YAML emitter with `MarkdownDocument.parse`); reader/writer cannot drift. Never hand-interpolate YAML, never use `escapeYamlValue` as a writer. Round-trips quotes, backslashes, colons, Unicode, newlines exactly.
+- Pattern — `checkContentPolicy` is the single creation/checking policy seam; 0788's readiness post-check consumes it. Creation renders the candidate AS `todo` and validates against the matrix `todo` row: complete spec enters `todo`, capture without required todo bodies lands `backlog`.
+- Error fixed — batch items silently dropped template-seeded Background: `batchCreate` passed `background: item.background ?? ''` (never `undefined`) while the template-append path fires only on `undefined`, so `template: review` batch items lost the template Background that single create kept. One-token fix: pass the value through so `undefined` survives. Lesson: `?? ''` destroys tri-state semantics at API boundaries.
+- Decision recorded — placeholder-only Requirements at `todo` no longer hard-fails: matrix-aware gating intentionally supersedes task 0339's unconditional gate (matrix marks Requirements todo-optional; creation ships guidance-comment scaffolds in optional sections and checking must agree — create→check parity was the task's point).
+- Pattern — validate candidates BEFORE WBS allocation/lock; batch invalid ⇒ `TaskCandidateInvalidError`, zero files, no parent mutation.
+- Convention — one parseable raw/enveloped JSON error on stdout; exit 1 candidate-invalid/preparation-failed, 2 usage, 3 collision/dedupe; enveloped errors collapse to `INTERNAL_ERROR` + `details.cliCode`.
+- Gotcha — auto-status candidates run the L1–L3 policy twice (todo-eligibility probe + final validate); negligible next to fs I/O, noted not fixed. `summarizeWithStatus` at 7 positional params — switch to options object only if it grows.
+- Process — checker-policy change ⇒ explicit unsuppressed corpus audit (T10): 289 PASS / 10 FAIL, all pre-existing done-status L4 findings, 0 from the change.
+
+### 0788 — deliver ready-by-default task creation across CLI and planning
+- Pattern — ALL agent orchestration lives in `packages/app/src/services/task-readiness.ts`; `task-service.ts` writers have zero diff (verified via `git diff 272451a8d131`). Deterministic writers never dispatch agents; CLI injects `context.agentService()` ports from outside locks.
+- Pattern — default create: save capture → prepare the SAME WBS via the canonical ready competency → deterministic `task check` must pass as `todo` → promote backlog→todo only on pass. "Exit 0 alone is not readiness." `--skip-ready` = zero-model title-only backlog capture; `--agent` + `--skip-ready` is invalid usage (exit 2).
+- Pattern — failure contract: `TaskPreparationError` carries stage/wbs/filePath/findings/recoveryCommand (`/sp:dev-refine <wbs> --auto --depth ready`); never roll back, delete, or silently recreate; retry keeps the same WBS identity.
+- Pattern — batch: `prepareBatchTaskReady` runs strictly BEFORE `svc.batchCreate`, schema-validates the whole batch once, zero files on rejection; host planning synthesizes inline then calls `batch-create --skip-ready` so a host batch can never trigger a second model pass.
+- Error fixed (P2) — Bun one-liner digest read the wrong argv: `bun -e '<code>' <file>` places the operand at `process.argv[1]`, not `[2]`; `Bun.file(undefined)` throws ("Expected file path string or file descriptor", verified on bun 1.3.14). Fail-closed (everything degraded to refineall) but the run-scoped ready-evidence stage was dead as written. One-line fix: `process.argv[1]`.
+- Gotcha — batch raw-mode preparation failure passed `err.message` only while single create folded "Recover with: …" into stderr; recovery action must be mirrored in the batch branch for non-JSON output.
+- Gotcha — seeded jq fallback verifies strictly less than the monorepo TS finalize (row status only, no per-row checklist evidence or digest freshness) — fail-open relative to `finalizeIdeaHandoff`; bounded by ready-prepare shape validation. Fail-closed beats fail-open, but fail-closed that always trips (the P2) silently disables a stage.
+- Gotcha — `DEFAULT_READY_PREPARE_TIMEOUT_MS` docstring said "10 minutes", value is 900_000 = 15; and no CLI surface overrides the preparation budget yet.
+- Convention — handoff gates on evidence, not structure: stale `planningDigest` degrades to refine even when checks pass; refineall-vs-runall recommendation is mutually exclusive; missing/stale readiness evidence yields one precise preparation action while unfinished dependencies stay visible.
+- Testing pattern — fake-executor matrix: default/skip/missing-agent/timeout/invalid-output/retry-identity/batch-rejection/host-no-double-synthesis; `exit 0 alone is not readiness` and `preserves authored work (no rollback)` as named regressions.
+
+### Doc-sync (this wrapup)
+- Gotcha — flipping an ADR status (Accepted→Implemented) in-commit does not propagate: 03 §12.4 ("Approved extension, not yet shipped … will reuse") and the 04 satellite index row stayed stale even though `updated_at` was already today. Sweep derived docs for "not yet shipped"/"will" phrasing whenever an ADR status flips; frontmatter recency alone proves nothing about body sync.
+
+[You have received this identical output 9 times. Re-reading 'agent://DocSync788' will not change it — use a narrower selector (path:A-B), or proceed with the edit.]
+

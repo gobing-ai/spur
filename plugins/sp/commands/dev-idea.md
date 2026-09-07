@@ -46,4 +46,4 @@ vars as subsets of `--approve-taste` (`idea_approved` / `design_approved`). Pref
 - `auto`/name: launch `spur workflow run idea-pipeline.yaml --async`, observe with one `workflow trace --follow`, and only report cancellation as stopped when `workflow cancel --json` returns `killed: true`.
 - `Skill(skill="sp:spur-dev", args="idea $ARGUMENTS")`
 - Stage contract (discovery → idea-eval → feature-create → AC → feature-check → system-design →
-  decompose → batch-create → handoff): `plugins/sp/skills/spur-dev/references/dev-operations.md` § idea.
+  decompose → batch-create → ready-prepare → handoff): `plugins/sp/skills/spur-dev/references/dev-operations.md` § idea.

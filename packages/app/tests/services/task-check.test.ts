@@ -2579,10 +2579,12 @@ describe('TaskCheckService', () => {
             expect(terminalErrors[0]?.message).not.toContain('spur feature update');
         });
 
-        test('R3: placeholder-only Requirements emits L3_REQUIREMENTS_EMPTY (fails gate)', async () => {
-            // WHY: task 0337 had only template placeholder comments in Requirements
-            // and still passed. A task with no requirements is unverifiable by
-            // construction — the gate must fail it.
+        test('R3 (F21 0787): placeholder-only Requirements is tolerated where the matrix does not require it', async () => {
+            // WHY: 0337 made L3_REQUIREMENTS_EMPTY unconditional; F21 0787 R1
+            // supersedes that — creation scaffolded placeholders everywhere, so a
+            // task created bare then promoted to todo MUST still check clean. The
+            // placeholder rule now fires only when the effective status's matrix
+            // entry REQUIRES the section (`todo` does not require Requirements).
             const content = [
                 taskFm({ status: 'todo' }),
                 '',
@@ -2601,9 +2603,7 @@ describe('TaskCheckService', () => {
             cleanup();
 
             const emptyReq = result.findings.filter((f) => f.code === FINDING_CODES.L3_REQUIREMENTS_EMPTY);
-            expect(emptyReq.length).toBe(1);
-            expect(emptyReq[0]?.severity).toBe('error');
-            expect(result.pass).toBe(false);
+            expect(emptyReq.length).toBe(0);
         });
 
         test('R3: placeholder-only Acceptance Criteria emits L3_AC_EMPTY (fails gate)', async () => {
@@ -3726,4 +3726,125 @@ test('0700 R2: a superseding PASS appended to the Review is authoritative — no
 test('0700 R2: the rule is gated on terminal status — a wip task is not flagged', async () => {
     const findings = await closedTaskWith('**Verdict: PARTIAL — request-changes** (blocks gate).', 'wip');
     expect(findings).toHaveLength(0);
+});
+
+describe('F21 0787: requiredSections reporting and candidate content policy', () => {
+    const readyTodo = [
+        '---',
+        'schema_version: 1',
+        'name: "Ready todo"',
+        'status: todo',
+        'created_at: 2026-06-13T00:00:00.000Z',
+        'updated_at: 2026-06-13T00:00:00.000Z',
+        '---',
+        '',
+        '## 0001. Ready todo',
+        '',
+        '### Background',
+        '',
+        'Context text.',
+        '',
+        '### Acceptance Criteria',
+        '',
+        'Given the check runs',
+        'When all required sections exist',
+        'Then requiredSections reports the full list',
+        '',
+        '### Design',
+        '',
+        'Use the existing checker service.',
+        '',
+        '### Plan',
+        '',
+        '- [ ] Step one',
+    ].join('\n');
+
+    test('requiredSections reports the FULL matrix obligation set even when nothing is missing (0787 R3)', async () => {
+        const { fs, path, cleanup } = seedFile(readyTodo);
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        expect(result.pass).toBe(true);
+        expect(result.requiredSections).toEqual(['Background', 'Acceptance Criteria', 'Design', 'Plan']);
+        expect(result.missingSections).toEqual([]);
+    });
+
+    test('missingSections reports the missing subset while requiredSections stays full (0787 R3)', async () => {
+        // Drop the Plan section from an otherwise-complete todo task.
+        const content = readyTodo.slice(0, readyTodo.indexOf('\n### Plan'));
+        const { fs, path, cleanup } = seedFile(content);
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        expect(result.requiredSections).toEqual(['Background', 'Acceptance Criteria', 'Design', 'Plan']);
+        expect(result.missingSections).toEqual(['Plan']);
+    });
+
+    test('checkContentPolicy passes a todo-ready candidate through the same policy (0787 R2)', async () => {
+        const { fs, cleanup } = seedFile(readyTodo);
+        const svc = new TaskCheckService(fs, matrix);
+        cleanup();
+
+        const { doc, findings, entry } = svc.checkContentPolicy(readyTodo, '0001', { asStatus: 'todo' });
+        expect(doc).not.toBeNull();
+        expect(findings.filter((f) => f.severity === 'error')).toEqual([]);
+        expect(entry?.required).toEqual(['Background', 'Acceptance Criteria', 'Design', 'Plan']);
+    });
+
+    test('checkContentPolicy flags schema-invalid frontmatter as an L1 error (0787 R2)', async () => {
+        const svc = new TaskCheckService(createNodeFileSystem(), matrix);
+
+        // Missing `name` (required by the task frontmatter schema) and no
+        // sections at all — exactly the shape a malformed candidate would hit.
+        const raw = [
+            '---',
+            'schema_version: 1',
+            'status: todo',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Broken candidate',
+        ].join('\n');
+        const { findings } = svc.checkContentPolicy(raw, '0001', { asStatus: 'todo' });
+        const l1 = findings.filter((f) => f.layer === 'L1');
+        expect(l1.length).toBeGreaterThan(0);
+        expect(l1.every((f) => f.severity === 'error')).toBe(true);
+    });
+
+    test('checkContentPolicy fails a placeholder-only candidate evaluated as todo (0787 R2)', async () => {
+        const bare = [
+            '---',
+            'schema_version: 1',
+            'name: "Bare candidate"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Bare candidate',
+            '',
+            '### Background',
+            '',
+            'Captured from the creation title: "Bare candidate".',
+            '',
+            '### Acceptance Criteria',
+            '',
+            '<!-- Copy or derive real scenarios from the linked feature. Do not leave placeholder AC here. -->',
+            '',
+            '### Design',
+            '',
+            '<!-- Document the chosen approach. -->',
+            '',
+            '### Plan',
+            '',
+            '<!-- Add an implementation checklist. -->',
+        ].join('\n');
+        const svc = new TaskCheckService(createNodeFileSystem(), matrix);
+
+        const { findings } = svc.checkContentPolicy(bare, '0001', { asStatus: 'todo' });
+        // Placeholder AC is a hard error when AC is required — this is exactly
+        // why creation keeps such a candidate at backlog instead of todo.
+        expect(findings.some((f) => f.severity === 'error')).toBe(true);
+    });
 });

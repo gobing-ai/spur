@@ -84,7 +84,9 @@ describe('CLI planning events -> system_events ledger (0249)', () => {
 
         // create a task; this runs the full planning pipeline (lock + write + emit).
         const createOut = createCapturedOutput();
-        expect(await main(['task', 'create', 'Ledger sink task', '--json'], { cwd, output: createOut })).toBe(0);
+        expect(
+            await main(['task', 'create', '--skip-ready', 'Ledger sink task', '--json'], { cwd, output: createOut }),
+        ).toBe(0);
         const wbs = wbsFromCreate(createOut);
 
         // forward step backlog -> todo — the only valid transition out of a freshly created task.

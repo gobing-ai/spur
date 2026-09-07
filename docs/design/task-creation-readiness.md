@@ -1,5 +1,5 @@
 ---
-status: approved-design
+status: shipped-design
 feature: F21
 adr: ADR-109
 updated_at: 2026-09-06
@@ -7,10 +7,10 @@ updated_at: 2026-09-06
 
 # Task creation and implementation readiness
 
-Approved for implementation; the flags and outcomes below are planned, not shipped.
-The existing command registrations remain the authority for currently available flags.
+Shipped by F21 task 0788. The flags and outcomes below are live; the existing
+command registrations remain the authority for currently available flags.
 
-## Planned command changes
+## Command changes
 
 | Surface | Addition | Contract |
 | --- | --- | --- |

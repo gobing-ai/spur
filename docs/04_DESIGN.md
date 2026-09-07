@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.68.0
+version: 1.69.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-09-06
@@ -1722,6 +1722,13 @@ Row-level deltas from the default rule:
   branches, history daily `{error: detail}`, and (close-out 2026-08-27) the `feature show` /
   `feature transition` not-found returns at `apps/cli/src/commands/feature.ts:60,175`, which had
   bypassed the seam via a direct `context.output.error(...)`.
+  Task 0787 (2026-09-06) added the create/batch-create machine-error surface:
+  `writeCreateJsonError` (`apps/cli/src/commands/task.ts:146`) emits ONE parseable
+  `--json` result for `candidate-invalid` (exit 1, `details.findings` carrying the
+  checker findings), `invalid-usage` (exit 2), collision/duplicate-follow-up (exit 3),
+  and `create-failed`/`batch-create-failed` (exit 1). Unlike `writeJsonError`, raw
+  mode (`--json` without envelope) writes the `ok:false` payload to **stdout**;
+  without `--json` the message stays stderr prose.
 - **Class-3 top-level-`ok` payloads** move under `data` unchanged; the envelope `ok` is
   recomputed as command success (task migrate, migrate-anchors, check --corpus, noop,
   agent create, init fresh run, projects/builder success payloads).
@@ -1766,7 +1773,7 @@ Row-level deltas from the default rule:
 
 | Noun | Verb | Emit sites (`apps/cli/src/commands/<noun>.ts`) | Current shape | Deviation from ADR-091 envelope |
 | --- | --- | --- | --- | --- |
-| task (26) | create | 191, 199, 217 | mixed: success flat-object `{…result, wbs, filePath}`; collision errors pseudo-envelope `{ok:false, error:{code:'wbs-collision'\|'duplicate-follow-up', …}}` | success unwrapped; error codes not in `API_ERROR_CODES` (ADR-091: collapse to `INTERNAL_ERROR` with `details`) |
+| task (26) | create | 228, 241, 272, 307, 312 | success flat-object `{…result, wbs, filePath, readiness:{status: ready\|skipped, depth: ready}}` (0788); all error branches via `writeCreateJsonError` (0787): raw `--json` stdout `{ok:false, error:{code, message, …}}` — `candidate-invalid` carries `findings`, `preparation-failed` (0788) carries `failedStage`/`wbs`/`filePath`/`recoveryCommand`/`readiness`/`findings?` — enveloped collapses to `INTERNAL_ERROR` + `details.cliCode` | success unwrapped; exits: candidate-invalid/preparation-failed/failed 1, usage 2, collision/dedupe 3 |
 | task | show | 255 | flat-object `{…rest, frontmatter}` | unwrapped |
 | task | update | 324, 349, 431, 475 | flat-object; `--section` result `{ref, warnings, …}` has **no `ok`** (0688 case 1); `noop` path `{ok:true, noop, …}` | unwrapped; top-level `ok` on a subset of branches = two meanings of `ok` across calls |
 | task | deps | 546 | flat-object | unwrapped |
@@ -1776,7 +1783,7 @@ Row-level deltas from the default rule:
 | task | migrate | 715 | flat-object-with-ok `{ok:true, dryRun, corpusDir, …report}` | `ok` at top level means command success, not envelope discriminant |
 | task | migrate-anchors | 754 | flat-object-with-ok | same top-level-`ok` conflict |
 | task | refresh-roster | 797 | flat-object | unwrapped |
-| task | batch-create | 821, 840 | success flat-object `{created, wbs, parentsWired}`; collision error pseudo-envelope | unwrapped success; non-vocabulary error code |
+| task | batch-create | 959, 1015, 1020 | success flat-object `{created, wbs, parentsWired, readiness:{status: ready\|skipped, depth: ready}}` (0788 — whole batch prepared before commit unless `--skip-ready`); error branches via `writeCreateJsonError` (0787): raw `--json` stdout `{ok:false, error:{code, …}}`, `candidate-invalid` carrying `findings`, `preparation-failed` (0788) carrying `failedStage`/`recoveryCommand` | unwrapped success; enveloped errors collapse to `INTERNAL_ERROR` + `details.cliCode`; any invalid item aborts the whole batch (zero files) |
 | task | record | 880 | flat-object | unwrapped |
 | task | verdict | 947 | flat-object artifact written to `.spur/run/<wbs>-verdict.json` (raw `JSON.stringify`) | file artifact, not stdout; unwrapped; bypasses `toJson` |
 | task | verifyall-aggregate | 1013 | flat-object (raw `JSON.stringify`) | unwrapped; bypasses `toJson` |
@@ -2035,9 +2042,9 @@ shipped (`05 §9` tracks status).
 
 ### 7.1 `spur task` commands
 
-| Planned extension | Status |
+| Extension | Status |
 | --- | --- |
-| [Task creation and readiness](design/task-creation-readiness.md) | Approved design; F21 / ADR-109; not yet shipped |
+| [Task creation and readiness](design/task-creation-readiness.md) | Shipped — F21 / ADR-109; tasks 0787–0788 |
 
 The command table below continues to describe the current registrations.
 
@@ -2238,6 +2245,15 @@ Storage values stay lowercase canonical (DD-01); the icon is presentation-only a
   causal evidence without adopting the stricter `issue` template. Authority for matrix semantics:
   design §3 (the L2 layer), delivery §3.2.
 
+**Matrix-aware L3 gating (0787).** Placeholder-only sections hard-fail only when the **effective
+status requires them**: the L3 placeholder rules gate on `requiredAtStatus` — the effective
+status's required set (`packages/app/src/services/task-check.ts:649-655`) — so guidance-scaffold
+content in optional sections is advisory, not an error. In the shipped matrix
+(`config/tasks/section-matrix.yaml`) Requirements is todo-**optional**: a placeholder-only
+Requirements at `todo` no longer blocks (intentionally superseding task 0339's unconditional
+Requirements-at-todo gate, which predated the matrix-driven L2/L3 split; decision recorded in the
+0787 task-doc Review section).
+
 **Matrix-driven creation (single producer).** The same matrix is the **sole semantic authority**
 for which sections a *new* task file carries, **per variant** (F92 R1). `spur task create` /
 `batch-create` always render the body via the canonical
@@ -2252,6 +2268,20 @@ installation layout and defeated the SSOT. Per-variant section **bodies** (e.g.
 (`config/templates/task/<variant>.md`), extracted by `extractTemplateBodies` and merged under the
 task-specific bodies (Background/Requirements) — so variant boilerplate is **data, never hardcoded**.
 
+**Ready-by-default creation (0788, ADR-109).** `spur task create`/`batch-create` prepare the saved
+content to ready depth through `prepareCreatedTaskReady`/`prepareBatchTaskReady`
+(`packages/app/src/services/task-readiness.ts`) before reporting success: an executor applies the
+ready checklist, the deterministic `task check` must pass as `todo`, and a backlog task is promoted
+to `todo` (idempotent). `--skip-ready` captures caller content without model execution. Success JSON
+carries `readiness:{status: ready|skipped, depth: ready}`; preparation failures emit
+`preparation-failed` with the stage and the exact recovery command (`/sp:dev-refine … --depth ready`
+or `/sp:dev-refineall … --depth ready`). In the idea pipeline, `batch-create-run` invokes
+`batch-create --skip-ready` and the dedicated `ready-prepare` state has the planning owner prepare
+each created task and write the run-scoped ready-evidence sidecar (`.spur/run/<runId>-idea-ready.json`);
+`handoff-finalize` verifies row status, planning digest and checklist evidence before recommending
+auto `runall` — missing or failing evidence degrades the recommendation to ready-depth `refineall`
+and never fails the run.
+
 **Target-aware lifecycle validation (F92 R2/R3).** `spur task check` accepts
 `--as <status>` (a read-only `asStatus` projection). Frontmatter **schema** validation reads the real
 document, while the lifecycle-dependent L2/L3/L4 policy evaluates
@@ -2263,11 +2293,14 @@ is never mutated before the guard allows the transition. `--strict-core` is reta
 temporary compatibility alias for installed plugins/workflows; target-state selection supplies the
 real done semantics.
 Each remaining unfilled section gets an invisible HTML guidance comment (skipped by the L3 format
-rules via `isPlaceholderBody`). **Creation status (§2.3 semantics):** a spec'd task (a `--feature`
-link, or a batch item with `background`/`requirements`) is created at **`todo`** ("ready to execute"
-— the HITL review gate, so Acceptance Criteria + Design + Plan are present); a bare capture is created
-at **`backlog`** ("still preparing" — Background only). `Solution` is the implementation change-map
-and first appears at `wip`; the L3 `file:line` rule only fires once it has real content.
+rules via `isPlaceholderBody`). **Creation status (§2.3 semantics, 0787 eligibility probe):**
+creation renders the candidate AS `todo` and validates it against the matrix's `todo` row; a
+complete spec (the required todo bodies — Background, Acceptance Criteria, Design, Plan — filled)
+passes the probe and is created at **`todo`** ("ready to execute" — the HITL review gate), while a
+capture lacking any required todo body (bare, requirements-only, or `--feature`-linked without a
+full spec) is created at **`backlog`** ("still preparing" — Background only). `Solution` is the
+implementation change-map and first appears at `wip`; the L3 `file:line` rule only fires once it
+has real content.
 `History`/`References`/`Notes` are universally allowed by the closed-world check (structural, present
 throughout the lifecycle).
 
