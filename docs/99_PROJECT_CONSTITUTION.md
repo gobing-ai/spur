@@ -3,7 +3,7 @@ name: Project Constitution
 doc: 99_PROJECT_CONSTITUTION
 owns: PROCESS — how the key files are maintained
 authority: authoritative-on-process
-version: 1.5.0
+version: 1.5.1
 created_at: 2026-05-31T17:30:43.643Z
 updated_at: 2026-09-07
 edit_rules: 99 §6.8
@@ -37,14 +37,14 @@ agent should be able to verify compliance mechanically, not interpret intent.
 
 Two axes that cannot collide:
 
-| Axis | Question | Winner |
-|------|----------|--------|
-| **Content** | What is true about the project? | Lower number wins: `00_ADR` is binding on *decisions*; `01_PRD` is authoritative on *scope*; `02`–`05` are derived |
-| **Process** | How are the key files maintained? | **This file** |
+| Axis        | Question                          | Winner                                                                                                             |
+| ----------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Content** | What is true about the project?   | Lower number wins: `00_ADR` is binding on _decisions_; `01_PRD` is authoritative on _scope_; `02`–`05` are derived |
+| **Process** | How are the key files maintained? | **This file**                                                                                                      |
 
 They cannot conflict because this file holds no project content (§1 rule 3).
 
-**Why this file is numbered 99, not 00:** "lower number wins" is a *content* rule, and this file
+**Why this file is numbered 99, not 00:** "lower number wins" is a _content_ rule, and this file
 plays on the other axis. The out-of-band number is the visible signal that the constitution sits
 outside the content chain — renumbering it into the chain (e.g. as `00`) would re-entangle the
 two axes and force a renumber of every content doc, invalidating the dense web of cross-pointers
@@ -60,12 +60,12 @@ drift in the commit message or task. Never average two conflicting statements in
 Tools are bound by **role**; roles are permanent, bindings evolve. This table is the only
 project-variable section besides Lessons — update the binding when the toolchain migrates.
 
-| Role | Current binding | Notes |
-| ------ | ----------------- | ------- |
-| Spec lifecycle — tasks | `tasks` CLI (WBS markdown task files) → migrating to `spur task` | Task files are tool-owned; edit through the tool, never the Write tool |
-| Spec lifecycle — features | `ftree` (feature markdown files) → migrating to `spur feature` | Same tool-owned rule |
-| Delivery harness | `spur` (constraint rules, workflows, agent runner, history analytics) | Quality gates are self-hosted through it where possible |
-| Agent-facing wrappers | per-project plugin dir (e.g. `plugins/sp/`) | **Fat Skills, thin others:** skills are the SSOT for agent-facing behavior and may be arbitrarily rich; slash commands and subagents are thin wrappers of skills (every agent supports skills; command/subagent support varies) |
+| Role                      | Current binding                                                       | Notes                                                                                                                                                                                                                           |
+| ------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Spec lifecycle — tasks    | `tasks` CLI (WBS markdown task files) → migrating to `spur task`      | Task files are tool-owned; edit through the tool, never the Write tool                                                                                                                                                          |
+| Spec lifecycle — features | `ftree` (feature markdown files) → migrating to `spur feature`        | Same tool-owned rule                                                                                                                                                                                                            |
+| Delivery harness          | `spur` (constraint rules, workflows, agent runner, history analytics) | Quality gates are self-hosted through it where possible                                                                                                                                                                         |
+| Agent-facing wrappers     | per-project plugin dir (e.g. `plugins/sp/`)                           | **Fat Skills, thin others:** skills are the SSOT for agent-facing behavior and may be arbitrarily rich; slash commands and subagents are thin wrappers of skills (every agent supports skills; command/subagent support varies) |
 
 ## 4. Common file layout
 
@@ -74,17 +74,17 @@ project-variable section besides Lessons — update the binding when the toolcha
 Each project's `AGENTS.md` embeds an instantiated copy of this table (§4.4). A fact lives in
 **one** doc; other docs link to it, never restate it.
 
-| Doc | Owns the question | Authority | Read / edit when |
-| ----- | ------------------- | ----------- | ------------------ |
-| `docs/00_ADR.md` | **WHY** — which cross-cutting decision was made, and the one-line reason | **Authoritative** (wins all content) | Read before any structural change; add a dated entry before diverging from a decision |
-| `docs/01_PRD.md` | **WHAT** — product vision, users, scope (in / out / deferred) | **Authoritative on scope** | Read before adding a command/feature; edit when scope changes |
-| `docs/02_ROADMAP.md` | **WHEN** — phases, current vs deferred, sequencing | Derived | Read to place work in a phase; edit when phase status changes |
-| `docs/03_ARCHITECTURE.md` | **HOW** — module boundaries, data flow, runtime model, invariants, rationale-in-depth | Derived (ADR wins) | Read before cross-module/seam/schema work; edit when boundaries or mechanisms change |
-| `docs/04_DESIGN.md` | **SURFACE** — concrete shapes: every CLI command, flag, config key, env var, table, DTO; **index over `docs/design/<slug>.md`** (§4.5) | Derived | Read/edit when changing a non-UI command, flag, env var, or schema — same commit |
-| `DESIGN.md` (repo root) | **UI/UX SURFACE** — visual design, color tokens, typography, component specs, layout, micro-animations, accessibility | **Authoritative for UI/UX when present** | Read/edit when planning or implementing UI/UX visual changes (dynamically supported; ignored when absent) |
-| `docs/05_FEATURES.md` | **STATUS** — feature decomposition + state (✅ done / 🔶 partial / ⏳ planned / 💤 deferred); **index over `docs/features/<id>_<slug>.md`** (§4.5) | Derived | Read to find a feature's state; edit when a feature's status changes |
-| `docs/99_PROJECT_CONSTITUTION.md` | **PROCESS** — how the files above are maintained | **Authoritative on process** | Read before editing any doc above; edit per §6.8 |
-| `AGENTS.md` (repo root) | **ENTRY** — how agents work in this repo: stack, commands, gates, conventions + the instantiated doc map | Derived (from 99 + 00/01/04) | Read first every session; regenerate factual blocks from code (§6.7) |
+| Doc                               | Owns the question                                                                                                                                  | Authority                                | Read / edit when                                                                                          |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `docs/00_ADR.md`                  | **WHY** — which cross-cutting decision was made, and the one-line reason                                                                           | **Authoritative** (wins all content)     | Read before any structural change; add a dated entry before diverging from a decision                     |
+| `docs/01_PRD.md`                  | **WHAT** — product vision, users, scope (in / out / deferred)                                                                                      | **Authoritative on scope**               | Read before adding a command/feature; edit when scope changes                                             |
+| `docs/02_ROADMAP.md`              | **WHEN** — phases, current vs deferred, sequencing                                                                                                 | Derived                                  | Read to place work in a phase; edit when phase status changes                                             |
+| `docs/03_ARCHITECTURE.md`         | **HOW** — module boundaries, data flow, runtime model, invariants, rationale-in-depth                                                              | Derived (ADR wins)                       | Read before cross-module/seam/schema work; edit when boundaries or mechanisms change                      |
+| `docs/04_DESIGN.md`               | **SURFACE** — concrete shapes: every CLI command, flag, config key, env var, table, DTO; **index over `docs/design/<slug>.md`** (§4.5)             | Derived                                  | Read/edit when changing a non-UI command, flag, env var, or schema — same commit                          |
+| `DESIGN.md` (repo root)           | **UI/UX SURFACE** — visual design, color tokens, typography, component specs, layout, micro-animations, accessibility                              | **Authoritative for UI/UX when present** | Read/edit when planning or implementing UI/UX visual changes (dynamically supported; ignored when absent) |
+| `docs/05_FEATURES.md`             | **STATUS** — feature decomposition + state (✅ done / 🔶 partial / ⏳ planned / 💤 deferred); **index over `docs/features/<id>_<slug>.md`** (§4.5) | Derived                                  | Read to find a feature's state; edit when a feature's status changes                                      |
+| `docs/99_PROJECT_CONSTITUTION.md` | **PROCESS** — how the files above are maintained                                                                                                   | **Authoritative on process**             | Read before editing any doc above; edit per §6.8                                                          |
+| `AGENTS.md` (repo root)           | **ENTRY** — how agents work in this repo: stack, commands, gates, conventions + the instantiated doc map                                           | Derived (from 99 + 00/01/04)             | Read first every session; regenerate factual blocks from code (§6.7)                                      |
 
 **Routing — put each fact in its owning doc, link from the rest:**
 
@@ -92,15 +92,15 @@ Each project's `AGENTS.md` embeds an instantiated copy of this table (§4.4). A 
 - Scope (in/out/deferred) → `01`. Mechanism / data flow / invariants → `03`.
 - UI/UX visual design, design tokens, component specs & accessibility → `DESIGN.md` (when present; otherwise follow established project UI conventions).
 - Non-UI command/flag/config/schema/DTO shapes → `04`. Phase timing → `02`. Feature status → `05`.
-- If you are writing *how it's built* or *why* inside `00`/`01`/`02`, it belongs in `03`/`04`.
+- If you are writing _how it's built_ or _why_ inside `00`/`01`/`02`, it belongs in `03`/`04`.
 
 ### 4.2 Working layers (outside the authority chain)
 
-| Location | Purpose | Rules |
-| ---------- | --------- | ------- |
+| Location                           | Purpose                                                                                     | Rules                                                                                                                                                                    |
+| ---------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `docs/plans/YYYY-MM-DD-<topic>.md` | Dated working documents: research, triage, design discussions, decision records-in-progress | They **record**, they do not **govern**. Once concluded, immutable except dated correction sections. Decisions they reach must be promoted into `00`–`05` to take effect |
-| `docs/tasks/` | Task files | Tool-owned (§3). Never edited with raw file writes |
-| other `docs/` folders | Optional scratch (analysis, refactor notes, ...) | Nothing in the authority chain may depend on them |
+| `docs/tasks/`                      | Task files                                                                                  | Tool-owned (§3). Never edited with raw file writes                                                                                                                       |
+| other `docs/` folders              | Optional scratch (analysis, refactor notes, ...)                                            | Nothing in the authority chain may depend on them                                                                                                                        |
 
 `docs/design/` and `docs/features/` are **not** scratch — they are the satellite layers of `04` and
 `05` and are governed by §4.5.
@@ -115,14 +115,14 @@ the doc map, and tooling can validate it:
 ---
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
-authority: derived            # authoritative | authoritative-on-scope | authoritative-on-process | derived
+authority: derived # authoritative | authoritative-on-scope | authoritative-on-process | derived
 version: 1.1.0
-derived_from: [00_ADR, 01_PRD]   # omit for 00
+derived_from: [00_ADR, 01_PRD] # omit for 00
 owner: <name>
 updated_at: YYYY-MM-DD
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
-sync: [T1]                    # §5 trigger IDs that obligate touching this doc
+sync: [T1] # §5 trigger IDs that obligate touching this doc
 ---
 ```
 
@@ -155,10 +155,10 @@ Two derived docs are **index pages** over a folder of per-item **satellite** fil
 the headline rows + pointers; each satellite holds one item's detail. This keeps the index readable
 (loaded every session) while detail scales without bloating it.
 
-| Index doc | Satellite folder | Satellite file name | Satellite ownership |
-|-----------|------------------|---------------------|---------------------|
-| `docs/04_DESIGN.md` | `docs/design/` | `docs/design/<slug>.md` | Hand-maintained derived doc (§6.5) |
-| `docs/05_FEATURES.md` | `docs/features/` | `docs/features/<feature-id>_<slug>.md` | **Tool-owned** (§3 — `spur feature`/`ftree`); satellites *and* the index region are written by the tool, never by raw file writes |
+| Index doc             | Satellite folder | Satellite file name                    | Satellite ownership                                                                                                               |
+| --------------------- | ---------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `docs/04_DESIGN.md`   | `docs/design/`   | `docs/design/<slug>.md`                | Hand-maintained derived doc (§6.5)                                                                                                |
+| `docs/05_FEATURES.md` | `docs/features/` | `docs/features/<feature-id>_<slug>.md` | **Tool-owned** (§3 — `spur feature`/`ftree`); satellites _and_ the index region are written by the tool, never by raw file writes |
 
 Rules (both axes):
 
@@ -166,7 +166,7 @@ Rules (both axes):
    reachable from exactly one index row. A satellite with no index row, or an index row with no
    satellite, is drift (§7 audit).
 2. **One item per satellite.** `<slug>` (design) / `<feature-id>_<slug>` (features) is the grep
-   anchor (§6.0 rule 6) — stable once chosen; renaming is a rename of the file *and* its index row in
+   anchor (§6.0 rule 6) — stable once chosen; renaming is a rename of the file _and_ its index row in
    the same change.
 3. **Detail lives only in the satellite; the index carries pointer + status only.** The index never
    restates a satellite's body (§6.0 rule 2). For `05`, a row is `<id> <status> <name> → pointer`;
@@ -181,30 +181,30 @@ Rules (both axes):
 
 ## 5. Sync triggers — same-commit obligations
 
-The root cause of stale key files is *unsynchronized success*: code ships, docs don't hear about
+The root cause of stale key files is _unsynchronized success_: code ships, docs don't hear about
 it. Each trigger below has a stable ID (referenced by doc frontmatter `sync:` lists, §4.3) and
 names the docs that must be touched **in the same commit / same change**:
 
-| ID | When this happens | Touch (same change) |
-| ---- | ------------------- | --------------------- |
-| T1 | New cross-cutting decision, or reversal of one | `00` **first** (dated entry), then `03` mechanism, `01` if scope shifts |
-| T2 | A code change would contradict an existing ADR | **Stop.** Add the superseding/amending ADR entry first — never silently diverge |
-| T3 | Command, flag, config key, env var, schema, or DTO added/changed | `04` + the `AGENTS.md` surface block |
-| T4 | A feature ships or changes state | its `05` row; a new `01` scope row if it is new surface |
-| T5 | A phase completes, reorders, or gains items | `02` (update the bullet to the *real, shipped name* of the deliverable) |
-| T6 | Scope added / cut / deferred | `01`; placement in `02` |
-| T7 | The doc map or process changes | this file → re-sync `AGENTS.md` (§4.4) → propagate to sibling projects |
-| T8 | A multi-wave batch is planned | schedule "doc sync" as an **explicit work item** — same-commit discipline does not survive on memory alone |
-| T9 | A design or feature item is added/changed | the satellite **first** (`docs/design/<slug>.md` or `docs/features/<id>_<slug>.md`), **then** its index row in `04`/`05` — same change (§4.5 rule 5) |
+| ID  | When this happens                                                                                         | Touch (same change)                                                                                                                                                                                    |
+| --- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| T1  | New cross-cutting decision, or reversal of one                                                            | `00` **first** (dated entry), then `03` mechanism, `01` if scope shifts                                                                                                                                |
+| T2  | A code change would contradict an existing ADR                                                            | **Stop.** Add the superseding/amending ADR entry first — never silently diverge                                                                                                                        |
+| T3  | Command, flag, config key, env var, schema, or DTO added/changed                                          | `04` + the `AGENTS.md` surface block                                                                                                                                                                   |
+| T4  | A feature ships or changes state                                                                          | its `05` row; a new `01` scope row if it is new surface                                                                                                                                                |
+| T5  | A phase completes, reorders, or gains items                                                               | `02` (update the bullet to the _real, shipped name_ of the deliverable)                                                                                                                                |
+| T6  | Scope added / cut / deferred                                                                              | `01`; placement in `02`                                                                                                                                                                                |
+| T7  | The doc map or process changes                                                                            | this file → re-sync `AGENTS.md` (§4.4) → propagate to sibling projects                                                                                                                                 |
+| T8  | A multi-wave batch is planned                                                                             | schedule "doc sync" as an **explicit work item** — same-commit discipline does not survive on memory alone                                                                                             |
+| T9  | A design or feature item is added/changed                                                                 | the satellite **first** (`docs/design/<slug>.md` or `docs/features/<id>_<slug>.md`), **then** its index row in `04`/`05` — same change (§4.5 rule 5)                                                   |
 | T10 | A corpus check rule is added or tightened (a new `L*` finding code, or an existing one raised to `error`) | Run focused finding-rule tests and one explicit unsuppressed audit (`bun run corpus-check`); record/reconcile exposed essential failures in the same change without waivers or regenerated acceptance. |
 
-**T10 — why it exists.** Corpus checks run *once*, at a transition, against the rules that existed
+**T10 — why it exists.** Corpus checks run _once_, at a transition, against the rules that existed
 that day. Nothing re-validates afterwards, so tightening a rule silently converts previously-legal
 closed work into non-compliant work — with no event anywhere. Task 0368 closed 2026-07-28; the rule
 that now flags it landed 2026-08-01 (`f373e90b`). Four days apart, invisible for ten.
 
 The explicit unsuppressed audit makes that fallout visible, so the remaining
-question is *where* it gets reconciled. The answer is the tightening commit itself: its author knows
+question is _where_ it gets reconciled. The answer is the tightening commit itself: its author knows
 why the rule changed, and the blast radius is smallest before anyone rebases onto it. Deferring the
 reconciliation means the next unrelated contributor inherits a red gate they did not cause and
 cannot judge.
@@ -253,19 +253,20 @@ Entry template:
 **Detail:** <pointer into 03/04/plans — depth never lives here.>
 ```
 
-**Admission test (ADR-112).** An entry belongs here only when the decision binds more than one
+**Admission test (ADR-000).** An entry belongs here only when the decision binds more than one
 feature, module, or pipeline, or changes a repo-wide invariant. Single-feature design choices —
 even approved, important ones — live in the feature's `docs/design/` satellite and feature file.
 When in doubt, keep it out: a missing ADR is recoverable, a diluted register is not.
 
-1. **One decision per entry.** If a draft contains a principle *and* a deferred design *and* a
-   mechanism choice *and* implementation tips — split it: decision(s) here, mechanism in `03`,
+1. **One decision per entry.** If a draft contains a principle _and_ a deferred design _and_ a
+   mechanism choice _and_ implementation tips — split it: decision(s) here, mechanism in `03`,
    shapes in `04`, tips nowhere (they are implementation guidance, not decisions).
 2. **ADR = decision + one-line reason.** No Zod patterns, no lock details, no code idioms.
 3. **Append-only.** Never renumber, never delete, never rewrite history. Corrections are dated
    `**Amendment (YYYY-MM-DD)**` blocks inside the entry; reversals are **new entries** that name
    what they supersede, while the old entry's Status becomes `Superseded by ADR-MMM`.
-4. **Numbering:** next free integer, one sequence per repo. A burned/skipped number gets a stub
+4. **Numbering:** next free integer, one sequence per repo — ADR-000 is the reserved admission
+   entry (ADR-000 itself), outside the append sequence. A burned/skipped number gets a stub
    entry (`Status: Skipped`) so the gap is audit-clean and never reused.
 5. **`Accepted (design)`** means decided but not built — readers must be able to tell decided
    from shipped.
@@ -273,8 +274,8 @@ When in doubt, keep it out: a missing ADR is recoverable, a diluted register is 
 7. **Retrofit rule:** the entry template binds **new entries and amendments only**. Historical
    entries are never restructured to match it — append-only beats stylistic consistency. The
    non-entry preamble is normal editable text.
-8. **Amendments record the decision delta.** An `**Amendment**` block records *what changed about the
-   decision* — the new choice and its one-line reason — plus a `Detail:` pointer for mechanism.
+8. **Amendments record the decision delta.** An `**Amendment**` block records _what changed about the
+   decision_ — the new choice and its one-line reason — plus a `Detail:` pointer for mechanism.
    Implementation file paths, detailed semantics, and multi-paragraph rationale belong in `03`/`04`,
    not in the amendment body. If an amendment would carry more than a few lines of non-decision text,
    the mechanism has leaked in; link it instead of inlining it.
@@ -285,8 +286,8 @@ When in doubt, keep it out: a missing ADR is recoverable, a diluted register is 
    **no shapes** (→ `04`).
 2. **Every shipped surface has a scope row.** When a command/capability ships, its row enters
    the in-scope table in the same change — shipped-but-unlisted is the most common drift.
-3. Scope states are explicit: *in (committed)* / *supporting* / *deferred (needs design
-   reconfirmation)* / *out of scope*. A deferred item carries the condition that would
+3. Scope states are explicit: _in (committed)_ / _supporting_ / _deferred (needs design
+   reconfirmation)_ / _out of scope_. A deferred item carries the condition that would
    reactivate it.
 4. Surface beyond the committed set is **not ported/built speculatively** — re-confirm the need
    first and record the evidence pointer (a dated plans doc, usage data) in the entry that
@@ -335,7 +336,7 @@ map + pointers; each `docs/design/<slug>.md` holds one surface area's detailed d
 4. Shapes only. Rationale lives in `00`/`03`. **Behavioral notes are shapes** ("resolving zero
    rules exits 1" — keep); justifications are not ("...because a silent gate is the worst
    failure mode" — cut, or point to `00`/`03`). This applies to satellites too — they hold
-   *detailed shapes*, not rationale.
+   _detailed shapes_, not rationale.
 5. Command signatures are **transcribed from the code registrations**, never from memory or from
    an older doc revision — a signature is a factual block in the §6.7 sense.
 6. The index never restates a satellite's body (§6.0 rule 2): an `04` row names the surface area,
@@ -448,7 +449,7 @@ if it recurs, a new rule in §6.
   repointing with no `00` entry — the scheduled doc-sync hop retrofitted ADR-059/060. A decision
   that reverses a shipped mechanism (T1/T2) belongs in `00` in the implementing change, not at
   wrapup.
-- [2026-08-13] spur-new: The B2 role-selector delta (0536) amended ADR-033 (stage routing) but left ADR-047 — the ADR that owns the `--agent` table — untouched until the wrapup added a cross-amendment. A decision delta that changes a value domain owned by *another* ADR must cross-amend the owner in the same change; grep the ADRs that own the surface, not just the ADR you are extending.
+- [2026-08-13] spur-new: The B2 role-selector delta (0536) amended ADR-033 (stage routing) but left ADR-047 — the ADR that owns the `--agent` table — untouched until the wrapup added a cross-amendment. A decision delta that changes a value domain owned by _another_ ADR must cross-amend the owner in the same change; grep the ADRs that own the surface, not just the ADR you are extending.
 - [2026-08-12] spur-new: Draft ADRs that bundled a principle + a deferred design + a mechanism
   choice + implementation tips had to be unbundled on operator review. Split before proposing,
   not after (now §6.1 rules 1–2). Recurred on ADR-057 first draft (occupant/run/wait stuffed into
@@ -460,7 +461,7 @@ if it recurs, a new rule in §6.
 - [2026-06-11] spur-new: An ADR number was burned by confusion with a sibling repo's ADR
   sequence; the gap was later documented as a `Skipped` stub. One sequence per repo, stub the
   gaps (now §6.1 rule 4).
-- [2026-08-16] spur-new: Task 0575 changed only the *observable output* of an existing verb (new
+- [2026-08-16] spur-new: Task 0575 changed only the _observable output_ of an existing verb (new
   stderr line + `warnings[]` entry on `spur task update --section Requirements|Plan`) — no
   noun/verb/flag — and still required ADR-051 consent. Record the granted application as a dated
   amendment so behavior-only changes are never later exempted from the gate.
@@ -491,7 +492,7 @@ if it recurs, a new rule in §6.
 
 ### Lessons for `docs/03_ARCHITECTURE.md`
 
-- [2026-08-16] spur-new: The B2 role→tier→executor two-layer contract (0535–0542) shipped with the mechanism documented only in `04 §2.1` (surface) — 03 had no executor-selection section at all until the wrapup added §19. Recurred on B3/0572: §19 existed but kept asserting the **deleted** `roles.md` regex parse — ADR-061 (SSOT moved to `DEFAULT_AGENT_ROLES`) landed with no 03 mechanism sync, so the wrapup had to rewrite Layer 1. A surface rewrite that changes *how resolution works* is a §6.4 rule 4 mechanism replacement, not just a T3 flag list: schedule the 03 mechanism block in the same change — and when the mechanism section already exists, re-read it against the diff, not just "add a section".
+- [2026-08-16] spur-new: The B2 role→tier→executor two-layer contract (0535–0542) shipped with the mechanism documented only in `04 §2.1` (surface) — 03 had no executor-selection section at all until the wrapup added §19. Recurred on B3/0572: §19 existed but kept asserting the **deleted** `roles.md` regex parse — ADR-061 (SSOT moved to `DEFAULT_AGENT_ROLES`) landed with no 03 mechanism sync, so the wrapup had to rewrite Layer 1. A surface rewrite that changes _how resolution works_ is a §6.4 rule 4 mechanism replacement, not just a T3 flag list: schedule the 03 mechanism block in the same change — and when the mechanism section already exists, re-read it against the diff, not just "add a section".
 - [2026-06-11] spur-new: The module list still described a hand-rolled parser two ADRs after it
   was replaced — stale module descriptions survive migrations silently (§6.4 rule 4).
 - [2026-06-12] spur-new: A wildcard dependency edge (`apps/* ──► packages/{…}`) hid three real
@@ -505,7 +506,7 @@ if it recurs, a new rule in §6.
   the section title says otherwise — always flag `(accepted design — not yet built)` (§6.4
   rule 1).
 - [2026-07-19] spur-new: A verify run certified task 0282 `done` citing `evidence:134` anchors
-  that resolve to a *different ticket's* content, with R4/R5 marked MET on material absent from
+  that resolve to a _different ticket's_ content, with R4/R5 marked MET on material absent from
   the deliverable — caught only by a `--force` re-audit that re-read every cited line. Verify
   must confirm each `file:line` anchor names the requirement's subject (not merely exists)
   before writing a MET row (filed as task 0299, P2).
@@ -526,7 +527,7 @@ if it recurs, a new rule in §6.
   `helpText()` renderers) survived two doc passes after the superseding ADR landed, directly
   contradicting the section above it. When an ADR is superseded, grep the derived docs for its
   mechanism vocabulary in the same change.
-- [2026-08-04] spur-new: A UI/UX web module (Inbox, 0422) shipped with its *visual* design
+- [2026-08-04] spur-new: A UI/UX web module (Inbox, 0422) shipped with its _visual_ design
   correctly routed to root `DESIGN.md`, but the module's **system-boundary surface** — module
   registration (`id`/`route`/`order`), the two-channel message plane, the shared
   `process-stream` lib — was never recorded in `04`/`03`/ADR until a follow-up doc-evolve pass.
@@ -553,7 +554,7 @@ if it recurs, a new rule in §6.
   (§7).
 - [2026-06-12] spur-new: A ✅ row described a flag surface that a later refactor had moved
   elsewhere (run-level identity flags → agent specs) — the row stayed green while its acceptance
-  text went false. A ✅ row's *acceptance text* rots independently of its status; spot-check both
+  text went false. A ✅ row's _acceptance text_ rots independently of its status; spot-check both
   (§7 audit).
 - [2026-08-08] spur-new: The entire §6 History section was stale after feature E1 shipped — 7 sources (now 10), no forensic ETL, no `--source all` fan-out, no `daily`/`analyze`/`report` pipeline, no scheduling, no versioned artifact. A ✅ status row stayed green while its acceptance text was 4 features behind. When a feature ships a capability group, audit every `05` row in that section in the same wrapup (§7 audit).
 - [2026-08-13] spur-new: `01` and `05` still called `spur team start|stop` “Phase 4 stubs” after G2 tasks 0195/0207–0210 were `done` and `04` already documented the live verbs. Recurred when G4 wave 1 (0529) shipped while `05` stayed ⏳ and `02` left the wave-1 box unchecked. A 💤/`stubs`/`⏳` label in an index outlives the satellite. When a supervision/CLI slice ships, update `01` membership and `05` status in the same wrapup — and `feature refresh`/`sync` the leaf — or the next planning pass will reinvent the supervisor.
@@ -571,7 +572,7 @@ if it recurs, a new rule in §6.
 - [2026-08-18] spur-new: Task 0587 R4 turned `bunfig.toml [test] coverage` off and routed the
   enforcing chains through a new `bun test --coverage` script — but in Bun `1.3.14` the bunfig key
   **overrides** the CLI flag, so the "coverage" script collected nothing and the 90/90 gate silently
-  vanished from CI. Two compounding errors: an *assumed* precedence between a config file and a CLI
+  vanished from CI. Two compounding errors: an _assumed_ precedence between a config file and a CLI
   flag that was never probed, and a performance premise ("coverage roughly doubles the suite") copied
   from a dogfood report that had never timed a controlled plain run — the real cost measured 1.1s on
   65s (1.7%). Before disabling a gate for speed: probe the precedence in a two-arm scratch run, and
@@ -586,8 +587,8 @@ if it recurs, a new rule in §6.
 - [2026-06-18] spur-new: First §4.5 audit found `04`/`05` had orphan satellites (no index rows) and a
   competing tool-generated `features/INDEX.md`. Fixed by adding index sections that point at the
   satellites; `05` points at the tool's `INDEX.md` (tool keeps owning it). **§4.5 rule 2 caveat
-  learned:** existing satellite filenames are load-bearing grep anchors referenced across *tool-owned
-  tasks* and *immutable plans* — renaming them to bare `<slug>.md` would strand those backward
+  learned:** existing satellite filenames are load-bearing grep anchors referenced across _tool-owned
+  tasks_ and _immutable plans_ — renaming them to bare `<slug>.md` would strand those backward
   pointers (which raw edits may not touch). Index existing files under their current names; apply the
   `<slug>.md` convention to **new** satellites only. Retroactive renames need a tool-driven migration,
   not raw rewrites.

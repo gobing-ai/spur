@@ -27,25 +27,25 @@ All product work goes through the harness unless the operator explicitly overrid
 
 ### Harness tool routing
 
-| Need | Route to | Avoid |
-| --- | --- | --- |
-| Plan a feature (intake → AC → tasks) | `/sp:dev-plan`, `/sp:dev-idea` | Freeform feature files without gates |
-| Drive one task end-to-end | `/sp:dev-run <wbs>` or **`sp:super-planner`** | Implement with no task/pipeline |
-| Batch or parallel task runs | `/sp:dev-runall`, `/sp:dev-parallel`, **`sp:super-planner`** | Unordered multi-task work |
-| Batch-refine tasks under a feature | `/sp:dev-refineall --feature <id> --auto` | Hand-looping task refinement |
-| Multi-step corpus CLI (tasks/features/rules/workflows) | **`sp:expert-spur`** | Raw corpus writes |
-| Look up `spur` verbs / flags / `--json` | Skill **`sp:spur-cli`** | Inventing flags |
-| Create/edit/list tasks or features | **`spur task` / `spur feature`** | Direct-writing corpus files |
-| Verify requirements / AC | `/sp:dev-verify` | Self-reported done |
-| Review (SECUA + traceability + architecture) | `/sp:dev-review` or **`sp:super-reviewer`** | Unstructured LGTM |
-| Tests / coverage | `/sp:dev-unit` | Untested production paths |
-| Constraint gate / rule authoring | `spur rule`; `/sp:rule-scan`, `/sp:rule-add`, `/sp:rule-refine` | Skipping `spur rule run` |
-| Workflow author / run | `spur workflow`; `/sp:workflow-add`, `/sp:workflow-refine` | Ad-hoc shell lifecycle |
-| Docs drift / sync / lessons | **`sp:doc-evolve`** + `docs/99_PROJECT_CONSTITUTION.md` | Patching derived docs over authority |
-| Wrap completed work | `/sp:dev-wrap`, `/sp:dev-wrapall` | Skipping learnings/doc sync |
-| Session index / memory | **`sp:indexed-context`** + `.spur/context/` | Full-tree rereads |
-| Install / sync a plugin across coding agents | `superskill install <plugin>` | Hand-copying adapters |
-| Capability authoring / quality lifecycle | `superskill <noun> --help` | Bypassing lifecycle gates |
+| Need                                                   | Route to                                                        | Avoid                                |
+| ------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------ |
+| Plan a feature (intake → AC → tasks)                   | `/sp:dev-plan`, `/sp:dev-idea`                                  | Freeform feature files without gates |
+| Drive one task end-to-end                              | `/sp:dev-run <wbs>` or **`sp:super-planner`**                   | Implement with no task/pipeline      |
+| Batch or parallel task runs                            | `/sp:dev-runall`, `/sp:dev-parallel`, **`sp:super-planner`**    | Unordered multi-task work            |
+| Batch-refine tasks under a feature                     | `/sp:dev-refineall --feature <id> --auto`                       | Hand-looping task refinement         |
+| Multi-step corpus CLI (tasks/features/rules/workflows) | **`sp:expert-spur`**                                            | Raw corpus writes                    |
+| Look up `spur` verbs / flags / `--json`                | Skill **`sp:spur-cli`**                                         | Inventing flags                      |
+| Create/edit/list tasks or features                     | **`spur task` / `spur feature`**                                | Direct-writing corpus files          |
+| Verify requirements / AC                               | `/sp:dev-verify`                                                | Self-reported done                   |
+| Review (SECUA + traceability + architecture)           | `/sp:dev-review` or **`sp:super-reviewer`**                     | Unstructured LGTM                    |
+| Tests / coverage                                       | `/sp:dev-unit`                                                  | Untested production paths            |
+| Constraint gate / rule authoring                       | `spur rule`; `/sp:rule-scan`, `/sp:rule-add`, `/sp:rule-refine` | Skipping `spur rule run`             |
+| Workflow author / run                                  | `spur workflow`; `/sp:workflow-add`, `/sp:workflow-refine`      | Ad-hoc shell lifecycle               |
+| Docs drift / sync / lessons                            | **`sp:doc-evolve`** + `docs/99_PROJECT_CONSTITUTION.md`         | Patching derived docs over authority |
+| Wrap completed work                                    | `/sp:dev-wrap`, `/sp:dev-wrapall`                               | Skipping learnings/doc sync          |
+| Session index / memory                                 | **`sp:indexed-context`** + `.spur/context/`                     | Full-tree rereads                    |
+| Install / sync a plugin across coding agents           | `superskill install <plugin>`                                   | Hand-copying adapters                |
+| Capability authoring / quality lifecycle               | `superskill <noun> --help`                                      | Bypassing lifecycle gates            |
 
 **Non-negotiable unless the operator overrides:**
 
@@ -86,16 +86,16 @@ first, then derived docs, then this file.
 
 ### Doc map
 
-| Doc | Owns | Authority | Read/edit when |
-| --- | --- | --- | --- |
-| `docs/00_ADR.md` | **WHY** | Authoritative content | Structural decision; dated entry before divergence |
-| `docs/01_PRD.md` | **WHAT** | Authoritative scope | Scope changes |
-| `docs/02_ROADMAP.md` | **WHEN** | Derived | Phase placement/status |
-| `docs/03_ARCHITECTURE.md` | **HOW** | Derived; ADR wins | Cross-module, seam, schema |
-| `docs/04_DESIGN.md` + `docs/design/` | **SURFACE** | Derived | Commands, flags, config, DTOs, system boundaries |
-| `docs/05_FEATURES.md` + `docs/features/` | **STATUS** | Derived/tool-owned | Feature state |
-| `docs/99_PROJECT_CONSTITUTION.md` | **PROCESS** | Authoritative process | Before numbered-doc edits |
-| `AGENTS.md` | **ENTRY** | Derived | First every session |
+| Doc                                      | Owns        | Authority             | Read/edit when                                            |
+| ---------------------------------------- | ----------- | --------------------- | --------------------------------------------------------- |
+| `docs/00_ADR.md`                         | **WHY**     | Authoritative content | Real architectural decisions only (ADR-000 admission test); dated entry before divergence |
+| `docs/01_PRD.md`                         | **WHAT**    | Authoritative scope   | Scope changes                                             |
+| `docs/02_ROADMAP.md`                     | **WHEN**    | Derived               | Phase placement/status                                    |
+| `docs/03_ARCHITECTURE.md`                | **HOW**     | Derived; ADR wins     | Cross-module, seam, schema                                |
+| `docs/04_DESIGN.md` + `docs/design/`     | **SURFACE** | Derived               | Commands, flags, config, DTOs, system boundaries          |
+| `docs/05_FEATURES.md` + `docs/features/` | **STATUS**  | Derived/tool-owned    | Feature state                                             |
+| `docs/99_PROJECT_CONSTITUTION.md`        | **PROCESS** | Authoritative process | Before numbered-doc edits                                 |
+| `AGENTS.md`                              | **ENTRY**   | Derived               | First every session                                       |
 
 Routing: decision → `00`; scope → `01`; mechanism → `03`; surface → `04`; phase → `02`; feature
 status → `05`. Working layers, satellites, edit rules, and audit protocol live in `99`.
