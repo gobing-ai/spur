@@ -1923,7 +1923,12 @@ Only this section exists.
                 output: createCapturedOutput(),
             });
             const acBody = join(cwd, 'ac-strict-core.md');
-            await Bun.write(acBody, '- [ ] Given a strict-core task / When done is attempted / Then exit 0.\n');
+            // Box CHECKED on purpose: task 0800 R1 made L3.unchecked-checklist a hard
+            // error when `--as` names a differing transition target, so an open box here
+            // would block `done` on an L3 error and mask this test's actual subject
+            // (L4 warnings must not block). Open-box refusal is covered by task-check's
+            // own AC1/AC2 tests.
+            await Bun.write(acBody, '- [x] Given a strict-core task / When done is attempted / Then exit 0.\n');
             await main(['task', 'update', wbs, '--section', 'Acceptance Criteria', '--from-file', acBody], {
                 cwd,
                 output: createCapturedOutput(),
