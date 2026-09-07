@@ -8,7 +8,8 @@ updated_at: 2026-09-07
 
 # Executor availability
 
-Feature B5 owns acceptance criteria. Robin approved this design on 2026-09-07; it is not yet built.
+Feature B5 owns acceptance criteria. Robin approved this design on 2026-09-07. Task 0796
+(routing/doctor respect for `disabled`) is implemented; 0797–0799 remain.
 ADR-111 records the accepted persistence decision.
 
 ## 1. Ownership and contracts

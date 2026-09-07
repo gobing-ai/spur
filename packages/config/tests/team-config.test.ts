@@ -333,8 +333,8 @@ describe('AgentConfigSchema team validation', () => {
 describe('resolveExecutor', () => {
     const config: AgentConfig = {
         executors: [
-            { name: 'fast', agent: 'codex', model: 'gpt-5' },
-            { name: 'zai', agent: 'omp', model: 'zai//glm-5.2' },
+            { name: 'fast', agent: 'codex', model: 'gpt-5', disabled: false },
+            { name: 'zai', agent: 'omp', model: 'zai//glm-5.2', disabled: false },
         ],
     };
     const isCanonical = (n: string) => ['claude', 'codex', 'omp'].includes(n);
@@ -358,7 +358,7 @@ describe('resolveExecutor', () => {
     });
 
     test('returns { agent } with no model when the executor has no model', () => {
-        const noModel: AgentConfig = { executors: [{ name: 'bare', agent: 'codex' }] };
+        const noModel: AgentConfig = { executors: [{ name: 'bare', agent: 'codex', disabled: false }] };
         expect(resolveExecutor('bare', noModel)).toEqual({ agent: 'codex' });
     });
 

@@ -100,6 +100,8 @@ export interface AgentExecutorConfig {
     agent: string;
     model?: string;
     tier?: CapabilityTier;
+    /** 111: routing kill-switch; validated/merged at the config boundary. */
+    disabled: boolean;
 }
 
 /**
@@ -486,7 +488,12 @@ export class AgentService {
         // R1: DoctorRunner probes iff `executor.model` is set (doctor-runner.js:75/:89),
         // so handing it a model-stripped copy suppresses probing without touching the
         // runner. renderDoctor keeps reading the UNMODIFIED config array (R2).
-        const runnerExecutors = args.probeHealth ? executors : executors?.map(({ name, agent }) => ({ name, agent }));
+        // 111 R5: disabled profiles are stripped too — they get synthesized rows
+        // (no install/liveness/auth probe) instead of real ones.
+        const enabledExecutors = executors?.filter((e) => e.disabled !== true);
+        const runnerExecutors = args.probeHealth
+            ? enabledExecutors
+            : enabledExecutors?.map(({ name, agent }) => ({ name, agent }));
         const fingerprint = executorFingerprint(executors);
         let cacheInfo: DoctorCacheInfo = { hit: false, ageMs: null, path: DOCTOR_CACHE_REL };
         // Cache is active by default in production; an injected doctorRunner WITHOUT an
@@ -514,7 +521,8 @@ export class AgentService {
                     args.enveloped,
                 );
             }
-            const results = await doctorRunner.runAll();
+            const probeResults = await doctorRunner.runAll();
+            const results = withDisabledRows(probeResults, executors);
             if (cacheOn && !args.probeHealth) {
                 // R5: a forced refresh rewrites the file so capturedAt advances.
                 const writeErr = await writeDoctorCacheFile(fileSystem, fingerprint, results, now);
@@ -537,14 +545,24 @@ export class AgentService {
             // returns every executor row; resolveRole picks the elected one via the
             // same doctor-walk dispatch uses. R8: resolveRole itself is untouched.
             const resolved = await this.resolveRole(args.agent, roleDef.tier, doctorRunner);
-            const results = await doctorRunner.runAll();
+            // 111 R5: disabled profiles stay visible in the ladder (appended after
+            // the enabled rungs) — merged into the rowset without a probe.
+            const results = withDisabledRows(await doctorRunner.runAll(), executors);
             const rows = buildDoctorRows(results, executors, this.ctx.roles);
             const rowByName = new Map(rows.map((row) => [row.executor, row]));
-            // Ladder rows in resolution order (cheapest eligible first).
+            // Ladder rows in resolution order (cheapest eligible first); disabled
+            // tier-eligible profiles are appended after the enabled rungs.
             const executorsConfigured = this.ctx.agentConfig?.executors ?? [];
-            const ladderRows = cheapestEligibleExecutors(executorsConfigured, roleDef.tier)
+            const disabledLadderRows = executorsConfigured
+                .filter((e) => e.disabled === true && isTierEligible(getExecutorTier(e), roleDef.tier))
                 .map((e) => rowByName.get(e.name))
                 .filter((row): row is DoctorRow => row !== undefined);
+            const ladderRows = [
+                ...cheapestEligibleExecutors(executorsConfigured, roleDef.tier)
+                    .map((e) => rowByName.get(e.name))
+                    .filter((row): row is DoctorRow => row !== undefined),
+                ...disabledLadderRows,
+            ];
             if (!resolved.ok) {
                 // R5: the full tried ladder renders BEFORE the failure return —
                 // per-row reasons supersede resolveRole's single joined `tried:`
@@ -585,6 +603,7 @@ export class AgentService {
                         model: row.model,
                         roles: row.roles,
                         elected: row.elected,
+                        disabled: row.disabled,
                     };
                 });
                 this.ctx.output.write(
@@ -601,6 +620,20 @@ export class AgentService {
         }
         // R8: single-executor selector — served from a fresh matching cache when one
         // covers the name; on a miss run only what the selector needs and write nothing.
+        // 111 R6: a targeted check of a disabled profile fails (exit 1) without probing —
+        // before the cache/runner paths so the disable is authoritative.
+        const disabledEntry = (executors ?? []).find((e) => e.name === args.agent && e.disabled === true);
+        if (disabledEntry !== undefined) {
+            this.renderDoctor(
+                syntheticDisabledRows([disabledEntry]),
+                executors,
+                args.json,
+                args.agent,
+                cacheInfo,
+                args.enveloped,
+            );
+            return 1;
+        }
         const cachedSelectorRow = serveCached?.results.find((r) => r.agent === args.agent);
         if (cachedSelectorRow !== undefined) {
             cacheInfo = { hit: true, ageMs: serveCached?.ageMs ?? null, path: DOCTOR_CACHE_REL };
@@ -657,6 +690,7 @@ export class AgentService {
                     model: row.model,
                     roles: row.roles,
                     elected: row.elected,
+                    disabled: row.disabled,
                 };
             });
             const cacheField: DoctorCacheInfo = cache ?? { hit: false, ageMs: null, path: DOCTOR_CACHE_REL };
@@ -1806,6 +1840,7 @@ export class AgentService {
         const eligible = executors.filter((e) => {
             const canonical = resolveAgentName(e.agent);
             return (
+                e.disabled !== true &&
                 isTierEligible(getExecutorTier(e), targetTier) &&
                 !(exclude?.has(e.name) ?? false) &&
                 (canonical === undefined || !(exhaustedAgents?.has(canonical) ?? false))
@@ -1900,6 +1935,16 @@ export class AgentService {
             // executor name is the legacy value — warn once under the registered shim.
             if (source === 'default') {
                 warnAgentDefaultExecutorOnce(selector, this.ctx.output);
+            }
+            // 111 R3/R4: a pinned (or default-named, or phase-mapped) disabled
+            // profile is never silently substituted — routing fails naming the
+            // profile and the fix, before any probe or spawn.
+            if (executor.disabled === true) {
+                return {
+                    ok: false,
+                    exitCode: 2,
+                    message: `Executor '${executor.name}'${phaseSuffix} is disabled (agent.executors.${executor.name}.disabled: true) — enable it or select another executor`,
+                };
             }
             const canonical = resolveAgentName(executor.agent);
             if (canonical === undefined) {
@@ -2058,7 +2103,15 @@ export class AgentService {
                 };
             }
         }
-        const tried = eligible.length > 0 ? eligible.map((e) => e.name).join(', ') : 'none eligible';
+        let tried = eligible.length > 0 ? eligible.map((e) => e.name).join(', ') : 'none eligible';
+        // 111 R6: an all-disabled candidate set names the disabled profiles so
+        // the fix (re-enable one) is actionable instead of "none eligible".
+        if (eligible.length === 0 && executors !== undefined) {
+            const disabledEligible = executors
+                .filter((e) => e.disabled === true && isTierEligible(getExecutorTier(e), roleTier))
+                .map((e) => e.name);
+            if (disabledEligible.length > 0) tried = `disabled: ${disabledEligible.join(', ')}`;
+        }
         return {
             ok: false,
             exitCode: 1,
@@ -2274,14 +2327,18 @@ interface DoctorCacheFile {
 }
 
 /**
- * Executor-set identity (R3): name-ascending `name|agent|model?|tier` lines hashed
+ * Executor-set identity (R3): name-ascending `name|agent|model?|tier|disabled` lines hashed
  * with sha256. Sorting makes the key independent of config ordering; including tier
- * invalidates when inference changes. Exported for direct unit pins.
+ * invalidates when inference changes; including the disabled flag (111 R5) invalidates
+ * cached eligibility when an operator flips the kill-switch. Exported for direct unit pins.
  */
 export function executorFingerprint(executors: readonly AgentExecutorConfig[] | undefined): string {
     const lines = [...(executors ?? [])]
         .sort((a, b) => a.name.localeCompare(b.name))
-        .map((e) => `${e.name}|${e.agent}|${e.model ?? ''}|${getExecutorTier(e)}`);
+        .map(
+            (e) =>
+                `${e.name}|${e.agent}|${e.model ?? ''}|${getExecutorTier(e)}|${e.disabled === true ? 'disabled' : 'enabled'}`,
+        );
     return createHash('sha256').update(lines.join('\n')).digest('hex');
 }
 
@@ -2495,6 +2552,8 @@ type DoctorRow = {
     /** Probe error when unavailable — the ladder's per-row reason. */
     error: string | null;
     modelStatus?: ModelHealthResult | null;
+    /** 111 R5: profile disabled by config — inventoried, never probed or elected. */
+    disabled: boolean;
 };
 
 /**
@@ -2512,7 +2571,12 @@ function buildDoctorRows(
     const joined = results.map((result) => {
         // No matching executor entry (a bare binary, or no `agent.executors`
         // block) keeps the name-based inference rather than an absent tier.
-        const executor = executorByName.get(result.agent) ?? { name: result.agent, agent: result.agent };
+        // Bare binaries are always enabled (no config profile to disable, 111).
+        const executor = executorByName.get(result.agent) ?? {
+            name: result.agent,
+            agent: result.agent,
+            disabled: false,
+        };
         return { result, capabilityTier: getExecutorTier(executor), model: executor.model ?? (null as string | null) };
     });
     // Election: roleId -> winning executor name. Usable lookup across all rows
@@ -2532,6 +2596,7 @@ function buildDoctorRows(
         tier: result.tier,
         capabilityTier,
         model,
+        disabled: executorByName.get(result.agent)?.disabled === true,
         roles: roles ? [...roles].filter(([, rd]) => isTierEligible(capabilityTier, rd.tier)).map(([id]) => id) : [],
         elected: [...elections].filter(([, executorName]) => executorName === result.agent).map(([id]) => id),
         version: result.version,
@@ -2544,6 +2609,36 @@ function buildDoctorRows(
 function renderRolesCell(row: DoctorRow): string {
     if (!row.usable || row.roles.length === 0) return '—';
     return row.roles.map((id) => (row.elected.includes(id) ? `${id}*` : id)).join(',');
+}
+
+/**
+ * 111 R5: a disabled profile is inventoried without any probe — the row is
+ * synthesized (never run through install/liveness/auth checks) with usable
+ * false so it can never be elected. Tier 2 keeps the support-tier exit-code
+ * aggregation from reading an intentional disable as a health failure (R6).
+ */
+function syntheticDisabledRows(executors: readonly AgentExecutorConfig[] | undefined): DoctorResult[] {
+    return (executors ?? [])
+        .filter((e) => e.disabled === true)
+        .map((e) => ({
+            agent: e.name,
+            installed: false,
+            version: null,
+            authenticated: 'unknown' as const,
+            usable: false,
+            tier: 2 as const,
+            channels: [],
+            error: `disabled by config (agent.executors.${e.name}.disabled: true)`,
+        }));
+}
+
+/** Append synthesized disabled rows that the probe/cached rowset does not already carry. */
+function withDisabledRows(
+    probeResults: DoctorResult[],
+    executors: readonly AgentExecutorConfig[] | undefined,
+): DoctorResult[] {
+    const have = new Set(probeResults.map((r) => r.agent));
+    return [...probeResults, ...syntheticDisabledRows(executors).filter((r) => !have.has(r.agent))];
 }
 
 /**
@@ -2569,7 +2664,7 @@ function renderDoctorTable(results: DoctorRow[]): string {
         const usable = result.usable;
         return {
             glyph: usable ? '✓' : '✗',
-            state: usable ? 'usable' : 'missing',
+            state: result.disabled ? 'disabled' : usable ? 'usable' : 'missing',
             executor: result.executor,
             agentBinary: result.agentBinary,
             model: result.model ?? dash,
@@ -2602,11 +2697,17 @@ function renderDoctorTable(results: DoctorRow[]): string {
         `${row.glyph} ${row.state.padEnd(wState)}  ${row.executor.padEnd(wExecutor)}  ${row.agentBinary.padEnd(wAgent)}  ${row.model.padEnd(wModel)}  ${row.tier.padEnd(wTier)}  ${row.version.padEnd(wVersion)}  ${row.roles}`.trimEnd();
 
     const usableCount = rows.filter((row) => row.state === 'usable').length;
-    // Support tier keeps its one remaining consumer: the footer counts are plain
-    // (no support-tier naming — that confusion is what TIER now prevents).
-    const missing = rows.length - usableCount;
+    // 111 R6: intentional disables are reported separately, not folded into the
+    // missing/health-failure count — a healthy enabled fleet still prints a
+    // plain success footer and exits 0.
+    const disabledCount = rows.filter((row) => row.state === 'disabled').length;
+    const missing = rows.length - usableCount - disabledCount;
+    const usableFooter =
+        disabledCount > 0
+            ? `${usableCount} usable, ${missing} missing, ${disabledCount} disabled`
+            : `${usableCount} usable, ${missing} missing`;
     const footerLines = [
-        `${usableCount} usable, ${missing} missing`,
+        usableFooter,
         ...(results.some((result) => result.elected.length > 0) ? ['(* = elected executor for that role)'] : []),
     ];
 
@@ -2631,13 +2732,21 @@ function renderRoleLadder(
     const wName = Math.max(...ladder.map((row) => row.executor.length));
     for (const row of ladder) {
         const glyph = row.usable ? '✓' : '✗';
-        const status = row.usable ? 'usable' : 'missing';
+        const status = row.disabled ? 'disabled' : row.usable ? 'usable' : 'missing';
         const note =
-            row.executor === electedExecutor ? 'ELECTED' : row.usable ? 'eligible' : (row.error ?? 'not installed');
+            row.executor === electedExecutor
+                ? 'ELECTED'
+                : row.disabled
+                  ? 'disabled by config'
+                  : row.usable
+                    ? 'eligible'
+                    : (row.error ?? 'not installed');
         lines.push(`${glyph} ${row.executor.padEnd(wName)}  ${status}${note.length > 0 ? `  ${note}` : ''}`);
     }
     const usableCount = ladder.filter((row) => row.usable).length;
-    lines.push('', `${ladder.length} eligible, ${usableCount} usable, elected: ${electedExecutor ?? 'none'}`);
+    // 111 R5: disabled rows render appended for visibility but are not eligible.
+    const eligibleCount = ladder.filter((row) => !row.disabled).length;
+    lines.push('', `${eligibleCount} eligible, ${usableCount} usable, elected: ${electedExecutor ?? 'none'}`);
     return lines.join('\n');
 }
 
@@ -2652,7 +2761,7 @@ function renderDoctorDetail(result: DoctorRow | null): string {
     const glyph = result.usable ? '✓' : '✗';
     lines.push(`${glyph} ${result.executor}  (${result.capabilityTier})`);
     lines.push(`  agent:      ${result.agentBinary}`);
-    lines.push(`  status:     ${result.usable ? 'usable' : 'missing'}`);
+    lines.push(`  status:     ${result.disabled ? 'disabled by config' : result.usable ? 'usable' : 'missing'}`);
     lines.push(`  version:    ${result.version ?? '—'}`);
     // Pinned config model — distinct from the probed model health below.
     lines.push(`  pinned:     ${result.model ?? '—'}`);
@@ -2733,6 +2842,7 @@ export function cheapestEligibleExecutors(
     minTier: CapabilityTier,
 ): AgentExecutorConfig[] {
     return executors
+        .filter((e) => e.disabled !== true)
         .filter((e) => isTierEligible(getExecutorTier(e), minTier))
         .sort((a, b) => TIER_RANK[getExecutorTier(a)] - TIER_RANK[getExecutorTier(b)]);
 }

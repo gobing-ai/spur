@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    AgentExecutorConfigSchema,
     featuresConfigSchema,
     HistoryConfigSchema,
     HistoryRefreshConfigSchema,
@@ -138,5 +139,28 @@ describe('misplacedGlobalKeys (task 0649 R4)', () => {
     test('an empty or global-only config produces no finding', () => {
         expect(misplacedGlobalKeys({})).toEqual([]);
         expect(misplacedGlobalKeys({ workflows: {} })).toEqual([]);
+    });
+});
+
+// ---- agent.executors disabled flag (0796 R1/R2) ----
+
+describe('AgentExecutorConfigSchema disabled (0796)', () => {
+    test('omitted disabled parses to false (post-merge default)', () => {
+        const result = AgentExecutorConfigSchema.safeParse({ name: 'omp', agent: 'omp' });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.disabled).toBe(false);
+        }
+    });
+
+    test('explicit true and false parse verbatim', () => {
+        expect(AgentExecutorConfigSchema.parse({ name: 'a', agent: 'x', disabled: true }).disabled).toBe(true);
+        expect(AgentExecutorConfigSchema.parse({ name: 'a', agent: 'x', disabled: false }).disabled).toBe(false);
+    });
+
+    test('non-boolean values are rejected (R2)', () => {
+        for (const bad of ['yes', 'true', null, 1, {}]) {
+            expect(AgentExecutorConfigSchema.safeParse({ name: 'a', agent: 'x', disabled: bad }).success).toBe(false);
+        }
     });
 });

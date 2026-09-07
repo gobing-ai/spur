@@ -859,3 +859,29 @@ describe('parseConfigYaml (task 0649 R4)', () => {
         expect(() => parseConfigYaml(': : : invalid')).toThrow();
     });
 });
+
+// ---- agent.executors disabled flag JSON schema round-trip (0796 R2) ----
+
+describe('agent.executors disabled JSON schema round-trip (0796)', () => {
+    const schemaPath = join(import.meta.dir, '..', '..', '..', 'apps', 'cli', 'schemas', 'spur-config.schema.json');
+
+    test('disabled: true is accepted by both zod and the JSON schema', async () => {
+        await writeConfig(
+            tmpCwd,
+            `version: "1"\nname: t\n$schema: "${schemaPath}"\nagent:\n  executors:\n    - name: retired\n      agent: omp\n      disabled: true\n`,
+        );
+        const viaJsonSchema = await loadSpurConfig(tmpCwd, { validateJsonSchema: true });
+        expect(viaJsonSchema.agent?.executors?.[0]?.disabled).toBe(true);
+        const viaZod = await loadSpurConfig(tmpCwd, { validateJsonSchema: false });
+        expect(viaZod.agent?.executors?.[0]?.disabled).toBe(true);
+    });
+
+    test('a non-boolean disabled value is rejected by both', async () => {
+        await writeConfig(
+            tmpCwd,
+            `version: "1"\nname: t\n$schema: "${schemaPath}"\nagent:\n  executors:\n    - name: retired\n      agent: omp\n      disabled: "yes"\n`,
+        );
+        await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: true })).rejects.toThrow();
+        await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: false })).rejects.toThrow();
+    });
+});

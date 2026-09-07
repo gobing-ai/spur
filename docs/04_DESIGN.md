@@ -303,7 +303,9 @@ matches roles first (the vocabulary is closed and pairwise-disjoint from executo
 then reuses the executor-first-then-binary lookup as `agent.default` (`resolveExecutorSelector`):
 if `agent.executors` has an entry whose `name` matches, that profile's `{ agent, model? }` is used
 (the profile's `model` becomes the run model unless the user also passed `--model`); otherwise the
-name is resolved as a legacy coding-agent binary. Collision precedence: when an executor and an
+name is resolved as a legacy coding-agent binary. A profile with `disabled: true` (feature B5 / 0796)
+**fails with exit 2 naming the profile and the enable-fix before any probe or spawn** — disabled
+profiles are never silently substituted. Collision precedence: when an executor and an
 agent binary share a name, **the executor wins** (to reach the bare binary, remove or rename the
 executor entry). An explicit selector never consults phase / `default-by-phase` config (R8).
 **Spec-id addressing (feature G4 / 0537 / 0542).** Under `--drain`, `--spec <id>` (canonical since
@@ -429,6 +431,9 @@ Readiness check per agent (same `DISPLAY_ORDER` as list). Text mode prints an al
   (probe) lines. Health probing is **opt-in** (feature B4 / 0683): `--probe-health` passes pinned models
   through to the runner so it probes them; without the flag the models are withheld from the probe set and
   no network/model check runs. The MODEL column always reflects config either way.
+- **STATUS** shows `disabled` for a profile with `agent.executors[].disabled: true` (feature B5 / 0796):
+such rows are synthesized from config without a probe (`usable: false`, error `disabled by config`), a
+full-set inventory still exits 0, and naming a disabled executor directly exits 1 with its row.
 - **TIER** renders the executor's capability tier (`cheap|standard|capable-*`), distinct from support tier 1/2/3
   (routing introspection only — the task-pipeline size precheck stopped consuming it in 0723), which never appears
   in the table. Declared `agent.executors[].tier`
@@ -441,8 +446,8 @@ Arg semantics: a bare **agent/exec name** prints that executor's detail block; a
 (`coder`, `reviewer`, …) instead renders the full eligible ladder for that role — one line per eligible
 agent with the ELECTED marker and per-row failure reasons plus an `N eligible, M usable, elected: X`
 summary. `--json` emits `{ agents: [...], cache? }`, each entry adding `capabilityTier`, `model` (pinned or null),
-`roles`, and `elected`; a full-set run adds `cache: {hit, ageMs, path}` — detection results are cached for
-60 s at `.spur/run/agent-doctor.json` keyed by an executor-set fingerprint (name/agent/model/tier), served
+`roles`, and `elected`; each entry also carries `disabled` (feature B5 / 0796, config state); a full-set run adds `cache: {hit, ageMs, path}` — detection results are cached for
+60 s at `.spur/run/agent-doctor.json` keyed by an executor-set fingerprint (name/agent/model/tier/disabled), served
 only on an exact fresh match, and corrupted/stale/unwritable states degrade silently to a live run; text
 mode prints a dated footer note on a hit; `--probe-health` never reads or writes the cache and
 `--force-refresh` skips the read, re-runs detection live, and rewrites the file. Under a role selector,

@@ -298,6 +298,12 @@ export type RequiresCapabilities = z.infer<typeof RequiresCapabilitiesSchema>;
  * Never invent capable-2/3 via inference — only declare those explicitly.
  * `executionCapabilities` (0706) is orthogonal to `tier`: it attests what the
  * native platform enforces, not model quality.
+ *
+ * `disabled` (111 R1/R2): routing kill-switch. Only `omitted` or a boolean is
+ * accepted — the zod default applies `false` AFTER the global/project raw merge,
+ * so a project layer omitting the field inherits the global `true` and an
+ * explicit project `false` overrides it. String/null/numeric values fail
+ * validation (no `"true"`/`1` coercion).
  */
 export const AgentExecutorConfigSchema = z.object({
     name: z.string().min(1),
@@ -305,7 +311,21 @@ export const AgentExecutorConfigSchema = z.object({
     model: z.string().min(1).optional(),
     tier: executorCapabilityTierSchema.optional(),
     executionCapabilities: ExecutionCapabilitiesSchema.optional(),
+    disabled: z.boolean().default(false),
 });
+
+/**
+ * Thrown by {@link resolveExecutor} when the referenced executor profile is
+ * explicitly disabled (111 R4). Distinct from the unknown-reference error so
+ * spawn paths can name the fix (enable the profile) instead of mislabeling it
+ * as a dangling reference.
+ */
+export class ExecutorDisabledError extends Error {
+    constructor(name: string) {
+        super(`Executor "${name}" is disabled by config (agent.executors.${name}.disabled: true)`);
+        this.name = 'ExecutorDisabledError';
+    }
+}
 
 /** A single executor profile entry. */
 export type AgentExecutorConfig = z.infer<typeof AgentExecutorConfigSchema>;
@@ -511,7 +531,14 @@ export function resolveExecutor(
     opts?: ResolveExecutorOptions,
 ): ResolvedExecutor {
     const exec = agentConfig?.executors?.find((entry) => entry.name === name);
-    if (exec !== undefined) return { agent: exec.agent, model: exec.model };
+    if (exec !== undefined) {
+        // 111 R4: a disabled profile is never a spawnable target — an explicit
+        // pin to it must fail here, before any process spawns, and must not
+        // fall through to a same-named bare binary (executors-first collision
+        // precedence keeps the reference pointing at the profile).
+        if (exec.disabled === true) throw new ExecutorDisabledError(name);
+        return { agent: exec.agent, model: exec.model };
+    }
     if (opts?.isCanonicalAgent === undefined || opts.isCanonicalAgent(name)) {
         return { agent: name };
     }

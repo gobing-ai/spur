@@ -431,3 +431,30 @@ describe('layer merge machinery (in-process unit coverage)', () => {
         expect(enriched.message).toContain('/g.yaml');
     });
 });
+
+// ---- disabled flag layering (0796 R1) ----
+
+describe('disabled flag layering (0796)', () => {
+    test('global disabled=true survives a project layer that omits the flag', () => {
+        const globalRaw = { agent: { executors: [{ name: 'omp', agent: 'omp', disabled: true }] } };
+        const merged = mergeSpurConfigLayers(globalRaw, { agent: { executors: [{ name: 'omp', model: 'm' }] } });
+        const config = parseMergedWithProvenance(merged, globalRaw, {}, {});
+        const executors = config.agent?.executors ?? [];
+        expect(executors).toHaveLength(1);
+        expect(executors[0]?.disabled).toBe(true);
+    });
+
+    test('project disabled=false overrides global disabled=true', () => {
+        const globalRaw = { agent: { executors: [{ name: 'omp', agent: 'omp', disabled: true }] } };
+        const projectRaw = { agent: { executors: [{ name: 'omp', agent: 'omp2', disabled: false }] } };
+        const merged = mergeSpurConfigLayers(globalRaw, projectRaw);
+        const config = parseMergedWithProvenance(merged, globalRaw, projectRaw, {});
+        expect(config.agent?.executors?.[0]?.disabled).toBe(false);
+    });
+
+    test('both layers omitting the flag parses to false', () => {
+        const merged = mergeSpurConfigLayers({ agent: { executors: [{ name: 'omp', agent: 'omp' }] } }, {});
+        const config = parseMergedWithProvenance(merged, {}, {}, {});
+        expect(config.agent?.executors?.[0]?.disabled).toBe(false);
+    });
+});

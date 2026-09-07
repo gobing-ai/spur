@@ -11,7 +11,7 @@ import {
     type WaitUntil,
     waitForOccupant,
 } from '@gobing-ai/spur-app';
-import { resolveExecutor } from '@gobing-ai/spur-config';
+import { ExecutorDisabledError, resolveExecutor } from '@gobing-ai/spur-config';
 import { SystemEventDao, type SystemEventRow } from '@gobing-ai/spur-domain';
 import { type AgentSpec, isAgentName } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
@@ -579,6 +579,13 @@ function drainAgentSelector(spec: AgentSpec, context: CliContext): string {
     try {
         resolveExecutor(spec.executor, context.agentConfig, { isCanonicalAgent: isAgentName });
     } catch (error) {
+        // 111 R4: a spec pinned to a profile disabled AFTER materialization fails
+        // before spawn with the enable-fix — never relabeled as a dangling ref.
+        if (error instanceof ExecutorDisabledError) {
+            throw new Error(
+                `Spec "${spec.id}" pins disabled executor "${spec.executor}" — enable it via agent.executors.${spec.executor}.disabled: false or repin the spec before drain`,
+            );
+        }
         throw new Error(
             `Spec "${spec.id}" references unknown executor "${spec.executor}" — define it under agent.executors or remove the reference (${error instanceof Error ? error.message : String(error)})`,
         );

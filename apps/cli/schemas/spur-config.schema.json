@@ -165,6 +165,10 @@
                                 "type": "string",
                                 "enum": ["cheap", "standard", "capable-1", "capable-2", "capable-3"],
                                 "description": "Capability tier for stage-registry adaptive model routing (ADR-033, 0343). Live values: cheap | standard | capable-1 | capable-2 | capable-3 (1=low output quality, 3=high within the capable band). A stage starts on the cheapest eligible executor meeting its model_policy min_tier. Bare legacy `capable` is accepted at runtime (zod preprocess \u2192 capable-1) during the deprecation window but is not part of this editor enum."
+                            },
+                            "disabled": {
+                                "type": "boolean",
+                                "description": "Routing kill-switch (111): a disabled profile never serves a role, team, stage, or explicit selection, and doctor inventories it without probing. Omitted = enabled; only true/false accepted (no string/number/null coercion)."
                             }
                         }
                     }

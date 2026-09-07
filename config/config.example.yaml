@@ -130,6 +130,12 @@ agent:
     #   agent: omp
     #   model: minimax/MiniMax-M3
     #   tier: cheap
+    # A disabled profile stays visible to `spur agent doctor` but never routes
+    # (no role, team, stage, or explicit selection). Flip back to enabled by
+    # removing the line or setting disabled: false.
+    # - name: retired-profile
+    #   agent: omp
+    #   disabled: true
     - name: pi-dsv4-flash-volc
       agent: pi
     #   tier: standard
