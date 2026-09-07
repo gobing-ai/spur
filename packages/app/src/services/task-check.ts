@@ -539,6 +539,11 @@ export class TaskCheckService extends PlanningCheckService {
         // overrides the on-disk status for matrix + status-dependent rules, so a
         // lifecycle guard evaluates the rules the target status will require.
         const effectiveStatus = options?.asStatus ?? status;
+        // A lifecycle guard evaluating the row the task is about to ENTER, not the
+        // row it is in (task 0800 R1): `--as` naming a status different from the
+        // file's own is a transition-target check, and its terminal open-box rule
+        // fires at error severity so the gate can refuse the transition.
+        const isTransitionTarget = options?.asStatus !== undefined && options.asStatus !== status;
         // The template variant is the unified section-layout axis (§3.2); `template`
         // frontmatter selects it, defaulting to `default`. (`type` is the orthogonal
         // task/brainstorm corpus-compat field, not the matrix key.)
@@ -549,7 +554,7 @@ export class TaskCheckService extends PlanningCheckService {
         this.runL2(doc, entry, findings, raw);
 
         // ── L3: Format rules (warning-first, 3 hard-core) ──
-        this.runL3(doc, entry, effectiveStatus, findings);
+        this.runL3(doc, entry, effectiveStatus, findings, isTransitionTarget);
         // ── L4: Traceability — feature_id edges, parent_wbs, dependencies, AC coverage
         const tasksDir = dirname(filePath);
         const featuresDir = join(dirname(tasksDir), 'features');
@@ -611,11 +616,13 @@ export class TaskCheckService extends PlanningCheckService {
             return { doc: null, findings };
         }
         const fm = doc.frontmatterData ?? {};
-        const effectiveStatus = options?.asStatus ?? (fm.status as string) ?? 'backlog';
+        const status = (fm.status as string) ?? 'backlog';
+        const effectiveStatus = options?.asStatus ?? status;
+        const isTransitionTarget = options?.asStatus !== undefined && options.asStatus !== status;
         const variant = (fm.template as string) ?? DEFAULT_TASK_VARIANT;
         const entry = this.resolveMatrixEntry(variant, effectiveStatus);
         this.runL2(doc, entry, findings, raw);
-        this.runL3(doc, entry, effectiveStatus, findings);
+        this.runL3(doc, entry, effectiveStatus, findings, isTransitionTarget);
         const { findings: effectiveFindings } = this.summarizeWithStatus(
             effectiveStatus,
             findings,
@@ -633,6 +640,7 @@ export class TaskCheckService extends PlanningCheckService {
         entry: MatrixEntry | undefined,
         status: string,
         findings: CheckFindings[],
+        isTransitionTarget = false,
     ): void {
         // ── F21 task 0787 (R1): a placeholder-only body (HTML comments, `> TBD`,
         // whitespace) is an obligation only where the Section-Status-Matrix
@@ -883,8 +891,10 @@ export class TaskCheckService extends PlanningCheckService {
         // Terminal-status open checkboxes (0182 R7-optional): a `done`/`cancelled` task
         // should carry zero unchecked `- [ ] ` boxes anywhere in its body — an open box
         // on closed work means the reader can't tell "done" from "abandoned" by the
-        // boxes alone. Warning only (never error): a task can be legitimately closed
-        // with an intentionally-unchecked box (e.g. a deferred sub-item noted in prose).
+        // boxes alone. Warning on an already-terminal task (0182): a task can be
+        // legitimately closed with an intentionally-unchecked box (e.g. a deferred
+        // sub-item noted in prose); error only when `--as` names a differing
+        // transition target, so the gate can still refuse the close (0800 R1).
         // Gated strictly on terminal status so it never fires on a roster-bearing
         // umbrella/tracking parent still in progress (todo/wip) — the 0176 roster
         // pattern's Plan is expected to carry open boxes until every child lands.
@@ -895,7 +905,10 @@ export class TaskCheckService extends PlanningCheckService {
                 findings.push({
                     layer: 'L3',
                     code: FINDING_CODES.L3_UNCHECKED_CHECKLIST,
-                    severity: 'warning',
+                    // Error when `--as` names a transition target (task 0800 R1):
+                    // closing a task with an open box becomes an explicit refusal.
+                    // An already-terminal task keeps 0182's warning-only tolerance.
+                    severity: isTransitionTarget ? 'error' : 'warning',
                     section: '',
                     message: `Task is ${status} but carries ${openBoxes} unchecked checklist box(es) — flip to [x] or remove before closing`,
                 });

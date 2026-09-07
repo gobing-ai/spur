@@ -764,6 +764,48 @@ describe('TaskService.record', () => {
         expect(raw).toContain('- [ ] R3. third requirement');
     });
 
+    test('AC3 (0800 R1): a PASS verdict never flips a Plan box — Plan stays byte-identical', async () => {
+        // 0788 is the counter-example that fixed this rule: verdict PASS with a plan
+        // step deliberately left open. A verdict certifies requirements; flipping a
+        // Plan box from it would fabricate evidence no check produced.
+        const wbs = await createTask(svc);
+        const root = tasksDir.replace('/tasks', '');
+        const fs = createNodeFileSystem(root);
+        const ws = new PlanningWriteService({ fs });
+        const ref: EntityRef = {
+            kind: 'task',
+            id: wbs,
+            filePath: `${tasksDir}/${wbs}_record-test-task.md`,
+            folder: tasksDir,
+        };
+        await ws.updateSection(ref, 'Requirements', '- [ ] R1. first requirement\n');
+        const planBody = '- [x] 1. finished step\n- [ ] 2. deliberately open step\n';
+        await ws.updateSection(ref, 'Plan', planBody);
+        const planBefore = MarkdownDocument.parse(
+            await fs.readFile(`${tasksDir}/${wbs}_record-test-task.md`),
+            'task',
+        ).getSection('Plan');
+
+        const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+        await fs.writeFile(
+            verdictPath,
+            JSON.stringify({
+                wbs,
+                verdict: 'PASS',
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'covered' }],
+                checks: [],
+            }),
+        );
+
+        await svc.record(wbs, { verdictFile: verdictPath });
+
+        const raw = await fs.readFile(`${tasksDir}/${wbs}_record-test-task.md`);
+        const planAfter = MarkdownDocument.parse(raw, 'task').getSection('Plan');
+        expect(planAfter).toBe(planBefore);
+        expect(raw).toContain('- [x] R1. first requirement');
+        expect(raw).toContain('- [ ] 2. deliberately open step');
+    });
+
     test('handles missing verdict file gracefully', async () => {
         const wbs = await createTask(svc);
 

@@ -3267,6 +3267,118 @@ describe('F92 R2 — target-status (asStatus) validation projection', () => {
     });
 });
 
+describe('0800 R1 — open Plan box is an error at a terminal transition target', () => {
+    // A `testing` task whose Plan carries one unchecked box. The done gate runs
+    // `spur task check --as done`; pre-0800 the open box was L3.unchecked-checklist
+    // at WARNING and `pass: !hasError` dropped it — the transition sailed through
+    // and the box became silent residue.
+    const testingTaskOpenBox = [
+        '---',
+        'schema_version: 1',
+        'name: "0800 testing task"',
+        'status: testing',
+        'template: standard',
+        'created_at: 2026-09-07T00:00:00.000Z',
+        'updated_at: 2026-09-07T00:00:00.000Z',
+        '---',
+        '',
+        '## 0001. 0800 testing task',
+        '',
+        '### Background',
+        '',
+        'Text',
+        '',
+        '### Acceptance Criteria',
+        '',
+        '- [x] AC1',
+        '',
+        '### Design',
+        '',
+        'Chosen approach.',
+        '',
+        '### Plan',
+        '',
+        '- [x] 1. done step',
+        '- [ ] 2. open step',
+        '',
+        '### Solution',
+        '',
+        '`packages/app/src/services/x.ts:12` — change.',
+        '',
+        '### Testing',
+        '',
+        '`bun test` passed.',
+        '',
+        '### Review',
+        '',
+        'Verdict: PASS',
+        '',
+        '| Priority | Finding |',
+        '| --- | --- |',
+        '| P3 | No blocking findings |',
+        '',
+        '### References',
+        '',
+        'None.',
+        '',
+        '### History',
+        '',
+        '- 2026-09-07 created',
+    ].join('\n');
+
+    const openBoxFinding = (result: { findings: Array<{ code: string; severity: string }> }) =>
+        result.findings.find((f) => f.code === FINDING_CODES.L3_UNCHECKED_CHECKLIST);
+
+    test('AC1: --as done on a testing task with an open box reports error and blocks', async () => {
+        const { fs, path, cleanup } = seedFile(testingTaskOpenBox);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001', { asStatus: 'done' });
+        cleanup();
+        expect(result.status).toBe('done');
+        expect(openBoxFinding(result)?.severity).toBe('error');
+        expect(result.pass).toBe(false);
+    });
+
+    test('no --as on the same testing task reports nothing (non-terminal current row)', async () => {
+        const { fs, path, cleanup } = seedFile(testingTaskOpenBox);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+        expect(openBoxFinding(result)).toBeUndefined();
+        expect(result.pass).toBe(true);
+    });
+
+    test('--as testing (a differing but non-terminal target) reports nothing', async () => {
+        const wip = testingTaskOpenBox.replace('status: testing', 'status: wip');
+        const { fs, path, cleanup } = seedFile(wip);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001', { asStatus: 'testing' });
+        cleanup();
+        expect(openBoxFinding(result)).toBeUndefined();
+        expect(result.pass).toBe(true);
+    });
+
+    test('AC2: an already-done task with an open box still only warns (0182 survives)', async () => {
+        const doneTask = testingTaskOpenBox.replace('status: testing', 'status: done');
+        const { fs, path, cleanup } = seedFile(doneTask);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+        expect(openBoxFinding(result)?.severity).toBe('warning');
+        expect(result.pass).toBe(true);
+    });
+
+    test('a done task re-checked with --as done (same status, no transition) still only warns', async () => {
+        const doneTask = testingTaskOpenBox.replace('status: testing', 'status: done');
+        const { fs, path, cleanup } = seedFile(doneTask);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001', { asStatus: 'done' });
+        cleanup();
+        expect(openBoxFinding(result)?.severity).toBe('warning');
+        expect(result.pass).toBe(true);
+    });
+});
+
 describe('0625 R3 — hollow-Testing stub detection', () => {
     const stubTask = (testingBody: string): string =>
         [
