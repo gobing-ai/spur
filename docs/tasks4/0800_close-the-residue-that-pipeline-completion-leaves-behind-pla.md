@@ -4,7 +4,7 @@ name: "Close the residue that pipeline completion leaves behind: Plan checkboxes
 status: wip
 template: feature-impl
 created_at: 2026-09-07T17:36:01.774Z
-updated_at: "2026-09-07T22:55:50.499Z"
+updated_at: "2026-09-07T23:08:43.542Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -450,7 +450,58 @@ Four slices, one seam each — no new module, config key, or abstraction; every 
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Verdict: PASS
+
+Three-dimensional review (functional traceability + SECUA + architecture) of the committed
+implementation: `844ba9214` (R2), `cae44d37c` (R1), `1569710c6` (R4), `a40ca15b9` + `f8bde0908`
+(R3 + R1 fixture). All evidence below was re-run fresh this stage; every cited anchor was re-read.
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P3 | correctness (test surface) | `apps/server/tests/modules/task/handlers.test.ts:109-128` | The AC9 handler test's mock service re-implements the ValidationError wrapping inline, so the transport test would stay green even if `TaskService.list()` regressed to a plain Error. Mitigated by the real service-level guard at `packages/app/tests/services/task-service.test.ts:421` — acceptable layering, no change required. |
+| P4 | usability | `packages/app/src/services/task-check.ts:905-912` | The transition-target error fires on unchecked boxes anywhere in the body, not only Plan — a deliberately deferred unchecked AC item now blocks `done` unless pinned via `severityOverrides`. Matches R1's intent ("flip it, delete it, or leave the task open"); documented behavior, not a defect. |
+| P4 | architecture | `apps/cli/src/index.ts:134` | Exporting `buildProgram` widens the entry module's surface. Justified: the parity test walks the dispatcher's own tree, eliminating the drift-prone duplicate registration. No action. |
+| P4 | docs (task file) | `docs/tasks4/0800_close-the-residue-that-pipeline-completion-leaves-behind-pla.md` (Solution §R3) | Solution cites `apps/cli/src/index.ts:189` for `runCommandDispatch`; the anchor is `:180` after the refactor. Stale citation inside the task file only; no code impact. |
+
+#### Functional traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/services/task-check.ts:546` (`isTransitionTarget`), `:911` (`severity: isTransitionTarget ? 'error' : 'warning'`); both `runL3` call sites threaded (`:557`, `:625`). Tests: `packages/app/tests/services/task-check.test.ts` "0800 R1" 5/5 pass this run. Live probe: `spur task check 0800 --as done --json` → `pass: false`, `L3.unchecked-checklist` severity `error`. |
+| R2 | MET | `packages/app/src/services/structural-repair.ts:31` (union member), `:193` (`demoteDisallowedSections`), `:237` (wired as pass 0). Tests: `structural-repair.test.ts` "0800 R2" 5/5 pass this run. 0787 repaired: `spur task check 0787 --strict-core --json` → zero `L2.disallowed-section`; exactly 8 former phantom titles survive as `####` headings (`docs/tasks4/0787_*.md:204,215,223,227,253,259,268,275`), no content lines dropped. |
+| R3 | MET | `apps/cli/tests/help-doc-parity.test.ts:1-140` (both directions, allow-lists `--json-envelope`/`--help`, names `file :: subcommand :: flag`); walks the dispatcher's own `buildProgram` (`apps/cli/src/index.ts:134`). 2/2 pass this run from inside `apps/cli` (AC8 green on the repaired tree). 30 undocumented flags (16 estimated) given rows across 11 `docs/help/cmd_*.md` files + `index.md` overview note. |
+| R4 | MET | `packages/app/src/services/task-service.ts:1690` (`canonical()` rethrows `ValidationError` for both `status` and `phase`); `apps/server/src/modules/task/handlers.ts` — 0795's `try`/`catch` deleted, `toFilters` a plain mapper (`:11-19`), `HTTPException` retained only for the 404 path (`:63`). Tests: `task-service.test.ts` ValidationError 2/2 pass; `apps/server/tests/modules/task/handlers.test.ts` 19/19 pass this run, including 422 + `VALIDATION_FAILED` through `globalErrorHandler` naming `bogus` and the allowed set. |
+
+#### Acceptance Criteria verification
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 transition refused with open box | MET | test + command | `task-check.test.ts` AC1 test pass; live `spur task check 0800 --as done --json` → error, `pass: false` |
+| AC2 already-done task only warns | MET | test | `task-check.test.ts` "AC2: an already-done task … still only warns" pass; `--as done` on a done file also warns (0182 survives) |
+| AC3 PASS verdict never flips a Plan box | MET | test | `packages/app/tests/services/task-record.test.ts:767` — Plan byte-identical across a PASS record, R1 box flips, open Plan step stays; 1/1 pass |
+| AC4 phantom folds into owner losslessly | MET | test | `structural-repair.test.ts` AC4 — `#### Findings` inside Review, every original line survives |
+| AC5 orphan phantom left byte-identical | MET | test | `structural-repair.test.ts` AC5 — `changed: false`, content `toBe(input)` |
+| AC6 0787 repaired through the CLI | MET | command | `spur task check 0787 --strict-core --json` → no `L2.disallowed-section`; 8 titles as `####` (`0787_*.md:204-275`); its deliberate open Plan box stays open per the non-goal |
+| AC7 undocumented flag fails the check | MET | test | `help-doc-parity.test.ts` both directions assert `toEqual([])` and name file/subcommand/flag on failure |
+| AC8 parity green on repaired tree | MET | test | `cd apps/cli && bun test tests/help-doc-parity.test.ts` → 2 pass, 0 fail (this run) |
+| AC9 unknown status is 422 at the transport | MET | test | `handlers.test.ts:109` routes through `globalErrorHandler` → 422 `VALIDATION_FAILED`, message names `bogus` + allowed set; `handlers.ts` carries no status `try`/`catch` (grep-verified) |
+
+#### Design conformance
+
+4/4 slices DONE as written. One documented estimate correction: R3's session estimate was 16
+undocumented flags, the parity test surfaced 30 — all documented; AC8's `Then` (check exits zero)
+holds. No silent deviations, no scope creep (the `f8bde0908` fixture edit is R1's own blast
+radius, commented as such). Non-goals respected: no verdict-driven box flipping, no section-delete
+verb, no description-text parity, no status enum in the wire contract, no corpus sweep.
+
+#### Residual risk
+
+Low. The remaining sharp edge is intentional: any unchecked box (not just Plan) now refuses a
+`testing → done` transition; `severityOverrides` remains the operator escape hatch. The
+handler-test mock duplication (P3) is the only place a future regression could hide, and the
+service-level test closes it.
+
+**Disposition:** PASS — no blocker or major findings; P3/P4 recorded, none blocking.
 
 ### References
 
