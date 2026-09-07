@@ -516,7 +516,11 @@ export class HistoryService {
         // retro-correlation (task 0558) — is the authority: a (source, session_id)
         // present in `history_run_session` is spur-run, anything else is ambient. The
         // two-way alignment also self-heals rows imported by the old heuristic.
-        if (!dryRun) {
+        // Post-import provenance alignment and duration derivation: expensive full-table
+        // scans (~1.8 M rows) that are only worthwhile when this import actually added
+        // records. Skipping them on no-op ticks turns a periodic cron miss from minutes
+        // of heavy I/O into milliseconds.
+        if (!dryRun && result.importedRecords > 0) {
             for (const runRoot of discovery?.runRoots ?? []) {
                 const sourceFilePrefix = runRoot.root.endsWith(sep) ? runRoot.root : `${runRoot.root}${sep}`;
                 await dao.observeImportedSessions({
