@@ -88,6 +88,65 @@ describe('structuralFindings', () => {
     });
 });
 
+describe('0800 R2 — disallowed-section demote-and-merge', () => {
+    const phantomBody = (extra: string) => taskDoc().replace('### History', `${extra}\n### History`);
+
+    test('AC4: a phantom after a canonical section folds into it losslessly', () => {
+        const input = phantomBody('### Findings\n\n- finding one\n- finding two\n');
+        const out = applyStructuralRepairs(input, 'task', undefined);
+        expect(out.changed).toBe(true);
+        const fold = out.repairs.find((r) => r.kind === 'disallowed-section');
+        expect(fold?.section).toBe('Findings');
+        expect(fold?.detail).toBe('folded into Review');
+        // Heading demoted, body byte-preserved.
+        expect(out.content).toContain('#### Findings\n\n- finding one\n- finding two\n');
+        expect(out.content).not.toMatch(/^### Findings$/m);
+        // Every original content line survives.
+        for (const line of input.split('\n')) {
+            if (line === '### Findings') continue;
+            expect(out.content).toContain(line);
+        }
+    });
+
+    test('AC5: a phantom before any canonical section is left byte-identical', () => {
+        const input = `---
+status: wip
+---
+
+### Findings
+
+orphan content
+`;
+        const out = applyStructuralRepairs(input, 'task', undefined);
+        expect(out.changed).toBe(false);
+        expect(out.content).toBe(input);
+        expect(out.repairs.filter((r) => r.kind === 'disallowed-section')).toEqual([]);
+    });
+
+    test('two consecutive phantoms both fold into the same owner', () => {
+        const input = phantomBody('### Findings\n\none\n\n### Residual risk\n\ntwo\n');
+        const out = applyStructuralRepairs(input, 'task', undefined);
+        const folds = out.repairs.filter((r) => r.kind === 'disallowed-section');
+        expect(folds.map((r) => r.section)).toEqual(['Findings', 'Residual risk']);
+        expect(folds.every((r) => r.detail === 'folded into Review')).toBe(true);
+        expect(out.content).toContain('#### Findings\n\none\n\n#### Residual risk\n\ntwo\n');
+        expect(out.content).not.toMatch(/^### Residual risk$/m);
+    });
+
+    test('a universal section (History/References/Notes) is not a phantom', () => {
+        const input = phantomBody('### References\n\n- ref\n');
+        const out = applyStructuralRepairs(input, 'task', undefined);
+        expect(out.repairs.filter((r) => r.kind === 'disallowed-section')).toEqual([]);
+        expect(out.content).toContain('### References');
+    });
+
+    test('phantom content inside a fenced code block is not demoted', () => {
+        const input = phantomBody('```\n### Findings\n```\n');
+        const out = applyStructuralRepairs(input, 'task', undefined);
+        expect(out.repairs.filter((r) => r.kind === 'disallowed-section')).toEqual([]);
+    });
+});
+
 describe('applyStructuralRepairs', () => {
     test('fixes a mis-levelled heading in place', () => {
         const raw = `---\nstatus: wip\n---\n\n## 9999. Probe\n\n## Requirements\n\n- R1. x\n`;

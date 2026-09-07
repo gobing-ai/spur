@@ -201,7 +201,7 @@ Scope reviewed: full uncommitted diff (11 files, +767/−172), task spec R1–R5
 |----------|-----------|----------|---------|
 | P4 | — | — | No open P1–P3 findings; re-review verdict PASS, verify verdict PASS. Full historical detail lives in the sibling sections below (Findings, Prior-finding resolution, New findings). |
 
-### Findings
+#### Findings
 
 | # | Sev | Dimension | Finding | Evidence | MUST-FIX |
 | --- | --- | --- | --- | --- | --- |
@@ -212,7 +212,7 @@ Scope reviewed: full uncommitted diff (11 files, +767/−172), task spec R1–R5
 | 5 | P4 | Usability | `Error: ` prefix-strip + non-JSON stderr fallback duplicated between `writeCreateJsonError` (`task.ts:33-47`) and `writeJsonError` (`envelope.ts:113-119`). Fine at two call-site families; delegate if a third appears. | `apps/cli/src/commands/task.ts:33-47`; `packages/app/src/output/envelope.ts:113-119` | no |
 | 6 | P4 | Architecture | `summarizeWithStatus` is now 7 positional params (`requiredList` last, `planning-check-base.ts:295`); callers pass positional `undefined`s (`task-check.ts:568-577`). Documented dual-path (legacy finding-derived vs supplied list) is transitional; switch to an options object only if it grows again. | `packages/app/src/services/planning-check-base.ts:295,357-368` | no |
 
-### Functional traceability (R1–R5)
+#### Functional traceability (R1–R5)
 
 - **R1 — met.** L3 placeholder rules gated on the effective status's required set (`task-check.ts:645-666`); status granted by the checker's own todo-eligibility probe (`task-service.ts:628-640`); bare and feature-linked captures land at backlog and check clean (`task-service.test.ts:219,239`); `requiredSections` reports the full obligation set even when all present (`task-check.test.ts:3762`). Capture-line Background keeps required-Background substantive (`task-service.ts:585-587`).
 - **R2 — met** (finding #1 aside). Candidates validated BEFORE WBS allocation/lock (`task-service.ts:723-730`); batch resolves+validates every item up-front, invalid ⇒ `TaskCandidateInvalidError` with zero files and no parent mutation (`task-service.ts:1481-1502`; `task-service.test.ts:856`); complete spec ⇒ todo, requirements-only ⇒ backlog (`task-service.test.ts:819`); explicit-status candidates validated as that status; I/O rollback retained.
@@ -220,11 +220,11 @@ Scope reviewed: full uncommitted diff (11 files, +767/−172), task spec R1–R5
 - **R4 — met.** Frontmatter serialized from the OBJECT via `serializeTaskFrontmatter` (`task-skeleton.ts:155-158`, shared yaml emitter with `MarkdownDocument.parse`); quotes/backslashes/colons/Unicode/newlines round-trip (`task-skeleton.test.ts:198,214`; `task-service.test.ts:247`); ONE parseable raw/enveloped JSON error on stdout, exit 1/2/3 semantics kept (`task.ts:146-181,307-312,1014-1019`); invalid input rejected pre-lock ⇒ no writes. Hand-interpolation removed from both create paths; `escapeYamlValue` not used as a writer. Probe-WBS `0000` claim verified: wbs reaches only L1 message text and L4 (excluded from policy).
 - **R5 — met for this stage.** Real-matrix regressions across app/domain; corpus audit recorded unsuppressed (289 PASS / 10 FAIL, all pre-existing done-status L4 integrity findings; 0 from this change) in Implementation Notes; CLI surface docs + doc-evolve remain plan item 5 (open, deferred — must not be lost by wrap).
 
-### SECUA / architecture depth
+#### SECUA / architecture depth
 
 Security: YAML via the shared emitter (no injection surface), findings carried inside the JSON envelope, validation moved to the create trust boundary — improved. Correctness: batch atomicity, rollback, empty/placeholder sections, special chars all covered by focused tests. Architecture: deepens the seams — one frontmatter writer in domain (reader/writer cannot drift), `checkContentPolicy` as the single creation/checking policy seam 0788 will consume, matrix stays sole semantic authority (`sectionsForStatus` throws loudly on missing entries, no silent fallback). HTTP parity holds via the shared `TaskService.create` (`apps/server/src/modules/task/handlers.ts:74`); the server test fixture's added `todo` matrix entry aligns the fixture with the probe.
 
-### Residual risk & disposition
+#### Residual risk & disposition
 
 1. Finding #1 MUST be fixed before verify (one-token change + ideally a batch review-variant regression test).
 2. Finding #2 needs an explicit recorded decision (Q&A or design doc) — the current behavior is defensible under R1 but silently supersedes 0339's todo gate.
@@ -250,13 +250,13 @@ unconditional gate predated the matrix-driven split. Done readiness is gated by 
 trio — the L3 Solution/Testing placeholder check (`task-check.ts:852`) plus DD-09 AC-coverage
 (errors at effective done); no separate "record-completeness review" mechanism exists.
 
-### Re-review (post-remediation)
+#### Re-review (post-remediation)
 
 **Verdict: PASS** — attempt 2 resolves all three substantive findings from the first review with real evidence (gate green: 7477 pass / 0 fail across 417 files, all typechecks + post-check rules pass, proof digest `sha256:35397034e240453ae78e03cc8a903fc480c2c0823b20398778b50f7848395be2` matching the run's recorded quality gate). Decision text corrected by reviewer during review finalization (self-correction of this section's own prose); no code or test changes.
 
 Scope re-reviewed: full uncommitted diff (13 files, +993/−181), task spec R1–R5 + AC, feature F21, shipped matrix (`config/tasks/section-matrix.yaml`), gate log, and every code path the prior findings named.
 
-### Prior-finding resolution
+#### Prior-finding resolution
 
 | # | Prior finding | Status | Evidence |
 | --- | --- | --- | --- |
@@ -265,14 +265,14 @@ Scope re-reviewed: full uncommitted diff (13 files, +993/−181), task spec R1�
 | 3 | P2 — missing CLI error-surface regressions | **Resolved.** Four command-boundary tests assert observable contract (`apps/cli/tests/commands/task.test.ts:2892` raw `--json` → exit 1, stdout `{ok:false,error:{code:'candidate-invalid',findings}}`, stderr empty; `:2910` enveloped → `apiErrorSchema` with `details.cliCode`/`details.findings`; `:2933` non-JSON → stderr prose, stdout untouched; `:2949` batch-create raw). Mocking at the service boundary is correct layering — service behavior keeps its own tests. The JSON-mode dup-WBS push (`apps/cli/src/commands/task.ts:1348-1352`) is covered by the pre-existing `--json` test (`task.test.ts:2769`: exit 1, `status:'duplicate'`, `pass:false` in parsed results). |
 | — | Plan item 5 (docs sync) | **Docs content landed; item stays open by design.** `docs/04_DESIGN.md` §4.1 gains the create/batch-create emission paragraph and updated inventory rows describing `writeCreateJsonError` (raw `--json` on stdout, `details.cliCode`, exits 1/2/3); §7.4 gains "Matrix-aware L3 gating (0787)" (:2228) plus a creation-status paragraph rewritten around the eligibility probe. Plan item 5's checkbox (doc-evolve sync-check + full gates) remains open — wrap must carry it. |
 
-### New findings
+#### New findings
 
 | # | Sev | Dimension | Finding | Evidence | MUST-FIX |
 | --- | --- | --- | --- | --- | --- |
 | R1 | P2 | Correctness (recorded decision) | The Decision's closure sentence — "At `done`, Requirements still blocks via the matrix `done` row's gate plus the record-completeness review" — was ungrounded on both named mechanisms. The shipped `done` row requires only `[Solution, Testing, Review]`; Requirements is done-**optional** (`config/tasks/section-matrix.yaml:39-41`), so the 0787 gate (`requiredAtStatus.has('Requirements')`, `task-check.ts:650`) cannot fire at `done`; and no "record-completeness review" exists anywhere in packages/apps/plugins/docs (grep: 0 hits). The nearest real done-status gates are DD-09 AC-coverage (AC↔feature scenario subsets, not Requirements placeholders) and the L3 Testing/Solution placeholder check (`task-check.ts:852`). Net widening vs 0339: a `done` task with a placeholder-only Requirements now checks clean — deliberate and accepted per the matrix's done-optional design intent (`section-matrix.yaml:35-38`). **Resolved in place:** the Decision sentence was rewritten during finalization (see verdict note); the todo-side paragraph is untouched; no code or test changes. | `config/tasks/section-matrix.yaml:39-41`; `packages/app/src/services/task-check.ts:648-655`, `:852`; this doc `:146-152` | **yes** → **resolved in place** |
 | R2 | P4 | Semantics (note only) | A batch item with explicit `background: ""` suppresses the template-Background append (`input.background === undefined` is false) while single create cannot express that case. Supplied-wins semantics; no current caller. | `packages/app/src/services/task-service.ts:596-604` | no |
 
-### Re-review sweep (traceability / SECUA / architecture)
+#### Re-review sweep (traceability / SECUA / architecture)
 
 - R1–R4 re-verified on the post-remediation diff: Background precedence chain intact (supplied → feature-derived → capture line → template append, `task-service.ts:569-604`); `checkContentPolicy`'s positional `summarizeWithStatus` call matches the 8-param signature (accepted=`undefined`, id=wbs, requiredList=`entry?.required`); `serializeTaskFrontmatter` remains the single frontmatter writer on the reader-shared yaml emitter with `lineWidth: 0` (round-trip tests incl. quotes/backslashes/colons/Unicode/newlines, `packages/domain/tests/planning/task-skeleton.test.ts:194-220`); exit-code semantics preserved (usage 2, collision 3, candidate/failed 1).
 - No new security surface (checker findings ride inside the JSON envelope; no fs writes before validation), and the remediation does not weaken completion evidence: done still hard-requires the Solution/Testing/Review trio + `gate: true` (`section-matrix.yaml:39-42`).

@@ -1,25 +1,34 @@
 /**
  * Structural repair engine for task/feature corpus files (task 0619).
  *
- * Repairs are limited to heading presence, heading level, section order, and
- * R-item checkbox form — the shapes a check can derive from the section matrix.
- * It never authors section content: an empty section is inserted as a bare
- * heading, prose is never rewritten, and acceptance-criteria bodies are never
- * touched. Off-variant sections (disallowed/forbidden) are reported and left in
- * place — there is deliberately no section-delete verb.
+ * Repairs are limited to heading presence, heading level, section order,
+ * R-item checkbox form, and disallowed-section demote-and-merge — the shapes a
+ * check can derive from the section matrix. It never authors section content:
+ * an empty section is inserted as a bare heading, prose is never rewritten, and
+ * acceptance-criteria bodies are never touched. An off-variant section that
+ * follows a canonical one is demoted one level so it folds back into its
+ * owner's body (task 0800 R2) — lossless, the exact inverse of how the bypass
+ * write created it; there is deliberately still no section-delete verb. An
+ * off-variant section with no canonical predecessor is reported and left in
+ * place.
  *
  * The engine is a pure string transform: input markdown → output markdown.
  * A file with nothing structural to repair returns its input byte-identical
  * (`changed === false`), which is the trust property (R4/R15).
  */
 
-import { FEATURE_CANONICAL_SECTIONS, type MarkdownDomain, TASK_CANONICAL_SECTIONS } from '@gobing-ai/spur-domain';
+import {
+    FEATURE_CANONICAL_SECTIONS,
+    type MarkdownDomain,
+    TASK_CANONICAL_SECTIONS,
+    UNIVERSAL_SECTIONS,
+} from '@gobing-ai/spur-domain';
 
 import { type CheckFindings, FINDING_CODES, type MatrixEntry } from './planning-check-base';
 
 /** One applied repair, rendered by the CLI in the per-file report. */
 export interface StructuralRepair {
-    kind: 'heading-level' | 'section-order' | 'missing-section' | 'requirement-checkbox';
+    kind: 'heading-level' | 'section-order' | 'missing-section' | 'requirement-checkbox' | 'disallowed-section';
     section: string;
     detail: string;
 }
@@ -173,6 +182,42 @@ export function structuralFindings(content: string, domain: MarkdownDomain): Che
 }
 
 /**
+ * Demote each non-canonical domain-level heading that FOLLOWS a canonical one
+ * (`### X` → `#### X` for tasks), folding it back into its owning section's
+ * body (task 0800 R2). Content never moves and no line is dropped — demoting
+ * the heading marker is what makes the following lines part of the preceding
+ * canonical section on the next parse. A heading with no canonical predecessor
+ * is left in place (the check still reports it). Returns the (possibly
+ * unchanged) body and records one repair per fold.
+ */
+function demoteDisallowedSections(
+    body: string,
+    level: number,
+    order: readonly string[],
+    repairs: StructuralRepair[],
+): string {
+    const allowed = new Set<string>([...order, ...UNIVERSAL_SECTIONS]);
+    let owner: string | undefined;
+    let result = '';
+    let cursor = 0;
+    let changed = false;
+    for (const h of scanHeadings(body, level)) {
+        if (!h.atLevel) continue;
+        if (allowed.has(h.name)) {
+            owner = h.name;
+            continue;
+        }
+        if (owner === undefined) continue;
+        result += `${body.slice(cursor, h.start)}${'#'.repeat(level + 1)} ${h.name}`;
+        cursor = h.start + h.line.length;
+        changed = true;
+        repairs.push({ kind: 'disallowed-section', section: h.name, detail: `folded into ${owner}` });
+    }
+    if (!changed) return body;
+    return result + body.slice(cursor);
+}
+
+/**
  * Apply the structural repairs. Returns the repaired content (byte-identical
  * when nothing was repairable) and the list of repairs.
  */
@@ -185,7 +230,11 @@ export function applyStructuralRepairs(
     const level = LEVEL[domain];
     const order = canonicalOrder(domain);
     const canonical = new Set<string>(order);
-    const { frontmatter, body } = splitFrontmatter(content);
+    const { frontmatter, body: originalBody } = splitFrontmatter(content);
+
+    // ── 0. Disallowed-section demote-and-merge (task 0800 R2): runs first so a
+    // folded heading is no longer a section when order/level are computed. ──
+    const body = demoteDisallowedSections(originalBody, level, order, repairs);
     const headings = scanHeadings(body, level);
 
     // ── 1. Heading level: rewrite wrong-depth canonical headings ──
