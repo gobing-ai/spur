@@ -1,6 +1,6 @@
 {
     "name": "@gobing-ai/spur-domain",
-    "version": "0.3.74",
+    "version": "0.3.75",
     "type": "module",
     "private": true,
     "exports": {
