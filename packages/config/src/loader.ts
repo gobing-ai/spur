@@ -267,6 +267,10 @@ export async function loadSpurConfig(cwd: string = process.cwd(), opts?: LoadSpu
     return promise;
 }
 
+export type {
+    ExecutorUpdateErrorCode,
+    SetProjectExecutorDisabledResult,
+} from './executor-update';
 /**
  * Invalidate the cached {@link SpurConfig} for one config path or the entire cache.
  *
@@ -278,6 +282,13 @@ export async function loadSpurConfig(cwd: string = process.cwd(), opts?: LoadSpu
  * @param configPath - Optional layer path (project or global) to invalidate; clears the
  *   entire cache when omitted.
  */
+// Task 0797 / ADR-111: filesystem updater rides the node-only `./loader` subpath.
+// (Re-exported here because the package `exports` map points `./loader` at this file;
+// the import cycle executor-update → loader is safe — the shared symbols are used
+// lazily at call time, never at module init.)
+export { ExecutorUpdateError, setProjectExecutorDisabled } from './executor-update';
+
+/** Drop cached loader entries so the next {@link loadSpurConfig} re-reads from disk. */
 export function invalidateSpurConfig(configPath?: string): void {
     if (configPath === undefined) {
         spurConfigCache.clear();
