@@ -234,9 +234,10 @@ export default function RoutingTab({ timeRange }: ObservabilityTabProps) {
         const controller = new AbortController();
         // R4: `all` yields an undefined since → the param is omitted, not sent empty.
         const since = timeRangeSince(timeRange);
+        const baseUrl = resolveApiUrl();
         const url = since
-            ? `${resolveApiUrl()}/observability/routing-summary?since=${encodeURIComponent(since)}`
-            : `${resolveApiUrl()}/observability/routing-summary`;
+            ? `${baseUrl}/observability/routing-summary?since=${encodeURIComponent(since)}`
+            : `${baseUrl}/observability/routing-summary`;
         (async () => {
             try {
                 const res = await fetchWithTimeout(new Request(url, { signal: controller.signal }));

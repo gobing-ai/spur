@@ -573,7 +573,7 @@ export function displayValue(value: string | null | undefined): string {
 /** Serialize UI filter state into the server-side query params. */
 export function serializeFilter(
     filter: Partial<ObservabilityFilterValues>,
-    timeRange: ObservabilityTimeRange = '24h',
+    timeRange: ObservabilityTimeRange,
 ): ActiveFilter {
     const out: ActiveFilter = {};
     if (filter.selectedPrefixes && filter.selectedPrefixes.size === 1) {

@@ -858,8 +858,10 @@ describe('observability components', () => {
             tierFilter: 'all' as const,
             runId: '',
         };
-        const nameUrl = historyUrl(serializeFilter({ ...base, searchQuery: 'task.created', searchScope: 'name' }));
-        const actorUrl = historyUrl(serializeFilter({ ...base, searchQuery: 'operator', searchScope: 'actor' }));
+        const nameUrl = historyUrl(
+            serializeFilter({ ...base, searchQuery: 'task.created', searchScope: 'name' }, '24h'),
+        );
+        const actorUrl = historyUrl(serializeFilter({ ...base, searchQuery: 'operator', searchScope: 'actor' }, '24h'));
 
         expect(nameUrl).toContain('names=task.created');
         expect(actorUrl).toContain('actor=operator');
