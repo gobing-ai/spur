@@ -4,7 +4,7 @@ name: "Close remaining proof-input and physical artifact confinement gaps"
 status: done
 template: issue
 created_at: 2026-09-06T18:27:45.398Z
-updated_at: "2026-09-06T22:35:26.054Z"
+updated_at: "2026-09-06T23:45:56.684Z"
 feature_id: D6
 priority: P1
 dependencies: ["0781", "0784"]
@@ -71,11 +71,11 @@ Dependencies: 0781's lexical fix remains intact; 0784 supplies immutable source 
 
 Execution budget: one owned task at a time; checkpoint after 45 minutes or two unsuccessful fix iterations in .spur/run/0785-execution-notes.md, preserving focused logs. Reproduce with targeted workspace tests before the single final project gate. requireDiff: source/tests for runtime tasks, canonical docs/tests for 0786; no fabricated source edit for refinement. Refinement itself changes planning sections only.
 ### Plan
-- [ ] R1/R2: add failing missing/unreadable/wrong-type spec, relative cwd, leaf/ancestor/dangling/root symlink and unsupported-filesystem tests.
-- [ ] R1/R2: implement shared validated input reads and physical path confinement; preserve legitimate descendants and no-effects refusal.
-- [ ] R3: implement fresh verify-verdict comparison and authoritative run binding with existing DB/ProcessExecutor seams; test forged vars, mismatched WBS/run/definition/stage digests and missing proof.
-- [ ] R1/R3/R4: supply canonical task/feature paths on every bracket, move bound registration before completion without duplicate capture, and stamp review from a same-run/same-digest completion marker.
-- [ ] R5: test unchanged unbound registration and explicit unsupported binding; sync actual contract/legacy projections, run affected safety-path suites, rebuild bundle and run the final project gate.
+- [x] R1/R2: add failing missing/unreadable/wrong-type spec, relative cwd, leaf/ancestor/dangling/root symlink and unsupported-filesystem tests.
+- [x] R1/R2: implement shared validated input reads and physical path confinement; preserve legitimate descendants and no-effects refusal.
+- [x] R3: implement fresh verify-verdict comparison and authoritative run binding with existing DB/ProcessExecutor seams; test forged vars, mismatched WBS/run/definition/stage digests and missing proof.
+- [x] R1/R3/R4: supply canonical task/feature paths on every bracket, move bound registration before completion without duplicate capture, and stamp review from a same-run/same-digest completion marker.
+- [x] R5: test unchanged unbound registration and explicit unsupported binding; sync actual contract/legacy projections, run affected safety-path suites, rebuild bundle and run the final project gate.
 ### Root Cause
 
 <!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
@@ -107,7 +107,7 @@ confined read path and one bound write path, both physically anchored to the rea
   reconstruction of the missing suffix — result strictly inside the canonical run root. A
   `FileSystem` without `realPath` fails closed; symlink escapes are rejected before `ensureDir`,
   dispatch, or any write.
-- `command-gate.ts:120` and `run-artifact.ts:105,232` — every result/path traversal goes through
+- `packages/app/src/workflow/actions/command-gate.ts:120` and `packages/app/src/workflow/actions/run-artifact.ts:105` and `packages/app/src/workflow/actions/run-artifact.ts:232` — every result/path traversal goes through
   `resolveRunArtifactPath` before any effect; `ensureDir` now guards the parent of the normalized
   file (never the target itself, so a file-named-directory cannot be created).
 
@@ -122,7 +122,7 @@ confined read path and one bound write path, both physically anchored to the rea
   digest; `stages.review.status = completed` AND the run-scoped marker
   `.spur/run/<runId>-review-proof.digest` names the same digest; only then `dao.record`. Any
   refusal leaves the artifact ledger empty for the run.
-- `builtins.ts:96` — `RunArtifactActionRunner` receives `processExecutor` (no ambient executor).
+- `packages/app/src/workflow/builtins.ts:96` — `RunArtifactActionRunner` receives `processExecutor` (no ambient executor).
 - `config/workflows/task-pipeline.yaml` — review state writes the completion marker right after its
   agent (line 600); verify stamps `review: {status: $rv, ...}` conditionally on the marker
   (line ~695: default `skipped`, never claimed-complete); the `verify → record` guard additionally
@@ -140,11 +140,16 @@ run.artifact contract rewritten to the enforced binding, proof-state paragraph d
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/workflow/proof-input-fingerprint.ts — exported readProofInputContents(): undefined/empty stays omitted, non-string rejected by option name, lexical containment under resolve(workdir) (:122), stat→isFile→read fails closed (:138); digest folds both contents. task-pipeline.yaml carries taskFile on 4 legs + featureSpecPath resolver (declared-but-unresolvable fails closed); docs-pipeline.yaml 3 legs. |
-| R2 | MET | packages/app/src/workflow/actions/run-path.ts resolveRunArtifactPath (:37): lexical descent under workdir first, then realPath canonicalization; missing realPath fails closed (:42-44); dangling-symlink rejection; missing-leaf reconstruction; result strictly inside canonical .spur/run. Wired before any effect: command-gate.ts (2 call sites), run-artifact.ts (3). |
-| R3 | MET | run-artifact.ts executeBound (:159): fresh readProofInputContents capture (:188) must equal declared digest (PROOF_DIGEST_RE); canonical verdict PASS for same wbs + raw .proof block validated (runId, definitionDigest vs RunDao.traceRowById :323 / resumeDefinitionDigest :336 — caller vars never trusted); qualityGate/verification stage digests equal fresh capture; ledger untouched on any refusal. Tests: forged-var, mismatched-wbs/run/definition/stage cases all green. |
-| R4 | MET | task-pipeline.yaml:600 — run-scoped marker <runId>-review-proof.digest written right after review agent; :698 verify stamps review completed only when marker equals current digest (default skipped); verify→record guard requires proof.stages.review.status=completed (:732). Skipped/stale review is never completed evidence; ADR-107 Option B untouched. |
-| R5 | MET | run-artifact.ts :91 unsupported proofBinding refusal (only "current" defined, ADR-071); non-verify-verdict current binding refuses instead of inventing a schema (:167); unbound path-only registration preserved; no new registry/envelope/sandbox. Docs synced same-change: docs/design/workflow-composition-contract.md + docs/04_DESIGN.md. |
+| R1 | MET | `packages/app/src/workflow/proof-input-fingerprint.ts:118-142` — `readProofInputContents()` keeps `undefined` / `''` legitimately omitted (`:121`), rejects non-string option values by option name, enforces lexical containment under `resolve(workdir)` (`:122-125`), then `stat` → `isFile` → `readFile`, each failing closed with a named error before any digest (`:127-142`). Both task and feature contents fold into the digest. Callers: `config/workflows/task-pipeline.yaml` carries `taskFile` on 4 legs plus a `featureSpecPath` resolver (declared-but-unresolvable fails closed); `config/workflows/docs-pipeline.yaml` on 3 legs. Tests: `packages/app` `bun test tests/workflow/actions/proof-fingerprint.test.ts tests/workflow/proof-input-fingerprint.test.ts` (in the 6-file group below) — 90 pass / 0 fail this run. |
+| R2 | MET | `packages/app/src/workflow/actions/run-path.ts:37-50` — `resolveRunArtifactPath()` refuses outright when the FileSystem has no `realPath` (`:42-45`, "refusing to skip confinement (0785 R2)"), applies 0781 lexical descent first (`:48-50`, traversal + sibling prefixes + the run root itself rejected), then canonicalizes so the result is strictly inside the canonical `.spur/run`; dangling symlinks are rejected and a missing output leaf is reconstructed. Wired before any effect at all 3 call sites: `packages/app/src/workflow/actions/command-gate.ts:120` and `packages/app/src/workflow/actions/run-artifact.ts:105,232`. Tests: `tests/workflow/actions/run-artifact.test.ts`, `tests/workflow/actions/command-gate.test.ts` — 90 pass / 0 fail this run. |
+| R3 | MET | `packages/app/src/workflow/actions/run-artifact.ts:159-195` — `executeBound()` re-reads the specs itself (`:186-190`, "R1: validated spec reads … BEFORE any digest") and independently captures the current digest instead of trusting caller-supplied vars; the canonical verdict must be PASS for the same wbs and its raw `.proof` block must match the authoritative run identity read from `RunDao` (trace row / resume definition digest), with `qualityGate` and `verification` stage digests equal to the fresh capture. A digest-shaped workflow var alone is insufficient and a forged matching var cannot bless stale content — every refusal returns before the ArtifactDao ledger write and leaves the task lifecycle unmutated (`:86-89` doc comment). Tests: forged-var, mismatched wbs / run / definition / stage cases — 90 pass / 0 fail this run. |
+| R4 | MET | `config/workflows/task-pipeline.yaml:598-600` writes the run-scoped marker `.spur/run/$__runId-review-proof.digest` immediately after the review agent; `:696-700` stamps `RV="completed"` only when that marker exists AND equals the current `$proofDigest` (default `"skipped"`); `:730-734` the verify→record registration comment requires `proof.stages.review.status = completed` independently evidenced by the same run-scoped marker (0785 R4). A skipped or stale review marker is therefore never completed evidence. ADR-107 Option B and the existing safety-completion requirements are untouched. Tests: `tests/workflow/task-pipeline-proof-chain.test.ts`, `tests/workflow/docs-pipeline-proof-chain.test.ts` — 90 pass / 0 fail this run. |
+| R5 | MET | `packages/app/src/workflow/actions/run-artifact.ts:88-93` — an unsupported `proofBinding` is refused explicitly ("only \"current\" is defined (ADR-071)"); `:165-172` a `current` binding on any kind other than `verify-verdict` fails as unsupported rather than inventing a second proof envelope. Unbound path-only artifact registration is preserved unchanged; no new registry, envelope or runtime sandbox is introduced, and `packages/app/src/workflow/actions/run-path.ts:33-36` documents the bounded local-filesystem threat model (static symlink escapes, explicitly not TOCTOU, no sandbox). Docs synced in the same change: `docs/design/workflow-composition-contract.md`, `docs/04_DESIGN.md`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Declared missing proof inputs fail closed | MET | test | `packages/app/src/workflow/proof-input-fingerprint.ts:127-138` — an explicitly supplied spec that does not exist returns a named error ("an explicitly supplied spec must be readable, not silently omitted") and no digest is produced; a workdir-relative spec is resolved against `resolve(workdir)` and read from there (`:122-125`), while anything escaping the workdir is refused. Linked feature-spec contents fold into the same digest, so a feature requirement change invalidates task and docs proof. Executable evidence: `cd packages/app && bun test tests/workflow/actions/proof-fingerprint.test.ts tests/workflow/actions/run-artifact.test.ts tests/workflow/actions/command-gate.test.ts tests/workflow/proof-input-fingerprint.test.ts tests/workflow/task-pipeline-proof-chain.test.ts tests/workflow/docs-pipeline-proof-chain.test.ts` → 90 pass / 0 fail, 353 expect() calls, this run. |
+| Scenario: R2 — Artifacts cannot escape through symlinks or claim false binding | MET | test | `packages/app/src/workflow/actions/run-path.ts:37-50` rejects leaf/ancestor symlink escapes, dangling symlinks and any path outside the canonical `.spur/run` root before the external write, and fails closed when `realPath` is unavailable; it is invoked ahead of every effect from `packages/app/src/workflow/actions/command-gate.ts:120` and `packages/app/src/workflow/actions/run-artifact.ts:105,232`. Mismatched proof is refused in `packages/app/src/workflow/actions/run-artifact.ts:159-195` before the ledger record, and `config/workflows/task-pipeline.yaml:696-700` reports review `completed` only against the matching run-scoped digest marker, so unexecuted review is never reported completed and the task cannot transition done before artifact binding succeeds. Executable evidence: same 6-file group, 90 pass / 0 fail this run. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->
@@ -154,6 +159,7 @@ run.artifact contract rewritten to the enforced binding, proof-state paragraph d
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - docs/plans/2026-09-06-workflow-conflict-audit.md — F-07; tasks 0751 and 0781.
 - docs/00_ADR.md — ADR-069/071, ADR-107 Option B, ADR-108; docs/design/workflow-composition-contract.md.

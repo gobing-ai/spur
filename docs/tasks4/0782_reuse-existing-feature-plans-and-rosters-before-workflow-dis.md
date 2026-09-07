@@ -4,7 +4,7 @@ name: "Reuse existing feature plans and rosters before workflow dispatch"
 status: done
 template: issue
 created_at: 2026-09-06T18:27:45.282Z
-updated_at: "2026-09-06T19:54:32.981Z"
+updated_at: "2026-09-06T23:44:25.366Z"
 feature_id: D6
 priority: P1
 ---
@@ -65,11 +65,11 @@ Handoff: 0784 runs after 0782 and removes the obsolete terminal checkpoint write
 
 Execution budget: one owned task at a time; checkpoint after 45 minutes or two unsuccessful fix iterations in .spur/run/0782-execution-notes.md, preserving focused logs. Reproduce with targeted workspace tests before the single final project gate. requireDiff: source/tests for runtime tasks, canonical docs/tests for 0786; no fabricated source edit for refinement. Refinement itself changes planning sections only.
 ### Plan
-- [ ] R1/R2: add failing source-definition fixtures for missing/invalid feature, malformed/duplicate roster, unready status, all-terminal roster and exact todo dispatch count.
-- [ ] R1/R2: replace the planning prefix with captured existing-feature validation and profile-aware explicit-task runall dispatch; reuse file.read.into-var.
-- [ ] R3: move one essential completion check into feature-verify onEnter and make guards consume its result; test nonzero, malformed, missing, warning-only and PASS cases.
-- [ ] R4: retain collected-HEAD review behavior; update version and owning surface notes.
-- [ ] Run focused definition/CLI workflow tests, bundle parity and the final project gate during implementation; record actual counts, not estimated token savings.
+- [x] R1/R2: add failing source-definition fixtures for missing/invalid feature, malformed/duplicate roster, unready status, all-terminal roster and exact todo dispatch count.
+- [x] R1/R2: replace the planning prefix with captured existing-feature validation and profile-aware explicit-task runall dispatch; reuse file.read.into-var.
+- [x] R3: move one essential completion check into feature-verify onEnter and make guards consume its result; test nonzero, malformed, missing, warning-only and PASS cases.
+- [x] R4: retain collected-HEAD review behavior; update version and owning surface notes.
+- [x] Run focused definition/CLI workflow tests, bundle parity and the final project gate during implementation; record actual counts, not estimated token savings.
 ### Root Cause
 
 <!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
@@ -94,10 +94,15 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | config/workflows/feature-dev.yaml:90-124 — precheck onEnter resolves feature + roster via CLI JSON; rejects missing featureId/runId, unknown feature, non-array/empty roster, empty/duplicate WBS identities, unknown statuses, any backlog/wip/testing/blocked member; nothing auto-created. Tests: feature-dev-definition.test.ts R1 failure-path executions (dispatch/model-call counters zero on failure). |
-| R2 | MET | feature-dev.yaml:98/133 frozen sort |
-| R3 | MET | feature-dev.yaml:171-198 — feature check "$featureId" --as done --json invoked exactly once in feature-verify onEnter; captured at .spur/run/<runId>-feature-dev-verify.json + atomic tmp->mv .status (PASS = exit 0 && nonempty array && all pass===true); guards :310-316/:334-338 read ONLY captured .status. No --strict, no whole-corpus scan. Tests: exactly-one-invocation on failure; malformed evidence fails closed; advisory warnings alone do not fail. |
-| R4 | MET | feature-dev.yaml:1-12/66-84 brainstorm/plan states and edges deleted (runall dispatch keeps pinned executor role per ADR-043); version 1->2 (:26); integration-review collected-HEAD policy unchanged; no new flag/noun. Docs same-change: docs/04_DESIGN.md + docs/design/essential-workflow-checks.md; version pins updated in wrapup-pipeline.test.ts. |
+| R1 | MET | `config/workflows/feature-dev.yaml:82-131` — `precheck` onEnter resolves feature + roster through CLI JSON reads into `.spur/run/$__runId-feature-dev-{feature,roster}.json`, rejects missing identity, malformed/non-array roster, duplicate/mismatched identities, empty roster and any backlog/wip/testing/blocked member with an actionable planning/refine/resume handoff BEFORE model dispatch; nothing auto-created or re-planned. Re-read this run: the doctor call is gone and the state list is precheck/execute-tasks-auto/execute-tasks/feature-verify/integration-review/done/failed only. Test: `packages/app/tests/workflow/feature-dev-definition.test.ts` — 23 pass / 0 fail this run (dispatch + model-call counters stay zero on every rejection path). |
+| R2 | MET | `config/workflows/feature-dev.yaml:132-167` — `execute-tasks-auto` (:137-145) and `execute-tasks` (:156-164) read the frozen sorted todo WBS list with `kind: file.read.into-var` into `featureTaskIds` (declared with an empty default at `:70`) and dispatch ONE pure-slash `/sp:dev-runall --tasks ${vars.featureTaskIds}` — `--auto` only on the auto branch, so profile-controlled auto-vs-interactive execution is preserved. Membership is never re-enumerated in the child selector; done/cancelled members never enter the list, so a nonempty all-terminal roster routes straight to feature-verify with zero execution model calls. Test: same suite, 23 pass / 0 fail this run. |
+| R3 | MET | `config/workflows/feature-dev.yaml:169-193` — `feature-verify` onEnter runs `$spurBin feature check "$featureId" --as done --json` EXACTLY ONCE, captures exit code + JSON at `.spur/run/$__runId-feature-dev-verify.json`, and writes PASS/FAIL to the `.status` sibling via atomic tmp→`mv -f`; PASS requires exit 0 AND `type == "array" and length > 0 and all(.[]; .pass == true)`. Sibling guards read only the captured status — no guard re-runs the check. No `--strict` elevation and no whole-corpus scan appear in the block. Test: same suite, 23 pass / 0 fail this run (nonzero, malformed, missing and warning-only cases). |
+| R4 | MET | `config/workflows/feature-dev.yaml:195-247` — `integration-review` keeps the 0770 collected-HEAD policy verbatim (one Codex review request per captured HEAD, then exactly one `pr-reviewing.ts collect --head <captured-head>`, no wait loop); phase boundary and `requireCleanReview` unchanged. No planning flag and no implicit brainstorm/decomposition state exists in the definition — explicit planning stays `/sp:dev-plan` / `/sp:dev-idea`. Definition `version:` at `:24` was incremented for the behavior change (now `"3"` after the later 0784 bump; 0782 shipped the 1→2 step). Docs same-change: `docs/04_DESIGN.md`, `docs/design/essential-workflow-checks.md`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Existing feature work avoids duplicate planning | MET | test | `config/workflows/feature-dev.yaml:82-167` — no `brainstorm` / `plan` state exists; precheck reuses the resolved roster and fails closed on invalid feature input before any model dispatch; only the frozen todo WBS list reaches `/sp:dev-runall` with the profile-selected branch; a nonempty all-terminal roster reaches feature-verify with no execution model hop. Executable evidence: `cd packages/app && bun test tests/workflow/feature-dev-definition.test.ts` → 23 pass / 0 fail, 115 expect() calls, this run. |
+| Scenario: R2 — Feature verification runs once | MET | test | `config/workflows/feature-dev.yaml:169-193` — one `feature check --as done --json` invocation per run, captured to `.spur/run/<runId>-feature-dev-verify.json` with an atomic `.status` sibling; malformed or missing evidence writes FAIL so the workflow fails before requesting integration review; advisory warnings alone do not fail a valid completion (PASS keys off `all(.[]; .pass == true)`, not on warning counts). Executable evidence: same suite, 23 pass / 0 fail this run. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->
@@ -107,6 +112,7 @@ Each entry cites the first changed line per file (`file:line`).
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - docs/plans/2026-09-06-workflow-conflict-audit.md — F-03.
 - docs/00_ADR.md — ADR-022, ADR-043, ADR-107 Option B, ADR-108.

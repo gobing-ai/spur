@@ -4,7 +4,7 @@ name: "Align workflow resume identity and checkpoint freshness with persisted ru
 status: done
 template: issue
 created_at: 2026-09-06T18:27:45.363Z
-updated_at: "2026-09-06T21:19:50.781Z"
+updated_at: "2026-09-06T23:45:26.246Z"
 feature_id: D6
 priority: P1
 dependencies: ["0782", "0783"]
@@ -71,11 +71,11 @@ Dependencies: 0782 and 0783 deliver the final feature/wrapup graphs first; retai
 
 Execution budget: one owned task at a time; checkpoint after 45 minutes or two unsuccessful fix iterations in .spur/run/0784-execution-notes.md, preserving focused logs. Reproduce with targeted workspace tests before the single final project gate. requireDiff: source/tests for runtime tasks, canonical docs/tests for 0786; no fabricated source edit for refinement. Refinement itself changes planning sections only.
 ### Plan
-- [ ] R1/R2: add failing engine pause/resume and DAO metadata tests, including same-name alternate files and attached-run identity preservation.
-- [ ] R1/R2: extend atomic identity recording, pin exact resume source/workdir, retain legacy diagnostics, and distinguish consented execution identity.
-- [ ] R3: map checkpoint states at the resume consumer; supply checked HEAD/WBS/workdir artifact probes and test missing/stale/valid checkpoints.
-- [ ] R4: after 0782/0783, remove only obsolete pseudo-writers; fix canonical terminal interpolation and update its guidance/behavior tests.
-- [ ] R5: run focused domain/app/CLI consumer tests and type checks; rebuild changed bundles and run the final project gate. Record actual engine fixture results, not real-model cost claims.
+- [x] R1/R2: add failing engine pause/resume and DAO metadata tests, including same-name alternate files and attached-run identity preservation.
+- [x] R1/R2: extend atomic identity recording, pin exact resume source/workdir, retain legacy diagnostics, and distinguish consented execution identity.
+- [x] R3: map checkpoint states at the resume consumer; supply checked HEAD/WBS/workdir artifact probes and test missing/stale/valid checkpoints.
+- [x] R4: after 0782/0783, remove only obsolete pseudo-writers; fix canonical terminal interpolation and update its guidance/behavior tests.
+- [x] R5: run focused domain/app/CLI consumer tests and type checks; rebuild changed bundles and run the final project gate. Record actual engine fixture results, not real-model cost claims.
 ### Root Cause
 
 <!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
