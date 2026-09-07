@@ -1,11 +1,13 @@
 ---
 schema_version: 1
 name: Dogfood J31 findings register — comma-list status filters, dogfood token-table drift, ADR-110 retention premise, and section-write semantics
-status: todo
+status: done
 template: issue
 created_at: 2026-09-07T05:07:02.241Z
-updated_at: "2026-09-07T05:13:55.448Z"
+updated_at: "2026-09-07T17:11:09.161Z"
 
+feature_id: J31
+ac_altitude: task-local
 ---
 
 ## 0795. Dogfood J31 findings register — comma-list status filters, dogfood token-table drift, ADR-110 retention premise, and section-write semantics
@@ -24,7 +26,7 @@ Design, Plan, and Acceptance Criteria below.
 
 | ID | Finding | Severity | Plane |
 | --- | --- | --- | --- |
-| F1 | `--status` takes one value and silently returns 0 rows for anything else — including the `backlog,todo` default the batch docs specify | P2 | `apps/cli` + `packages/app` + `packages/domain` |
+| F1 | `--status` silently returns 0 rows at exit 0 for any value outside the vocabulary, and the batch docs present a value the CLI never accepted | P2 | `apps/cli` + `packages/app` + `plugins/sp` docs |
 | F2 | Dogfood `SKILL.md` documents 11 pipeline tokens; `PIPELINE_TOKENS` has 15 | P3 | `plugins/sp` |
 | F3 | ADR-110 and the J31 design satellite both assert a retention fallback that does not exist | P3 | `docs/` authority |
 | F4 | `spur task update --section "Q&A"` appends rather than replaces, and its `<!-- qa:replace -->` escape is documented nowhere | P3 | `apps/cli` help + `sp:spur-cli` references |
@@ -42,49 +44,71 @@ read. It is a measurement-baseline question, not a defect, and is deliberately o
 **Traceability.** Deliberately created without a `feature_id`. Four of five findings belong to the
 harness/CLI plane rather than J31 ("Observabilities module polish"); filing them under J31 would
 record traceability that is not true. F3's J31 linkage is carried in References instead.
+
+**Scope note (F1, operator ruling 2026-09-07).** The dogfood report proposed splitting `--status` on
+comma so `backlog,todo` would resolve as a union. That half is **rejected**: no consumer in the repo
+needs a list-valued `--status` (`execution-batch.md:108` already resolves multi-status membership
+with per-status calls), and widening a public flag's semantics needs consent under
+`docs/design/harness-surface-governance.md`. F1 here is the other half — the silent empty result —
+plus the doc lines that invited the bad call. After the fix, `--status backlog,todo` exits 1 naming
+the value.
 ### Requirements
-- [ ] R1. **(F1)** `spur task list --status <s>` accepts a comma-separated list and matches any
-      listed status (OR): `--status backlog,todo` returns the union. A single value keeps its
-      current behaviour byte-for-byte, and the legacy `--phase <p>` alias parses identically (no new
-      precedence rule when both are passed).
-- [ ] R2. **(F1)** `spur feature list --status <s>` accepts the same comma-list syntax, validated
-      against `FEATURE_STATUSES`. Each noun validates against its own vocabulary — `active` is valid
-      for features and invalid for tasks.
-- [ ] R3. **(F1)** A status value outside the noun's vocabulary is a loud failure, not an empty
-      result: exit code `1` and a message naming the offending value and the allowed set; under
-      `--json` the failure travels the existing `writeJsonError` path so automation sees an error
-      object, not `[]`. Whitespace around commas is tolerated (`backlog, todo`); an empty element
-      (`todo,`) is rejected.
-- [ ] R4. **(F1)** The human (non-`--json`) task board renders one column per requested status in
-      canonical `TASK_STATUSES` order, regardless of the order the operator typed them.
-- [ ] R5. **(F1)** `plugins/sp/skills/spur-dev/references/execution-batch.md:108` no longer tells
-      the batch driver to issue two `spur task list` calls and union them in-agent; the `ready`
-      selector resolves membership with one `--status todo,backlog` invocation.
-- [ ] R6. **(F2)** The pipeline-token tables in `plugins/sp/skills/dogfood-testing/SKILL.md` list
+
+- [x] R1. **(F1)** `spur task list --status <s>` (and its legacy `--phase <p>` alias) validates its
+      argument against `TASK_STATUSES` before filtering. A value outside the vocabulary is a loud
+      failure, not an empty result: exit code `1` and a message naming the offending value and the
+      allowed set; under `--json` the failure travels the existing `writeJsonError` path so
+      automation sees an error object, not `[]`. Validation goes through the existing
+      `normalizeTaskStatus`, so case and legacy aliases (`--status TODO`, `--phase in-progress`) are
+      accepted and resolve to their canonical status. `--status <one canonical status>` keeps its
+      current result set byte-for-byte.
+- [x] R2. **(F1)** `spur feature list --status <s>` gets the same treatment through
+      `normalizeFeatureStatus`. Each noun validates against its own vocabulary — `active` is valid
+      for features and invalid for tasks; `todo` is valid for tasks and invalid for features.
+- [x] R3. **(F1)** The human (non-`--json`) task board collapses to the column for the *normalized*
+      status, so `--status IN-PROGRESS` renders the `wip` column rather than falling through to the
+      all-columns view. The silent all-columns fallback for an unrecognized value disappears —
+      unrecognized values no longer reach the renderer.
+- [x] R4. **(F1)** `plugins/sp/commands/dev-refineall.md:26,42` and
+      `plugins/sp/skills/spur-dev/references/dev-operations.md:240,244` stop presenting
+      `backlog,todo` as a single `--status` argument value. They state that the batch default is the
+      two statuses `backlog` + `todo`, applied **in-agent** against the frozen set, and that
+      `spur task list --status` takes exactly one canonical status per call — the resolution
+      `plugins/sp/skills/spur-dev/references/execution-batch.md:108` already performs.
+- [x] R5. **(F2)** The pipeline-token tables in `plugins/sp/skills/dogfood-testing/SKILL.md` list
       every entry of `PIPELINE_TOKENS` — all 15, including `dev-refineall`, `dev-verifyall`,
       `refineall`, `verifyall` — so an operator can predict from the docs alone which testees trip
       the `--max-retry` refuse gate.
-- [ ] R7. **(F2)** A contract test fails when the SKILL.md token list and the `PIPELINE_TOKENS`
+- [x] R6. **(F2)** A contract test fails when the SKILL.md token list and the `PIPELINE_TOKENS`
       constant diverge in either direction. Doc drift is caught by CI, not by the next dogfood.
-- [ ] R8. **(F3)** `docs/00_ADR.md:2304` (ADR-110 Decision) and
+- [x] R7. **(F3)** `docs/00_ADR.md:2304` (ADR-110 Decision) and
       `docs/design/observabilities-module-polish.md:57-58` state the retention mechanism that is
       actually true — the quota list is extended with the uncataloged prefix at the persist site —
       and no longer claim uncataloged prefixes "resolve through the existing per-prefix quota
       fallback". Both restatements agree in mechanism with task 0794 Design D3c.
-- [ ] R9. **(F4)** `spur task update --help` and the `sp:spur-cli` task references
+- [x] R8. **(F4)** `spur task update --help` and the `sp:spur-cli` task references
       (`references/tasks/verbs.md`, `references/tasks/section-editing.md`) state that `Q&A` appends
       a timestamped entry rather than replacing, and name the `<!-- qa:replace -->` first-line
       marker that forces a wholesale replace. The generic `--section <name>` description no longer
       reads as an unconditional "replace".
-- [ ] R10. **(F5)** `MarkdownDocument.replaceSection` produces the same spacing as `insertSection`:
+- [x] R9. **(F5)** `MarkdownDocument.replaceSection` produces the same spacing as `insertSection`:
       exactly one blank line between the `###` heading and the first body line, and a body trailer
       that leaves one blank line before the following heading. The normalisation is idempotent (no
       accumulating blank lines on re-write) and never rewrites content inside fenced code blocks.
 
 **Non-goals.**
 
-- No new `spur` noun or verb (public-surface consent rule). F1 changes the parsing of an existing
-  flag only.
+- **No comma-separated `--status` values.** `spur task list --status backlog,todo` must *fail*, not
+  parse. Operator decision, 2026-09-07: a list-valued `--status` is unneeded surface — no in-repo
+  consumer requires it (`execution-batch.md:108` already resolves multi-status membership as
+  per-status calls unioned in-agent), and widening the semantics of a public flag needs consent
+  under `docs/design/harness-surface-governance.md`. The defect is the silent empty result, and R1
+  closes it. See Q3.
+- No new `spur` noun, verb, or flag. F1 adds validation to an existing flag; it does not change what
+  a valid value means.
+- No normalisation of the *stored* side of the comparison. `list` keeps comparing against the raw
+  `frontmatter.status`; a legacy alias sitting on disk is a corpus defect that `spur task migrate`
+  owns, not a filter defect.
 - No change to `PIPELINE_TOKENS` membership — F2 is a doc/test fix; the constant is already correct
   and already pinned by `pipeline-detect.test.ts:116`.
 - No implementation of task 0794. F3 corrects the authority docs to agree with 0794's already-
@@ -93,65 +117,63 @@ record traceability that is not true. F3's J31 linkage is carried in References 
   deliberate (task 0701 R7a).
 - No corpus-wide reflow of existing task files to the new spacing. F5 fixes the writer; existing
   files converge as their sections are rewritten.
+
 ### Acceptance Criteria
 ```gherkin
-Scenario: AC1 (R1) comma-separated task status filter returns the union
-  Given tasks exist in both "backlog" and "todo"
+Scenario: AC1 (R1) an unknown task status fails loudly instead of returning empty
+  When I run "spur task list --status bogus"
+  Then the exit code is 1
+  And the message names "bogus" and lists the allowed task statuses
+  And "spur task list --status bogus --json" emits a writeJsonError payload, not "[]"
+
+Scenario: AC2 (R1) the original dogfood repro now fails instead of silently matching nothing
   When I run "spur task list --status backlog,todo --json"
-  Then the output contains every backlog task and every todo task
-  And the exit code is 0
+  Then the exit code is 1
+  And the message names "backlog,todo" as an unknown task status
+  And the same holds for "spur task list --phase backlog,todo --json"
 
-Scenario: AC2 (R1) a single status value is unchanged
-  Given tasks exist in several statuses
+Scenario: AC3 (R1) valid values are unchanged and aliases resolve
+  Given tasks exist in "todo"
   When I run "spur task list --status todo --json"
-  Then the output is byte-identical to the pre-change behaviour for that command
-  And the legacy alias "spur task list --phase backlog,todo --json" returns the same union as AC1
+  Then the result is byte-identical to the pre-change behaviour for that command
+  And "spur task list --status TODO --json" returns the same rows
+  And "spur task list --phase in-progress --json" returns the same rows as "--status wip"
 
-Scenario: AC3 (R2) feature status filters accept the same syntax against their own vocabulary
-  When I run "spur feature list --status backlog,active --json"
-  Then the output contains every backlog feature and every active feature
+Scenario: AC4 (R2) each noun validates against its own vocabulary
+  When I run "spur feature list --status active --json"
+  Then the exit code is 0 and only active features are returned
   And "spur feature list --status todo --json" exits 1 because "todo" is not a feature status
   And "spur task list --status active --json" exits 1 because "active" is not a task status
 
-Scenario: AC4 (R3) an unknown status fails loudly instead of returning empty
-  When I run "spur task list --status bogus"
-  Then the exit code is 1
-  And stderr names "bogus" and lists the allowed task statuses
-  And "spur task list --status bogus --json" emits a writeJsonError payload, not "[]"
+Scenario: AC5 (R3) the human board collapses to the normalized column
+  When I run "spur task list --status in-progress"
+  Then the board renders exactly the "wip" column
+  And no invocation renders the all-columns fallback for a value the vocabulary rejects
 
-Scenario: AC5 (R3) whitespace is tolerated and empty elements are rejected
-  When I run "spur task list --status 'backlog, todo' --json"
-  Then the result equals the AC1 union and the exit code is 0
-  When I run "spur task list --status 'todo,' --json"
-  Then the exit code is 1 and the message names the empty element
+Scenario: AC6 (R4) the batch docs no longer present a comma string as a --status argument
+  When I read plugins/sp/commands/dev-refineall.md and
+       plugins/sp/skills/spur-dev/references/dev-operations.md at the --status entries
+  Then the default is stated as the two statuses "backlog" + "todo" applied in-agent
+  And neither document shows "backlog,todo" as a value passed to "spur task list --status"
+  And execution-batch.md's per-status resolution is named as the mechanism, unchanged
 
-Scenario: AC6 (R4) the human board shows the requested columns in canonical order
-  When I run "spur task list --status done,backlog"
-  Then the board renders exactly the "backlog" and "done" columns
-  And "backlog" appears before "done" regardless of the order typed
-
-Scenario: AC7 (R5) the batch driver resolves membership in one call
-  When I read plugins/sp/skills/spur-dev/references/execution-batch.md at the "ready" selector
-  Then it specifies a single "spur task list --status todo,backlog --json" invocation
-  And it no longer instructs the driver to union two separate list calls in-agent
-
-Scenario: AC8 (R6, R7) documented pipeline tokens match the constant
+Scenario: AC7 (R5, R6) documented pipeline tokens match the constant
   When the dogfood SKILL.md token inventories are compared with PIPELINE_TOKENS
   Then both inventories list all 15 tokens including dev-refineall and dev-verifyall
   And the parity test fails if a token is added to either side alone
 
-Scenario: AC9 (R8) the authority docs state the retention mechanism that exists
+Scenario: AC8 (R7) the authority docs state the retention mechanism that exists
   When I read docs/00_ADR.md ADR-110 Decision and docs/design/observabilities-module-polish.md R10
   Then neither claims uncataloged prefixes resolve through the existing per-prefix quota fallback
   And both describe binding the prefix at the persist site, agreeing with task 0794 Design D3c
 
-Scenario: AC10 (R9) the Q&A write contract is discoverable from the CLI
+Scenario: AC9 (R8) the Q&A write contract is discoverable from the CLI
   When I run "spur task update --help"
   Then it states that --section "Q&A" appends a timestamped entry rather than replacing
   And it names the "<!-- qa:replace -->" first-line marker that forces a wholesale replace
   And the sp:spur-cli task references carry the same exception
 
-Scenario: AC11 (R10) rewritten and inserted sections share one spelling
+Scenario: AC10 (R9) rewritten and inserted sections share one spelling
   Given a task file whose sections were written by insertSection
   When a section body is rewritten through "spur task update --section <name> --from-file <path>"
   Then exactly one blank line separates the "###" heading from the first body line
@@ -172,18 +194,35 @@ not true, which is worse than none. F3 is genuinely J31 content and carries its 
 References instead. *Deferred:* if a harness-hardening feature is opened later, re-point this task
 with `spur task update 0795 --feature <id>`.
 
-**Q3. For F1, fix the CLI or fix the docs?** — Fix the CLI. Comma-list status filtering is what four
-independent surfaces already assume (`dev-refineall.md:26,42`,
-`dev-operations.md:240,244`), and the batch driver already pays for its absence with a two-call
-in-agent union (`execution-batch.md:108`). Changing the docs to single-value would make the batch
-default less useful and leave the silent-empty-result trap in place, which is the actual P2.
+**Q3. Should `--status` accept a comma-separated list?** — **No** (operator ruling, 2026-09-07;
+overrides the dogfood report's suggested action). Three reasons, in order of weight:
 
-**Q4. Where does `parseStatusFilter` live?** — `packages/domain/src/planning/schema.ts`, beside the
-vocabularies it validates. Rejected: `apps/cli/src/commands/shared-options.ts` (declared a pure
+1. *No consumer needs it.* `execution-batch.md:108` — the only in-repo place that resolves
+   multi-status membership — already lists single statuses in its selector table and resolves
+   `ready` as two `spur task list --status <one>` calls unioned by the driver. `refineall` itself
+   resolves membership through `--feature`. The apparent demand was four doc lines, not a caller.
+2. *It is public surface.* Changing what `--status` accepts is a semantic widening of a public flag
+   and needs operator consent under `docs/design/harness-surface-governance.md`. Consent was asked
+   for and declined.
+3. *It does not fix the P2.* The defect is that a bad value is answered with exit 0 and `[]`.
+   Parsing `backlog,todo` would make one bad value good and leave every other typo silent.
+
+The correct fix is the inverse: make an invalid value impossible to pass unnoticed (R1–R3) and
+correct the docs that suggested passing one (R4). `spur task list --status backlog,todo` then exits
+1 with `Unknown task status: "backlog,todo" (allowed: backlog, todo, wip, testing, blocked, done,
+cancelled)` — the caller learns immediately, instead of the shape being tolerated forever.
+*Deferred:* if a real caller ever needs a union in one call, it arrives as a consent-gated surface
+change with that caller as evidence.
+
+**Q4. Where does the validation live — a new helper?** — No helper.
+`normalizeTaskStatus` / `normalizeFeatureStatus` (`schema.ts:180,204`) already throw
+`Unknown <noun> status: … (allowed: …)`, already tolerate case and legacy aliases (DD-01), and are
+already used by every write path. F1 is calling them on the filter path. Rejected: a new
+`parseStatusFilter` in `packages/domain` (a second validator and a second message family for the
+same vocabulary); a check in `apps/cli/src/commands/shared-options.ts` (declared a pure
 `[flags, description]` registry in its own header and enforced by
-`apps/cli/tests/shared-option-parity.test.ts`); a new `apps/cli` helper module (`packages/app`
-filters tasks and may not import `apps/cli`); duplicating the parse per call site (two places to
-forget R3's validation).
+`apps/cli/tests/shared-option-parity.test.ts`); duplicating the check per call site (two places to
+forget it).
 
 **Q5. Amend ADR-110 in place, or supersede it?** — Amend. ADR-110 is `Proposed`, dated 2026-09-07,
 and has no implementation depending on the wrong sentence. A superseding ADR is for reversing a
@@ -208,100 +247,134 @@ if `ready`-depth and `standard`-depth cache rates are ever trended together, spl
 first.
 
 **Q9. What proves F1 is really fixed, given the dogfood used a workaround?** — The original repro,
-re-run against a rebuilt bundle (Plan step 5). The dogfood resolved membership through `--feature`
-and filtered in-agent, so the batch never exercised the broken path; the acceptance evidence must
-come from the CLI directly, not from a passing `refineall` run.
+re-run against a rebuilt bundle (Plan step 4), now asserting the *opposite* outcome: exit 1 with the
+value named. The dogfood resolved membership through `--feature` and filtered in-agent, so the batch
+never exercised the broken path; acceptance evidence must come from the CLI directly, not from a
+passing `refineall` run.
+
+**Q10. Does R1 break any current caller that passes a value the vocabulary rejects?** — Any such
+caller is already broken; it is receiving `[]` and treating it as "nothing matched". Turning that
+into exit 1 surfaces the bug rather than creating one. The alias tolerance in `normalizeTaskStatus`
+means the change is strictly widening for legitimate values: `--status TODO` and
+`--phase in-progress` start working, and no previously-matching value stops working.
 ### Design
-**Frozen names.** `parseStatusFilter(raw: string, allowed: readonly string[], label: string): string[]`
-exported from `packages/domain/src/planning/schema.ts`. Doc-parity markers
-`<!-- pipeline-tokens:start -->` / `<!-- pipeline-tokens:end -->`. Reused unchanged:
-`TASK_STATUSES`, `FEATURE_STATUSES`, `TASK_CANONICAL_SECTIONS`, `PIPELINE_TOKENS`,
-`writeJsonError`, `renderTaskBoard`, `MarkdownDocument.insertSection`, `appendQaEntry`,
-`<!-- qa:replace -->`. **No** new flag, verb, config key, DTO, or migration.
+**Frozen names.** No new exported symbol. F1 reuses `normalizeTaskStatus` /
+`normalizeFeatureStatus` (`packages/domain/src/planning/schema.ts:180,204`) — the throwing,
+alias-tolerant normalizers that already own the `Unknown <noun> status: … (allowed: …)` message.
+New doc-parity markers `<!-- pipeline-tokens:start -->` / `<!-- pipeline-tokens:end -->` (F2).
+Reused unchanged: `TASK_STATUSES`, `FEATURE_STATUSES`, `TASK_CANONICAL_SECTIONS`,
+`PIPELINE_TOKENS`, `writeJsonError`, `renderTaskBoard`, `MarkdownDocument.insertSection`,
+`appendQaEntry`, `<!-- qa:replace -->`. **No** new flag, verb, helper, config key, DTO, or
+migration.
 
 **Files this task may touch.**
 
 | File | Finding | Change |
 | --- | --- | --- |
-| `packages/domain/src/planning/schema.ts` | F1 | add `parseStatusFilter` |
-| `packages/app/src/services/task-service.ts` | F1 | parse once in `list()`; set-membership at `:1699`,`:1702` |
-| `apps/cli/src/commands/feature.ts` | F1 | set-membership at `:273` |
+| `packages/app/src/services/task-service.ts` | F1 | normalize `status`/`phase` filters in `list()`; `:1699`,`:1702` |
+| `apps/cli/src/commands/feature.ts` | F1 | normalize `options.status` before the filter at `:273` |
 | `apps/cli/src/commands/task.ts` | F1, F4 | board columns `:851-856`; Q&A note in `addHelpText` `:418-430`, summary `:415` |
-| `plugins/sp/skills/spur-dev/references/execution-batch.md` | F1 | `:108` single-call `ready` resolution |
+| `plugins/sp/commands/dev-refineall.md` | F1 | `:26`,`:42` state the default as two in-agent statuses |
+| `plugins/sp/skills/spur-dev/references/dev-operations.md` | F1 | `:240`,`:244` same |
 | `plugins/sp/skills/dogfood-testing/SKILL.md` | F2 | `:78-79`, `:338-339` complete + marker-wrapped |
 | `plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts` | F2 | doc↔constant parity test |
 | `docs/00_ADR.md` | F3 | `:2304` Decision mechanism |
 | `docs/design/observabilities-module-polish.md` | F3 | `:57-58` R10 mechanism |
+| `apps/cli/src/commands/shared-options.ts` | F4 | `:36` `--section` description |
 | `plugins/sp/skills/spur-cli/references/tasks/verbs.md` | F4 | `:65`,`:88` Q&A exception |
 | `plugins/sp/skills/spur-cli/references/tasks/section-editing.md` | F4 | `:48` Q&A exception |
 | `packages/domain/src/planning/markdown-document.ts` | F5 | `replaceSection` `:387` spacing |
 
-**D1 — one parser, in the domain, beside the vocabulary it validates (R1–R3).**
+Not touched: `packages/domain/src/planning/schema.ts` (the normalizers already exist),
+`plugins/sp/skills/spur-dev/references/execution-batch.md` (its per-status resolution is already
+correct — it is the model the F1 doc fix points at), and the generated bundle copies under
+`apps/cli/plugins/sp/**` (regenerated by `build:bundle`, never hand-edited).
+
+**D1 — validate the filter with the normalizer that already exists (R1–R3).**
+
+The vocabulary check, the error message, and the alias tolerance are all already written:
 
 ```ts
-/** Parse a comma-separated `--status` filter into a validated, de-duplicated set. */
-export function parseStatusFilter(raw: string, allowed: readonly string[], label: string): string[] {
-    const parts = raw.split(',').map((p) => p.trim());
-    for (const p of parts) {
-        if (p === '' || !allowed.includes(p)) {
-            throw new Error(`Unknown ${label} status: ${JSON.stringify(p)} (allowed: ${allowed.join(', ')})`);
-        }
+// packages/domain/src/planning/schema.ts:180
+export function normalizeTaskStatus(raw: string): TaskStatus {
+    const key = raw.trim().toLowerCase();
+    const resolved = TASK_STATUS_ALIASES[key];
+    if (resolved === undefined) {
+        throw new Error(`Unknown task status: ${JSON.stringify(raw)} (allowed: ${TASK_STATUSES.join(', ')})`);
     }
-    return [...new Set(parts)];
+    return resolved;
 }
 ```
 
-Message shape deliberately mirrors `schema.ts:184` / `:209` so operators meet one message family
-whether the value failed on the parse path or the filter path.
+The whole of F1 is calling it on the filter path. Nothing new is exported, so there is no barrel
+change, no parity-test surface, and no second message family for operators to learn. `task.ts:40`
+already imports it.
 
-*Why `packages/domain`.* `apps/cli/src/commands/shared-options.ts` is a pure `[flags, description]`
-registry — its header says so and `apps/cli/tests/shared-option-parity.test.ts` enforces it, so a
-function may not live there. Both consumers (`packages/app` for tasks, `apps/cli` for features)
-already import the status vocabularies from `packages/domain`; it is the only workspace both may
-depend on. `apps/cli/src/commands/task.ts:41` already imports `TASK_STATUSES` from there.
-
-**D1a — task path.** Keep `TaskListFilters.status` and `.phase` as `string` — the CLI hands through
-one raw string and the parse belongs at one seam. In `TaskService.list()`
-(`task-service.ts:1680`), parse **before** the `readDir` so an invalid value fails without touching
-the filesystem:
+**D1a — task path (R1).** In `TaskService.list()` (`task-service.ts:1679-1715`), normalize **before**
+`readDir` so an invalid value fails without touching the filesystem:
 
 ```ts
-const wantStatus = filters?.status === undefined
-    ? undefined
-    : new Set(parseStatusFilter(filters.status, TASK_STATUSES, 'task'));
-const wantPhase  = filters?.phase  === undefined
-    ? undefined
-    : new Set(parseStatusFilter(filters.phase,  TASK_STATUSES, 'task'));
+const wantStatus = filters?.status === undefined ? undefined : normalizeTaskStatus(filters.status);
+const wantPhase = filters?.phase === undefined ? undefined : normalizeTaskStatus(filters.phase);
 ```
 
-`:1699` → `if (wantStatus !== undefined && !wantStatus.has(status)) continue;` and `:1702`
-likewise for `wantPhase`. `--status` + `--phase` together keep today's semantics: both filters
-apply (AND across flags, OR within each), which is what the current sequential `continue` pair
-already does.
+`:1699` → `if (wantStatus !== undefined && wantStatus !== status) continue;` and `:1702` likewise
+for `wantPhase`. `TaskListFilters` (`:348`) keeps `status?: string` — the CLI hands through one raw
+string and the normalize happens at one seam. `--status` + `--phase` together keep today's
+semantics (both filters apply), which is what the sequential `continue` pair already does. Add
+`normalizeTaskStatus` to the existing `@gobing-ai/domain` import in this file.
 
-**D1b — feature path.** `feature.ts:273` becomes the same set test, built from
-`parseStatusFilter(options.status, FEATURE_STATUSES, 'feature')`, placed inside the existing `try`
-opened at `:270`.
+**D1b — feature path (R2).** Inside the `try` opened at `feature.ts:270`, `:273` becomes:
 
-**D1c — no new error plumbing (R3).** Both handlers already wrap their work in
+```ts
+const wantStatus = normalizeFeatureStatus(options.status);
+features = features.filter((f) => f.status === wantStatus);
+```
+
+Import `normalizeFeatureStatus` from `@gobing-ai/domain` alongside the file's existing domain
+imports. The feature filter deliberately stays in the CLI handler where it already lives; moving it
+into `FeatureService.list()` is a refactor this task does not need.
+
+**D1c — no new error plumbing (R1, R2).** Both handlers already wrap their work in
 `try { … } catch (err) { writeJsonError(context.output, options, String(err)); context.setExitCode(1); }`
 (`task.ts:858-860`, `feature.ts:288-290`). A thrown `Error` therefore yields exit `1` plus the
 correct JSON error envelope for free. Do not add a bespoke validation branch in the action handler.
 
-**D1d — board columns (R4).** `task.ts:851-856` today maps a single `requested` value to one column
-and falls back to all columns for a non-canonical value. Replace with:
+**D1d — board columns (R3).** `task.ts:851-856` today maps a canonical `requested` value to one
+column and silently falls back to *all* columns for anything else — the rendering half of F1.
+Replace with:
 
 ```ts
 const requested = options.status ?? options.phase;
-const wanted = requested === undefined ? undefined : new Set(parseStatusFilter(requested, TASK_STATUSES, 'task'));
-const columns = wanted === undefined ? TASK_STATUSES : TASK_STATUSES.filter((s) => wanted.has(s));
+const columns = requested === undefined ? TASK_STATUSES : [normalizeTaskStatus(requested)];
 ```
 
-Canonical ordering falls out of filtering the canonical array — no sort is needed, and the operator's
-typed order is intentionally ignored. The old non-canonical fallback disappears by construction:
-an invalid value now throws in the service before rendering is reached.
+The `includes` guard is no longer needed: an invalid value now throws in the service before
+rendering is reached, and an alias resolves to its canonical column instead of expanding the board.
+This call sits inside the same `try`, so a value that somehow reached here still exits 1 rather than
+rendering a misleading board.
 
-**D2 — doc↔constant parity for the token tables (R6, R7).** Complete both SKILL.md inventories to
+**D1e — correct the batch docs to describe what the CLI does (R4).** The `backlog,todo` string in
+`dev-refineall.md:26,42` and `dev-operations.md:240,244` is a **slash-command** filter expression
+applied in-agent to a frozen set — it was never a `spur task list` argument, and
+`execution-batch.md:108` already spells out the real resolution (per-status calls, unioned by the
+driver; `--feature` for the feature path). The docs read as if the string were passed through, which
+is what sent the dogfood driver into the silent-empty trap. Restate the default as the two statuses
+and name the boundary:
+
+- `dev-refineall.md:26` (flag table) → default cell `` `backlog` + `todo` ``, description
+  "Only refine tasks in these statuses (applied in-agent to the frozen set)."
+- `dev-refineall.md:42` (prose) → ``  `--status` (default `backlog` + `todo`)  ``.
+- `dev-operations.md:240` → "…default **`backlog` + `todo`** — planning-side fill candidates. The
+  filter is applied in-agent against the frozen set; `spur task list --status` takes exactly one
+  canonical status per call (see `execution-batch.md` Step 1)."
+- `dev-operations.md:244` (Behavior step 2) → same parenthetical, replacing the bare
+  `(default `backlog,todo`)`.
+
+After R1 lands, an agent that ignores this and passes the string through gets exit 1 with the
+allowed set — the doc fix and the validation close the trap from both ends.
+
+**D2 — doc↔constant parity for the token tables (R5, R6).** Complete both SKILL.md inventories to
 all 15 tokens and wrap each in `<!-- pipeline-tokens:start -->` / `<!-- pipeline-tokens:end -->`
 (HTML comments, invisible when rendered). The new test in `pipeline-detect.test.ts` reads SKILL.md,
 extracts every backticked span between each marker pair, and asserts the union equals
@@ -309,7 +382,7 @@ extracts every backticked span between each marker pair, and asserts the union e
 over the whole document keeps the test from breaking when unrelated prose gains a backtick.
 Precedent: `apps/cli/tests/shared-option-parity.test.ts` is the same doc-vs-code parity shape.
 
-**D3 — correct the retention mechanism in both authority docs (R8).** ADR-110 is `Proposed` and
+**D3 — correct the retention mechanism in both authority docs (R7).** ADR-110 is `Proposed` and
 dated today, so amend in place rather than superseding it; `docs/99` gives `00` content authority,
 which is exactly why it must not keep asserting a mechanism the code does not implement.
 
@@ -327,7 +400,7 @@ which is exactly why it must not keep asserting a mechanism the code does not im
 `per-prefix quota bound at the persist site (the resolver enumerates catalog prefixes only)`.
 Leave the rest of the Decision, the Why, and the Detail unchanged.
 
-**D4 — document the Q&A exception where it is true (R9).** `SHARED_OPTIONS.section` is consumed by
+**D4 — document the Q&A exception where it is true (R8).** `SHARED_OPTIONS.section` is consumed by
 both `task update` (`task.ts:432`) and `feature update` (`feature.ts:92`), and features carry no
 `Q&A` section (`FEATURE_CANONICAL_SECTIONS`, `markdown-document.ts:51-58`) — so the exception must
 **not** go in the shared string. Two edits instead:
@@ -344,7 +417,7 @@ both `task update` (`task.ts:432`) and `feature update` (`feature.ts:92`), and f
 Mirror the same two facts into `plugins/sp/skills/spur-cli/references/tasks/verbs.md:65,88` and
 `.../section-editing.md:48`, which today list `Q&A` among replaceable sections with no exception.
 
-**D5 — normalise spacing at the single writer (R10).** `markdown-document.ts:387` →
+**D5 — normalise spacing at the single writer (R9).** `markdown-document.ts:387` →
 
 ```ts
 const trimmed = cleaned.trim();
@@ -354,19 +427,25 @@ section.modifiedText = trimmed.length > 0
 ```
 
 This is byte-identical in shape to `insertSection:448`, so the two writers stop disagreeing.
-Idempotency (R10) comes from `trim()`: a body that already carries surrounding blank lines collapses
+Idempotency (R9) comes from `trim()`: a body that already carries surrounding blank lines collapses
 to the same output. Fenced code blocks are safe — `trim()` only touches the ends of the whole body,
 never interior lines. The empty-body branch preserves today's ability to blank a section without
 fusing it into the next heading.
 
 **Anti-patterns — do not implement.**
 
-- Do **not** widen `TaskListFilters.status` to `string[]` or add a `statuses` field. The CLI hands
-  through one raw string; a second shape means two parse seams and two places to forget validation.
-- Do **not** add a `--statuses` flag, a new verb, or a `--status` value like `any`/`all`
-  (public-surface consent rule).
-- Do **not** make `parseStatusFilter` skip or warn on unknown values — silently dropping them
-  reproduces F1 with extra steps. R3 is the whole point.
+- Do **not** add comma-list parsing to `--status`, a `--statuses` flag, a repeated `--status`, or a
+  sentinel value like `any`/`all`. The operator ruled list-valued status out (Q3); after R1 the
+  comma string is a rejected value, which is the intended outcome, not a gap to close.
+- Do **not** write a new `parseStatusFilter`-style helper. `normalizeTaskStatus` /
+  `normalizeFeatureStatus` already throw with the right message; a second validator means two
+  message families and a second place to forget.
+- Do **not** widen `TaskListFilters.status` to `string[]` or add a `statuses` field.
+- Do **not** downgrade the throw to a warning-and-skip. Silently dropping an unknown value
+  reproduces F1 with extra steps.
+- Do **not** normalize the stored side (`normalizeTaskStatusSafe(fm.status)`) in `list()`. Storage
+  is canonical by contract (schema.ts header, DD-01) and `spur task migrate` owns any stale alias on
+  disk; normalizing on read would hide a corpus defect behind the filter.
 - Do **not** edit `PIPELINE_TOKENS` to match the prose. The constant is correct and pinned by
   `pipeline-detect.test.ts:116-136`; the doc is what drifted.
 - Do **not** change the Q&A append semantics or remove `<!-- qa:replace -->`. F4 is a documentation
@@ -378,97 +457,107 @@ fusing it into the next heading.
   to format its temp file; normalise once at the writer instead.
 - Do **not** reflow existing task files to the new spacing in this task. The writer converges them
   as sections are rewritten; a corpus-wide sweep is a separate, reviewable change.
+- Do **not** hand-edit `apps/cli/plugins/sp/**`; it is regenerated by `build:bundle`.
 ### Plan
+
 Five independent slices. Each ends green on its own gate, so they can land as separate commits in
 any order — only the steps inside slice 1 are ordered.
 
-**Slice 1 — F1 status-filter vocabulary (R1–R5).** The only behaviour change; do it first.
+**Slice 1 — F1 status-filter validation (R1–R4).** The only behaviour change; do it first.
 
-- [ ] 1. Add `parseStatusFilter` to `packages/domain/src/planning/schema.ts` beside `TASK_STATUSES`
-      / `FEATURE_STATUSES` with the D1 body, export it from the domain barrel alongside
-      `TASK_STATUSES`, and unit-test it in `packages/domain/tests/planning/schema.test.ts`: single
-      value, comma list, surrounding whitespace, duplicate elision, empty element, unknown-value
-      message text. `cd packages/domain && bun test tests/planning/schema.test.ts`
-- [ ] 2. **(R1)** Parse once at the top of `TaskService.list()` (`task-service.ts:1680`, before
-      `readDir`) and convert `:1699` / `:1702` to set membership. Extend
+- [x] 1. **(R1)** Import `normalizeTaskStatus` into `packages/app/src/services/task-service.ts` and
+      normalize `filters.status` / `filters.phase` at the top of `list()` (`:1679`, before
+      `readDir`), converting `:1699` / `:1702` to compare the normalized value. Extend
       `packages/app/tests/services/task-service.test.ts` beside the existing filter cases (`:373`,
-      `:410`): comma union, `--phase` comma union, unknown value throws.
+      `:410`): unknown value throws with the allowed set in the message, `"backlog,todo"` throws,
+      an uppercase/alias value returns the canonical rows, a canonical value is unchanged.
       `cd packages/app && bun test tests/services/task-service.test.ts`
-- [ ] 3. **(R2, R4)** Convert `feature.ts:273` to the same set test inside the existing `try`
-      (`:270`), and replace the `requested`/`columns` block at `task.ts:851-856` with the D1d form.
-- [ ] 4. **(R3, R4)** Add CLI-level coverage in `apps/cli/tests/commands/task.test.ts` and
-      `apps/cli/tests/commands/feature.test.ts`: exit code 1 plus a JSON error payload on an unknown
-      value (assert it is **not** `[]`), and the rendered board's column set and order.
-- [ ] 5. **(R1–R5)** Rebuild (`cd apps/cli && bun link && bun run --filter @gobing-ai/spur
+- [x] 2. **(R2, R3)** Import `normalizeFeatureStatus` into `apps/cli/src/commands/feature.ts` and
+      normalize `options.status` inside the existing `try` (`:270`) before the `:273` filter;
+      replace the `requested`/`columns` block at `task.ts:851-856` with the D1d two-liner.
+- [x] 3. **(R1–R3)** Add CLI-level coverage in `apps/cli/tests/commands/task.test.ts` and
+      `apps/cli/tests/commands/feature.test.ts`: exit code 1 plus a JSON error payload for `bogus`
+      and for `backlog,todo` (assert the payload is **not** `[]`), cross-vocabulary rejection
+      (`task --status active`, `feature --status todo`), and the board rendering exactly the `wip`
+      column for `--status in-progress`.
+      `cd apps/cli && bun test tests/commands/task.test.ts tests/commands/feature.test.ts`
+- [x] 4. **(R1, R4)** Rebuild (`cd apps/cli && bun link && bun run --filter @gobing-ai/spur
       build:bundle`) and re-run the original repro: `spur task list --status backlog,todo --json`
-      returns the union, `spur task list --status bogus` exits 1, `spur feature list --status
-      backlog,active --json` returns the union. Then rewrite the `ready` selector row at
-      `execution-batch.md:108` to one `spur task list --status todo,backlog --json` call and delete
-      the in-agent union instruction.
+      now exits 1 naming the value, `spur task list --status todo --json` still returns its rows.
+      Then apply the D1e wording to `plugins/sp/commands/dev-refineall.md:26,42` and
+      `plugins/sp/skills/spur-dev/references/dev-operations.md:240,244`, leaving
+      `execution-batch.md` untouched, and re-run `build:bundle` so the `apps/cli/plugins/sp/**`
+      copies follow.
 
-**Slice 2 — F2 dogfood token-table parity (R6, R7).**
+**Slice 2 — F2 dogfood token-table parity (R5, R6).**
 
-- [ ] 6. Complete both inventories in `plugins/sp/skills/dogfood-testing/SKILL.md` (`:78-79`,
+- [x] 5. Complete both inventories in `plugins/sp/skills/dogfood-testing/SKILL.md` (`:78-79`,
       `:338-339`) to all 15 tokens and wrap each in
       `<!-- pipeline-tokens:start -->` / `<!-- pipeline-tokens:end -->`.
-- [ ] 7. Add the doc↔constant parity test to
+- [x] 6. Add the doc↔constant parity test to
       `plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts` (D2). Prove it fails by temporarily
       deleting one token from the doc, then restore.
       `bun test plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts`
 
-**Slice 3 — F3 authority-doc retention premise (R8).** Docs only; no code.
+**Slice 3 — F3 authority-doc retention premise (R7).** Docs only; no code.
 
-- [ ] 8. Apply the D3 replacements to `docs/design/observabilities-module-polish.md:57-58` and to
+- [x] 7. Apply the D3 replacements to `docs/design/observabilities-module-polish.md:57-58` and to
       the ADR-110 Decision parenthetical at `docs/00_ADR.md:2304`. Leave ADR-110's Status
       (`Proposed`), Why, and Detail untouched.
-- [ ] 9. Re-read task 0794 Design D3c and confirm both restatements agree with it in mechanism —
+- [x] 8. Re-read task 0794 Design D3c and confirm both restatements agree with it in mechanism —
       the quota list is extended at the persist site, and `resolveRetentionQuotas`'s override
       typo-guard is unchanged.
 
-**Slice 4 — F4 Q&A write contract (R9).** Help text and references only; no behaviour change.
+**Slice 4 — F4 Q&A write contract (R8).** Help text and references only; no behaviour change.
 
-- [ ] 10. `shared-options.ts:36` → `['--section <name>', 'Section name to write']`; add the two Q&A
+- [x] 9. `shared-options.ts:36` → `['--section <name>', 'Section name to write']`; add the two Q&A
       lines to the `addHelpText('after', …)` block at `task.ts:418-430`; correct `.summary()` at
       `:415`. Verify with `spur task update --help`.
-- [ ] 11. Mirror the exception and the `<!-- qa:replace -->` marker into
+- [x] 10. Mirror the exception and the `<!-- qa:replace -->` marker into
       `plugins/sp/skills/spur-cli/references/tasks/verbs.md:65,88` and `.../section-editing.md:48`.
-- [ ] 12. Re-run the surface-parity suites that read those files:
+- [x] 11. Re-run the surface-parity suites that read those files:
       `cd apps/cli && bun test tests/shared-option-parity.test.ts tests/spur-cli-parity.test.ts`,
       then `bun test plugins/sp/tests/cli-surface-parity.test.ts`.
 
-**Slice 5 — F5 section spacing (R10).** Smallest diff, widest blast radius — land last.
+**Slice 5 — F5 section spacing (R9).** Smallest diff, widest blast radius — land last.
 
-- [ ] 13. Apply the D5 change at `markdown-document.ts:387`, then run
+- [x] 12. Apply the D5 change at `markdown-document.ts:387`, then run
       `cd packages/domain && bun test tests/planning/markdown-document.test.ts` and
       `cd packages/app && bun test tests/services/planning-write-service.test.ts tests/services/task-service.test.ts`.
       Expect exact-string assertions to fail; repair each by updating the expected fixture, never by
       weakening the assertion.
-- [ ] 14. Add a `markdown-document.test.ts` case covering R10 directly: the heading→body gap, the
+- [x] 13. Add a `markdown-document.test.ts` case covering R9 directly: the heading→body gap, the
       gap before the next heading, idempotence on re-write, a fenced code block preserved verbatim,
       and the last section in a file (`History`) not accumulating blank lines at EOF.
-- [ ] 15. Round-trip a real file: run the same `spur task update <wbs> --section Notes --from-file`
+- [x] 14. Round-trip a real file: run the same `spur task update <wbs> --section Notes --from-file`
       twice and diff — the second write must produce no change.
 
 **Close-out.**
 
-- [ ] 16. `bun run autofix && bun run spur-check && bun run test && bun run build` green, then
+- [x] 15. `bun run autofix && bun run spur-check && bun run test && bun run build` green, then
       `spur task check 0795` → `pass: true`, and record the evidence in Testing.
+
 ### Root Cause
 Each cause below was reproduced or read directly against the tree at HEAD `8963ab161`.
 
-**F1 — single-value equality, no vocabulary check, no error path.**
-Three layers agree on "one status, silently":
+**F1 — a filter path that never checks its own vocabulary.**
+The status vocabularies and a throwing, alias-tolerant normalizer for each of them already exist
+(`packages/domain/src/planning/schema.ts:20,23,180,204`). Every *write* path uses them —
+`planning-write-service.ts:621`, `corpus-migrator.ts:123`, `task.ts:91`. The *filter* path uses
+none of them, in either layer:
 
 - `packages/app/src/services/task-service.ts:1699` —
   `if (filters?.status !== undefined && filters.status !== status) continue;`
-  Strict string equality. `"backlog,todo"` never equals `"backlog"`, so every task is skipped.
-  Line `:1702` repeats it for the `phase` alias.
+  Raw string equality against the on-disk value. Nothing consults `TASK_STATUSES`, so any value the
+  vocabulary would reject simply matches no file. Line `:1702` repeats it for the `phase` alias.
 - `apps/cli/src/commands/feature.ts:273` — `features.filter((f) => f.status === options.status)`.
   Same defect, different layer: features filter in the CLI, tasks filter in the service.
-- Nothing validates the value against `TASK_STATUSES` / `FEATURE_STATUSES`
-  (`packages/domain/src/planning/schema.ts:20,23`). `schema.ts:184,209` already own the
-  "Unknown task status: … (allowed: …)" message shape, but only on the *parse* path, never on the
-  *filter* path.
+
+The renderer then hides the failure a second time. `apps/cli/src/commands/task.ts:851-856` picks the
+board's columns with
+`requested !== undefined && TASK_STATUSES.includes(requested) ? [requested] : TASK_STATUSES` — an
+unrecognized value falls through to the *all-columns* view, so a typo prints a full, plausible board
+with every column empty of the rows the operator expected.
 
 Reproduced (2026-09-07, source-local CLI):
 
@@ -480,15 +569,20 @@ spur feature list --status backlog,todo --json→ []      exit 0
 spur task list --status backlog,todo          → "(no tasks)"  exit 0
 ```
 
-The empty result is indistinguishable from "the filter matched nothing", which is why the batch
-driver's `aborted (empty set after filter)` report carries no explanation.
+Exit 0 with an empty set is indistinguishable from "the filter matched nothing", which is why a
+batch driver's `aborted (empty set after filter)` report carries no explanation of what went wrong.
 
-Blast radius is documented, not hypothetical: `plugins/sp/commands/dev-refineall.md:26,42` and
-`plugins/sp/skills/spur-dev/references/dev-operations.md:240,244` all specify `backlog,todo` as the
-`refineall` default filter — a string the CLI cannot express. The batch driver already works around
-it: `plugins/sp/skills/spur-dev/references/execution-batch.md:108` instructs two separate
-`spur task list` calls unioned in-agent. The workaround is the proof of the defect.
-
+**Why the comma string was passed at all — a doc defect, not a missing feature.**
+`plugins/sp/commands/dev-refineall.md:26,42` and
+`plugins/sp/skills/spur-dev/references/dev-operations.md:240,244` give `refineall`'s `--status`
+default as the literal string `backlog,todo`. That flag is a **slash-command** filter applied
+in-agent to an already-frozen set; it was never a `spur task list` argument. The real resolution is
+spelled out at `plugins/sp/skills/spur-dev/references/execution-batch.md:108`, whose selector table
+lists single statuses only (`todo | backlog | wip | blocked | testing`) and resolves `ready` as the
+union of two separate `spur task list --status <one>` calls. So no consumer in the repo needs a
+list-valued `--status` — but four doc lines read as if one existed, and an agent that trusts them
+constructs a call the CLI answers with a silent empty set. Root cause is therefore two-sided: the
+CLI accepts a value it should reject, and the docs describe a value the CLI never accepted.
 **F2 — the doc table is hand-maintained; only the constant is tested.**
 `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:50-66` defines 15 tokens.
 `plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts:116-136` pins all 15 by value, so the
@@ -562,15 +656,151 @@ sections (`Acceptance Criteria` `:70`, `Q&A` `:98`, `Solution` `:189`, `Testing`
 consistency defect, not a correctness one — hence P4.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+F1–F5 from the J31 refineall dogfood, landed as five independent slices. No new noun/verb/flag; `--status backlog,todo` is a rejected value, not a union.
+
+**F1 (R1–R4) — loud `--status` validation.** `TaskService.list()` now calls `normalizeTaskStatus` on `status`/`phase` before `readDir`, so unknown values throw `Unknown task status: … (allowed: …)` instead of matching nothing. Feature list uses `normalizeFeatureStatus` at the existing CLI filter. The human board collapses to the *normalized* column (`in-progress` → `wip`); the all-columns fallback is gone. Batch docs state the default as two in-agent statuses, not a CLI comma-list.
+
+- `packages/app/src/services/task-service.ts:18` — import `normalizeTaskStatus`
+- `packages/app/src/services/task-service.ts:1681-1685` — normalize filters before `readDir`
+- `packages/app/src/services/task-service.ts:1702,1705` — compare normalized want vs stored status
+- `apps/cli/src/commands/feature.ts:10` — import `normalizeFeatureStatus`
+- `apps/cli/src/commands/feature.ts:274-275` — validate then filter
+- `apps/cli/src/commands/task.ts:851-853` — board columns from `normalizeTaskStatus`
+- `plugins/sp/commands/dev-refineall.md:26,42` — default `backlog` + `todo`, applied in-agent
+- `plugins/sp/skills/spur-dev/references/dev-operations.md:240,244` — same; points at `execution-batch.md` Step 1
+
+**F2 (R5–R6) — pipeline-token inventories.** Both SKILL.md tables list all 15 `PIPELINE_TOKENS`, wrapped in `<!-- pipeline-tokens:start/end -->`. The contract test fails if either inventory or the constant drifts.
+
+- `plugins/sp/skills/dogfood-testing/SKILL.md:78-81` — refuse-gate inventory, all 15 tokens incl. `dev-refineall`, `dev-verifyall`
+- `plugins/sp/skills/dogfood-testing/SKILL.md:341-342` — word-boundary table Examples cells, `dev-runall` + `verifyall`
+- `plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts:139-158` — doc↔constant parity
+
+**F3 (R7) — retention premise.** ADR-110 Decision parenthetical and the J31 satellite now describe binding the uncataloged prefix at the persist site (resolver still enumerates catalog prefixes only), agreeing with task 0794 Design D3c. Status/Why/Detail untouched.
+
+- `docs/00_ADR.md:2304` — Decision parenthetical
+- `docs/design/observabilities-module-polish.md:57-60` — R10 mechanism
+
+**F4 (R8) — Q&A write contract.** Shared `--section` no longer says unconditional "replace". `task update --help` names the append exception and `<!-- qa:replace -->`. Feature help is unchanged (no `Q&A` section).
+
+- `apps/cli/src/commands/shared-options.ts:36` — "Section name to write"
+- `apps/cli/src/commands/task.ts:415` — summary "write a section"
+- `apps/cli/src/commands/task.ts:430-431` — Q&A append + replace marker
+- `plugins/sp/skills/spur-cli/references/tasks/verbs.md:64-67,90` — Q&A exception
+- `plugins/sp/skills/spur-cli/references/tasks/section-editing.md:43-48` — Q&A exception
+
+**F5 (R9) — `replaceSection` spacing.** Same spelling as `insertSection`: one blank line after the `###` heading and a body trailer before the next heading. `trim()` keeps rewrites idempotent; fenced interiors are untouched.
+
+- `packages/domain/src/planning/markdown-document.ts:382-387` — heading/body/trailer spelling
+
+
+**Verify-run fix (P2, server read path).** R1's validation lives in the shared `TaskService.list()`, so the oRPC task-list handler inherited the throw: `taskListInputSchema.status` is a free-form string, so `?status=bogus` reached the service and surfaced as 500 INTERNAL_ERROR instead of the pre-change empty list. `toFilters` now normalizes the status and maps the failure to `HTTPException(400)` — the file's existing idiom — so aliases still resolve and the service receives the canonical value.
+
+- `apps/server/src/modules/task/handlers.ts:3` — import `normalizeTaskStatus`
+- `apps/server/src/modules/task/handlers.ts:10-24` — normalize in `toFilters`; unknown status → 400
+- `apps/server/tests/modules/task/handlers.test.ts:105-136` — 400 regression + alias resolution
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/task-service.ts:1681-1684` normalizes `status`/`phase` through `normalizeTaskStatus` before `readDir`, so an unknown value throws instead of matching nothing; `:1702,:1705` compare the canonical want against the stored status. CLI catch `apps/cli/src/commands/task.ts:856-858` routes it through the existing `writeJsonError` + exit 1. Service tests `packages/app/tests/services/task-service.test.ts:414-424` (unknown status / comma-list throw with the allowed set). CLI tests `apps/cli/tests/commands/task.test.ts:753,764,775` . This run: `cd apps/cli && bun test tests/commands/task.test.ts tests/commands/feature.test.ts` -> 232 pass 0 fail. Live `bun apps/cli/src/index.ts task list --status bogus` exit 1, stderr `Unknown task status: "bogus" (allowed: backlog, todo, wip, testing, blocked, done, cancelled)`; `--json` stdout empty (not `[]`); `--json --json-envelope` stdout `{ok:false,error:{code:INTERNAL_ERROR,...}}`. |
+| R2 | MET | `apps/cli/src/commands/feature.ts:10` imports `normalizeFeatureStatus`; `:274-275` validates then filters; catch `:290-292` writeJsonError + exit 1. Test `apps/cli/tests/commands/feature.test.ts:207-244` `list --status validates against the feature vocabulary`. Cross-vocabulary test `apps/cli/tests/commands/task.test.ts:783`. Live: feature `--status active --json` exit 0 n=8 all `active`; feature `--status todo --json` exit 1 `Unknown feature status: "todo" (allowed: backlog, active, verifying, blocked, done, cancelled)`; task `--status active --json` exit 1 `Unknown task status: "active"`. |
+| R3 | MET | `apps/cli/src/commands/task.ts:851-853` `columns = requested === undefined ? TASK_STATUSES : [normalizeTaskStatus(requested)]` — the previous `includes(requested) ? [..] : TASK_STATUSES` all-columns fallback is deleted (diff confirms). Test `apps/cli/tests/commands/task.test.ts:792`. Live `bun apps/cli/src/index.ts task list --status TESTING` renders only the `🧪 Testing` column (0795); the unfiltered board renders Backlog/Todo/WIP/Testing/Blocked/Done/Canceled. Rejected values never reach the renderer (exit 1 first). |
+| R4 | MET | `plugins/sp/commands/dev-refineall.md:26` `Only refine tasks in these statuses (applied in-agent to the frozen set)` default `` `backlog` + `todo` ``; `:42` same. `plugins/sp/skills/spur-dev/references/dev-operations.md:240,244` state the in-agent application and that `spur task list --status` takes exactly one canonical status per call, naming `execution-batch.md` Step 1. `rg --fixed-strings 'backlog,todo'` over both files -> exit 1 (no matches). `plugins/sp/skills/spur-dev/references/execution-batch.md:108` per-status resolution unchanged. |
+| R5 | MET | `plugins/sp/skills/dogfood-testing/SKILL.md:78-81` refuse-gate inventory inside `<!-- pipeline-tokens:start/end -->` lists all 15 tokens including `dev-refineall`, `dev-verifyall`, `refineall`, `verifyall`; `:341-342` word-boundary table Examples cells (8 + 7 = 15). Union equals `PIPELINE_TOKENS` (15 entries) at `plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts:50-66`. |
+| R6 | MET | `plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts:139-158` extracts every marker block and asserts the union equals `PIPELINE_TOKENS` in both directions, plus per-block equality. This run: `cd plugins/sp && bun test tests/dogfood-testing/pipeline-detect.test.ts tests/skill-structure.test.ts` -> 127 pass 0 fail. Required CI fixture: `plugins/sp/tests/skill-structure.test.ts:810-813` body budget 38800 -> 39103 with a dated rationale comment. |
+| R7 | MET | `docs/00_ADR.md:2304` ADR-110 Decision parenthetical now reads `per-prefix quota bound at the persist site (the resolver enumerates catalog prefixes only)`. `docs/design/observabilities-module-polish.md:57-60` describes appending the quota row at the persist site then pruning scoped to that prefix, still with no new config shape. `rg --fixed-strings 'per-prefix quota fallback'` over both files -> exit 1. Agrees with task 0794 Design D3c. Status/Why/Detail lines untouched (`docs/00_ADR.md:2303,2305-2306`). |
+| R8 | MET | `apps/cli/src/commands/shared-options.ts:36` `'Section name to write'` (was `to replace`). `apps/cli/src/commands/task.ts:415` summary `Update a task status or write a section.`; `:430-431` help text names the `Q&A` APPENDS exception and the `<!-- qa:replace -->` marker. References `plugins/sp/skills/spur-cli/references/tasks/verbs.md:65-67,90` and `plugins/sp/skills/spur-cli/references/tasks/section-editing.md:47-49`. Test `apps/cli/tests/commands/task.test.ts:830`. Live `bun apps/cli/src/index.ts task update --help` contains `Section name to write`, `Q&A`, `APPENDS`, `<!-- qa:replace -->`; `feature update --help` contains no `Q&A` (grep -c = 0). |
+| R9 | MET | `packages/domain/src/planning/markdown-document.ts:382-387` `heading\n\n${trimmed}\n\n` (empty body -> `heading\n\n`), matching `insertSection`; `trim()` supplies idempotence and fenced interiors are untouched. Tests `packages/domain/tests/planning/markdown-document.test.ts:248,255,264,277` (heading/body/trailer gap, idempotent rewrite, fenced block verbatim, History-as-last-section EOF). CLI round trip `apps/cli/tests/commands/task.test.ts:658`. This run: `cd packages/domain && bun test tests/planning/markdown-document.test.ts` -> 74 pass 0 fail. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 (R1) an unknown task status fails loudly instead of returning empty | MET | command | Live `bun apps/cli/src/index.ts task list --status bogus` exit 1, stderr `Unknown task status: "bogus" (allowed: backlog, todo, wip, testing, blocked, done, cancelled)`. `--status bogus --json` exit 1 with empty stdout (not `[]`); `--json --json-envelope` stdout `{"ok":false,"error":{"code":"INTERNAL_ERROR","message":"Unknown task status: \"bogus\" ..."}}`. Test `apps/cli/tests/commands/task.test.ts:753`. |
+| AC2 (R1) the original dogfood repro now fails instead of silently matching nothing | MET | command | Live `bun apps/cli/src/index.ts task list --status backlog,todo --json` exit 1 naming `"backlog,todo"`; `--phase backlog,todo --json` exit 1 with the same message. Tests `apps/cli/tests/commands/task.test.ts:764,775`; service `packages/app/tests/services/task-service.test.ts:420`. |
+| AC3 (R1) valid values are unchanged and aliases resolve | MET | command | Live `--status todo --json` exit 0, n=2, statuses `["todo"]`; `--status TODO --json` byte-identical to `--status todo --json` (shell string compare YES); `--phase in-progress --json` byte-identical to `--status wip --json` (both n=0 in the current tree, equality is the assertion). Tests `apps/cli/tests/commands/task.test.ts:808` and `packages/app/tests/services/task-service.test.ts:425`. |
+| AC4 (R2) each noun validates against its own vocabulary | MET | command | Live: `feature list --status active --json` exit 0, n=8, statuses `["active"]`; `feature list --status todo --json` exit 1 `Unknown feature status: "todo"`; `task list --status active --json` exit 1 `Unknown task status: "active"`. Tests `apps/cli/tests/commands/feature.test.ts:207` and `apps/cli/tests/commands/task.test.ts:783`. |
+| AC5 (R3) the human board collapses to the normalized column | MET | command | Live `bun apps/cli/src/index.ts task list --status TESTING` (non-canonical case) renders only `🧪 Testing` with 0795; the unfiltered `task list` renders all seven columns. Rejected values exit 1 before the renderer, so no all-columns fallback path remains. Test `apps/cli/tests/commands/task.test.ts:792`. |
+| AC6 (R4) the batch docs no longer present a comma string as a --status argument | MET | command | `rg --fixed-strings 'backlog,todo' plugins/sp/commands/dev-refineall.md plugins/sp/skills/spur-dev/references/dev-operations.md` -> exit 1 (no matches). `dev-refineall.md:26,42` and `dev-operations.md:240,244` state the two-status in-agent default and the one-canonical-status-per-call rule, naming `plugins/sp/skills/spur-dev/references/execution-batch.md` Step 1; that file's `:108` per-status resolution is unchanged. |
+| AC7 (R5, R6) documented pipeline tokens match the constant | MET | test | `cd plugins/sp && bun test tests/dogfood-testing/pipeline-detect.test.ts tests/skill-structure.test.ts` -> 127 pass 0 fail, including `SKILL.md pipeline-token inventories match PIPELINE_TOKENS` (`plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts:139-158`), which fails if either side gains a token alone. |
+| AC8 (R7) the authority docs state the retention mechanism that exists | MET | command | `rg --fixed-strings 'per-prefix quota fallback' docs/00_ADR.md docs/design/observabilities-module-polish.md` -> exit 1. `docs/00_ADR.md:2304` binds the quota at the persist site; `docs/design/observabilities-module-polish.md:57-60` appends the quota row then prunes scoped to the prefix, matching task 0794 Design D3c. |
+| AC9 (R8) the Q&A write contract is discoverable from the CLI | MET | command | Live `bun apps/cli/src/index.ts task update --help` exit 0: line 14 `--section <name>  Section name to write`; lines 55-56 `Sections replace, with one exception: --section "Q&A" APPENDS a timestamped #### Q&A entry — <ISO> block. Start the body with <!-- qa:replace --> to replace it wholesale.` `feature update --help` has no `Q&A` (grep -c = 0). References `plugins/sp/skills/spur-cli/references/tasks/verbs.md:65-67,90`, `plugins/sp/skills/spur-cli/references/tasks/section-editing.md:47-49`. Test `apps/cli/tests/commands/task.test.ts:830`. |
+| AC10 (R9) rewritten and inserted sections share one spelling | MET | test | `cd packages/domain && bun test tests/planning/markdown-document.test.ts` -> 74 pass 0 fail, covering the heading/body/trailer single-blank-line rule (`:248`), byte-identical idempotent rewrite (`:255`), fenced code block preserved verbatim including interior blank lines (`:264`), and no EOF blank-line accumulation when History is last (`:277`). End-to-end through the CLI writer: `apps/cli/tests/commands/task.test.ts:658` `update --section Notes is byte-identical on a second identical write`, green in the 232-pass CLI run. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Review verdict: PASS** — independent review of F1–F5 (status-filter validation, dogfood token-table parity, ADR-110 retention premise, Q&A write-contract docs, `replaceSection` spacing). Functional traceability 9/9 MET. Design claims D1–D5 DONE (anti-patterns honored: no comma-list `--status`, no new helper, no Q&A behavior change, no corpus reflow). No P1–P3. Two P4 residuals in derived/lead docs, neither blocking.
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | usability | `docs/help/cmd_task.md:116`, `docs/help/cmd_feature.md:108` | Derived help dumps still say `Section name to replace`. R8's named surfaces (`spur task update --help`, `shared-options.ts:36`, spur-cli refs) are correct; this dump was not in the Design file list. Follow-up: regen `docs/help/` when that generator next runs. |
+| P4 | usability | `plugins/sp/skills/spur-cli/references/tasks/section-editing.md:10-13` | Recipe intro still says the named section "is replaced wholesale" before the Q&A exception at `:47-49`. Agents who stop at the intro can miss the append contract. Soften the lead or add a one-line forward pointer. |
+
+**Functional Traceability**
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/services/task-service.ts:1681-1682` normalizes `status`/`phase` via `normalizeTaskStatus` before `readDir`; `:1702,:1705` compare canonical want vs stored status. CLI catch `apps/cli/src/commands/task.ts:856-858` uses existing `writeJsonError` + exit 1. Tests: `packages/app/tests/services/task-service.test.ts` (unknown / `backlog,todo` throw); `apps/cli/tests/commands/task.test.ts` (`bogus`, comma-list, `--phase` comma-list, `--json` not `[]`). |
+| R2 | MET | `apps/cli/src/commands/feature.ts:274-275` `normalizeFeatureStatus` then filter; catch `:290-292`. CLI test `apps/cli/tests/commands/feature.test.ts` (`--status active` ok; `--status todo` exit 1, not `[]`). Cross-vocab: task `--status active` rejected in `task.test.ts`. |
+| R3 | MET | `apps/cli/src/commands/task.ts:851-853` `columns = requested === undefined ? TASK_STATUSES : [normalizeTaskStatus(requested)]` — all-columns fallback gone. Test: `--status in-progress` renders `WIP` only. |
+| R4 | MET | `plugins/sp/commands/dev-refineall.md:26,42` default `` `backlog` + `todo` ``, in-agent; `plugins/sp/skills/spur-dev/references/dev-operations.md:240,244` same + `execution-batch.md` Step 1. No `backlog,todo` as a `spur task list --status` value. |
+| R5 | MET | `plugins/sp/skills/dogfood-testing/SKILL.md:78-81` refuse-gate inventory (all 15, markers); `:341-342` word-boundary Examples (union of both cells = 15). |
+| R6 | MET | `plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts:139-158` marker-block backtick union equals `PIPELINE_TOKENS` both directions. Necessary CI fixture: `plugins/sp/tests/skill-structure.test.ts:810-813` body-budget baseline 38800 → 39103. |
+| R7 | MET | `docs/00_ADR.md:2304` Decision parenthetical: quota bound at persist site (resolver enumerates catalog prefixes only). `docs/design/observabilities-module-polish.md:57-60` matches 0794 Design D3c (append quota row, prune scoped to prefix). Status/Why/Detail untouched. |
+| R8 | MET | `apps/cli/src/commands/shared-options.ts:36` "Section name to write"; `apps/cli/src/commands/task.ts:415,430-431` Q&A APPENDS + `<!-- qa:replace -->`; `plugins/sp/skills/spur-cli/references/tasks/verbs.md:64-67,90`; `.../section-editing.md:47-49`. Help test in `task.test.ts`. Feature help unchanged (no `Q&A`). |
+| R9 | MET | `packages/domain/src/planning/markdown-document.ts:385-387` `heading\n\n${trimmed}\n\n` (empty → `heading\n\n`). Tests: heading/body/trailer gap, idempotence, fenced interior, last-section History; CLI Notes round-trip in `task.test.ts`. |
+
+**Acceptance Criteria**
+
+| AC | Status | Evidence |
+| --- | --- | --- |
+| AC1 unknown task status fails loudly | MET | CLI test `list --status bogus --json` exit 1, names `"bogus"`, allowed set, stdout not `[]`. Same `writeJsonError` catch for human path. |
+| AC2 dogfood repro `backlog,todo` fails | MET | CLI tests for `--status` and `--phase` `backlog,todo --json`. |
+| AC3 valid values + aliases | MET | Service + CLI tests: canonical `todo`/`wip` unchanged; `TODO` and `--phase in-progress` resolve. |
+| AC4 per-noun vocabulary | MET | Feature `--status active` / `--status todo`; task `--status active`. |
+| AC5 board collapses to normalized column | MET | `--status in-progress` → `WIP` only (`task.ts:851-853` + CLI test). |
+| AC6 batch docs | MET | `dev-refineall.md:26,42`; `dev-operations.md:240,244`. |
+| AC7 token inventories = constant | MET | SKILL.md + `pipeline-detect.test.ts:139-158`. |
+| AC8 retention mechanism | MET | ADR-110 `:2304`; satellite `:57-60` vs 0794 D3c. |
+| AC9 Q&A write contract discoverable | MET | `task update --help` test; spur-cli refs. |
+| AC10 replace/insert spacing | MET | domain tests + CLI Notes double-write. |
+
+**Design conformance**
+
+| Claim | Status | Notes |
+| --- | --- | --- |
+| D1a task `list()` normalize-before-`readDir` | DONE | `task-service.ts:1681-1682` outside the per-file `catch` (invalid filter cannot be swallowed as unparseable). |
+| D1b feature filter in CLI | DONE | `feature.ts:274-275`; not moved into `FeatureService`. |
+| D1c reuse `writeJsonError` | DONE | No bespoke validation branch. |
+| D1d board columns | DONE | `task.ts:851-853`. |
+| D1e batch docs | DONE | D1e wording landed. |
+| D2 marker-wrapped inventories + parity test | DONE | Plus required `skill-structure.test.ts` ratchet (not in Design file list; keeps R5 CI-green). |
+| D3 ADR-110 + satellite | DONE | Agrees with 0794 D3c; no 0794 code. |
+| D4 Q&A docs; shared string not task-only | DONE | Exception in task `addHelpText`, not `SHARED_OPTIONS.section`. |
+| D5 `replaceSection` spacing | DONE | Matches designed `trim()` spelling. |
+| Anti-patterns | DONE | No comma-list parse, no new helper, stored status not normalized, `PIPELINE_TOKENS` membership unchanged, no Q&A behavior change, no corpus reflow. |
+
+**SECUA**
+
+- **S** — status compared after vocabulary check; error uses `JSON.stringify(raw)`; no secrets, no injection.
+- **E** — invalid *task* status fails before `readDir`. Invalid *feature* status still lists then throws (D1b; cold path).
+- **C** — type-fit: `normalizeTaskStatus`/`normalizeFeatureStatus` are the throwing alias-tolerant helpers (`schema.ts:180,205`). Filter compares canonical want vs raw stored status (non-goal: no stored-side normalize). Empty `replaceSection` does not fuse headings.
+- **U** — loud `Unknown <noun> status: … (allowed: …)`; Q&A contract on `--help`. Residuals: P4 help-dump / lead-paragraph.
+- **A** — no new export; validation at existing seams; spacing at the single writer (`MarkdownDocument`), not `stripLeadingSectionHeader`.
+
+**Architecture depth**
+
+No blocker/major candidates. F1 reuses the domain normalizers (deletion test: a new `parseStatusFilter` would have been the shallow extra module the Design forbade). Feature-vs-task filter locality is the pre-existing seam D1b kept. F5 locality is correct (writer, not caller). F2 test surface is a pure marker extract — no stack required.
+
+**Out of scope (not scored):** working-tree `README.md` install-path/table-padding edits are unrelated to 0795 and were not in the implement file list.
+
+**Residual risk.** (1) P4 derived-help drift until `docs/help/` regenerates. (2) F5 converges existing corpus only as sections are rewritten (Q7). (3) Feature invalid-status still pays a full `FeatureService.list()` before throw — accepted by D1b.
+
+**Final disposition: APPROVE** — no P1/P2. Proceed. P4s are follow-up polish, not rework.
 
 ### References
 **Evidence source**
@@ -582,15 +812,21 @@ consistency defect, not a correctness one — hence P4.
 
 **F1 — status filter**
 
-- `packages/app/src/services/task-service.ts:1699,1702` — task-side equality filter
-- `apps/cli/src/commands/feature.ts:273` — feature-side equality filter
-- `apps/cli/src/commands/task.ts:823,851-856,858-860` — flag registration, board columns, catch path
-- `apps/cli/src/commands/shared-options.ts:38` — `statusFilter` declaration
-- `packages/domain/src/planning/schema.ts:20,23,184,209` — vocabularies and the existing
-  "Unknown … status" message shape
-- Callers assuming comma lists: `plugins/sp/commands/dev-refineall.md:26,42`,
+- `packages/app/src/services/task-service.ts:1699,1702` — task-side raw equality filter
+- `apps/cli/src/commands/feature.ts:273` — feature-side raw equality filter
+- `apps/cli/src/commands/task.ts:823,851-856,858-860` — flag registration, the all-columns fallback
+  for an unrecognized value, and the existing catch → `writeJsonError` + `setExitCode(1)`
+- `packages/domain/src/planning/schema.ts:20,23,180,204` — vocabularies and the throwing,
+  alias-tolerant normalizers this task reuses on the filter path
+- Write paths that already normalize (the precedent):
+  `packages/app/src/services/planning-write-service.ts:621`,
+  `packages/app/src/services/corpus-migrator.ts:123`, `apps/cli/src/commands/task.ts:91`
+- Doc lines presenting `backlog,todo` as a `--status` argument:
+  `plugins/sp/commands/dev-refineall.md:26,42`,
   `plugins/sp/skills/spur-dev/references/dev-operations.md:240,244`
-- Existing workaround: `plugins/sp/skills/spur-dev/references/execution-batch.md:108`
+- The correct resolution these docs should point at (unchanged by this task):
+  `plugins/sp/skills/spur-dev/references/execution-batch.md:108` — per-status calls, unioned in-agent
+- Consent rule behind the comma-list non-goal: `docs/design/harness-surface-governance.md`
 
 **F2 — pipeline-token drift**
 
@@ -642,3 +878,8 @@ consistency defect, not a correctness one — hence P4.
 - `docs/99_PROJECT_CONSTITUTION.md` — process authority; `00` wins content conflicts (F3)
 - `docs/design/harness-surface-governance.md` — public-surface consent rule (Design non-goals)
 ### History
+
+- 2026-09-07T06:09:45.002Z todo → wip (system)
+- 2026-09-07T07:01:41.910Z wip → testing (system)
+- 2026-09-07T16:22:58.845Z testing → done (system)
+
