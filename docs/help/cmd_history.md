@@ -12,6 +12,7 @@
 | `analyze` | Aggregate imported history with SQL and write a versioned JSON artifact (Q1-Q10 forensic query set) |
 | `report` | Render a previously-generated artifact as a spend + forensic report (pure renderer — never opens the DB) |
 | `daily` | Run-once daily pipeline: import-all → analyze → write artifact → prune reports older than 90 days |
+| `reset` | Destructively wipe every history table (requires `--yes`); task corpus and run provenance are untouched |
 
 ## spur history import
 
@@ -104,6 +105,21 @@ the next run with no gap and no double-count.
 | `--source-timeout <ms>` | Per-source timeout |
 | `--mode <name>` | Report mode sidecar pass-through (`default` \| `forensics`) |
 | `--json` | Output machine-readable JSON |
+
+## spur history reset
+
+```
+spur history reset [options]
+```
+
+| Flag | Description |
+|---|---|
+| `--yes` | Confirm the destructive wipe |
+| `--json` | Output machine-readable JSON |
+
+Destructively wipe every `history_*` table: normalized rows, per-source ETL, board rollups,
+daily stats, and importer checkpoints/ledger. The task corpus and run provenance
+(`task_run_links`) are untouched; a full `spur history import` rebuilds everything.
 
 ## See Also
 

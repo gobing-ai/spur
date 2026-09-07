@@ -24,6 +24,7 @@ spur init [options]
 | `--name <name>` | Project name (default: current directory name) |
 | `--force` | Recreate files that already exist (refused otherwise — see "Re-init guard") |
 | `--minimal` | Only write the minimal `.spur` scaffold (no rules, no workflows) |
+| `--adopt-global-config` | Also rewrite `~/.config/spur/config.yaml` from the shipped global default (backed up first) |
 | `--json` | Output machine-readable JSON |
 
 ## What It Creates

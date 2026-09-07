@@ -46,6 +46,8 @@ spur task create [options] <title>
 | `--folder <path>` | Custom tasks folder |
 | `--dedupe-within <seconds>` | Override the default dedup window (seconds); guard is on (300s) by default when `--feature` is set |
 | `--allow-duplicate-name` | Disable the dedup guard entirely (creates anyway) |
+| `--skip-ready` | Skip ready preparation (backlog capture only, no model dispatch) |
+| `--agent <selector>` | Agent used for ready preparation (defaults to the configured agent) |
 | `--json` | Output machine-readable JSON |
 
 ### Example
@@ -221,6 +223,8 @@ spur task batch-create [options] --file <path>
 |---|---|
 | `--file <path>` | Path to the batch JSON file (validated against `task-batch.schema.json`) — required |
 | `--folder <path>` | Custom tasks folder |
+| `--skip-ready` | Skip ready preparation (write supplied content as-is, no model dispatch) |
+| `--agent <selector>` | Agent used for ready preparation (defaults to the configured agent) |
 | `--json` | Output machine-readable JSON |
 
 All-or-nothing: if any task in the batch fails validation, none are created. This is the
@@ -283,6 +287,9 @@ spur task check [options] [wbs]
 | `--strict` | Elevate ALL warnings to failures |
 | `--strict-core` | Gate variant: fail only on hard-core errors (the `testing → done` guard) |
 | `--fix` | Repair structural findings in place (heading presence/level, section order, R-item checkboxes) — never authors content, never removes off-variant sections (task 0619) |
+| `--as <status>` | Evaluate the task AS if it were in `<status>` — the lifecycle guards pass the transition target so `testing → done` checks the done row. Omitted → current-status diagnostics |
+| `--corpus` | Explicit unsuppressed audit of active tasks and features; warnings are advisory |
+| `--since <ref>` | Scope the corpus fog comparison to changes since a git ref (requires `--corpus`) |
 | `--folder <path>` | Custom tasks folder |
 | `--json` | Output machine-readable JSON |
 
@@ -438,6 +445,20 @@ Runs the A17 corpus normalization pass over the active task folder. Dry-run repo
 per-file changes without writing; apply writes through the corpus migrator's atomic write path.
 Idempotent: a second run over a migrated corpus is a no-op. The live `docs/tasks2/` corpus was
 migrated 2026-07-04 (task 0192); subsequent runs are no-ops.
+
+## spur task migrate-anchors
+
+```
+spur task migrate-anchors [options]
+```
+
+| Flag | Description |
+|---|---|
+| `--dry-run` | Produce the full report without writing files |
+| `--json` | Output machine-readable JSON |
+
+Rewrites stale `file:line` anchors in task sections to the current line numbers. Dry-run reports
+the same per-file changes without writing.
 
 ## See Also
 

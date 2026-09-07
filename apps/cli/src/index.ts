@@ -126,16 +126,12 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
     return exitCode;
 }
 
-/** Build the Commander program and run the dispatch. Returns exit code. */
-async function runCommandDispatch(
-    argv: string[],
-    context: ReturnType<typeof createCliContext>,
-    output: CommandOutput,
-): Promise<number> {
-    let exitCode = 0;
-    context.setExitCode = (code: number) => {
-        exitCode = code;
-    };
+/**
+ * Build the Commander program with every noun command group registered.
+ * Exported so the docs/help flag-set parity test (task 0800 R3) walks the same
+ * tree the dispatcher runs — a separately-built tree would drift.
+ */
+export function buildProgram(context: ReturnType<typeof createCliContext>, output: CommandOutput): Command {
     const program = new Command();
     program.name('spur').version(CLI_CONFIG.binaryVersion).exitOverride();
     program.configureOutput({
@@ -176,6 +172,21 @@ async function runCommandDispatch(
     registerTeamCommand(program, context);
     registerTaskCommand(program, context);
     registerWorkflowCommand(program, context);
+
+    return program;
+}
+
+/** Build the Commander program and run the dispatch. Returns exit code. */
+async function runCommandDispatch(
+    argv: string[],
+    context: ReturnType<typeof createCliContext>,
+    output: CommandOutput,
+): Promise<number> {
+    let exitCode = 0;
+    context.setExitCode = (code: number) => {
+        exitCode = code;
+    };
+    const program = buildProgram(context, output);
 
     try {
         await program.parseAsync(argv, { from: 'user' });

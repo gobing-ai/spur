@@ -27,6 +27,7 @@ spur message send [options] <body>
 |---|---|---|
 | `--to <id>` | — | Recipient agent id (required) |
 | `--from <id>` | `operator` | Sender id |
+| `--role <name>` | — | Address by Layer-1 role or executor name; must resolve to exactly one materialized instance |
 | `--wait` | — | Block until the recipient occupant reaches `--until` (snapshots occupant **before** enqueue) |
 | `--until <state>` | `invoke-exit` | Wait target when `--wait` is set: `injected` \| `invoke-exit` (repeatable OR) |
 | `--timeout <ms>` | — | Caller deadline for `--wait` |

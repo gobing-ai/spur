@@ -137,6 +137,8 @@ spur agent doctor [options] [agent]
 
 | Flag | Description |
 |---|---|
+| `--probe-health` | Opt into model health probing (liveness questions are never cached) |
+| `--force-refresh` | Bypass the detection cache, re-run, and rewrite it |
 | `--json` | Output machine-readable JSON |
 
 Readiness check per agent. Text mode prints an aligned table
@@ -170,6 +172,7 @@ spur agent wait [options] <specId>
 | Flag | Description |
 |---|---|
 | `--run <runId>` | Pin a specific run id (default: the spec's latest run) |
+| `--role <name>` | Address by Layer-1 role or executor name; must resolve to exactly one materialized instance |
 | `--until <state>` | Lifecycle state to wait for (repeatable OR): `idle` \| `working` \| `invoke-exit` \| `blocked`. Default `idle` |
 | `--timeout <ms>` | Caller deadline in milliseconds. Omit = no deadline (stall budget still applies) |
 | `--json` | `{ satisfied, pin }` on success; `{ error: { code, message } }` on failure |

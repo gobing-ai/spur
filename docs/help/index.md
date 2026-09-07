@@ -36,7 +36,9 @@ Verify: `spur --version` → `0.3.1`; `spur agent doctor` checks every detected 
 
 ### CLI Surface
 
-11 noun groups, every command supports `--json`:
+11 noun groups, every command supports `--json`. Two flags are global and documented here
+once rather than repeated per command: `--help` prints any command's usage, and
+`--json-envelope` wraps `--json` output in the machine envelope (docs/04_DESIGN.md §4.1):
 
 | Command         | Purpose                                                           |
 | --------------- | ----------------------------------------------------------------- |

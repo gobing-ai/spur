@@ -50,6 +50,24 @@ spur workflow validate .spur/workflows/basic.yaml --json
 # → { "ok": true, "valid": true, "workflow": { "kind": "state-machine", "name": "basic", ... } }
 ```
 
+## spur workflow show
+
+```
+spur workflow show [options] <file>
+```
+
+| Argument | Description |
+|---|---|
+| `file` | Workflow YAML file |
+
+| Flag | Description |
+|---|---|
+| `--format <name>` | Projection to render: `mermaid` (default) or `todo` |
+| `--json` | Output machine-readable JSON |
+
+Render a workflow definition: mermaid FSM diagram (default) or declared-step todo checklist.
+Read-only — never executes the definition.
+
 ## spur workflow run
 
 ```
@@ -163,6 +181,7 @@ spur workflow continue [options] [run-id]
 | Flag | Description |
 |---|---|
 | `--yes` | Skip the CLI resume confirmation only (does **not** set the HITL gate answer) |
+| `--force` | Proceed with resume even if workflow definition drift is detected |
 | `--answer <yes\|no\|cancel>` | Inject a HITL gate answer into resume vars as `__hitlAnswer` before guards re-evaluate (0433). Does **not** imply `--yes`. Invalid values exit `2`. |
 | `--json` | Output machine-readable JSON |
 

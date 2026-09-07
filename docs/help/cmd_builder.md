@@ -31,6 +31,7 @@ spur builder bump-ver [options] <package-id|--all> <version>
 |---|---|
 | `--all` | Bump the whole released set instead of one package |
 | `--push` | Also push the branch and the release tag to `origin` |
+| `--json` | Output machine-readable JSON |
 
 Behavior: rewrites the manifest version (and `workspace:` pins of consumers, plus the
 `binaryVersion` literal in `src/config.ts` when present), stages `bun.lock` when non-empty,
@@ -49,5 +50,6 @@ spur builder drop-tags [options] <package-id|--all> <version>
 |---|---|
 | `--all` | Drop the whole released set's tags (per-package + aggregate) |
 | `--remote` | Also delete the tag(s) on `origin` |
+| `--json` | Output machine-readable JSON |
 
 No-ops gracefully when a local or remote tag is already absent.
