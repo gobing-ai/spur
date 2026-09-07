@@ -196,11 +196,12 @@ is empty by design — the two can land in either order; whoever lands second re
       Run `bun test` from inside `apps/web`, then the root gate `bun run spur-check`.
 
 ### Solution
+
 Change-map (auto-generated — implement step did not record a Solution).
 Each entry cites the first changed line per file (`file:line`).
 
 | Change (`file:line`) |
-|----------------------|
+| ---------------------- |
 | `apps/web/src/modules/observability/JobsTab.tsx:133` |
 | `apps/web/src/modules/observability/ObservabilityFilters.tsx:14` |
 | `apps/web/src/modules/observability/ObservabilityFilters.tsx:161` |
@@ -295,25 +296,29 @@ Each entry cites the first changed line per file (`file:line`).
 | `apps/web/tests/modules/observability/summary-tab.test.tsx:233` |
 | `apps/web/tests/modules/observability/summary-tab.test.tsx:253` |
 | `apps/web/tests/modules/observability/summary-tab.test.tsx:269` |
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | Header + module name read `Observabilities`: apps/web/src/modules/observability/index.tsx:14 — `name: 'Observabilities'`, byte-identical to `sidebarLabel` (index.tsx:18); apps/web/src/modules/observability/ObservabilityShell.tsx:66 — `<h1 ...>Observabilities</h1>`; consumers read this run: apps/web/src/components/BoardLayout.tsx:110 renders `activeModule?.name` (breadcrumb), apps/web/src/components/GlobalAgentBar.tsx:32 prefers `sidebarLabel ?? name`. Tests: apps/web/tests/modules/observability.test.ts:23, apps/web/tests/modules/observability/components.test.tsx:277. |
 | R2 | MET | Shell-level time-range presets visible on every tab; shell state sole owner: exported `TimeRangePresets` at apps/web/src/modules/observability/ObservabilityFilters.tsx:47-84 (aria-label "Time range presets" at :61); rendered in the shell header row at apps/web/src/modules/observability/ObservabilityShell.tsx:120 inside the header container (:62-121) and before the tab panel (:124), so it stays mounted across tab switches; sole owner is shell state (ObservabilityShell.tsx:19 — the only `useState<ObservabilityTimeRange>` under src/modules/observability, grep this run); `timeRange`/`onTimeRangeChange` are required props (apps/web/src/modules/observability/tabs.ts:30-31); zero `timeWindow` occurrences under apps/web/src (grep this run). Tests: components.test.tsx:282-289 (presets in shell, absent from tab filter bar), :304-308 and :337-343 (visible on System Events/Jobs/Routing with `24h` selection persisted), :699-711 (preset order + shell header container), :1957-1969 (filter bar no longer renders presets). |
 | R3 | MET | Every tab queries `since` derived from the shell range; RoutingTab windowed; no local override: apps/web/src/modules/observability/RoutingTab.tsx:229 destructures required `timeRange`, :236 `since = timeRangeSince(timeRange)`, :237-239 appends `?since=` to routing-summary conditionally, :253 effect deps `[timeRange]`; endpoint already reads since/until (apps/server/src/modules/observability/index.ts:216 — unchanged, not part of this diff). SystemEventsTab escapes deleted: props required with no local fallback (SystemEventsTab.tsx:770; grep shows no `localTimeRange`, no `timeWindow` in apps/web/src), `serializeFilter` takes `Partial<ObservabilityFilterValues>` (SystemEventsTab.tsx:574-576) and derives `since` from the passed range (:587-588), active-filter memo depends on `[debouncedFilter, timeRange]` (:828). Summary/Jobs already windowed: SummaryTab.tsx:127 with deps `:193 [timeRange]`; JobsTab.tsx:171 with deps `:206 [timeRange, statusFilter, offset]`. Tests: apps/web/tests/modules/observability/routing-tab.test.tsx:239-256 (since present for 4h + refetch on range change), components.test.tsx:651-733 (shell preset drives System Events query: 4h default, 30s refetch filters old row, persistence on Jobs). |
 | R4 | MET | `all` sends no `since` bound: apps/web/src/modules/observability/ObservabilityFilters.tsx:38 `all: null` and :41-45 `timeRangeSince` returns `undefined` for it; RoutingTab.tsx:237-239 builds the bare endpoint URL when `since` is falsy (param omitted, not empty); historyUrl skips falsy since (SystemEventsTab.tsx:146); SummaryTab.tsx:131 `if (sinceIso)`; JobsTab.tsx:175 `if (since)`. Tests: routing-tab.test.tsx:258-267 (no `since` param, bare URL), components.test.tsx:727-732 (last history call carries no `since=`), components.test.tsx:1954 (unit: `timeRangeSince('all')` undefined). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
+| --------------------- | -------- | --------------- | ---------- |
 | R1 — Module header matches the sidebar label | MET | test | Code: index.tsx:14 (`name` == `sidebarLabel` at :18, byte-identical), ObservabilityShell.tsx:66 (`<h1>Observabilities</h1>`), BoardLayout.tsx:110 renders `activeModule?.name`. Test: observability.test.ts:23 asserts `name === 'Observabilities'`; components.test.tsx:277 asserts the h1 text. Command: targeted bun test run green (131 pass / 0 fail). |
 | R2 — The time-range selector renders for every tab | MET | test | Code: ObservabilityShell.tsx:120 renders presets in the header row above the tab panel (:124), driven solely by shell state (:19); no tab renders presets (grep: only aria-label occurrence is the component itself, ObservabilityFilters.tsx:61). Test: components.test.tsx:304-308, 337-343 (presets present and `24h` still aria-pressed across System Events → Jobs → Routing switches), :651-711, :1966-1968. Command: targeted bun test run green. |
 | R3 — Every tab's data queries honor the selected time range | MET | test | Code: RoutingTab.tsx:236-239,253; SystemEventsTab.tsx:587,828 (serializeFilter from passed range; memo keyed on timeRange); SummaryTab.tsx:127,193; JobsTab.tsx:171,206. Test: routing-tab.test.tsx:239-256 (4h carries a parseable `since`; rerender with 24h triggers a second fetch), components.test.tsx:713-721 (shell 4h default drives history query; 30s click refetches and old row drops). Command: targeted bun test run green. |
 | R4 — The "all" range sends no since bound | MET | test | Code: ObservabilityFilters.tsx:38,43 (`all: null` → `undefined`); RoutingTab.tsx:237-239 (bare URL); SystemEventsTab.tsx:146 (since omitted when falsy). Test: routing-tab.test.tsx:258-267 (`since` null, URL ends with bare endpoint), components.test.tsx:727-732 (history call without `since=`), components.test.tsx:1954. Command: targeted bun test run green. |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
 
 Review verdict: PASS

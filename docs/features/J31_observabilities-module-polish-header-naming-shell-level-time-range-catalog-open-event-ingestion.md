@@ -135,6 +135,7 @@ Feature: Observabilities module polish — naming, shell time range, catalog-ope
 ## Notes
 
 ## History
+
 - 2026-09-07T06:21:51.775Z backlog → active (system)
 - 2026-09-07T07:24:00.183Z active → verifying (system)
 - 2026-09-07T07:24:00.472Z verifying → done (system)

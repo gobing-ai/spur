@@ -280,11 +280,12 @@ requires it. `dependencies[]` is empty; either order lands.
       then the root gate `bun run spur-check`. Record commands and outcomes in Testing.
 
 ### Solution
+
 Change-map (auto-generated — implement step did not record a Solution).
 Each entry cites the first changed line per file (`file:line`).
 
 | Change (`file:line`) |
-|----------------------|
+| ---------------------- |
 | `apps/cli/src/system-event-ledger.ts:109` |
 | `apps/cli/src/system-event-ledger.ts:19` |
 | `apps/cli/src/system-event-ledger.ts:23` |
@@ -407,13 +408,15 @@ Each entry cites the first changed line per file (`file:line`).
 | `packages/app/tests/services/system-event-emitter.test.ts:165` |
 | `packages/app/tests/services/system-event-emitter.test.ts:173` |
 | `packages/app/tests/services/system-event-emitter.test.ts:178` |
+
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R5 | MET | Server install beside the tap with the same DAO/quotas/secrets/project context: `apps/server/src/serve.ts:511-520`. Generic entry (prefix = first dot-segment `:69`, renderer `generic` `:75`, tier default, severity `info`): `packages/app/src/services/system-event-catch-all.ts:66-87`. Persist through the standard envelope path (normalization + configured-secret redaction via `buildSystemEventEnvelope`): `system-event-catch-all.ts:127-142` (`:136`). Tests (passed this run): `apps/server/tests/upstream-system-events-wiring.test.ts:607-637` (uncataloged row persisted, schemaVersion 2, payload severity honored) and `packages/app/tests/services/system-event-catch-all.test.ts:112-165` (row fields + secret redacted from `payload_json`). |
 | R6 | MET | Early return replaced by the generic-entry fallback: `packages/app/src/services/system-event-emitter.ts:70`. Catch-all installed at the CLI ledger attach and drained on flush: `apps/cli/src/system-event-ledger.ts:82-90,107-111`. History endpoint renders uncataloged rows with the generic renderer: `apps/server/src/modules/events/index.ts:328` (`?? 'generic'`; also SSE `:215`). Tests (passed this run): `packages/app/tests/services/system-event-emitter.test.ts:165-192` (unregistered planning event persisted, D3c quota append asserted) and `apps/cli/tests/system-event-ledger.test.ts:220-248` (uncataloged bus event persists after `ledger.flush()`). |
 | R7 | MET | Regression test pinning default Board visibility of an undefined-tier row: `apps/web/tests/modules/observability/system-events-tab.test.ts:410-444` (default filters admit it `:429-431`; `'default'` admits it while gating a diagnostic name `:433-439`; a cataloged default-tier row stays admitted `:441-443`). Pinned to the real implementation: `apps/web/src/modules/observability/SystemEventsTab.tsx:622-625` (`'all'` skips the filter; `'default'` admits `entryTier === undefined`), `tierByName` built from catalog entries only `:814-820`, exported pure helper `:604` (behavior-inert `export`, the only 0794 web production delta). No tier-filter production change — per Q&A Q3. Suite passed this run (35 pass). |
@@ -423,7 +426,7 @@ Each entry cites the first changed line per file (`file:line`).
 | R11 | MET | Drift signal: warn event name constant `system_events.uncataloged` — `packages/app/src/services/system-event-catch-all.ts:44`; once per name per sink at first successful persist `:151-154` (dedup Set `:125`). `renderer='generic'` rows queryable through the history endpoint's catalog metadata: `apps/server/src/modules/events/index.ts:328`. Promotion-list query documented and the D3c retention claim corrected: `docs/design/observabilities-module-polish.md:69-80` (D4) and `:57-60` (D3c). Tests (passed this run): `apps/cli/tests/system-event-ledger.test.ts:220-248` (exactly 1 drift warn across 2 same-name emissions) and `packages/app/tests/services/system-event-catch-all.test.ts:224-236` (once per name across retries). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
+| --------------------- | -------- | --------------- | ---------- |
 | R5 — An uncataloged event emitted on the server bus is persisted | MET | test | `apps/server/tests/upstream-system-events-wiring.test.ts:607-637` (row persisted with emitted name, schemaVersion 2, redacted envelope) + suite run green this run + `apps/server/src/serve.ts:511-520`, `packages/app/src/services/system-event-catch-all.ts:66-87,127-143`. |
 | R6 — An uncataloged planning event emitted from the CLI is persisted | MET | test | `packages/app/tests/services/system-event-emitter.test.ts:165-192` and `apps/cli/tests/system-event-ledger.test.ts:220-248` (persisted after flush, not dropped) + suites green this run + `packages/app/src/services/system-event-emitter.ts:70`, `apps/cli/src/system-event-ledger.ts:82-90`, history renderer `apps/server/src/modules/events/index.ts:328`. |
 | R7 — Uncataloged events are visible by default on the Board | MET | test | `apps/web/tests/modules/observability/system-events-tab.test.ts:410-444` (default and `'default'` filters admit an undefined-tier row; diagnostic still gated; cataloged default-tier admitted) + suite green this run (35 pass) + `apps/web/src/modules/observability/SystemEventsTab.tsx:622-625,814-820`. |
@@ -431,7 +434,9 @@ Each entry cites the first changed line per file (`file:line`).
 | R9 — Uncataloged ingestion still isolates failures | MET | test | `packages/app/tests/services/system-event-catch-all.test.ts:238-253,333-341` (persist failure swallowed; emit resolves; never thrown to producer) + suite green this run + `packages/app/src/services/system-event-catch-all.ts:144-149,188-199`, `packages/app/src/services/system-event-emitter.ts:92-99`. |
 | R10 — Uncataloged rows respect retention | MET | test | `packages/app/tests/services/system-event-catch-all.test.ts:383-428` (real in-memory SQLite DAO: uncataloged prefix pruned to quota 3, other prefix untouched at 6) and `:210-222` (typo-guard intact) + suite green this run + `packages/app/src/services/system-event-catch-all.ts:92-99,143`, `packages/app/src/services/system-event-emitter.ts:88-91`, `packages/app/src/services/system-event-retention.ts:31-44` (unchanged). |
 | R11 — A drift audit names every emitted-but-uncataloged event | MET | test | `apps/cli/tests/system-event-ledger.test.ts:220-248` (exactly 1 `system_events.uncataloged` warn for 2 same-name emissions) and `packages/app/tests/services/system-event-catch-all.test.ts:224-236` + suites green this run + `packages/app/src/services/system-event-catch-all.ts:44,151-154`, `apps/server/src/modules/events/index.ts:328`, promotion-list doc `docs/design/observabilities-module-polish.md:69-80`. |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
 
 Verdict: **PASS with findings** (all P4; no P1–P3). Three-dimensional review of the uncommitted 0794 working-tree changes (functional traceability + SECUA + architecture), run with `--auto`. Scope: the 0794 files (`packages/app` catch-all module + emitter reroute, `apps/server/src/serve.ts`, `apps/cli/src/system-event-ledger.ts`, apps/web R7 regression test, `docs/design/observabilities-module-polish.md`) — 0793's web changes reviewed separately and excluded from traceability. All `file:line` evidence re-read this run (including the pi-lens-reformatted `system-event-catch-all.ts`, `system-event-catch-all.test.ts`, `system-events-tab.test.ts`).
