@@ -23,6 +23,8 @@ for `Plan`, `Acceptance Criteria`, hand-authored `Solution`, and any narrative s
 
 1. **Assemble the full section body** in a temp file. The body is everything *under* the `###`
    heading — do not include the heading line itself; the CLI owns the heading.
+   Sub-headings inside the body MUST be `####` or deeper: a `###` in a body parses as a new
+   top-level section and trips `L2.disallowed-section` (task 0787 grew 8 phantom sections this way).
 
    ```bash
    cat > /tmp/review.md <<'EOF'
