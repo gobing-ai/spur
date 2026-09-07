@@ -7,7 +7,7 @@ import type { WorkflowObservabilityEventMap } from '../../src/workflow/observabi
 import { WorkflowTraceWriter } from '../../src/workflow/trace-writer';
 
 describe('WorkflowTraceWriter', () => {
-    test('writes ordered schema-versioned events only under .spur/runs/workflow', async () => {
+    test('writes ordered schema-versioned events only under .spur/workflow', async () => {
         const cwd = await mkdtemp(join(tmpdir(), 'spur-trace-writer-'));
         const bus = new EventBus<WorkflowObservabilityEventMap>();
         const writer = new WorkflowTraceWriter(cwd, 'run/unsafe');
@@ -101,7 +101,7 @@ describe('WorkflowTraceWriter', () => {
         });
         await writer.flush();
 
-        expect(writer.path).toBe(join(cwd, '.spur', 'runs', 'workflow', 'run_unsafe.jsonl'));
+        expect(writer.path).toBe(join(cwd, '.spur', 'workflow', 'run_unsafe.jsonl'));
         const lines = (await readFile(writer.path, 'utf8'))
             .trim()
             .split('\n')

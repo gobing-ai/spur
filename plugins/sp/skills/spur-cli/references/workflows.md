@@ -209,7 +209,7 @@ spur workflow run ./workflows/approval.yaml --steer                # interactive
   are exclusive (exit `2`); `--silent` cannot combine with either (exit `2`).
 - **`--detail <level>`** sets human verbosity: `minimal` (state changes only), `invocation` (default;
   per-step headers), `full` (transitions + correlation). `--verbose` is shorthand for `--detail full`.
-- **`--trace-file`** appends a redacted, schema-versioned JSONL trace under `.spur/runs/workflow/`
+- **`--trace-file`** appends a redacted, schema-versioned JSONL trace under `.spur/workflow/`
   for post-run analysis - independent of human/JSON output.
 - **`--no-log`** opts out of writing the consolidated all-in-one run log (`.spur/run/<RUNID>.log`).
   By default the log is written **and retained** after the run ends; this flag skips it entirely
@@ -280,7 +280,7 @@ not advertise `--json-envelope` because its JSON projection is a kept-raw docume
 | `--silent` | Suppress all routine output; errors still set a non-zero exit status. |
 | `--verbose` | Include transitions and correlation diagnostics in human progress (implies `--detail full`). |
 | `--detail <level>` | Human detail level: `minimal`, `invocation` (default), or `full`. |
-| `--trace-file` | Append a redacted schema-versioned JSONL trace under `.spur/runs/workflow/`. |
+| `--trace-file` | Append a redacted schema-versioned JSONL trace under `.spur/workflow/`. |
 | `--no-log` | Opt out of writing the consolidated `.spur/run/<RUNID>.log` (retained by default; propagates to `--async` workers). |
 | `--steer` | Accept in-process steering commands on stdin at declared action boundaries (sync only; incompatible with `--json`/`--async`). |
 
@@ -335,7 +335,7 @@ redirecting `agent.run` stages (ADR-047).
 - **Run-log reclamation** (0429): removes retained `.spur/run/<RUNID>.log` files whose mtime is older
   than `workflow.logRetentionDays` in `.spur/config.yaml` (default 30 days; integer days, not minutes).
   Age is the only gate; best-effort deletes never abort the rest. Never touches
-  `.spur/runs/workflow/<RUNID>.jsonl` or `*-partial.md`.
+  `.spur/workflow/<RUNID>.jsonl` or `*-partial.md`.
 - **`--logs`** scopes to log reclamation only (skips stale-run finalization). `--dry-run` applies to
   both scopes (lists what would be removed, writes nothing). `--json` returns
   `{ olderThanMinutes, dryRun, cleaned, logs: { retentionDays, dryRun, reclaimed, failures } }` (with

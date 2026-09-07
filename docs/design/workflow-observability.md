@@ -100,7 +100,7 @@ The command retries the initial lookup briefly to cover the detached-launch/crea
 DTO.
 
 `spur workflow run --trace-file` appends the already-redacted bus projection to
-`.spur/runs/workflow/<safe-run-id>.jsonl`. Each record has `traceSchemaVersion: 1`, an append-order
+`.spur/workflow/<safe-run-id>.jsonl`. Each record has `traceSchemaVersion: 1`, an append-order
 `traceSequence`, event type, and event envelope. Detached runs propagate the option to the child. Definition
 roots remain read-only.
 

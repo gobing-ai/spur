@@ -65,7 +65,7 @@ queue chatter, and a focused query costs one indexed round trip instead of a 100
 **Out of scope:**
 
 - All Board UI — module ordering, tab redesign, new tabviews (feature J4).
-- Server-side ingestion of `.spur/runs/workflow/*.jsonl` trace files (evaluated and declined in
+- Server-side ingestion of `.spur/workflow/*.jsonl` trace files (evaluated and declined in
   favour of the direct-DAO write path; the JSONL trace remains the CLI-side replay artifact).
 - Cross-process steering control channel — remains design-only per task 0365 R12 and
   `docs/design/workflow-steering-control-channel.md`.

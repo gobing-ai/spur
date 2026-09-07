@@ -33,7 +33,7 @@ In:
   persisted DB state). No `monitor` verb.
 - Reclamation of retained logs under a retention policy on the existing `spur workflow clean` verb.
 - Consolidation of existing per-run log sinks (RUNID-output.log, RUNID-STEP-partial.md,
-  `.spur/runs/workflow/RUNID.jsonl`, persisted workflow_runs DB state) treated as a compatibility
+  `.spur/workflow/RUNID.jsonl`, persisted workflow_runs DB state) treated as a compatibility
   decision — check `spur workflow trace`, the async worker
   (apps/cli/src/commands/workflow.ts:53), web board consumers, and the timed-out-implement runbook
   (plugins/sp/skills/spur-dev/references/execution-workflow.md) before repointing any path.
@@ -164,7 +164,7 @@ Feature: All-in-one per-run workflow run log
 - With `--async`, that rendering is discarded outright (detached nohup, three std streams to /dev/null at apps/cli/src/commands/workflow.ts:53).
 - stdin is not captured; `--steer` reads steering commands from stdin, only redacted steering events reach the bus/trace.
 - Non-agent.run actions (engine shell, HITL steps) contribute no output to any log file.
-- Artifacts split across `.spur/run/` and `.spur/runs/workflow/` — a discoverability trap.
+- Artifacts split across `.spur/run/` and `.spur/workflow/` — a discoverability trap.
 
 **Design authority**
 

@@ -1039,7 +1039,7 @@ failureStates:
             }),
         ).toBe(0);
 
-        const tracePath = join(dir, '.spur', 'runs', 'workflow', 'trace-file-run.jsonl');
+        const tracePath = join(dir, '.spur', 'workflow', 'trace-file-run.jsonl');
         const records = (await readFile(tracePath, 'utf8'))
             .trim()
             .split('\n')

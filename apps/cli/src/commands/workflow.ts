@@ -478,7 +478,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option('--silent', 'Suppress all routine output; errors still set a non-zero exit status')
         .option(...SHARED_OPTIONS.verboseWorkflow)
         .option('--detail <level>', 'Human detail level: minimal, invocation, or full')
-        .option('--trace-file', 'Append a redacted schema-versioned JSONL trace under .spur/runs/workflow/')
+        .option('--trace-file', 'Append a redacted schema-versioned JSONL trace under .spur/workflow/')
         .option('--no-log', 'Opt out of writing the consolidated .spur/run/<RUNID>.log')
         .option('--steer', 'Accept local in-process steering commands on stdin at declared action boundaries')
         .option(...SHARED_OPTIONS.jsonSupported)

@@ -39,9 +39,9 @@ designing a file format blind to its only consumer, or a UI blind to what it can
   `.log` ×177, `-verify-answer.txt` ×115, `-precheck-doctor.status` ×78, `-precheck-size.status` ×73,
   `-test-gate.status` ×62, `-test-fix-attempt` ×54, `-implement-partial.md` ×46, `-agent-session.json`
   ×40, and ~20 more.
-- **Corrected during refine:** `.spur/runs/workflow/` **does not exist on disk.**
+- **Corrected during refine:** `.spur/workflow/` **does not exist on disk.**
   `apps/cli/src/commands/workflow.ts:227` advertises `--trace-file` as writing "a redacted
-  schema-versioned JSONL trace under `.spur/runs/workflow/`", but the directory is absent from `.spur/`
+  schema-versioned JSONL trace under `.spur/workflow/`", but the directory is absent from `.spur/`
   — the flag is never used, so the tree is never created. The finding is **not** "two run directories";
   it is **a declared-but-dead trace facility**, whose disposition (adopt as the JSON state cache, or
   delete the flag) belongs to this task's contract.
@@ -60,7 +60,7 @@ designing a file format blind to its only consumer, or a UI blind to what it can
 1. **The run-record contract.** Per workflow-run instance, exactly two files — one **append-only
    markdown** capturing every input and output in sequence (no reads without an explicit order), and
    one **JSON state cache** (read/write). Specify what each holds, who writes them, how the ~30
-   existing artifact kinds map in or are dropped, and what happens to `.spur/runs/workflow/`.
+   existing artifact kinds map in or are dropped, and what happens to `.spur/workflow/`.
 2. **The reader inventory.** Find every stage that currently *reads* an artifact written by an earlier
    stage, before declaring the append-only rule. A live mid-run reader is what makes that rule
    non-trivial; the rule cannot be declared over an unknown set.
@@ -94,7 +94,7 @@ design. A new board module. Anything under `spur task` (feature F92, concurrent 
 ### Requirements
 
 - [ ] R1 — Specify the run-record contract: exactly two files per workflow-run instance — an append-only markdown of every input and output in sequence, and a read/write JSON state cache — stating what each holds and who writes them.
-- [ ] R2 — Map every one of the ~30 existing `.spur/run` artifact kinds into the new contract or explicitly drop it, and state the disposition of the second directory `.spur/runs/workflow/`.
+- [ ] R2 — Map every one of the ~30 existing `.spur/run` artifact kinds into the new contract or explicitly drop it, and state the disposition of the second directory `.spur/workflow/`.
 - [ ] R3 — Identify every current mid-run *reader* of a run artifact before declaring the append-only rule, since a live reader is what makes that rule non-trivial.
 - [ ] R4 — Propose a concrete retention window and GC mechanism for run artifacts, stating the forensic-evidence trade-off, as the recommendation for map open question 3 without deciding it.
 - [ ] R5 — Audit what `ToolUsingTab` reads today with `path:line`; if its source is anything other than the `spur history import` → `spur history analyze` plane, state the gap and what moving it there requires.
@@ -117,7 +117,7 @@ Feature: Run-record consolidation and the Observability read plane
     Given the roughly thirty artifact kinds currently written to .spur/run
     When the mapping is produced
     Then each kind is either mapped into the two-file contract or explicitly dropped
-    And the disposition of .spur/runs/workflow is stated
+    And the disposition of .spur/workflow is stated
 
   Scenario: R3 — append-only is validated against real readers
     Given some pipeline stages may read artifacts written by earlier stages
@@ -163,7 +163,7 @@ Feature: Run-record consolidation and the Observability read plane
 - `TasksTab` / `JobsTab` are deferred: inventory the data gap, no refactor design.
 
 **Closed during refine (premise verification).**
-- `.spur/runs/workflow/` **does not exist** — `--trace-file` declares it but is never used. The
+- `.spur/workflow/` **does not exist** — `--trace-file` declares it but is never used. The
   "two directories" framing was wrong; it is a dead facility needing a disposition.
 - `ToolUsingTab`'s source **is** the token ledger (`TokenLedgerWatcher` over a JSONL `ledgerPath`,
   SSE via `fs.watch`), **not** the history plane. Ruling 2's violation is confirmed; R5 is a migration
@@ -228,7 +228,7 @@ graduates into and in what order; treat the sizing as a deliverable, not a footn
 ### Plan
 - [x] Inventory `.spur/run` by artifact kind with counts and the writing stage for each of the ~30 kinds (R2)
 - [x] Grep every workflow stage, skill, and CLI path for **reads** of `.spur/run/*`; list each reader with `path:line` (R3)
-- [x] Decide the disposition of the declared-but-dead `--trace-file` / `.spur/runs/workflow/` facility: adopt, or remove the flag (R2)
+- [x] Decide the disposition of the declared-but-dead `--trace-file` / `.spur/workflow/` facility: adopt, or remove the flag (R2)
 - [x] Specify the append-only markdown: what it records, write ordering, who appends, and how the reader set from R3 is satisfied or migrated (R1, R3)
 - [x] Specify the JSON state cache: what it holds, read/write access rules, and its relationship to the markdown (R1)
 - [x] Map each of the ~30 artifact kinds into the two files or mark it dropped, with a reason per drop (R2)
@@ -241,13 +241,13 @@ graduates into and in what order; treat the sizing as a deliverable, not a footn
 - [x] Name every required contract, history first, and size each piece S/M/L (R8)
 - [x] Verification: zero source files modified; every source claim carries `path:line`; the single design doc (`run-record-contract.md`) routed per constitution §4.1
 ### Solution
-Specified the two-file run-record contract and the Observability read plane in `docs/design/run-record-contract.md:26-27` (the `<RUNID>.md` + `<RUNID>.state.json` contract table). R1 two-file contract (append-only markdown + read/write JSON state cache); R2 artifact-kind disposition (~30 kinds → markdown/cache/dropped with per-drop reason; `.spur/runs/workflow/` facility removed); R3 mid-run reader inventory (9 readers, all state-readers → cache, append-only feasible); R4 retention proposal (30-day GC, proposal-only vs map open question 3); R5 ToolUsingTab migration (ledger → history plane, live-tail kept as overlay); R6 SystemEventsTab/RoutingTab keep, TasksTab/JobsTab deferred with gaps named; R7 three views → RoutingTab+ToolUsingTab+new RunRecordTab; R8 contracts sized (1 L + 2 M + 2 S). Zero source-file modifications.
+Specified the two-file run-record contract and the Observability read plane in `docs/design/run-record-contract.md:26-27` (the `<RUNID>.md` + `<RUNID>.state.json` contract table). R1 two-file contract (append-only markdown + read/write JSON state cache); R2 artifact-kind disposition (~30 kinds → markdown/cache/dropped with per-drop reason; `.spur/workflow/` facility removed); R3 mid-run reader inventory (9 readers, all state-readers → cache, append-only feasible); R4 retention proposal (30-day GC, proposal-only vs map open question 3); R5 ToolUsingTab migration (ledger → history plane, live-tail kept as overlay); R6 SystemEventsTab/RoutingTab keep, TasksTab/JobsTab deferred with gaps named; R7 three views → RoutingTab+ToolUsingTab+new RunRecordTab; R8 contracts sized (1 L + 2 M + 2 S). Zero source-file modifications.
 ### Testing
 Coverage: N/A (doc-authoring task, no code shipped).
 
 Validation performed:
 - Artifact-kind count: `ls .spur/run/ | sed … | sort | uniq -c` — 1,576 files (grew from 1,518 at charting, confirming the retention evidence), grouped into the ~30 kinds tabulated in the design doc §2.1–§2.3.
-- Reader-grep evidence: `rg -n 'spur/run|\.spur/run|runDir|RUN_DIR' apps plugins scripts` plus `rg -n 'trace-file|\.spur/runs/workflow'` — 9 mid-run readers identified, each cited at path:line in the design doc §3 and verified against source.
+- Reader-grep evidence: `rg -n 'spur/run|\.spur/run|runDir|RUN_DIR' apps plugins scripts` plus `rg -n 'trace-file|\.spur/workflow'` — 9 mid-run readers identified, each cited at path:line in the design doc §3 and verified against source.
 - Source-correctness audit: confirmed ToolUsingTab reads the token ledger via TokenLedgerWatcher (not the history plane), and confirmed SystemEventsTab/RoutingTab/TasksTab/JobsTab read the endpoints named in the design doc §6.
 - `git status` shows only the new design doc plus `docs/tasks4/0598*.md`.
 ### Review
@@ -255,7 +255,7 @@ Validation performed:
 | --- | --- | --- |
 | P1 | ToolUsingTab sources from token ledger, not history plane (ruling 2 violation) | `ToolUsingTab.tsx:6` → `observability/index.ts:244` → `token-ledger-watcher.ts:25`. Migration designed §5; live tail kept as overlay, not dropped. |
 | P1 | Append-only rule gated on unknown readers | Resolved §3: 9 readers inventoried, all read state → JSON cache; only the `--follow` tail reads the markdown (append-safe). Rule feasible without relaxation. |
-| P2 | `.spur/runs/workflow/` dead facility | `workflow.ts:227` declares, `:357` wires, tree absent. Disposition §2.4: delete flag+writer, do not adopt as cache. |
+| P2 | `.spur/workflow/` dead facility | `workflow.ts:227` declares, `:357` wires, tree absent. Disposition §2.4: delete flag+writer, do not adopt as cache. |
 | P3 | Retention window unresolved | §4 proposes 30-day GC; recorded as proposal against map open question 3 (operator decides; deletes nothing). |
 | P4 | TasksTab/JobsTab insufficient backend data | §6.3/§6.4 gaps named (no WBS/AC join; job stats are 4 counters). Deferred, no design. |
 ### References

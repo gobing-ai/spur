@@ -239,7 +239,7 @@ Invariants (enforceable):
 as a distinct source, exiting at terminal status; the structured DB timeline remains the default and
 `--output` does not interleave with it. Removed-and-repointed surfaces are compatibility changes:
 `<RUNID>-output.log` folds into `<RUNID>.log`, and the timed-out-implement runbook tails the new path;
-the `.spur/runs/workflow/<RUNID>.jsonl` trace-file and `<RUNID>-STEP-partial.md` salvage stay distinct
+the `.spur/workflow/<RUNID>.jsonl` trace-file and `<RUNID>-STEP-partial.md` salvage stay distinct
 authorities. Surface shapes: `docs/design/workflow-run-log.md`; decision: `00 ADR-045`; feature `D2`.
 
 ### 6.2 Resume and guard vars contract

@@ -10,7 +10,7 @@ export class WorkflowTraceWriter {
 
     constructor(cwd: string, runId: string) {
         const safeRunId = runId.replace(/[^A-Za-z0-9._-]/g, '_');
-        this.path = join(cwd, '.spur', 'runs', 'workflow', `${safeRunId}.jsonl`);
+        this.path = join(cwd, '.spur', 'workflow', `${safeRunId}.jsonl`);
     }
 
     attach(bus: WorkflowObservabilityBus): void {

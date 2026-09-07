@@ -100,7 +100,7 @@ Removing or repointing any existing sink is a compatibility decision. Before rem
 | timed-out-implement runbook (`plugins/sp/skills/spur-dev/references/execution-workflow.md`) | tails `<RUNID>-output.log` | repoint to `<RUNID>.log` |
 | `spur workflow clean` | finalizes stale runs only | extended with log reclamation |
 
-`.spur/runs/workflow/<RUNID>.jsonl` (`--trace-file`) and `.spur/run/<RUNID>-STEP-partial.md` salvage
+`.spur/workflow/<RUNID>.jsonl` (`--trace-file`) and `.spur/run/<RUNID>-STEP-partial.md` salvage
 remain distinct authorities and are **not** folded into `<RUNID>.log`.
 
 ## Surface additions (shipped, ADR-045)

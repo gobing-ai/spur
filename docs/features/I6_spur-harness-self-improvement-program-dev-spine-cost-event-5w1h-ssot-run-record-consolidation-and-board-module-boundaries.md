@@ -86,7 +86,7 @@ are corrected in their tickets. Recorded here so no session re-derives them.
 | --- | --- |
 | "~55 cataloged events" | **71** entries in `SYSTEM_EVENT_CATALOG`. |
 | "the catalog's `metadataFields` are under-populated" | **Populated on all 71 — but only 12 distinct shapes.** `event()` (`event-names.ts:254`) spreads `SOURCE_PROFILES[source]`, so presentation is inherited per *source*, not per *event*: all six planning events share `entity.kind, entity.id, field, from, to`. Descriptions are string-mangled by `describeEvent()` (`:296`). The catalog is **mis-parameterized, not empty** — and it advertises a `field` that `PlanningEvent` has no property for. The `task.updated` root cause is `planning-write-service.ts:441`, which emits `{event, entity, at}` plus `from`/`to` **only on a status transition**, and never sets `data`. |
-| "a second run directory `.spur/runs/workflow/` exists" | **It does not exist on disk.** `workflow.ts:227` declares it for `--trace-file`, but the flag is unused so the tree is never created. The finding is a **declared-but-dead trace facility**, not two directories. |
+| "a second run directory `.spur/workflow/` exists" | **It does not exist on disk.** `workflow.ts:227` declares it for `--trace-file`, but the flag is unused so the tree is never created. The finding is a **declared-but-dead trace facility**, not two directories. |
 | "`ToolUsingTab`'s source needs auditing" | **Already proven:** `GET /api/observability/tool-use` is a *token-ledger tail* (`observability/index.ts:233`, mounted `:244`) served by `TokenLedgerWatcher` over a JSONL `ledgerPath` with `fs.watch` SSE. It is **not** the history plane. [0598] R5 is therefore a **migration design**, and its hard part is that the ledger is live-tailable while the history plane is batch-imported. |
 
 Minor drift, restated as-of 2026-08-18: `plugins/sp` markdown **25,141** lines (was 25,088 at
@@ -98,7 +98,7 @@ Two facts nobody listed, both material:
 
 - **`.spur/run` holds 1,512 files, flat, in ~30 artifact kinds** (`-verdict.json` ×248, `.log` ×177,
   `-verify-answer.txt` ×115, `-precheck-doctor.status` ×78, `-test-fix-attempt` ×54, …). There is a
-  **second** directory, `.spur/runs/workflow/`, for `--trace-file` JSONL. **No retention policy exists
+  **second** directory, `.spur/workflow/`, for `--trace-file` JSONL. **No retention policy exists
   anywhere.** The two-file rule is the fix; the sprawl is worse than the premise assumed.
 - **`spur workflow --dry-run` walks transitions without executing actions** — which means a two-layer
   plan is derivable today with no engine change. The prototype ticket should confirm this rather than

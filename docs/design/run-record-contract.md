@@ -13,7 +13,7 @@
 3. **`Tasks` and `Jobs` tabs are deferred** — inventory data gaps, no refactor design.
 4. Retention window is **map open question 3, owner: operator** — this doc proposes, does not decide, deletes nothing.
 
-Ground truth established at charting (verified this run, counts drifted up): `.spur/run` is **flat**, holds **1,576 files** today (1,518 at charting — growth is itself retention evidence), across ~30 artifact kinds. `.spur/runs/workflow/` **does not exist on disk**.
+Ground truth established at charting (verified this run, counts drifted up): `.spur/run` is **flat**, holds **1,576 files** today (1,518 at charting — growth is itself retention evidence), across ~30 artifact kinds. `.spur/workflow/` **does not exist on disk**.
 
 ---
 
@@ -80,14 +80,14 @@ Counts are a live `ls .spur/run/` grouping (1,576 files). The ~30 kinds fold int
 
 **Net:** every durable fact lands in one of the two files; the drops are all derived or transient. No artifact kind is silently lost — each drop names the surviving home of its durable content. Run-scoped artifacts and `agent-doctor.json` are disjoint: the cache never carries run linkage, so run-record consolidation ignores it.
 
-### 2.4 `.spur/runs/workflow/` disposition — **remove the facility**
+### 2.4 `.spur/workflow/` disposition — **remove the facility**
 
-`apps/cli/src/commands/workflow.ts:227` declares `--trace-file` writing a "redacted schema-versioned JSONL trace under `.spur/runs/workflow/`"; the flag is wired (`:282` async propagation, `:357` `WorkflowTraceWriter`) but **never exercised** — the tree does not exist on disk. The trace need is already covered twice over:
+`apps/cli/src/commands/workflow.ts:227` declares `--trace-file` writing a "redacted schema-versioned JSONL trace under `.spur/workflow/`"; the flag is wired (`:282` async propagation, `:357` `WorkflowTraceWriter`) but **never exercised** — the tree does not exist on disk. The trace need is already covered twice over:
 
 - the consolidated run log (`WorkflowRunLogSink`, `:374`), which this contract promotes to the append-only `<RUNID>.md`, and
 - the `system_events` ledger (task 0370), which made the JSONL trace redundant for server-side visibility (`docs/tasks3/0370_…md` records server-side ingestion of these traces was declined).
 
-**Disposition: delete the flag, `WorkflowTraceWriter`, and the `.spur/runs/workflow/` doc references.** Do **not** adopt it as the JSON state cache — the cache must be co-located (`<RUNID>.state.json` next to `<RUNID>.md`); a second directory recreates the exact discoverability trap the two-file rule removes.
+**Disposition: delete the flag, `WorkflowTraceWriter`, and the `.spur/workflow/` doc references.** Do **not** adopt it as the JSON state cache — the cache must be co-located (`<RUNID>.state.json` next to `<RUNID>.md`); a second directory recreates the exact discoverability trap the two-file rule removes.
 
 ---
 

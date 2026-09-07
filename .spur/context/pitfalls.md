@@ -68,7 +68,7 @@ Each entry records a past mistake and its correction. Maintained by the
 ## Do-Not-Repeat
 
 - Do not mark a Spur feature "done" when its engine-side support is only in the ts-libs working tree (uncommitted/unpublished). The published package silently no-ops the option. Mark it blocked-on-release, use the sanctioned temporary `link:` (documented in the task), and add a behavioral regression test that fails against the published version.
-- Do not write rule/workflow run logs into `.spur/rules/` — that is the rule-DEFINITION root (local layer). Run traces belong under `.spur/runs/<domain>/<runId>.jsonl`.
+- Do not write rule/workflow run logs into `.spur/rules/` — that is the rule-DEFINITION root (local layer). Run traces belong under `.spur/<domain>/<runId>.jsonl`.
 
 ---
 

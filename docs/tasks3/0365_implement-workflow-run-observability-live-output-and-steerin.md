@@ -67,7 +67,7 @@ console, or durable trace projection.
 - R12. Keep cross-process steering out of the runtime implementation until a durable authenticated,
   ordered, crash-recoverable control channel is designed and approved; record that protocol as a
   follow-up design deliverable.
-- R13. Persist or export a replayable, schema-versioned trace under the established `.spur/runs/<domain>/`
+- R13. Persist or export a replayable, schema-versioned trace under the established `.spur/<domain>/`
   convention when file traces are enabled; never write run traces into definition roots.
 - R14. Cover TTY, non-TTY, `--json`, synchronous, async, cancellation, backpressure, redaction, unavailable
   usage, and resume/failure paths with producer-driven tests and dogfood evidence.
@@ -198,7 +198,7 @@ requirements:
   liveness, and explicit unavailable usage.
 - `packages/app/src/workflow/trace-writer.ts:6` and
   `packages/app/tests/workflow/trace-writer.test.ts:10` add the append-only schema-v1 JSONL projection under
-  `.spur/runs/workflow/`, covering every workflow, agent, and steering event.
+  `.spur/workflow/`, covering every workflow, agent, and steering event.
 - `apps/cli/src/commands/workflow.ts:118`, `apps/cli/src/index.ts:156`,
   `apps/cli/tests/commands/workflow.test.ts:299`, and `apps/cli/tests/commands/workflow.test.ts:468` ship
   default-rich human progress, quiet/silent/verbose/detail compatibility, byte-safe JSON, trace-file
@@ -241,7 +241,7 @@ design-only exactly as R12 requires.
 | R10 | MET | packages/app/src/workflow/steering.ts:84 and packages/app/tests/workflow/steering.test.ts:24 — targeted/versioned commands, ack/nack, idempotency, timeout, cancellation |
 | R11 | MET | packages/app/src/workflow/steering.ts:181 and :194 — immutable completed history and explicit failed-attempt retry gate; regressions at packages/app/tests/workflow/steering.test.ts:90 and :173 |
 | R12 | MET | docs/design/workflow-steering-control-channel.md:1 (49 lines: command record, processing invariants, storage/transport seam, explicit non-goals) and apps/cli/src/commands/workflow.ts:151 — detached steering rejected |
-| R13 | MET | packages/app/src/workflow/trace-writer.ts:13 — `join(cwd, '.spur', 'runs', 'workflow', …)`; schema v1 at :34, append-only at :41, runId sanitized against traversal at :12; test packages/app/tests/workflow/trace-writer.test.ts:10 |
+| R13 | MET | packages/app/src/workflow/trace-writer.ts:13 — `join(cwd, '.spur', 'workflow', …)`; schema v1 at :34, append-only at :41, runId sanitized against traversal at :12; test packages/app/tests/workflow/trace-writer.test.ts:10 |
 | R14 | MET | Producer-driven suites across TTY-mode policy, machine modes, async follow, cancellation, backpressure, redaction, unavailable usage — see re-audit block below for reproducible counts |
 | R15 | MET | package.json:32 — released @gobing-ai/ts-* 0.4.14 catalog; seams verified present in the consumed packages (see re-audit) |
 
@@ -318,7 +318,7 @@ R15 seams verified present in the **consumed** packages, not just claimed: `onOu
 | R10 | MET | `packages/app/src/workflow/steering.ts:84` implements targeted commands, version checks, ack/nack, actor/deadline, idempotency, timeout, and cancellation. |
 | R11 | MET | `packages/app/src/workflow/steering.ts:181` rejects completed-history mutation and `packages/app/src/workflow/steering.ts:194` policy-gates failed-attempt retries. |
 | R12 | MET | `docs/design/workflow-steering-control-channel.md:1` is design-only; runtime rejects detached steering at `apps/cli/src/commands/workflow.ts:151`. |
-| R13 | MET | `packages/app/src/workflow/trace-writer.ts:6` writes schema-v1 append-only traces only under `.spur/runs/workflow/`. |
+| R13 | MET | `packages/app/src/workflow/trace-writer.ts:6` writes schema-v1 append-only traces only under `.spur/workflow/`. |
 | R14 | MET | Producer/CLI suites cover TTY-mode policy, machine modes, async follow, cancellation, pressure, redaction, unavailable usage, and failures; compiled dogfood covers the end-to-end surface. |
 | R15 | MET | `package.json:32` consumes published 0.4.14 packages; upstream publish run `30388111243` succeeded and the rebuilt binary passed compiled dogfood. |
 

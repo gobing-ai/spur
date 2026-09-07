@@ -627,7 +627,7 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   implies full correlation and FSM transitions. `--quiet` keeps only the final summary;
   `--silent` suppresses routine output. `--json` emits only the existing result object.
   `--trace-file` appends the schema-versioned redacted stream under
-  `.spur/runs/workflow/<run-id>.jsonl` and propagates to the detached child. `--steer` enables
+  `.spur/workflow/<run-id>.jsonl` and propagates to the detached child. `--steer` enables
   synchronous in-process `continue|note|retry|abort` commands at an action's declared
   `steeringBoundary`; it conflicts with `--json` and `--async`, and retry additionally requires an
   explicit idempotent `retryPolicy`. `--no-plan` remains orthogonal. Mechanism, backpressure, redaction,

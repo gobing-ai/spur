@@ -11,7 +11,7 @@ generated_at: 2026-08-04T17:05:30Z
 
 Today no single artifact spans a `spur workflow run` beginning to end. Four sinks exist, none
 complete: a bounded agent-output log (`.spur/run/RUNID-output.log`, only `agent.run` child output),
-a timeout-only `partial.md` salvage, an opt-in redacted JSONL trace (`.spur/runs/workflow/RUNID.jsonl`),
+a timeout-only `partial.md` salvage, an opt-in redacted JSONL trace (`.spur/workflow/RUNID.jsonl`),
 and persisted DB state. The run's own foreground rendering (plan preview, per-step progress, final
 summary) is terminal-only — and under `--async` it is discarded outright (`nohup … </dev/null
 >/dev/null 2>&1`, `apps/cli/src/commands/workflow.ts:53`), the exact mode an operator most needs to
@@ -68,7 +68,7 @@ steering input, and shell/HITL output; keep plain `tail -f` for real-time follow
 
 **Trade-offs:**
 - **Pros:** lowest risk, no new flag, no trace extension, reuse of the bounded relay.
-- **Cons:** leaves two directory trees (`.spur/run` vs `.spur/runs/workflow`) unconsolidated;
+- **Cons:** leaves two directory trees (`.spur/run` vs `.spur/workflow`) unconsolidated;
   does not unify the log; still needs the async worker repointed; no CLI improvement beyond what
   `tail -f` gives.
 

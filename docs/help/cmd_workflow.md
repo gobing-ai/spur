@@ -71,7 +71,7 @@ spur workflow run [options] <file>
 | `--silent` | Suppress all routine output; errors still set a non-zero exit status |
 | `--verbose` | Include transitions and correlation diagnostics (implies `--detail full`) |
 | `--detail <level>` | Human detail: `minimal` \| `invocation` (default) \| `full` |
-| `--trace-file` | Append a redacted schema-versioned JSONL trace under `.spur/runs/workflow/` |
+| `--trace-file` | Append a redacted schema-versioned JSONL trace under `.spur/workflow/` |
 | `--no-log` | Opt out of writing the consolidated `.spur/run/<RUNID>.log` (written+retained by default) |
 | `--steer` | Accept in-process steering commands on stdin at declared action boundaries (sync only) |
 | `--json` | Output machine-readable JSON |
@@ -289,7 +289,7 @@ Housekeeping **two scopes** (unless scoped by flag):
 1. **Stale-run finalization** — bulk-finalize orphaned `running`/`pending` runs as `failed`.
 2. **Run-log reclamation** — remove retained `.spur/run/<RUNID>.log` files older than
    `workflow.logRetentionDays` in `.spur/config.yaml` (default 30 days). Never touches
-   `.spur/runs/workflow/<RUNID>.jsonl` or `*-partial.md`.
+   `.spur/workflow/<RUNID>.jsonl` or `*-partial.md`.
 
 ## Workflow Action and Guard Kinds
 

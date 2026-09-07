@@ -104,7 +104,7 @@ finalization behavior (`--older-than` / `--force` / `--dry-run`).
 - Best-effort deletes: a permission error on one file does not abort the rest;
   report failures in the result / stderr.
 - `--dry-run` lists candidates without unlinking.
-- Does not touch `.spur/runs/workflow/<RUNID>.jsonl` or `*-partial.md`
+- Does not touch `.spur/workflow/<RUNID>.jsonl` or `*-partial.md`
   (distinct authorities per design doc).
 
 ## Surfaces touched
@@ -129,11 +129,11 @@ finalization behavior (`--older-than` / `--force` / `--dry-run`).
 Implemented log reclamation in `spur workflow clean` (feature D2 / R9).
 
 - `packages/config/src/index.ts:413` - new `WorkflowConfigSchema` (`logRetentionDays`, int > 0, default 30) + root `workflow` key in `spurConfigSchema` (`:444`); `WorkflowConfig` type; `workflow` added to `SpurAppConfig` Pick.
-- `packages/app/src/services/workflow-service.ts:536` - new `cleanRunLogs(retentionDays, dryRun)` sibling of `clean`: lists `.spur/run/*.log`, filters by mtime vs `now - retentionDays`, deletes (or lists under dry-run), best-effort with `failures` reporting; missing run dir is a no-op; never touches `.spur/runs/workflow/` JSONL or partials. New `resolveWorkflowLogRetentionDays(cwd)` (`:901`) degrades to 30 on unreadable/absent config (same pattern as `resolveOutputLogConfig`). New `ReclaimedRunLog` / `RunLogReclamationResult` types.
+- `packages/app/src/services/workflow-service.ts:536` - new `cleanRunLogs(retentionDays, dryRun)` sibling of `clean`: lists `.spur/run/*.log`, filters by mtime vs `now - retentionDays`, deletes (or lists under dry-run), best-effort with `failures` reporting; missing run dir is a no-op; never touches `.spur/workflow/` JSONL or partials. New `resolveWorkflowLogRetentionDays(cwd)` (`:901`) degrades to 30 on unreadable/absent config (same pattern as `resolveOutputLogConfig`). New `ReclaimedRunLog` / `RunLogReclamationResult` types.
 - `packages/app/src/index.ts` - exports `resolveWorkflowLogRetentionDays`.
 - `apps/cli/src/commands/workflow.ts:487-500` - `clean` gains `--logs` (log-reclamation-only scope); without it, runs **both** scopes (stale-run finalization + log reclamation) in one invocation. `--dry-run` applies to both; `--older-than`/`--force` remain stale-run-only (minutes vs days unit split per design). Human output per scope; JSON is additive: `{ olderThanMinutes, dryRun, cleaned, logs: { retentionDays, dryRun, reclaimed, failures } }`, or the reclamation object alone under `--logs`. Per-file removal failures go to stderr.
 - Tests - config: schema default/rejection + root key (4 cases). Service: reclaim-old/keep-fresh, dry-run lists without unlinking, missing-dir no-op, non-log files ignored (4); resolver: override/default/unreadable (3). CLI: `--logs` skips stale finalization, `--logs --dry-run` lists without deleting, dual-scope one-liner, `workflow.logRetentionDays` override honored, JSON shape, plus existing clean/--force tests pinned to temp cwds (the verb now scans the real filesystem).
-- `plugins/sp/skills/spur-cli/references/workflows.md:95,209,270` - clean row + signature gain `--logs`; new "clean - housekeeping scopes" section documenting dual-scope default, `--logs`, `workflow.logRetentionDays` (days, not minutes), JSON shape, and the `.spur/runs/workflow/` non-touch invariant (ADR-038 parity).
+- `plugins/sp/skills/spur-cli/references/workflows.md:95,209,270` - clean row + signature gain `--logs`; new "clean - housekeeping scopes" section documenting dual-scope default, `--logs`, `workflow.logRetentionDays` (days, not minutes), JSON shape, and the `.spur/workflow/` non-touch invariant (ADR-038 parity).
 ### Testing
 **Re-verify results** (2026-08-05T02:13:49Z, `/sp-dev-verifyall --feature D2 --force --fix all`)
 
