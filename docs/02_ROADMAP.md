@@ -2,10 +2,10 @@
 doc: 02_ROADMAP
 owns: WHEN — phases, current vs deferred, sequencing
 authority: derived
-version: 1.8.0
+version: 1.9.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-06
+updated_at: 2026-09-07
 read_before: placing work in a phase
 edit_rules: 99 §6.3
 sync: [T5, T6]
@@ -108,6 +108,10 @@ cleared the A17 cutover gate. The legacy `kanban.md` generator is removed.
 ## Phase 2 — Agent Execution & Run Model
 
 Turn detection into execution with a captured run model.
+
+- [ ] **B5 executor availability:** config/selection/doctor and project updater, then upstream quota
+  event integration and durable server application. Recovery detection remains deferred; design
+  accepted for task decomposition. See [executor availability](design/executor-availability.md).
 
 - [x] `spur agent run <prompt>` — execution via `AiRunner` shipped (team-mode `--spec`/`--drain`
   occupant addressing, identity-pinned `agent wait`, role-based executor selection, G5 inline

@@ -2,9 +2,9 @@
 doc: 01_PRD
 owns: WHAT — product vision, users, scope (in / out / deferred)
 authority: authoritative-on-scope
-version: 1.8.0
+version: 1.9.0
 owner: Robin Min
-updated_at: 2026-09-06
+updated_at: 2026-09-07
 read_before: adding a command or feature
 edit_rules: 99 §6.2
 sync: [T1, T4, T6]
@@ -89,6 +89,7 @@ creation failures; automatic task implementation and model execution inside HTTP
 | Project scaffold                                           | `spur init`                                        | local CLI + DAOs                           |
 | Agent detection / health                                   | `spur agent list\|doctor`                          | `ts-ai-runner`                             |
 | Agent run execution                                        | `spur agent run`                                   | `ts-ai-runner` (`AiRunner`)                |
+| Executor availability and quota-driven project updates      | Existing executor config, routing, and `spur agent doctor` | B5 (accepted scope; recovery detection and account-wide fan-out deferred) |
 | Agent spec management                                      | `spur agent create\|edit\|delete`, `list --specs`  | `ts-ai-runner` spec helpers                |
 | Inter-agent durable messages                               | `spur message send\|inbox\|reply`                  | `MessageService` + ts-db                   |
 | Team coordination                                          | `spur team assign\|status\|up\|down\|start\|stop` | `TeamService` + `SupervisorService` (`spur serve`) |

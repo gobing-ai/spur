@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.41.0
+version: 1.42.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-06
+updated_at: 2026-09-07
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -1406,3 +1406,15 @@ Capability, budget, proof, and trip-wire failures are deterministic and fail clo
 boundaries. Raw prompts, output, and logs remain bounded references rather than packet/event content.
 Unavailable measurement stays unavailable; it never becomes zero. The always-loaded guide byte gate
 is process enforcement owned by `99 §6.7` and task 0705, so it does not receive a project ADR.
+
+## 25. Executor Availability (accepted design — not yet built)
+
+B5 preserves merged YAML as the availability authority. Upstream runner quota observations carry
+Spur's exact dispatch attribution into a shared app subscription. The subscription records the
+newest pending update per project/executor in the existing SQLite database; the local server
+applies it through the config package's exact-name updater and refreshes subsequent dispatch
+decisions. Immediate fallback exclusion remains invocation-local. Event-history pruning cannot
+remove pending updates. Recovery has a consumer but no automatic producer.
+
+ADR-111 records this delivery choice. Shapes, failure contracts, and rejected alternatives live
+in [executor availability](design/executor-availability.md).
