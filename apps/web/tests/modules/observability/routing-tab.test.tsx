@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, render, waitFor } from '@testing-library/react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import RoutingTab, {
     formatTokenCount,
@@ -8,6 +8,12 @@ import RoutingTab, {
     sourceLabel,
 } from '../../../src/modules/observability/RoutingTab';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
+
+/**
+ * Bare renders use `all`: no since bound, so the legacy exact-URL assertion
+ * (endpoint without a query) still holds (task 0793 R3/R4).
+ */
+const baseProps = { timeRange: 'all', onTimeRangeChange: () => {} } as const;
 
 function jsonResponse(body: unknown): Response {
     return new Response(JSON.stringify(body), {
@@ -96,7 +102,7 @@ describe('RoutingTab (task 0552)', () => {
             ],
         });
 
-        const view = render(<RoutingTab />);
+        const view = render(<RoutingTab {...baseProps} />);
         await view.findByText('Role → executor');
 
         // Counts render exactly as the query returns them.
@@ -127,7 +133,7 @@ describe('RoutingTab (task 0552)', () => {
     test('R2: token totals render with no currency figure anywhere', async () => {
         stubRouting({ roles: [role()] });
 
-        const view = render(<RoutingTab />);
+        const view = render(<RoutingTab {...baseProps} />);
         await view.findByText('Token consumption by role');
 
         expect(view.getByText('input')).toBeTruthy();
@@ -172,7 +178,7 @@ describe('RoutingTab (task 0552)', () => {
             ],
         });
 
-        const view = render(<RoutingTab />);
+        const view = render(<RoutingTab {...baseProps} />);
         await view.findByText('Token consumption by role');
 
         const unmeasuredCard = document.querySelector('[data-role-attribution="ghost"]');
@@ -201,7 +207,7 @@ describe('RoutingTab (task 0552)', () => {
             ],
         });
 
-        const view = render(<RoutingTab />);
+        const view = render(<RoutingTab {...baseProps} />);
         await view.findByText('Token consumption by role');
 
         expect(document.querySelector('[data-token-bucket="exact"]')?.textContent).toContain('1,000');
@@ -213,7 +219,7 @@ describe('RoutingTab (task 0552)', () => {
     test('R5: an empty dataset states that nothing has been recorded, not zero activity', async () => {
         stubRouting({ pairs: [], roles: [] });
 
-        const view = render(<RoutingTab />);
+        const view = render(<RoutingTab {...baseProps} />);
         await view.findByText(/No routing attribution has been recorded/i);
 
         expect(document.querySelector('[data-routing-empty]')).toBeTruthy();
@@ -225,9 +231,39 @@ describe('RoutingTab (task 0552)', () => {
     test('fetches the routing-summary endpoint through the API client', async () => {
         stubRouting({ pairs: [], roles: [] });
 
-        const view = render(<RoutingTab />);
+        const view = render(<RoutingTab {...baseProps} />);
         await view.findByText(/No routing attribution has been recorded/i);
         expect(requestedUrls.some((u) => u.endsWith('/api/observability/routing-summary'))).toBe(true);
+    });
+
+    test('0793 R3: carries the derived since for a preset range and refetches when it changes', async () => {
+        stubRouting({ pairs: [], roles: [] });
+
+        const view = render(<RoutingTab timeRange="4h" onTimeRangeChange={() => {}} />);
+        await view.findByText(/No routing attribution has been recorded/i);
+        const firstCall = requestedUrls.find((u) => u.includes('/observability/routing-summary'));
+        expect(firstCall).toBeDefined();
+        const since = new URL(firstCall as string).searchParams.get('since');
+        expect(since).not.toBeNull();
+        // The since is a real instant derived from the selected window.
+        expect(Number.isNaN(Date.parse(since as string))).toBe(false);
+
+        // timeRange is an effect dep: changing the shell range refetches.
+        view.rerender(<RoutingTab timeRange="24h" onTimeRangeChange={() => {}} />);
+        await waitFor(() =>
+            expect(requestedUrls.filter((u) => u.includes('/observability/routing-summary')).length).toBe(2),
+        );
+    });
+
+    test('0793 R4: the all range sends no since bound', async () => {
+        stubRouting({ pairs: [], roles: [] });
+
+        const view = render(<RoutingTab timeRange="all" onTimeRangeChange={() => {}} />);
+        await view.findByText(/No routing attribution has been recorded/i);
+        const call = requestedUrls.find((u) => u.includes('/observability/routing-summary')) ?? '';
+        expect(call).not.toBe('');
+        expect(new URL(call).searchParams.get('since')).toBeNull();
+        expect(call.endsWith('/api/observability/routing-summary')).toBe(true);
     });
 });
 

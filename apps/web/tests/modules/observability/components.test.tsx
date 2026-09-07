@@ -30,6 +30,9 @@ import ToolUsingTab from '../../../src/modules/observability/ToolUsingTab';
 import { OBSERVABILITY_TABS, type ObservabilityLiveness } from '../../../src/modules/observability/tabs';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
+/** Required range props under the shell-owned contract (task 0793 Q3). */
+const tabProps = { timeRange: '4h', onTimeRangeChange: () => {} } as const;
+
 class FakeEventSource {
     static instances: FakeEventSource[] = [];
 
@@ -271,10 +274,19 @@ describe('observability components', () => {
         expect(shell?.className).toContain('max-w-[1600px]');
         expect(shell?.className).toContain('mx-auto');
         expect(getByText('📡')).toBeDefined();
-        expect(getByText('Observability')).toBeDefined();
+        expect(getByText('Observabilities')).toBeDefined();
         expect(getByText('System event streams, queue execution telemetry, and routing attribution')).toBeDefined();
         const chip = getByTestId('observability-liveness-chip');
         expect(chip).toBeDefined();
+
+        // Task 0793 R2: the time-range presets are a shell header control,
+        // rendered on the default tab and not inside any tab's filter bar.
+        const presets = getByRole('group', { name: 'Time range presets' });
+        expect(presets).toBeDefined();
+        expect(presets.closest('[data-observability-shell]')).not.toBeNull();
+        expect(
+            container.querySelector('[data-system-events-tab] fieldset[aria-label="Time range presets"]'),
+        ).toBeNull();
 
         const summaryTab = getByRole('tab', { name: 'Summary' });
         expect(summaryTab.getAttribute('aria-selected')).toBe('true');
@@ -288,6 +300,12 @@ describe('observability components', () => {
         expect(systemEventsTab.getAttribute('aria-selected')).toBe('true');
         expect(systemEventsTab.getAttribute('aria-controls')).toBe('observability-tab-panel-system-events');
         expect(getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('observability-tab-system-events');
+
+        // Task 0793 R2: the selector stays visible on every tab and the
+        // selection persists across switches (shell state is the sole owner).
+        expect(getByRole('group', { name: 'Time range presets' })).toBeDefined();
+        fireEvent.click(getByRole('button', { name: '24h' }));
+        expect(getByRole('button', { name: '24h' }).getAttribute('aria-pressed')).toBe('true');
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
         expect(calls.some((url) => url.includes('/events/history?limit=100'))).toBe(true);
@@ -316,6 +334,14 @@ describe('observability components', () => {
         expect(calls.some((url) => url.includes('/jobs'))).toBe(true);
         expect(calls.some((url) => url.includes('/jobs/schedules'))).toBe(true);
 
+        // Task 0793 R2: presets remain visible on Jobs and Routing, still owned
+        // by the shell header, with the earlier selection intact.
+        expect(getByRole('group', { name: 'Time range presets' })).toBeDefined();
+        expect(getByRole('button', { name: '24h' }).getAttribute('aria-pressed')).toBe('true');
+        fireEvent.click(getByRole('tab', { name: 'Routing' }));
+        expect(getByRole('group', { name: 'Time range presets' })).toBeDefined();
+        expect(getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('observability-tab-routing');
+
         // Switch back to System Events
         fireEvent.click(getByRole('tab', { name: 'System Events' }));
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
@@ -323,7 +349,7 @@ describe('observability components', () => {
 
     test('system events tab fetches history and prepends live SSE events', async () => {
         installObservabilityFetchMock();
-        const { queryAllByText } = render(<SystemEventsTab />);
+        const { queryAllByText } = render(<SystemEventsTab {...tabProps} />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
         expect(FakeEventSource.instances).toHaveLength(1);
@@ -349,7 +375,7 @@ describe('observability components', () => {
         installObservabilityFetchMock();
         const livenessEvents: ObservabilityLiveness[] = [];
         const { queryAllByText, getByText } = render(
-            <SystemEventsTab onLivenessChange={(l) => livenessEvents.push(l)} />,
+            <SystemEventsTab {...tabProps} onLivenessChange={(l) => livenessEvents.push(l)} />,
         );
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
@@ -365,7 +391,7 @@ describe('observability components', () => {
         installObservabilityFetchMock();
         const livenessEvents: ObservabilityLiveness[] = [];
         const { queryAllByText, getByRole } = render(
-            <SystemEventsTab onLivenessChange={(l) => livenessEvents.push(l)} />,
+            <SystemEventsTab {...tabProps} onLivenessChange={(l) => livenessEvents.push(l)} />,
         );
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
@@ -395,7 +421,7 @@ describe('observability components', () => {
         installObservabilityFetchMock();
         const livenessEvents: ObservabilityLiveness[] = [];
         const { queryAllByText, getByText } = render(
-            <SystemEventsTab onLivenessChange={(l) => livenessEvents.push(l)} />,
+            <SystemEventsTab {...tabProps} onLivenessChange={(l) => livenessEvents.push(l)} />,
         );
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
@@ -419,7 +445,7 @@ describe('observability components', () => {
 
     test('system events tab renders the default visible desktop columns and customizer (J92 R1/R3)', async () => {
         installObservabilityFetchMock();
-        const { container, queryAllByText } = render(<SystemEventsTab />);
+        const { container, queryAllByText } = render(<SystemEventsTab {...tabProps} />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
@@ -434,7 +460,7 @@ describe('observability components', () => {
 
     test('event names are colored by a stable prefix-to-color map (task 0223 R4/R5/R6)', async () => {
         installObservabilityFetchMock();
-        const { queryAllByText } = render(<SystemEventsTab />);
+        const { queryAllByText } = render(<SystemEventsTab {...tabProps} />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
@@ -452,7 +478,7 @@ describe('observability components', () => {
 
     test('event-name cell has an expand button that toggles a detail panel (task 0375 R4)', async () => {
         installObservabilityFetchMock();
-        const { queryAllByText, container } = render(<SystemEventsTab />);
+        const { queryAllByText, container } = render(<SystemEventsTab {...tabProps} />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
@@ -487,7 +513,7 @@ describe('observability components', () => {
 
     test('system events tab derives prefix filters from catalog metadata', async () => {
         installObservabilityFetchMock();
-        const { queryAllByText, getByRole } = render(<SystemEventsTab />);
+        const { queryAllByText, getByRole } = render(<SystemEventsTab {...tabProps} />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
         expect(queryAllByText('queue.job.completed').length).toBeGreaterThan(0);
@@ -545,7 +571,7 @@ describe('observability components', () => {
             }
             return new Response('not found', { status: 404 });
         }) as unknown as typeof fetch);
-        const { queryAllByText, getByRole } = render(<SystemEventsTab />);
+        const { queryAllByText, getByRole } = render(<SystemEventsTab {...tabProps} />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
         expect(queryAllByText('bus.handler.error').length).toBeGreaterThan(0);
@@ -558,7 +584,7 @@ describe('observability components', () => {
 
     test('filter bar exposes a multi-select prefix pill row (task 0224 R1/R2)', async () => {
         installObservabilityFetchMock();
-        const { queryAllByText, getByRole } = render(<SystemEventsTab />);
+        const { queryAllByText, getByRole } = render(<SystemEventsTab {...tabProps} />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
@@ -590,7 +616,7 @@ describe('observability components', () => {
 
     test('filter bar exposes a segmented tier toggle (task 0224 R3)', async () => {
         installObservabilityFetchMock();
-        const { container, queryAllByText } = render(<SystemEventsTab />);
+        const { container, queryAllByText } = render(<SystemEventsTab {...tabProps} />);
 
         // The filter bar only renders after the events array is loaded.
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
@@ -612,7 +638,7 @@ describe('observability components', () => {
     });
     test('search input has an inline scope selector (task 0224 R4)', async () => {
         installObservabilityFetchMock();
-        const { queryAllByText, getByRole } = render(<SystemEventsTab />);
+        const { queryAllByText, getByRole } = render(<SystemEventsTab {...tabProps} />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
@@ -622,14 +648,17 @@ describe('observability components', () => {
         expect((scopeSelect as HTMLSelectElement).value).toBe('all');
     });
 
-    test('time-range presets restrict visible events to the trailing window (task 0224 R5; J92 R1/R3)', async () => {
-        // Two events: one old (>5m ago), one recent. After picking 30s only
-        // the recent one should remain.
+    test('time-range presets live in the shell and drive every tab query (task 0793 R2-R4)', async () => {
+        // Two events: one old (>5m ago), one recent. The shell's preset drives
+        // the System Events query: 30s keeps only the recent row; `all` clears
+        // the since bound entirely (R4).
         const now = Date.now();
         const recentIso = new Date(now - 5_000).toISOString();
         const oldIso = new Date(now - 10 * 60_000).toISOString();
+        const calls: string[] = [];
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
+            calls.push(url);
             if (url.includes('/events/history')) {
                 const urlObj = new URL(url, 'http://localhost');
                 const sinceParam = urlObj.searchParams.get('since');
@@ -663,26 +692,49 @@ describe('observability components', () => {
             }
             return new Response('not found', { status: 404 });
         }) as unknown as typeof fetch);
-        const { queryAllByText, getByRole } = render(<SystemEventsTab />);
+        const { queryAllByText, getByRole } = render(<ObservabilityShell />);
 
+        // R2: the presets are visible before any tab mounts its own filters,
+        // inside the shell's flex-wrap header row, with the shell's 4h default.
+        const presets = getByRole('group', { name: 'Time range presets' });
+        expect(presets).toBeDefined();
+        expect(Array.from(presets.querySelectorAll('button')).map((button) => button.textContent)).toEqual([
+            '30s',
+            '5m',
+            '1h',
+            '4h',
+            '24h',
+            '7d',
+            'All',
+        ]);
+        expect(getByRole('button', { name: '4h' }).getAttribute('aria-pressed')).toBe('true');
+        expect(presets.parentElement?.className).toContain('flex-wrap');
+
+        // On System Events the shell's default 4h window drives the query (R3).
+        fireEvent.click(getByRole('tab', { name: 'System Events' }));
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
         expect(queryAllByText('queue.job.completed').length).toBeGreaterThan(0);
+        expect(calls.some((u) => u.includes('/events/history') && u.includes('since='))).toBe(true);
 
-        // Click the 30s preset button
-        const btn30s = getByRole('button', { name: '30s' });
-        fireEvent.click(btn30s);
-        await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
-        expect(queryAllByText('queue.job.completed').length).toBe(0);
+        // Click the 30s preset in the shell: the tab refetches with the new since.
+        fireEvent.click(getByRole('button', { name: '30s' }));
+        await waitFor(() => expect(queryAllByText('queue.job.completed').length).toBe(0));
 
-        // Click All to restore
-        const btnAll = getByRole('button', { name: 'All' });
-        fireEvent.click(btnAll);
+        // Selection persists across tab switches (R2).
+        fireEvent.click(getByRole('tab', { name: 'Jobs' }));
+        expect(getByRole('button', { name: '30s' }).getAttribute('aria-pressed')).toBe('true');
+
+        // `all` clears the bound: the next history query carries no since (R4).
+        fireEvent.click(getByRole('button', { name: 'All' }));
+        fireEvent.click(getByRole('tab', { name: 'System Events' }));
         await waitFor(() => expect(queryAllByText('queue.job.completed').length).toBeGreaterThan(0));
+        const lastHistoryCall = [...calls].reverse().find((u) => u.includes('/events/history')) ?? '';
+        expect(lastHistoryCall).not.toContain('since=');
     });
 
     test('clear-filters button appears when filters are active and resets them (task 0224 R6)', async () => {
         installObservabilityFetchMock();
-        const { queryAllByText, queryByRole, getByRole } = render(<SystemEventsTab />);
+        const { queryAllByText, queryByRole, getByRole } = render(<SystemEventsTab {...tabProps} />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
@@ -703,7 +755,7 @@ describe('observability components', () => {
 
     test('filter bar renders an inline result count (task 0224 R7)', async () => {
         installObservabilityFetchMock();
-        const { queryAllByText, getByText } = render(<SystemEventsTab />);
+        const { queryAllByText, getByText } = render(<SystemEventsTab {...tabProps} />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
@@ -724,7 +776,7 @@ describe('observability components', () => {
 
         try {
             installObservabilityFetchMock();
-            const { container, queryAllByText, getByText } = render(<SystemEventsTab />);
+            const { container, queryAllByText, getByText } = render(<SystemEventsTab {...tabProps} />);
 
             await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
@@ -748,7 +800,7 @@ describe('observability components', () => {
 
     test('severity and event family are never communicated by color alone', async () => {
         installObservabilityFetchMock();
-        const { queryAllByText } = render(<SystemEventsTab />);
+        const { queryAllByText } = render(<SystemEventsTab {...tabProps} />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
@@ -769,7 +821,7 @@ describe('observability components', () => {
 
     test('detail panel renders typed summary and is keyboard-toggleable (task 0225 R3 + 0375 R4)', async () => {
         installObservabilityFetchMock();
-        const { container, queryAllByText } = render(<SystemEventsTab />);
+        const { container, queryAllByText } = render(<SystemEventsTab {...tabProps} />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
@@ -804,7 +856,6 @@ describe('observability components', () => {
         const base = {
             selectedPrefixes: new Set<string>(),
             tierFilter: 'all' as const,
-            timeWindow: 'all' as const,
             runId: '',
         };
         const nameUrl = historyUrl(serializeFilter({ ...base, searchQuery: 'task.created', searchScope: 'name' }));
@@ -858,7 +909,7 @@ describe('observability components', () => {
             return new Response('not found', { status: 404 });
         }) as unknown as typeof fetch);
 
-        const view = render(<SystemEventsTab />);
+        const view = render(<SystemEventsTab {...tabProps} />);
         await waitFor(() => expect(view.getByText('workflow.action.done')).toBeDefined());
         const row = view.getByText('workflow.action.done').closest('tr') as HTMLTableRowElement;
         expect(row.textContent).toContain('info');
@@ -918,7 +969,7 @@ describe('observability components', () => {
             return new Response('not found', { status: 404 });
         }) as unknown as typeof fetch);
 
-        const view = render(<SystemEventsTab />);
+        const view = render(<SystemEventsTab {...tabProps} />);
         await waitFor(() => expect(view.getByTestId('system-event-name')).toBeDefined());
         // Hover the event name to open the ephemeral tooltip.
         fireEvent.mouseEnter(view.getByTestId('system-event-name'));
@@ -976,7 +1027,7 @@ describe('observability components', () => {
             return new Response('not found', { status: 404 });
         }) as unknown as typeof fetch);
 
-        const view = render(<SystemEventsTab />);
+        const view = render(<SystemEventsTab {...tabProps} />);
         await waitFor(() => expect(view.getByTestId('system-event-name')).toBeDefined());
 
         // Primary pin trigger: click the event name (no need to leave the hover target).
@@ -1032,7 +1083,7 @@ describe('observability components', () => {
             return new Response('not found', { status: 404 });
         }) as unknown as typeof fetch);
 
-        const view = render(<SystemEventsTab />);
+        const view = render(<SystemEventsTab {...tabProps} />);
         await waitFor(() => expect(view.getByTestId('system-event-name')).toBeDefined());
         fireEvent.mouseEnter(view.getByTestId('system-event-name'));
         const pinBtn = await waitFor(() => view.getByTestId('system-event-payload-tooltip-pin'));
@@ -1088,7 +1139,7 @@ describe('observability components', () => {
             return new Response('not found', { status: 404 });
         }) as unknown as typeof fetch);
 
-        const view = render(<SystemEventsTab />);
+        const view = render(<SystemEventsTab {...tabProps} />);
         await waitFor(() => expect(view.getByText('queue.job.completed')).toBeDefined());
         const row = view.getByText('queue.job.completed').closest('tr') as HTMLTableRowElement;
         expect(row.textContent).not.toContain('ea874dc4-cb7f-4bd1-bb47-fbe3c175b737');
@@ -1099,7 +1150,7 @@ describe('observability components', () => {
 
     test('filter bar controls are keyboard-focusable native elements (task 0225 R4)', async () => {
         installObservabilityFetchMock();
-        const { container, queryAllByText } = render(<SystemEventsTab />);
+        const { container, queryAllByText } = render(<SystemEventsTab {...tabProps} />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
@@ -1870,7 +1921,7 @@ describe('system event tooltip footer (R5, 0601)', () => {
             return new Response('not found', { status: 404 });
         }) as unknown as typeof fetch);
 
-        const view = render(<SystemEventsTab />);
+        const view = render(<SystemEventsTab {...tabProps} />);
         await waitFor(() => expect(view.getByTestId('system-event-name')).toBeDefined());
         fireEvent.mouseEnter(view.getByTestId('system-event-name'));
         const hoverTip = await waitFor(() => view.getByTestId('system-event-payload-tooltip'));
@@ -1903,27 +1954,18 @@ describe('ObservabilityFilters and TimeRange (J92 R1-R7)', () => {
         expect(timeRangeSince('all', fixedNow)).toBeUndefined();
     });
 
-    test('filter bar exposes the exact responsive range and action contract (J92 R1-R4/R7)', async () => {
+    test('filter bar exposes the exact responsive action contract (J92 R4/R7; 0793 R2)', async () => {
         installObservabilityFetchMock();
-        const view = render(<SystemEventsTab />);
+        const view = render(<SystemEventsTab {...tabProps} />);
 
         await waitFor(() => expect(view.queryAllByText('task.created').length).toBeGreaterThan(0));
-        const ranges = view.getByRole('group', { name: 'Time range presets' });
-        expect(Array.from(ranges.querySelectorAll('button')).map((button) => button.textContent)).toEqual([
-            '30s',
-            '5m',
-            '1h',
-            '4h',
-            '24h',
-            '7d',
-            'All',
-        ]);
-        expect(view.getByRole('button', { name: '24h' }).getAttribute('aria-pressed')).toBe('true');
         expect(view.getByTestId('observability-retention-badge')).toBeDefined();
-        expect(ranges.parentElement?.className).toContain('flex-wrap');
         expect(view.getByLabelText('Toggle filter panel')).toBeDefined();
         expect(view.getByRole('button', { name: 'Pause live event stream' })).toBeDefined();
         expect(view.getByLabelText('Customize visible columns')).toBeDefined();
+        // Task 0793 R2: the time-range presets moved to the shell header —
+        // the tab's filter bar no longer renders them.
+        expect(view.queryByRole('group', { name: 'Time range presets' })).toBeNull();
     });
 
     test('SystemEventsTab filters by severity client-side (J92 R3/R6)', async () => {
@@ -1957,7 +1999,7 @@ describe('ObservabilityFilters and TimeRange (J92 R1-R7)', () => {
             return new Response('not found', { status: 404 });
         }) as unknown as typeof fetch);
 
-        const { queryAllByText, getByRole } = render(<SystemEventsTab />);
+        const { queryAllByText, getByRole } = render(<SystemEventsTab {...tabProps} />);
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
         expect(queryAllByText('rule.eval.error').length).toBeGreaterThan(0);
 
@@ -2036,7 +2078,7 @@ describe('System Events customizable columns, sorting, and cell polish (J92 R1-R
             return new Response('not found', { status: 404 });
         }) as unknown as typeof fetch);
 
-        const view = render(<SystemEventsTab />);
+        const view = render(<SystemEventsTab {...tabProps} />);
         await waitFor(() => expect(view.queryAllByText('task.created').length).toBeGreaterThan(0));
 
         const checkboxes = view.getAllByRole('checkbox') as HTMLInputElement[];
@@ -2077,7 +2119,7 @@ describe('System Events customizable columns, sorting, and cell polish (J92 R1-R
         );
         view.unmount();
 
-        const remount = render(<SystemEventsTab />);
+        const remount = render(<SystemEventsTab {...tabProps} />);
         await waitFor(() => expect(remount.queryAllByText('task.created').length).toBeGreaterThan(0));
         expect(
             Array.from(remount.container.querySelectorAll('[data-system-events-tab] thead th')).map((th) =>
@@ -2317,7 +2359,7 @@ describe('System Events customizable columns, sorting, and cell polish (J92 R1-R
 
     test('Header clicking toggles sort direction and updates aria-sort in SystemEventsTable (R4)', async () => {
         installObservabilityFetchMock();
-        const { getByRole, queryAllByText } = render(<SystemEventsTab />);
+        const { getByRole, queryAllByText } = render(<SystemEventsTab {...tabProps} />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
@@ -2419,7 +2461,7 @@ describe('J92 regression coverage', () => {
             return new Response('not found', { status: 404 });
         }) as unknown as typeof fetch);
 
-        const view = render(<SystemEventsTab />);
+        const view = render(<SystemEventsTab {...tabProps} />);
         await waitFor(() => expect(view.queryAllByText('task.created').length).toBeGreaterThan(0));
 
         const headers = Array.from(view.container.querySelectorAll('[data-system-events-tab] thead th'));

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Badge, Loading } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
+import { timeRangeSince } from './ObservabilityFilters';
+import type { ObservabilityTabProps } from './tabs';
 
 // ---------------------------------------------------------------------------
 // Wire shapes — the two J6 aggregates consumed as-is (tasks 0546 / 0547).
@@ -223,18 +225,21 @@ function RoleTokenCard({ role }: { role: RoleAttribution }) {
     );
 }
 
-/** Routing tab: role→executor aggregate + per-role token totals (task 0552). */
-export default function RoutingTab() {
+/** Routing tab: role→executor aggregate + per-role token totals (task 0552; 0793 R3/R4 window). */
+export default function RoutingTab({ timeRange }: ObservabilityTabProps) {
     const [state, setState] = useState<RoutingSummaryView | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const controller = new AbortController();
+        // R4: `all` yields an undefined since → the param is omitted, not sent empty.
+        const since = timeRangeSince(timeRange);
+        const url = since
+            ? `${resolveApiUrl()}/observability/routing-summary?since=${encodeURIComponent(since)}`
+            : `${resolveApiUrl()}/observability/routing-summary`;
         (async () => {
             try {
-                const res = await fetchWithTimeout(
-                    new Request(`${resolveApiUrl()}/observability/routing-summary`, { signal: controller.signal }),
-                );
+                const res = await fetchWithTimeout(new Request(url, { signal: controller.signal }));
                 if (!res.ok) throw new Error(`routing summary fetch failed: ${res.status}`);
                 const body = parseRoutingSummaryResponse((await res.json()) as unknown);
                 if (!body) throw new Error('routing summary response failed schema validation');
@@ -245,7 +250,7 @@ export default function RoutingTab() {
             }
         })();
         return () => controller.abort();
-    }, []);
+    }, [timeRange]);
 
     if (error) {
         return (

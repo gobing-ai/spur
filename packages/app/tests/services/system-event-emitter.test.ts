@@ -7,6 +7,7 @@ import type {
 } from '@gobing-ai/spur-domain';
 import type { PlanningEvent } from '../../src/services/planning-write-service';
 import { SystemEventEmitter, type SystemEventEmitterLogger } from '../../src/services/system-event-emitter';
+import { DEFAULT_SYSTEM_EVENT_RETENTION_QUOTA } from '../../src/services/system-event-retention';
 
 /**
  * In-memory fake DAO recording every insert; optionally throws on a configured
@@ -161,7 +162,7 @@ describe('SystemEventEmitter', () => {
         expect(entity?.kind).toBe('feature');
     });
 
-    test('skips unregistered event names without touching the DAO', async () => {
+    test('persists an unregistered planning event through the generic path (0794 R6)', async () => {
         const dao = new FakeSystemEventDao();
         const emitter = new SystemEventEmitter(
             dao as unknown as SystemEventDao,
@@ -169,14 +170,44 @@ describe('SystemEventEmitter', () => {
         );
 
         // PlanningEventName narrows the union; cast an unregistered name through
-        // `unknown` to exercise the skip path — a future name must be a no-op,
-        // not a persistence error.
-        const unknownEvent = { ...makeEvent(), event: 'task.unknown' } as unknown as PlanningEvent;
+        // `unknown` to exercise the generic fallback — catalog-open ingestion
+        // (task 0794 R6): the event persists instead of being dropped.
+        const unknownEvent = { ...makeEvent(), event: 'ledgerwidget.mutated' } as unknown as PlanningEvent;
         await emitter.emit(unknownEvent);
 
-        // Unregistered event was a no-op — no insert, no prune.
-        expect(dao.inserted).toHaveLength(0);
-        expect(dao.pruneCalls).toHaveLength(0);
+        expect(dao.inserted).toHaveLength(1);
+        const row = dao.inserted[0];
+        expect(row?.event_name).toBe('ledgerwidget.mutated');
+        // Same canonical envelope path as cataloged rows (R5).
+        const payload = parsePayload(row?.payload_json);
+        expect(payload?.schemaVersion).toBe(2);
+        const presentation = payload?.presentation as Record<string, unknown> | undefined;
+        expect(presentation?.severity).toBe('info');
+        // D3c: the uncataloged prefix is appended to the quota list with the
+        // documented default before the scoped prune.
+        expect(dao.pruneCalls).toHaveLength(1);
+        expect(dao.pruneCalls[0]?.prefix).toBe('ledgerwidget');
+        const appended = dao.pruneCalls[0]?.quotas.find((q) => q.prefix === 'ledgerwidget');
+        expect(appended?.quota).toBe(DEFAULT_SYSTEM_EVENT_RETENTION_QUOTA);
+    });
+
+    test('honors the payload severity of an unregistered planning event (0794 Q5)', async () => {
+        const dao = new FakeSystemEventDao();
+        const emitter = new SystemEventEmitter(
+            dao as unknown as SystemEventDao,
+            new CapturingLogger() as unknown as SystemEventEmitterLogger,
+        );
+
+        const unknownEvent = {
+            ...makeEvent(),
+            event: 'ledgerwidget.mutated',
+            severity: 'warning',
+        } as unknown as PlanningEvent;
+        await emitter.emit(unknownEvent);
+
+        const payload = parsePayload(dao.inserted[0]?.payload_json);
+        const presentation = payload?.presentation as Record<string, unknown> | undefined;
+        expect(presentation?.severity).toBe('warning');
     });
 
     test('swallows a DAO insert failure and warns (R5) without throwing', async () => {

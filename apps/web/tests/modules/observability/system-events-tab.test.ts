@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    DEFAULT_FILTER,
     displayValue,
     formatDuration,
     historyUrl,
+    matchesClientFilter,
     parseHistoryResponse,
     parseHistoryRow,
     parseSystemEventView,
@@ -402,5 +404,42 @@ describe('historyUrl', () => {
         expect(url).not.toContain('prefix=');
         expect(url).not.toContain('names=');
         expect(url).not.toContain('actor=');
+    });
+});
+
+describe('matchesClientFilter tier visibility (task 0794 R7)', () => {
+    // Mirrors the component's tierByName construction: built from catalog
+    // entries only, so an uncataloged name resolves to `undefined` in the map.
+    const catalog = [
+        { name: 'task.updated', prefix: 'task', source: 'bus', tier: 'default', renderer: 'table' },
+        { name: 'workflow.agent', prefix: 'workflow', source: 'bus', tier: 'diagnostic', renderer: 'table' },
+    ];
+    const tierByName = new Map<string, string>();
+    for (const entry of catalog) {
+        if (entry.tier) tierByName.set(entry.name, entry.tier);
+    }
+
+    // Uncataloged name: no catalog entry, so `prefix`/`view` are absent too.
+    const uncatalogedRow = {
+        eventName: 'db.connection.error',
+        occurredAt: '2026-01-01T00:00:00.000Z',
+        actor: null,
+    };
+
+    test('default filters admit an uncataloged (undefined-tier) row', () => {
+        expect(matchesClientFilter(uncatalogedRow, DEFAULT_FILTER, tierByName)).toBe(true);
+    });
+
+    test("tierFilter 'default' admits an uncataloged row while still gating diagnostic rows", () => {
+        const filters = { ...DEFAULT_FILTER, tierFilter: 'default' as const };
+        expect(matchesClientFilter(uncatalogedRow, filters, tierByName)).toBe(true);
+        expect(matchesClientFilter({ ...uncatalogedRow, eventName: 'workflow.agent' }, filters, tierByName)).toBe(
+            false,
+        );
+    });
+
+    test("tierFilter 'default' still admits a cataloged default-tier row", () => {
+        const filters = { ...DEFAULT_FILTER, tierFilter: 'default' as const };
+        expect(matchesClientFilter({ ...uncatalogedRow, eventName: 'task.updated' }, filters, tierByName)).toBe(true);
     });
 });

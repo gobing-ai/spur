@@ -217,6 +217,61 @@ describe('attachSystemEventLedger', () => {
         }
     });
 
+    test('persists an uncataloged event through the catch-all; drift warn once per name (0794 R6/R11)', async () => {
+        const db = await createMigratedDbAdapter(undefined, undefined, ':memory:');
+        try {
+            const { context, output } = fakeContext({ getDb: async () => db });
+            const bus = new EventBus() as SystemEventBus;
+            const ledger = await attachSystemEventLedger(bus, context as never);
+
+            bus.emit('db.connection.error', { reason: 'boom', severity: 'error', actor: 'runtime' });
+            bus.emit('db.connection.error', { reason: 'again' });
+            await ledger.flush();
+
+            const rows = await new SystemEventDao(db).query({ name: 'db.connection.error', limit: 50 });
+            expect(rows).toHaveLength(2);
+            // Same canonical envelope path as cataloged rows; the payload's own
+            // severity wins over the generic info default (Q5). Order-independent:
+            // same-millisecond emits have no stable newest-first tiebreak.
+            const severities = rows
+                .map((r) => JSON.parse(r.payload_json ?? '{}') as Record<string, unknown>)
+                .map((envelope) => (envelope.presentation as Record<string, unknown>).severity)
+                .sort();
+            expect(severities).toEqual(['error', 'info']);
+            // One drift warn per name per process, not per emission (R11/Q4).
+            const drift = output.errors.filter((m) => m.includes('system_events.uncataloged'));
+            expect(drift).toHaveLength(1);
+            ledger.unsubscribe();
+        } finally {
+            await db.close();
+        }
+    });
+
+    test('cataloged events are not duplicated when the catch-all is installed (0794 R8)', async () => {
+        const db = await createMigratedDbAdapter(undefined, undefined, ':memory:');
+        try {
+            const { context } = fakeContext({ getDb: async () => db });
+            const bus = new EventBus() as SystemEventBus;
+            const ledger = await attachSystemEventLedger(bus, context as never);
+
+            bus.emit('workflow.run.started', {
+                schemaVersion: 1,
+                eventId: 'evt-no-dup',
+                sequence: 1,
+                runId: 'run-no-dup',
+                workflowName: 'cli-single-write',
+                at: '2026-07-28T12:00:00.000Z',
+            });
+            await ledger.flush();
+
+            const rows = await new SystemEventDao(db).query({ name: 'workflow.run.started', limit: 50 });
+            expect(rows).toHaveLength(1);
+            ledger.unsubscribe();
+        } finally {
+            await db.close();
+        }
+    });
+
     test('persist failure is logged via the attach logger and does not throw (R5)', async () => {
         // Adapter that accepts open/migration-ish calls but fails on insert so the
         // SystemEventDao → tap → logger.warn path is exercised through attach.

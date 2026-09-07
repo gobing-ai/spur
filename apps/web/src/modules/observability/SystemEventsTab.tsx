@@ -572,7 +572,7 @@ export function displayValue(value: string | null | undefined): string {
 
 /** Serialize UI filter state into the server-side query params. */
 export function serializeFilter(
-    filter: Partial<ObservabilityFilterValues> & { timeWindow?: string },
+    filter: Partial<ObservabilityFilterValues>,
     timeRange: ObservabilityTimeRange = '24h',
 ): ActiveFilter {
     const out: ActiveFilter = {};
@@ -584,10 +584,7 @@ export function serializeFilter(
     if (query !== '' && filter.searchScope === 'actor') out.actor = query;
     if (filter.runId && filter.runId.trim() !== '') out.runId = filter.runId.trim();
 
-    // Support both timeRange and legacy timeWindow
-    const effectiveRange: ObservabilityTimeRange =
-        filter.timeWindow && filter.timeWindow !== 'all' ? (filter.timeWindow as ObservabilityTimeRange) : timeRange;
-    const since = timeRangeSince(effectiveRange);
+    const since = timeRangeSince(timeRange);
     if (since) out.since = since;
 
     return out;
@@ -600,8 +597,11 @@ export function serializeFilter(
  * All filter dimensions are applied client-side so the UI responds instantly
  * to control changes. The debounced `serializeFilter` drives the server query
  * in parallel, which narrows the paginated result set.
+ *
+ * Exported for the task-0794 R7 regression test, which pins that an
+ * uncataloged (undefined-tier) row stays visible under default filters.
  */
-function matchesClientFilter(
+export function matchesClientFilter(
     evt: {
         eventName: string;
         occurredAt: string;
@@ -770,15 +770,7 @@ export function CopyValueButton({ value, label }: { value: string; label: string
  * ledger will fit in memory. Filter changes are debounced (≥250ms) so the
  * input does not fire a request per keystroke.
  */
-export default function SystemEventsTab({
-    onLivenessChange,
-    timeRange: propTimeRange,
-    onTimeRangeChange: propOnTimeRangeChange,
-}: ObservabilityTabProps = {}) {
-    const [localTimeRange, setLocalTimeRange] = useState<ObservabilityTimeRange>('24h');
-    const timeRange = propTimeRange ?? localTimeRange;
-    const onTimeRangeChange = propOnTimeRangeChange ?? setLocalTimeRange;
-
+export default function SystemEventsTab({ onLivenessChange, timeRange }: ObservabilityTabProps) {
     const [visibleColumns, setVisibleColumns] = useState<EventColumnKey[]>(() => loadVisibleColumns());
     const [sortState, setSortState] = useState<EventSortState>(DEFAULT_SORT_STATE);
 
@@ -913,8 +905,6 @@ export default function SystemEventsTab({
     filterRef.current = filter;
     const tierRef = useRef(tierByName);
     tierRef.current = tierByName;
-    const timeRangeRef = useRef(timeRange);
-    timeRangeRef.current = timeRange;
 
     useEffect(() => {
         if (!liveEnabled) return;
@@ -1017,10 +1007,8 @@ export default function SystemEventsTab({
 
     return (
         <div className="flex flex-col gap-4" data-system-events-tab>
-            {/* Filter Bar (J92 R2/R3/R4) */}
+            {/* Filter Bar (J92 R2/R3/R4) — time-range presets live in the shell (task 0793 R2) */}
             <ObservabilityFilters
-                timeRange={timeRange}
-                onTimeRangeChange={onTimeRangeChange}
                 filters={filter}
                 onFiltersChange={setFilter}
                 onClearFilters={clearFilters}

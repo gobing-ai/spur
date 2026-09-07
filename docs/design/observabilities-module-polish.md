@@ -54,8 +54,11 @@ One shared capability in `packages/app`, consumed at both persistence seams:
   owning them, so no double-write (R8).
 - CLI: `SystemEventEmitter.emit` drops the unregistered-name no-op and persists through the same
   generic-entry path; the CLI ledger attach installs the same catch-all wrapper.
-- Retention: uncataloged prefixes resolve through the existing per-prefix quota fallback
-  (documented default), so no new config shape (R10).
+- Retention (D3c): at the uncataloged persist site the quota list gains
+  `{ prefix, quota: retention.default ?? DEFAULT_SYSTEM_EVENT_RETENTION_QUOTA }` when the prefix
+  is absent (`ensureRetentionQuotaForPrefix`), then the prune is scoped to the just-written prefix.
+  `resolveRetentionQuotas` is unchanged — its typo-guard for operator config override keys stays —
+  and no new config shape is introduced (R10).
 - Failure isolation is unchanged: catch-all persist errors are logged and swallowed, never thrown
   to the producer (R9).
 
@@ -65,11 +68,16 @@ a wildcard/`onAny` in ts-infra's EventBus — upstream follow-up, explicitly out
 
 ### D4 — Drift audit surface
 
-The promotion list is derived, not stored: uncataloged names are observable as (a) once-per-name
-`system_events.uncataloged` warn logs and (b) ledger rows with renderer `generic`
-(`SELECT DISTINCT event_name … WHERE renderer = 'generic'` semantics via the history endpoint's
-catalog metadata). The satellite documents this query as the audit surface; a dedicated CLI verb
-is deferred until the list proves recurrent.
+The promotion list is derived, not stored, from two artifacts this task emits:
+
+1. **Warn logs:** `system_events.uncataloged`, warn-logged exactly once per uncataloged name per
+   process at first successful persist (R11/Q4) — a cheap live signal during a session.
+2. **Ledger rows:** persisted rows carry `renderer = 'generic'` via the history endpoint's catalog
+   metadata. The operational promotion-list query is therefore "distinct event names in the history
+   endpoint whose catalog metadata is absent (or whose renderer is `generic`)" — i.e.
+   `SELECT DISTINCT event_name … WHERE renderer = 'generic'` semantics over the ledger, surfaced
+   through `/api/events/history`'s `catalog` metadata. A dedicated CLI verb is deferred until the
+   list proves recurrent.
 
 ## Blast radius
 

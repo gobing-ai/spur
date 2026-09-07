@@ -124,7 +124,7 @@ describe('SummaryTab (task 0791)', () => {
             });
         }) as unknown as typeof fetch);
 
-        const { getByTestId, queryByTestId } = render(<SummaryTab timeRange="4h" />);
+        const { getByTestId, queryByTestId } = render(<SummaryTab timeRange="4h" onTimeRangeChange={() => {}} />);
         expect(getByTestId('observability-summary-skeleton')).toBeDefined();
 
         for (const resolve of resolvers) {
@@ -168,7 +168,7 @@ describe('SummaryTab (task 0791)', () => {
             return jsonResponse(mockSummary);
         }) as unknown as typeof fetch);
 
-        const { getByTestId } = render(<SummaryTab timeRange="4h" />);
+        const { getByTestId } = render(<SummaryTab timeRange="4h" onTimeRangeChange={() => {}} />);
 
         await waitFor(() => {
             expect(getByTestId('stacked-event-volume-chart')).toBeDefined();
@@ -189,7 +189,9 @@ describe('SummaryTab (task 0791)', () => {
             navigated.push(intent);
         };
 
-        const { getByTestId, getByText } = render(<SummaryTab timeRange="4h" onNavigate={handleNavigate} />);
+        const { getByTestId, getByText } = render(
+            <SummaryTab timeRange="4h" onTimeRangeChange={() => {}} onNavigate={handleNavigate} />,
+        );
 
         await waitFor(() => {
             expect(getByTestId('top-event-types-table')).toBeDefined();
@@ -216,7 +218,7 @@ describe('SummaryTab (task 0791)', () => {
             return new Response('Database timeout', { status: 500, statusText: 'Internal Server Error' });
         }) as unknown as typeof fetch);
 
-        const { getByTestId } = render(<SummaryTab timeRange="4h" />);
+        const { getByTestId } = render(<SummaryTab timeRange="4h" onTimeRangeChange={() => {}} />);
 
         await waitFor(() => {
             expect(getByTestId('observability-summary-error')).toBeDefined();
@@ -228,7 +230,7 @@ describe('SummaryTab (task 0791)', () => {
     test('empty window renders zeros and calm fallback instead of throwing (AC R2)', async () => {
         setFetchForTesting((async () => jsonResponse(emptySummary)) as unknown as typeof fetch);
 
-        const { getByTestId, getByText } = render(<SummaryTab timeRange="4h" />);
+        const { getByTestId, getByText } = render(<SummaryTab timeRange="4h" onTimeRangeChange={() => {}} />);
 
         await waitFor(() => {
             expect(getByTestId('kpi-card-total-events').textContent).toContain('0');
@@ -248,7 +250,7 @@ describe('SummaryTab (task 0791)', () => {
             return jsonResponse(mockSummary);
         }) as unknown as typeof fetch);
 
-        const { getByTestId, queryByTestId } = render(<SummaryTab timeRange="4h" />);
+        const { getByTestId, queryByTestId } = render(<SummaryTab timeRange="4h" onTimeRangeChange={() => {}} />);
 
         await waitFor(() => {
             expect(getByTestId('kpi-card-total-events')).toBeDefined();
@@ -264,7 +266,7 @@ describe('SummaryTab (task 0791)', () => {
         // an ErrorBoundary, spammed the console). Normalize-to-array makes it render zeros.
         setFetchForTesting((async () => jsonResponse([])) as unknown as typeof fetch);
 
-        const { getByTestId, queryByTestId } = render(<SummaryTab timeRange="4h" />);
+        const { getByTestId, queryByTestId } = render(<SummaryTab timeRange="4h" onTimeRangeChange={() => {}} />);
 
         await waitFor(() => {
             expect(getByTestId('kpi-card-total-events')).toBeDefined();

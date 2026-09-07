@@ -130,7 +130,7 @@ const ActiveSchedulesCard: FC = () => {
     );
 };
 
-export default function JobsTab({ timeRange = '4h', onNavigate }: ObservabilityTabProps = {}) {
+export default function JobsTab({ timeRange = '4h', onNavigate }: ObservabilityTabProps) {
     const [statusFilter, setStatusFilter] = useState<JobStatusFilter>('all');
     const [jobs, setJobs] = useState<QueueJobRow[]>([]);
     const [counts, setCounts] = useState<QueueJobStatusCounts>({

@@ -20,7 +20,7 @@ describe('observability web module', () => {
     test('exports a valid WebModule shape (id, name, route, component, icon)', () => {
         expect(isWebModule(observabilityModule)).toBe(true);
         expect(observabilityModule.id).toBe('observability');
-        expect(observabilityModule.name).toBe('Observability');
+        expect(observabilityModule.name).toBe('Observabilities');
         expect(observabilityModule.route).toBe('observability');
         expect(typeof observabilityModule.icon).toBe('string');
         expect(observabilityModule.icon.length).toBeGreaterThan(0);
