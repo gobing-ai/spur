@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Close the residue that pipeline completion leaves behind: Plan checkboxes, review sub-heading level, docs/help drift, and the task-list status contract"
-status: backlog
+status: todo
 template: feature-impl
 created_at: 2026-09-07T17:36:01.774Z
-updated_at: "2026-09-07T18:07:06.522Z"
+updated_at: "2026-09-07T18:30:37.550Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -16,14 +16,11 @@ ac_altitude: task-local
 
 Session review of the `/sp:dev-verify 0795 --auto --next --force --focus all --fix all` run
 (2026-09-07), triaged against the earlier `/sp:dev-verifyall --feature F21` run. Four findings
-survived triage; each is unowned by an existing task.
+survived triage — F1–F4 below, mapping to R1–R4 in order; each is unowned by an existing task.
 
 The unifying symptom: **pipeline completion marks a task `done` while leaving structural residue
-that nothing ever closes.** `spur task check --strict-core` reports these as `warning`, and the
-done-gate reads only the verdict artifact, so a PASS verdict clears the gate with warnings intact.
-They accumulate silently and surface later as noise in every subsequent check.
-
-Evidence that this recurs rather than being a one-off — three tasks from two different runs:
+that nothing ever closes.** Evidence that this recurs rather than being a one-off — three tasks
+from two different runs:
 
 | Task | Run | Residue at `done` |
 | --- | --- | --- |
@@ -31,10 +28,35 @@ Evidence that this recurs rather than being a one-off — three tasks from two d
 | 0788 | F21 verifyall | 1 unchecked Plan box |
 | 0795 | this run | 15 unchecked Plan boxes (cleared by hand this session) |
 
+Refinement traced each finding to its seam, and two of the four first-pass premises turned out to
+be wrong. The corrected picture:
+
+- **The open box is not unobserved — it is observed and discarded.** The done gate does run
+  `spur task check $wbs --as done` (`config/workflows/task-lifecycle.yaml:93`), `check()` honours
+  `--as` (`task-check.ts:541`), and the terminal-status rule therefore fires at the exact moment
+  the transition could be refused (`:891`). It fires at `warning`, and `pass: !hasError`
+  (`planning-check-base.ts:375`) drops it. The gap is one severity decision, not a missing check.
+- **The write-boundary guard for phantom sections already exists and works.**
+  `assertNoNewPhantomSections` (`planning-write-service.ts:523`, shipped in `692e091f9`, task 0115)
+  aborts any `PlanningWriteService` mutation that would introduce a non-canonical heading; verified
+  live this session by replacing `Review` with a body starting `### Findings` — it comes back
+  `#### Findings`, phantoms `[]`. 0787's 8 phantoms arrived in the pipeline's own commit
+  `272451a8d`, i.e. from a write that bypassed the service. The real gap is that **no repair
+  exists**: `structural-repair.ts` has four kinds, none for off-variant sections, so `--fix` cannot
+  clean a task the guard never got to see.
+- **`docs/help` drift is real but smaller than it looks.** Measured this session across
+  `docs/help/cmd_*.md` and the live commander tree: 236 documented flag rows, **72** CLI flags with
+  no row, **0** documented rows for flags that do not exist, and **89** rows whose description text
+  differs from the CLI's. 56 of the 72 are the global `--json-envelope`.
+- **The 500-on-bad-status root cause is an untyped throw, not a loose contract.**
+  `normalizeTaskStatus` resolves aliases and case (`packages/domain/src/planning/schema.ts:180`),
+  so the wire schema cannot be narrowed to the bare enum without breaking `?status=BACKLOG`. It
+  throws a plain `Error`, which the transport maps to 500 (`error-handler.ts:166`). 0795 patched
+  that in the HTTP handler only; the CLI and any future transport still see the untyped throw.
+
 Already fixed inline during the review, and therefore **out of scope here**: the
 `plugins/sp/skills/spur-cli/references/tasks/section-editing.md` recipe never said a section body's
-sub-headings must be `####` or deeper. That doc gap is closed; F2 below is the code-side guard that
-would have caught 0787 regardless of what the doc said.
+sub-headings must be `####` or deeper. That doc gap is closed.
 
 ### Requirements
 
@@ -113,8 +135,9 @@ would have caught 0787 regardless of what the doc said.
 
 - **No auto-flip of Plan checkboxes from a verdict.** 0788 proves PASS can coexist with a
   genuinely undone plan step.
-- **No second phantom-section write guard.** The existing one works; the damage came from a
-  raw write that bypasses it. Detecting non-CLI corpus writes is a separate problem.
+- **No second phantom-section write guard, and no section-delete verb.** The write guard works;
+  the damage came from a raw write that bypasses it. Detecting non-CLI corpus writes is a
+  separate problem. R2's repair demotes and merges — it never deletes content (0619 stands).
 - **No description-text parity between `docs/help/` and the CLI.** 89 of 236 rows differ and
   the differences are editorial; a text gate would be pure noise.
 - **No status enum in `taskListInputSchema`** — it would break alias and case resolution.
@@ -132,7 +155,7 @@ Scenario: AC1 (R1) a transition to done is refused while a Plan box is open
   When "spur task check <wbs> --as done --json" runs
   Then L3.unchecked-checklist is reported with severity "error"
   And pass is false
-  And "spur task update <wbs> --status done" is blocked naming the open box
+  And the testing to done transition is blocked naming the open box
 
 Scenario: AC2 (R1) an already-done task still only warns
   Given a task whose frontmatter status is already "done" and whose Plan carries an unchecked box
@@ -146,23 +169,36 @@ Scenario: AC3 (R1) a PASS verdict never flips a Plan box
   Then the Plan section is byte-identical to before
   And only Requirements and Acceptance Criteria boxes are flipped
 
-Scenario: AC4 (R2) task 0787's phantom sections are folded back into Review
-  When "spur task check 0787 --strict-core --json" runs
-  Then no L2.disallowed-section finding is reported
-  And the Review section body still contains the eight sub-headings at "####" level
+Scenario: AC4 (R2) the repair engine folds a phantom section back into its owner
+  Given a task whose body carries a non-canonical "### Findings" section after "### Review"
+  When applyStructuralRepairs runs for the task domain
+  Then a repair of kind "disallowed-section" is reported for "Findings"
+  And the heading is emitted as "#### Findings" inside the Review body
+  And no line of its content is dropped
 
-Scenario: AC5 (R3) an undocumented CLI flag fails the parity check
+Scenario: AC5 (R2) a phantom with no preceding canonical section is left alone
+  Given a task whose first body heading is a non-canonical section
+  When applyStructuralRepairs runs
+  Then the content is returned byte-identical with changed false
+  And the L2.disallowed-section finding is still reported
+
+Scenario: AC6 (R2) task 0787 is repaired through the CLI
+  When "spur task check 0787 --fix" runs
+  Then "spur task check 0787 --strict-core --json" reports no L2.disallowed-section finding
+  And the eight former section titles survive as "####" headings inside Review
+
+Scenario: AC7 (R3) an undocumented CLI flag fails the parity check
   Given a subcommand declares a flag with no row in its docs/help/cmd_<noun>.md
   When the flag-set parity check runs
   Then it exits non-zero naming the file, the subcommand, and the flag
   And a documented flag the CLI does not declare fails the same way
 
-Scenario: AC6 (R3) the parity check is green on the repaired tree
-  Given the 16 undocumented flags have rows and --json-envelope/--help are allow-listed
+Scenario: AC8 (R3) the parity check is green on the repaired tree
+  Given the 16 undocumented per-command flags have rows and --json-envelope and --help are allow-listed
   When the flag-set parity check runs
   Then it exits zero
 
-Scenario: AC7 (R4) an unknown status is a validation error at every transport
+Scenario: AC9 (R4) an unknown status is a validation error at every transport
   Given the server is running
   When "GET /api/tasks?status=bogus" is requested
   Then the response status is 422 with code VALIDATION_FAILED
@@ -242,13 +278,157 @@ docs, run doc-evolve sync-check and the required project gates". Two tasks from 
 the identical step suggests the batch path skipped its wrap phase rather than two authors
 independently deferring. Recorded here as a lead; it is not this task's requirement.
 
+#### Q&A entry — 2026-09-07T18:09:06.091Z
+
+**Q: Does R2's repair contradict task 0619's "deliberately no section-delete verb"?**
+No. 0619 refused *deletion* because the engine must never destroy content it cannot re-author
+(`packages/app/src/services/structural-repair.ts:8-9`). A demote-and-merge destroys nothing: the
+heading survives one level down and every line of the body is preserved under the canonical
+section that already precedes it. It is the exact inverse of the corruption — a body's `###`
+became a section, so the section becomes a body's `####` again — and it reuses the same pure
+string-transform contract (`changed === false` when there is nothing to repair).
+
+**Q: Why does 0787 need a repair verb at all — can't the Review section just be rewritten?**
+No. `spur task update 0787 --section Review --from-file <f>` replaces the *body* of `Review`,
+which ends at the next same-level heading — `### Findings`. The 8 phantom sections sit after it
+and survive the write untouched. Nothing else in the CLI can remove or fold a section, and
+hand-editing a corpus file is forbidden, so without R2's repair kind task 0787 is unrepairable.
+
 ### Design
 
-<!-- Chosen implementation approach, key tradeoffs, invariants, and impacted surfaces. -->
+Four independent slices, one seam each. Nothing here adds a module, a config key, an interface or
+an abstraction: every change lands inside a function that already exists.
+
+#### R1 — severity depends on whether `--as` names a *target*
+
+`packages/app/src/services/task-check.ts` already holds both facts it needs, four lines apart:
+`status` (on-disk, `:536`) and `effectiveStatus = options?.asStatus ?? status` (`:541`). Derive
+one boolean beside them and thread it into `runL3`:
+
+```ts
+// A lifecycle guard evaluating the row the task is about to enter, not the row it is in.
+const isTransitionTarget = options?.asStatus !== undefined && options.asStatus !== status;
+```
+
+`runL3` (`:631`) gains it as a parameter, and the terminal-status block (`:891`) uses it for one
+finding only:
+
+```ts
+severity: isTransitionTarget ? 'error' : 'warning',
+```
+
+Invariants:
+
+- `severityOverrides` still applies last in `summarizeWithStatus`, so an operator can pin the
+  rule back to `warning` per folder without a code change.
+- `strict` is untouched — no blanket warning elevation (the 0147 bug).
+- `L3.review-testing-contradiction`, in the same block, is already `error`; it does not move.
+
+Blast radius is exactly the callers that pass a *differing* `asStatus`:
+`config/workflows/task-lifecycle.yaml:86` (`--as testing`) and `:93` (`--as done`), plus the
+adapter-unavailable fallback `runDoneGateCheck` (`apps/cli/src/commands/task.ts:1720`). `testing`
+and `todo` are both non-terminal, so the wip→testing edge and the create-time readiness check
+(`apps/cli/src/commands/task.ts:252`, `asStatus: 'todo'`) never reach the rule. The behaviour
+change is confined to the testing→done edge.
+
+#### R2 — a fifth repair kind: demote-and-merge
+
+`packages/app/src/services/structural-repair.ts` is a pure `string → string` transform over the
+body's heading list (`HeadingLine`, `:52-60`) with a per-domain heading level
+(`LEVEL = { task: 3, feature: 2 }`, `:34`). Add `'disallowed-section'` to the `StructuralRepair`
+union (`:22`) and one pass:
+
+1. Walk the domain-level headings in order, tracking the last canonical one seen.
+2. For a heading whose name is outside `canonicalOrder(domain) ∪ UNIVERSAL_SECTIONS`:
+   - no canonical heading seen yet → leave it, emit no repair (the check still reports it);
+   - otherwise rewrite its `###` to `####` in place and record
+     `{ kind: 'disallowed-section', section: name, detail: 'folded into <owner>' }`.
+3. Body text is never moved — demoting the heading is what makes the following lines part of the
+   preceding section on the next parse. That is why the transform is lossless and why it is not a
+   delete.
+
+Run it before the existing order/level passes so a folded section is no longer a section when
+order is computed.
+
+#### R3 — flag-set parity as a test, not a new script
+
+The mechanical claim is set equality, measured this session at 236 documented rows / 72
+undocumented CLI flags / 0 phantom rows. Implement it as a test in `apps/cli/tests/` (it needs the
+commander tree, which lives there) rather than extending
+`plugins/sp/scripts/validate-flag-contracts.ts`, whose five surfaces are sp *plugin* command files
+— a different vocabulary that happens to share the word "flag".
+
+- Source of truth: walk the commander program, `cmd.name()` path → `cmd.options[].long`.
+- Documented set: rows matching ``| `--flag …` | … |`` under each `## spur <path>` heading in
+  `docs/help/cmd_<noun>.md`.
+- Allow-list: `--json-envelope` and `--help` only, with a one-line note in the `docs/help`
+  overview. 56 of the 72 gaps are `--json-envelope`; 56 identical rows would bury the 16 real ones.
+- Assert both directions and name file + subcommand + flag in the failure message.
+
+Descriptions are explicitly out of scope: 89 of 236 rows differ, almost all editorially.
+
+#### R4 — one typed throw replaces one transport patch
+
+`packages/app` already depends on `@gobing-ai/ts-utils`. In
+`packages/app/src/services/task-service.ts:1681-1682`, wrap the two normalizations so the service
+speaks the error vocabulary the transport already maps:
+
+```ts
+const canonical = (raw: string): TaskStatus => {
+    try {
+        return normalizeTaskStatus(raw);
+    } catch (err) {
+        // Plain Error from the domain reads as INTERNAL_ERROR/500 at the HTTP boundary
+        // (error-handler.ts:166). A caller-supplied filter is a validation failure.
+        throw new ValidationError(err instanceof Error ? err.message : String(err));
+    }
+};
+```
+
+`ValidationError` carries `code: 'VALIDATION'`, which `isAppErrorLike` maps to **422
+VALIDATION_FAILED** (`apps/server/src/middleware/error-handler.ts:158-164`, table `:107`). Then
+delete `apps/server/src/modules/task/handlers.ts:18-24` — the whole `try`/`catch` and the
+`normalizeTaskStatus`/`HTTPException` imports it needed — leaving `toFilters` a plain mapper
+again. Update the one assertion at `apps/server/tests/modules/task/handlers.test.ts:116` from 400
+to 422 and add a service-level test that `list({ status: 'bogus' })` throws `ValidationError`.
+
+The domain function keeps throwing a plain `Error`: `packages/domain` has no `ts-utils`
+dependency, and the same function is called on values read from disk, where a throw means a
+corrupt file rather than a bad request.
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+Four slices, independent — each is committable on its own. R2 is the only one that also repairs a
+corpus file (0787), so it runs after its code lands.
+
+#### R1 — transition-target severity
+
+- [ ] 1. Add `isTransitionTarget` beside `effectiveStatus` in `check()` (`packages/app/src/services/task-check.ts:541`) and thread it through `runL3` (`:631`) into the terminal-status block (`:891`); `severity: isTransitionTarget ? 'error' : 'warning'` on `L3.unchecked-checklist` only.
+- [ ] 2. Test in `packages/app/tests/services/task-check.test.ts`: a `testing` task with one open box → `--as done` yields severity `error` and `pass: false`; the same task checked without `--as` yields `warning` and `pass: true`; a `done` task with an open box still yields `warning` (0182's deferral survives).
+- [ ] 3. Test that `--as testing` on the same task is unaffected (non-terminal target, no finding).
+
+#### R2 — `disallowed-section` repair kind
+
+- [ ] 4. Add `'disallowed-section'` to the `StructuralRepair` union (`packages/app/src/services/structural-repair.ts:22`) and a demote pass that runs before the order/level passes: for each domain-level heading outside `canonicalOrder(domain) ∪ UNIVERSAL_SECTIONS` that follows a canonical heading, rewrite its marker one level deeper and record the repair; leave a phantom with no canonical predecessor untouched.
+- [ ] 5. Test in `packages/app/tests/services/structural-repair.test.ts`: a task body with `### Findings` after `### Review` folds to `#### Findings` with the body text byte-identical; a phantom before any canonical section is reported, not moved; two consecutive phantoms both fold.
+- [ ] 6. Run `spur task check 0787 --fix --json` and confirm the 8 phantoms clear with no content loss (`git diff` shows heading markers only).
+
+#### R3 — flag-set parity
+
+- [ ] 7. Add `apps/cli/tests/help-doc-parity.test.ts`: walk the commander tree for `<path> → long flags`, parse ``| `--flag …` |`` rows under each `## spur <path>` heading in `docs/help/cmd_*.md`, assert set equality both ways with `--json-envelope` and `--help` allow-listed; failure names file, subcommand and flag.
+- [ ] 8. Run it, document the ~16 real gaps it reports as new rows in the owning `docs/help/cmd_<noun>.md` files, and note the two allow-listed global flags once in the `docs/help` overview.
+- [ ] 9. Re-run until green from inside `apps/cli`.
+
+#### R4 — typed validation error
+
+- [ ] 10. Wrap both `normalizeTaskStatus` calls in `TaskService.list()` (`packages/app/src/services/task-service.ts:1681-1682`) so an unknown value throws `ValidationError` from `@gobing-ai/ts-utils`.
+- [ ] 11. Delete the `try`/`catch` and the now-unused `normalizeTaskStatus` / `HTTPException` imports from `apps/server/src/modules/task/handlers.ts:3,5,18-24`, leaving `toFilters` a plain mapper.
+- [ ] 12. Move `apps/server/tests/modules/task/handlers.test.ts:116` from 400 to 422 and assert `VALIDATION_FAILED`; add a `packages/app` test that `list({ status: 'bogus' })` rejects with `ValidationError` and that `list({ status: 'BACKLOG' })` and an alias still resolve.
+
+#### Close
+
+- [ ] 13. `bun run spur-check`, `bun run lint`, `bun run test`, `bun run build`.
+- [ ] 14. `spur task check 0800 --strict-core --json` clean; verify PASS; four atomic commits (one per requirement).
 
 ### Solution
 
@@ -264,22 +444,42 @@ independently deferring. Recorded here as a lead; it is not this task's requirem
 
 ### References
 
-Session evidence (`/sp:dev-verify 0795`, 2026-09-07):
+Verified this session (2026-09-07), against the working tree at commit `bf11979da`.
 
-- `packages/app/src/services/task-service.ts:1343-1352` — record's flip loop, `Requirements` and
-  `Acceptance Criteria` only ("never on PARTIAL/FAIL/UNKNOWN beyond the proven ids").
-- `apps/cli/src/commands/task.ts:1306` — `--fix` help text assigning box-flipping to `record`.
-- `docs/tasks4/0787_*.md:204-283` — the 8 `###` sub-headings inside `## Review`.
-- `packages/app/src/services/planning-write-service.ts:540` — the write-boundary seam that already
-  normalizes AC fences; the natural home for R2's guard.
-- `plugins/sp/scripts/validate-flag-contracts.ts:1-24` — the five covered surfaces; `docs/help/` is
-  absent from the list.
-- `packages/contracts/src/task.ts:32` — `status: z.string().optional()`.
-- `apps/server/src/modules/task/handlers.ts:14-24` — the 400 seam added by 0795's verify fix.
-- Commit `d2e9a0d9c` — 0795 R1-R3, where the 500 regression was found and patched.
+**R1 — the open box is observed at the edge**
+
+- `config/workflows/task-lifecycle.yaml:86,93` — the gate commands: `spur task check $wbs --as testing` and `--as done`.
+- `packages/app/src/services/task-check.ts:541` — `const effectiveStatus = options?.asStatus ?? status;`, passed to `runL3` at `:552`.
+- `packages/app/src/services/task-check.ts:891-902` — the terminal-status block that raises `L3.unchecked-checklist` at `severity: 'warning'`.
+- `packages/app/src/services/planning-check-base.ts:375` — `pass: !hasError`; why a warning never blocks.
+- `apps/cli/src/commands/task.ts:1702-1723` — `runDoneGateCheck`, the adapter-unavailable fallback; already passes `asStatus: targetStatus`.
+- `packages/app/src/services/task-record.ts:194-224` + `packages/domain/src/bdd/checklist.ts:29-73` — record flips only `Requirements`/`Acceptance Criteria`, and the anchored id regex means a Plan step never carries a requirement id, so record structurally cannot own a Plan box.
+- Commit `4e12bd478` — 0788 verified PASS with item 6 deliberately open ("unrunnable rule-preset gate (SQLite lock)"): the counter-example that rules out flipping boxes from a verdict.
+- Task 0182 R7-optional — open boxes on an already-terminal task are warning-only by design; preserved.
+
+**R2 — guard exists, repair does not**
+
+- `packages/app/src/services/planning-write-service.ts:393,406,507,523` — `phantomSections` / `assertNoNewPhantomSections`; shipped `692e091f9` (task 0115).
+- `packages/app/src/services/structural-repair.ts:8-9` — "there is deliberately no section-delete verb" (task 0619); `:22` — the four existing repair kinds; `:34` — per-domain heading level.
+- `docs/tasks4/0787_*.md:204-283` — the 8 `###` sub-headings inside `## Review`, introduced by the pipeline's own commit `272451a8d`.
+
+**R3 — measured drift**
+
+- `docs/help/cmd_*.md` vs the live commander tree: 236 / 72 / 0 / 89 (documented rows / undocumented flags / phantom rows / description mismatches); 56 of the 72 are `--json-envelope`.
+- `plugins/sp/scripts/validate-flag-contracts.ts:1-24` — the five covered surfaces are sp *plugin* command files, a different vocabulary; `docs/help/` is deliberately not one of them.
+
+**R4 — untyped throw at the service**
+
+- `packages/domain/src/planning/schema.ts:180-187` — `normalizeTaskStatus`, alias- and case-tolerant, throws a plain `Error`.
+- `packages/app/src/services/task-service.ts:1681-1682` — the two call sites in `list()`.
+- `apps/server/src/middleware/error-handler.ts:107` (mapping table), `:158-164` (`code === 'VALIDATION'` → 422 `VALIDATION_FAILED`), `:166-172` (unknown `Error` → 500).
+- `apps/server/src/modules/task/handlers.ts:18-24` — the transport-local 400 patch from 0795, to be deleted; `apps/server/tests/modules/task/handlers.test.ts:105-117` — its assertion, 400 → 422.
+- `packages/contracts/src/task.ts:29-33` — `status: z.string().optional()`; stays free-form.
 
 Related: task 0795 (the register these findings came out of), task 0692 R2 (record's
-Requirements/AC auto-flip), feature F21 (the earlier verifyall whose tasks 0787/0788 carry the
-same residue).
+Requirements/AC auto-flip), task 0115 (the write-boundary guard), task 0619 (the no-delete rule),
+task 0182 (terminal-status open boxes), feature F21 (the earlier verifyall whose tasks 0787/0788
+carry the same residue).
 
 ### History
+- 2026-09-07T18:30:37.550Z backlog → todo (system)
