@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { ValidationError } from '@gobing-ai/ts-utils';
 import type { SectionMatrix } from '../../src/services/planning-check-base';
 import { PlanningWriteService } from '../../src/services/planning-write-service';
 import { TaskCheckService } from '../../src/services/task-check';
@@ -415,6 +416,23 @@ describe('TaskService', () => {
             await expect(svc.list({ status: 'bogus' })).rejects.toThrow(
                 /Unknown task status: "bogus".*allowed:.*backlog/,
             );
+        });
+
+        test('rejects an unknown status with the typed ValidationError (task 0800 R4)', async () => {
+            // The typed error carries code 'VALIDATION', which every transport maps
+            // to 422 VALIDATION_FAILED (error-handler.ts:158-164) — a caller-supplied
+            // bad filter must never surface as INTERNAL_ERROR/500 again.
+            const err = await svc.list({ status: 'bogus' }).then(
+                () => undefined,
+                (e: unknown) => e,
+            );
+            expect(err).toBeInstanceOf(ValidationError);
+            expect((err as ValidationError).code).toBe('VALIDATION');
+            expect(String((err as Error).message)).toMatch(/Unknown task status: "bogus".*allowed:.*backlog/);
+        });
+
+        test('rejects an unknown phase alias with the typed ValidationError (task 0800 R4)', async () => {
+            await expect(svc.list({ phase: 'bogus' })).rejects.toBeInstanceOf(ValidationError);
         });
 
         test('rejects a comma-list status rather than matching nothing', async () => {

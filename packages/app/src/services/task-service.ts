@@ -23,10 +23,12 @@ import {
     TASK_CANONICAL_SECTIONS,
     type TaskBatchItem,
     type TaskSection,
+    type TaskStatus,
     taskBatchSchema,
     UNIVERSAL_SECTIONS,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { ValidationError } from '@gobing-ai/ts-utils';
 import { GuardDeniedError } from '../errors';
 import { ensurePipelineRunLink, TASK_FORWARD_CHAIN } from './pipeline-run-link';
 import type { CheckFindings, SectionMatrix } from './planning-check-base';
@@ -1678,8 +1680,22 @@ export class TaskService {
     // ── list ──
 
     async list(filters?: TaskListFilters): Promise<TaskSummary[]> {
-        const wantStatus = filters?.status === undefined ? undefined : normalizeTaskStatus(filters.status);
-        const wantPhase = filters?.phase === undefined ? undefined : normalizeTaskStatus(filters.phase);
+        // A caller-supplied filter that fails to normalize is a validation
+        // failure, not an internal error: the domain throws a plain Error, which
+        // the HTTP transport would map to 500 (error-handler.ts:166). Rethrow the
+        // typed ts-utils error every transport already maps to 422
+        // VALIDATION_FAILED (task 0800 R4). The domain function keeps its plain
+        // Error — it is also called on values read from disk, where a throw means
+        // a corrupt file, not a bad request.
+        const canonical = (raw: string): TaskStatus => {
+            try {
+                return normalizeTaskStatus(raw);
+            } catch (err) {
+                throw new ValidationError(err instanceof Error ? err.message : String(err));
+            }
+        };
+        const wantStatus = filters?.status === undefined ? undefined : canonical(filters.status);
+        const wantPhase = filters?.phase === undefined ? undefined : canonical(filters.phase);
         const dir = this.resolveListDir(filters?.folder);
 
         const entries = await this.ctx.fs.readDir(dir);

@@ -1,6 +1,6 @@
 import type { WriteResult } from '@gobing-ai/spur-app';
 import { contract } from '@gobing-ai/spur-contracts';
-import { normalizeTaskStatus, normalizeTaskStatusSafe, TASK_TYPES } from '@gobing-ai/spur-domain/schema';
+import { normalizeTaskStatusSafe, TASK_TYPES } from '@gobing-ai/spur-domain/schema';
 import { implement } from '@orpc/server';
 import { HTTPException } from 'hono/http-exception';
 import type { ServerContext } from '../../context';
@@ -12,16 +12,10 @@ function toFilters(query?: Record<string, unknown>): { status?: string; parentWb
     if (!query) return {};
     const f: { status?: string; parentWbs?: string; folder?: string } = {};
     // `taskListInputSchema.status` is a free-form string (aliases and case must
-    // resolve), and `TaskService.list()` throws a plain Error on an unknown one
-    // (task 0795 R1). Normalize here so a bad `?status=` is a 400 client error
-    // rather than a 500, and the service receives the canonical value.
-    if (typeof query.status === 'string') {
-        try {
-            f.status = normalizeTaskStatus(query.status);
-        } catch (err) {
-            throw new HTTPException(400, { message: err instanceof Error ? err.message : String(err) });
-        }
-    }
+    // resolve). The raw value passes through: `TaskService.list()` normalizes and
+    // throws the typed `ValidationError` on an unknown one (task 0800 R4), which
+    // the transport maps to 422 VALIDATION_FAILED — no handler-local catch.
+    if (typeof query.status === 'string') f.status = query.status;
     if (typeof query.parent === 'string') f.parentWbs = query.parent;
     if (typeof query.folder === 'string') f.folder = query.folder;
     return f;

@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { normalizeTaskStatus } from '@gobing-ai/spur-domain/schema';
+import { ValidationError } from '@gobing-ai/ts-utils';
+import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
+import { globalErrorHandler } from '../../../src/middleware/error-handler';
 import { createTaskHandlers } from '../../../src/modules/task';
 
 describe('task handlers', () => {
@@ -102,22 +106,43 @@ describe('task handlers', () => {
         await fn({ input: undefined });
     });
 
-    test('list handler rejects an unknown status with 400, not a 500 (task 0795 R1)', async () => {
-        const handlers = createTaskHandlers(makeCtx());
+    test('list handler surfaces an unknown status as 422 VALIDATION_FAILED (task 0800 R4)', async () => {
+        // The service speaks the typed ts-utils vocabulary; the handler no longer
+        // catches anything (0795's transport-local 400 patch is deleted), so the
+        // error reaches globalErrorHandler, which maps code 'VALIDATION' → 422
+        // VALIDATION_FAILED (error-handler.ts mapping table :107).
+        const ctx = makeCtx({
+            list: async (filters: { status?: string }) => {
+                try {
+                    normalizeTaskStatus(filters?.status ?? '');
+                    return [];
+                } catch (err) {
+                    throw new ValidationError(err instanceof Error ? err.message : String(err));
+                }
+            },
+        });
+        const handlers = createTaskHandlers(ctx);
         const fn = handlers.list['~orpc'].handler as unknown as (opts: {
             input?: Record<string, unknown>;
         }) => Promise<unknown>;
-        // TaskService.list() throws a plain Error on an unknown status; unmapped it
-        // would surface as INTERNAL_ERROR/500 through globalErrorHandler.
-        const err = await fn({ input: { status: 'bogus' } }).then(
-            () => undefined,
-            (e: unknown) => e,
-        );
-        expect((err as { status?: number } | undefined)?.status).toBe(400);
-        expect(String((err as Error).message)).toContain('Unknown task status: "bogus"');
+        const app = new Hono();
+        app.onError(globalErrorHandler);
+        app.get('/tasks', async (c) => {
+            await fn({ input: { status: 'bogus' } });
+            return c.json({ ok: true });
+        });
+        const res = await app.request('/tasks');
+        expect(res.status).toBe(422);
+        const body = (await res.json()) as { error: { code: string; message: string } };
+        expect(body.error.code).toBe('VALIDATION_FAILED');
+        expect(body.error.message).toContain('Unknown task status: "bogus"');
+        expect(body.error.message).toContain('backlog');
     });
 
-    test('list handler resolves status aliases and case before filtering', async () => {
+    test('list handler passes the raw status through; the service canonicalizes (task 0800 R4)', async () => {
+        // toFilters is a plain mapper again — alias/case resolution lives in
+        // TaskService.list() (covered service-level in packages/app), so the wire
+        // contract stays free-form and `?status=BACKLOG` keeps working.
         const seen: Record<string, unknown>[] = [];
         const ctx = makeCtx({
             list: async (filters: Record<string, unknown>) => {
@@ -130,7 +155,7 @@ describe('task handlers', () => {
             input?: Record<string, unknown>;
         }) => Promise<unknown>;
         await fn({ input: { status: 'IN-PROGRESS' } });
-        expect(seen[0]?.status).toBe('wip');
+        expect(seen[0]?.status).toBe('IN-PROGRESS');
     });
 
     test('show handler returns task detail', async () => {
