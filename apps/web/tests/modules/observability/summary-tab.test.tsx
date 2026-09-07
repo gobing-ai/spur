@@ -257,4 +257,20 @@ describe('SummaryTab (task 0791)', () => {
         expect(queryByTestId('observability-summary-error')).toBeNull();
         expect(getByTestId('kpi-card-total-events').textContent).toContain('150');
     });
+
+    test('malformed summary payload (e.g. a catch-all returning []) renders without throwing', async () => {
+        // Regression: `data?.eventVolumeBuckets.map(...)` only guarded `data`, so a
+        // payload that exists but lacks the nested arrays crashed the tab (and, under
+        // an ErrorBoundary, spammed the console). Normalize-to-array makes it render zeros.
+        setFetchForTesting((async () => jsonResponse([])) as unknown as typeof fetch);
+
+        const { getByTestId, queryByTestId } = render(<SummaryTab timeRange="4h" />);
+
+        await waitFor(() => {
+            expect(getByTestId('kpi-card-total-events')).toBeDefined();
+        });
+
+        expect(queryByTestId('observability-summary-error')).toBeNull();
+        expect(getByTestId('kpi-card-total-events').textContent).toContain('0');
+    });
 });

@@ -269,8 +269,12 @@ export default function SummaryTab(props: ObservabilityTabProps) {
     };
     const prevKpis = prevData?.kpis;
 
-    const eventSparkline = data?.eventVolumeBuckets.map((b) => b.total) ?? [];
-    const errorWarningSparkline = data?.eventVolumeBuckets.map((b) => b.bySeverity.error + b.bySeverity.warning) ?? [];
+    // `data?.X.map(...)` only guards `data` itself; a malformed summary payload
+    // (e.g. a catch-all mock returning `[]`) leaves `eventVolumeBuckets` undefined
+    // and crashes on `.map`. Normalize to an array first so the render never throws.
+    const volumeBuckets = data?.eventVolumeBuckets ?? [];
+    const eventSparkline = volumeBuckets.map((b) => b.total);
+    const errorWarningSparkline = volumeBuckets.map((b) => b.bySeverity.error + b.bySeverity.warning);
 
     const handleNavigateToJob = (jobId: string) => {
         props.onNavigate?.({ tab: 'jobs', jobId });
@@ -451,7 +455,7 @@ export default function SummaryTab(props: ObservabilityTabProps) {
                                         </td>
                                     </tr>
                                 ))}
-                                {(!data || data.topEventTypes.length === 0) && (
+                                {(!data || (data.topEventTypes ?? []).length === 0) && (
                                     <tr>
                                         <td colSpan={4} className="text-center text-base-content/40 py-4">
                                             No events recorded
@@ -525,7 +529,7 @@ export default function SummaryTab(props: ObservabilityTabProps) {
                                 </div>
                             );
                         })}
-                        {(!data || data.recentErrors.length === 0) && (
+                        {(!data || (data.recentErrors ?? []).length === 0) && (
                             <div className="p-8 text-center text-xs text-base-content/50">
                                 No recent failures in this time range.
                             </div>
