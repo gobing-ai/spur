@@ -33,7 +33,7 @@ export const SHARED_OPTIONS = {
         'With --json, wrap output in the standard {ok, data|error} envelope (ADR-091; default stays raw during the deprecation window)',
     ] as const,
     jsonSupported: ['--json', 'Output machine-readable JSON where supported'] as const,
-    section: ['--section <name>', 'Section name to replace'] as const,
+    section: ['--section <name>', 'Section name to write'] as const,
     fromFile: ['--from-file <path>', 'File to read section body from (requires --section)'] as const,
     statusFilter: ['--status <s>', 'Filter by status'] as const,
     last: ['--last <n>', 'Limit results (default 20)'] as const,

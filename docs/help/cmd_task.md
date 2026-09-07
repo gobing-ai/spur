@@ -113,17 +113,22 @@ spur task update [options] <wbs> --priority <P0..P3>
 
 | Flag | Description |
 |---|---|
-| `--section <name>` | Section name to replace (requires `--from-file`; body-only format) |
+| `--section <name>` | Section name to write (requires `--from-file`; body-only format) |
 | `--from-file <path>` | File to read section body from (requires `--section`) |
 | `--feature <id>` | Set the `feature_id` frontmatter field (allow-listed post-create path) |
 | `--priority <p>` | Set the `priority` frontmatter field (`P0`–`P3`) |
 | `--ac-numbering <mode>` | Set the `ac_numbering` frontmatter field (task-local) — opts the task into the Requirements↔AC coverage check |
+| `--ac-altitude <mode>` | Set the `ac_altitude` frontmatter field: `graduating` (default; DD-09 feature-AC subset rule enforced) or `task-local` (skip it — task scenarios are intentionally not feature ship criteria) |
 | `--no-lifecycle` | Suppress lifecycle workflow run creation (used by `task-pipeline.yaml` to avoid orphaned lifecycle runs) |
 | `--force-done` | Allow transitioning to `done` even when the verify verdict is not PASS; records an override (task 0292) |
 | `--reason <text>` | Rationale for a forced-done override (paired with `--force-done`; persisted as `done_reason`) |
 | `--verdict-dir <path>` | Directory holding `<wbs>-verdict.json` artifacts |
 | `--folder <path>` | Custom tasks folder |
 | `--json` | Output machine-readable JSON |
+
+Sections replace, with one exception: `--section "Q&A"` **appends** a timestamped
+`#### Q&A entry — <ISO>` block instead of overwriting prior entries. Start the body with
+`<!-- qa:replace -->` to replace the section wholesale.
 
 ### Examples
 

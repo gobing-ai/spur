@@ -105,7 +105,7 @@ spur feature update [options] <id> --field <key> --value <value>
 |---|---|
 | `--field <key>` | Frontmatter field to set (e.g. `priority`) |
 | `--value <value>` | New value for `--field` |
-| `--section <name>` | Section name to replace (requires `--from-file`; body-only contract) |
+| `--section <name>` | Section name to write (requires `--from-file`; body-only contract) |
 | `--from-file <path>` | File to read section body from (requires `--section`) |
 | `--folder <path>` | Custom features folder |
 | `--json` | Output machine-readable JSON |

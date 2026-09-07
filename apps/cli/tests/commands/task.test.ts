@@ -827,6 +827,16 @@ describe('spur task CLI', () => {
         expect(JSON.parse(lastMessage(wipOut)).some((t: { name: string }) => t.name === 'Wip alias')).toBe(true);
     });
 
+    test('update --help documents the Q&A append exception and qa:replace marker', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', '--help'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const help = output.messages.join('\n');
+        expect(help).toContain('Section name to write');
+        expect(help).toContain('Q&A');
+        expect(help).toContain('APPENDS');
+        expect(help).toContain('<!-- qa:replace -->');
+    });
     test('resolve maps a task file path to its WBS', async () => {
         const cOut = createCapturedOutput();
         await main(['task', 'create', '--skip-ready', 'Resolve me'], { cwd, output: cOut });

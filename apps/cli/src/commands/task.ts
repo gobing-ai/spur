@@ -412,7 +412,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
 
     // ── update ──
     task.command('update')
-        .summary('Update a task status or replace a section.')
+        .summary('Update a task status or write a section.')
         .argument('<wbs>', 'Task WBS number')
         .argument('[status]', 'New status (for lifecycle transition)')
         .addHelpText(
@@ -427,6 +427,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 '`SPUR_PROVENANCE_OVERRIDE=1 spur task update <wbs> done --force-done --reason "…"`.',
                 'See the gate checklist (spur-dev/references/gate-checklists.md).',
                 'Valid section names (no failed write): `spur task sections <wbs> list`.',
+                'Sections replace, with one exception: `--section "Q&A"` APPENDS a timestamped',
+                '`#### Q&A entry — <ISO>` block. Start the body with `<!-- qa:replace -->` to replace it wholesale.',
             ].join('\n'),
         )
         .option(...SHARED_OPTIONS.section)

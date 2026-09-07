@@ -61,8 +61,10 @@ frontmatter scalar.
   to avoid orphaned nested lifecycle runs). **It is not a guard bypass** — the `wip→testing` and
   `testing→done` `check` gates above still run; the CLI evaluates them inline when the FSM guard
   does not. `--force-done` waives the verify **verdict** only, never the section matrix.
-- **Section** (`--section` **requires** `--from-file`): replaces the entire named section body from
-  the file. No inline-body flag. Section names: `Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `Plan`, `Solution`, `Testing`, `Review`, `References`, `History`, `Notes`.
+- **Section** (`--section` **requires** `--from-file`): writes the named section body from the file.
+  Most sections replace wholesale. Exception: `--section "Q&A"` APPENDS a timestamped
+  `#### Q&A entry — <ISO>` block; start the body with `<!-- qa:replace -->` to replace the section
+  wholesale. No inline-body flag. Section names: `Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `Plan`, `Solution`, `Testing`, `Review`, `References`, `History`, `Notes`.
 - **Frontmatter** (`--feature <id>`, `--priority <p>`): sets the scalar frontmatter field on an
   existing task — the only post-create path, allow-listed to `feature_id` / `parent_wbs` / `priority`.
 
@@ -85,7 +87,7 @@ Flags: `--folder <path>`, `--json`. Exit codes: `0` success, `1` error, `2` usag
 
 ## `sections <wbs> <op> [name]`
 
-CLI-safe, matrix-enforced task section mutation. Section names are validated against canonical sections (`Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `Plan`, `Solution`, `Root Cause`, `Testing`, `Review`, `References`, `History`, `Notes`). Universal sections (`History`, `References`, `Notes`) are always allowed; `Root Cause` is carried by the `issue` template variant.
+CLI-safe, matrix-enforced task section mutation. Section names are validated against canonical sections (`Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `Plan`, `Solution`, `Root Cause`, `Testing`, `Review`, `References`, `History`, `Notes`). Universal sections (`History`, `References`, `Notes`) are always allowed; `Root Cause` is carried by the `issue` template variant. `Q&A` on `update --section` appends rather than replacing (see the Section bullet above); `<!-- qa:replace -->` forces a wholesale replace.
 
 | Op | Usage | Description |
 | --- | --- | --- |

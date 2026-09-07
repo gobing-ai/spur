@@ -9,8 +9,8 @@ see_also:
 
 Task bodies are edited section-by-section through `spur task update --section <name> --from-file
 <path>`. The write is **file-wins and crash-safe** (atomic write): the named section's body is
-replaced wholesale from the file you point at. There is no inline-body flag — always stage the new
-body in a file first.
+replaced wholesale from the file you point at — with one exception, `Q&A`, which appends (see
+below). There is no inline-body flag — always stage the new body in a file first.
 
 For **pipeline output**, section authorship is one-writer-per-section (F92 0593 R1):
 `Testing` comes from `spur task record` (deterministic, from a verify verdict artifact — the
@@ -42,7 +42,11 @@ for `Plan`, `Acceptance Criteria`, hand-authored `Solution`, and any narrative s
 
 3. The whole `### Review` body is now that file's contents. To amend rather than overwrite, read
    the current body (`spur task show 0040`), edit the temp file to the full desired state, and
-   replace again — there is no append mode.
+   replace again — there is no append mode for ordinary sections.
+
+**`Q&A` is the exception.** `--section "Q&A"` APPENDS a timestamped `#### Q&A entry — <ISO>`
+block rather than replacing the section. Start the body with `<!-- qa:replace -->` to replace it
+wholesale.
 
 `--section` **requires** `--from-file` (exit `2` otherwise). Section names match the DD-08 headings
 exactly: `Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `Plan`, `Solution`, `Root Cause`, `Testing`, `Review`, `References`, `History`, `Notes` (universal sections are `History`, `References`, `Notes`; `Root Cause` is carried by the `issue` template variant).
