@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Close the residue that pipeline completion leaves behind: Plan checkboxes, review sub-heading level, docs/help drift, and the task-list status contract"
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-09-07T17:36:01.774Z
-updated_at: "2026-09-07T18:30:37.550Z"
+updated_at: "2026-09-07T22:55:50.499Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -403,27 +403,27 @@ corpus file (0787), so it runs after its code lands.
 
 #### R1 — transition-target severity
 
-- [ ] 1. Add `isTransitionTarget` beside `effectiveStatus` in `check()` (`packages/app/src/services/task-check.ts:541`) and thread it through `runL3` (`:631`) into the terminal-status block (`:891`); `severity: isTransitionTarget ? 'error' : 'warning'` on `L3.unchecked-checklist` only.
-- [ ] 2. Test in `packages/app/tests/services/task-check.test.ts`: a `testing` task with one open box → `--as done` yields severity `error` and `pass: false`; the same task checked without `--as` yields `warning` and `pass: true`; a `done` task with an open box still yields `warning` (0182's deferral survives).
-- [ ] 3. Test that `--as testing` on the same task is unaffected (non-terminal target, no finding).
+- [x] 1. Add `isTransitionTarget` beside `effectiveStatus` in `check()` (`packages/app/src/services/task-check.ts:541`) and thread it through `runL3` (`:631`) into the terminal-status block (`:891`); `severity: isTransitionTarget ? 'error' : 'warning'` on `L3.unchecked-checklist` only.
+- [x] 2. Test in `packages/app/tests/services/task-check.test.ts`: a `testing` task with one open box → `--as done` yields severity `error` and `pass: false`; the same task checked without `--as` yields `warning` and `pass: true`; a `done` task with an open box still yields `warning` (0182's deferral survives).
+- [x] 3. Test that `--as testing` on the same task is unaffected (non-terminal target, no finding).
 
 #### R2 — `disallowed-section` repair kind
 
-- [ ] 4. Add `'disallowed-section'` to the `StructuralRepair` union (`packages/app/src/services/structural-repair.ts:22`) and a demote pass that runs before the order/level passes: for each domain-level heading outside `canonicalOrder(domain) ∪ UNIVERSAL_SECTIONS` that follows a canonical heading, rewrite its marker one level deeper and record the repair; leave a phantom with no canonical predecessor untouched.
-- [ ] 5. Test in `packages/app/tests/services/structural-repair.test.ts`: a task body with `### Findings` after `### Review` folds to `#### Findings` with the body text byte-identical; a phantom before any canonical section is reported, not moved; two consecutive phantoms both fold.
-- [ ] 6. Run `spur task check 0787 --fix --json` and confirm the 8 phantoms clear with no content loss (`git diff` shows heading markers only).
+- [x] 4. Add `'disallowed-section'` to the `StructuralRepair` union (`packages/app/src/services/structural-repair.ts:22`) and a demote pass that runs before the order/level passes: for each domain-level heading outside `canonicalOrder(domain) ∪ UNIVERSAL_SECTIONS` that follows a canonical heading, rewrite its marker one level deeper and record the repair; leave a phantom with no canonical predecessor untouched.
+- [x] 5. Test in `packages/app/tests/services/structural-repair.test.ts`: a task body with `### Findings` after `### Review` folds to `#### Findings` with the body text byte-identical; a phantom before any canonical section is reported, not moved; two consecutive phantoms both fold.
+- [x] 6. Run `spur task check 0787 --fix --json` and confirm the 8 phantoms clear with no content loss (`git diff` shows heading markers only).
 
 #### R3 — flag-set parity
 
-- [ ] 7. Add `apps/cli/tests/help-doc-parity.test.ts`: walk the commander tree for `<path> → long flags`, parse ``| `--flag …` |`` rows under each `## spur <path>` heading in `docs/help/cmd_*.md`, assert set equality both ways with `--json-envelope` and `--help` allow-listed; failure names file, subcommand and flag.
-- [ ] 8. Run it, document the ~16 real gaps it reports as new rows in the owning `docs/help/cmd_<noun>.md` files, and note the two allow-listed global flags once in the `docs/help` overview.
-- [ ] 9. Re-run until green from inside `apps/cli`.
+- [x] 7. Add `apps/cli/tests/help-doc-parity.test.ts`: walk the commander tree for `<path> → long flags`, parse ``| `--flag …` |`` rows under each `## spur <path>` heading in `docs/help/cmd_*.md`, assert set equality both ways with `--json-envelope` and `--help` allow-listed; failure names file, subcommand and flag.
+- [x] 8. Run it, document the ~16 real gaps it reports as new rows in the owning `docs/help/cmd_<noun>.md` files, and note the two allow-listed global flags once in the `docs/help` overview.
+- [x] 9. Re-run until green from inside `apps/cli`.
 
 #### R4 — typed validation error
 
-- [ ] 10. Wrap both `normalizeTaskStatus` calls in `TaskService.list()` (`packages/app/src/services/task-service.ts:1681-1682`) so an unknown value throws `ValidationError` from `@gobing-ai/ts-utils`.
-- [ ] 11. Delete the `try`/`catch` and the now-unused `normalizeTaskStatus` / `HTTPException` imports from `apps/server/src/modules/task/handlers.ts:3,5,18-24`, leaving `toFilters` a plain mapper.
-- [ ] 12. Move `apps/server/tests/modules/task/handlers.test.ts:116` from 400 to 422 and assert `VALIDATION_FAILED`; add a `packages/app` test that `list({ status: 'bogus' })` rejects with `ValidationError` and that `list({ status: 'BACKLOG' })` and an alias still resolve.
+- [x] 10. Wrap both `normalizeTaskStatus` calls in `TaskService.list()` (`packages/app/src/services/task-service.ts:1681-1682`) so an unknown value throws `ValidationError` from `@gobing-ai/ts-utils`.
+- [x] 11. Delete the `try`/`catch` and the now-unused `normalizeTaskStatus` / `HTTPException` imports from `apps/server/src/modules/task/handlers.ts:3,5,18-24`, leaving `toFilters` a plain mapper.
+- [x] 12. Move `apps/server/tests/modules/task/handlers.test.ts:116` from 400 to 422 and assert `VALIDATION_FAILED`; add a `packages/app` test that `list({ status: 'bogus' })` rejects with `ValidationError` and that `list({ status: 'BACKLOG' })` and an alias still resolve.
 
 #### Close
 
@@ -432,7 +432,17 @@ corpus file (0787), so it runs after its code lands.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Four slices, one seam each — no new module, config key, or abstraction; every change lands inside a function that already existed.
+
+**R1 — transition-target severity.** `packages/app/src/services/task-check.ts:546` derives `isTransitionTarget = options?.asStatus !== undefined && options.asStatus !== status` beside `effectiveStatus`, threads it through both `runL3` call sites (`:557`, `:625`) into the terminal-status block, which now emits `L3.unchecked-checklist` at `severity: isTransitionTarget ? 'error' : 'warning'` (`:911`). `--strict` untouched, `severityOverrides` still applies last, `L3.review-testing-contradiction` unmoved. Blast radius confined to the testing→done edge: `--as testing`/`--as todo` are non-terminal so the rule never fires there; an already-done task re-checked with `--as done` (same status) keeps 0182's warning. No auto-flip: record still touches only Requirements/AC boxes. Dogfood proof: `spur task check 0800 --as done --json` → error + `pass:false`; `spur task check 0787 --as done --json` (already done) → warning + `pass:true`. Tests: `packages/app/tests/services/task-check.test.ts:3270` (5 tests: AC1 error/block, no-`--as` clean, `--as testing` clean, AC2 warning, done+`--as done` warning) and `packages/app/tests/services/task-record.test.ts:767` (AC3: Plan byte-identical across a PASS record while R1 flips).
+
+**R2 — `disallowed-section` repair kind.** `packages/app/src/services/structural-repair.ts:31` adds the union member; `:193` `demoteDisallowedSections` walks domain-level headings, tracks the nearest preceding canonical (`canonicalOrder ∪ UNIVERSAL_SECTIONS`), and rewrites a phantom's marker one level deeper in place — lossless, no content moves, 0619's no-delete rule stands; a phantom with no canonical predecessor is left untouched. Wired as pass 0 at `:237` so a folded heading is no longer a section when order/level compute. Tests: `packages/app/tests/services/structural-repair.test.ts:91` (AC4 fold lossless, AC5 orphan byte-identical, two consecutive phantoms, universal sections untouched, fenced-code immunity). 0787 repaired through the CLI: `spur task check 0787 --fix --json` reported 8 `disallowed-section` repairs (all "folded into Review"); re-check reports zero `L2.disallowed-section`; `git diff` shows exactly 8 heading-marker lines changed (`###` → `####`), nothing else. 0787's deliberately-open Plan box stays open per the non-goal.
+
+**R3 — flag-set parity as a test.** `apps/cli/src/index.ts:134` extracts `buildProgram(context, output)` from `runCommandDispatch` (`:189`) so the test walks the same commander tree the dispatcher runs. `apps/cli/tests/help-doc-parity.test.ts` walks `spur <noun> [verb]` → long flags, parses `` `--flag` `` rows under `# spur <noun>` / `## spur <path>` / combined `## spur team start | stop` headings in `docs/help/cmd_*.md` (escaped pipes inside backticked cells handled), allow-lists `--json-envelope` + `--help`, and asserts set equality both directions, naming `file :: subcommand :: flag` in failures. The run surfaced 30 undocumented flags (the session estimate was 16) — all now documented: rows added in `docs/help/cmd_agent.md`, `cmd_builder.md`, `cmd_history.md` (+ new `spur history reset` section), `cmd_message.md`, `cmd_init.md`, `cmd_task.md` (create/batch-create/check rows + new `spur task migrate-anchors` section), `cmd_workflow.md` (continue row + new `spur workflow show` section), `cmd_projects.md` (5 new per-verb sections), new `docs/help/cmd_maintain.md`, and the two global flags noted once in `docs/help/index.md`. Description-text parity deliberately not checked (89/236 editorial diffs).
+
+**R4 — typed validation error.** `packages/app/src/services/task-service.ts:1690` wraps both `normalizeTaskStatus` calls in `list()` with a `canonical()` helper that rethrows `ValidationError` from `@gobing-ai/ts-utils` (code `VALIDATION` → 422 `VALIDATION_FAILED` at every transport); the domain function keeps its plain `Error` (disk reads mean corruption, not client error). `apps/server/src/modules/task/handlers.ts:11` — 0795's transport-local `try`/`catch` deleted; `toFilters` is a plain mapper passing the raw status through; `HTTPException` stays for the 404 path. Tests: `packages/app/tests/services/task-service.test.ts:421,434` (`ValidationError` with the allowed-set message; alias/case resolution still covered by the pre-existing 'resolves uppercase and alias filters' test); `apps/server/tests/modules/task/handlers.test.ts:109` routes the handler through `globalErrorHandler` and asserts 422 + `VALIDATION_FAILED` naming `bogus` and the allowed set, and `:142` asserts raw passthrough. `taskListInputSchema.status` stays `z.string()`.
+
+**Verification this stage (targeted probes; the full project gate belongs to the pipeline's test hop):** `packages/app`: task-check 168 pass, structural-repair 16 pass, task-record 82 pass, task-service list 15 pass. `apps/server`: handlers 19 pass. `apps/cli`: help-doc-parity 2 pass, commands/task + output-envelope 230 pass, bootstrap + output-envelope 51 pass. Typechecks: `@gobing-ai/spur-app`, `@gobing-ai/spur-server`, `@gobing-ai/spur` all exit 0.
 
 ### Testing
 
@@ -482,4 +492,7 @@ task 0182 (terminal-status open boxes), feature F21 (the earlier verifyall whose
 carry the same residue).
 
 ### History
+
 - 2026-09-07T18:30:37.550Z backlog → todo (system)
+- 2026-09-07T22:55:50.499Z todo → wip (system)
+
