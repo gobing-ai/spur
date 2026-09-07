@@ -4,7 +4,7 @@ name: "Observability Jobs tab redesign: truthful queue_jobs table, active schedu
 status: done
 template: feature-impl
 created_at: 2026-09-06T21:43:37.718Z
-updated_at: "2026-09-06T23:06:01.478Z"
+updated_at: "2026-09-07T00:34:32.858Z"
 feature_id: J93
 priority: P2
 tags: ["observability", "web", "ui", "jobs"]
@@ -396,24 +396,24 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | apps/web/src/modules/observability/JobsTab.tsx:160-205 fetches GET /api/jobs?status=&since=&limit=&offset= typed by QueueJobListResponse; legacy historyUrl and /api/jobs/stats removed |
-| R2 | MET | apps/web/src/modules/observability/JobsTab.tsx:220-255 status filter chips for All, Failed, Running, Completed with counts read from countsByStatus |
-| R3 | MET | apps/web/src/modules/observability/JobsTab.tsx:257-274 failure warning banner with Filter to Failed action button |
-| R4 | MET | apps/web/src/modules/observability/JobsTab.tsx:310-370 table columns Status, Job Type, Enqueued At, Started At, Duration, Attempts, Error; null startedAt and durationMs render em dash |
-| R5 | MET | apps/web/src/modules/observability/JobsTab.tsx:350-366 inline truncated lastError with per-row expand/hide toggle that does not trigger drawer |
-| R6 | MET | apps/web/src/modules/observability/JobsTab.tsx:45-135 ActiveSchedulesCard fetches GET /api/jobs/schedules, displays schedule details, handles null nextFireAt/lastStatus, degrades independently |
-| R7 | MET | apps/web/src/modules/observability/JobDetailDrawer.tsx:1-295 slide-over detail drawer with metadata grid, formatted payload, full error, and chronological lifecycle timeline with diagnostic-tier explanation |
-| R8 | MET | apps/web/src/modules/observability/JobDetailDrawer.tsx:150-165 link to open correlated events in System Events tab rendered only when onNavigate prop is supplied |
-| R9 | MET | apps/web/src/modules/observability/JobsTab.tsx:254 RetentionBadge imported from ./ObservabilityFilters rendered in controls bar |
-| R10 | MET | apps/web/tests/modules/observability/jobs-tab.test.tsx:1-298 passes 5/5 tests covering all R1-R9 behaviors |
+| R1 | MET | `apps/web/src/modules/observability/JobsTab.tsx:160-206` fetches `GET /api/jobs?status=&since=&limit=&offset=` typed by `QueueJobListResponse`; `since` from `timeRangeSince(props.timeRange)` (`:12` import). Legacy paths are deleted, not dormant: `grep -n "events/history\|jobs/stats" JobsTab.tsx` returns no match |
+| R2 | MET | `apps/web/src/modules/observability/JobsTab.tsx:218-256` — chips array (All, Failed, Running, Completed) with counts from `countsByStatus` (`:195`), `running`→`processing` via `mapFilterToStatus` (`:173`); `data-testid="job-status-chips"` at `:229`, per-chip testids at `:237`; selecting re-requests through the `:206` effect deps |
+| R3 | MET | `apps/web/src/modules/observability/JobsTab.tsx:261-279` — `counts.failed > 0` warning banner (`data-testid="jobs-failure-banner"` at `:265`) rendering `N jobs failed in this window` with a `Filter to Failed` button (`data-testid="filter-to-failed-btn"` at `:273`) that calls `setStatusFilter('failed')` at `:274` |
+| R4 | MET | `apps/web/src/modules/observability/JobsTab.tsx:285-370` table; `:314` `<th>Enqueued At</th>` in the Status / Job Type / Enqueued At / Started At / Duration / Attempts / Error header row, all fields read straight off `QueueJobRow` with no client-side timing math. Null `startedAt`/`durationMs` render as an em dash — asserted at `apps/web/tests/modules/observability/jobs-tab.test.tsx:152` |
+| R5 | MET | `apps/web/src/modules/observability/JobsTab.tsx:350-366` — `job.lastError` inline and truncated with a per-row expand toggle (`:323` `expandedErrors.has(job.id)`, `:147` the `Set` state, `:363` `data-testid="expand-error-btn-<id>"`); the toggle stops short of the drawer, asserted at `apps/web/tests/modules/observability/jobs-tab.test.tsx:180` |
+| R6 | MET | `apps/web/src/modules/observability/JobsTab.tsx:44-131` (`ActiveSchedulesCard`, closing at `:131`) fetching `GET /api/jobs/schedules`, rendered above the table at `:282`. Renders `name`, `cron`, `cadence`, `nextFireAt`, `lastFiredAt`, `lastStatus`, and the `builtin`/`config` marker; `nextFireAt: null` → `next run: cron (unknown)`, `lastStatus: 'none'` → `never run`; a schedules-fetch failure degrades the card only — asserted at `apps/web/tests/modules/observability/jobs-tab.test.tsx:210` |
+| R7 | MET | `apps/web/src/modules/observability/JobDetailDrawer.tsx:45-299` opens from the row click wired at `apps/web/src/modules/observability/JobsTab.tsx:396`; metadata grid, formatted `payload` (`:236-239`), full `lastError` (`:223-226`), and the chronological lifecycle timeline (`:46,264-265`) correlated by `jobId` per Q&A D3 (`:24-28` reads `payload.jobId` then `payload.context.correlation.jobId`). Empty timeline renders the diagnostic-tier explanation at `:256` (`data-testid="empty-lifecycle-timeline"`), not an error or spinner |
+| R8 | MET | `apps/web/src/modules/observability/JobDetailDrawer.tsx:162-167` — the System Events link is inside `{onNavigate && (…)}` and fires `onNavigate({ tab: 'system-events', runId: job.id })`; `:11` declares the optional prop, `apps/web/src/modules/observability/JobsTab.tsx:396` forwards it |
+| R9 | MET | `apps/web/src/modules/observability/JobsTab.tsx:12` imports `RetentionBadge` from `./ObservabilityFilters`, `:258` renders it in the controls bar. No copy is redefined here — `RETENTION_COPY` stays at `apps/web/src/modules/observability/ObservabilityFilters.tsx:109` |
+| R10 | MET | Re-run this turn: `cd apps/web && bun test tests/modules/observability` → 128 pass / 0 fail. `apps/web/tests/modules/observability/jobs-tab.test.tsx:92-297` — `:106` (chips + counts, failure banner, retention badge), `:152` (columns + null timing em dash), `:180` (inline error expansion without drawer), `:210` (schedules card + degradation), `:251` (drawer open, metadata, empty-timeline note) . Fix pass (`--fix all`) touched only gitignored artifacts: `.spur/run/0792-verify-answer.txt:6-15,20-24,29-32` (evidence anchors re-read at HEAD after commit `f0c330233` line drift; bare-basename citations expanded to repo-relative form) → `.spur/run/0792-verdict.json` re-derived. No source file was edited by this verify run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R5 — Jobs tab queried directly from queue_jobs table | MET | test | apps/web/tests/modules/observability/jobs-tab.test.tsx:1-298 |
-| R6 — Server-side jobs query endpoint with timing calculations and status filtering | MET | test | apps/web/tests/modules/observability/jobs-tab.test.tsx:120-175 |
-| R7 — Active cron schedule visibility and next-fire calculation | MET | test | apps/web/tests/modules/observability/jobs-tab.test.tsx:205-245 |
-| R8 — Run detail drawer keyed by jobId with correlated event chain | MET | test | apps/web/tests/modules/observability/jobs-tab.test.tsx:250-295 |
-| R9 — Status filter chips, inline error preview, and retention notice | MET | test | apps/web/tests/modules/observability/jobs-tab.test.tsx:120-200 |
+| R5 — Jobs tab queried directly from queue_jobs table | MET | test | `apps/web/tests/modules/observability/jobs-tab.test.tsx:106,152`; the `/api/events/history` + `/api/jobs/stats` replay path is gone from `JobsTab.tsx` (grep returns no match), replaced by the single `GET /api/jobs` fetch at `:160-206` |
+| R6 — Server-side jobs query endpoint with timing calculations and status filtering | MET | test | `apps/web/tests/modules/observability/jobs-tab.test.tsx:106` (chip filtering, counts stay complete while filtered), `:152` (server-computed timings rendered verbatim, nulls as em dash); server half at `apps/server/tests/modules/jobs/index.test.ts:85` |
+| R7 — Active cron schedule visibility and next-fire calculation | MET | test | `apps/web/tests/modules/observability/jobs-tab.test.tsx:210`; `nextFireAt: null` → `cron (unknown)` is the frozen 0789 Q&A D4 contract, documented at `docs/design/observability-module-refactor.md:89` |
+| R8 — Run detail drawer keyed by jobId with correlated event chain | MET | test | `apps/web/tests/modules/observability/jobs-tab.test.tsx:251`; correlation resolution at `apps/web/src/modules/observability/JobDetailDrawer.tsx:24-28`, System Events link at `:162-167` |
+| R9 — Status filter chips, inline error preview, and retention notice | MET | test | `apps/web/tests/modules/observability/jobs-tab.test.tsx:106` (chips + retention badge), `:180` (inline error preview expansion) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->
@@ -422,8 +422,8 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | lint | — | biome check . --error-on-warnings && bun run typecheck |
-| P4 | unit-tests | — | cd apps/web && bun test tests/modules/observability passed 128/128 |
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - Parent feature: `docs/features/J93_observability-module-refactor-summary-tab-4h-range-default-queue-jobs-table-and-schedule-tracing.md` (scenarios R5, R6, R7, R8, R9)
 - Design satellite: `docs/design/observability-module-refactor.md` §2.3, §2.4, §2.5, §2.6, §2.7, §3.2, §3.3 — ⚠️ four premises corrected here (`queue.job.started`, diagnostic tier, `?runId=`, the `7d` retention claim); satellite fix owed at wrap

@@ -4,7 +4,7 @@ name: "Observability backend data layer: summary aggregations, queue_jobs query,
 status: done
 template: feature-impl
 created_at: 2026-09-06T21:42:07.700Z
-updated_at: "2026-09-06T22:52:44.509Z"
+updated_at: "2026-09-07T00:34:31.364Z"
 feature_id: J93
 priority: P2
 tags: ["observability", "server", "domain", "contracts"]
@@ -374,19 +374,19 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/contracts/src/observability.ts:1-120; packages/contracts/src/index.ts:18; packages/contracts/tests/observability.test.ts:1-143 |
-| R2 | MET | packages/domain/src/dao/system-event-dao.ts:446-608; packages/domain/tests/dao/system-event-dao.test.ts:1210-1282 |
-| R3 | MET | packages/domain/src/db.ts:413-529; packages/domain/tests/dao/queue-jobs-query.test.ts:1-177 |
-| R4 | MET | apps/server/src/modules/observability/index.ts:252-297; apps/server/tests/modules/observability/index.test.ts:153-228 |
-| R5 | MET | apps/server/src/modules/jobs/index.ts:22-68; apps/server/tests/modules/jobs/index.test.ts:109-143 |
-| R6 | MET | apps/server/src/modules/jobs/schedule-registry.ts:1-74; apps/server/src/serve.ts:147-190; apps/server/src/modules/jobs/index.ts:70-123; apps/server/tests/modules/jobs/index.test.ts:193-235 |
-| R7 | MET | All unit tests pass; bun run test-cf passed; bun run lint passed clean with zero warnings |
+| R1 | MET | `packages/contracts/src/observability.ts:6-182` (all 12 frozen schemas + inferred types); `packages/contracts/src/index.ts:39` (`export * from './observability'`); `packages/contracts/tests/observability.test.ts:1-143` (3 pass, 7 expect) |
+| R2 | MET | `packages/domain/src/dao/system-event-dao.ts:530` (`eventSummary`, beside `routingSummary:457`); SQL bound with `?1`-`?4` positional params, severity via `json_extract`, no raw rows returned; `packages/domain/tests/dao/system-event-dao.test.ts:1186-1282` |
+| R3 | MET | `packages/domain/src/db.ts:376` (`queryQueueJobs`), `:534` (`queueJobKpis`); SQL-side `status`/`since` filters + `LIMIT ? OFFSET ?`; `packages/domain/tests/dao/queue-jobs-query.test.ts:1-177` |
+| R4 | MET | `apps/server/src/modules/observability/index.ts:230` (`handleObservabilitySummary`, 400 `MALFORMED_TIMESTAMP` at `:252-262`), `:361` (mount); `apps/server/tests/modules/observability/index.test.ts:456-558` (200 payload, malformed 400, empty-window zeroed) |
+| R5 | MET | `apps/server/src/modules/jobs/index.ts:33` (`GET /api/jobs`; unknown status → 400 at `:44-53`, limit clamped 1..500 at `:60`); `/api/jobs/stats` untouched at `:27`; `apps/server/tests/modules/jobs/index.test.ts:85-147` |
+| R6 | MET | `apps/server/src/modules/jobs/schedule-registry.ts:1-32`; `apps/server/src/serve.ts:34,137,204` (`setRegisteredSchedules` from `registerSchedulerEntries`); `apps/server/src/modules/jobs/index.ts:87` (`GET /api/jobs/schedules`); `apps/server/tests/modules/jobs/index.test.ts:149-274` |
+| R7 | MET | Re-run this turn: `cd packages/contracts && bun test tests/observability.test.ts` → 3 pass / 0 fail; `cd packages/domain && bun test tests/dao/system-event-dao.test.ts tests/dao/queue-jobs-query.test.ts` → 40 pass / 0 fail; `cd apps/server && bun test tests/modules/observability tests/modules/jobs` → 29 pass / 0 fail; `bun run lint` → biome 916 files clean + typecheck exit 0 across 7 workspaces; `bun run test-cf` → 1 pass, exit 0 . Fix pass (`--fix all`) touched only gitignored artifacts: `.spur/run/0789-verify-answer.txt:6-12,17-19,24-26` (evidence anchors re-read at HEAD after commit `f0c330233` line drift; bare-basename citations expanded to repo-relative form) → `.spur/run/0789-verdict.json` re-derived. No source file was edited by this verify run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R4 — Server-side observability summary aggregation endpoint | MET | test | apps/server/tests/modules/observability/index.test.ts:153-228 |
-| R6 — Server-side jobs query endpoint with timing calculations and status filtering | MET | test | apps/server/tests/modules/jobs/index.test.ts:109-143 |
-| R7 — Active cron schedule visibility and next-fire calculation | MET | test | apps/server/tests/modules/jobs/index.test.ts:193-235 |
+| R4 — Server-side observability summary aggregation endpoint | MET | test | `apps/server/tests/modules/observability/index.test.ts:457` (200 + schema), `:499` (malformed since/until → 400), `:527` (no-data window → zeroed, not 500); SQL-only aggregation at `packages/domain/src/dao/system-event-dao.ts:530` |
+| R6 — Server-side jobs query endpoint with timing calculations and status filtering | MET | test | `apps/server/tests/modules/jobs/index.test.ts:85` (status filter, pagination, invalid status → 400); `countsByStatus` computed ignoring the status filter at `packages/domain/src/db.ts:390-397` |
+| R7 — Active cron schedule visibility and next-fire calculation | MET | test | `apps/server/tests/modules/jobs/index.test.ts:149` (registered jobs with timing + latest status). Cron-entry `nextFireAt: null` is the task's own frozen AC clause (Q&A D4) and is documented at `docs/design/observability-module-refactor.md:89` — documented deferral, not a silent deviation |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->
@@ -395,9 +395,8 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | lint | — | biome check . --error-on-warnings && bun run typecheck |
-| P4 | unit-tests | — | contracts, domain, server tests passed |
-| P4 | cf-tests | — | bun run test-cf passed |
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 
 - Parent feature: `docs/features/J93_observability-module-refactor-summary-tab-4h-range-default-queue-jobs-table-and-schedule-tracing.md` (scenarios R4, R6, R7)

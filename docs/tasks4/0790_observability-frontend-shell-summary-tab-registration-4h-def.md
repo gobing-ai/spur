@@ -4,7 +4,7 @@ name: "Observability frontend shell: Summary tab registration, 4h default range,
 status: done
 template: feature-impl
 created_at: 2026-09-06T21:42:37.707Z
-updated_at: "2026-09-06T22:55:54.162Z"
+updated_at: "2026-09-07T00:34:31.868Z"
 feature_id: J93
 priority: P2
 tags: ["observability", "web", "ui"]
@@ -306,21 +306,21 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | apps/web/src/modules/observability/tabs.ts:3,42; apps/web/tests/modules/observability/tabs.test.ts:30 |
-| R2 | MET | apps/web/src/modules/observability/tabs.ts:8 |
-| R3 | MET | apps/web/src/modules/observability/ObservabilityShell.tsx:17; apps/web/tests/modules/observability/components.test.tsx:2203 |
-| R4 | MET | apps/web/src/modules/observability/ObservabilityFilters.tsx:31,38; apps/web/tests/modules/observability/components.test.tsx:2128 |
-| R5 | MET | apps/web/src/modules/observability/ObservabilityFilters.tsx:109-122,376; apps/web/tests/modules/observability/components.test.tsx:2215-2222 |
-| R6 | MET | apps/web/src/modules/observability/SummaryTab.tsx:1-26; apps/web/tests/modules/observability/components.test.tsx:267 |
-| R7 | MET | RoutingTab.tsx, SystemEventsTab.tsx, JobsTab.tsx untouched; routing-tab.test.tsx passes 11/11 tests |
-| R8 | MET | tabs.test.ts passes 5/5 tests; components.test.tsx passes all 124 tests in apps/web |
+| R1 | MET | `apps/web/src/modules/observability/tabs.ts:4` (SummaryTab import), `:47-52` (`OBSERVABILITY_TABS` with `summary` first, then `system-events`, `jobs`, `routing` — existing ids/labels verbatim); `apps/web/tests/modules/observability/tabs.test.ts:26-31` asserts the exact list |
+| R2 | MET | `apps/web/src/modules/observability/tabs.ts:8` — `export type ObservabilityTimeRange = '30s' \| '5m' \| '1h' \| '4h' \| '24h' \| '7d' \| 'all'` |
+| R3 | MET | `apps/web/src/modules/observability/ObservabilityShell.tsx:18` (`useState<ObservabilityTimeRange>('4h')`), `:17` derives the default tab from `OBSERVABILITY_TABS[0]` unchanged; `apps/web/tests/modules/observability/components.test.tsx:279-283` asserts Summary is the active tab on mount |
+| R4 | MET | `apps/web/src/modules/observability/ObservabilityFilters.tsx:31` (`TIME_RANGES` with `'4h'` between `'1h'` and `'24h'`), `:37` (`'4h': 4 * 60 * 60_000`); `apps/web/tests/modules/observability/components.test.tsx:1900` asserts `timeRangeSince('4h')` = `now - 14_400_000`, `:1981` asserts the 4h control is pressed |
+| R5 | MET | `apps/web/src/modules/observability/ObservabilityFilters.tsx:109` (`RETENTION_COPY`, numbers sourced in the `:105-108` comment from `packages/app/src/services/system-event-retention.ts:11` and `packages/domain/src/retention.ts:25,221`, not re-typed in JSX), `:111-121` (`RetentionBadge` with `ℹ️` + `data-testid="observability-retention-badge"`), `:356` (rendered in the controls bar); `apps/web/tests/modules/observability/components.test.tsx:2000-2007`, `:1922` |
+| R6 | MET | `apps/web/src/modules/observability/SummaryTab.tsx` exists as a default-exported `ObservabilityTabProps` component carrying `data-testid="observability-summary-tab"` (`:235`, `:284`); `apps/web/tests/modules/observability/components.test.tsx:283` asserts it renders inside the registry. NOTE: the placeholder body this task shipped was superseded by task 0791 as designed — the R6 contract (registry compiles, tab renders) still holds against current HEAD |
+| R7 | MET | `RoutingTab.tsx` / `SystemEventsTab.tsx` carry no 0790 edit; `apps/web/tests/modules/observability/routing-tab.test.tsx:1-287` passes untouched. `JobsTab.tsx` was later rewritten by task 0792 (out of this task's scope, sequenced after) |
+| R8 | MET | Re-run this turn: `cd apps/web && bun test tests/modules/observability` → 128 pass / 0 fail across 7 files. `apps/web/tests/modules/observability/tabs.test.ts:30` asserts `['summary','system-events','jobs','routing']`; `apps/web/tests/modules/observability/components.test.tsx:279-283` (shell mounts on Summary), `:1900` (4h `timeRangeSince`), `:2000-2007` (retention badge copy) . Fix pass (`--fix all`) touched only gitignored artifacts: `.spur/run/0790-verify-answer.txt:6-13,18-21,26-28` (evidence anchors re-read at HEAD after commit `f0c330233` line drift; bare-basename citations expanded to repo-relative form) → `.spur/run/0790-verdict.json` re-derived. No source file was edited by this verify run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — Summary tab as the first and default view | MET | test | apps/web/tests/modules/observability/tabs.test.ts:30; apps/web/tests/modules/observability/components.test.tsx:263-267 |
-| R3 — 4h time range preset and module-wide default | MET | test | apps/web/tests/modules/observability/components.test.tsx:2128,2203 |
-| R9 — Status filter chips, inline error preview, and retention notice | MET | test | apps/web/tests/modules/observability/components.test.tsx:2147,2215-2222 |
-| R10 — Routing tab preserved unchanged | MET | test | apps/web/tests/modules/observability/routing-tab.test.tsx:1-50 |
+| R1 — Summary tab as the first and default view | MET | test | `apps/web/tests/modules/observability/tabs.test.ts:26-31`; `apps/web/tests/modules/observability/components.test.tsx:279-283` (`aria-selected="true"` on the Summary tab at mount) |
+| R3 — 4h time range preset and module-wide default | MET | test | `apps/web/tests/modules/observability/components.test.tsx:1900` (14,400,000 ms lower bound), `:1981` (4h preset pressed), source default at `apps/web/src/modules/observability/ObservabilityShell.tsx:18` |
+| R9 — Status filter chips, inline error preview, and retention notice | MET | test | Retention notice half owned here: `apps/web/tests/modules/observability/components.test.tsx:2000-2007` (truthful copy, no false 7d event-purge claim), `:1922`. Chips and inline error preview are task 0792's half |
+| R10 — Routing tab preserved unchanged | MET | test | `apps/web/tests/modules/observability/routing-tab.test.tsx:1-287` passes with no source edit to `RoutingTab.tsx` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->
@@ -329,8 +329,8 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | lint | — | biome check . --error-on-warnings && bun run typecheck |
-| P4 | unit-tests | — | cd apps/web && bun test tests/modules/observability passed 124/124 |
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - Parent feature: `docs/features/J93_observability-module-refactor-summary-tab-4h-range-default-queue-jobs-table-and-schedule-tracing.md` (scenarios R1, R3, R9-badge, R10)
 - Design satellite: `docs/design/observability-module-refactor.md` §2.1, §2.2, §2.7 — ⚠️ §2.7 and the mermaid `system_events (7d quota)` node are factually wrong; `### Q&A` D3 records the corrected copy and the satellite fix owed at wrap

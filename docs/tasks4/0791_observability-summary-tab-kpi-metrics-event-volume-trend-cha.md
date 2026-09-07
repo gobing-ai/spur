@@ -4,7 +4,7 @@ name: "Observability Summary tab: KPI metrics, event volume trend charts, and er
 status: done
 template: feature-impl
 created_at: 2026-09-06T21:43:07.713Z
-updated_at: "2026-09-06T23:00:34.054Z"
+updated_at: "2026-09-07T00:34:32.370Z"
 feature_id: J93
 priority: P2
 tags: ["observability", "web", "ui", "charts"]
@@ -305,18 +305,18 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | apps/web/src/modules/observability/SummaryTab.tsx:128-197 self-fetches GET /api/observability/summary with AbortController, monotonic fetchIdRef, and period-over-period Promise.all |
-| R2 | MET | apps/web/src/modules/observability/SummaryTab.tsx:324-386 renders 4 KPI cards (Total Events, Active Jobs, Success Rate, Errors/Warnings) with Sparklines and DeltaBadge |
-| R3 | MET | apps/web/src/modules/observability/SummaryTab.tsx:389-411 StackedColumnsChart stacked by event prefix with stable PREFIX_COLORS |
-| R4 | MET | apps/web/src/modules/observability/SummaryTab.tsx:413-446 4-segment severity distribution bar including distinct neutral unknown segment |
-| R5 | MET | apps/web/src/modules/observability/SummaryTab.tsx:449-556 Top event types table and recent failures feed triggering onNavigate with job/event destination |
-| R6 | MET | apps/web/src/modules/observability/tabs.ts:16-25 ObservabilityNavIntent and optional onNavigate member on ObservabilityTabProps; ObservabilityShell.tsx:103-108 handleNavigate wired to setActiveId |
-| R7 | MET | apps/web/src/modules/observability/SummaryTab.tsx:294-322 loading skeleton and error panel matching History module pattern |
-| R8 | MET | apps/web/tests/modules/observability/summary-tab.test.tsx:1-258 passes 7/7 comprehensive tests covering all R1-R7 behaviors |
+| R1 | MET | `apps/web/src/modules/observability/SummaryTab.tsx:109` (`export default function SummaryTab(props: ObservabilityTabProps)` — 0790's placeholder body replaced, signature kept), `:110,119,158,175,182` (monotonic `fetchIdRef` guard discarding out-of-order responses), `:120` (`AbortController`), `:130,150` (`resolveApiUrl()`/`fetchWithTimeout` to `/observability/summary`), re-fetch keyed on `props.timeRange` |
+| R2 | MET | `apps/web/src/modules/observability/SummaryTab.tsx:285-325` — four `KpiCard`s (Total Events, Active Jobs, Success Rate, Errors/Warnings); `:50` `DeltaBadge`, `:98` its per-card use, `:102` `Sparkline`, `:272-273` the window sparkline series. `successRatePct: 0` renders as `0%` via `fmtInt`/percent formatting — covered by `apps/web/tests/modules/observability/summary-tab.test.tsx:228` |
+| R3 | MET | `apps/web/src/modules/observability/SummaryTab.tsx:326-345` (Event Volume Trend block), `:338` `<StackedColumnsChart buckets={chartBuckets} series={series} />`; stable prefix→color mapping shared across chart, severity bar, and table at `:18` (`PREFIX_COLORS`), `:32` (`colorForPrefix`) |
+| R4 | MET | `apps/web/src/modules/observability/SummaryTab.tsx:347-412` severity distribution bar; `:355` `data-testid="severity-distribution-bar"`; `:364,372,380` info/warning/error segments and `:388` the distinct `severity-bar-unknown` segment (not folded into info); aggregation at `:220-227` sums all four buckets |
+| R5 | MET | `apps/web/src/modules/observability/SummaryTab.tsx:416-535` hotspots; `:418-455` top event types table (`data-testid="top-event-types-table"` at `:424`, `name`/`prefix`/`count`/`latestAt` at `:434-450`); `:466-535` recent failures feed (`data-testid="recent-failures-feed"` at `:473`), each row an activator calling `:276` (`onNavigate({tab:'jobs', jobId})`) or `:280` (`onNavigate({tab:'system-events', eventName, runId})`) |
+| R6 | MET | `apps/web/src/modules/observability/tabs.ts:17-20` (`ObservabilityNavIntent`), `:27` (`onNavigate?: (intent: ObservabilityNavIntent) => void` — the single added member on `ObservabilityTabProps`); `apps/web/src/modules/observability/ObservabilityShell.tsx:32-34` (`handleNavigate` → `setActiveId(intent.tab)`), `:131` (passed to the active tab). `OBSERVABILITY_TABS` order and the `useState` defaults are untouched |
+| R7 | MET | `apps/web/src/modules/observability/SummaryTab.tsx:235-237` loading skeleton (`animate-pulse`, `data-testid="observability-summary-skeleton"`); `:252` error panel using the History idiom `bg-error/10 border border-error/20 text-error`; aborted fetches short-circuit at the `:158,175,182` fetch-id guards rather than surfacing as errors |
+| R8 | MET | Re-run this turn: `cd apps/web && bun test tests/modules/observability` → 128 pass / 0 fail. `apps/web/tests/modules/observability/summary-tab.test.tsx:102-259` — 7 tests at `:116` (loading→loaded, 4 KPI values), `:145` (delta sign up/down/inverted/absent-previous), `:162` (stacked chart + unknown severity segment), `:184` (failure-row `onNavigate` targets), `:214` (error panel), `:228` (empty window renders zeros), `:242` (previous-window failure degrades) . Fix pass (`--fix all`) touched only gitignored artifacts: `.spur/run/0791-verify-answer.txt:6-13,18,23-25` (evidence anchors re-read at HEAD after commit `f0c330233` line drift; bare-basename citations expanded to repo-relative form) → `.spur/run/0791-verdict.json` re-derived. No source file was edited by this verify run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R2 — Summary tab KPI metrics and trend charts | MET | test | apps/web/tests/modules/observability/summary-tab.test.tsx:1-258 |
+| R2 — Summary tab KPI metrics and trend charts | MET | test | `apps/web/tests/modules/observability/summary-tab.test.tsx:116` (four KPI cards after load), `:162` (stacked columns chart + severity bar with unknown segment), `:228` (empty window → zeros, no crash); source at `apps/web/src/modules/observability/SummaryTab.tsx:285-345` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
 <!-- spur:record-review -->
@@ -325,8 +325,8 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | lint | — | biome check . --error-on-warnings && bun run typecheck |
-| P4 | unit-tests | — | cd apps/web && bun test tests/modules/observability passed 131/131 |
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 ### References
 - Parent feature: `docs/features/J93_observability-module-refactor-summary-tab-4h-range-default-queue-jobs-table-and-schedule-tracing.md` (scenario R2)
 - Design satellite: `docs/design/observability-module-refactor.md` §2.1, §3.1 (`ObservabilitySummaryResponse`)
