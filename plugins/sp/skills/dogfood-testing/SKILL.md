@@ -75,8 +75,11 @@ The command forwards these via `$ARGUMENTS`:
 > independent mutation sources is present:
 >
 > - **Pipeline-driving testees** — tokens
->   [`--next`, `dev-runall`, `dev-wrapall`, `dev-run`, `dev-wrap`, `dev-idea`,
->   `runall`, `wrapall`, `run`, `wrap`, `idea`] matched as a **distinct hyphen-word**
+>   <!-- pipeline-tokens:start -->
+>   [`--next`, `dev-runall`, `dev-wrapall`, `dev-refineall`, `dev-verifyall`, `dev-run`, `dev-wrap`, `dev-idea`,
+>   `refineall`, `verifyall`, `runall`, `wrapall`, `run`, `wrap`, `idea`]
+>   <!-- pipeline-tokens:end -->
+>   matched as a **distinct hyphen-word**
 >   (machine-checked by
 >   [`detectPipelineDriving`](../../scripts/dogfood-testing/detect-pipeline-driving.ts);
 >   see [§Pipeline-driving word-boundary contract](#pipeline-driving-word-boundary-contract))
@@ -335,8 +338,8 @@ node "$(superskill script path sp dogfood-testing/detect-pipeline-driving.mjs)" 
 
 | Token shape | Examples | Matches | Rejects |
 |-------------|----------|---------|---------|
-| Flag / complete | `--next`, `dev-run`, `dev-runall`, `dev-wrap`, `dev-wrapall`, `dev-idea` | `/sp:dev-run 0125`, bare `--next` | `--next-gen`, `dev-runner` |
-| Bare noun | `run`, `runall`, `wrap`, `wrapall`, `idea` | `task run 0042` | `runaway`, `wrapper`, `idealist` |
+| Flag / complete | <!-- pipeline-tokens:start -->`--next`, `dev-run`, `dev-runall`, `dev-wrap`, `dev-wrapall`, `dev-idea`, `dev-refineall`, `dev-verifyall`<!-- pipeline-tokens:end --> | `/sp:dev-run 0125`, bare `--next` | `--next-gen`, `dev-runner` |
+| Bare noun | <!-- pipeline-tokens:start -->`run`, `runall`, `wrap`, `wrapall`, `idea`, `refineall`, `verifyall`<!-- pipeline-tokens:end --> | `task run 0042` | `runaway`, `wrapper`, `idealist` |
 
 `-` is a **word character** for boundaries: a token must be a distinct hyphen-word. Contract tests:
 `plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts`. Helpers:

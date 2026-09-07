@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
     detectImplementHeavy,
@@ -133,6 +134,27 @@ describe('dogfood-pipeline-detect — detectPipelineDriving word-boundary contra
             'wrap',
             'idea',
         ]);
+    });
+
+    test('SKILL.md pipeline-token inventories match PIPELINE_TOKENS', () => {
+        const skillMd = readFileSync(
+            join(import.meta.dir, '..', '..', 'skills', 'dogfood-testing', 'SKILL.md'),
+            'utf8',
+        );
+        const blocks: string[][] = [];
+        const blockRe = /<!-- pipeline-tokens:start -->([\s\S]*?)<!-- pipeline-tokens:end -->/g;
+        for (const match of skillMd.matchAll(blockRe)) {
+            const spans = [...(match[1] ?? '').matchAll(/`([^`]+)`/g)].map((m) => m[1] ?? '');
+            blocks.push(spans);
+        }
+        expect(blocks.length).toBeGreaterThanOrEqual(2);
+        const expected = new Set<string>(PIPELINE_TOKENS);
+        const union = new Set(blocks.flat());
+        expect(union).toEqual(expected);
+        // First inventory is the refuse-gate bullet (all 15); remaining blocks are the
+        // word-boundary table Examples cells and must union to the same set.
+        expect(new Set(blocks[0])).toEqual(expected);
+        expect(new Set(blocks.slice(1).flat())).toEqual(expected);
     });
 
     test('non-string / empty input is safe — returns false, never throws', () => {

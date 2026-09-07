@@ -807,8 +807,10 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // affordances, doctor caveat). Not permanent — split into references.
             // 0689 R4: 38148 → 38800 (+609B round-trip headroom) operator-local
             // write_file(**) allow caveat — unblock-not-fix, masks shim regressions.
-            // Not permanent — split into references.
-            'dogfood-testing': 38_800,
+            // 0795 R5: 38800 → 39103 (+303B) complete PIPELINE_TOKENS inventories
+            // (4 missing *refineall/*verifyall tokens + marker wrappers). Not
+            // permanent — split into references.
+            'dogfood-testing': 39_103,
             'code-verification': 30_488,
             wayfinder: 26_264,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
