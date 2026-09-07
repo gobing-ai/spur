@@ -64,10 +64,10 @@ your supported coding agents without cloning this repo:
 bun add -g @gobing-ai/superskill
 
 # install plugin sp via npm tarball
-superskill install sp --marketplace $(npm root -g)/@gobing-ai/spur
+superskill install sp --marketplace ~/.bun/install/global/node_modules/@gobing-ai/spur
 
 # install plugin sp via github URL
-superskill install kk --marketplace https://github.com/gobing-ai/sour
+superskill install sp --marketplace https://github.com/gobing-ai/spur
 ```
 
 **Without Bun — standalone binary (macOS / Linux):**
@@ -259,15 +259,15 @@ exits non-zero (a gate that checks nothing is not a pass).
 Read the doc that governs your change before editing code. On conflict, **lower number wins**
 (`00_ADR` is binding and overrides all others).
 
-| Document                                             | Purpose                                                          | Authority                          |
-| ---------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------- |
-| [`docs/00_ADR.md`](docs/00_ADR.md)                   | _Why_ — binding architecture decisions                           | Authoritative (wins all conflicts) |
-| [`docs/01_PRD.md`](docs/01_PRD.md)                   | _What_ — product, scope, in/out of scope                         | Authoritative for scope            |
-| [`docs/02_ROADMAP.md`](docs/02_ROADMAP.md)           | _When_ — phases, current vs deferred work                        | Derived                            |
-| [`docs/03_ARCHITECTURE.md`](docs/03_ARCHITECTURE.md) | _How_ — module boundaries, data flow, invariants                 | Derived (ADR wins)                 |
+| Document                                             | Purpose                                                      | Authority                          |
+| ---------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------- |
+| [`docs/00_ADR.md`](docs/00_ADR.md)                   | _Why_ — binding architecture decisions                       | Authoritative (wins all conflicts) |
+| [`docs/01_PRD.md`](docs/01_PRD.md)                   | _What_ — product, scope, in/out of scope                     | Authoritative for scope            |
+| [`docs/02_ROADMAP.md`](docs/02_ROADMAP.md)           | _When_ — phases, current vs deferred work                    | Derived                            |
+| [`docs/03_ARCHITECTURE.md`](docs/03_ARCHITECTURE.md) | _How_ — module boundaries, data flow, invariants             | Derived (ADR wins)                 |
 | [`docs/04_DESIGN.md`](docs/04_DESIGN.md)             | Concrete non-UI surface — CLI commands, config schemas, DTOs | Derived                            |
 | [`DESIGN.md`](DESIGN.md)                             | UI/UX design SSOT — visual language, tokens, component specs | Authoritative for UI/UX (dynamic)  |
-| [`docs/05_FEATURES.md`](docs/05_FEATURES.md)         | Feature decomposition + status (✅/🔶/⏳/💤)                     | Derived                            |
+| [`docs/05_FEATURES.md`](docs/05_FEATURES.md)         | Feature decomposition + status (✅/🔶/⏳/💤)                 | Derived                            |
 
 Agent-facing guidance for working in this repo lives in [`AGENTS.md`](AGENTS.md) (`CLAUDE.md` /
 `GEMINI.md` symlink to it).
