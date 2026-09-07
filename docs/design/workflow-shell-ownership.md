@@ -127,7 +127,7 @@ and the >5-line/>60-word Testing-length proxies with the standard verdict contra
 | `verify:onEnter:6` | GLUE | proof-digest + runId injection into verdict json (jq mutation; workflow-local proof wiring) |
 | `record:onEnter:0` | GLUE | captured `task record --solution-from-diff --transition testing` → `task update done --no-lifecycle` → persisted-status readback; guards consume the captured result (0769: exit 0 never converts a denied record to done) |
 
-### idea-pipeline.yaml (13 compound)
+### idea-pipeline.yaml (14 compound)
 
 0769: the feature check is measured exactly once per author/revise boundary by the
 `idea-ac-check` (end of ac-generate) and `idea-design-check` (end of system-design)
@@ -146,7 +146,8 @@ consumes the recorded run-scoped PASS/FAIL instead of re-running `spur feature c
 | `design-approval:onEnter:0` | GLUE | reject counter increment |
 | `decompose:onEnter:0` | GLUE | retry counter + batch scratch cleanup |
 | `decompose:onEnter:2` | GLUE | jq validation of batch order/dep uniqueness (workflow-local predicate) |
-| `batch-create-run:onEnter:0` | GLUE | idempotent `task batch-create` + jq verify + done/failed markers |
+| `batch-create-run:onEnter:0` | GLUE | idempotent `task batch-create --skip-ready` + jq verify + done/failed markers |
+| `ready-prepare:onEnter:1` | GLUE | normalize absent ready-evidence sidecar to empty + jq fail-closed shape validation (0788) |
 | `handoff-finalize:onEnter:0` | DUAL | monorepo app-service writer (`idea-handoff-cli.ts`) + portable jq/shell fallback for seeded projects — the R5 steady state |
 | `handoff:onEnter:2` | GLUE | checkpoint write |
 

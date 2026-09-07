@@ -6,6 +6,7 @@ import {
     type ProcessExecutor,
     type ProcessResult,
 } from '@gobing-ai/ts-runtime';
+import { computePlanningDigest, readyRefineCommand, verifyReadyChecks } from '../services/task-readiness';
 import { splitLaunchCommand } from './split-launch-command';
 
 /**
@@ -70,6 +71,10 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
     const batchPath = resolve(runDir, `${runId}-idea-task-batch.json`);
     const resultPath = resolve(runDir, `${runId}-idea-batch-create-result.json`);
     const orderPath = resolve(runDir, `${runId}-idea-task-order.json`);
+    // Run-scoped ready evidence written by the creation-preparation stage
+    // (F21 0788). Optional: a run without evidence falls back to per-task
+    // refine actions below — exit 0 from `task check` alone is never readiness.
+    const readyPath = resolve(runDir, `${runId}-idea-ready.json`);
     const reportPath = resolve(runDir, `${runId}-idea-handoff.md`);
 
     // Split the launch string once: `spurBin` legitimately resolves to `"<bun> <mainModule>"`
@@ -106,6 +111,31 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
             name: string;
             depends_on_names?: string[];
         }>;
+        /** Per-task row of `<runId>-idea-ready.json` (structural view). */
+        interface EvidenceRow {
+            wbs?: unknown;
+            status?: unknown;
+            planningDigest?: unknown;
+            checks?: unknown;
+        }
+        const sidecarExists = await fs.exists(readyPath);
+        const evidenceRows: EvidenceRow[] = await (async () => {
+            if (!sidecarExists) return [];
+            try {
+                const parsed: unknown = JSON.parse(await fs.readFile(readyPath));
+                const tasks =
+                    typeof parsed === 'object' && parsed !== null && 'tasks' in parsed
+                        ? (parsed as { tasks: unknown }).tasks
+                        : undefined;
+                return Array.isArray(tasks) ? (tasks as EvidenceRow[]) : [];
+            } catch {
+                return [];
+            }
+        })();
+        const evidenceByWbs = new Map<string, EvidenceRow>();
+        for (const row of evidenceRows) {
+            if (typeof row?.wbs === 'string') evidenceByWbs.set(row.wbs, row);
+        }
 
         if (!Array.isArray(batch) || !Array.isArray(result?.wbs) || !Array.isArray(order)) {
             return {
@@ -205,29 +235,109 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
             };
         }
 
-        // Check per-task readiness
-        const checkResults: Array<{ wbs: string; pass: boolean }> = [];
+        // Per-task readiness (F21 0788, R7/R7b): exit 0 from the deterministic
+        // check is necessary but NOT sufficient — each task must also carry
+        // run-scoped ready evidence (every checklist row passing with nonempty
+        // evidence) whose planning digest still matches the CURRENT task doc.
+        // Missing/stale/failed evidence degrades to a precise preparation
+        // action (`/sp:dev-refine <wbs> --auto --depth ready`), never a silent
+        // execution handoff.
+        const checkResults: Array<{ wbs: string; pass: boolean; status: string; reason?: string; action?: string }> =
+            [];
         for (const wbs of result.wbs) {
-            const checkRes = await executor.run({
+            const pathRes = await executor.run({
                 command: spurCommand,
-                args: [...spurArgsPrefix, 'task', 'check', wbs, '--json'],
+                args: [...spurArgsPrefix, 'task', 'path', wbs, '--json'],
                 cwd: root,
                 forceBuffered: true,
                 rejectOnError: false,
             });
-            // A null exitCode means the executor could not spawn the resolved command —
-            // the executor is broken, not the task. Fail loudly with no fabricated
-            // readiness table (R7). Real failures keep pass:false → refineall (R7b).
-            if (checkRes.exitCode === null) {
+            if (pathRes.exitCode === null) {
                 return {
                     ok: false,
                     wbsList: result.wbs,
                     nextCommand: '',
                     reportPath,
-                    error: `Task check for ${wbs} could not be spawned (${spurCommand}): ${processEvidence(checkRes)}`,
+                    error: `Task path for ${wbs} could not be spawned (${spurCommand}): ${processEvidence(pathRes)}`,
                 };
             }
-            checkResults.push({ wbs, pass: checkRes.exitCode === 0 });
+            let reason: string | undefined;
+            if (pathRes.exitCode !== 0) {
+                reason = `task path resolution failed: ${processEvidence(pathRes)}`;
+            } else {
+                let filePath: string | undefined;
+                try {
+                    const parsed: unknown = JSON.parse(pathRes.stdout);
+                    if (typeof parsed === 'object' && parsed !== null && 'filePath' in parsed) {
+                        const fp: unknown = (parsed as { filePath: unknown }).filePath;
+                        if (typeof fp === 'string') filePath = fp;
+                    }
+                } catch {
+                    filePath = undefined;
+                }
+                if (filePath === undefined) {
+                    reason = 'task path output carried no filePath';
+                } else {
+                    let digest: string | undefined;
+                    try {
+                        digest = computePlanningDigest(await fs.readFile(filePath));
+                    } catch {
+                        digest = undefined;
+                    }
+                    if (digest === undefined) {
+                        reason = `task file unreadable at ${filePath}`;
+                    } else {
+                        const row: EvidenceRow | undefined = evidenceByWbs.get(wbs);
+                        if (row === undefined) {
+                            reason = 'no ready evidence recorded for this run';
+                        } else if (row.status !== 'ready') {
+                            reason = `ready evidence status is ${String(row.status)}`;
+                        } else if (typeof row.planningDigest !== 'string' || row.planningDigest !== digest) {
+                            reason = 'planning digest stale — task content changed after preparation';
+                        } else {
+                            const verdict = verifyReadyChecks(
+                                Array.isArray(row.checks)
+                                    ? (row.checks as Array<{ id: string; pass: boolean; evidence: string }>)
+                                    : undefined,
+                            );
+                            if (!verdict.ok) reason = verdict.reason;
+                        }
+                    }
+                }
+            }
+
+            if (reason === undefined) {
+                const checkRes = await executor.run({
+                    command: spurCommand,
+                    args: [...spurArgsPrefix, 'task', 'check', wbs, '--json'],
+                    cwd: root,
+                    forceBuffered: true,
+                    rejectOnError: false,
+                });
+                // A null exitCode means the executor could not spawn the resolved command —
+                // the executor is broken, not the task. Fail loudly with no fabricated
+                // readiness table (R7). Real failures keep a precise reason → refineall (R7b).
+                if (checkRes.exitCode === null) {
+                    return {
+                        ok: false,
+                        wbsList: result.wbs,
+                        nextCommand: '',
+                        reportPath,
+                        error: `Task check for ${wbs} could not be spawned (${spurCommand}): ${processEvidence(checkRes)}`,
+                    };
+                }
+                if (checkRes.exitCode !== 0) {
+                    reason = `deterministic task check failed (${processEvidence(checkRes)})`;
+                }
+            }
+
+            const pass = reason === undefined;
+            checkResults.push({
+                wbs,
+                pass,
+                status: pass ? 'ready' : 'unready',
+                ...(pass ? {} : { reason, action: readyRefineCommand(wbs) }),
+            });
         }
 
         const anyFailed = checkResults.some((c) => !c.pass);
@@ -244,12 +354,20 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
             '## Created tasks',
             ...result.wbs.map((w) => `  - ${w}`),
             '',
-            '## Per-task readiness (spur task check)',
+            '## Per-task readiness (evidence + digest + task check)',
             '',
-            '| WBS | Outcome |',
-            '|-----|---------|',
-            ...checkResults.map((c) => `| ${c.wbs} | ${c.pass ? 'PASS' : 'FAIL'} |`),
+            '| WBS | Outcome | Reason |',
+            '|-----|---------|--------|',
+            ...checkResults.map((c) => `| ${c.wbs} | ${c.pass ? 'READY' : 'UNREADY'} | ${c.reason ?? '-'} |`),
             '',
+            ...(anyFailed
+                ? [
+                      '## Preparation actions',
+                      '',
+                      ...checkResults.filter((c) => !c.pass).map((c) => `  - ${c.wbs}: ${c.action}`),
+                      '',
+                  ]
+                : []),
             '## Next command',
             '',
             nextCommand,

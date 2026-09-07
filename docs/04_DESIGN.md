@@ -1753,7 +1753,7 @@ Row-level deltas from the default rule:
 
 | Noun | Verb | Emit sites (`apps/cli/src/commands/<noun>.ts`) | Current shape | Deviation from ADR-091 envelope |
 | --- | --- | --- | --- | --- |
-| task (26) | create | 228, 241, 272, 307, 312 | success flat-object `{…result, wbs, filePath}`; all error branches via `writeCreateJsonError` (0787): raw `--json` stdout `{ok:false, error:{code, message, …}}` — `candidate-invalid` carries `findings` — enveloped collapses to `INTERNAL_ERROR` + `details.cliCode` | success unwrapped; exits: candidate-invalid/failed 1, usage 2, collision/dedupe 3 |
+| task (26) | create | 228, 241, 272, 307, 312 | success flat-object `{…result, wbs, filePath, readiness:{status: ready\|skipped, depth: ready}}` (0788); all error branches via `writeCreateJsonError` (0787): raw `--json` stdout `{ok:false, error:{code, message, …}}` — `candidate-invalid` carries `findings`, `preparation-failed` (0788) carries `failedStage`/`wbs`/`filePath`/`recoveryCommand`/`readiness`/`findings?` — enveloped collapses to `INTERNAL_ERROR` + `details.cliCode` | success unwrapped; exits: candidate-invalid/preparation-failed/failed 1, usage 2, collision/dedupe 3 |
 | task | show | 255 | flat-object `{…rest, frontmatter}` | unwrapped |
 | task | update | 324, 349, 431, 475 | flat-object; `--section` result `{ref, warnings, …}` has **no `ok`** (0688 case 1); `noop` path `{ok:true, noop, …}` | unwrapped; top-level `ok` on a subset of branches = two meanings of `ok` across calls |
 | task | deps | 546 | flat-object | unwrapped |
@@ -1763,7 +1763,7 @@ Row-level deltas from the default rule:
 | task | migrate | 715 | flat-object-with-ok `{ok:true, dryRun, corpusDir, …report}` | `ok` at top level means command success, not envelope discriminant |
 | task | migrate-anchors | 754 | flat-object-with-ok | same top-level-`ok` conflict |
 | task | refresh-roster | 797 | flat-object | unwrapped |
-| task | batch-create | 959, 1015, 1020 | success flat-object `{created, wbs, parentsWired}`; error branches via `writeCreateJsonError` (0787): raw `--json` stdout `{ok:false, error:{code, …}}`, `candidate-invalid` carrying `findings` | unwrapped success; enveloped errors collapse to `INTERNAL_ERROR` + `details.cliCode`; any invalid item aborts the whole batch (zero files) |
+| task | batch-create | 959, 1015, 1020 | success flat-object `{created, wbs, parentsWired, readiness:{status: ready\|skipped, depth: ready}}` (0788 — whole batch prepared before commit unless `--skip-ready`); error branches via `writeCreateJsonError` (0787): raw `--json` stdout `{ok:false, error:{code, …}}`, `candidate-invalid` carrying `findings`, `preparation-failed` (0788) carrying `failedStage`/`recoveryCommand` | unwrapped success; enveloped errors collapse to `INTERNAL_ERROR` + `details.cliCode`; any invalid item aborts the whole batch (zero files) |
 | task | record | 880 | flat-object | unwrapped |
 | task | verdict | 947 | flat-object artifact written to `.spur/run/<wbs>-verdict.json` (raw `JSON.stringify`) | file artifact, not stdout; unwrapped; bypasses `toJson` |
 | task | verifyall-aggregate | 1013 | flat-object (raw `JSON.stringify`) | unwrapped; bypasses `toJson` |
@@ -2247,6 +2247,20 @@ installation layout and defeated the SSOT. Per-variant section **bodies** (e.g.
 `review`'s `#### Review Findings` input table under Background) come from the scaffold template files
 (`config/templates/task/<variant>.md`), extracted by `extractTemplateBodies` and merged under the
 task-specific bodies (Background/Requirements) — so variant boilerplate is **data, never hardcoded**.
+
+**Ready-by-default creation (0788, ADR-109).** `spur task create`/`batch-create` prepare the saved
+content to ready depth through `prepareCreatedTaskReady`/`prepareBatchTaskReady`
+(`packages/app/src/services/task-readiness.ts`) before reporting success: an executor applies the
+ready checklist, the deterministic `task check` must pass as `todo`, and a backlog task is promoted
+to `todo` (idempotent). `--skip-ready` captures caller content without model execution. Success JSON
+carries `readiness:{status: ready|skipped, depth: ready}`; preparation failures emit
+`preparation-failed` with the stage and the exact recovery command (`/sp:dev-refine … --depth ready`
+or `/sp:dev-refineall … --depth ready`). In the idea pipeline, `batch-create-run` invokes
+`batch-create --skip-ready` and the dedicated `ready-prepare` state has the planning owner prepare
+each created task and write the run-scoped ready-evidence sidecar (`.spur/run/<runId>-idea-ready.json`);
+`handoff-finalize` verifies row status, planning digest and checklist evidence before recommending
+auto `runall` — missing or failing evidence degrades the recommendation to ready-depth `refineall`
+and never fails the run.
 
 **Target-aware lifecycle validation (F92 R2/R3).** `spur task check` accepts
 `--as <status>` (a read-only `asStatus` projection). Frontmatter **schema** validation reads the real

@@ -335,7 +335,7 @@ describe('init command', () => {
         expect(await main(['init'], options)).toBe(0);
         // task create reads the scaffolded template + section-matrix; failure here
         // means the scaffold is internally inconsistent.
-        expect(await main(['task', 'create', 'probe-task', '--json'], options)).toBe(0);
+        expect(await main(['task', 'create', '--skip-ready', 'probe-task', '--json'], options)).toBe(0);
         expect(existsSync(join(cwd, '.spur', 'tasks'))).toBe(true);
     });
 });

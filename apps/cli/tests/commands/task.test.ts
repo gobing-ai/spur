@@ -7,7 +7,7 @@
  */
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, rmSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { FINDING_CODES, TaskCandidateInvalidError, TaskService, WbsCollisionError } from '@gobing-ai/spur-app';
@@ -101,7 +101,10 @@ describe('spur task CLI', () => {
         const root = await mkdtemp(join(tmpdir(), 'spur-explicit-audit-'));
         try {
             const created = createCapturedOutput();
-            await main(['task', 'create', 'Audit warning fixture', '--json'], { cwd: root, output: created });
+            await main(['task', 'create', '--skip-ready', 'Audit warning fixture', '--json'], {
+                cwd: root,
+                output: created,
+            });
             const taskPath = JSON.parse(lastMessage(created)).filePath;
             const taskBody = await readFile(taskPath, 'utf8');
             await writeFile(
@@ -202,7 +205,7 @@ describe('spur task CLI', () => {
     // ── create ──
     test('create writes a task file and exits 0', async () => {
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'create', 'Unit test task'], { cwd, output });
+        const exitCode = await main(['task', 'create', '--skip-ready', 'Unit test task'], { cwd, output });
         expect(exitCode).toBe(0);
         const content = await Bun.file(createdPath(output)).text();
         expect(content).toContain('Unit test task');
@@ -210,7 +213,7 @@ describe('spur task CLI', () => {
 
     test('create --json returns the write-result envelope', async () => {
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'create', 'JSON task', '--json'], { cwd, output });
+        const exitCode = await main(['task', 'create', '--skip-ready', 'JSON task', '--json'], { cwd, output });
         expect(exitCode).toBe(0);
         const parsed = JSON.parse(lastMessage(output));
         expect(parsed.ref.kind).toBe('task');
@@ -224,7 +227,10 @@ describe('spur task CLI', () => {
 
     test('create with --feature adds feature_id', async () => {
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'create', 'Feature task', '--feature', 'A'], { cwd, output });
+        const exitCode = await main(['task', 'create', '--skip-ready', 'Feature task', '--feature', 'A'], {
+            cwd,
+            output,
+        });
         expect(exitCode).toBe(0);
         const content = await Bun.file(createdPath(output)).text();
         expect(content).toContain('feature_id: A');
@@ -236,7 +242,7 @@ describe('spur task CLI', () => {
         await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
         try {
             const first = createCapturedOutput();
-            await main(['task', 'create', 'Dedup clone', '--feature', 'D1', '--json'], {
+            await main(['task', 'create', '--skip-ready', 'Dedup clone', '--feature', 'D1', '--json'], {
                 cwd: isoCwd,
                 output: first,
             });
@@ -244,10 +250,13 @@ describe('spur task CLI', () => {
             const firstWbs = JSON.parse(lastMessage(first)).ref.id;
 
             const second = createCapturedOutput();
-            const exitCode = await main(['task', 'create', 'Dedup clone', '--feature', 'D1', '--json'], {
-                cwd: isoCwd,
-                output: second,
-            });
+            const exitCode = await main(
+                ['task', 'create', '--skip-ready', 'Dedup clone', '--feature', 'D1', '--json'],
+                {
+                    cwd: isoCwd,
+                    output: second,
+                },
+            );
             expect(exitCode).toBe(3);
             expect(second.errors).toEqual([]);
             expect(JSON.parse(lastMessage(second))).toMatchObject({
@@ -269,7 +278,7 @@ describe('spur task CLI', () => {
         await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
         try {
             const first = createCapturedOutput();
-            await main(['task', 'create', 'Window dup', '--feature', 'W1'], {
+            await main(['task', 'create', '--skip-ready', 'Window dup', '--feature', 'W1'], {
                 cwd: isoCwd,
                 output: first,
             });
@@ -279,10 +288,13 @@ describe('spur task CLI', () => {
             await writeFile(taskPath, content.replaceAll(/(created_at|updated_at): .+/g, `$1: ${twoMinutesAgo}`));
 
             const second = createCapturedOutput();
-            const exitCode = await main(['task', 'create', 'Window dup', '--feature', 'W1', '--dedupe-within', '60'], {
-                cwd: isoCwd,
-                output: second,
-            });
+            const exitCode = await main(
+                ['task', 'create', '--skip-ready', 'Window dup', '--feature', 'W1', '--dedupe-within', '60'],
+                {
+                    cwd: isoCwd,
+                    output: second,
+                },
+            );
             expect(exitCode).toBe(0);
         } finally {
             rmSync(isoCwd, { recursive: true, force: true });
@@ -293,7 +305,7 @@ describe('spur task CLI', () => {
         test(`create rejects invalid --dedupe-within ${invalid}`, async () => {
             const output = createCapturedOutput();
             const exitCode = await main(
-                ['task', 'create', 'Invalid window', '--feature', 'W2', '--dedupe-within', invalid],
+                ['task', 'create', '--skip-ready', 'Invalid window', '--feature', 'W2', '--dedupe-within', invalid],
                 {
                     cwd,
                     output,
@@ -309,13 +321,19 @@ describe('spur task CLI', () => {
         await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
         try {
             const first = createCapturedOutput();
-            await main(['task', 'create', 'Allow dup', '--feature', 'A1'], { cwd: isoCwd, output: first });
+            await main(['task', 'create', '--skip-ready', 'Allow dup', '--feature', 'A1'], {
+                cwd: isoCwd,
+                output: first,
+            });
 
             const second = createCapturedOutput();
-            const exitCode = await main(['task', 'create', 'Allow dup', '--feature', 'A1', '--allow-duplicate-name'], {
-                cwd: isoCwd,
-                output: second,
-            });
+            const exitCode = await main(
+                ['task', 'create', '--skip-ready', 'Allow dup', '--feature', 'A1', '--allow-duplicate-name'],
+                {
+                    cwd: isoCwd,
+                    output: second,
+                },
+            );
             expect(exitCode).toBe(0);
         } finally {
             rmSync(isoCwd, { recursive: true, force: true });
@@ -327,12 +345,12 @@ describe('spur task CLI', () => {
         await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
         try {
             const first = createCapturedOutput();
-            await main(['task', 'create', 'No scope dup', '--json'], { cwd: isoCwd, output: first });
+            await main(['task', 'create', '--skip-ready', 'No scope dup', '--json'], { cwd: isoCwd, output: first });
             expect(first.errors.join('')).toBe('');
             const firstWbs = JSON.parse(lastMessage(first)).wbs;
 
             const second = createCapturedOutput();
-            const exitCode = await main(['task', 'create', 'No scope dup', '--json'], {
+            const exitCode = await main(['task', 'create', '--skip-ready', 'No scope dup', '--json'], {
                 cwd: isoCwd,
                 output: second,
             });
@@ -355,13 +373,16 @@ describe('spur task CLI', () => {
         await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
         try {
             const first = createCapturedOutput();
-            await main(['task', 'create', 'No scope allow'], { cwd: isoCwd, output: first });
+            await main(['task', 'create', '--skip-ready', 'No scope allow'], { cwd: isoCwd, output: first });
 
             const second = createCapturedOutput();
-            const exitCode = await main(['task', 'create', 'No scope allow', '--allow-duplicate-name'], {
-                cwd: isoCwd,
-                output: second,
-            });
+            const exitCode = await main(
+                ['task', 'create', '--skip-ready', 'No scope allow', '--allow-duplicate-name'],
+                {
+                    cwd: isoCwd,
+                    output: second,
+                },
+            );
             expect(exitCode).toBe(0);
         } finally {
             rmSync(isoCwd, { recursive: true, force: true });
@@ -373,17 +394,20 @@ describe('spur task CLI', () => {
         await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
         try {
             const first = createCapturedOutput();
-            await main(['task', 'create', 'No scope window'], { cwd: isoCwd, output: first });
+            await main(['task', 'create', '--skip-ready', 'No scope window'], { cwd: isoCwd, output: first });
             const taskPath = createdPath(first);
             const content = await readFile(taskPath, 'utf8');
             const twoMinutesAgo = new Date(Date.now() - 120_000).toISOString();
             await writeFile(taskPath, content.replaceAll(/(created_at|updated_at): .+/g, `$1: ${twoMinutesAgo}`));
 
             const second = createCapturedOutput();
-            const exitCode = await main(['task', 'create', 'No scope window', '--dedupe-within', '60'], {
-                cwd: isoCwd,
-                output: second,
-            });
+            const exitCode = await main(
+                ['task', 'create', '--skip-ready', 'No scope window', '--dedupe-within', '60'],
+                {
+                    cwd: isoCwd,
+                    output: second,
+                },
+            );
             expect(exitCode).toBe(0);
         } finally {
             rmSync(isoCwd, { recursive: true, force: true });
@@ -392,7 +416,10 @@ describe('spur task CLI', () => {
 
     test('create with --parent adds parent_wbs', async () => {
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'create', 'Child task', '--parent', '0042'], { cwd, output });
+        const exitCode = await main(['task', 'create', '--skip-ready', 'Child task', '--parent', '0042'], {
+            cwd,
+            output,
+        });
         expect(exitCode).toBe(0);
         const content = await Bun.file(createdPath(output)).text();
         expect(content).toContain('parent_wbs: "0042"');
@@ -400,7 +427,10 @@ describe('spur task CLI', () => {
 
     test('create --template writes the variant to frontmatter', async () => {
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'create', 'Issue task', '--template', 'issue'], { cwd, output });
+        const exitCode = await main(['task', 'create', '--skip-ready', 'Issue task', '--template', 'issue'], {
+            cwd,
+            output,
+        });
         expect(exitCode).toBe(0);
         const content = await Bun.file(createdPath(output)).text();
         expect(content).toContain('template: issue');
@@ -408,7 +438,10 @@ describe('spur task CLI', () => {
 
     test('create --template rejects an unknown variant with exit 2', async () => {
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'create', 'Bad variant', '--template', 'nope'], { cwd, output });
+        const exitCode = await main(['task', 'create', '--skip-ready', 'Bad variant', '--template', 'nope'], {
+            cwd,
+            output,
+        });
         expect(exitCode).toBe(2);
         expect(output.errors.join('')).toContain('Unknown template variant');
     });
@@ -416,7 +449,10 @@ describe('spur task CLI', () => {
     test('create --template meta uses the meta template', async () => {
         // First access of 'meta' variant exercises bundled fallback + cache miss paths
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'create', 'Meta task', '--template', 'meta'], { cwd, output });
+        const exitCode = await main(['task', 'create', '--skip-ready', 'Meta task', '--template', 'meta'], {
+            cwd,
+            output,
+        });
         expect(exitCode).toBe(0);
         const content = await Bun.file(createdPath(output)).text();
         expect(content).toContain('template: meta');
@@ -424,7 +460,10 @@ describe('spur task CLI', () => {
 
     test('create --template brainstorm uses the brainstorm template', async () => {
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'create', 'Brainstorm task', '--template', 'brainstorm'], { cwd, output });
+        const exitCode = await main(['task', 'create', '--skip-ready', 'Brainstorm task', '--template', 'brainstorm'], {
+            cwd,
+            output,
+        });
         expect(exitCode).toBe(0);
         const content = await Bun.file(createdPath(output)).text();
         expect(content).toContain('Brainstorm task');
@@ -437,7 +476,10 @@ describe('spur task CLI', () => {
         // post-fix reflection. With template-as-skeleton rendering, ALL template sections
         // appear at creation (including `### Review` with its guidance text).
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'create', 'Fix review', '--template', 'review'], { cwd, output });
+        const exitCode = await main(['task', 'create', '--skip-ready', 'Fix review', '--template', 'review'], {
+            cwd,
+            output,
+        });
         expect(exitCode).toBe(0);
         const content = await Bun.file(createdPath(output)).text();
         expect(content).toContain('template: review');
@@ -449,7 +491,7 @@ describe('spur task CLI', () => {
     // ── show ──
     test('show prints task content', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Show me'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Show me'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -460,7 +502,7 @@ describe('spur task CLI', () => {
 
     test('show --json exposes frontmatter as a top-level field (R4)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Show JSON'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Show JSON'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -494,7 +536,7 @@ describe('spur task CLI', () => {
     // ── show alias (0534 R1) ──
     test('show alias `get` resolves like show', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Alias me'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Alias me'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -505,7 +547,7 @@ describe('spur task CLI', () => {
 
     test('near-miss suggester still fires on a typo (0534 AC2 non-regression)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Suggester'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Suggester'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -524,7 +566,7 @@ describe('spur task CLI', () => {
     // ── update ──
     test('update --section without --from-file exits 2 (usage error)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Section guard'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Section guard'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -535,7 +577,7 @@ describe('spur task CLI', () => {
 
     test('update with no status and no --section exits 2 (usage error)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Arg guard'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Arg guard'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -546,7 +588,7 @@ describe('spur task CLI', () => {
 
     test('update status transition exits 0 and reports from→to', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Transition me'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Transition me'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -557,7 +599,7 @@ describe('spur task CLI', () => {
 
     test('update --section --from-file replaces the section body', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Section target'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Section target'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
         const bodyFile = join(cwd, 'body.md');
         await Bun.write(
@@ -576,7 +618,7 @@ describe('spur task CLI', () => {
 
     test('update --section Solution with no file:line citation exits 3 without mutating (0510 R1)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'R1 solution reject'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'R1 solution reject'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
         const taskPath = createdPath(cOut);
         const before = await Bun.file(taskPath).text();
@@ -598,7 +640,7 @@ describe('spur task CLI', () => {
 
     test('update --section Solution rejection is non-zero under --json too (0510 R1)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'R1 solution reject json'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'R1 solution reject json'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const bodyFile = join(cwd, 'sol-no-cite-json.md');
@@ -680,7 +722,7 @@ describe('spur task CLI', () => {
     });
     test('resolve maps a task file path to its WBS', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Resolve me'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Resolve me'], { cwd, output: cOut });
         const taskPath = createdPath(cOut);
 
         const output = createCapturedOutput();
@@ -691,7 +733,7 @@ describe('spur task CLI', () => {
 
     test('resolve --json returns structured output', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Resolve JSON'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Resolve JSON'], { cwd, output: cOut });
         const taskPath = createdPath(cOut);
 
         const output = createCapturedOutput();
@@ -715,7 +757,7 @@ describe('spur task CLI', () => {
         // placeholder Requirements/AC trip L3 empty-section errors — so this test seeds
         // real content to validate the gate on a *valid* backlog task.
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Check me'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Check me'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
         const reqBody = join(cwd, `req-${wbs}.md`);
         await Bun.write(reqBody, 'R1. The check command must pass on a valid backlog task.\n');
@@ -739,7 +781,7 @@ describe('spur task CLI', () => {
 
     test('check --json returns structured results even on failure', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Check JSON'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Check JSON'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -755,7 +797,7 @@ describe('spur task CLI', () => {
         // (backlog); check --as done must report the TARGET status (done) in the
         // JSON, proving the lifecycle guard evaluates the done row.
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Check as done'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Check as done'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const plain = createCapturedOutput();
@@ -777,7 +819,7 @@ describe('spur task CLI', () => {
 
     test('check --strict elevates warnings and can exit 1 on missing sections', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Check strict'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Check strict'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -834,10 +876,12 @@ describe('spur task CLI', () => {
         );
 
         const c1 = createCapturedOutput();
-        expect(await main(['task', 'create', 'Active folder task'], { cwd: root, output: c1 })).toBe(0);
+        expect(await main(['task', 'create', '--skip-ready', 'Active folder task'], { cwd: root, output: c1 })).toBe(0);
         const activeWbs = createdWbs(c1);
         const c2 = createCapturedOutput();
-        expect(await main(['task', 'create', 'Inactive folder task'], { cwd: root, output: c2 })).toBe(0);
+        expect(await main(['task', 'create', '--skip-ready', 'Inactive folder task'], { cwd: root, output: c2 })).toBe(
+            0,
+        );
         const inactiveWbs = createdWbs(c2);
 
         // Seed real Requirements + AC so the tasks pass L3 (placeholders error) — same
@@ -1067,7 +1111,7 @@ describe('spur task CLI', () => {
         await Bun.write(batchFile, JSON.stringify([{ name: 'Batch task 1' }, { name: 'Batch task 2' }]));
 
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'batch-create', '--file', batchFile], { cwd, output });
+        const exitCode = await main(['task', 'batch-create', '--skip-ready', '--file', batchFile], { cwd, output });
         expect(exitCode).toBe(0);
         expect(output.messages.join('')).toContain('Created 2 task(s)');
     });
@@ -1077,7 +1121,10 @@ describe('spur task CLI', () => {
         await Bun.write(batchFile, JSON.stringify([{ name: 'JSON batch' }]));
 
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'batch-create', '--file', batchFile, '--json'], { cwd, output });
+        const exitCode = await main(['task', 'batch-create', '--skip-ready', '--file', batchFile, '--json'], {
+            cwd,
+            output,
+        });
         expect(exitCode).toBe(0);
         const parsed = JSON.parse(lastMessage(output));
         expect(parsed.created).toBe(1);
@@ -1087,7 +1134,7 @@ describe('spur task CLI', () => {
 
     test('batch-create wires parent roster and reports parent summary', async () => {
         const parentOut = createCapturedOutput();
-        await main(['task', 'create', 'CLI parent for batch wiring'], { cwd, output: parentOut });
+        await main(['task', 'create', '--skip-ready', 'CLI parent for batch wiring'], { cwd, output: parentOut });
         const parentPath = createdPath(parentOut);
         const parentWbs = createdWbs(parentOut);
         const parentBody = await Bun.file(parentPath).text();
@@ -1112,7 +1159,7 @@ describe('spur task CLI', () => {
         );
 
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'batch-create', '--file', batchFile], { cwd, output });
+        const exitCode = await main(['task', 'batch-create', '--skip-ready', '--file', batchFile], { cwd, output });
 
         expect(exitCode).toBe(0);
         const messages = output.messages.join('\n');
@@ -1131,7 +1178,7 @@ describe('spur task CLI', () => {
         await Bun.write(batchFile, 'not json');
 
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'batch-create', '--file', batchFile], { cwd, output });
+        const exitCode = await main(['task', 'batch-create', '--skip-ready', '--file', batchFile], { cwd, output });
         expect(exitCode).toBe(1);
         expect(output.errors.join('')).toContain('not valid JSON');
     });
@@ -1141,21 +1188,24 @@ describe('spur task CLI', () => {
         await Bun.write(batchFile, '[]');
 
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'batch-create', '--file', batchFile], { cwd, output });
+        const exitCode = await main(['task', 'batch-create', '--skip-ready', '--file', batchFile], { cwd, output });
         expect(exitCode).toBe(1);
         expect(output.errors.join('')).toContain('validation failed');
     });
 
     test('batch-create with missing file exits 1', async () => {
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'batch-create', '--file', '/nonexistent/batch.json'], { cwd, output });
+        const exitCode = await main(['task', 'batch-create', '--skip-ready', '--file', '/nonexistent/batch.json'], {
+            cwd,
+            output,
+        });
         expect(exitCode).toBe(1);
     });
 
     // ── update --json ──
     test('update status --json returns structured output', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'JSON transition'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'JSON transition'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1169,7 +1219,7 @@ describe('spur task CLI', () => {
 
     test('update --section --from-file --json returns structured output', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Section JSON'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Section JSON'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
         const bodyFile = join(cwd, 'body-json.md');
         await Bun.write(bodyFile, 'JSON section body citing `packages/app/src/services/task-service.ts:1102`.\n');
@@ -1186,7 +1236,7 @@ describe('spur task CLI', () => {
 
     test('update --feature sets feature_id on task', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Feature update'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Feature update'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1200,7 +1250,7 @@ describe('spur task CLI', () => {
 
     test('update --priority sets priority on task', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Priority update'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Priority update'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1211,7 +1261,7 @@ describe('spur task CLI', () => {
 
     test('update --ac-altitude sets ac_altitude frontmatter and the field persists (0600 R-fix)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Altitude update'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Altitude update'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1226,7 +1276,7 @@ describe('spur task CLI', () => {
 
     test('update --ac-altitude with invalid value is rejected by the L1 schema', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Altitude bad'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Altitude bad'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1236,7 +1286,7 @@ describe('spur task CLI', () => {
 
     test('update --feature --json returns structured output', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Feature JSON'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Feature JSON'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1250,10 +1300,10 @@ describe('spur task CLI', () => {
 
     test('deps set replaces the dependency array and exits 0', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Deps parent'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Deps parent'], { cwd, output: cOut });
         const parentWbs = createdWbs(cOut);
         const cOut2 = createCapturedOutput();
-        await main(['task', 'create', 'Deps child'], { cwd, output: cOut2 });
+        await main(['task', 'create', '--skip-ready', 'Deps child'], { cwd, output: cOut2 });
         const childWbs = createdWbs(cOut2);
 
         const output = createCapturedOutput();
@@ -1267,13 +1317,13 @@ describe('spur task CLI', () => {
 
     test('deps add appends and dedupes', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Add parent'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Add parent'], { cwd, output: cOut });
         const parentWbs = createdWbs(cOut);
         const cOutB = createCapturedOutput();
-        await main(['task', 'create', 'Add child b'], { cwd, output: cOutB });
+        await main(['task', 'create', '--skip-ready', 'Add child b'], { cwd, output: cOutB });
         const bWbs = createdWbs(cOutB);
         const cOutC = createCapturedOutput();
-        await main(['task', 'create', 'Add child c'], { cwd, output: cOutC });
+        await main(['task', 'create', '--skip-ready', 'Add child c'], { cwd, output: cOutC });
         const cWbs = createdWbs(cOutC);
 
         await main(['task', 'deps', parentWbs, 'set', bWbs], { cwd, output: createCapturedOutput() });
@@ -1286,13 +1336,13 @@ describe('spur task CLI', () => {
 
     test('deps remove drops a listed value', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Rem parent'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Rem parent'], { cwd, output: cOut });
         const parentWbs = createdWbs(cOut);
         const cOutB = createCapturedOutput();
-        await main(['task', 'create', 'Rem child b'], { cwd, output: cOutB });
+        await main(['task', 'create', '--skip-ready', 'Rem child b'], { cwd, output: cOutB });
         const bWbs = createdWbs(cOutB);
         const cOutC = createCapturedOutput();
-        await main(['task', 'create', 'Rem child c'], { cwd, output: cOutC });
+        await main(['task', 'create', '--skip-ready', 'Rem child c'], { cwd, output: cOutC });
         const cWbs = createdWbs(cOutC);
 
         await main(['task', 'deps', parentWbs, 'set', bWbs, cWbs], { cwd, output: createCapturedOutput() });
@@ -1305,10 +1355,10 @@ describe('spur task CLI', () => {
 
     test('deps clear empties the array and exits 0', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Clr parent'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Clr parent'], { cwd, output: cOut });
         const parentWbs = createdWbs(cOut);
         const cOutB = createCapturedOutput();
-        await main(['task', 'create', 'Clr child b'], { cwd, output: cOutB });
+        await main(['task', 'create', '--skip-ready', 'Clr child b'], { cwd, output: cOutB });
         const bWbs = createdWbs(cOutB);
 
         await main(['task', 'deps', parentWbs, 'set', bWbs], { cwd, output: createCapturedOutput() });
@@ -1323,10 +1373,10 @@ describe('spur task CLI', () => {
 
     test('deps --json returns structured output with dependencies field', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'JSON parent'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'JSON parent'], { cwd, output: cOut });
         const parentWbs = createdWbs(cOut);
         const cOutB = createCapturedOutput();
-        await main(['task', 'create', 'JSON child b'], { cwd, output: cOutB });
+        await main(['task', 'create', '--skip-ready', 'JSON child b'], { cwd, output: cOutB });
         const bWbs = createdWbs(cOutB);
 
         const output = createCapturedOutput();
@@ -1339,7 +1389,7 @@ describe('spur task CLI', () => {
 
     test('deps with unknown op exits 2 (usage)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Bad op parent'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Bad op parent'], { cwd, output: cOut });
         const parentWbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1350,7 +1400,7 @@ describe('spur task CLI', () => {
 
     test('deps clear with values exits 2 (usage)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Clr misuse'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Clr misuse'], { cwd, output: cOut });
         const parentWbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1361,7 +1411,7 @@ describe('spur task CLI', () => {
 
     test('deps with non-existent target WBS exits 3 (not-found)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Nf parent'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Nf parent'], { cwd, output: cOut });
         const parentWbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1372,7 +1422,7 @@ describe('spur task CLI', () => {
 
     test('deps with self-edge exits 3 (self-edge)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Self-edge'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Self-edge'], { cwd, output: cOut });
         const parentWbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1383,10 +1433,10 @@ describe('spur task CLI', () => {
 
     test('deps with a direct cycle exits 3 (cycle)', async () => {
         const cOutA = createCapturedOutput();
-        await main(['task', 'create', 'Cycle a'], { cwd, output: cOutA });
+        await main(['task', 'create', '--skip-ready', 'Cycle a'], { cwd, output: cOutA });
         const aWbs = createdWbs(cOutA);
         const cOutB = createCapturedOutput();
-        await main(['task', 'create', 'Cycle b'], { cwd, output: cOutB });
+        await main(['task', 'create', '--skip-ready', 'Cycle b'], { cwd, output: cOutB });
         const bWbs = createdWbs(cOutB);
 
         await main(['task', 'deps', bWbs, 'set', aWbs], { cwd, output: createCapturedOutput() });
@@ -1407,7 +1457,7 @@ describe('spur task CLI', () => {
 
     test('sections list returns matrix snapshot for current variant/status', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Sections list target'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Sections list target'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1430,7 +1480,7 @@ describe('spur task CLI', () => {
 
     test('sections init is idempotent on a fully-seeded template task', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Init seeded'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Init seeded'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
         // Walk to todo: required expands to [Background, Acceptance Criteria, Design, Plan].
         await main(['task', 'update', wbs, 'todo'], { cwd, output: createCapturedOutput() });
@@ -1447,7 +1497,7 @@ describe('spur task CLI', () => {
 
     test('sections init stays idempotent across status transitions', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Init across'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Init across'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
         await main(['task', 'update', wbs, 'wip'], { cwd, output: createCapturedOutput() });
 
@@ -1521,7 +1571,7 @@ Only this section exists.
 
     test('sections add <name> adds a canonical section not in the template (Notes)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Add notes'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Add notes'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1542,7 +1592,7 @@ Only this section exists.
 
     test('sections add is idempotent when section already present', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Add idempotent'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Add idempotent'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
         // First add of Notes — succeeds.
         await main(['task', 'sections', wbs, 'add', 'Notes'], { cwd, output: createCapturedOutput() });
@@ -1561,7 +1611,7 @@ Only this section exists.
 
     test('sections add rejects unknown section name with exit 3', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Add unknown'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Add unknown'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1575,7 +1625,7 @@ Only this section exists.
 
     test('sections add a universal section that is already seeded is a no-op', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Add history'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Add history'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1595,7 +1645,7 @@ Only this section exists.
 
     test('sections with unknown op exits 2 (usage)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Sec bad op'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Sec bad op'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1606,7 +1656,7 @@ Only this section exists.
 
     test('sections add without name exits 2 (usage)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Add no name'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Add no name'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1617,7 +1667,7 @@ Only this section exists.
 
     test('sections init with extra name argument exits 2 (usage)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Init extra arg'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Init extra arg'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1631,7 +1681,7 @@ Only this section exists.
 
     test('sections list with name argument exits 2 (usage)', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'List extra arg'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'List extra arg'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1645,7 +1695,7 @@ Only this section exists.
 
     test('sections list (human output) prints matrix and present/missing', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Sec human'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Sec human'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -1680,7 +1730,7 @@ Only this section exists.
         const spy = spyOn(configModule, 'bundledConfigRoot').mockReturnValue(null);
         try {
             const cOut = createCapturedOutput();
-            await main(['task', 'create', 'P3 gate target'], { cwd, output: cOut });
+            await main(['task', 'create', '--skip-ready', 'P3 gate target'], { cwd, output: cOut });
             const wbs = createdWbs(cOut);
 
             // Plant a Solution with no `file:line` citation → L3 hard error at testing/done.
@@ -1743,7 +1793,7 @@ Only this section exists.
         const spy = spyOn(configModule, 'bundledConfigRoot').mockReturnValue(null);
         try {
             const cOut = createCapturedOutput();
-            await main(['task', 'create', 'Strict-core gate target'], { cwd, output: cOut });
+            await main(['task', 'create', '--skip-ready', 'Strict-core gate target'], { cwd, output: cOut });
             const wbs = createdWbs(cOut);
 
             // Seed done-required sections with valid content so the ONLY finding is
@@ -1830,7 +1880,7 @@ Only this section exists.
         const spy = spyOn(configModule, 'bundledConfigRoot').mockReturnValue(null);
         try {
             const cOut = createCapturedOutput();
-            await main(['task', 'create', 'Hard L3 gate target'], { cwd, output: cOut });
+            await main(['task', 'create', '--skip-ready', 'Hard L3 gate target'], { cwd, output: cOut });
             const wbs = createdWbs(cOut);
 
             // Plant Solution WITHOUT a file:line citation → L3 hard error.
@@ -1884,7 +1934,7 @@ Only this section exists.
         // default gate permits deferral (feature_id=null is a TODO, not a blocker). This test
         // locks the 0147 fix: feature_id never silently re-enters the hard-core blocking set.
         const cOut = createCapturedOutput();
-        await main(['task', 'create', '0147-regression target'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', '0147-regression target'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         // Seed Requirements + AC so the only finding is the L4 "Missing feature_id"
@@ -1925,7 +1975,7 @@ Only this section exists.
     test('update --section --from-file with non-json output handles warnings', async () => {
         // Create a task with a section that triggers warnings on write (e.g. Review at backlog)
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Warning test'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Warning test'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
         const bodyFile = join(cwd, 'body-warn.md');
         await Bun.write(bodyFile, 'Some review text.\n');
@@ -1957,7 +2007,7 @@ Only this section exists.
 
     test('record --json returns structured result', async () => {
         const out = createCapturedOutput();
-        await main(['task', 'create', 'Record JSON test'], { cwd, output: out });
+        await main(['task', 'create', '--skip-ready', 'Record JSON test'], { cwd, output: out });
         const wbs = createdWbs(out);
         // Create a minimal verdict so record has something to write.
         const verdictPath = join(cwd, '.spur', 'run', `${wbs}-verdict.json`);
@@ -1973,7 +2023,7 @@ Only this section exists.
 
     test('record (human output) prints summary of written sections', async () => {
         const out = createCapturedOutput();
-        await main(['task', 'create', 'Record human test'], { cwd, output: out });
+        await main(['task', 'create', '--skip-ready', 'Record human test'], { cwd, output: out });
         const wbs = createdWbs(out);
         const verdictPath = join(cwd, '.spur', 'run', `${wbs}-verdict.json`);
         await mkdir(join(cwd, '.spur', 'run'), { recursive: true });
@@ -2088,8 +2138,8 @@ Only this section exists.
     test('list --feature filters to tasks linked to that feature', async () => {
         // Feature IDs must match ^[A-Z][1-9]*$ (DD-14): a letter + optional 1-9 digits.
         const out = createCapturedOutput();
-        await main(['task', 'create', 'Linked to F3', '--feature', 'F3'], { cwd, output: out });
-        await main(['task', 'create', 'Unlinked task'], { cwd, output: out });
+        await main(['task', 'create', '--skip-ready', 'Linked to F3', '--feature', 'F3'], { cwd, output: out });
+        await main(['task', 'create', '--skip-ready', 'Unlinked task'], { cwd, output: out });
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'list', '--feature', 'F3', '--json'], { cwd, output });
         expect(exitCode).toBe(0);
@@ -2119,7 +2169,10 @@ Only this section exists.
 
             try {
                 const output = createCapturedOutput();
-                const exitCode = await main(['task', 'create', 'Archived task'], { cwd: isoCwd, output });
+                const exitCode = await main(['task', 'create', '--skip-ready', 'Archived task'], {
+                    cwd: isoCwd,
+                    output,
+                });
                 expect(exitCode).toBe(0);
                 // The created file must land under the YAML-configured active_folder, not docs/tasks.
                 const path = createdPath(output);
@@ -2136,7 +2189,7 @@ Only this section exists.
     // ── path ──
     test('path prints absolute file path and exits 0', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Path test'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Path test'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -2148,7 +2201,7 @@ Only this section exists.
 
     test('path --json returns structured output', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Path JSON test'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Path JSON test'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -2176,14 +2229,14 @@ Only this section exists.
         await Bun.write(join(dir, '.spur', 'config.yaml'), 'tasks:\n  active:\n');
 
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'create', 'Malformed cfg task'], { cwd: dir, output });
+        const exitCode = await main(['task', 'create', '--skip-ready', 'Malformed cfg task'], { cwd: dir, output });
         expect(exitCode).toBe(0); // falls back to defaults, still creates task
         rmSync(dir, { recursive: true, force: true });
     });
     // ── refresh-roster ──
     test('refresh-roster with no sub-tasks prints nothing-to-roster message', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Roster parent'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Roster parent'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
@@ -2197,7 +2250,7 @@ Only this section exists.
         await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
         const cOut = createCapturedOutput();
         try {
-            await main(['task', 'create', 'Parent with kids'], { cwd: isoCwd, output: cOut });
+            await main(['task', 'create', '--skip-ready', 'Parent with kids'], { cwd: isoCwd, output: cOut });
             const parentWbs = createdWbs(cOut);
             // Parent needs a ## Plan section to host the roster.
             const planFile = join(isoCwd, 'plan-body.md');
@@ -2207,8 +2260,14 @@ Only this section exists.
                 output: cOut,
             });
             // Create two children under the parent.
-            await main(['task', 'create', 'Kid A', '--parent', parentWbs], { cwd: isoCwd, output: cOut });
-            await main(['task', 'create', 'Kid B', '--parent', parentWbs], { cwd: isoCwd, output: cOut });
+            await main(['task', 'create', '--skip-ready', 'Kid A', '--parent', parentWbs], {
+                cwd: isoCwd,
+                output: cOut,
+            });
+            await main(['task', 'create', '--skip-ready', 'Kid B', '--parent', parentWbs], {
+                cwd: isoCwd,
+                output: cOut,
+            });
 
             const output = createCapturedOutput();
             const exitCode = await main(['task', 'refresh-roster', parentWbs], { cwd: isoCwd, output });
@@ -2225,7 +2284,7 @@ Only this section exists.
         await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
         const cOut = createCapturedOutput();
         try {
-            await main(['task', 'create', 'JSON roster parent'], { cwd: isoCwd, output: cOut });
+            await main(['task', 'create', '--skip-ready', 'JSON roster parent'], { cwd: isoCwd, output: cOut });
             const parentWbs = createdWbs(cOut);
 
             const output = createCapturedOutput();
@@ -2265,7 +2324,7 @@ Only this section exists.
         // an outright strip), which populates result.warnings. The non-JSON path routes
         // those warnings to the error channel.
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Warn section task'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'Warn section task'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
         const bodyFile = join(cwd, 'warn-section-body.md');
         // Body contains a ### heading — same level as section headers, triggers strip warning.
@@ -2297,7 +2356,7 @@ Only this section exists.
     // ── run-link ────────────────────────────────────────────────────
     test('run-link inserts a pipeline provenance link', async () => {
         const output = createCapturedOutput();
-        await main(['task', 'create', 'run-link test'], { cwd, output });
+        await main(['task', 'create', '--skip-ready', 'run-link test'], { cwd, output });
         const wbs = createdWbs(output);
         const exitCode = await main(['task', 'run-link', wbs, '--source', 'next-auto', '--json'], { cwd, output });
         expect(exitCode).toBe(0);
@@ -2308,7 +2367,7 @@ Only this section exists.
     });
     test('run-link is idempotent', async () => {
         const output = createCapturedOutput();
-        await main(['task', 'create', 'run-link idempotent'], { cwd, output });
+        await main(['task', 'create', '--skip-ready', 'run-link idempotent'], { cwd, output });
         const wbs = createdWbs(output);
         // First call inserts.
         await main(['task', 'run-link', wbs, '--source', 'next-auto', '--json'], { cwd, output });
@@ -2360,7 +2419,7 @@ Only this section exists.
 
     async function seedTaskAtTesting(label: string): Promise<string> {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', label], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', label], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
         await fillDoneRequiredSections(createdPath(cOut));
         await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: nullOutput() });
@@ -2513,7 +2572,7 @@ Only this section exists.
     // bookkeeping ("the pipeline is already a run"), never a guard bypass.
     test('--no-lifecycle does not bypass the structural gate on wip→testing', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'bypass regression testing hop'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'bypass regression testing hop'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
         // Deliberately NOT filled — placeholder Requirements/AC are L3 errors.
         await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: nullOutput() });
@@ -2527,7 +2586,7 @@ Only this section exists.
 
     test('--no-lifecycle --force-done together cannot land a structurally invalid task at done', async () => {
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'bypass regression done hop'], { cwd, output: cOut });
+        await main(['task', 'create', '--skip-ready', 'bypass regression done hop'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
         await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: nullOutput() });
         await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: nullOutput() });
@@ -2749,7 +2808,10 @@ Only this section exists.
         });
         try {
             const output = createCapturedOutput();
-            const exitCode = await main(['task', 'create', 'Colliding task', '--json'], { cwd, output });
+            const exitCode = await main(['task', 'create', '--skip-ready', 'Colliding task', '--json'], {
+                cwd,
+                output,
+            });
             expect(exitCode).toBe(3);
             expect(output.errors).toEqual([]);
             expect(JSON.parse(lastMessage(output))).toMatchObject({
@@ -2771,7 +2833,7 @@ Only this section exists.
         await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
         try {
             const first = createCapturedOutput();
-            await main(['task', 'create', 'Original dup task'], { cwd: isoCwd, output: first });
+            await main(['task', 'create', '--skip-ready', 'Original dup task'], { cwd: isoCwd, output: first });
             expect(first.errors.join('')).toBe('');
             const wbs = createdWbs(first);
 
@@ -2813,7 +2875,10 @@ Only this section exists.
         });
         try {
             const output = createCapturedOutput();
-            const exitCode = await main(['task', 'batch-create', '--file', batchFile, '--json'], { cwd, output });
+            const exitCode = await main(['task', 'batch-create', '--skip-ready', '--file', batchFile, '--json'], {
+                cwd,
+                output,
+            });
             expect(exitCode).toBe(3);
             expect(output.errors).toEqual([]);
             expect(JSON.parse(lastMessage(output))).toMatchObject({
@@ -2838,7 +2903,7 @@ Only this section exists.
         });
         try {
             const output = createCapturedOutput();
-            const exitCode = await main(['task', 'create', 'Colliding task'], { cwd, output });
+            const exitCode = await main(['task', 'create', '--skip-ready', 'Colliding task'], { cwd, output });
             expect(exitCode).toBe(3);
             // Non-JSON path: the error message goes to the error sink, not stdout.
             expect(output.errors.length).toBeGreaterThan(0);
@@ -2862,7 +2927,7 @@ Only this section exists.
         });
         try {
             const output = createCapturedOutput();
-            const exitCode = await main(['task', 'batch-create', '--file', batchFile], { cwd, output });
+            const exitCode = await main(['task', 'batch-create', '--skip-ready', '--file', batchFile], { cwd, output });
             expect(exitCode).toBe(3);
             expect(output.errors.length).toBeGreaterThan(0);
             expect(output.errors.join('')).toContain('wbs-collision');
@@ -2895,7 +2960,7 @@ Only this section exists.
         });
         try {
             const output = createCapturedOutput();
-            const exitCode = await main(['task', 'create', 'Bad candidate', '--json'], { cwd, output });
+            const exitCode = await main(['task', 'create', '--skip-ready', 'Bad candidate', '--json'], { cwd, output });
             expect(exitCode).toBe(1);
             expect(output.errors).toEqual([]);
             expect(JSON.parse(lastMessage(output))).toMatchObject({
@@ -2913,10 +2978,13 @@ Only this section exists.
         });
         try {
             const output = createCapturedOutput();
-            const exitCode = await main(['task', 'create', 'Bad candidate', '--json', '--json-envelope'], {
-                cwd,
-                output,
-            });
+            const exitCode = await main(
+                ['task', 'create', '--skip-ready', 'Bad candidate', '--json', '--json-envelope'],
+                {
+                    cwd,
+                    output,
+                },
+            );
             expect(exitCode).toBe(1);
             const parsed = apiErrorSchema.parse(JSON.parse(lastMessage(output)));
             expect(parsed.ok).toBe(false);
@@ -2936,7 +3004,7 @@ Only this section exists.
         });
         try {
             const output = createCapturedOutput();
-            const exitCode = await main(['task', 'create', 'Bad candidate'], { cwd, output });
+            const exitCode = await main(['task', 'create', '--skip-ready', 'Bad candidate'], { cwd, output });
             expect(exitCode).toBe(1);
             // Non-JSON path: stderr prose, stdout untouched.
             expect(output.messages).toEqual([]);
@@ -2954,7 +3022,10 @@ Only this section exists.
         });
         try {
             const output = createCapturedOutput();
-            const exitCode = await main(['task', 'batch-create', '--file', batchFile, '--json'], { cwd, output });
+            const exitCode = await main(['task', 'batch-create', '--skip-ready', '--file', batchFile, '--json'], {
+                cwd,
+                output,
+            });
             expect(exitCode).toBe(1);
             expect(JSON.parse(lastMessage(output))).toMatchObject({
                 ok: false,
@@ -2970,7 +3041,10 @@ Only this section exists.
         await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
         try {
             const first = createCapturedOutput();
-            await main(['task', 'create', 'Original dup task (nojson)'], { cwd: isoCwd, output: first });
+            await main(['task', 'create', '--skip-ready', 'Original dup task (nojson)'], {
+                cwd: isoCwd,
+                output: first,
+            });
             expect(first.errors.join('')).toBe('');
             const wbs = createdWbs(first);
 
@@ -2998,7 +3072,7 @@ Only this section exists.
         await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
         try {
             const createOut = createCapturedOutput();
-            await main(['task', 'create', 'Scaffold target'], { cwd: isoCwd, output: createOut });
+            await main(['task', 'create', '--skip-ready', 'Scaffold target'], { cwd: isoCwd, output: createOut });
             const wbs = createdWbs(createOut);
 
             const output = createCapturedOutput();
@@ -3161,5 +3235,210 @@ Probe for the repair engine.
         } finally {
             rmSync(isoCwd, { recursive: true, force: true });
         }
+    });
+});
+
+describe('spur task ready-by-default (0788, fake executor)', () => {
+    let isoCwd: string;
+    let binDir: string;
+    let savedPath: string | undefined;
+
+    // Substantive replacements for the template placeholder comments — the same
+    // fills that make `task check --as todo` pass with warnings only (verified
+    // against the real checker).
+    const AC_PLACEHOLDER =
+        '<!-- Given/When/Then scenarios or a checklist derived from Requirements. Keep empty if this task has no objective AC yet. -->';
+    const DESIGN_PLACEHOLDER =
+        '<!-- Chosen approach, key tradeoffs, invariants, and impacted surfaces. Keep snippets short. -->';
+    const PLAN_PLACEHOLDER = '<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->';
+
+    beforeAll(async () => {
+        isoCwd = join(import.meta.dir, '..', `.tmp-task-ready-${Date.now()}`);
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        await mkdir(join(isoCwd, '.spur'), { recursive: true });
+        // An agent.default must be a role or a configured executor; declare the
+        // executor HERE (tests run with SPUR_SKIP_GLOBAL_CONFIG=true, so no
+        // global layer merges in) pinning the claude shim our fake bin serves.
+        await writeFile(
+            join(isoCwd, '.spur', 'config.yaml'),
+            'agent:\n  default: fakeprep\n  executors:\n    - name: fakeprep\n      agent: claude\n',
+        );
+        binDir = join(isoCwd, '.fake-bin');
+        await mkdir(binDir, { recursive: true });
+    });
+
+    afterAll(() => {
+        if (savedPath !== undefined) process.env.PATH = savedPath;
+        rmSync(isoCwd, { recursive: true, force: true });
+    });
+
+    /** Install a fake `claude` on PATH. `behavior` shapes the -p response. */
+    async function installFakeClaude(
+        behavior: 'prepare' | 'prepare-batch' | 'reject-batch' | 'log-only',
+    ): Promise<string> {
+        const log = join(binDir, `invocations-${behavior}-${Math.random().toString(36).slice(2)}.log`);
+        const body = `#!/bin/sh
+touch '${log}'
+if [ "$1" = "--version" ]; then
+  echo 'claude 1.0.0 (fake)'
+  exit 0
+fi
+if [ "$1" = "-p" ]; then
+  input="$2"
+  printf '%s\\n' "$input" >> '${log}'
+  case '${behavior}' in
+    log-only)
+      echo "noop"; exit 0 ;;
+    prepare)
+      wbs=$(printf '%s' "$input" | grep -oE '[0-9]{4}' | head -1)
+      file=$(ls docs/tasks/"\${wbs}"_*.md 2>/dev/null | head -1)
+      if [ -n "$file" ]; then
+        sed -i.bak \\
+          -e 's|${AC_PLACEHOLDER}|- [ ] Prepared scenario covers R1 (fake).|' \\
+          -e 's|${DESIGN_PLACEHOLDER}|Fake prepared design: single-seam approach with substance.|' \\
+          -e 's|${PLAN_PLACEHOLDER}|1. Fake prepared step one.|' "$file"
+        rm -f "$file.bak"
+      fi
+      echo "prepared"
+      exit 0 ;;
+    prepare-batch)
+      cat <<'JSON'
+[{"name":"Batch alpha","background":"Prepared background from fake.","requirements":"- [ ] R1. Prepared requirement.","acceptance_criteria":"- [ ] Prepared AC scenario.","design":"Fake prepared design.","plan":"1. Fake prepared plan step."}]
+JSON
+      exit 0 ;;
+    reject-batch)
+      echo 'definitely not json'
+      exit 0 ;;
+  esac
+fi
+echo "unsupported args: $*" >&2
+exit 1
+`;
+        const script = join(binDir, 'claude');
+        await writeFile(script, body);
+        await Bun.$`chmod +x ${script}`.quiet();
+        if (savedPath === undefined) savedPath = process.env.PATH;
+        process.env.PATH = `${binDir}:${savedPath}`;
+        return log;
+    }
+
+    function dropFakeFromPath(): void {
+        // Minimal system PATH: no fake dir AND no real claude install — the
+        // resolution ladder must find nothing.
+        process.env.PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
+    }
+
+    test('default flow prepares and promotes the task to todo', async () => {
+        const log = await installFakeClaude('prepare');
+        const output = createCapturedOutput();
+        const code = await main(['task', 'create', 'Ready target', '--json'], { cwd: isoCwd, output });
+        if (code !== 0)
+            throw new Error(`create failed (${code}): ${lastMessage(output)} :: ERR ${output.errors.join(' | ')}`);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.eventName).toBe('task.created');
+        expect(parsed.readiness).toEqual({ status: 'ready', depth: 'ready' });
+        // The fake saw exactly one refine dispatch naming the wbs at ready depth.
+        const dispatched = (await readFile(log, 'utf8'))
+            .trim()
+            .split('\n')
+            .filter((l) => l.startsWith('/'));
+        expect(dispatched.length).toBe(1);
+        expect(dispatched[0]).toContain('/sp:dev-refine');
+        expect(dispatched[0]).toContain(parsed.wbs);
+        expect(dispatched[0]).toContain('--depth ready');
+        // The task was promoted.
+        const body = await readFile(parsed.filePath, 'utf8');
+        expect(body).toMatch(/status: todo/);
+        expect(body).toContain('Fake prepared design');
+    });
+    test('--skip-ready dispatches nothing and reports skipped readiness', async () => {
+        const log = await installFakeClaude('log-only');
+        const output = createCapturedOutput();
+        const code = await main(['task', 'create', 'Skip ready', '--skip-ready', '--json'], { cwd: isoCwd, output });
+        expect(code).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.readiness).toEqual({ status: 'skipped', depth: 'ready' });
+        const body = await readFile(parsed.filePath, 'utf8');
+        expect(body).toMatch(/status: backlog/);
+        // Zero dispatches: the fake was never invoked, so its log never appeared.
+        expect(existsSync(log)).toBe(false);
+    });
+
+    test('missing executor fails preparation at agent-run stage and keeps the capture', async () => {
+        await installFakeClaude('log-only');
+        dropFakeFromPath();
+        const output = createCapturedOutput();
+        const code = await main(['task', 'create', 'No executor', '--json'], { cwd: isoCwd, output });
+        expect(code).toBe(1);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.error.code).toBe('preparation-failed');
+        expect(parsed.error.failedStage).toBe('agent-run');
+        expect(parsed.error.readiness).toEqual({ status: 'failed', depth: 'ready' });
+        expect(parsed.error.recoveryCommand).toBe(`/sp:dev-refine ${parsed.error.wbs} --auto --depth ready`);
+        // The capture survived: the task file exists and stays in backlog.
+        expect(existsSync(parsed.error.filePath)).toBe(true);
+        const body = await readFile(parsed.error.filePath, 'utf8');
+        expect(body).toMatch(/status: backlog/);
+    });
+
+    test('retry after failed preparation keeps the same WBS identity', async () => {
+        const output = createCapturedOutput();
+        const first = await main(['task', 'create', 'Retry identity', '--skip-ready', '--json'], {
+            cwd: isoCwd,
+            output,
+        });
+        expect(first).toBe(0);
+        const wbs = JSON.parse(lastMessage(output)).wbs;
+        // A plain duplicate of the same capture is rejected with the SAME wbs.
+        const second = createCapturedOutput();
+        const dup = await main(['task', 'create', 'Retry identity', '--skip-ready', '--json'], {
+            cwd: isoCwd,
+            output: second,
+        });
+        expect(dup).toBe(3);
+        expect(JSON.parse(lastMessage(second)).error.existingWbs).toBe(wbs);
+    });
+
+    test('batch-create with prepared output creates ready tasks in order', async () => {
+        await installFakeClaude('prepare-batch');
+        const batchFile = join(isoCwd, `.batch-ready-${Date.now()}.json`);
+        await writeFile(batchFile, `${JSON.stringify([{ name: 'Batch alpha' }])}\n`);
+        const output = createCapturedOutput();
+        const code = await main(['task', 'batch-create', '--file', batchFile, '--json'], { cwd: isoCwd, output });
+        expect(code).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.created).toBe(1);
+        expect(parsed.readiness.status).toBe('ready');
+        const body = await readFile(join(isoCwd, 'docs', 'tasks', `${parsed.wbs[0]}_batch-alpha.md`), 'utf8');
+        expect(body).toContain('Fake prepared design');
+        await rmSync(batchFile, { force: true });
+    });
+
+    test('batch-create rejects invalid prepared output atomically', async () => {
+        await installFakeClaude('reject-batch');
+        const batchFile = join(isoCwd, `.batch-reject-${Date.now()}.json`);
+        await writeFile(batchFile, `${JSON.stringify([{ name: 'Batch reject' }])}\n`);
+        const tasksBefore = (await readdir(join(isoCwd, 'docs', 'tasks'))).length;
+        const output = createCapturedOutput();
+        const code = await main(['task', 'batch-create', '--file', batchFile, '--json'], { cwd: isoCwd, output });
+        expect(code).toBe(1);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.error.code).toBe('preparation-failed');
+        expect(parsed.error.failedStage).toBe('invalid-output');
+        // Atomicity: nothing was committed.
+        expect((await readdir(join(isoCwd, 'docs', 'tasks'))).length).toBe(tasksBefore);
+        await rmSync(batchFile, { force: true });
+    });
+
+    test('--agent together with --skip-ready is invalid usage', async () => {
+        await installFakeClaude('log-only');
+        const output = createCapturedOutput();
+        const code = await main(['task', 'create', 'Contradiction', '--skip-ready', '--agent', 'claude', '--json'], {
+            cwd: isoCwd,
+            output,
+        });
+        expect(code).toBe(2);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.error.code).toBe('invalid-usage');
     });
 });

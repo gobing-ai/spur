@@ -327,7 +327,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: "mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-decompose-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-decompose-retry-count; rm -f .spur/run/$__runId-idea-task-batch.json .spur/run/$__runId-idea-task-order.json .spur/run/$__runId-idea-batch-create.done .spur/run/$__runId-idea-batch-create.failed .spur/run/$__runId-idea-batch-create-result.json .spur/run/$__runId-idea-handoff.md"
+          command: "mkdir -p .spur/run && count=$(cat .spur/run/$__runId-idea-decompose-retry-count 2>/dev/null || echo 0); echo $((count + 1)) > .spur/run/$__runId-idea-decompose-retry-count; rm -f .spur/run/$__runId-idea-task-batch.json .spur/run/$__runId-idea-task-order.json .spur/run/$__runId-idea-batch-create.done .spur/run/$__runId-idea-batch-create.failed .spur/run/$__runId-idea-batch-create-result.json .spur/run/$__runId-idea-handoff.md .spur/run/$__runId-idea-ready.json"
       - kind: agent.run
         options:
           agent: ${vars.planningAgent}
@@ -385,13 +385,56 @@ states:
           command: >-
             if test -f .spur/run/$__runId-idea-batch-create.done; then exit 0; fi;
             rm -f .spur/run/$__runId-idea-batch-create.failed .spur/run/$__runId-idea-batch-create-result.json .spur/run/$__runId-idea-batch-create-result.json.tmp;
-            if $spurBin task batch-create --file .spur/run/$__runId-idea-task-batch.json --json > .spur/run/$__runId-idea-batch-create-result.json.tmp && jq -e ".created == (.wbs | length)" .spur/run/$__runId-idea-batch-create-result.json.tmp >/dev/null 2>&1; then
+            if $spurBin task batch-create --file .spur/run/$__runId-idea-task-batch.json --skip-ready --json > .spur/run/$__runId-idea-batch-create-result.json.tmp && jq -e ".created == (.wbs | length)" .spur/run/$__runId-idea-batch-create-result.json.tmp >/dev/null 2>&1; then
               mv .spur/run/$__runId-idea-batch-create-result.json.tmp .spur/run/$__runId-idea-batch-create-result.json &&
               date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/$__runId-idea-batch-create.done;
             else
               rm -f .spur/run/$__runId-idea-batch-create-result.json.tmp;
               date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/$__runId-idea-batch-create.failed;
             fi
+
+  - id: ready-prepare
+    description: >
+      Ready-by-default preparation (0788): the planning owner applies the
+      ready-refinement checklist to each created task (requirements, design,
+      plan, ac, decisions, dependencies, premises) so the deterministic task
+      check passes, then writes the run-scoped ready evidence sidecar
+      (.spur/run/${vars.__runId}-idea-ready.json) with one row per task: wbs,
+      status (ready|failed|skipped), planningDigest, and seven check rows.
+      Handoff-finalize verifies presence, digest and checklist evidence before
+      recommending auto runall; missing or failing evidence never fails the
+      run — it degrades the recommendation to ready-depth refineall.
+    onEnter:
+      - kind: agent.run
+        options:
+          agent: ${vars.planningAgent}
+          # Declared Layer-1 role (0538 R2), same planner executor as decompose.
+          role: planner
+          timeoutMs: ${vars.stepTimeoutMs}
+          input: >-
+            Ready-by-default preparation for feature ${vars.featureId} (0788). The created WBS
+            values are in .spur/run/${vars.__runId}-idea-batch-create-result.json under .wbs.
+            For EACH wbs: resolve the task file with `spur task path <wbs> --json`; open the
+            task doc and apply the ready-refinement checklist — make requirements, design,
+            plan, acceptance criteria, decisions, dependencies and premises present and
+            non-placeholder so `spur task check <wbs> --json` exits 0; edit only planning
+            sections, never Solution/Testing/Review/History. Record one checklist row per id
+            with concrete evidence of how you verified it. Compute the planning digest with
+            the project's own implementation when this is a monorepo checkout:
+            `bun -e 'const m = await import("./packages/app/src/services/task-readiness"); console.log(m.computePlanningDigest(await Bun.file(process.argv[1]).text()))' <task-file>`
+            — when that is impossible in this checkout, set status "skipped" instead of
+            guessing a digest. Finally write .spur/run/${vars.__runId}-idea-ready.json with
+            exactly this shape: {"runId":"${vars.__runId}","depth":"ready","tasks":[{"wbs":"<wbs>","status":"ready" or "failed" or "skipped","planningDigest":"<sha256 hex>","checks":[{"id":"requirements" or "design" or "plan" or "ac" or "decisions" or "dependencies" or "premises","pass":true or false,"evidence":"<how verified>"}]}]}. A task you cannot fully prepare gets status "failed" or "skipped" — never fabricate evidence; the handoff degrades to refineall.
+      # Fail-closed shape validation (mirrors the order-sidecar guard). Absence is
+      # normalized to an empty sidecar: finalize and the seeded fallback then degrade
+      # the recommendation to refineall instead of failing the run. A PRESENT but
+      # malformed sidecar fails the run here — it must not masquerade as evidence.
+      - kind: shell
+        options:
+          command: >-
+            READY=".spur/run/$__runId-idea-ready.json" &&
+            if ! test -f "$READY"; then printf '{"runId":"%s","depth":"ready","tasks":[]}\n' "$__runId" > "$READY"; fi &&
+            jq -e 'type == "object" and (.tasks | type == "array") and (all(.tasks[]; (.wbs | type == "string") and (.status == "ready" or .status == "failed" or .status == "skipped") and (.planningDigest | type == "string") and (.checks | type == "array") and (all(.checks[]; (.id | type == "string") and (.pass | type == "boolean") and (.evidence | type == "string")))))' "$READY" >/dev/null
 
   - id: handoff-finalize
     description: >
@@ -458,7 +501,9 @@ states:
             CHECK_ROWS=$(wc -l < "$CHECKS" | tr -d ' ') &&
             WBS_COUNT=$(printf '%s\n' $WBS_LIST | wc -l | tr -d ' ') &&
             test "$CHECK_ROWS" = "$WBS_COUNT" &&
-            NEXT=$(jq -r --arg feature "$featureId" --slurpfile c "$CHECKS" 'if ($c | any(.[]; .pass == false)) then "/sp:dev-refineall --feature \($feature) --auto --depth ready" else "/sp:dev-runall --feature \($feature) --auto" end' "$RESULT") &&
+            READY=".spur/run/$__runId-idea-ready.json" &&
+            (test -f "$READY" || printf '{"tasks":[]}\n' > "$READY") &&
+            NEXT=$(jq -r --arg feature "$featureId" --slurpfile c "$CHECKS" --slurpfile k "$READY" 'if (($c | any(.[]; .pass == false)) or (($k[0].tasks // []) | length == 0) or (($k[0].tasks // []) | any(.[]; .status != "ready"))) then "/sp:dev-refineall --feature \($feature) --auto --depth ready" else "/sp:dev-runall --feature \($feature) --auto" end' "$RESULT") &&
             {
               echo "# Idea pipeline handoff report";
               echo;
@@ -748,14 +793,20 @@ transitions:
       options:
         command: 'test "$__hitlAnswer" = cancel'
 
-  # ── batch-create-run: success -> handoff-finalize, failure -> decompose (retry cap: 3), failure+cap -> failed ──
+  # ── batch-create-run: success -> ready-prepare, failure -> decompose (retry cap: 3), failure+cap -> failed ──
   - from: batch-create-run
-    to: handoff-finalize
-    description: Batch created and result captured — apply ordering, refresh roster, write handoff report.
+    to: ready-prepare
+    description: Batch created and result captured — apply ready-by-default preparation, then finalize the handoff.
     guard:
       kind: shell
       options:
         command: "test -f .spur/run/$__runId-idea-batch-create.done"
+  # ── ready-prepare: -> handoff-finalize (always; evidence absence degrades to refineall, never fails the run) ──
+  - from: ready-prepare
+    to: handoff-finalize
+    description: Ready evidence sidecar written (or normalized empty) — finalize the handoff report.
+    guard:
+      kind: always
   - from: batch-create-run
     to: decompose
     description: "Batch-create failed — revise decomposition (retry cap: 3)."
