@@ -846,13 +846,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     const label = foldersConfig.folders[folderPath]?.label;
                     const boardTitle = label ? `${label} (${folderPath})` : folderPath;
                     const color = makeColorize(shouldColor(context.env, process.stdout));
-                    // A status filter collapses the board to just the matching section;
-                    // an unfiltered (or non-canonical filter) view shows all columns.
+                    // A status filter collapses the board to the normalized column.
                     const requested = options.status ?? options.phase;
-                    const columns =
-                        requested !== undefined && (TASK_STATUSES as readonly string[]).includes(requested)
-                            ? [requested as (typeof TASK_STATUSES)[number]]
-                            : TASK_STATUSES;
+                    const columns = requested === undefined ? TASK_STATUSES : [normalizeTaskStatus(requested)];
                     context.output.write(renderTaskBoard(tasks, boardTitle, color, columns));
                 }
             } catch (err) {

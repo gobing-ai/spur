@@ -7,6 +7,7 @@ import {
     resolvePlanningFolders,
     type WriteResult,
 } from '@gobing-ai/spur-app';
+import { normalizeFeatureStatus } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { makePlanningEmitter } from '../planning-emitter';
@@ -270,7 +271,8 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
             try {
                 let features = await svc.list();
                 if (options.status !== undefined) {
-                    features = features.filter((f) => f.status === options.status);
+                    const wantStatus = normalizeFeatureStatus(options.status);
+                    features = features.filter((f) => f.status === wantStatus);
                 }
                 if (options.priority !== undefined) {
                     features = features.filter((f) => f.priority === options.priority);

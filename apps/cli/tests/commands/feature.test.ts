@@ -204,6 +204,46 @@ describe('spur feature CLI', () => {
         expect([...ids]).toEqual([...ids].sort());
     });
 
+    test('list --status validates against the feature vocabulary', async () => {
+        // Seed rather than `create` so this case does not consume a top-level letter ID
+        // (the suite already allocates most of A–Z).
+        writeFileSync(
+            join(cwd, 'docs/features/Z9_status-filter-active.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: Z9',
+                'name: "Status Filter Active"',
+                'status: active',
+                'priority: P2',
+                '---',
+                '',
+                '# Z9: Status Filter Active',
+                '',
+            ].join('\n'),
+        );
+
+        const activeOut = createCapturedOutput();
+        const activeCode = await main(['feature', 'list', '--status', 'active', '--json'], {
+            cwd,
+            output: activeOut,
+        });
+        expect(activeCode).toBe(0);
+        const rows = JSON.parse(lastMessage(activeOut));
+        expect(rows.length).toBeGreaterThan(0);
+        for (const f of rows) {
+            expect(f.status).toBe('active');
+        }
+
+        const todoOut = createCapturedOutput();
+        const todoCode = await main(['feature', 'list', '--status', 'todo', '--json'], { cwd, output: todoOut });
+        expect(todoCode).toBe(1);
+        const combined = `${todoOut.errors.join('\n')}\n${todoOut.messages.join('\n')}`;
+        expect(combined).toContain('Unknown feature status');
+        expect(combined).toContain('"todo"');
+        expect(todoOut.messages.join('').trim()).not.toBe('[]');
+    });
+
     test('list --priority filters by priority', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['feature', 'list', '--priority', 'P0', '--json'], { cwd, output });

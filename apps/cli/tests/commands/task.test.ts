@@ -700,7 +700,7 @@ describe('spur task CLI', () => {
 
     test('list --status filters out non-matching tasks via --json', async () => {
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'list', '--status', 'no-such-status', '--json'], { cwd, output });
+        const exitCode = await main(['task', 'list', '--status', 'cancelled', '--json'], { cwd, output });
         expect(exitCode).toBe(0);
         const rows = JSON.parse(lastMessage(output));
         expect(rows).toEqual([]);
@@ -718,7 +718,7 @@ describe('spur task CLI', () => {
 
     test('list with no matching status prints (no tasks)', async () => {
         const output = createCapturedOutput();
-        const exitCode = await main(['task', 'list', '--status', 'zzz-nonexistent'], { cwd, output });
+        const exitCode = await main(['task', 'list', '--status', 'cancelled'], { cwd, output });
         expect(exitCode).toBe(0);
         expect(output.messages.at(-1)).toContain('(no tasks)');
     });
@@ -748,6 +748,83 @@ describe('spur task CLI', () => {
         for (const col of ['Todo', 'WIP', 'Testing', 'Blocked', 'Done', 'Canceled']) {
             expect(board).not.toContain(col);
         }
+    });
+
+    test('list --status bogus --json fails with writeJsonError, not an empty array', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'list', '--status', 'bogus', '--json'], { cwd, output });
+        expect(exitCode).toBe(1);
+        const combined = `${output.errors.join('\n')}\n${output.messages.join('\n')}`;
+        expect(combined).toContain('Unknown task status');
+        expect(combined).toContain('"bogus"');
+        expect(combined).toMatch(/allowed:.*backlog/);
+        expect(output.messages.join('').trim()).not.toBe('[]');
+    });
+
+    test('list --status backlog,todo --json fails naming the value', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'list', '--status', 'backlog,todo', '--json'], { cwd, output });
+        expect(exitCode).toBe(1);
+        const combined = `${output.errors.join('\n')}\n${output.messages.join('\n')}`;
+        expect(combined).toContain('Unknown task status');
+        expect(combined).toContain('backlog,todo');
+        expect(output.messages.join('').trim()).not.toBe('[]');
+    });
+
+    test('list --phase backlog,todo --json fails naming the value', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'list', '--phase', 'backlog,todo', '--json'], { cwd, output });
+        expect(exitCode).toBe(1);
+        const combined = `${output.errors.join('\n')}\n${output.messages.join('\n')}`;
+        expect(combined).toContain('Unknown task status');
+        expect(combined).toContain('backlog,todo');
+    });
+
+    test('list --status active --json fails because active is not a task status', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'list', '--status', 'active', '--json'], { cwd, output });
+        expect(exitCode).toBe(1);
+        const combined = `${output.errors.join('\n')}\n${output.messages.join('\n')}`;
+        expect(combined).toContain('Unknown task status');
+        expect(combined).toContain('"active"');
+    });
+
+    test('list --status in-progress collapses the board to the wip column', async () => {
+        await writeFile(
+            join(cwd, 'docs/tasks/0904_wip-board.md'),
+            '---\nname: "Wip board"\nstatus: wip\n---\n\n## 0904. Wip board\n',
+        );
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'list', '--status', 'in-progress'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const board = output.messages.join('');
+        expect(board).toContain('WIP');
+        expect(board).toContain('Wip board');
+        for (const col of ['Backlog', 'Todo', 'Testing', 'Blocked', 'Done', 'Canceled']) {
+            expect(board).not.toContain(col);
+        }
+    });
+
+    test('list --status TODO and --phase in-progress resolve aliases', async () => {
+        await writeFile(
+            join(cwd, 'docs/tasks/0902_todo-alias.md'),
+            '---\nname: "Todo alias"\nstatus: todo\n---\n\n## 0902. Todo alias\n',
+        );
+        await writeFile(
+            join(cwd, 'docs/tasks/0903_wip-alias.md'),
+            '---\nname: "Wip alias"\nstatus: wip\n---\n\n## 0903. Wip alias\n',
+        );
+        const todoOut = createCapturedOutput();
+        expect(await main(['task', 'list', '--status', 'TODO', '--json'], { cwd, output: todoOut })).toBe(0);
+        const todoRows = JSON.parse(lastMessage(todoOut));
+        expect(todoRows.some((t: { name: string }) => t.name === 'Todo alias')).toBe(true);
+
+        const phaseOut = createCapturedOutput();
+        expect(await main(['task', 'list', '--phase', 'in-progress', '--json'], { cwd, output: phaseOut })).toBe(0);
+        const wipOut = createCapturedOutput();
+        expect(await main(['task', 'list', '--status', 'wip', '--json'], { cwd, output: wipOut })).toBe(0);
+        expect(JSON.parse(lastMessage(phaseOut))).toEqual(JSON.parse(lastMessage(wipOut)));
+        expect(JSON.parse(lastMessage(wipOut)).some((t: { name: string }) => t.name === 'Wip alias')).toBe(true);
     });
 
     test('resolve maps a task file path to its WBS', async () => {

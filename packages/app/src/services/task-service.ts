@@ -15,6 +15,7 @@ import {
     DEFAULT_TASK_VARIANT,
     MarkdownDocument,
     normalizeAcFence,
+    normalizeTaskStatus,
     parseChecklist,
     SECTION_GUIDANCE,
     serializeTaskFrontmatter,
@@ -1677,6 +1678,8 @@ export class TaskService {
     // ── list ──
 
     async list(filters?: TaskListFilters): Promise<TaskSummary[]> {
+        const wantStatus = filters?.status === undefined ? undefined : normalizeTaskStatus(filters.status);
+        const wantPhase = filters?.phase === undefined ? undefined : normalizeTaskStatus(filters.phase);
         const dir = this.resolveListDir(filters?.folder);
 
         const entries = await this.ctx.fs.readDir(dir);
@@ -1696,10 +1699,10 @@ export class TaskService {
                 const parentWbs = (fm.parent_wbs as string | null) ?? undefined;
                 const featureId = (fm.feature_id as string | null) ?? undefined;
 
-                if (filters?.status !== undefined && filters.status !== status) continue;
+                if (wantStatus !== undefined && wantStatus !== status) continue;
                 if (filters?.parentWbs !== undefined && filters.parentWbs !== parentWbs) continue;
                 if (filters?.featureId !== undefined && filters.featureId !== featureId) continue;
-                if (filters?.phase !== undefined && filters.phase !== status) continue;
+                if (wantPhase !== undefined && wantPhase !== status) continue;
 
                 tasks.push({
                     wbs,

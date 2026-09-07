@@ -411,6 +411,33 @@ describe('TaskService', () => {
             expect(wip.some((t) => t.name === 'Phase test')).toBe(true);
         });
 
+        test('rejects an unknown status with the allowed set in the message', async () => {
+            await expect(svc.list({ status: 'bogus' })).rejects.toThrow(
+                /Unknown task status: "bogus".*allowed:.*backlog/,
+            );
+        });
+
+        test('rejects a comma-list status rather than matching nothing', async () => {
+            await expect(svc.list({ status: 'backlog,todo' })).rejects.toThrow(/Unknown task status: "backlog,todo"/);
+            await expect(svc.list({ phase: 'backlog,todo' })).rejects.toThrow(/Unknown task status: "backlog,todo"/);
+        });
+
+        test('resolves uppercase and alias filters to canonical rows', async () => {
+            await svc.create({ title: 'Backlog alias' });
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            await fs.writeFile(
+                join(tasksDir, '0902_alias-wip.md'),
+                '---\nname: "Wip alias"\nstatus: wip\n---\n\n## 0902. Wip alias\n',
+            );
+
+            const upper = await svc.list({ status: 'BACKLOG' });
+            expect(upper.some((t) => t.name === 'Backlog alias')).toBe(true);
+            const alias = await svc.list({ phase: 'in-progress' });
+            expect(alias.some((t) => t.name === 'Wip alias')).toBe(true);
+            const canonical = await svc.list({ status: 'wip' });
+            expect(canonical.map((t) => t.wbs).sort()).toEqual(alias.map((t) => t.wbs).sort());
+        });
+
         test('lists from an alternate folder within the planning workspace', async () => {
             // A sibling folder under the same root as tasksDir is a valid target —
             // the multi-folder switcher must read tasks from the chosen directory.

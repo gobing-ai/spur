@@ -102,6 +102,37 @@ describe('task handlers', () => {
         await fn({ input: undefined });
     });
 
+    test('list handler rejects an unknown status with 400, not a 500 (task 0795 R1)', async () => {
+        const handlers = createTaskHandlers(makeCtx());
+        const fn = handlers.list['~orpc'].handler as unknown as (opts: {
+            input?: Record<string, unknown>;
+        }) => Promise<unknown>;
+        // TaskService.list() throws a plain Error on an unknown status; unmapped it
+        // would surface as INTERNAL_ERROR/500 through globalErrorHandler.
+        const err = await fn({ input: { status: 'bogus' } }).then(
+            () => undefined,
+            (e: unknown) => e,
+        );
+        expect((err as { status?: number } | undefined)?.status).toBe(400);
+        expect(String((err as Error).message)).toContain('Unknown task status: "bogus"');
+    });
+
+    test('list handler resolves status aliases and case before filtering', async () => {
+        const seen: Record<string, unknown>[] = [];
+        const ctx = makeCtx({
+            list: async (filters: Record<string, unknown>) => {
+                seen.push(filters);
+                return [];
+            },
+        });
+        const handlers = createTaskHandlers(ctx);
+        const fn = handlers.list['~orpc'].handler as unknown as (opts: {
+            input?: Record<string, unknown>;
+        }) => Promise<unknown>;
+        await fn({ input: { status: 'IN-PROGRESS' } });
+        expect(seen[0]?.status).toBe('wip');
+    });
+
     test('show handler returns task detail', async () => {
         const handlers = createTaskHandlers(makeCtx());
         const fn = handlers.show['~orpc'].handler as unknown as (opts: {
