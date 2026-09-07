@@ -66,7 +66,7 @@ export interface SystemEventCatchAll {
 export function genericSystemEventCatalogEntry(name: string): SystemEventCatalogEntry {
     return {
         name,
-        prefix: name.split('.')[0] ?? name,
+        prefix: name.replace(/\..*/, ''),
         source: 'bus',
         tier: 'default',
         persisted: true,
