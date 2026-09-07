@@ -11,6 +11,8 @@ import {
     createQueueConsumer,
     dbHealthCheck,
     enqueueCoalesced,
+    failOrphanedProcessingJobs,
+    findActiveSchedulerCustomJob,
     findPendingQueueJob,
     SQLITE_BUSY_TIMEOUT_MS,
     updatePendingQueueJob,
@@ -756,6 +758,98 @@ describe('findPendingQueueJob / updatePendingQueueJob', () => {
         const db = await createMigratedDb({ url: ':memory:' });
         try {
             expect(await updatePendingQueueJob(db, 'missing-id', { n: 1 }, 1)).toBeUndefined();
+        } finally {
+            db.close();
+        }
+    });
+});
+
+describe('findActiveSchedulerCustomJob', () => {
+    const insertCustomJob = (db: DbAdapter, id: string, name: string, status: string) =>
+        db.run(
+            `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, next_retry_at)
+             VALUES (?, 'scheduler.custom', ?, ?, 0, 3, 1000, 1000, NULL)`,
+            id,
+            JSON.stringify({ name, command: 'true' }),
+            status,
+        );
+
+    test('returns undefined when no active row exists for the name', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await insertCustomJob(db, 'done-1', 'history-refresh', 'completed');
+            await insertCustomJob(db, 'failed-1', 'history-refresh', 'failed');
+            await insertCustomJob(db, 'other-1', 'nightly-import', 'pending');
+            expect(await findActiveSchedulerCustomJob(db, 'history-refresh')).toBeUndefined();
+        } finally {
+            db.close();
+        }
+    });
+
+    test('returns the id of a pending row matching the name', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await insertCustomJob(db, 'pending-1', 'history-refresh', 'pending');
+            const found = await findActiveSchedulerCustomJob(db, 'history-refresh');
+            expect(found).toEqual({ id: 'pending-1' });
+        } finally {
+            db.close();
+        }
+    });
+
+    test('returns the id of a processing row matching the name', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await insertCustomJob(db, 'running-1', 'history-refresh', 'processing');
+            const found = await findActiveSchedulerCustomJob(db, 'history-refresh');
+            expect(found).toEqual({ id: 'running-1' });
+        } finally {
+            db.close();
+        }
+    });
+});
+
+describe('failOrphanedProcessingJobs', () => {
+    test('returns 0 and writes nothing when no processing rows exist', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, next_retry_at)
+                 VALUES ('p-1', 'demo', '{}', 'pending', 0, 3, 1000, 1000, NULL)`,
+            );
+            expect(await failOrphanedProcessingJobs(db, 5000)).toBe(0);
+            const row = await db.queryFirst<{ status: string }>("SELECT status FROM queue_jobs WHERE id = 'p-1'");
+            expect(row?.status).toBe('pending');
+        } finally {
+            db.close();
+        }
+    });
+
+    test('fails every processing row with an audit message and clears processing_at', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, processing_at)
+                 VALUES ('orphan-1', 'scheduler.custom', '{"name":"history-refresh"}', 'processing', 1, 3, 1000, 1000, 1500)`,
+            );
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at)
+                 VALUES ('ok-1', 'demo', '{}', 'completed', 1, 3, 2000, 2000)`,
+            );
+            const swept = await failOrphanedProcessingJobs(db, 9000);
+            expect(swept).toBe(1);
+            const orphan = await db.queryFirst<{
+                status: string;
+                last_error: string | null;
+                processing_at: number | null;
+                updated_at: number;
+            }>("SELECT status, last_error, processing_at, updated_at FROM queue_jobs WHERE id = 'orphan-1'");
+            expect(orphan?.status).toBe('failed');
+            expect(orphan?.last_error).toBe('Process terminated: server restarted while job was in flight');
+            expect(orphan?.processing_at).toBeNull();
+            expect(orphan?.updated_at).toBe(9000);
+            const ok = await db.queryFirst<{ status: string }>("SELECT status FROM queue_jobs WHERE id = 'ok-1'");
+            expect(ok?.status).toBe('completed');
         } finally {
             db.close();
         }

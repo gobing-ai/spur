@@ -14,6 +14,8 @@ export {
     type DbAdapter,
     dbHealthCheck,
     enqueueCoalesced,
+    failOrphanedProcessingJobs,
+    findActiveSchedulerCustomJob,
     findPendingQueueJob,
     type JobQueue,
     type PendingQueueJob,

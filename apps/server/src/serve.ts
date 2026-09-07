@@ -23,7 +23,7 @@ import {
     loadStructuredSpurConfig,
     resolveConfigFile,
 } from '@gobing-ai/spur-config/loader';
-import { SystemEventDao } from '@gobing-ai/spur-domain';
+import { failOrphanedProcessingJobs, findActiveSchedulerCustomJob, SystemEventDao } from '@gobing-ai/spur-domain';
 import type { ApplicationRuntime, ApplicationStopReason, SchedulerJobConfig } from '@gobing-ai/ts-infra/application';
 import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
@@ -191,6 +191,22 @@ export function registerSchedulerEntries(
         const schedule = job.cron ?? String(job.intervalMinutes * 60_000);
         register(schedule, `${SCHEDULER_CUSTOM_JOB}:${job.name}`, async () => {
             const queue = await ctx.jobQueue();
+            // Single-flight: skip if an active job with the same name already exists.
+            // Without this guard, every cron tick enqueues a new row even when the
+            // previous run is still processing — causing concurrent child processes
+            // that compete for the SQLite write lock.
+            const db = await ctx.getDb();
+            const active = await findActiveSchedulerCustomJob(db, job.name);
+            if (active !== undefined) {
+                ctx.eventBus().emit('scheduler.job.executed', {
+                    name: `${SCHEDULER_CUSTOM_JOB}:${job.name}`,
+                    durationMs: 0,
+                    severity: 'info',
+                    skipped: true,
+                    reason: `active job ${active.id} already exists`,
+                });
+                return;
+            }
             await queue.enqueue(SCHEDULER_CUSTOM_JOB, { name: job.name, command: job.command });
         });
         registrations.push({
@@ -532,6 +548,15 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 registry.register(SCHEDULER_CUSTOM_JOB, (job) =>
                     handleSchedulerCustomJob({ cwd: ctx.cwd, executor: childExecutor }, job),
                 );
+                // Startup sweep: fail orphaned `processing` jobs left by a prior server
+                // crash/restart. Without this, rows stuck in `processing` are never retried
+                // and hold conceptual locks on resources like the SQLite database.
+                const orphanCount = await failOrphanedProcessingJobs(await ctx.getDb(), Date.now());
+                if (orphanCount > 0) {
+                    appRt.logger.warn('Swept orphaned processing jobs at startup', {
+                        count: orphanCount,
+                    });
+                }
                 jobWorker = new JobWorkerService({
                     consumer: await ctx.queueConsumer(),
                     registry,

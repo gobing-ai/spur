@@ -616,7 +616,10 @@ describe('startServer', () => {
             createServerContext: (() =>
                 ({
                     queueConsumer: async () => queueConsumer,
-                    getDb: async () => ({}),
+                    getDb: async () => ({
+                        queryFirst: async () => undefined,
+                        run: async () => {},
+                    }),
                     systemEventDao: async () => ({
                         pruneQuotas: async () => {
                             pruneCallCount = 10_000;
@@ -762,6 +765,9 @@ describe('startServer', () => {
                     return `${type}-id`;
                 },
             }),
+            getDb: async () => ({
+                queryFirst: async () => undefined,
+            }),
             eventBus: () => ({
                 emit: (name: string, payload: unknown) => {
                     emitted.push({ name, payload });
@@ -824,6 +830,57 @@ describe('startServer', () => {
         expect(failPayload.name).toBe('system-events-prune');
         expect(failPayload.error).toContain('timeout');
         expect(typeof failPayload.durationMs).toBe('number');
+    });
+
+    test('registerSchedulerEntries skips enqueue when a same-named job is still active (single-flight)', async () => {
+        const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+        const enqueued: Array<{ type: string; payload: unknown }> = [];
+        const emitted: Array<{ name: string; payload: unknown }> = [];
+        const scheduler = {
+            register: (cron: string, action: () => Promise<void>) => {
+                registered.push({ cron, action });
+            },
+            start: async () => {},
+            stop: async () => {},
+        };
+        const ctx = {
+            jobQueue: async () => ({
+                enqueue: async (type: string, payload: unknown) => {
+                    enqueued.push({ type, payload });
+                    return `${type}-id`;
+                },
+            }),
+            // An active row exists for 'history-refresh' — the tick must skip.
+            getDb: async () => ({
+                queryFirst: async (sql: string, ...params: unknown[]) => {
+                    if (sql.includes('scheduler.custom') && params[0] === 'history-refresh') {
+                        return { id: 'existing-active-1' };
+                    }
+                    return undefined;
+                },
+            }),
+            eventBus: () => ({
+                emit: (name: string, payload: unknown) => {
+                    emitted.push({ name, payload });
+                },
+            }),
+        } as unknown as ServerContext;
+        const jobs: readonly SchedulerJobConfig[] = [
+            { name: 'history-refresh', cron: '*/15 7-23 * * *', command: 'bun apps/cli/src/index.ts history daily' },
+            { name: 'nightly-import', command: 'bun run load-history', cron: '30 2 * * *' },
+        ];
+
+        registerSchedulerEntries(scheduler, ctx, jobs);
+        // Registered after the two built-ins.
+        await registered[2]?.action(); // history-refresh → skipped
+        await registered[3]?.action(); // nightly-import → enqueued
+
+        expect(enqueued).toEqual([
+            { type: SCHEDULER_CUSTOM_JOB, payload: { name: 'nightly-import', command: 'bun run load-history' } },
+        ]);
+        const skipPayload = emitted.map((e) => e.payload as Record<string, unknown>).find((p) => p.skipped === true);
+        expect(skipPayload?.name).toBe(`${SCHEDULER_CUSTOM_JOB}:history-refresh`);
+        expect(String(skipPayload?.reason)).toContain('existing-active-1');
     });
 
     test('parseTaskActionJob validates payload shape and preserves optional routing fields', () => {

@@ -635,3 +635,47 @@ export async function queryScheduleLastExecution(
         throw error;
     }
 }
+
+/**
+ * Single-flight lookup for a configured `scheduler.custom` job: returns the id of
+ * an active (pending/processing) row for the named job, or `undefined` when none
+ * is active. A scheduler tick uses this to skip enqueueing behind its own
+ * still-running predecessor instead of piling duplicate rows onto the queue.
+ */
+export async function findActiveSchedulerCustomJob(db: DbAdapter, name: string): Promise<{ id: string } | undefined> {
+    const row = await db.queryFirst<{ id: string }>(
+        `SELECT id FROM queue_jobs
+         WHERE type = 'scheduler.custom' AND status IN ('pending', 'processing')
+           AND json_extract(payload, '$.name') = ?
+         LIMIT 1`,
+        name,
+    );
+    return row ?? undefined;
+}
+
+/**
+ * Startup sweep: mark every `processing` queue row as failed. Rows can only be
+ * stuck in `processing` when the owning process died mid-flight (a live worker
+ * always resolves its claim), so failing them at server start unblocks retry of
+ * the underlying work and clears the conceptual lock on shared resources.
+ *
+ * @returns the number of rows swept.
+ */
+export async function failOrphanedProcessingJobs(db: DbAdapter, now: number): Promise<number> {
+    const orphan = await db.queryFirst<{ cnt: number }>(
+        `SELECT count(*) AS cnt FROM queue_jobs WHERE status = 'processing'`,
+    );
+    const count = orphan?.cnt ?? 0;
+    if (count > 0) {
+        await db.run(
+            `UPDATE queue_jobs
+             SET status = 'failed',
+                 last_error = 'Process terminated: server restarted while job was in flight',
+                 processing_at = NULL,
+                 updated_at = ?
+             WHERE status = 'processing'`,
+            now,
+        );
+    }
+    return count;
+}

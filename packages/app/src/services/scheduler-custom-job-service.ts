@@ -72,29 +72,47 @@ export function validateSchedulerCustomJobPayload(raw: unknown): SchedulerCustom
 }
 
 /**
+ * In-process concurrency guard: prevents two queue workers from executing the same
+ * scheduler job name concurrently. Without this, duplicate queue rows (which the
+ * single-flight enqueue guard now prevents, but may exist from prior runs) would
+ * spawn parallel child processes competing for the SQLite write lock.
+ */
+const activeJobs = new Set<string>();
+
+/**
  * Run one configured scheduler command. Exit code is the entire success verdict: a spawn
  * failure, timeout, signal, or non-zero exit throws so the queue records a failed attempt
  * and applies its existing retry policy. Success returns silently — no output is emitted.
  */
 export async function handleSchedulerCustomJob(deps: SchedulerCustomJobDeps, job: Job<unknown>): Promise<void> {
     const payload = validateSchedulerCustomJobPayload(job.payload);
-    const result = await deps.executor.run({
-        command: '/bin/sh',
-        args: ['-c', payload.command],
-        cwd: deps.cwd,
-        timeout: deps.timeoutMs ?? SCHEDULER_CUSTOM_TIMEOUT_MS,
-        maxOutput: SCHEDULER_CUSTOM_MAX_OUTPUT,
-        forceBuffered: true,
-        // The handler owns the failure message so the command text stays out of it.
-        rejectOnError: false,
-    });
-    // stderr leads; stdout is the fallback for commands that report failure on stdout only.
-    const detail = outputTail(result.stderr) || outputTail(result.stdout);
-    if (result.exitCode === null) {
-        const signalDetail = result.signal === undefined ? '' : ` (${result.signal})`;
-        throw new Error(`scheduler job "${payload.name}" terminated before a normal exit${signalDetail}${detail}`);
+    if (activeJobs.has(payload.name)) {
+        throw new Error(
+            `scheduler job "${payload.name}" is already running in this process; skipping duplicate execution`,
+        );
     }
-    if (result.exitCode !== 0) {
-        throw new Error(`scheduler job "${payload.name}" exited ${result.exitCode}${detail}`);
+    activeJobs.add(payload.name);
+    try {
+        const result = await deps.executor.run({
+            command: '/bin/sh',
+            args: ['-c', payload.command],
+            cwd: deps.cwd,
+            timeout: deps.timeoutMs ?? SCHEDULER_CUSTOM_TIMEOUT_MS,
+            maxOutput: SCHEDULER_CUSTOM_MAX_OUTPUT,
+            forceBuffered: true,
+            // The handler owns the failure message so the command text stays out of it.
+            rejectOnError: false,
+        });
+        // stderr leads; stdout is the fallback for commands that report failure on stdout only.
+        const detail = outputTail(result.stderr) || outputTail(result.stdout);
+        if (result.exitCode === null) {
+            const signalDetail = result.signal === undefined ? '' : ` (${result.signal})`;
+            throw new Error(`scheduler job "${payload.name}" terminated before a normal exit${signalDetail}${detail}`);
+        }
+        if (result.exitCode !== 0) {
+            throw new Error(`scheduler job "${payload.name}" exited ${result.exitCode}${detail}`);
+        }
+    } finally {
+        activeJobs.delete(payload.name);
     }
 }
