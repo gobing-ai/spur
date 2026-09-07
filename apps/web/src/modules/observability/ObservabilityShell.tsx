@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { TimeRangePresets } from './ObservabilityFilters';
 import {
     OBSERVABILITY_TABS,
     type ObservabilityLiveness,
@@ -62,7 +63,7 @@ export default function ObservabilityShell() {
                 <div className="flex items-center gap-3">
                     <span className="text-2xl">📡</span>
                     <div>
-                        <h1 className="text-xl font-bold tracking-tight">Observability</h1>
+                        <h1 className="text-xl font-bold tracking-tight">Observabilities</h1>
                         <p className="text-xs text-base-content/60">
                             System event streams, queue execution telemetry, and routing attribution
                         </p>
@@ -114,6 +115,9 @@ export default function ObservabilityShell() {
                         );
                     })}
                 </div>
+
+                {/* Shell-owned time-range presets — visible on every tab (task 0793 R2/D2) */}
+                <TimeRangePresets timeRange={timeRange} onTimeRangeChange={setTimeRange} />
             </div>
 
             {/* Tab Panel */}

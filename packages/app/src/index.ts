@@ -371,6 +371,18 @@ export type {
     SupervisorTeamMemberEventPayload,
 } from './services/supervisor-service';
 export { SupervisorService } from './services/supervisor-service';
+export type {
+    SystemEventCatchAll,
+    SystemEventCatchAllSinkOptions,
+    SystemEventSink,
+} from './services/system-event-catch-all';
+export {
+    createSystemEventCatchAllSink,
+    GENERIC_SYSTEM_EVENT_RENDERER,
+    genericSystemEventCatalogEntry,
+    installSystemEventCatchAll,
+    SYSTEM_EVENT_UNCATALOGED_WARN_EVENT,
+} from './services/system-event-catch-all';
 export type { SystemEventEmitterLogger } from './services/system-event-emitter';
 export { SystemEventEmitter } from './services/system-event-emitter';
 export type {

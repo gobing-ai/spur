@@ -16,8 +16,11 @@
 
 import {
     configuredSecretValues,
+    createSystemEventCatchAllSink,
+    installSystemEventCatchAll,
     registerSystemEventTap,
     type SystemEventBus,
+    type SystemEventCatchAll,
     type SystemEventTap,
     systemEventProjectContext,
 } from '@gobing-ai/spur-app';
@@ -65,6 +68,7 @@ export async function attachSystemEventLedger(
     };
 
     let tap: SystemEventTap | undefined;
+    let catchAll: SystemEventCatchAll | undefined;
     try {
         const dao = new SystemEventDao(await context.getDb());
         tap = registerSystemEventTap(bus, dao, logger, {
@@ -72,6 +76,18 @@ export async function attachSystemEventLedger(
             secretValues: configuredSecretValues(context.env ?? {}),
             projectContext: systemEventProjectContext(context.cwd),
         });
+        // Catalog-open ingestion (task 0794 R6): uncataloged names persist
+        // beside the cataloged tap; cataloged names stay tap-owned, so no
+        // duplicate row. Installed once per process (idempotent wrapper, Q4).
+        catchAll = installSystemEventCatchAll(
+            bus,
+            createSystemEventCatchAllSink({
+                dao,
+                logger,
+                secretValues: configuredSecretValues(context.env ?? {}),
+                projectContext: systemEventProjectContext(context.cwd),
+            }),
+        );
     } catch (error) {
         // Unmigrated workspace / locked DB / missing table: log + continue.
         // Producers still emit on the in-process bus (human progress, trace
@@ -90,6 +106,9 @@ export async function attachSystemEventLedger(
         },
         flush: async () => {
             await tap?.flush();
+            // Catch-all persists are detached from the tap's in-flight set;
+            // drain them so a process exit cannot drop uncataloged rows (R6).
+            await catchAll?.flush();
         },
     };
 }

@@ -3,7 +3,9 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+    createSystemEventCatchAllSink,
     extractSystemEventActor,
+    installSystemEventCatchAll,
     RuleService,
     registerSystemEventTap,
     type SystemEventTap,
@@ -600,5 +602,37 @@ describe('upstream system event wiring (task 0221 R3 + task 0226 R8)', () => {
         // 0371 R4: team.* payloads use memberId when agentId/actor are absent.
         expect(extractSystemEventActor({ memberId: 'alpha-planner' })).toBe('alpha-planner');
         expect(extractSystemEventActor({ agentId: 'alpha-coder', memberId: 'local-id' })).toBe('alpha-coder');
+    });
+
+    test('[0794] catch-all persists uncataloged names once; cataloged names stay single-write', async () => {
+        // Mirrors the serve.ts composition: same bus/dao as the tap, sink built
+        // from the same DAO. Cataloged rows keep exactly one write path (R8).
+        const { bus, tap, dao } = await buildContextWithTap();
+        const catchAll = installSystemEventCatchAll(
+            bus,
+            createSystemEventCatchAllSink({ dao, logger: { warn: () => {} } }),
+        );
+        try {
+            await bus.emit('task.created', { entityId: '0794' });
+            await bus.emit('db.connection.error', { reason: 'boom', severity: 'error' });
+            await catchAll.flush();
+            await tap.flush();
+
+            const cataloged = await dao.query({ name: 'task.created', limit: 10 });
+            expect(cataloged).toHaveLength(1);
+
+            const uncataloged = await dao.query({ name: 'db.connection.error', limit: 10 });
+            expect(uncataloged).toHaveLength(1);
+            const envelope = JSON.parse(uncataloged[0]?.payload_json ?? '{}') as Record<string, unknown>;
+            expect(envelope.schemaVersion).toBe(2);
+            const context = envelope.context as Record<string, unknown>;
+            const producer = context.producer as Record<string, unknown>;
+            expect(producer.subsystem).toBe('unknown');
+            const presentation = envelope.presentation as Record<string, unknown>;
+            // The payload's own severity wins over the generic info default (Q5).
+            expect(presentation.severity).toBe('error');
+        } finally {
+            tap.unsubscribe();
+        }
     });
 });

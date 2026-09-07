@@ -16,13 +16,14 @@ import { createId, type SystemEventDao, type SystemEventRetentionQuotas } from '
 import type { Logger } from '@gobing-ai/ts-infra';
 import { systemEventCatalogEntry } from './event-names';
 import type { EventEmitter, PlanningEvent } from './planning-write-service';
+import { ensureRetentionQuotaForPrefix, genericSystemEventCatalogEntry } from './system-event-catch-all';
 import {
     buildSystemEventEnvelope,
     type SystemEventProjectContext,
     systemEventProjectContext,
 } from './system-event-envelope';
 import type { SystemEventRetentionConfig } from './system-event-retention';
-import { resolveRetentionQuotas } from './system-event-retention';
+import { DEFAULT_SYSTEM_EVENT_RETENTION_QUOTA, resolveRetentionQuotas } from './system-event-retention';
 import { extractSystemEventActor, extractSystemEventCorrelation, safeStringify } from './system-event-tap';
 
 /** Minimal logger surface required by {@link SystemEventEmitter}. */
@@ -42,6 +43,7 @@ export type SystemEventEmitterLogger = Pick<Logger, 'warn'>;
  */
 export class SystemEventEmitter implements EventEmitter {
     private readonly quotas: SystemEventRetentionQuotas;
+    private readonly uncatalogedQuota: number;
 
     constructor(
         private readonly dao: SystemEventDao,
@@ -54,13 +56,18 @@ export class SystemEventEmitter implements EventEmitter {
         // to the documented per-prefix default. Insert-time prune (R5) scopes to
         // the just-written prefix so planning overflow never evicts other tiers.
         this.quotas = resolveRetentionQuotas(retention);
+        // D3c (task 0794): quota bound applied to a persist whose prefix is
+        // absent from the catalog quotas (config default, else the documented
+        // fallback) so an uncataloged prefix stays bounded too.
+        this.uncatalogedQuota = retention.default ?? DEFAULT_SYSTEM_EVENT_RETENTION_QUOTA;
     }
 
     async emit(event: PlanningEvent): Promise<void> {
-        const entry = systemEventCatalogEntry(event.event);
-        // Unregistered names are a no-op — the catalog is the single source of
-        // which planning events are board-observable.
-        if (!entry) return;
+        // Catalog-open ingestion (task 0794 R6): cataloged names keep their
+        // catalog entry; absent names route through the generic fallback
+        // instead of being dropped — the catalog stays the presentation and
+        // promotion layer, never an ingestion gate.
+        const entry = systemEventCatalogEntry(event.event) ?? genericSystemEventCatalogEntry(event.event);
         try {
             await this.dao.insert({
                 id: createId('sev'),
@@ -76,8 +83,12 @@ export class SystemEventEmitter implements EventEmitter {
                 ...extractSystemEventCorrelation(event),
             });
             // Insert-time per-prefix prune backstop (R5): scope to the just-written
-            // prefix so planning overflow can never evict other prefixes' rows.
-            await this.dao.pruneQuotas(this.quotas, entry.prefix);
+            // prefix so planning overflow can never evict other prefixes' rows. An
+            // uncataloged prefix is appended with the default quota first (D3c).
+            await this.dao.pruneQuotas(
+                ensureRetentionQuotaForPrefix(this.quotas, entry.prefix, this.uncatalogedQuota),
+                entry.prefix,
+            );
         } catch (error) {
             // Failure isolation (R5): log + swallow. Never throw to the caller —
             // a sink write error must not abort or roll back the file mutation.

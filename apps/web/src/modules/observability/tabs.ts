@@ -19,11 +19,16 @@ export type ObservabilityNavIntent =
     | { tab: 'jobs'; jobId?: string }
     | { tab: 'system-events'; eventName?: string; runId?: string };
 
-/** Common props passed from ObservabilityShell to each tab view. */
+/** Common props passed from ObservabilityShell to each tab view.
+ *
+ * The shell owns the time range for every tab (task 0793 R2/Q3): `timeRange`
+ * and `onTimeRangeChange` are required and tabs must not fall back to local
+ * state for them.
+ */
 export interface ObservabilityTabProps {
     onLivenessChange?: (next: ObservabilityLiveness) => void;
-    timeRange?: ObservabilityTimeRange;
-    onTimeRangeChange?: (next: ObservabilityTimeRange) => void;
+    timeRange: ObservabilityTimeRange;
+    onTimeRangeChange: (next: ObservabilityTimeRange) => void;
     onNavigate?: (intent: ObservabilityNavIntent) => void;
 }
 

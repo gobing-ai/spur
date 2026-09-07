@@ -3,10 +3,12 @@ import type { SectionMatrix } from '@gobing-ai/spur-app';
 import {
     AgentService,
     configuredSecretValues,
+    createSystemEventCatchAllSink,
     type FeatureActionJob,
     HISTORY_REFRESH_JOB,
     handleHistoryRefreshJob,
     handleSchedulerCustomJob,
+    installSystemEventCatchAll,
     JobHandlerRegistry,
     JobWorkerService,
     ProjectRegistry,
@@ -502,6 +504,20 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                         secretValues: configuredSecretValues(env),
                         projectContext: ctx.systemEventProjectContext(),
                     });
+                    // Catalog-open ingestion (task 0794 R5): uncataloged names
+                    // persist through the same DAO/quotas/secrets/project
+                    // context; cataloged names stay tap-owned, so no duplicate
+                    // row. Installed once per process (idempotent wrapper, Q4).
+                    installSystemEventCatchAll(
+                        ctx.eventBus(),
+                        createSystemEventCatchAllSink({
+                            dao,
+                            logger: appRt.logger,
+                            retention: bootConfig.events.retention,
+                            secretValues: configuredSecretValues(env),
+                            projectContext: ctx.systemEventProjectContext(),
+                        }),
+                    );
                     appRt.logger.debug('system_events tap registered', {
                         diagnostic: bootConfig.events.diagnostic === true,
                     });
