@@ -45,7 +45,7 @@
 [verifying] **F**: Planning ([F_planning.md](./F_planning.md))
     ├── [verifying] **F1**: Planning foundation ([F1_planning-foundation.md](./F1_planning-foundation.md))
     ├── [done] **F2**: Task management CLI ([F2_task-management-cli.md](./F2_task-management-cli.md))
-        └── [active] **F21**: Consistent task creation and default implementation readiness ([F21_consistent-task-creation-and-default-implementation-readiness.md](./F21_consistent-task-creation-and-default-implementation-readiness.md))
+        └── [verifying] **F21**: Consistent task creation and default implementation readiness ([F21_consistent-task-creation-and-default-implementation-readiness.md](./F21_consistent-task-creation-and-default-implementation-readiness.md))
     ├── [verifying] **F3**: Feature management CLI ([F3_feature-management-cli.md](./F3_feature-management-cli.md))
         └── [verifying] **F31**: Feature tree restructure kit: audit, hierarchy guide, and /sp:dev-featurechange ([F31_feature-tree-restructure-kit-audit-hierarchy-guide-and-sp-dev-featurechange.md](./F31_feature-tree-restructure-kit-audit-hierarchy-guide-and-sp-dev-featurechange.md))
     ├── [done] **F4**: Lifecycle and events ([F4_lifecycle-and-events.md](./F4_lifecycle-and-events.md))

@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.40.0
+version: 1.41.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-09-06
@@ -602,8 +602,8 @@ task ## Acceptance Criteria (subset coverage)
 
 ### 12.4 Boundaries
 
-**Approved extension, not yet shipped (ADR-109, F21).** Task creation orchestration in
-`packages/app` will reuse the canonical ready competency and existing AgentService execution.
+**Built — ADR-109 (F21 tasks 0787–0788).** Task creation orchestration in
+`packages/app` reuses the canonical ready competency and existing AgentService execution.
 TaskService and PlanningWriteService remain deterministic for CLI, HTTP and internal callers.
 Single creation preserves a capture identity across preparation failure; batch preparation and
 candidate validation finish before the batch write boundary. Host planning prepares inline and

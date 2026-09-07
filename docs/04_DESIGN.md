@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.68.0
+version: 1.69.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-09-06
@@ -2022,9 +2022,9 @@ shipped (`05 §9` tracks status).
 
 ### 7.1 `spur task` commands
 
-| Planned extension | Status |
+| Extension | Status |
 | --- | --- |
-| [Task creation and readiness](design/task-creation-readiness.md) | Approved design; F21 / ADR-109; not yet shipped |
+| [Task creation and readiness](design/task-creation-readiness.md) | Shipped — F21 / ADR-109; tasks 0787–0788 |
 
 The command table below continues to describe the current registrations.
 
