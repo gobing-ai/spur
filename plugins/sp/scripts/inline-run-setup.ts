@@ -167,6 +167,7 @@ async function main(): Promise<void> {
 
     const workdir = process.cwd();
     const projectDb = await app.openInlineRunProjectDb(workdir);
+    let exitCode = 0;
     try {
         const result = await app.createOrAttachInlineRun({
             workdir,
@@ -178,16 +179,17 @@ async function main(): Promise<void> {
         if (!result.ok) {
             console.error(`inline-run-setup: FAIL for run ${runId}`);
             console.error(`  ${result.error}`);
-            process.exit(1);
+            exitCode = 1;
+        } else {
+            console.error(
+                `inline-run-setup: ${result.attached ? 'attached' : 'created'} run ${runId} ` +
+                    `(${result.workflowName}, layer ${result.layer}, digest ${result.definitionDigest}, status ${result.status})`,
+            );
         }
-        console.error(
-            `inline-run-setup: ${result.attached ? 'attached' : 'created'} run ${runId} ` +
-                `(${result.workflowName}, layer ${result.layer}, digest ${result.definitionDigest}, status ${result.status})`,
-        );
-        process.exit(0);
     } finally {
         projectDb.close();
     }
+    process.exit(exitCode);
 }
 
 main().catch((e: unknown) => {
