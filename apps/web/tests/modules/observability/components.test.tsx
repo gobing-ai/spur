@@ -31,7 +31,7 @@ import { OBSERVABILITY_TABS, type ObservabilityLiveness } from '../../../src/mod
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 /** Required range props under the shell-owned contract (task 0793 Q3). */
-const tabProps = { timeRange: '4h', onTimeRangeChange: () => {} } as const;
+const tabProps = { timeRange: '4h' } as const;
 
 class FakeEventSource {
     static instances: FakeEventSource[] = [];

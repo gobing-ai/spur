@@ -117,7 +117,7 @@ describe('JobsTab (task 0792)', () => {
             return jsonResponse({});
         }) as unknown as typeof fetch);
 
-        const { getByTestId, getByText } = render(<JobsTab timeRange="4h" onTimeRangeChange={() => {}} />);
+        const { getByTestId, getByText } = render(<JobsTab timeRange="4h" />);
 
         await waitFor(() => {
             expect(getByTestId('queue-jobs-table')).toBeDefined();
@@ -156,7 +156,7 @@ describe('JobsTab (task 0792)', () => {
             return jsonResponse(mockJobsResponse);
         }) as unknown as typeof fetch);
 
-        const { getByTestId } = render(<JobsTab timeRange="4h" onTimeRangeChange={() => {}} />);
+        const { getByTestId } = render(<JobsTab timeRange="4h" />);
 
         await waitFor(() => {
             expect(getByTestId('job-row-job-1')).toBeDefined();
@@ -184,7 +184,7 @@ describe('JobsTab (task 0792)', () => {
             return jsonResponse(mockJobsResponse);
         }) as unknown as typeof fetch);
 
-        const { getByTestId, queryByTestId } = render(<JobsTab timeRange="4h" onTimeRangeChange={() => {}} />);
+        const { getByTestId, queryByTestId } = render(<JobsTab timeRange="4h" />);
 
         await waitFor(() => {
             expect(getByTestId('job-row-job-2')).toBeDefined();
@@ -215,7 +215,7 @@ describe('JobsTab (task 0792)', () => {
             return jsonResponse(mockJobsResponse);
         }) as unknown as typeof fetch);
 
-        const view1 = render(<JobsTab timeRange="4h" onTimeRangeChange={() => {}} />);
+        const view1 = render(<JobsTab timeRange="4h" />);
         await waitFor(() => {
             expect(view1.getByTestId('schedule-item-session-cleanup')).toBeDefined();
         });
@@ -241,7 +241,7 @@ describe('JobsTab (task 0792)', () => {
             return jsonResponse(mockJobsResponse);
         }) as unknown as typeof fetch);
 
-        const view2 = render(<JobsTab timeRange="4h" onTimeRangeChange={() => {}} />);
+        const view2 = render(<JobsTab timeRange="4h" />);
         await waitFor(() => {
             expect(view2.getByTestId('schedules-error')).toBeDefined();
         });
@@ -261,9 +261,7 @@ describe('JobsTab (task 0792)', () => {
             navigated.push(intent);
         };
 
-        const { getByTestId, queryByTestId } = render(
-            <JobsTab timeRange="4h" onTimeRangeChange={() => {}} onNavigate={handleNavigate} />,
-        );
+        const { getByTestId, queryByTestId } = render(<JobsTab timeRange="4h" onNavigate={handleNavigate} />);
 
         await waitFor(() => {
             expect(getByTestId('job-row-job-1')).toBeDefined();
