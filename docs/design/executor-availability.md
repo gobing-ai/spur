@@ -1,17 +1,18 @@
 ---
 title: Executor availability and quota-driven disabling
 feature: B5
-status: accepted-design
-version: 1.0.0
+status: implemented
+version: 1.1.0
 updated_at: 2026-09-07
 ---
 
 # Executor availability
 
-Feature B5 owns acceptance criteria. Robin approved this design on 2026-09-07. Tasks 0796
-(routing/doctor respect for `disabled`) and 0797 (`setProjectExecutorDisabled` filesystem updater)
-are implemented; 0798–0799 remain.
-ADR-111 records the accepted persistence decision.
+Feature B5 owns acceptance criteria. Robin approved this design on 2026-09-07. Tasks 0796–0799
+are implemented (0796 routing/doctor respect for `disabled`; 0797 `setProjectExecutorDisabled`
+filesystem updater; 0798 upstream quota-observation producer handoff; 0799 durable application,
+server consumer, and runtime refresh).
+ADR-111 (Accepted) records the persistence decision; `03 §25` holds the mechanism.
 
 ## 1. Ownership and contracts
 
@@ -164,6 +165,10 @@ The shared app subscription validates both events and upserts the latest observa
 on CLI execution buses and the local server bus independently of telemetry display/persistence
 toggles. Emission persistence is awaited/flushed before producer exit. System Event catalog entries
 provide normal presentation and redaction; their optional tap is not the operational delivery path.
+**Shipped delta (0799):** as built, the two quota events are consumed from the run bus by the
+durable pipeline (`attachAgentQuotaUpdates` / `attachAgentQuotaPersistence`) and have **no
+`SYSTEM_EVENT_CATALOG` entry** — board presentation/redaction awaits ADR-110 catalog-open
+ingestion; the durable consumer is the operational delivery path.
 Persistence failure is reported while preserving the original agent failure and immediate local
 exclusion; no success is claimed for a lost update.
 

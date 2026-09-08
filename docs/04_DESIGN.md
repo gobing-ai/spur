@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.70.0
+version: 1.71.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-09-07
@@ -34,7 +34,7 @@ When collaborating with the design team:
 
 | Satellite                                                                                               | Area                                                                                                                                                                                                                                                                                                                      | Status                                                                                                                                                          |                                                                                                                               |             |
 | ------------------------------------------------------------------------------------------------------- | -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------                                                                                                                     | -------------------------------                                                                                                                                 |                                                                                                                               |             |
-| [`executor-availability.md`](design/executor-availability.md) | B5 executor availability, quota events, and project updates | accepted design; ADR-111 | | |
+| [`executor-availability.md`](design/executor-availability.md) | B5 executor availability, quota events, and project updates | implemented (0796–0799); ADR-111 | | |
 | [`rd3-migration-design.md`](design/rd3-migration-design.md)                                             | Planning layer (`spur task`/`spur feature`) — schemas, lifecycle, corpus migration (ADR-020–023)                                                                                                                                                                                                                          | finalized; surface in §1.x / §7                                                                                                                                 |                                                                                                                               |             |
 | [`server-side-adjustment-design.md`](design/server-side-adjustment-design.md)                           | Server/Web slice — ServerContext, runtime-safe imports, EventBus/JobQueue/Scheduler wiring, oRPC surface                                                                                                                                                                                                                  | design (in progress)                                                                                                                                            |                                                                                                                               |             |
 | [`server-side-adjustment-feature-finalized.md`](design/server-side-adjustment-feature-finalized.md)     | Server/Web — finalized feature decisions for the above                                                                                                                                                                                                                                                                    | finalized                                                                                                                                                       |                                                                                                                               |             |
@@ -1668,6 +1668,7 @@ standard scripts as `node "$(superskill script path sp <rel>.mjs)"`. Repo-only s
 | `history_run_session`                                      | CLI (`RunSessionDao`)        | Run→session mapping (feature E6): `run_id` → `(source, session_id)` with `exactness` (`exact` \| `unresolved` \| `estimated`) and `mechanism` (`observed` \| `supplied` \| `inferred`). `RunSessionObserver` writes boundary observations; import may promote an unresolved row to exact when a session is observed inside that run's `.spur/run/<runId>/agent-sessions/` directory (task 0624). `RetroCorrelator` writes estimated/inferred rows and never shadows exact. Indexed on `run_id` and `(source, session_id)`. |
 | `history_task_session`                                     | CLI (`TaskSessionDao`)       | Task↔session attribution (feature E6, task 0722): evidence-backed `(wbs, source, session_id)` triples recovered during history import. One row per task per session; `exactness` is `estimated` on the import path (first-party operational syntax only, echo rule per run-2 remediation R9 — task-scoped `/sp:dev-*` slash invocations in user rows, structured `spur task <verb> <wbs>` operations **only via tool-call args**; quoted command text in user rows, tool-output echoes, and prose never links and is counted skipped — validated through the task locator) and distinguishable from invoke-boundary `exact` mappings; `evidence_kind`/`evidence_ref` carry a bounded audit locator (`user-command`\|`cli-tool`, `<file basename>#<line>`), never transcript content. The primary key makes re-imports idempotent and enforces exact-over-estimated precedence. Indexed on `(source, session_id)`. |
 | `rule_runs`, `rule_eval_runs`                              | ts-rule-engine (≥0.3.15)  | Persisted rule-run history powering `spur rule trace`; added by migration `0002_spur_cli_rule_history`. `applied_fix_count` is re-stamped by Spur after `applyFixes`.           |
+| `agent_executor_updates`                                  | ts-db (`AgentExecutorUpdateDao`) | Durable newest-pending quota-driven executor update per project/executor (ADR-111): PK `(project_id, executor_name)`; `observation_id`/`observed_at`/`agent`/`model`/`disabled` plus `applied_observation_id`/`applied_at`/`attempts`/`retry_after`/`last_error`; survives event-history pruning. Added by migration `0040_spur_cli_agent_executor_updates`; consumed by the server drain and CLI flush-before-exit persistence (0799). |
 
 ### 3.2 SourceDefinition (history import)
 
@@ -2902,6 +2903,13 @@ Only events registered in `SYSTEM_EVENT_CATALOG` (`packages/app/src/services/eve
 are persisted to `system_events` and pushed over `/api/events/planning`. The catalog
 is the single source of truth — both the tap (`registerSystemEventTap`) and the SSE
 module derive their subscriptions from it.
+
+**Quota events (0799; ADR-111).** `agent.quota.exhausted` / `agent.quota.recovered` ride the
+app/CLI run bus and feed the durable executor-update pipeline — they are **not**
+`SYSTEM_EVENT_CATALOG` entries (bus-consumed, no board persistence until ADR-110 catalog-open
+ingestion ships). Trusted-shape schemas ship on `@gobing-ai/spur-config/agent-quota-events`
+(Workers-safe subpath, like `./loader`); payload fields and contracts live in
+[`executor-availability.md`](design/executor-availability.md) §4.
 
 **Tier rules (task 0221 R5).**
 

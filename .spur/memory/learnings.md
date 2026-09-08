@@ -1216,3 +1216,128 @@ Done.
 
 [You have received this identical output 9 times. Re-reading 'agent://DocSync788' will not change it — use a narrower selector (path:A-B), or proceed with the edit.]
 
+Wrapup complete. Summary:
+
+**Doc drift repair (sp:doc-evolve wrapup, batch 0796–0799):**
+- `docs/03_ARCHITECTURE.md` — §25 heading dropped "(accepted design — not yet built)" (§6.4 rule 1); body rewritten to the shipped mechanism: `disabled` config authority, upstream quota events, `setProjectExecutorDisabled`, `agent_executor_updates` durable record + DAO, one server consumer with correct lifecycle, CLI flush-before-exit, in-run exclusion, launch-boundary reload, reserved recovery contract. Version 1.42.0 → 1.43.0.
+- `docs/04_DESIGN.md` — index row status → "implemented (0796–0799); ADR-111"; added `agent_executor_updates` row (migration 0040) to the tables table; added an accurate §7.9 note that the quota events are **bus-consumed, not `SYSTEM_EVENT_CATALOG`-registered** (verified against `event-names.ts`), pointing to the satellite §4. Version 1.70.0 → 1.71.0.
+- `docs/design/executor-availability.md` — frontmatter `status: implemented`, version 1.1.0; header updated (all four tasks done, ADR-111 Accepted); added a shipped-delta note on catalog registration. Detail-first order followed (satellite before its index row).
+- `docs/00_ADR.md` — already correct (ADR-111 Accepted, frontmatter current); no edit needed.
+
+Per the §7 repair protocol, I verified frontmatter vs §4.1 (`owns`/`authority`/`updated_at` all match; bumps done same-edit), confirmed ADR-111's `03 §25` pointer still resolves, and confirmed no task/feature corpus was written. Two pre-existing orphan satellites (`observability-module-refactor.md`, `sqlite-forensics-token-time-per-step.md`) were found but are out of this batch's scope (J93/E5-era, referenced from task corpus) — flagged, not touched. The project's real gate is Biome (code only; `.md` files are ignored), so the doc edits carry no gate risk; the edit tool's markdown checks passed on all three files.
+
+**Learnings artifact** written to `/Users/robin/xprojects/spur-new-runall-b5-a57e58e6/.spur/run/110d68dc-41b0-4764-ab00-ee8c06dd2b29-wrapup-learnings.md` (grouped by date 2026-09-07 and WBS 0796–0799, plus batch-level lessons). It follows:
+
+# Wrapup learnings — run 110d68dc (batch 0796–0799, feature B5)
+
+## 2026-09-07
+
+### 0796 — config: executor `disabled` flag respected in routing and doctor
+
+- **Convention (strict-boolean config):** `agent.executors[].disabled` is boolean-only. The Zod
+  schema and the shipped JSON Schema (`apps/cli/schemas/spur-config.schema.json`) must reject
+  `"yes"`/`"true"`/null/`1`/`{}` *identically* — one schema passing what the other rejects is a
+  silent config-format divergence that bites later. Update both plus `config/config.example.yaml`
+  in the same change.
+- **Merge semantics:** raw global/project merge yields false by default; a project *omission*
+  inherits global true, an explicit project false overrides it. Layer tests must pin both
+  directions, not just "defaults to false".
+- **Explicit-pin discipline:** a disabled executor that is *explicitly pinned* (agent run, drain,
+  team materialization, role ladder) fails loudly pre-spawn with the profile name and the enable
+  fix (exit 2), and is **never silently substituted**. Automatic selection skips disabled
+  candidates; explicit references never fall back. Materialized team agent/model pairs cannot
+  bypass a later disable — the final enabled check runs immediately before each subprocess launch.
+- **Doctor probe hygiene:** disabled entries are synthesized from config without a probe
+  (`usable: false`, error `disabled by config`) — never probe what config says is off. The
+  fingerprint must include the disabled state or a stale cache serves pre-disable eligibility.
+  Elected enabled row stays `agents[0]`.
+- **Exit-status contract:** doctor *inventory* exits 0 with intentional disables; *naming* a
+  disabled executor (or all-disabled sets) exits nonzero. Tests pin inventory-vs-named exit codes
+  separately.
+
+### 0797 — config: safe single-entry `setProjectExecutorDisabled`
+
+- **Pattern (document-model edit):** flip one YAML key via the parsed document model, not text
+  search — comments, ordering, unrelated values, and file mode (`0o640`) survive. Byte-stable
+  no-op when the explicit value already matches; explicit false is *written* when the attribute is
+  absent.
+- **Strict no-op discipline:** missing file / missing `executors` / missing executor return a
+  structured `{status:'unchanged', reason}` and create **nothing** — no path or dir creation on
+  no-op paths. Invalid args (empty name, non-boolean) reject before any filesystem work.
+- **Error taxonomy:** stable codes `INVALID_CONFIG` (bad args, malformed/ambiguous YAML,
+  aliases/merge keys, duplicate names, symlinked config via `lstat`), `CONFIG_CONFLICT` (external
+  change detected pre-commit), `CONFIG_WRITE_FAILED` (lock/atomic-write failure).
+- **Concurrency:** per-path exclusive lock keyed `<configPath>.lock` with **dead-owner reclaim
+  only** (a live writer's long hold is never stolen); external-change detection by
+  mtime/size/ino identity immediately before rename; atomic same-dir tmp + fsync + rename with
+  mode preservation; loader cache invalidated on success. Locks are conflict *detection* — an
+  arbitrary editor never honors the lock, so never retry silently over a detected conflict.
+
+### 0798 — upstream: quota observation producer in @gobing-ai/ts-ai-runner
+
+- **Upstream-delivery convention:** the producer lives in the upstream package; Spur records the
+  handoff task (commit, harness task 0065 done) and does **not** bump/publish — release is
+  operator-gated. Tested package identity by commit (0.4.56+9285ab4), not version.
+- **Classifier discipline (allowlist, structured-only):** only confirmed-exhaustion codes
+  (`insufficient_quota`, `insufficient_credit_balance`, `quota_exceeded`, `usage_limit_reached`,
+  `credits_exhausted`, `billing_hard_limit_reached`, `provider_quota_exhausted`) over structured
+  JSON error envelopes produce events. Generic 429/`rate_limit_error`, `overloaded_error`,
+  `authentication_error`, context-length, timeout, free text, *quoted prompt content*, and
+  non-JSON stderr are tested **negatives** — zero events, original result intact. Successful
+  stdout is never scanned for quota vocabulary.
+- **Deterministic identity:** `observationId` = sha256 over evidence/reason/attribution — stable
+  across redelivery, so one event per observation (producer emits at most once per id).
+- **Attribution:** exact `{projectId, executor, agent, model}` carried via `quotaContext` from the
+  dispatch; missing attribution stays observable but cannot mutate config. Never infer an executor
+  from agent/model similarity.
+- **Bounded evidence:** trailing 8 KiB (`MAX_QUOTA_EVIDENCE_BYTES`); the same classifier drives
+  buffered, streaming/team, and opt-in health-probe paths (health stays read-only by default).
+
+### 0799 — app: durable quota updates, server consumer, runtime refresh
+
+- **Pattern (durable latest-observation):** one pending row per `(project_id, executor_name)` in
+  the existing SQLite DB (`agent_executor_updates`, migration 0040, `AgentExecutorUpdateDao`) —
+  chosen over a ledger cursor or the generic job queue because it coalesces superseded writes,
+  survives restart, and isolates delivery from event-history pruning. Observation order is
+  `(observedAt, observationId)` with deterministic lexical ID tie-breaking; a conditional
+  latest-observation upsert with version-specific ack means stale/duplicate/superseded
+  classifications never overwrite newer state.
+- **Lifecycle (server):** exactly **one** project-scoped consumer starts **before** autostart or
+  accepting dispatch; shutdown detaches subscriptions, flushes, and final-drains **before** DB
+  close and supervisor teardown. Startup failure is logged non-fatal — rows stay pending for the
+  next start.
+- **Lifecycle (CLI):** the same subscription attaches to agent/workflow/team run buses with
+  flush-before-exit; persistence failure is reported while preserving the original agent failure.
+- **Crash-safety:** a crash after YAML rename but before ack replays the idempotent operation on
+  restart; failed writes stay pending and visible (no failed ack, 3-attempt bound, serial drain —
+  bus wake-ups and a 30 s poll feed the *same* serialized drain, so bus callbacks never
+  independently write YAML).
+- **In-run exclusion vs persistence:** a run-scoped `agent.quota.exhausted` listener is
+  correlation-filtered to the active invocation and escalates as `resource-exhaustion` — the
+  current fallback set excludes the executor **without waiting for persistence**.
+  `reloadAgentConfig` suppliers thread into team/workflow services so availability re-resolves at
+  each selection/launch boundary without restart.
+- **Recovery is a reserved contract:** `agent.quota.recovered` maps trusted recovery through the
+  same `setProjectExecutorDisabled` path to `disabled: false`; absent entries stay absent. No
+  timer, poller, or automatic recovery producer exists — the 30 s poll is pending-record delivery
+  only.
+- **Trusted-shape schemas on a Workers-safe subpath:** the Zod schemas ship as
+  `@gobing-ai/spur-config/agent-quota-events` (a subpath export like `./loader`) so
+  Workers-bundled consumers never pull the Node-only root barrel; the consumer validates every
+  event against them before any attribution check — a malformed payload is a classified rejection,
+  never a YAML write.
+
+## Cross-cutting (batch-level)
+
+- **Docs sync was done in-commit per task** (T3/T9): 0796/0797 touched `04_DESIGN.md` +
+  `docs/design/executor-availability.md`; 0799 flipped ADR-111 to Accepted. The wrapup hop still
+  had to fix: 03 §25 still read "(accepted design — not yet built)" after the mechanism shipped
+  (§6.4 rule 1), the satellite header still said "0798–0799 remain", the 04 index row status was
+  stale, and the new `agent_executor_updates` table had no 04 table row. Frontmatter
+  version/`updated_at` bumps belong in the same edit as the body change.
+- **The two quota events are bus-consumed, not `SYSTEM_EVENT_CATALOG`-registered** — verify
+  against `packages/app/src/services/event-names.ts` before writing any "catalog entries provide
+  presentation" claim; board presentation awaits ADR-110 (catalog-open ingestion, still Proposed).
+  A 04 edit that names an enforcement surface must be checked against the actual file.
+- **Upstream tasks don't create repo surface:** 0798 (upstream producer) required no 00/03/04
+  repo-side surface — only the consuming side (0799) did.

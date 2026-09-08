@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.42.0
+version: 1.43.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-09-07
@@ -1407,14 +1407,33 @@ boundaries. Raw prompts, output, and logs remain bounded references rather than 
 Unavailable measurement stays unavailable; it never becomes zero. The always-loaded guide byte gate
 is process enforcement owned by `99 §6.7` and task 0705, so it does not receive a project ADR.
 
-## 25. Executor Availability (accepted design — not yet built)
+## 25. Executor Availability
 
-B5 preserves merged YAML as the availability authority. Upstream runner quota observations carry
-Spur's exact dispatch attribution into a shared app subscription. The subscription records the
-newest pending update per project/executor in the existing SQLite database; the local server
-applies it through the config package's exact-name updater and refreshes subsequent dispatch
-decisions. Immediate fallback exclusion remains invocation-local. Event-history pruning cannot
-remove pending updates. Recovery has a consumer but no automatic producer.
+Merged YAML is the availability authority: `agent.executors[].disabled` is boolean-only (false
+after raw global/project merge), and routing/doctor exclude disabled profiles — explicit pins fail
+pre-spawn, never substitute, and doctor synthesizes non-probed disabled rows (0796).
+
+Upstream `ts-ai-runner` (≥0.4.57) emits `agent.quota.exhausted` / `agent.quota.recovered` carrying
+Spur's exact dispatch attribution into a shared app subscription
+(`attachAgentQuotaUpdates`, packages/app). The subscription validates trusted shape (Zod,
+`@gobing-ai/spur-config/agent-quota-events`), attributes project/executor/profile, and applies the
+update through the config package's exact-name updater
+(`setProjectExecutorDisabled`, per-path lock + atomic same-dir commit + loader-cache invalidation,
+0797).
+
+The durable record is one pending row per project/executor in the existing SQLite database —
+`agent_executor_updates` (migration 0040, `AgentExecutorUpdateDao`) with a conditional
+latest-observation upsert and version-specific ack; it survives event-history pruning and restart,
+and coalesces superseded observations. The Bun server starts one project-scoped consumer before
+autostart/dispatch (drain + bus wake-up feed the same serialized drain) and detaches + drains it
+before DB close; the CLI attaches the same subscription to agent/workflow/team run buses with
+flush-before-exit (0799). Long-lived dispatch paths reload effective agent config at each
+selection/launch boundary; current-invocation exhaustion stays in memory so fallback never waits
+for persistence.
+
+Recovery is a reserved explicit contract — `agent.quota.recovered` maps through the same updater
+to `disabled: false`; there is no automatic producer, poller, or timer. The two quota events are
+bus-consumed, not catalog-registered (board presentation awaits ADR-110 catalog-open ingestion).
 
 ADR-111 records this delivery choice. Shapes, failure contracts, and rejected alternatives live
 in [executor availability](design/executor-availability.md).
