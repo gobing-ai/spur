@@ -4,7 +4,7 @@ name: Safely update one existing project executor disabled flag
 status: done
 template: feature-impl
 created_at: 2026-09-07T17:12:18.724Z
-updated_at: "2026-09-07T23:35:11.914Z"
+updated_at: "2026-09-08T05:56:35.590Z"
 feature_id: B5
 priority: P2
 tags:
@@ -102,15 +102,15 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 | ------------- | -------- | ---------- |
-| R1 | MET | packages/config/src/executor-update.ts:52 setProjectExecutorDisabled exported via packages/config/src/loader.ts:288 (`./loader` subpath); exact case-sensitive match via scalar name (packages/config/src/executor-update.ts:108); parseDocument mutation preserves comments/ordering/mode; explicit false persisted on absent attribute (executor-update.ts:130); byte-stable no-op on already-matching explicit value (executor-update.ts:127); tests executor-update.test.ts R1 x5 (exact vs prefix/case, name-only fragment, byte-stable no-op, comments+mode survive) |
-| R2 | MET | Structured no-ops without any write: missing-file (executor-update.ts:76), missing-executors (91-94), missing-executor (121); no path/dir creation on no-op paths; name-only fragment accepted (test R1); malformed YAML → INVALID_CONFIG preserving contents (test R2); duplicate names → INVALID_CONFIG ambiguous (test R2); aliases/merge keys rejected (test R2); symlinked config rejected via lstat (executor-update.ts:83, test R2); invalid args (empty name / non-boolean) rejected before filesystem work (executor-update.ts:61-67, test R2) |
-| R3 | MET | Per-path exclusive lock keyed on `<configPath>.lock` with dead-owner reclaim only (executor-update.ts:196-219, tests: concurrent calls serialize, dead owner reclaimed, live owner never reclaimed); external-change detection via mtime/size/ino identity immediately before rename (executor-update.ts:152-158); atomic same-dir tmp write + fsync + rename with mode preservation (executor-update.ts:161-170, test: atomic failure preserves original); loader cache invalidated on success (executor-update.ts:180, test: next load sees new value) |
+| R1 | MET | `packages/config/src/executor-update.ts:46-50` export; `108` exact scalar name match; `122-125` byte-stable already-set no-op; `125` persist explicit false; `packages/config/src/loader.ts:289` re-export; `packages/config/tests/executor-update.test.ts:76-101` alpha vs alphabet / case / prefix / name-only / comments+mode |
+| R2 | MET | `packages/config/src/executor-update.ts:51-56` empty name / non-boolean reject before FS; `63` missing-file; `66-70` symlink; `85-87` missing-executors; `119` missing-executor; tests `105-178` structured no-ops and INVALID_CONFIG with contents preserved |
+| R3 | MET | `packages/config/src/executor-update.ts:136-141` mtime/size/ino conflict; `143-151` tmp+fsync+rename+mode; `164` invalidateSpurConfig; `169-219` exclusive lock with dead-owner reclaim only; tests `184-237` concurrent serialize, live lock, dead reclaim, atomic failure, cache invalidation |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 | --------------------- | -------- | --------------- | ---------- |
-| R1 — Project updates change only an exact existing entry | MET | test | bun test packages/config — R1 tests: alpha vs alphabet isolation [false,true,true], case/prefix-free matching, explicit-false name-only fragment, already-set no-op leaves bytes identical, comments/unrelated values/0o640 mode survive; 18/18 pass |
-| R2 — Missing or invalid project targets never cause unintended writes | MET | test | R2 tests: missing file/section/executor return structured unchanged and create nothing (file bytes identical), malformed YAML rejects INVALID_CONFIG with contents preserved, duplicate names reject ambiguous, alias entry rejects, symlink rejects INVALID_CONFIG, empty/non-boolean args reject pre-FS; 18/18 pass |
-| R3 — Concurrent configuration writes preserve unrelated edits | MET | test | R3 tests: two concurrent updater calls serialize via per-path lock and both edits survive [false,true,true], dead lock owner reclaimed, live owner never reclaimed (exhaustion rejects CONFIG_WRITE_FAILED), read-only dir atomic-commit failure preserves original file byte-identical; conflict detection code path CONFIG_CONFLICT covered by mtime/size/ino identity check; 18/18 pass |
+| R7 — Project updates change only an exact existing entry | MET | test | `cd packages/config && bun test tests/executor-update.test.ts` R1 cases this run: alpha vs alphabet [false,true,true], case/prefix-free, name-only fragment, byte-stable no-op, comments/mode survive |
+| R8 — Missing or invalid project targets never cause unintended writes | MET | test | Same file R2 cases this run: missing file/section/executor unchanged, malformed YAML INVALID_CONFIG, duplicates ambiguous, alias/symlink reject, empty/non-boolean pre-FS |
+| R9 — Concurrent configuration writes preserve unrelated edits | MET | test | Same file R3 cases this run: concurrent serialize both edits survive, live owner never reclaimed, dead owner reclaimed, atomic failure preserves original, cache invalidation; 18/18 pass / 0 fail |
 
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
@@ -118,11 +118,12 @@ Each entry cites the first changed line per file (`file:line`).
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: UNKNOWN)
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 

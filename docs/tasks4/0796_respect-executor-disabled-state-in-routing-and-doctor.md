@@ -4,7 +4,7 @@ name: Respect executor disabled state in routing and doctor
 status: done
 template: feature-impl
 created_at: 2026-09-07T17:12:18.719Z
-updated_at: "2026-09-07T22:15:55.757Z"
+updated_at: "2026-09-08T05:56:35.126Z"
 feature_id: B5
 priority: P2
 tags:
@@ -216,21 +216,21 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 | ------------- | -------- | ---------- |
-| R1 | MET | packages/config/tests/loader-layers.test.ts "disabled flag layering (0796)" (global true survives project omission; project false overrides); config-schemas.test.ts "AgentExecutorConfigSchema disabled (0796)" omitted→false |
-| R2 | MET | config-schemas.test.ts rejects 'yes'/'true'/null/1/{}; loader.test.ts "disabled JSON schema round-trip (0796)" rejects disabled: "yes" via loadSpurConfig with validateJsonSchema true and false |
-| R3 | MET | agent-service.test.ts "disabled executors (0796)": stage-walk skip keeps resolving to enabled 'omp'; resolveRole all-tier-eligible-disabled names tried "disabled: cap-exec"; resolveStageModelPolicy filters e.disabled === true |
-| R4 | MET | agent-service.test.ts explicit pin → exit 2 + "agent.executors.<name>.disabled: true — enable it or select another executor", no spawn; team-service.test.ts materializeTeam pins disabled executor; apps/cli agent.test.ts --drain fails loud on pinned disabled executor |
-| R5 | MET | agent-service.test.ts doctor synthesizes non-probed disabled rows (tier 2, usable false, "disabled by config"); fingerprint toggle invalidates cache; elected enabled row stays agents[0] |
-| R6 | MET | agent-service.test.ts all-disabled fleet exits 0; named disabled executor exits 1 with its row; team resolveRole fails when every eligible executor is disabled |
+| R1 | MET | `packages/config/src/index.ts:302-314` boolean `disabled` defaulted after merge; `packages/config/tests/loader-layers.test.ts:437-459` global true survives project omission and project false overrides; both omit → false |
+| R2 | MET | `packages/config/tests/config-schemas.test.ts:161-165` rejects 'yes'/'true'/null/1/{}; `packages/config/tests/loader.test.ts:879-886` JSON Schema + Zod reject `disabled: "yes"`; `apps/cli/schemas/spur-config.schema.json:169-171` type boolean |
+| R3 | MET | `packages/app/src/services/agent-service.ts:1881` and `2883` filter `e.disabled !== true`; `packages/app/tests/services/agent-service.test.ts:4035-4052` stage walk skips disabled cheap-exec and dispatches omp; all-disabled role names `disabled: cap-exec` (`4054-4070`) |
+| R4 | MET | `packages/config/src/index.ts:535-539` `ExecutorDisabledError` before spawn; `packages/app/src/services/agent-service.ts:1980-1985` explicit pin exit 2; `packages/app/tests/services/agent-service.test.ts:4025-4033` no spawn; `packages/app/tests/services/team-service.test.ts:1662` materializeTeam pin; `apps/cli/tests/commands/agent.test.ts:708` drain fails loud |
+| R5 | MET | `packages/app/src/services/agent-service.ts:2658-2670` synthetic disabled rows (usable false, no probe); `2373-2378` fingerprint includes disabled; `591-596` elected row first; `packages/app/tests/services/agent-service.test.ts:4078-4101` inventory; `4133-4157` role JSON elects `live` first and lists `retired` disabled |
+| R6 | MET | `packages/app/tests/services/agent-service.test.ts:4103-4118` named disabled exits 1 without probe; `4121-4131` all-disabled inventory exits 0; `packages/app/src/services/agent-service.ts:625-635` targeted disabled check before probe |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 | --------------------- | -------- | --------------- | ---------- |
-| R1 — Legacy configuration and layered overrides preserve availability | MET | test | packages/config/tests/loader-layers.test.ts "disabled flag layering (0796)" |
-| R2 — Executor disabled values are strictly boolean | MET | test | packages/config/tests/config-schemas.test.ts + loader.test.ts schema round-trip rejections |
-| R3 — Automatic routing excludes disabled executors | MET | test | packages/app/tests/services/agent-service.test.ts stage-walk/role-ladder exclusion |
-| R4 — Explicit disabled executor references fail before spawn | MET | test | agent pin exit 2 + team-service materializeTeam + CLI drain tests |
-| R5 — Doctor displays exclusions without electing or probing them | MET | test | agent-service doctor synthetic rows + fingerprint toggle tests |
-| R6 — Doctor exit status distinguishes inventory and explicit checks | MET | test | agent-service all-disabled exit 0 / named disabled exit 1 tests |
+| R1 — Legacy configuration and layered overrides preserve availability | MET | test | `cd packages/config && bun test tests/loader-layers.test.ts --test-name-pattern "disabled flag layering"` → 3 pass / 0 fail this run |
+| R2 — Executor disabled values are strictly boolean | MET | test | `cd packages/config && bun test tests/config-schemas.test.ts tests/loader.test.ts --test-name-pattern "disabled"` → 5 pass / 0 fail this run |
+| R3 — Automatic routing excludes disabled executors | MET | test | `cd packages/app && bun test tests/services/agent-service.test.ts tests/services/team-service.test.ts --test-name-pattern "disabled"` → 9 pass / 0 fail this run |
+| R4 — Explicit disabled executor references fail before spawn | MET | test | `cd apps/cli && bun test tests/commands/agent.test.ts --test-name-pattern "disabled"` → 1 pass / 0 fail; app pin test exit 2 with no spawn this run |
+| R5 — Doctor displays exclusions without electing or probing them | MET | test | `cd packages/app && bun test tests/services/agent-service.test.ts --test-name-pattern "R5: successful role JSON"` → 1 pass / 0 fail this run |
+| R6 — Doctor exit status distinguishes inventory and explicit checks | MET | test | `cd packages/app && bun test tests/services/agent-service.test.ts --test-name-pattern "R6:"` this run: named disabled exit 1, all-disabled inventory exit 0 |
 
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 

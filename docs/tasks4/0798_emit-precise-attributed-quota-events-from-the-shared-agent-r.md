@@ -4,7 +4,7 @@ name: Emit precise attributed quota events from the shared agent runner
 status: done
 template: feature-impl
 created_at: 2026-09-07T17:12:18.726Z
-updated_at: "2026-09-08T00:05:33.320Z"
+updated_at: "2026-09-08T05:56:36.048Z"
 feature_id: B5
 priority: P2
 tags:
@@ -107,13 +107,13 @@ Full evidence: .spur/run/0798-upstream-report.md
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Upstream @gobing-ai/ts-ai-runner commit 9285ab4 (branch sp/quota-observation-0798): packages/ai-runner/src/quota.ts builds AgentQuotaObservation with deterministic sha256 observationId (stable across redelivery), normalizeObservedAt UTC-ms, reason/evidenceSource, exact QuotaAttribution (projectId/executor/agent/model) from optional AgentRunOptions.quotaContext (ai-runner.ts:45-52) and team/health paths; QuotaObservationProducer emits agent.quota.exhausted at most once per observationId; agent.quota.recovered payload type defined with explicit-only produceRecovery, no automatic producer. Upstream harness task 0065 done; tested package identity 0.4.56+9285ab4, version not bumped/published (release is operator-gated) |
-| R2 | MET | quota.ts classifies ONLY confirmed-exhaustion codes (insufficient_quota, insufficient_credit_balance, quota_exceeded, usage_limit_reached, credits_exhausted, billing_hard_limit_reached, provider_quota_exhausted) over structured JSON error envelopes; generic HTTP 429 rate_limit_error, overloaded_error, authentication_error, context-length, timeout, free text, quoted prompt content, non-JSON stderr all tested as negatives producing no event with original result intact; evidence bounded to trailing 8 KiB (MAX_QUOTA_EVIDENCE_BYTES); no successful-stdout or transcript scanning; same classifier drives buffered (ai-runner.ts:268-281), streaming/team (team-agent-process.ts:152-180) and opt-in health probe (model-health-probe.ts:245-286) |
+| R1 | MET | @gobing-ai/ts-ai-runner `src/quota.ts` line 38 — AgentQuotaObservation with deterministic observationId; `src/quota.ts` line 87 classifyQuotaErrorRecord; installed `@gobing-ai/ts-ai-runner@0.4.57` (contains commit 9285ab4); upstream `cd packages/ai-runner && bun test --test-name-pattern quota` 23 pass / 0 fail this run |
+| R2 | MET | @gobing-ai/ts-ai-runner `src/quota.ts` line 12 — exact allowlist; `src/quota.ts` line 87 free text / 429 / overload / auth / context / timeout classify false; same upstream test run negatives all pass this run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R10 — Confirmed quota failures emit one precise attributed event | MET | command | Upstream bun test packages/ai-runner: 217 pass / 0 fail (+35 quota fixtures: positives insufficient_quota/insufficient_credit_balance/usage_limit_reached across buffered, streaming subprocess and health-probe paths; one-event dedup per observationId; attribution exact when quotaContext present, observable without guessing when absent); bun run lint exit 0; bun run spur-check exit 0 (per-file 0.9 coverage gate); bun run build exit 0 |
-| R11 — Transient and unrelated failures never persistently disable executors | MET | command | Upstream negative-family fixtures each assert zero quota events with intact original result: rate_limit_error 429, overloaded_error, authentication_error, context-length, timeout, free-text quota mention, quoted prompt content, non-JSON stderr, successful run; classifier allowlist is exact-match over structured envelopes only — no quota event can arise from those families |
+| R10 — Confirmed quota failures emit one precise attributed event | MET | command | Upstream `cd /Users/robin/xprojects/ts-libs/packages/ai-runner && bun test --test-name-pattern quota` this run: 23 pass / 0 fail (buffered + streaming + health-probe one-event + stable observationId) |
+| R11 — Transient and unrelated failures never persistently disable executors | MET | command | Same command this run: generic HTTP 429, overload, auth, context-length, timeout, free-text, quoted prompt, successful run → zero quota events |
 
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
