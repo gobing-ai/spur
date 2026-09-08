@@ -1,0 +1,29 @@
+# No ESLint suppression comments. Spur lints with Biome, not ESLint; leftover
+# `eslint-disable*` comments are dead suppressions that hide the real fix and
+# would not even silence the live gate. Sibling of `no-biome-suppressions`
+# (AGENTS.md: never suppress a gate to force green).
+#
+# Tests ARE in scope: an eslint-disable in a test is the same bypass.
+include:
+  - "apps/**/*.ts"
+  - "apps/**/*.tsx"
+  - "packages/**/*.ts"
+  - "packages/**/*.tsx"
+  - "plugins/**/*.ts"
+  - "scripts/**/*.ts"
+exclude:
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/vendors/**"
+rules:
+  - id: no-eslint-suppressions
+    description: >
+      Do not use ESLint disable comments (file, line, or next-line forms).
+      Spur lints with Biome; an ESLint suppression does not silence the live
+      gate and hides the real fix. Remove the comment and fix the underlying
+      issue (AGENTS.md: no suppressions to force green).
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        pattern: "eslint-disable"
