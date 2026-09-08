@@ -101,6 +101,16 @@ Action semantics come from the YAML and the workflow action contract:
   `answerFile`; assert `expectFile`; enforce `requireDiff` against a pre-action git snapshot,
   including the task-scope guard; honor declared error policy. `timeoutMs` is recorded as not
   applicable because the host session has no independent kill boundary.
+- `run.artifact` — the engine's ledger registration has **no inline execution surface** (0808 R4).
+  The inline equivalent is a documented **registration-equivalent convention**: before the record
+  state mutates the task, the host validates the same refusal conditions inline — the declared
+  artifact exists at the resolved path and is canonical-valid for the run's wbs (for
+  `verify-verdict`: verdict `PASS`), `proofBinding: current` is honored against a freshly captured
+  proof digest, and the run-scoped review-completion marker exists — then appends one provenance
+  line to `.spur/run/<run-id>.log` naming the equivalence (artifact kind, path, verdict, digest) and
+  proceeds to `spur task record`. A failed validation stops at the state and follows the failure
+  contract; the step is never silently skipped. Artifact-provenance consumers read that run-log
+  line on the inline path — there is no ledger row.
 
 **Native-subagent dispatch (R2 eligibility, evaluated before each action):**
 
