@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.43.0
+version: 1.44.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-07
+updated_at: 2026-09-08
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -1449,3 +1449,12 @@ bus-consumed, not catalog-registered (board presentation awaits ADR-110 catalog-
 
 ADR-111 records this delivery choice. Shapes, failure contracts, and rejected alternatives live
 in [executor availability](design/executor-availability.md).
+
+## 26. Execution policy and renewable job ownership — accepted design (A21)
+
+ADR-112 places scheduler/queue execution deadlines and cancellation context in `ts-infra`, process
+cleanup in `ts-runtime`, safe import cancellation in the importer, and atomic attempt ownership in
+`ts-db`. Spur consumes these contracts and resolves application defaults. Lease renewal remains
+finite even when execution is unlimited; retry follows cancellation settlement. This target replaces
+the current local watchdog/sweep policy only after compatible upstream release and verification.
+The target surface and delivery dependencies are in [execution deadlines](design/execution-deadlines.md).

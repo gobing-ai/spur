@@ -2,9 +2,9 @@
 doc: 01_PRD
 owns: WHAT — product vision, users, scope (in / out / deferred)
 authority: authoritative-on-scope
-version: 1.9.0
+version: 1.10.0
 owner: Robin Min
-updated_at: 2026-09-07
+updated_at: 2026-09-08
 read_before: adding a command or feature
 edit_rules: 99 §6.2
 sync: [T1, T4, T6]
@@ -83,6 +83,11 @@ Scope tables own **membership** only; delivery status per capability lives in `0
 F21 adds consistent task creation/checking and default implementation-ready CLI preparation with
 an explicit capture opt-out (ADR-109). Scope includes batch/planning handoff and recoverable
 creation failures; automatic task implementation and model execution inside HTTP writes are excluded.
+
+A21 commits upstream-backed finite and explicitly unlimited execution for scheduled/queued history
+work, including cancellation settlement and renewable attempt ownership (ADR-112). It excludes a
+replacement scheduler, unrelated agent/workflow timeout changes, and a promise to eliminate every
+SQLite lock cause. Delivery depends on compatible released upstream capabilities.
 
 | Capability                                                 | Command                                            | Backed by                                  |
 | ---------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------ |

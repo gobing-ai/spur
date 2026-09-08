@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.42.0
+version: 1.43.0
 owner: Robin Min
-updated_at: 2026-09-07
+updated_at: 2026-09-08
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2343,3 +2343,23 @@ record per project/executor; retain YAML as the execution-availability authority
 **Detail:** [executor availability](design/executor-availability.md); `03 §25`.
 
 **Approval (2026-09-07).** Robin approved the proposed design and continuation to task decomposition.
+
+## ADR-112: Execution Deadlines Are Upstream Policy; Unlimited Jobs Retain Renewable Ownership
+
+**Status:** Accepted (design) · **Date:** 2026-09-08 · **Feature:** A21
+
+**Decision.** Scheduler and queue execution limits share an upstream `ts-infra` contract; process-tree
+termination stays in `ts-runtime` and cooperative import cancellation stays in the importer. Spur
+supplies application defaults and compatibility translation. Omission inherits, explicit `null`
+disables the execution deadline, and positive integers bound it. Queue ownership expires independently
+of execution duration and is renewed/fenced per attempt; cancellation settlement precedes retry.
+
+**Why.** Shared cancellation and ownership semantics benefit all consumers and prevent unlimited
+execution from becoming duplicate execution after a visibility interval. This binds scheduler,
+history, and queue persistence consumers while preserving ADR-004's published-package boundary.
+
+**Detail:** `03 §26`; [execution deadline design](design/execution-deadlines.md). Implementation and
+upstream release remain pending; no claim of eliminating all database-lock causes is made.
+
+**Approval (2026-09-08).** Robin requested upstream reuse and an unlimited mode, then approved the
+revised proposal with “okay, go ahead.”

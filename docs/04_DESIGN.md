@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.71.0
+version: 1.72.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-09-07
+updated_at: 2026-09-08
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -1988,6 +1988,10 @@ initialized on first `fetch`. Its static asset directory is `../../dist/web`, re
 `apps/server/wrangler.toml`. The Bun entry uses `runNodeApplication` mirroring the CLI (ADR-017).
 
 ### 5.2 Scheduler surface — `bootstrap.scheduler` (task 0734)
+
+| Planned surface | Status | Detail |
+| --- | --- | --- |
+| Shared execution deadlines, explicit unlimited mode and renewable job ownership (A21) | Accepted design; upstream delivery pending | [Execution deadlines](design/execution-deadlines.md) |
 
 Recurring commands are declared in **one** place: the `bootstrap.scheduler` object that
 `runNodeApplication` already owns. There is no top-level Spur `scheduler` section and no second

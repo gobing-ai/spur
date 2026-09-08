@@ -2,10 +2,10 @@
 doc: 02_ROADMAP
 owns: WHEN — phases, current vs deferred, sequencing
 authority: derived
-version: 1.9.0
+version: 1.10.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-07
+updated_at: 2026-09-08
 read_before: placing work in a phase
 edit_rules: 99 §6.3
 sync: [T5, T6]
@@ -38,6 +38,8 @@ Make the harness robust and clean before adding surface.
 - [x] Cutover: this repo is the canonical Spur (`origin` = `github.com/gobing-ai/spur.git`); legacy
   tree retired / remote re-pointed.
 - [ ] Harden each command: richer error messages, exit-code contracts, `--json` schema stability.
+- [ ] **A21 — Native execution deadlines and unlimited jobs:** upstream process/import cancellation
+  and queue ownership first, then released-package Spur adoption and regression/doc sync (ADR-112).
 - [x] Self-host the quality gate via `spur rule run`. `spur-check` runs `recommended-pre-check` +
   `recommended-post-check` presets via the local CLI (`spur rule run --fail-on warning`).
 - [ ] Squash re-foundation commit noise; clean conventional-commit history.
