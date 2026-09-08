@@ -15,6 +15,11 @@ import {
     parseHistoryRefreshContext,
     validateHistoryRefreshPayload,
 } from '../../src/services/history-refresh-service';
+import {
+    acquireExclusiveJob,
+    HISTORY_PRODUCER_EXCLUSIVE_KEY,
+    releaseExclusiveJob,
+} from '../../src/services/job-exclusion-guard';
 import { SCHEDULER_CUSTOM_TIMEOUT_MS } from '../../src/services/scheduler-custom-job-service';
 
 /** Config fixture — only `history.refresh` matters to the trigger. */
@@ -471,5 +476,26 @@ describe('handleHistoryRefreshJob watchdog timeout (task 0803 R1)', () => {
         ).catch((e: unknown) => e)) as Error;
         expect(err.message).toContain('terminated before a normal exit (SIGTERM)');
         expect(err.message).not.toContain('timed out');
+    });
+});
+
+describe('handler-level exclusive-key wiring (task 0807 R2)', () => {
+    test('the completion-triggered refresh is rejected while a configured chain holds the producer key', async () => {
+        acquireExclusiveJob(HISTORY_PRODUCER_EXCLUSIVE_KEY, 'scheduler job "history-daily-report"');
+        try {
+            const { executor, runs } = fakeExecutor({});
+            await expect(
+                handleHistoryRefreshJob(
+                    { cwd: '/p', invocation: 'bun', executor },
+                    jobOf({ trigger: 'task-done', triggerId: '0807', windowStart: 1, windowEnd: 2 }),
+                ),
+            ).rejects.toThrow(
+                'history producer "history-daily" is already running (scheduler job "history-daily-report")',
+            );
+            // Rejected at the guard — no child ever spawned.
+            expect(runs).toHaveLength(0);
+        } finally {
+            releaseExclusiveJob(HISTORY_PRODUCER_EXCLUSIVE_KEY, 'scheduler job "history-daily-report"');
+        }
     });
 });

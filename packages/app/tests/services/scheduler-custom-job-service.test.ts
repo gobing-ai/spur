@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Job } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor, type ProcessExecutor, type ProcessResult } from '@gobing-ai/ts-runtime';
+import { HISTORY_PRODUCER_EXCLUSIVE_KEY, isExclusiveJobActive } from '../../src/services/job-exclusion-guard';
 import {
     handleSchedulerCustomJob,
     resolveSchedulerCustomTimeoutMs,
@@ -257,5 +258,53 @@ describe('bounded-child timeout containment (task 0803 R1 / 0806 R1)', () => {
         ).catch((e: unknown) => e)) as Error;
         expect(err.message).toContain('terminated before a normal exit (SIGTERM)');
         expect(err.message).not.toContain('timed out');
+    });
+});
+
+describe('handler-level exclusive-key wiring (task 0807 R2)', () => {
+    test('two overlapping history producers: the second handler run is rejected naming the first', async () => {
+        const gate = Promise.withResolvers<void>();
+        const runs: RecordedRun[] = [];
+        const executor = {
+            run: async (options: RecordedRun) => {
+                runs.push(options);
+                await gate.promise;
+                return {
+                    command: options.command,
+                    args: options.args ?? [],
+                    exitCode: 0,
+                    stdout: '',
+                    stderr: '',
+                    durationMs: 1,
+                };
+            },
+        } as unknown as ProcessExecutor;
+        // The first producer holds the key while its child runs.
+        const first = handleSchedulerCustomJob(
+            { cwd: '/proj', executor },
+            jobOf({
+                name: 'history-daily-report',
+                command: 'bun run x history import',
+                exclusiveKey: HISTORY_PRODUCER_EXCLUSIVE_KEY,
+            }),
+        );
+        // The guard acquire is synchronous before the handler's first await, so the
+        // key is already held when `first` returns — no yield needed.
+        await expect(
+            handleSchedulerCustomJob(
+                { cwd: '/proj', executor },
+                jobOf({
+                    name: 'history-nightly',
+                    command: 'bun run y history daily',
+                    exclusiveKey: HISTORY_PRODUCER_EXCLUSIVE_KEY,
+                }),
+            ),
+        ).rejects.toThrow('history producer "history-daily" is already running (scheduler job "history-daily-report")');
+        // The rejected run never spawned a child.
+        expect(runs).toHaveLength(1);
+        gate.resolve();
+        await first;
+        // The first run's finally released the key for the next producer.
+        expect(isExclusiveJobActive(HISTORY_PRODUCER_EXCLUSIVE_KEY)).toBe(false);
     });
 });

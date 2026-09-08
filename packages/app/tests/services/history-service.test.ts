@@ -1441,3 +1441,24 @@ describe('importAll per-source timeout containment (task 0806 R2)', () => {
         expect(svc.attempted).toEqual(['antigravity']);
     });
 });
+
+describe('importAll rollup-refresh failure surfacing (task 0807 R1)', () => {
+    test('a rejecting rollup refresh becomes a warning plus a failed marker, not a swallowed error', async () => {
+        const ctx = makeCtx();
+        const db = await ctx.getDb();
+        // Force refreshHistoryRollups to reject: drift the recorded importer schema
+        // version so checkImporterSchemaVersion throws HistorySchemaVersionMismatchError.
+        await db.run(
+            `UPDATE "__spur_cli_migrations" SET id = 'importer_schema@0.0.0-bogus' WHERE id LIKE 'importer_schema@%'`,
+        );
+        const svc = new HistoryService(ctx);
+        const result = await svc.importAll({ sources: ['claude'], mode: 'incremental', root: emptyRoot() });
+        // The failed refresh is surfaced on the fan-out, never swallowed.
+        expect(result.rollupRefresh?.status).toBe('failed');
+        expect(result.rollupRefresh?.error).toContain('History schema version mismatch');
+        const warning = result.warnings.find((w) => w.code === 'rollup-refresh-failed');
+        expect(warning?.detail).toContain('board rollup refresh failed after import');
+        // The import itself still succeeded — the fan-out entries stay data-plane truth.
+        expect(result.entries.map((e) => e.source)).toEqual(['claude']);
+    });
+});
