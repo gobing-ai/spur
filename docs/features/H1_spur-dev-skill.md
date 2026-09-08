@@ -2,11 +2,11 @@
 schema_version: 1
 id: H1
 name: spur-dev umbrella skill
-status: blocked
+status: active
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-24T17:41:22.436Z"
+updated_at: "2026-09-08T00:09:43.138Z"
 ---
 
 # H1: spur-dev umbrella skill
@@ -515,6 +515,7 @@ Feature: spur-dev umbrella skill
 | 0588 | Measure spur-dev model-hop wall-clock and decide the latency lever | done |
 | 0589 | Raise process-inspector coverage to the 90% gate threshold | cancelled |
 | 0590 | Fix task-verdict answer parser consuming SECUA rows as AC rows | done |
+| 0800 | Close the residue that pipeline completion leaves behind: Plan checkboxes, review sub-heading level, docs/help drift, and the task-list status contract | testing |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -538,3 +539,5 @@ decided per candidate by the ADR-016 test (task 0065).
 - 2026-06-12 — created (rd3-migration feature finalizing)
 - 2026-08-08T20:21:45.518Z backlog → active (system)
 - 2026-08-24T17:41:22.436Z active → blocked (system)
+- 2026-09-08T00:09:43.138Z blocked → active (system)
+

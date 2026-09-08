@@ -77,7 +77,7 @@
     ├── [verifying] **G4**: Inter-agent control plane ([G4_inter-agent-control-plane.md](./G4_inter-agent-control-plane.md))
     └── [done] **G5**: Restore inline --agent with host-session-only semantics ([G5_restore-inline-agent-with-host-session-only-semantics.md](./G5_restore-inline-agent-with-host-session-only-semantics.md))
 [done] **H**: Agent integration ([H_agent-integration.md](./H_agent-integration.md))
-    ├── [blocked] **H1**: spur-dev umbrella skill ([H1_spur-dev-skill.md](./H1_spur-dev-skill.md))
+    ├── [active] **H1**: spur-dev umbrella skill ([H1_spur-dev-skill.md](./H1_spur-dev-skill.md))
         ├── [verifying] **H11**: Semantic conflict finder: authority-aware indexed audit and confirmed remediation ([H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md](./H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md))
         └── [done] **H12**: Feature frontier prioritizer: derived importance/urgency ranking and structure-defect proposals ([H12_feature-frontier-prioritizer-derived-importance-urgency-ranking-and-structure-defect-proposals.md](./H12_feature-frontier-prioritizer-derived-importance-urgency-ranking-and-structure-defect-proposals.md))
     ├── [done] **H2**: Companion skills and write guard ([H2_companions-and-guard.md](./H2_companions-and-guard.md))
