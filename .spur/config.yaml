@@ -38,7 +38,8 @@ bootstrap:
       # keep a no-op tick cheap (I81).
       - name: history-refresh
         cron: "*/20 7-23 * * *"
-        command: bun apps/cli/src/index.ts --no-logo history daily
+        # command: bun apps/cli/src/index.ts --no-logo history daily
+        command: bun run apps/cli/src/index.ts --no-logo history import && bun run apps/cli/src/index.ts --no-logo history analyze
 
       # 05:00 daily: full-corpus import (checkpoint resume self-heals gaps),
       # then the twelve-section history-anatomy diagnostic report headless. On
