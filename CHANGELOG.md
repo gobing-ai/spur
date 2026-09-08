@@ -1,5 +1,90 @@
 # Changelog
 
+## [0.3.76] - 2026-09-07
+
+### Added
+
+- observability: add avgDurationMs and failureCount to Top Event Types (b0e114572)
+- app: apply durable quota updates and refresh running executor selection (0799) (f639c8cf9)
+- config: safely update one existing project executor disabled flag (0797) (5c5ea31aa)
+- app: error on open Plan box at terminal transition target (cae44d37c)
+- app: fold disallowed sections back into their owner (844ba9214)
+- config: respect executor disabled state in routing and doctor (0796) (8d6385b70)
+- B5: add executor availability feature and tasks 0796-0799 (8addd7298)
+- observabilities: hoist shell time range and add catalog-open system-event catch-all (08356f9ee)
+
+### Fixed
+
+- web: place ObservabilityShell filters before the tab strip (ADR-081) (b524a6e76)
+- observability: close 0802 P4 residuals and re-record verify PASS (9665ac5fa)
+- history: bound periodic history-refresh job against wedged children (6a925c88a)
+- cli: SQLITE_BUSY diagnostic names db path + remediation, rule-run waits on busy_timeout (480c69e16)
+- api: typed ValidationError on unknown task status filter (1569710c6)
+- workflow: write traces to .spur/workflow/, not the nonexistent .spur/runs/ (d4a34d296)
+- sp: list every PIPELINE_TOKENS entry in the dogfood token tables (68c275232)
+- cli: fail loudly on an unknown --status instead of returning nothing (d2e9a0d9c)
+- domain: give replaceSection the same spacing as insertSection (9b580e647)
+
+### Changed
+
+- observability: narrow tab props, drop dead onTimeRangeChange pass (0802 R6) (e18f9c687)
+- app: derive uncataloged event prefix without dead fallback (6e5bc4aae)
+- observability: drop dead time-range defaults, hoist routing base URL (8a101d1a7)
+
+### Other
+
+- tasks: complete task 0805 findings inventory; ignore generated lens schema paths (84e944f55)
+- app: suppress known-false-positive SAFETY-comment advisory on pre-existing casts (c906a5f0c)
+- tasks: file task 0805 (session triage: history flake, serve --cwd, startup drain) (94c7d6427)
+- serve: correct quota-consumer drain cadence comment (dogfood F1) (ac6754991)
+- proect: version bump on ts-libs (c7f56a616)
+- merge branch 'sp/runall-b5-a57e58e6' (B5 runall batch: tasks 0796-0799 + wrap) (02dbb8716)
+- dogfood: drive B5 executor quota end to end and mark feature B5 done (194ed5daf)
+- merge branch 'sp/run-0802-8848363e' (task 0802 wrap-up: R2/R3/R6/R7 + verify record) (65a1ef486)
+- tasks: record task 0802 verify PASS with this-run evidence (status wip -> done) (f1bd034b4)
+- tasks: update task status after verification (3ad53adf0)
+- tasks: file 0800 dogfood findings as task 0804 (9e2024fc8)
+- memory: record 0803 wrapup metrics (8aba2620a)
+- history: record 0803 watchdog and PASSIVE checkpoint bounds (b996f057f)
+- tasks: fix 0800 Solution runCommandDispatch line anchor (d6166fc1e)
+- tasks: re-record 0800 verify PASS with this-run evidence (6e445eefd)
+- observability: record R2 shutdown policy, R3/R7 design-doc entries; serve.ts policy comment (0802 R2/R3/R7) (27ead6881)
+- tasks: re-record 0801 verify PASS with AC3 three-run evidence (aba9db1f8)
+- corpus: commit task 0800 pipeline residue (status wip → done, R1-R4 + plan items flipped, H1 → active) (fa3453412)
+- tasks: record upstream quota observation producer handoff (0798) (1ae6614f3)
+- tasks: record task 0801 implementation, review, verify, done (8ce09ddd1)
+- adr: §6.1 status-vocabulary amendments for ADR-109, ADR-110; version 1.41.0 → 1.42.0 (de1ede766)
+- tasks: update task status after implementation (bc05da17c)
+- spur: double bootstrap cron cadence to 30 minutes (3b5c7e174)
+- tasks: record task 0800 completion (6e2bd1376)
+- cli: align documented flags with the live commander tree (a40ca15b9)
+- cli: check the AC box in the strict-core done-gate fixture (f8bde0908)
+- tasks: update task status after refinement (6f1f06a85)
+- README.md: update README.md (0898a328f)
+- dogfood: register J31 refineall and runall reports in the ledger (e31827153)
+- tasks: record J31 verifyall PASS verdicts with refreshed evidence (00157c0ed)
+- tasks: refine 0802 to implementation-ready depth (5d435e63a)
+- tasks: rescope 0801 F1 after contention evidence falsified the first premise (b1a83fb1e)
+- tasks: refine 0801 to implementation-ready depth (813679e54)
+- tasks: file session findings register as task 0801 (54000b296)
+- tasks: update task status after implementation (9ca3b93c6)
+- merge branch 'sp/runall-j31-56a6' (J31 runall batch: tasks 0793+0794) (df48b7900)
+- tasks: update task status after refinement (b757ab678)
+- adr: refine ADR-000 as the reserved admission entry (429fa13c1)
+- adr: add ADR-112 admission test — 00 records cross-cutting decisions only (a2543820a)
+- readme: fix superskill install examples for bun and plugin sp (fb71dc6dc)
+- sp: warn that ### in a section body parses as a new section (2c808cdb8)
+- tasks: add 0800 for H1 pipeline-completion residue (87e0e705d)
+- sync derived docs with B5 accepted scope (de229fd08)
+- design: add executor availability design and brainstorm record for B5 (2f09a205d)
+- adr: add ADR-111 for quota-driven config update durability (4f55748f6)
+- tasks: record 0795 verify PASS and close the J31 dogfood register (1ad61e5e7)
+- adr: correct ADR-110's retention premise to the mechanism that exists (f54ff3737)
+- sp: stop presenting backlog,todo as one --status argument (8769b1163)
+- cli: state that --section Q&A appends rather than replaces (a9ef67175)
+- tasks: file J31 refineall-dogfood findings register task 0795 (bf11979da)
+- tasks: update task status after refinement (c415ae402)
+
 ## [0.3.75] - 2026-09-06
 
 ### Added
