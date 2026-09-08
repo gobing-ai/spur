@@ -101,6 +101,10 @@ describe('genericSystemEventCatalogEntry', () => {
         expect(genericSystemEventCatalogEntry('daemonbeat').prefix).toBe('daemonbeat');
     });
 
+    test('keeps an empty prefix for an empty name (task 0802 R1 pin)', () => {
+        expect(genericSystemEventCatalogEntry('').prefix).toBe('');
+    });
+
     test('does not infer severity from the name — info is the default (Q5)', () => {
         // Even a failure-sounding name must not be escalated: severity comes
         // from the payload envelope path only.
