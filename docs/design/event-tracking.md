@@ -8,7 +8,7 @@
 
 The task-0597 baseline is an **audit + SSOT only**: it changed no emitter, catalog entry, or Board component. J9 now owns the accepted remediation design in §§6–11. This document answers two questions and locks the contract that closes them:
 
-1. Which of the 71 cataloged events actually answer who/what/when/where/why/how?
+1. Which of the 72 cataloged events actually answer who/what/when/where/why/how?
 2. What convention closes the two concrete operator complaints — `task.updated` never says *what* changed, and `workflow.*` renders raw ids?
 
 J9 (0601/0602) shipped that shape: producer enrichment, event-specific presenters, history-read reprojection, and a Board free of event-specific switches. This document remains the per-event SSOT; it is not a second implementation.
@@ -17,7 +17,7 @@ J9 (0601/0602) shipped that shape: producer enrichment, event-specific presenter
 
 Three structural defects, all confirmed at `path:line`:
 
-1. **The catalog is source-parameterized, not event-parameterized.** `event-names.ts:254` (`event(name, source, renderer, …)`) builds each entry by spreading `SOURCE_PROFILES[source]` (`event-names.ts:262`). There are 12 sources → **12 distinct `metadataFields` shapes for 71 events**. All six planning events inherit the identical list `entity.kind, entity.id, field, from, to`. An event cannot describe itself when its presentation is inherited from its family.
+1. **The catalog is source-parameterized, not event-parameterized.** `event-names.ts:254` (`event(name, source, renderer, …)`) builds each entry by spreading `SOURCE_PROFILES[source]` (`event-names.ts:262`). There are 12 sources → **12 distinct `metadataFields` shapes for 72 events**. All six planning events inherit the identical list `entity.kind, entity.id, field, from, to`. An event cannot describe itself when its presentation is inherited from its family.
 2. **Descriptions are string-mangled.** `event-names.ts:296` (`describeEvent`) returns `` `${words} lifecycle event.` ``. `task.updated` is documented as *"Task updated lifecycle event."* — zero information, looks authored. Every description in the catalog is generated.
 3. **The what-changed payload is never emitted.** `planning-write-service.ts:447-453` constructs every planning event as `{ event, entity{kind,id}, at, from?, to? }`. `from`/`to` are set **only** on a status transition (`planning-write-service.ts:451-452`). `data` exists on `PlanningEvent` (`planning-write-service.ts:115`) and is **never populated**; `PlanningEvent` has **no `field` property**. So the `field` the catalog advertises (`event-names.ts` planning profile, `field('field', 'Field')`) is unpopulatable by construction — a contract lie, not an omission. A `--section Solution` write emits `{event, entity, at}` and nothing else.
 
@@ -36,7 +36,7 @@ Every cataloged event must answer six questions. "Present" means the payload car
 
 **Legend:** `P` present · `~` partial · `–` absent.
 
-## 4. 5W1H matrix (71/71)
+## 4. 5W1H matrix (72/72)
 
 Scores are family-uniform **by construction** — the defect from §2.1 means presentation is inherited per source, not per event. Emitter lines are the Spur-side emit/wiring point; ts-libs producers stamp the payload upstream and are attributed via the bridge.
 
@@ -59,65 +59,65 @@ Scores are family-uniform **by construction** — the defect from §2.1 means pr
 | 15 | `scheduler.job.executed` | `context.ts:411` → ts-infra scheduler | – | ~ | P | ~ | – | P |
 | 16 | `message.sent` | `team-service.ts:314` | ~ | ~ | P | ~ | – | – |
 | 17 | `message.replied` | `team-service.ts:314` | ~ | ~ | P | ~ | – | – |
-| 17 | `process.spawned` | `supervisor-service.ts:244` | ~ | ~ | ~ | – | – | ~ |
-| 18 | `process.exited` | `supervisor-service.ts:263` | ~ | ~ | ~ | – | P | P |
-| 19 | `process.stopped` | `supervisor-service.ts:353` | ~ | ~ | ~ | – | P | P |
-| 20 | `process.started` | `context.ts:474` → ts-runtime `ProcessExecutor` | ~ | ~ | ~ | – | – | ~ |
-| 21 | `agent.invoke.start` | `agent-service.ts:709` (bridge) + `event-bridge.ts:43` | ~ | ~ | P | ~ | ~ | ~ |
-| 22 | `agent.invoke.exit` | `agent-service.ts:709` (bridge) + `event-bridge.ts:43` | ~ | ~ | P | ~ | ~ | P |
-| 23 | `agent.invoke.escalated` | `agent-service.ts:1060` | ~ | P | P | ~ | P | P |
-| 24 | `agent.invoke.exhausted` | `agent-service.ts:1032` | ~ | P | P | ~ | P | P |
-| 25 | `agent.started` | `context.ts:460` → ts-ai-runner | ~ | ~ | P | ~ | – | ~ |
-| 26 | `agent.stopped` | `context.ts:460` → ts-ai-runner | ~ | ~ | P | ~ | – | ~ |
-| 27 | `agent.message.sent` | `context.ts:460` → ts-ai-runner | ~ | ~ | P | ~ | – | ~ |
-| 28 | `team.up` | `team-service.ts:801` | ~ | ~ | P | ~ | – | ~ |
-| 29 | `team.down` | `team-service.ts:831` | ~ | ~ | P | ~ | – | ~ |
-| 30 | `team.member.assigned` | `team-service.ts:521` | ~ | ~ | P | ~ | – | ~ |
-| 31 | `team.member.started` | `team-service.ts:959` / `supervisor-service.ts:253` | ~ | ~ | P | ~ | – | ~ |
-| 32 | `team.member.stopped` | `team-service.ts:969` / `supervisor-service.ts:273` | ~ | ~ | P | ~ | – | ~ |
-| 33 | `history.import.completed` | `apps/cli/src/commands/history.ts:364` | – | ~ | P | ~ | ~ | P |
-| 34 | `history.analyze.completed` | `apps/cli/src/commands/history.ts:378` | – | ~ | P | ~ | ~ | P |
-| 35 | `history.daily.failed` | `apps/cli/src/commands/history.ts:336` / `:390` | – | ~ | P | ~ | P | P |
-| 36 | `history.refresh.enqueued` | `apps/cli/src/history-refresh.ts:47` | – | ~ | P | ~ | P | ~ |
-| 37 | `rule.run.start` | `rule-service.ts:523` | ~ | ~ | P | ~ | – | ~ |
-| 38 | `rule.eval.start` | `rule-service.ts:532` | ~ | ~ | P | ~ | – | ~ |
-| 39 | `rule.eval.done` | `rule-service.ts:540` | ~ | ~ | P | ~ | – | P |
-| 40 | `rule.eval.error` | `rule-service.ts:548` | ~ | ~ | P | ~ | P | P |
-| 41 | `rule.run.done` | `rule-service.ts:557` | ~ | ~ | P | ~ | – | P |
-| 42 | `workflow.run.started` | `observability.ts:222` (adapter) / ts-dual-workflow-engine | ~ | ~ | P | P | – | ~ |
-| 43 | `workflow.run.done` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | – | P |
-| 44 | `workflow.run.failed` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | P |
-| 45 | `workflow.run.finalized` | `observability.ts:230` | ~ | ~ | P | P | – | P |
-| 46 | `workflow.run.paused` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | P |
-| 47 | `workflow.run.resumed` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | P |
-| 48 | `workflow.run.reseeded` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | P |
-| 49 | `workflow.node.enter` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | – | ~ |
-| 50 | `workflow.phase` | `observability.ts:242` / ts-dual-workflow-engine | ~ | ~ | P | P | – | ~ |
-| 51 | `workflow.node.transition` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | ~ | P |
-| 52 | `workflow.transition` | `observability.ts:247` / `observability.ts:265` | ~ | ~ | P | P | ~ | P |
-| 53 | `workflow.transition.requested` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | ~ | ~ |
-| 54 | `workflow.transition.denied` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | P |
-| 55 | `workflow.action.start` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | – | ~ |
-| 56 | `workflow.action.started` | `observability.ts:284` | ~ | P | P | P | – | P |
-| 57 | `workflow.action.done` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | – | P |
-| 58 | `workflow.action.finished` | `observability.ts:312` | ~ | P | P | P | – | P |
-| 59 | `workflow.action.failed_continue` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | P |
-| 60 | `workflow.guard.evaluated` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | ~ |
-| 61 | `workflow.hitl.ask` | `hitl-confirm.ts:29` / `hitl-select.ts:35` / `hitl-input.ts:29` | ~ | ~ | P | ~ | – | ~ |
-| 62 | `workflow.hitl.response` | `hitl-confirm.ts:42` / `hitl-select.ts:49` / `hitl-input.ts:42` | ~ | ~ | P | ~ | ~ | ~ |
-| 63 | `workflow.hitl.note` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | ~ | ~ | ~ |
-| 64 | `workflow.custom` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | ~ | – | ~ |
-| 65 | `workflow.agent` | `agent-run.ts:260` | ~ | ~ | P | P | – | P |
-| 66 | `workflow.steering` | ts-dual-workflow-engine bridge → `workflow-service.ts:563` | ~ | ~ | P | P | ~ | ~ |
-| 67 | `api.request.error` | `apps/server/src/middleware/error-handler.ts:198` | – | ~ | P | ~ | P | P |
-| 68 | `bus.emit.done` | `context.ts:411` → ts-infra `EventBus` | – | ~ | P | ~ | – | ~ |
-| 69 | `bus.emit.noop` | `context.ts:411` → ts-infra `EventBus` | – | ~ | P | ~ | – | ~ |
-| 70 | `bus.handler.error` | `context.ts:411` → ts-infra `EventBus` | – | ~ | P | ~ | P | P |
-| 71 | `bus.handler.async.enqueued` | `context.ts:411` → ts-infra `EventBus` | – | ~ | P | ~ | – | ~ |
+| 18 | `process.spawned` | `supervisor-service.ts:244` | ~ | ~ | ~ | – | – | ~ |
+| 19 | `process.exited` | `supervisor-service.ts:263` | ~ | ~ | ~ | – | P | P |
+| 20 | `process.stopped` | `supervisor-service.ts:353` | ~ | ~ | ~ | – | P | P |
+| 21 | `process.started` | `context.ts:474` → ts-runtime `ProcessExecutor` | ~ | ~ | ~ | – | – | ~ |
+| 22 | `agent.invoke.start` | `agent-service.ts:709` (bridge) + `event-bridge.ts:43` | ~ | ~ | P | ~ | ~ | ~ |
+| 23 | `agent.invoke.exit` | `agent-service.ts:709` (bridge) + `event-bridge.ts:43` | ~ | ~ | P | ~ | ~ | P |
+| 24 | `agent.invoke.escalated` | `agent-service.ts:1060` | ~ | P | P | ~ | P | P |
+| 25 | `agent.invoke.exhausted` | `agent-service.ts:1032` | ~ | P | P | ~ | P | P |
+| 26 | `agent.started` | `context.ts:460` → ts-ai-runner | ~ | ~ | P | ~ | – | ~ |
+| 27 | `agent.stopped` | `context.ts:460` → ts-ai-runner | ~ | ~ | P | ~ | – | ~ |
+| 28 | `agent.message.sent` | `context.ts:460` → ts-ai-runner | ~ | ~ | P | ~ | – | ~ |
+| 29 | `team.up` | `team-service.ts:801` | ~ | ~ | P | ~ | – | ~ |
+| 30 | `team.down` | `team-service.ts:831` | ~ | ~ | P | ~ | – | ~ |
+| 31 | `team.member.assigned` | `team-service.ts:521` | ~ | ~ | P | ~ | – | ~ |
+| 32 | `team.member.started` | `team-service.ts:959` / `supervisor-service.ts:253` | ~ | ~ | P | ~ | – | ~ |
+| 33 | `team.member.stopped` | `team-service.ts:969` / `supervisor-service.ts:273` | ~ | ~ | P | ~ | – | ~ |
+| 34 | `history.import.completed` | `apps/cli/src/commands/history.ts:364` | – | ~ | P | ~ | ~ | P |
+| 35 | `history.analyze.completed` | `apps/cli/src/commands/history.ts:378` | – | ~ | P | ~ | ~ | P |
+| 36 | `history.daily.failed` | `apps/cli/src/commands/history.ts:336` / `:390` | – | ~ | P | ~ | P | P |
+| 37 | `history.refresh.enqueued` | `apps/cli/src/history-refresh.ts:47` | – | ~ | P | ~ | P | ~ |
+| 38 | `rule.run.start` | `rule-service.ts:523` | ~ | ~ | P | ~ | – | ~ |
+| 39 | `rule.eval.start` | `rule-service.ts:532` | ~ | ~ | P | ~ | – | ~ |
+| 40 | `rule.eval.done` | `rule-service.ts:540` | ~ | ~ | P | ~ | – | P |
+| 41 | `rule.eval.error` | `rule-service.ts:548` | ~ | ~ | P | ~ | P | P |
+| 42 | `rule.run.done` | `rule-service.ts:557` | ~ | ~ | P | ~ | – | P |
+| 43 | `workflow.run.started` | `observability.ts:222` (adapter) / ts-dual-workflow-engine | ~ | ~ | P | P | – | ~ |
+| 44 | `workflow.run.done` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | – | P |
+| 45 | `workflow.run.failed` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | P |
+| 46 | `workflow.run.finalized` | `observability.ts:230` | ~ | ~ | P | P | – | P |
+| 47 | `workflow.run.paused` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | P |
+| 48 | `workflow.run.resumed` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | P |
+| 49 | `workflow.run.reseeded` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | P |
+| 50 | `workflow.node.enter` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | – | ~ |
+| 51 | `workflow.phase` | `observability.ts:242` / ts-dual-workflow-engine | ~ | ~ | P | P | – | ~ |
+| 52 | `workflow.node.transition` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | ~ | P |
+| 53 | `workflow.transition` | `observability.ts:247` / `observability.ts:265` | ~ | ~ | P | P | ~ | P |
+| 54 | `workflow.transition.requested` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | ~ | ~ |
+| 55 | `workflow.transition.denied` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | P |
+| 56 | `workflow.action.start` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | – | ~ |
+| 57 | `workflow.action.started` | `observability.ts:284` | ~ | P | P | P | – | P |
+| 58 | `workflow.action.done` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | – | P |
+| 59 | `workflow.action.finished` | `observability.ts:312` | ~ | P | P | P | – | P |
+| 60 | `workflow.action.failed_continue` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | P |
+| 61 | `workflow.guard.evaluated` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | ~ |
+| 62 | `workflow.hitl.ask` | `hitl-confirm.ts:29` / `hitl-select.ts:35` / `hitl-input.ts:29` | ~ | ~ | P | ~ | – | ~ |
+| 63 | `workflow.hitl.response` | `hitl-confirm.ts:42` / `hitl-select.ts:49` / `hitl-input.ts:42` | ~ | ~ | P | ~ | ~ | ~ |
+| 64 | `workflow.hitl.note` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | ~ | ~ | ~ |
+| 65 | `workflow.custom` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | ~ | – | ~ |
+| 66 | `workflow.agent` | `agent-run.ts:260` | ~ | ~ | P | P | – | P |
+| 67 | `workflow.steering` | ts-dual-workflow-engine bridge → `workflow-service.ts:563` | ~ | ~ | P | P | ~ | ~ |
+| 68 | `api.request.error` | `apps/server/src/middleware/error-handler.ts:198` | – | ~ | P | ~ | P | P |
+| 69 | `bus.emit.done` | `context.ts:411` → ts-infra `EventBus` | – | ~ | P | ~ | – | ~ |
+| 70 | `bus.emit.noop` | `context.ts:411` → ts-infra `EventBus` | – | ~ | P | ~ | – | ~ |
+| 71 | `bus.handler.error` | `context.ts:411` → ts-infra `EventBus` | – | ~ | P | ~ | P | P |
+| 72 | `bus.handler.async.enqueued` | `context.ts:411` → ts-infra `EventBus` | – | ~ | P | ~ | – | ~ |
 
 **Tally:** Who — present `0`, partial `48`, absent `23`. What — present `4`, partial `67`, absent `0`. When — present `67`, partial `4`, absent `0`. Where — present `27`, partial `40`, absent `4`. Why — present `18`, partial `12`, absent `41`. How — present `33`, partial `34`, absent `4`.
 
-The most complete dimension is **When** — 67 of 71 payloads carry a timestamp or duration, and the tap stamps `occurred_at` for the rest (`system-event-tap.ts:68`), so no event is ever atemporal. **Who is never fully present** (0 of 71 carry a canonical actor/executor/role; 48 carry a partial machine id such as `agentId`/`pid`/`memberId`). **Why is the deepest hole** — 41 of 71 events carry no `trigger`/`reason`, because no payload in the planning, queue, scheduler, message, history, or bus families captures what fired them.
+The most complete dimension is **When** — 68 of 72 payloads carry a timestamp or duration, and the tap stamps `occurred_at` for the rest (`system-event-tap.ts:68`), so no event is ever atemporal. **Who is never fully present** (0 of 72 carry a canonical actor/executor/role; 48 carry a partial machine id such as `agentId`/`pid`/`memberId`). **Why is the deepest hole** — 42 of 72 events carry no `trigger`/`reason`, because no payload in the planning, queue, scheduler, message, history, or bus families captures what fired them.
 
 ## 5. Gap list (payload vs presentation — do not conflate)
 
@@ -208,7 +208,7 @@ A **two-sided gate** (corpus-style, mirroring `spur task check --corpus` / `tran
 
 - **One side:** every `SYSTEM_EVENT_CATALOG` name must appear in `event-tracking.md`'s matrix (§4) with a 5W1H row and an emitter `path:line` — an entry missing from the doc fails.
 - **Other side:** every matrix row in §4 must resolve to a catalog name — a row that no longer reproduces fails, so the doc cannot rot into a silent list.
-- Optionally: assert the count (71 today) and the "no `describeEvent`-only description / no source-inherited `metadataFields`" invariants once remediation lands.
+- Optionally: assert the count (72 today) and the "no `describeEvent`-only description / no source-inherited `metadataFields`" invariants once remediation lands.
 
 This is enforceable today as a `spur rule` or a small script the same way `transition-shim-check` (`bun run transition-shim-check`) enforces marker↔manifest parity — and it costs nothing until remediation, because it fails *open* (audit-only) until emitters are fixed.
 
