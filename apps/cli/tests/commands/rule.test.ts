@@ -358,6 +358,101 @@ describe('rule trace end-to-end', () => {
     });
 });
 
+describe('rule run SQLITE_BUSY busy-wait integration', () => {
+    /**
+     * Integration proof that the rule-run path's db connection honors
+     * `SQLITE_BUSY_TIMEOUT_MS` (task 0801 R1a). The rule engine opens the
+     * project db via `createMigratedDb`, which `exec`s `PRAGMA busy_timeout
+     * = 30000` explicitly because the upstream BunSqliteAdapter defaults
+     * omit it (bug-245 lineage). A child process holds the write lock for
+     * 4s; the parent must WAIT for that window instead of throwing
+     * SQLITE_BUSY instantly (the original failure mode). The 4s hold is a
+     * real integration timer — fake timers cannot drive the platform-level
+     * busy wait.
+     *
+     * Mirrors `packages/domain/tests/db.test.ts` "cross-process writer
+     * waits within SQLITE_BUSY_TIMEOUT_MS then commits", but exercises the
+     * full CLI dispatch path (rule run verb → RuleService → context.getDb
+     * → DbRulePersistenceAdapter.insertRun) rather than the bare adapter.
+     */
+    test('rule run waits out a busy window held by another writer (does not throw SQLITE_BUSY)', async () => {
+        const cwd = await createTempProject();
+        const dbUrl = `${cwd}/busy-wait.db`;
+        const file = `${cwd}/rules.yaml`;
+        await Bun.write(
+            file,
+            [
+                'rules:',
+                '  - id: sample-rule',
+                '    description: Sample rule',
+                '    evaluator:',
+                '      type: path',
+                '      config:',
+                '        paths:',
+                '          - package.json',
+            ].join('\n'),
+        );
+        await Bun.write(`${cwd}/package.json`, '{"name":"fixture","type":"module"}\n');
+
+        // Prime the schema so the child sees the migrated table set on first open.
+        await main(['rule', 'trace'], { cwd, output: nullOutput(), dbUrl });
+
+        // Hold a write lock for 4s via BEGIN IMMEDIATE + setTimeout + COMMIT,
+        // signal readiness on stdout. A single INSERT commits immediately
+        // and releases the lock — the parent would then succeed in ms and
+        // the busy-wait path would not be exercised. Mirrors the holding
+        // pattern from packages/domain/tests/db.test.ts.
+        const holdMs = 4000;
+        // Hold a write lock for `holdMs` via BEGIN IMMEDIATE + setTimeout +
+        // COMMIT, then signal readiness on stdout. Uses `bun:sqlite`
+        // directly (built-in) so the child does not need workspace-package
+        // resolution — the [eval] path bun uses for `-e` scripts does not
+        // see workspace symlinks. Mirrors the holding pattern from
+        // packages/domain/tests/db.test.ts:875+.
+        const child = Bun.spawn(
+            [
+                'bun',
+                '-e',
+                `const { Database } = require('bun:sqlite');
+const db = new Database(${JSON.stringify(dbUrl)});
+db.exec('BEGIN IMMEDIATE');
+db.exec(\`INSERT INTO rule_runs (id, preset, source_kind, status, started_at, created_at, updated_at) VALUES ('child-holder', 'recommended-pre-check', 'preset', 'done', '2026-01-01T00:00:00Z', datetime('now'), datetime('now'))\`);
+process.stdout.write('locked\\n');
+setTimeout(() => {
+  db.exec('COMMIT');
+  db.close();
+  process.exit(0);
+}, ${holdMs});`,
+            ],
+            { stderr: 'inherit' },
+        );
+        // Wait for the child's readiness signal before timing the parent's run.
+        await new Promise<void>((resolve) => {
+            (child.stdout as ReadableStream<Uint8Array>)
+                .getReader()
+                .read()
+                .then(() => resolve());
+        });
+
+        const t0 = performance.now();
+        const exitCode = await main(['rule', 'run', '--file', file, '--json'], {
+            cwd,
+            output: nullOutput(),
+            dbUrl,
+        });
+        const elapsedMs = performance.now() - t0;
+        await child.exited;
+
+        // Rule run must NOT throw SQLITE_BUSY: it must wait and succeed (exit 0).
+        expect(exitCode).toBe(0);
+        // The parent's rule run waited for the holder to release (>= 2s into
+        // the 4s hold), retried, and committed — bounded by the 30s busy
+        // timeout, not an instant SQLITE_BUSY.
+        expect(elapsedMs).toBeGreaterThanOrEqual(2000);
+        expect(elapsedMs).toBeLessThan(30000);
+    }, 20000);
+});
+
 describe('formatTraceList', () => {
     test('renders header and rows', () => {
         const runs: RuleRunRow[] = [
