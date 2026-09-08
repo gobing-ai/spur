@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Session findings register: spur-check SQLite lock vs running server, ADR status vocabulary drift, Codex scratch leftover"
-status: todo
+status: done
 template: issue
 created_at: 2026-09-07T18:49:22.806Z
-updated_at: "2026-09-07T19:13:42.893Z"
+updated_at: "2026-09-08T00:00:10.481Z"
 
 ---
 
@@ -48,21 +48,21 @@ committed (429fa13c1); B5 planning corpus and doc sync committed by concern (4f5
 
 ### Requirements
 
-- [ ] R1. A `SQLITE_BUSY` failure from any CLI verb exits non-zero with a message that names the
+- [x] R1. A `SQLITE_BUSY` failure from any CLI verb exits non-zero with a message that names the
       database path and the next diagnostic step (identify the holder, e.g. `lsof <db>`; stop a
       stale Spur process or `spur serve`), instead of today's bare retry line.
-- [ ] R2. ADR-109 and ADR-110 carry §6.1 template statuses via dated amendment blocks, with entry
+- [x] R2. ADR-109 and ADR-110 carry §6.1 template statuses via dated amendment blocks, with entry
       numbers, dates, decision text, and every repo-wide cross-reference unchanged.
 
 ### Acceptance Criteria
 
-- [ ] AC1. With a second writer holding the project db, the rule-run path waits out the busy
+- [x] AC1. With a second writer holding the project db, the rule-run path waits out the busy
       window instead of throwing instantly (integration evidence), and a forced `SQLITE_BUSY`
       through `errorMessage()` still yields a message containing `.spur/spur.db` and a
       remediation step with a non-zero exit; new tests pass (`cd apps/cli && bun test`).
-- [ ] AC2. ADR-109 and ADR-110 carry only §6.1 template statuses after dated amendments;
+- [x] AC2. ADR-109 and ADR-110 carry only §6.1 template statuses after dated amendments;
       `git grep -c 'ADR-109\|ADR-110'` counts are unchanged versus the task's filing commit.
-- [ ] AC3. With `spur serve` running, `bun run spur-check` passes three consecutive runs
+- [x] AC3. With `spur serve` running, `bun run spur-check` passes three consecutive runs
       (evidence recorded in the task record).
 
 ### Q&A
@@ -130,15 +130,15 @@ and 8; bump `docs/00_ADR.md` version. No other entry content changes.
 
 ### Plan
 
-- [ ] R1a. Trace `RuleService`'s db connection from `apps/cli/src/commands/rule.ts:34`; make it
+- [x] R1a. Trace `RuleService`'s db connection from `apps/cli/src/commands/rule.ts:34`; make it
       honor `SQLITE_BUSY_TIMEOUT_MS` exactly as `packages/domain/src/db.ts` does; add the
       busy-wait integration check.
-- [ ] R1b. Amend the busy branch of `errorMessage()` in `apps/cli/src/errors.ts` with the db path
+- [x] R1b. Amend the busy branch of `errorMessage()` in `apps/cli/src/errors.ts` with the db path
       and remediation hint; add the unit test and exit-code check; run cli workspace tests.
-- [ ] R2. Add the two dated amendment blocks in `docs/00_ADR.md` (ADR-109 → Accepted, ADR-110 →
+- [x] R2. Add the two dated amendment blocks in `docs/00_ADR.md` (ADR-109 → Accepted, ADR-110 →
       Accepted (design)), bump the doc version, and verify repo-wide `ADR-109`/`ADR-110`
       cross-reference counts are unchanged.
-- [ ] Final: with `spur serve` running, `bun run spur-check` green on three consecutive runs
+- [x] Final: with `spur serve` running, `bun run spur-check` green on three consecutive runs
       (contention regression proof); commit per project convention.
 
 ### Root Cause
@@ -159,18 +159,154 @@ Verified by code and observation:
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+#### F1 — SQLITE_BUSY contention (R1a, R1b)
+
+Trace conclusion: the rule-run path's db connection already honors
+`SQLITE_BUSY_TIMEOUT_MS` via the existing chain
+`apps/cli/src/commands/rule.ts:34` → `new RuleService(context)`
+→ `context.getDb()` → `createMigratedDbAdapter()`
+→ `createMigratedDb({ url })` (which `exec`s
+`PRAGMA busy_timeout = 30000` explicitly in
+`packages/domain/src/db.ts:38`, mirroring the runtime factory at
+`packages/domain/src/db.ts:62`). The observed `SQLITE_BUSY` failures
+during refinement were caused by transient writer windows (e.g. a healthy
+`spur serve` plus a second CLI process); the connection honors the 30s
+timeout and waits. No code change to the connection wiring was needed —
+the regression is captured by a new busy-wait integration check
+(`apps/cli/tests/commands/rule.test.ts:361-450`) that proves the
+rule-run path waits instead of throwing.
+
+Diagnostics change: the single busy branch in `errorMessage()`
+(`apps/cli/src/errors.ts:21-44`) is enriched with the db path
+(`.spur/spur.db`) and a static remediation hint (`identify the holder:
+lsof .spur/spur.db; stop the stale Spur process or spur serve, then
+retry`). No process inspection at the error seam — sandboxed CLIs may
+lack `lsof`/`ps`. The constants `SQLITE_BUSY_DB_PATH` and
+`SQLITE_BUSY_REMEDIATION` (apps/cli/src/errors.ts:20-37) are exported
+as a frozen `SQLITE_BUSY_MESSAGE_CONSTANTS` object for the test seam.
+
+| File:line | Change |
+| --- | --- |
+| `apps/cli/src/errors.ts:20-49` | Enrich SQLITE_BUSY branch with db path + remediation; export `SQLITE_BUSY_MESSAGE_CONSTANTS`. |
+| `apps/cli/tests/errors.test.ts` (whole file) | New tests: SQLITE_BUSY → path + remediation (`describe('errorMessage')`, `describe('SQLITE_BUSY_MESSAGE_CONSTANTS')`); CLI-dispatch exit-code check via stub db throwing SQLITE_BUSY (`describe('SQLITE_BUSY exit-code propagation through CLI dispatch')`). |
+| `apps/cli/tests/commands/rule.test.ts:361-450` | New busy-wait integration check: child process holds a 4s BEGIN IMMEDIATE write lock on the project db; the parent's `rule run` must wait, succeed (exit 0), and complete in [2s, 30s). |
+
+#### F2 — ADR-109 / ADR-110 status vocabulary (R2)
+
+Two dated `**Amendment (2026-09-07)**` blocks added — one per entry —
+recording only the §6.1 status-vocabulary correction. Per §6.1 rule 3
+only the status vocabulary aligns; entry number, date, decision text,
+and every repo-wide cross-reference are unchanged. Doc version bumped
+1.41.0 → 1.42.0.
+
+| File:line | Change |
+| --- | --- |
+| `docs/00_ADR.md:2318` | ADR-109 status: `Implemented (F21 task 0788)` → `Accepted`. |
+| `docs/00_ADR.md:2323` | New amendment block for ADR-109 (per §6.1 rule 5: shipped, task 0788 verify PASS). |
+| `docs/00_ADR.md:2325,2327` | ADR-110 status: `Proposed` → `Accepted (design)`. |
+| `docs/00_ADR.md:2325,2332` | New amendment block for ADR-110 (per §6.1 rule 5: decided, unbuilt). |
+| `docs/00_ADR.md:5` | Doc version: `1.41.0` → `1.42.0`. |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/cli/src/errors.ts:21-44` enriches the SQLITE_BUSY branch of `errorMessage()` with `SQLITE_BUSY_DB_PATH` (`.spur/spur.db`) and `SQLITE_BUSY_REMEDIATION` (`identify the holder: lsof .spur/spur.db; stop the stale Spur process or spur serve, then retry`). Constants exported as `Object.freeze({ dbPath, remediation })` at `apps/cli/src/errors.ts:47-50` for the test seam. Busy-wait integration check at `apps/cli/tests/commands/rule.test.ts:361-453` proves the rule-run path waits out a real 4 s BEGIN IMMEDIATE write lock (parent exits 0, elapsed in [2 s, 30 s); no instant SQLITE_BUSY). Unit + dispatch tests at `apps/cli/tests/errors.test.ts` cover path + remediation + non-zero exit (17 cases, all pass). |
+| R2 | MET | ADR-109 status `Accepted` at `docs/00_ADR.md:2318`; ADR-110 status `Accepted (design)` at `docs/00_ADR.md:2329`. Dated `**Amendment (2026-09-07).**` blocks at `docs/00_ADR.md:2323-2325` (ADR-109) and `docs/00_ADR.md:2334-2336` (ADR-110) — decision-delta only, entry number / date / decision text / cross-references unchanged per `99 §6.1` rule 3. Doc version bumped `1.41.0 -> 1.42.0` at `docs/00_ADR.md:5`. Per-file `git grep -c 'ADR-109\|ADR-110'` vs filing commit `bc05da17c`: identical for all 19 non-task files; task file 12 -> 17 (expected §6.1 rule 3 self-reference in the Solution/Review sections). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1. | MET | test | Busy-wait test at `apps/cli/tests/commands/rule.test.ts:361-453`: child holds 4 s BEGIN IMMEDIATE write lock; parent `rule run --json` must wait, succeed (exit 0), complete in [2 s, 30 s). Local re-run reported in Review: `1 pass, 4052.00ms` — within bounds, exit 0, no instant throw. Diagnostic unit + dispatch tests at `apps/cli/tests/errors.test.ts` (17 cases) force SQLITE_BUSY through `errorMessage()` and assert message contains `.spur/spur.db` and the remediation string, then exercise CLI dispatch with a SQLITE_BUSY-throwing `DbAdapter` stub to assert non-zero exit and stderr contents. `packages/domain/src/db.ts:38,62` confirm the rule path's connection honors `PRAGMA busy_timeout = 30000`. |
+| AC2. | MET | command | ADR-109 status `Accepted` at `docs/00_ADR.md:2318`; ADR-110 status `Accepted (design)` at `docs/00_ADR.md:2329`. Dated `**Amendment (2026-09-07).**` blocks at `docs/00_ADR.md:2323-2325` (ADR-109) and `docs/00_ADR.md:2334-2336` (ADR-110). Doc version bumped `1.41.0 -> 1.42.0` at `docs/00_ADR.md:5`. Per-file `git grep -c 'ADR-109\|ADR-110'` baseline vs `bc05da17c` shows zero delta in the 19 non-task files; the only delta is the task file itself (12 -> 17), expected from the Solution + Review self-references per §6.1 rule 3. §6.1 vocabulary source confirmed at `docs/99_PROJECT_CONSTITUTION.md:247`. |
+| AC3. | MET | command | `.spur/run/0801-test-gate.log` records 3 `--- AC3 evidence run #N ---` sections (lines 1, 366, 731; each ~365 lines). Each run completes the full spur-check pipeline (link-check -> transition-shim-check -> script-contract-check -> inline-pipeline-parity-check -> dependency-drift-check -> importer-schema-check -> history-surface-freeze-check -> lint -> test-pre-check -> test -> test-post-check) green: `All 44 rules passed` (pre-check, lines 34/399/764) and `All 2 rules passed` (post-check, lines 365/730/1095); `7701 pass, 0 fail` per `bun test` (lines 354/719/1084). `.spur/run/0801-serve.pid` = 18536 (server was active during the gate). `.spur/run/0801-test-gate.status` = `PASS`. `.spur/run/0801-proof-digest.txt` = `080d68927a2fdac505d4486d21bfb03dc7ef30c730c78c7d28f72b3fca9789c4` (matches the bracketed compare digest for this run). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Scope:** task WBS 0801 diff vs filing commit `bc05da17c` (5 files: 4 non-corpus + 1 corpus).
+**Dimensions:** functional (R1, R2), SECUA (security, efficiency, correctness, usability, architecture), depth.
+**Verdict:** **PASS** — implementation satisfies both requirements and all three acceptance criteria with fresh, file:line evidence below. No P1–P3 findings; two P4 (advisory) observations recorded for future-task consideration only.
+
+#### Functional Traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| **R1** (SQLITE_BUSY message names db path + remediation, non-zero exit) | **MET** | `apps/cli/src/errors.ts:21-44` — `errorMessage()` returns single-line message containing `SQLITE_BUSY_DB_PATH` (`.spur/spur.db`) and `SQLITE_BUSY_REMEDIATION` (`identify the holder: lsof .spur/spur.db; stop the stale Spur process or spur serve, then retry`). Constants exported as frozen `SQLITE_BUSY_MESSAGE_CONSTANTS` (`apps/cli/src/errors.ts:47-50`) for the test seam. Unit tests at `apps/cli/tests/errors.test.ts:33-76` cover both `Error` and string SQLITE_BUSY inputs. CLI-dispatch exit-code check at `apps/cli/tests/errors.test.ts:114-167` asserts `exitCode !== 0` and stderr contains both constants. All 17 errors.test.ts cases passed (`17 pass, 0 fail`). |
+| **R2** (ADR-109/ADR-110 §6.1 statuses via dated amendments, xrefs unchanged) | **MET** | ADR-109 status `Accepted` at `docs/00_ADR.md:2318`; ADR-110 status `Accepted (design)` at `docs/00_ADR.md:2329`. Dated `**Amendment (2026-09-07)**` blocks at `docs/00_ADR.md:2323-2325` (ADR-109) and `docs/00_ADR.md:2334-2336` (ADR-110). Doc version bumped `1.41.0` → `1.42.0` at `docs/00_ADR.md:5`. `git grep -c 'ADR-109\\ | ADR-110'` per-file counts vs `bc05da17c`: every file unchanged except the task file itself (12 → 17, expected per §6.1 rule 3 — Solution section adds ADR cross-references). |
+
+#### Acceptance criteria mapping
+
+| AC | Status | Evidence |
+| --- | --- | --- |
+| **AC1** (busy-wait integration + diagnostic message + exit code + tests green) | **MET** | Busy-wait integration check at `apps/cli/tests/commands/rule.test.ts:361-453`: child holds 4 s BEGIN IMMEDIATE write lock; parent's `rule run --json` must wait, succeed (exit 0), and complete in [2 s, 30 s). Locally re-run: `1 pass, 4052.00ms` — within bounds, exit 0, no instant SQLITE_BUSY throw. errors.test.ts CLI-dispatch check confirms non-zero exit + path/remediation in stderr (13.78 ms). |
+| **AC2** (template statuses + amendments + unchanged xref counts) | **MET** | See R2 evidence above. Per-file `git grep -c 'ADR-109\\ | ADR-110'` vs `bc05da17c` identical for all 19 non-task files; only task file delta (12 → 17). |
+| **AC3** (3 consecutive `bun run spur-check` green with `spur serve` running) | **MET** | `.spur/run/0801-test-gate.log` records 3 `--- AC3 evidence run #N ---` sections (lines 1, 366, 731). Each completes the full spur-check pipeline (link-check → transition-shim-check → … → test-pre-check → test → test-post-check) green: `All 44 rules passed` (pre-check) and `All 2 rules passed` (post-check); `7701 pass, 0 fail` per `bun test`. `.spur/run/0801-serve.pid` records PID 18536; `ps -p 18536` confirms `bun apps/cli/src/index.ts serve` running. `.spur/run/0801-test-gate.status` = `PASS`. |
+
+#### SECUA
+
+| Dimension | Assessment | Evidence |
+| --- | --- | --- |
+| **Security** | Clean. The remediation hint is static text only — no `lsof`/`ps` shell-out at the error seam (sandboxed CLIs may lack them, per Q&A D1). `SQLITE_BUSY_MESSAGE_CONSTANTS` is `Object.freeze`d (`apps/cli/src/errors.ts:47-50`). No new attack surface. |
+| **Efficiency** | Clean. The busy-wait path uses the existing `PRAGMA busy_timeout = 30000` (`packages/domain/src/db.ts:19,38,62`); no new locks, no new contention. The diagnostic enrichment is a string concat at error time — no measurable cost on the happy path. Test uses a real 4 s timer (fake timers cannot drive platform-level busy waits — comment at `apps/cli/tests/commands/rule.test.ts:361-368`). |
+| **Correctness** | Clean. Both `Error.code === 'SQLITE_BUSY'` and `/\bSQLITE_BUSY\b/i.test(message)` are recognized (`apps/cli/src/errors.ts:11-15`). The single-line format assertion (`apps/cli/tests/errors.test.ts:46`) prevents multi-line regressions. CLI-dispatch test (`apps/cli/tests/errors.test.ts:114-167`) verifies the diagnostic reaches stderr — not just the in-memory return value — closing the real-user-path loop. |
+| **Usability** | Strong. The message reads as one sentence with the db path, the holder-identification command, and both recovery paths (stale process or `spur serve`). Constants are exported so downstream test fixtures stay aligned with the production string. Coverage: `apps/cli/src/errors.ts` at 100% functions / 100% lines per the spur-check coverage report. |
+| **Architecture** | Sound. The fix is surgical: a single `if (isSqliteBusy(error))` branch in `errorMessage()` plus an exported-constants test seam. No new modules, no new dependency direction. The amendment blocks follow the §6.1 pattern (dated, minimal, decision-delta only — no mechanism leakage). |
+
+#### Architecture Depth
+
+The change turns a shallow, opaque error mapping (`SQLITE_BUSY: database is locked`) into a
+testable, contract-bound diagnostic. Three depth signals:
+
+1. **Test seam via exported constants.** `SQLITE_BUSY_MESSAGE_CONSTANTS` (`apps/cli/src/errors.ts:47-50`)
+   turns the message into a public contract: tests assert on the constants, not on string equality,
+   so a future rewrite of the user-facing wording does not silently break the test contract.
+2. **Real concurrency, not fake timers.** The busy-wait integration check (`apps/cli/tests/commands/rule.test.ts:361-453`)
+   spawns a child process holding a real BEGIN IMMEDIATE write lock for 4 s and times the parent.
+   This catches regressions a unit test with `vi.useFakeTimers()` would miss — the platform-level
+   busy wait is driven by the SQLite engine, not by JS timers.
+3. **Constitutional conformance of amendments.** Both amendment blocks conform to `99 §6.1` rules
+   3 (append-only), 5 (`Accepted (design)` semantics), and 8 (decision delta + one-line reason, no
+   mechanism leakage). The amendment for ADR-109 is slightly longer because it names the previous
+   vocabulary value (`Implemented (F21 task 0788)`) to make the delta unambiguous; the ADR-110
+   amendment is the minimal form.
+
+#### Findings (ranked)
+
+| # | Severity | Dimension | Finding | Location |
+| --- | --- | --- | --- | --- |
+| 1 | P4 (advisory) | usability | The remediation string duplicates the db path literal (`.spur/spur.db` appears twice: once as `SQLITE_BUSY_DB_PATH` and once inside `SQLITE_BUSY_REMEDIATION`). If the canonical path ever changes, the inner literal must be edited in two places. Cosmetic only — consider interpolating `SQLITE_BUSY_DB_PATH` into `SQLITE_BUSY_REMEDIATION` in a future cleanup. | `apps/cli/src/errors.ts:20-37` |
+| 2 | P4 (advisory) | architecture | The busy-wait integration check has a duplicated leading comment block (two paragraphs describing the same BEGIN IMMEDIATE + setTimeout + COMMIT holding pattern at the test's top). Reader-friendly now but invites drift on the next edit. Future cleanup could fold both paragraphs into one. | `apps/cli/tests/commands/rule.test.ts:361-388` |
+
+No P1 (blocker), P2 (major), or P3 (minor) findings. The two P4 items are non-actionable for this
+task; they would be appropriate as a one-line follow-up if the user wants to deepen the module
+later.
+
+#### Residual Risk
+
+Low. The diagnostic enrichment is additive (a richer SQLITE_BUSY message is strictly better than
+today's bare line, with no regression risk for the happy path). The amendment blocks are
+non-destructive (entry number, date, decision text, and cross-references all preserved per §6.1
+rule 3). The busy-wait test exercises a real concurrency primitive, so the green CI signal is
+trustworthy. Re-run of the AC1 busy-wait test on this working tree: `1 pass, 4052.00ms` (in
+[2 s, 30 s]) — exit 0, no instant throw.
+
+**Next:** proceed to `spur task done 0801 --phase commit` (or the equivalent gate in the
+pipeline's phase-7 → phase-8 transition); no follow-up work required.
 
 ### References
 
-<!-- Links to failing logs, related issues, tasks, docs, or external references. -->
+- Filing commit: `bc05da17c docs(tasks): update task status after implementation`
+- Test gate evidence: `.spur/run/0801-test-gate.log` (3 AC3 evidence runs; `PASS`)
+- Server PID during AC3: `.spur/run/0801-serve.pid` (18536)
+- §6.1 vocabulary source: `docs/99_PROJECT_CONSTITUTION.md:240-282`
 
 ### History
+
+- 2026-09-07T23:25:34.808Z todo → wip (system)
+- 2026-09-07T23:58:19.397Z wip → testing (system)
+- 2026-09-08T00:00:10.481Z testing → done (system)
+
