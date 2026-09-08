@@ -37,7 +37,7 @@ bootstrap:
       # alone never does. Checkpoint resume + the rollup-freshness short-circuit
       # keep a no-op tick cheap (I81).
       - name: history-refresh
-        cron: "*/15 7-23 * * *"
+        cron: "*/20 7-23 * * *"
         command: bun apps/cli/src/index.ts --no-logo history daily
 
       # 05:00 daily: full-corpus import (checkpoint resume self-heals gaps),
@@ -75,7 +75,8 @@ agent:
   executors:
     - name: pi-dsv4-flash-volc
       agent: pi
-      # tier: standard
+      tier: standard
+      disabled: false
       executionCapabilities:
         version: 1
         axes:
@@ -90,6 +91,8 @@ agent:
             provenance: native-known
     - name: pi-zai
       agent: pi
+      tier: standard
+      disabled: false
       executionCapabilities:
         version: 1
         axes:
