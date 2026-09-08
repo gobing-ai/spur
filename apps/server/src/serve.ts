@@ -524,10 +524,12 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             let jobWorker: JobWorkerService<unknown> | undefined;
 
             // 0799 R5: the ONE project-scoped quota-update consumer starts BEFORE
-            // autostart or any dispatch acceptance, so pending durable updates
-            // (including work emitted by CLI runs while the server was offline)
-            // apply through setProjectExecutorDisabled before supervised agents
-            // can select executors. The consumer owns the exhaustion/recovery
+            // autostart or any dispatch acceptance, so exhaustion/recovery
+            // events (including CLI work emitted while the server was offline)
+            // are subscribed before supervised agents can select executors.
+            // Pending rows drain on the 30s poll cadence, not synchronously at
+            // startup (dogfood 54D294E4D301 F1); the disable lands at the next
+            // launch boundary. The consumer owns the exhaustion/recovery
             // subscriptions and drains them serially; startup failure is logged
             // and non-fatal so the server still serves (rows stay pending and
             // retry on the next start).
