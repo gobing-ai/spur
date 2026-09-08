@@ -4129,4 +4129,184 @@ describe('disabled executors (0796)', () => {
         const exitCode = await svc.doctor({ json: false }, { doctorRunner });
         expect(exitCode).toBe(0);
     });
+
+    test('R5: successful role JSON places the enabled elected executor first and still lists the disabled row', async () => {
+        const { lines, output } = captureOutput();
+        const cfg: AgentConfig = {
+            default: 'coder',
+            executors: [
+                { name: 'retired', agent: 'codex', tier: 'standard', disabled: true },
+                { name: 'live', agent: 'omp', tier: 'standard', disabled: false },
+            ],
+        };
+        const svc = makeConfiguredService(cfg, {}, roleMap(), output);
+        const runAll = mock(() => Promise.resolve([mockDoctorResult({ agent: 'live', usable: true })]));
+        const runOne = mock((name: string) => Promise.resolve(mockDoctorResult({ agent: name, usable: true })));
+        const doctorRunner = { runAll, runOne } as unknown as AgentRunDeps['doctorRunner'];
+        const exitCode = await svc.doctor({ json: true, agent: 'coder' }, { doctorRunner });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lines.find((l) => l.includes('"agents"')) ?? '{}') as {
+            agents: Array<{ agent: string; disabled: boolean; usable: boolean }>;
+        };
+        expect(parsed.agents[0]?.agent).toBe('live');
+        expect(parsed.agents[0]?.disabled).toBe(false);
+        expect(parsed.agents[0]?.usable).toBe(true);
+        const retired = parsed.agents.find((row) => row.agent === 'retired');
+        expect(retired).toMatchObject({ agent: 'retired', disabled: true, usable: false });
+        expect(runAll).toHaveBeenCalledTimes(1);
+        expect(runOne.mock.calls.every((call) => call[0] !== 'codex')).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: in-run quota exclusion (0799 / ADR-111 R3/R14)
+describe('in-run quota exclusion (0799 R3)', () => {
+    const quotaConfig: AgentConfig = {
+        executors: [
+            { name: 'std-exec', agent: 'pi', tier: 'standard', disabled: false },
+            { name: 'capable-exec', agent: 'claude', tier: 'capable-1', disabled: false },
+        ],
+    };
+
+    test('a correlated quota event escalates as resource-exhaustion even when stderr is generic', async () => {
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const { errors, output } = captureOutput();
+        const svc = new AgentService({
+            cwd: process.cwd(),
+            env: {},
+            output,
+            agentConfig: quotaConfig,
+            events: bus,
+            roles: roleMap(),
+        });
+        let callIndex = 0;
+        const runPromptCommand = mock(
+            async (
+                _agent: string,
+                _opts: unknown,
+                extras?: { correlation?: { runId?: string }; quotaContext?: { executor?: string } },
+            ) => {
+                const idx = callIndex++;
+                if (idx === 0) {
+                    await bus.emit('agent.quota.exhausted', {
+                        attribution: { executor: extras?.quotaContext?.executor ?? 'std-exec' },
+                        correlation: { runId: extras?.correlation?.runId },
+                    });
+                    return makeRunResult({ exitCode: 1, stderr: 'provider said nope' });
+                }
+                return makeRunResult({ exitCode: 0 });
+            },
+        );
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
+
+        const code = await svc.run('Implement the task', { agent: 'auto', role: 'coder', json: false }, deps);
+
+        expect(code).toBe(0);
+        expect(runPromptCommand.mock.calls.map((call) => call[0] as string)).toEqual(['pi', 'claude']);
+        expect(
+            (runPromptCommand.mock.calls[0]?.[2] as { quotaContext?: { executor?: string } } | undefined)?.quotaContext
+                ?.executor,
+        ).toBe('std-exec');
+        expect(errors.some((line) => line.includes('Escalating: std-exec'))).toBe(true);
+        expect(errors.some((line) => line.includes('resource-exhaustion'))).toBe(true);
+        expect(errors.some((line) => line.includes('retrying on capable-exec'))).toBe(true);
+    });
+
+    test('a stage-sourced dispatch also attaches quotaContext and escalates on a correlated quota event', async () => {
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const { errors, output } = captureOutput();
+        const svc = new AgentService({
+            cwd: process.cwd(),
+            env: {},
+            output,
+            agentConfig: quotaConfig,
+            events: bus,
+        });
+        let callIndex = 0;
+        const runPromptCommand = mock(
+            async (
+                _agent: string,
+                _opts: unknown,
+                extras?: { correlation?: { runId?: string }; quotaContext?: { executor?: string } },
+            ) => {
+                const idx = callIndex++;
+                if (idx === 0) {
+                    await bus.emit('agent.quota.exhausted', {
+                        attribution: { executor: extras?.quotaContext?.executor ?? 'std-exec' },
+                        correlation: { runId: extras?.correlation?.runId },
+                    });
+                    return makeRunResult({ exitCode: 1, stderr: 'provider said nope' });
+                }
+                return makeRunResult({ exitCode: 0 });
+            },
+        );
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
+
+        const code = await svc.run('Implement the task', { agent: 'auto', stage: 'implement', json: false }, deps);
+
+        expect(code).toBe(0);
+        expect(
+            (runPromptCommand.mock.calls[0]?.[2] as { quotaContext?: { executor?: string } } | undefined)?.quotaContext
+                ?.executor,
+        ).toBe('std-exec');
+        expect(runPromptCommand.mock.calls.map((call) => call[0] as string)).toEqual(['pi', 'claude']);
+        expect(errors.some((line) => line.includes('resource-exhaustion'))).toBe(true);
+    });
+
+    test('an uncorrelated quota event does not escalate a generic failure', async () => {
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const { errors, output } = captureOutput();
+        const svc = new AgentService({
+            cwd: process.cwd(),
+            env: {},
+            output,
+            agentConfig: quotaConfig,
+            events: bus,
+            roles: roleMap(),
+        });
+        const runPromptCommand = mock(
+            async (
+                _agent: string,
+                _opts: unknown,
+                extras?: { correlation?: { runId?: string }; quotaContext?: { executor?: string } },
+            ) => {
+                await bus.emit('agent.quota.exhausted', {
+                    attribution: { executor: extras?.quotaContext?.executor ?? 'std-exec' },
+                    correlation: { runId: 'not-this-run' },
+                });
+                return makeRunResult({ exitCode: 1, stderr: 'provider said nope' });
+            },
+        );
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
+
+        const code = await svc.run('Implement the task', { agent: 'auto', role: 'coder', json: false }, deps);
+
+        expect(code).toBe(3);
+        expect(runPromptCommand).toHaveBeenCalledTimes(1);
+        expect(errors.some((line) => line.includes('Escalating:'))).toBe(false);
+    });
 });
