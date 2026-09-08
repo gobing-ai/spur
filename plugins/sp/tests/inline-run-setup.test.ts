@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 /**
- * Task 0804 R7/P2 (SECUA): the inline run setup delegate writes
+ * Task 0804 R8/P2 (SECUA): the inline run setup delegate writes
  * `.spur/run/<run-id>-inline-setup.json`, so `--run-id` must be validated as a single safe
  * filename component BEFORE any outcome write — the same refusal class the task-pipeline
  * route-reason shell action applies to `$__runId` (task 0804 R8): path separators, dot

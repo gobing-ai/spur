@@ -110,8 +110,10 @@ For answer files, emit a matching parseable table:
 `Verdict: PARTIAL` first, append one complete row at a time, and replace the first verdict line only
 after every row is certified. `verify-answer-lint.ts` gates the file before `spur task verdict
 --from-answer` and rejects, with row-level diagnostics: missing/duplicate/unknown requirement IDs,
-AC ids that do not exactly match a task AC checklist label (or its leading token, e.g. `AC1`) or a
-linked feature scenario title, invalid status (`MET | PARTIAL | UNMET` for requirements;
+AC ids that do not resolve to one accepted identity — a task AC checklist label or its declared
+`AC-N`/checklist-token alias, or a linked feature scenario title, in the ac-style-guide forms
+(exact/bare title, `Scenario:` prefix, bracket tags, `AC-N`); paraphrases and ambiguous aliases
+fail — invalid status (`MET | PARTIAL | UNMET` for requirements;
 `N/A` additionally allowed for AC), invalid evidence type (`test | command | static-ref |
 manual-review | llm-judge | n/a`, or a `+` compound), and empty evidence. Interrupted runs keep the
 rows that pass the lint and complete only the missing IDs on retry.

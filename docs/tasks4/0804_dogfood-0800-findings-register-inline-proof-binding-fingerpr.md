@@ -4,7 +4,7 @@ name: Dogfood 0800 findings register — inline proof binding, fingerprint globs
 status: done
 template: issue
 created_at: 2026-09-08T00:53:08.613Z
-updated_at: "2026-09-08T19:40:15.872Z"
+updated_at: "2026-09-08T19:52:19.741Z"
 
 priority: P2
 ac_altitude: task-local
@@ -132,41 +132,14 @@ Current source evidence, distinguished from historical driver behavior:
 
 ### Solution
 
-Change-map (auto-generated — implement step did not record a Solution).
-Each entry cites the first changed line per file (`file:line`).
+#### Scope decision — installed-script delivery narrowed to fail-closed (review round-1 P4 disposition)
 
-| Change (`file:line`) |
-|----------------------|
-| `packages/app/src/index.ts:232` |
-| `packages/app/src/services/task-check.ts:333` |
-| `packages/app/src/services/task-check.ts:345` |
-| `packages/app/src/services/task-check.ts:347` |
-| `packages/app/src/services/task-check.ts:351` |
-| `packages/app/src/services/task-check.ts:355` |
-| `packages/app/src/services/task-check.ts:357` |
-| `packages/app/src/services/task-check.ts:384` |
-| `packages/app/src/services/task-check.ts:389` |
-| `packages/app/src/services/task-check.ts:393` |
-| `packages/app/src/services/task-check.ts:396` |
-| `packages/app/src/services/workflow-service.ts:1716` |
-| `packages/app/tests/services/task-check.test.ts:2920` |
-| `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:2` |
-| `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:345` |
-| `plugins/sp/scripts/verify-answer-lint.ts:260` |
-| `plugins/sp/scripts/verify-answer-lint.ts:313` |
-| `plugins/sp/scripts/verify-answer-lint.ts:317` |
-| `plugins/sp/scripts/verify-answer-lint.ts:319` |
-| `plugins/sp/scripts/verify-answer-lint.ts:321` |
-| `plugins/sp/scripts/verify-answer-lint.ts:375` |
-| `plugins/sp/scripts/verify-answer-lint.ts:378` |
-| `plugins/sp/scripts/verify-answer-lint.ts:440` |
-| `plugins/sp/scripts/verify-answer-lint.ts:457` |
-| `plugins/sp/scripts/verify-answer-lint.ts:466` |
-| `plugins/sp/scripts/verify-answer-lint.ts:478` |
-| `plugins/sp/scripts/verify-answer-lint.ts:479` |
-| `plugins/sp/scripts/verify-answer-lint.ts:481` |
-| `plugins/sp/scripts/verify-answer-lint.ts:507` |
-| `plugins/sp/tests/verify-answer-lint.test.ts:447` |
+Design R1's "cover installed-script delivery as well as repository execution" was deliberately
+narrowed: the delegate (`plugins/sp/scripts/inline-run-setup.ts:178`) resolves the app entry from a
+repository checkout only; on a bundle-only install it refuses with exit 1 and install remediation
+guidance (documented in the script header). Safe under R1's declared failure policy — no unbound
+fallback, no synthetic identity. If bundle-only inline pipelines become a supported surface, a
+follow-up must ship a bundled setup path.
 
 ### Testing
 
@@ -175,7 +148,7 @@ Each entry cites the first changed line per file (`file:line`).
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | `packages/app/src/services/inline-run-setup.ts:127` — `createOrAttachInlineRun`: resolve via shared `resolveWorkflowDefinition` `:136`, canonical digest, engine create via `DbWorkflowPersistenceAdapter` `:243-255` (fresh row `status: 'running'`, never synthetic done) + `runDao.stampRunIdentity` `:255` re-read this run; identity-checked attach refusals re-read at `:176` (no digest), `:184` (digest mismatch), `:193` (workflow name), `:205`/`:220` (source/workdir mismatch); fail-closed delegate `plugins/sp/scripts/inline-run-setup.ts:178-182` (result not ok → exit 1, no unbound fallback) re-read. Driver wiring `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:51-60` (delegate before any stage; missing script → fail closed with install remediation). Tests `cd packages/app && bun test tests/services/inline-run-setup.test.ts` → 10 pass / 0 fail this run. |
 | R2 | MET | Proof-window discipline now consistent across the whole doc set, re-read this run: `plugins/sp/skills/dogfood-testing/references/monitor-ledger.md:31-38` rule 3 — live-only append from first proof capture to final proof-sensitive action incl. done/provenance checks, mirror frozen mid-window, abort sync, finalize recovery from valid live, "missing live evidence cannot manufacture complete"; `plugins/sp/skills/dogfood-testing/SKILL.md:189-191` — mirror mandate now "unconditional **outside** a pipeline proof window; **inside** one the mirror stays **frozen**"; `plugins/sp/skills/dogfood-testing/references/report-template.md:30` — "promoted on open + every step + finalize" now carries the identical proof-window exception with cross-link. Grep this run: no unconditional per-step mirror mandate remains (`SKILL.md:189` and `report-template.md:30` are the only hits, both carrying the exception). `DEFAULT_EXCLUDE_GLOBS` unchanged `packages/app/src/workflow/proof-input-fingerprint.ts:172` (existing exclusions kept per R2; reports stay tracked and detectable — the superseding Design/Q&A decision, not D2's original exclusion prescription). |
 | R3 | MET | All five classifier sites re-read carrying the expanded path-aware alternation: `config/workflows/task-pipeline.yaml:346`, `:442`, `:558`, `:758`, `:805` (`database is locked |
@@ -187,7 +160,7 @@ Each entry cites the first changed line per file (`file:line`).
 | R9 | MET | `packages/app/src/services/task-check.ts:341-356` re-read — `extractSubjectTokens` blanks every parsed citation span `:352-356` before all bare-identifier scans; multi-anchor 0688 R2 policy kept `:347-351`; independent line-anchor validation untouched. Tests `cd packages/app && bun test tests/services/task-check.test.ts --test-name-pattern "0804"` → 4 pass / 0 fail this run (`:2925` snake_case, `:2934` CamelCase, `:2941` multi-anchor, `:2949` real absent symbol still reports). Guidance re-read: exact underscore-path citations preserved `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:224-229`; concrete-anchor rule `plugins/sp/skills/code-verification/SKILL.md:145` and `plugins/sp/skills/code-verification/references/verdict-schema.md:119-124`. Residual: the T10 unsuppressed `corpus-check` audit for this checker-policy change is still not evidenced in `.spur/run/` — owned by the task's Close plan item (round-1 and round-2 review dispositions unchanged); it gates implementation PASS at close, not this requirement. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
+| --------------------- | -------- | --------------- | ---------- |
 | AC1 | MET | test | `packages/app/tests/services/inline-run-setup.test.ts:127+` — "AC1: setup creates the authoritative row, and bound run.artifact record then ACCEPTS the inline run": exercises the real `createOrAttachInlineRun` path (not a hand-inserted row), asserts row/workflow/digest/definitionSource identity; siblings pin idempotent attach, changed-definition refusal, resume-digest precedence, different-workflow/project refusals, malformed-metadata and pre-identity refusals, empty runId, unresolvable workflow — 10 pass / 0 fail this run (`cd packages/app && bun test tests/services/inline-run-setup.test.ts`). |
 | AC2 [docs-only] | MET | static-ref | Protocol docs re-read this run: freeze window boundaries and live-only append incl. done/provenance scope and live-based finalize recovery `plugins/sp/skills/dogfood-testing/references/monitor-ledger.md:31-38`; mirror mandates conditional inside a proof window `plugins/sp/skills/dogfood-testing/SKILL.md:189-191` and `plugins/sp/skills/dogfood-testing/references/report-template.md:30`; tracked source/plan/report edits remain fingerprint inputs (exclusions unchanged, `packages/app/src/workflow/proof-input-fingerprint.ts:172`). Docs-authoring AC per Design R2 ("Update SKILL.md, monitor-ledger.md and report-template.md together") — evidence is the authored, mutually consistent content; no executable protocol surface was in scope, hence `[docs-only]` per the verdict-schema marker rule. |
 | AC3 | MET | test | `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts` --test-name-pattern "0804" — 5 pass / 0 fail this run: verbatim five-site alternation pin (`config/workflows/task-pipeline.yaml:346,442,558,758,805`), behavioral retry-once and quality-gate classifiers retry only lock-class failures (path-bearing busy message per `apps/cli/src/errors.ts:39-40`, raw locked text, SQLITE_BUSY; non-lock does not retry; first-attempt success never retries) within existing budgets (3×`sleep 2` `:347/:759/:806`, 2×`-ge 5`/`sleep 10` `:445-447`/`:561-563`). |
@@ -197,6 +170,7 @@ Each entry cites the first changed line per file (`file:line`).
 | AC7 [docs-only] | MET | static-ref | Cost doctrine re-read this run: scope/unknowns explicit and cache writes never hits (`plugins/sp/skills/dogfood-testing/SKILL.md:213-220,303-306,481-494`; `monitor-ledger.md:102,119-123,148-157,166-171`; `report-template.md:161-181,136`); percentages use the documented observable-rows denominator with worked example arithmetic verified (`monitor-ledger.md:233-234`, 2050/5750 → 36% + P3). Unknown usage alone generates the observability P3, not a false low-cache finding. Gate-log rule: status/bounded tail default, targeted excerpts allowed, logs stay on disk (pre-existing D8 baseline). Docs-authoring AC per Design R7 ("Align cost instructions in dogfood SKILL.md, monitor-ledger.md and report-template.md"; sample calculations verified; validate-report.ts explicitly not claimed as accounting proof) → `[docs-only]`. |
 | AC8 | MET | test | Proof-chain behavioral test "empty falls back, valid ids write, unsafe ids fail without a reason artifact (R8)" — pass in the 5-pass run above, executing the route-reason action in a temporary project: empty → `pipeline-$wbs`, valid UUID/timestamp-slug ids write expected paths, `$`/`{`/`}`/`vars.` and traversal/separator ids exit nonzero with no artifact; guard source `config/workflows/task-pipeline.yaml:283-288`. |
 | AC9 | MET | test | `packages/app/tests/services/task-check.test.ts:2925-2953` — 4 pass / 0 fail this run: snake_case/CamelCase fragments never subjects, tokenless-path rows match, multi-anchor rows lose every citation span, real subject outside the anchor still reports. Stale-path/invalid-range and terminal-record behavior untouched (pre-existing coverage green in the implement-stage full gate 7827/0; not re-run this round per stage contract). Guidance re-read: `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:224-229`, `plugins/sp/skills/code-verification/SKILL.md:145`, `plugins/sp/skills/code-verification/references/verdict-schema.md:119-124`. |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -258,6 +232,7 @@ Scope: verify the attempt-2 remediation hop against round-1 findings by reading 
 ### References
 
 Current-source anchors (checked 2026-09-08 at d37c1f6b3):
+
 - `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:49` — setup; `:206` — stale filename advice.
 - `packages/app/src/workflow/actions/run-artifact.ts:324` — authoritative identity refusal.
 - `packages/app/src/services/workflow-service.ts:698` — canonical definition digest injection.
@@ -282,3 +257,9 @@ Current-source anchors (checked 2026-09-08 at d37c1f6b3):
 - 2026-09-08T19:33:37.778Z wip → testing (system)
 - 2026-09-08T19:40:15.872Z testing → done (system)
 
+### Notes
+
+## Dogfood Findings (run c8c496fc, 2026-09-08)
+
+1. **[confirmed] Silent `runs`-row loss in a worktree lifecycle DB.** At record entry the worktree `.spur/spur.db` had zero `runs` rows while `task_run_links` still held this run's link row; no production `DELETE FROM runs` path exists in-tree. Recovery required reconstructing the row via `createOrAttachInlineRun` + launch-identity correction. Suspected gate-side DB rebuild during focused test runs (DB mtime moved mid-verify). Follow-up: instrument or guard against lifecycle-DB mutation outside the owning pipeline.
+2. **[working-as-designed, sharp edge] Definition-digest drift mid-run.** A pipeline task that legitimately modifies `config/workflows/task-pipeline.yaml` (this task's R3–R9) makes the record-stage bound `run.artifact` registration refuse with a stale-definition error (0785 R3) unless the 0784 R2 consented-drift stamp (`resumeDefinitionDigest`) is applied. The inline driver should stamp consented drift automatically when the authorized task itself authored the definition change, instead of requiring host-side manual recovery.
