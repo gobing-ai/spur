@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.42.0
+version: 1.43.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-09-07
@@ -353,7 +353,7 @@ enqueuing a duplicate, and a producer arriving while a refresh is `processing` r
 `already-running`. Consumption is server-side: `spur serve`'s job worker spawns the daily pipeline
 in an isolated child process (E31 below). Coalescing shapes in `04 §3`.
 
-### History refresh process isolation (ADR-101; built — 0716–0717)
+### History refresh process isolation (ADR-101; built — 0716–0717, 0803)
 
 E31 moves only the expensive execution across an OS-process seam. Schedule, completion, and Board
 manual producers converge on the existing app-layer history enqueue function. A partial unique
@@ -369,7 +369,19 @@ artifact, which outgrew the handler's output bound on 2026-08-30 and failed heal
 Awaiting preserves queue completion/retry truth while the child process isolates
 synchronous filesystem and `bun:sqlite` work from the Hono/oRPC event loop. The child and server
 share the WAL database; the 30-second SQLite busy timeout (`SQLITE_BUSY_TIMEOUT_MS`) bounds lock
-contention. Concrete
+contention.
+
+Task 0803 bounds the periodic child so a wedged run cannot pin the shared write lock: both the
+`history.refresh` and `scheduler.custom` spawn sites run the child under the daemon-resolved
+`SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` watchdog (default 600,000 ms), killing it at the deadline with a
+timeout-labelled failure; the `importAll` fan-out aborts after two consecutive source failures
+classified as `SQLITE_BUSY` instead of burning each remaining source's 30s `busy_timeout`; and the
+daily retention pass checkpoints the WAL `PASSIVE` (exclusive TRUNCATE stays on the manual
+`spur self maintain` path). A `processing` row older than the timeout is failed in place by the next
+scheduler tick (`swept: true`) and a fresh job enqueued on that same tick, with the tick enqueue
+carrying `maxRetries: 1` so a failed attempt goes terminal instead of suppressing later ticks.
+
+Concrete
 payload, enqueue-result, process, and transport shapes live in
 `docs/design/history-refresh-process-isolation.md`.
 

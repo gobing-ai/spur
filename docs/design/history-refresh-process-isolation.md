@@ -1,6 +1,6 @@
 # History Refresh Process Isolation and Single-Flight Execution
 
-**Status:** Accepted; built — 0716 single-flight, 0717 process isolation  
+**Status:** Accepted; built — 0716 single-flight, 0717 process isolation, 0803 watchdog/bounded-BUSY/PASSIVE bounds  
 **Date:** 2026-08-29  
 **Feature:** E31  
 **Decision:** ADR-101
@@ -110,7 +110,8 @@ retain their existing multiplicity.
 4. Assert the queue handler reads `job.payload`, preserves `full` mode and trigger/window metadata,
    and rejects non-zero or malformed child results.
 5. Run server and child against one WAL database; verify lock waits are bounded by the existing
-   5-second `busy_timeout` and failures remain visible without blocking the server event loop.
+   30-second `busy_timeout` (`SQLITE_BUSY_TIMEOUT_MS`, `packages/domain/src/db.ts`) and failures
+   remain visible without blocking the server event loop.
 
 ## As-built (0716–0717)
 
@@ -128,6 +129,12 @@ retain their existing multiplicity.
   schedule ticks; unifying the producer changes the old scheduler-only value of 1 intentionally.
 - The server queue visibility timeout is two hours, covering six sequential ten-minute source bounds
   plus analysis. The upstream 30-second default must not reset and reclaim a live refresh row.
+- Task 0803 watchdog: the child runs under the daemon-resolved `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS`
+  (default 600,000 ms); `handleHistoryRefreshJob` passes `timeout: deps.timeoutMs ??
+  SCHEDULER_CUSTOM_TIMEOUT_MS` into its `executor.run`, and a kill at the deadline throws the
+  timeout-labelled `history refresh child timed out after <n>ms (killed)` instead of the generic
+  terminated message — a wedged child can no longer hold the WAL write lock for the full
+  two-hour visibility window.
 - `history daily` parses the context env before creating the event bus/ledger (malformed context exits 1
   before any import); when present it selects and stamps the resolved `importMode` plus `trigger`/window
   (`coverage` on import) onto its existing `history.*` events. Absent env: interactive behavior unchanged.
