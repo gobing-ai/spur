@@ -66,18 +66,40 @@ One shared capability in `packages/app`, consumed at both persistence seams:
 events are history-visible on the next load/refresh rather than streamed live. Closing that needs
 a wildcard/`onAny` in ts-infra's EventBus — upstream follow-up, explicitly out of scope.
 
+**Shutdown policy (accepted, task 0802 R2/D1):** server-side uncataloged persists are
+best-effort and lossy-on-shutdown — the server installs no drain for the catch-all or the
+cataloged tap, so in-flight rows are discarded when the process exits; the CLI ledger path is the
+durable seam (it drains both). A graceful-shutdown drain is separate scope.
+
 ### D4 — Drift audit surface
 
 The promotion list is derived, not stored, from two artifacts this task emits:
 
 1. **Warn logs:** `system_events.uncataloged`, warn-logged exactly once per uncataloged name per
    process at first successful persist (R11/Q4) — a cheap live signal during a session.
+
+   **Dedup scope (task 0802 R7):** the once-per-name warn is deduplicated by a `Set` that lives
+   inside `createSystemEventCatchAllSink` — per sink (≈ per process, one sink per attach point),
+   not global. Two attach points (server boot + CLI ledger) therefore each warn once per name, and
+   a restarted process warns again. That is deliberate: the dedup bounds log noise within one
+   process lifetime, while the per-process repetition after a restart is the intended drift signal.
 2. **Ledger rows:** persisted rows carry `renderer = 'generic'` via the history endpoint's catalog
    metadata. The operational promotion-list query is therefore "distinct event names in the history
    endpoint whose catalog metadata is absent (or whose renderer is `generic`)" — i.e.
    `SELECT DISTINCT event_name … WHERE renderer = 'generic'` semantics over the ledger, surfaced
    through `/api/events/history`'s `catalog` metadata. A dedicated CLI verb is deferred until the
    list proves recurrent.
+
+## Accepted deviations
+
+### D5 — `matchesClientFilter` stays exported (Q3 letter-deviation, task 0802 R3/D2)
+
+`matchesClientFilter` (SystemEventsTab.tsx:604) is exported solely for the task-0794 R7 test; all
+ production call sites are internal to the module. The 0794 review's Q3 letter listed the export
+ as a deviation. **Accepted as-is:** the function is pure and behavior-inert when exported, and
+ testing through the module surface would force DOM renders for what is a pure predicate. The
+ deviation is recorded rather than "fixed" — un-exporting trades a clean test seam for no runtime
+ difference.
 
 ## Blast radius
 

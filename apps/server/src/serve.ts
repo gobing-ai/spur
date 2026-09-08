@@ -508,6 +508,13 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                     // persist through the same DAO/quotas/secrets/project
                     // context; cataloged names stay tap-owned, so no duplicate
                     // row. Installed once per process (idempotent wrapper, Q4).
+                    // Best-effort, lossy-on-shutdown (task 0802 R2 / D1): like
+                    // the cataloged tap below, in-flight uncataloged persists are
+                    // discarded when the server exits — there is no shutdown
+                    // drain for either sink. Documented, not drained: a
+                    // catch-all-only drain would not close the loss window and
+                    // would add the asymmetry 0794 deliberately avoided. The CLI
+                    // ledger path is the durable seam (it drains both).
                     installSystemEventCatchAll(
                         ctx.eventBus(),
                         createSystemEventCatchAllSink({
