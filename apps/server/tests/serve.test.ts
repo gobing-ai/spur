@@ -622,10 +622,13 @@ describe('startServer', () => {
             },
         });
 
-        await startServer({ port: 5004, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: b }, deps);
-
-        if (prevSkipGlobal === undefined) delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
-        else process.env.SPUR_SKIP_GLOBAL_CONFIG = prevSkipGlobal;
+        try {
+            await startServer({ port: 5004, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: b }, deps);
+        } finally {
+            if (prevSkipGlobal === undefined) delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
+            else process.env.SPUR_SKIP_GLOBAL_CONFIG = prevSkipGlobal;
+            rmSync(b, { recursive: true, force: true });
+        }
 
         expect(captured.fsRoot).toBe(b);
         expect(captured.ctxCwd).toBe(b);
