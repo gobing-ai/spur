@@ -4,7 +4,7 @@ name: Fix history-daily-report timeout containment, import stalls, budget mismat
 status: done
 template: issue
 created_at: 2026-09-08T15:14:51.554Z
-updated_at: "2026-09-08T17:47:50.628Z"
+updated_at: "2026-09-08T18:33:36.778Z"
 feature_id: A2
 priority: P1
 
@@ -21,6 +21,7 @@ Investigate and repair the 2026-09-08 history-daily-report incident as one issue
 Incident: queue job d35d528c-5747-4b3b-8336-3da646a95f3a, scheduler.custom, attempts 1/1. Queued 2026-09-08 05:00:00.059 PDT; failed 07:02:56.333 PDT. Config: .spur/config.yaml:48-53 runs source-local history import --source all && workflow run config/workflows/history-anatomy.yaml --quiet && self maintain.
 
 Read-only evidence captured 2026-09-08:
+
 - .spur/spur.db queue_jobs has processing_at=NULL and last_error "timed out after 600000ms (killed)" followed by the import summary and exit_code: 0.
 - The matching queue.job.failed event at 2026-09-08T14:02:56.334Z records handler durationMs=7375452.334167 (122.924 minutes), implying handler start about 05:00:00.882 PDT. This was not a two-hour wait before execution.
 - .spur/logs/spur.log:24552-24556 starts builtin:user-callback at 12:00:01.194Z and only reaches the following builtin:scheduler startup/shutdown at 14:02:56.321Z. apps/cli/src/index.ts:115-126 awaits command dispatch inside user-callback before bootstrap finishes. This places the long interval in the import command callback rather than a proven workflow-agent stall.
@@ -142,7 +143,7 @@ Change-map (auto-generated — implement step did not record a Solution).
 Each entry cites the first changed line per file (`file:line`).
 
 | Change (`file:line`) |
-|----------------------|
+| ---------------------- |
 | `apps/server/src/modules/jobs/index.ts:15` |
 | `apps/server/src/modules/jobs/index.ts:158` |
 | `apps/server/src/modules/jobs/index.ts:2` |
@@ -249,26 +250,27 @@ Each entry cites the first changed line per file (`file:line`).
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | `bounded-child-run.ts:105-162` deadline abort signals the detached process group; `:87-95` negative-pid SIGKILL escalation after grace (`:35` default 5000ms, `:42` env-resolved); honest deadline/elapsed/terminationReason `:136-162`. Real SIGTERM-resistant descendant reaped <1s: `packages/app/tests/services/bounded-child-run.test.ts:101-120`; serve-level deadline kills both handlers: `apps/server/tests/serve.test.ts:1180-1185` |
-| R2 | MET | Per-source deadline race emits `source-timeout` and measures spend: `history-service.ts:1014-1075` (warning `:1051`); whole-run abort before the next source starts `:883-890`; rollup outcome surfaced as `rollup-refresh-failed` + `rollupRefresh` marker `:914-938` (no longer swallowed); per-source `durationMs` on CoverageEntry `packages/domain/src/analytics/artifact.ts:76`. Hung-source regression: `packages/app/tests/services/history-service.test.ts:1413-1443` |
-| R3 | MET | Per-job budget `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` with safe fallback `scheduler-custom-job-service.ts:99-124`, wired per handler `apps/server/src/serve.ts:730-731`; refresh watchdog decoupled via `SPUR_HISTORY_REFRESH_TIMEOUT_MS` `history-refresh-service.ts:260-267` (`serve.ts:713`); stale sweep = effective budget + kill grace `serve.ts:235-255`; tests `job-exclusion-guard.test.ts:53-79`, sweep asserts 65000ms `serve.test.ts:1021` |
-| R4 | MET | Terminal rows enriched only from persisted `queue.job.*` evidence, never assigned enqueue time: `apps/server/src/modules/jobs/index.ts:27-87`, wired into GET /api/jobs `:155-163`; `queue.job.started` registered `event-names.ts:263` with presenter `:507-517`; started anchor with entityId `serve.ts:309-332` emitted for both child-spawning handlers `:703,722`; tests `apps/server/tests/modules/jobs/enrichment.test.ts:28-89` |
-| R5 | MET | `describeBoundedFailure` names configured deadline vs measured elapsed vs termination reason and flags tail exit_code as subcommand-only `bounded-child-run.ts:166-193`; queued→started→terminal correlation via `emitQueueJobStarted` `serve.ts:309-332` + `event-names.ts:263,507`; bounded redacted detail: 400-char tails `scheduler-custom-job-service.ts:131-141`, 1MB output cap `:128`, command text never logged; tests `bounded-child-run.test.ts:31-89`, real kills `serve.test.ts:1180-1185` |
-| R6 | MET | Cross-kind exclusive guard + history-producer stamp predicate `job-exclusion-guard.ts:19-70`; refresh acquires/releases around the child `history-refresh-service.ts:296-312`; scheduler handler acquires `scheduler-custom-job-service.ts:189-193,224`; enqueue-side stamping `serve.ts:285-290` (asserted `serve.test.ts:1032`); startup sweep of orphaned processing rows `serve.ts:736-744`; one-attempt policy retained `serve.ts:292` (`maxRetries: 1`); guard tests `job-exclusion-guard.test.ts:17-51` |
-| R7 | MET | Success-path import→report→maintenance ordering preserved in config ownership (`&&` chain untouched in `.spur/config.yaml`); killed chain explicitly records "later configured stages did not run" `bounded-child-run.ts:181-190` (tested `bounded-child-run.test.ts:75-89`); documented skipped-maintenance/safe-cleanup policy `docs/04_DESIGN.md:1252-1256`; manual deep-maintenance code untouched |
-| R8 | MET | New suites: `bounded-child-run.test.ts` (6 tests), `job-exclusion-guard.test.ts` (8), `apps/server/tests/modules/jobs/enrichment.test.ts` (3); updated regressions in `history-service.test.ts:1413-1443`, `history-refresh-service.test.ts:440-466`, `scheduler-custom-job-service.test.ts`, `serve.test.ts:1014-1192`; docs synced `docs/04_DESIGN.md:1233-1266`, `docs/design/event-tracking.md:54,273`; gate `bun run spur-check` PASS 7815 pass / 0 fail `.spur/run/0806-test-gate.log:360-361`, proof digest sha256:e3d2f94b33682696d7cfd38d10495d6873b884e97f92b93e3efc4e777bd37571 |
+| ------------- | -------- | ---------- |
+| R1 | MET | packages/app/src/services/bounded-child-run.ts:105-157 group containment + :87-98 SIGKILL escalation; packages/app/tests/services/bounded-child-run.test.ts:101-116 SIGTERM-resistant descendant reaped <1s (fresh pass); apps/server/tests/serve.test.ts:1178-1185 both handlers fail within deadline+grace (fresh pass) |
+| R2 | MET | packages/app/src/services/history-service.ts:1022-1074 per-source deadline race + source-timeout warning; :883-888 whole-run abort; :914-930 rollup outcome surfaced; packages/domain/src/analytics/artifact.ts:71-76 durationMs; packages/app/tests/services/history-service.test.ts:1413-1443 (fresh pass) |
+| R3 | MET | packages/app/src/services/scheduler-custom-job-service.ts:99-123 per-job budget; apps/server/src/serve.ts:727-731 wiring; packages/app/src/services/history-refresh-service.ts:253-265 decoupled refresh watchdog; apps/server/src/serve.ts:231-235,250-265 sweep = budget + grace; apps/server/tests/serve.test.ts:1017-1021 asserts 65000ms (fresh pass) |
+| R4 | MET | apps/server/src/modules/jobs/index.ts:27-87 enrichment never invents startedAt, wired :158-164; apps/server/src/serve.ts:306-333 started anchor; packages/app/src/services/event-names.ts:263,507-518; apps/server/tests/modules/jobs/enrichment.test.ts (3 pass, fresh) |
+| R5 | MET | packages/app/src/services/bounded-child-run.ts:166-181 deadline/elapsed/reason separated + subcommand tail flag; apps/server/src/serve.ts:309-333 emitQueueJobStarted; packages/app/src/services/scheduler-custom-job-service.ts:126,131-135 bounded redacted tails, command never logged; packages/app/tests/services/bounded-child-run.test.ts:75-88 (fresh pass) |
+| R6 | MET | packages/app/src/services/job-exclusion-guard.ts:27-59 cross-kind guard + stamp predicate; packages/app/src/services/history-refresh-service.ts:299,317 acquire/release; packages/app/src/services/scheduler-custom-job-service.ts:188-191,223; apps/server/src/serve.ts:286-290 stamp, :292 maxRetries 1, :736-744 startup sweep; packages/app/tests/services/job-exclusion-guard.test.ts (fresh pass) |
+| R7 | MET | packages/app/src/services/bounded-child-run.ts:178-179 killed chain records later configured stages did not run (tested packages/app/tests/services/bounded-child-run.test.ts:75-88, fresh pass); && chain ordering preserved; docs/04_DESIGN.md:1252-1256 documented policy; manual deep maintenance untouched |
+| R8 | MET | Fresh this run: bun run test 7815 pass / 0 fail; biome 936 files clean; typecheck 7/7; bun run build PASS; spur rule run --preset recommended-pre-check 45/45 PASS; focused suites 62+3+43+1 pass; docs/04_DESIGN.md:1233-1266 + docs/design/event-tracking.md:54,273 synced |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| R1 — A shell timeout terminates descendants and releases the worker | MET | test | `packages/app/tests/services/bounded-child-run.test.ts:101-120` (SIGTERM-resistant descendant reaped <1s, timeout classification), `apps/server/tests/serve.test.ts:1180-1185` (both handlers fail within deadline+grace) |
-| R2 — Source and rollup work has an honest bounded outcome | MET | test | `packages/app/tests/services/history-service.test.ts:1413-1443` (hung source: budget kill, `source-timeout`, remaining sources not started); rollup failure surfaced `history-service.ts:914-938` |
-| R3 — Report and refresh budgets are consistent | MET | test | `packages/app/tests/services/job-exclusion-guard.test.ts:53-79` (per-job override, invalid falls back, refresh watchdog decoupled); sweep = budget + grace `apps/server/tests/serve.test.ts:1021` |
-| R4 — Terminal and retried job timing stays truthful | MET | test | `apps/server/tests/modules/jobs/enrichment.test.ts:28-89` (duration from terminal event, start only from started anchor, non-terminal/known rows untouched, dao failure degrades); rows without evidence stay null `apps/server/src/modules/jobs/index.ts:73-86` |
-| R5 — Ordinary diagnostics explain the failing stage | MET | test | `packages/app/tests/services/bounded-child-run.test.ts:31-89` (deadline/elapsed/reason separated; tail flagged subcommand-only), `apps/server/tests/serve.test.ts:1180-1185` (started event emitted; killed handler message carries both numbers) |
-| R6 — Recovery cannot overlap an abandoned importer | MET | test | `packages/app/tests/services/job-exclusion-guard.test.ts:17-51` (second acquire fails its own run with owner named); stamp at enqueue `apps/server/tests/serve.test.ts:1032`; startup + tick sweep `serve.ts:235-255,736-744` |
-| R7 — Maintenance policy preserves chain semantics | MET | test | `packages/app/tests/services/bounded-child-run.test.ts:75-89` (killed chain records later configured stages did not run); success-path `&&` ordering and manual maintenance unchanged; policy documented `docs/04_DESIGN.md:1252-1256` |
-| R8 — Evidence and gates cover the repaired execution path | MET | command | `bun run spur-check` PASS: 7815 pass / 0 fail (`.spur/run/0806-test-gate.log:360-361`), proof digest sha256:e3d2f94b33682696d7cfd38d10495d6873b884e97f92b93e3efc4e777bd37571 |
+| --------------------- | -------- | --------------- | ---------- |
+| R1 — A shell timeout terminates descendants and releases the worker | MET | test | packages/app/tests/services/bounded-child-run.test.ts:101-116; apps/server/tests/serve.test.ts:1178-1185 (fresh pass) |
+| R2 — Source and rollup work has an honest bounded outcome | MET | test | packages/app/tests/services/history-service.test.ts:1413-1443 (fresh pass); packages/app/src/services/history-service.ts:914-930 |
+| R3 — Report and refresh budgets are consistent | MET | test | apps/server/tests/serve.test.ts:1017-1021 (fresh pass); packages/app/src/services/scheduler-custom-job-service.ts:114-123; packages/app/src/services/history-refresh-service.ts:260-265 |
+| R4 — Terminal and retried job timing stays truthful | MET | test | apps/server/tests/modules/jobs/enrichment.test.ts (3 pass, fresh); apps/server/src/modules/jobs/index.ts:79-86 |
+| R5 — Ordinary diagnostics explain the failing stage | MET | test | packages/app/tests/services/bounded-child-run.test.ts:75-88; apps/server/tests/serve.test.ts:1178-1185 (fresh pass); apps/server/src/serve.ts:309-333 |
+| R6 — Recovery cannot overlap an abandoned importer | MET | test | packages/app/tests/services/job-exclusion-guard.test.ts (fresh pass); apps/server/tests/serve.test.ts:1024-1036; apps/server/src/serve.ts:250-265,736-744 |
+| R7 — Maintenance policy preserves chain semantics | MET | test | packages/app/tests/services/bounded-child-run.test.ts:75-88 (fresh pass); docs/04_DESIGN.md:1252-1256 |
+| R8 — Evidence and gates cover the repaired execution path | MET | command | Fresh this run: bun run test 7815/0; biome clean; typecheck 7/7; build PASS; rule run 45/45 PASS; focused suites 62+3+43+1 pass |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -302,9 +304,11 @@ Architecture: `bounded-child-run.ts` is a deep 4-symbol module; process-tree fac
 ### References
 
 Run from project root (safe, no database writes, no model calls):
+
 ```sh
 bun -e 'import{NodeProcessExecutor}from"@gobing-ai/ts-runtime";const start=performance.now();const r=await new NodeProcessExecutor().run({command:"/bin/sh",args:["-c","sleep 2; echo descendant-survived"],timeout:100,forceBuffered:true,rejectOnError:false});const elapsed=performance.now()-start;console.log(JSON.stringify({elapsedMs:Math.round(elapsed),exitCode:r.exitCode,signal:r.signal,stdout:r.stdout,durationMs:r.durationMs}));if(elapsed>1000||r.stdout.includes("descendant-survived")){console.error("FAIL: shell timeout did not bound descendant lifetime/output");process.exitCode=1;}'
 ```
+
 Observed: exit 1; elapsedMs=2018, exitCode=null, signal=Termination, stdout="", durationMs=2017.4345. This is a minimized descendant/pipe-wait reproduction, not a benchmark for a future SIGTERM grace policy; the final regression must assert the chosen deadline-plus-grace bound and descendant/lock cleanup explicitly.
 
 References: task 0803 (prior watchdog/lock remediation), 0734 (configured scheduler jobs), 0750 (schedule consolidation), 0717 (history child isolation), 0792 (Jobs projection), 0660 (report workflow); E31 process isolation/single-flight feature. Evidence anchors and installed package paths are in Background and Root Cause. The failed historical run was not replayed; no fix or implementation verify PASS is claimed.
@@ -314,4 +318,3 @@ References: task 0803 (prior watchdog/lock remediation), 0734 (configured schedu
 - 2026-09-08T17:12:30.190Z todo → wip (system)
 - 2026-09-08T17:45:38.615Z wip → testing (system)
 - 2026-09-08T17:47:50.628Z testing → done (system)
-
