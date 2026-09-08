@@ -236,13 +236,6 @@ export {
     runHistoryReport,
     UnsafeHistoryImporterError,
 } from './services/history-service';
-export {
-    acquireExclusiveJob,
-    HISTORY_PRODUCER_EXCLUSIVE_KEY,
-    historyProducerExclusiveKeyFor,
-    isExclusiveJobActive,
-    releaseExclusiveJob,
-} from './services/job-exclusion-guard';
 // Authoritative inline full-pipeline run identity (task 0804 R1)
 export type {
     InlineRunSetupFailure,
@@ -255,6 +248,13 @@ export {
     type InlineRunProjectDb,
     openInlineRunProjectDb,
 } from './services/inline-run-setup';
+export {
+    acquireExclusiveJob,
+    HISTORY_PRODUCER_EXCLUSIVE_KEY,
+    historyProducerExclusiveKeyFor,
+    isExclusiveJobActive,
+    releaseExclusiveJob,
+} from './services/job-exclusion-guard';
 export type { JobWorkerConsumer, JobWorkerServiceOptions } from './services/job-worker-service';
 export { JobHandlerRegistry, JobWorkerService } from './services/job-worker-service';
 export type {
