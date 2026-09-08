@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Emit precise attributed quota events from the shared agent runner
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-07T17:12:18.726Z
-updated_at: "2026-09-07T17:14:06.866Z"
+updated_at: "2026-09-08T00:05:33.320Z"
 feature_id: B5
 priority: P2
 tags:
@@ -20,6 +20,7 @@ tags:
 Spur's current resource-exhaustion classifier combines quota failures with throttling, overload and context limits. Persistent disabling needs a separate precise upstream observation contract shared by buffered and streaming execution. This task owns the upstream implementation and the verified integration handoff, not a Spur-only regex patch.
 
 Implements:
+
 - R10 — Confirmed quota failures emit one precise attributed event
 - R11 — Transient and unrelated failures never persistently disable executors
 
@@ -28,8 +29,8 @@ Rubric: E6 D1 L2 C2 R1 = 12; estimated 6h. Retain this cohesive deliverable; tes
 
 ### Requirements
 
-- [ ] R1. Implement reusable quota classification and agent.quota.exhausted event production in ts-ai-runner for supported instrumented invocation and opt-in health observation paths; emit once per observation with stable observationId, normalized observedAt, reason/evidenceSource and available exact project/executor/agent/model and run correlation. Define agent.quota.recovered and its explicit-recovery payload without an automatic producer.
-- [ ] R2. Do not classify generic HTTP 429, temporary throttling, overload, authentication, context/output limits, timeout, unknown errors or quoted prompt content as quota exhaustion; preserve original runner results and use the same precise classification for bounded streaming error records and buffered failures.
+- [x] R1. Implement reusable quota classification and agent.quota.exhausted event production in ts-ai-runner for supported instrumented invocation and opt-in health observation paths; emit once per observation with stable observationId, normalized observedAt, reason/evidenceSource and available exact project/executor/agent/model and run correlation. Define agent.quota.recovered and its explicit-recovery payload without an automatic producer.
+- [x] R2. Do not classify generic HTTP 429, temporary throttling, overload, authentication, context/output limits, timeout, unknown errors or quoted prompt content as quota exhaustion; preserve original runner results and use the same precise classification for bounded streaming error records and buffered failures.
 
 ### Acceptance Criteria
 
@@ -80,18 +81,57 @@ Preserve unrelated/concurrent edits. Start implementation in a clean isolated wo
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Deliverable implemented upstream (per task Design: upstream owner is @gobing-ai/ts-ai-runner; this Spur task records the verified handoff).
+
+Upstream: ts-libs branch `sp/quota-observation-0798`, commit `9285ab4` (base `60a98c2` = v0.4.56); upstream harness task **0065** (status done). Not bumped, not tagged, not pushed.
+
+Change map (upstream file:line):
+
+- packages/ai-runner/src/quota.ts (new): shared classifier (exact allowlist over structured error envelopes), bounded 8 KiB trailing evidence, buildQuotaObservation with deterministic sha256 observationId, normalizeObservedAt UTC-ms, QuotaObservationProducer (once per observationId), explicit-only produceRecovery
+- src/events.ts:39: AgentEvents += agent.quota.exhausted / agent.quota.recovered
+- src/ai-runner.ts:45 / :170 / :268: optional quotaContext; per-runner producer; buffered-path classification
+- src/team-agent-process.ts:53/:152: events+quotaContext options, bounded stderr tail, classify on errored exit
+- src/model-health-probe.ts:245: observeQuotaHealthResult — only opted-in health path produces observations; ordinary doctor read-only
+- src/index.ts: barrel export of ./quota
+
+Rationale: quota is narrower than resource-exhaustion; structured provider codes only, no prompt/transcript scanning; attribution optional upstream, exact when quotaContext supplied; recovery is a reserved contract with no producer/timer.
+
+Integration contract for 0799: exports QuotaExhaustionReason, QuotaEvidenceSource, QuotaAttribution, AgentQuotaObservation, AgentQuotaRecovery, QuotaClassification, QuotaHealthObservationOptions, classifyQuotaErrorRecord, buildQuotaObservation, normalizeObservedAt, MAX_QUOTA_EVIDENCE_BYTES, QuotaObservationProducer, observeQuotaHealthResult; AgentRunOptions.quotaContext, AgentProcessOptions.events/quotaContext. Requires the first release containing 9285ab4 (published 0.4.56 predates it); release is operator-gated.
+Full evidence: .spur/run/0798-upstream-report.md
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Upstream @gobing-ai/ts-ai-runner commit 9285ab4 (branch sp/quota-observation-0798): packages/ai-runner/src/quota.ts builds AgentQuotaObservation with deterministic sha256 observationId (stable across redelivery), normalizeObservedAt UTC-ms, reason/evidenceSource, exact QuotaAttribution (projectId/executor/agent/model) from optional AgentRunOptions.quotaContext (ai-runner.ts:45-52) and team/health paths; QuotaObservationProducer emits agent.quota.exhausted at most once per observationId; agent.quota.recovered payload type defined with explicit-only produceRecovery, no automatic producer. Upstream harness task 0065 done; tested package identity 0.4.56+9285ab4, version not bumped/published (release is operator-gated) |
+| R2 | MET | quota.ts classifies ONLY confirmed-exhaustion codes (insufficient_quota, insufficient_credit_balance, quota_exceeded, usage_limit_reached, credits_exhausted, billing_hard_limit_reached, provider_quota_exhausted) over structured JSON error envelopes; generic HTTP 429 rate_limit_error, overloaded_error, authentication_error, context-length, timeout, free text, quoted prompt content, non-JSON stderr all tested as negatives producing no event with original result intact; evidence bounded to trailing 8 KiB (MAX_QUOTA_EVIDENCE_BYTES); no successful-stdout or transcript scanning; same classifier drives buffered (ai-runner.ts:268-281), streaming/team (team-agent-process.ts:152-180) and opt-in health probe (model-health-probe.ts:245-286) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R10 — Confirmed quota failures emit one precise attributed event | MET | command | Upstream bun test packages/ai-runner: 217 pass / 0 fail (+35 quota fixtures: positives insufficient_quota/insufficient_credit_balance/usage_limit_reached across buffered, streaming subprocess and health-probe paths; one-event dedup per observationId; attribution exact when quotaContext present, observable without guessing when absent); bun run lint exit 0; bun run spur-check exit 0 (per-file 0.9 coverage gate); bun run build exit 0 |
+| R11 — Transient and unrelated failures never persistently disable executors | MET | command | Upstream negative-family fixtures each assert zero quota events with intact original result: rate_limit_error 429, overloaded_error, authentication_error, context-length, timeout, free-text quota mention, quoted prompt content, non-JSON stderr, successful run; classifier allowlist is exact-match over structured envelopes only — no quota event can arise from those families |
+
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-08T00:05:33.320Z todo → done (system)

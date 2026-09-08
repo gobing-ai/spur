@@ -1,4 +1,5 @@
 import type { Command } from '@commander-js/extra-typings';
+import type { AgentQuotaEventBus } from '@gobing-ai/spur-app';
 import {
     type MaterializeResult,
     type SystemEventBus,
@@ -9,6 +10,7 @@ import {
     type TeardownResult,
 } from '@gobing-ai/spur-app';
 import { EventBus } from '@gobing-ai/ts-infra';
+import { attachAgentQuotaPersistence } from '../agent-quota-persistence';
 import type { CliContext } from '../context';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { attachSystemEventLedger, type CliSystemEventLedger } from '../system-event-ledger';
@@ -111,7 +113,7 @@ export function registerTeamCommand(program: Command, context: CliContext): void
 /** `spur team assign <task-id> <agent-id>` */
 async function runTeamAssign(taskId: string, agentId: string, context: CliContext): Promise<number> {
     // CLI ledger so team.member.assigned reaches system_events without serve (0371 R6).
-    const { svc, ledger } = await makeTeamServiceWithLedger(context);
+    const { svc, ledger, quotaPersistence } = await makeTeamServiceWithLedger(context);
     try {
         await svc.assignTask(taskId, agentId);
         context.output.write(`assigned ${taskId} → ${agentId}`);
@@ -119,6 +121,8 @@ async function runTeamAssign(taskId: string, agentId: string, context: CliContex
     } finally {
         await ledger.flush();
         ledger.unsubscribe();
+        await quotaPersistence.flush();
+        quotaPersistence.unsubscribe();
     }
 }
 
@@ -390,11 +394,17 @@ function formatTeamBlock(team: TeamListing): string {
  * Same attach pattern as workflow/agent (task 0370): bus → registerSystemEventTap
  * → SystemEventDao. Mutations still succeed if the ledger attach fails.
  */
-async function makeTeamServiceWithLedger(
-    context: CliContext,
-): Promise<{ svc: TeamService; ledger: CliSystemEventLedger }> {
+async function makeTeamServiceWithLedger(context: CliContext): Promise<{
+    svc: TeamService;
+    ledger: CliSystemEventLedger;
+    quotaPersistence: ReturnType<typeof attachAgentQuotaPersistence>;
+}> {
     const bus = new EventBus() as SystemEventBus;
     const ledger = await attachSystemEventLedger(bus, context);
+    // 0799 R1: quota events from team lifecycle commands persist beside the
+    // ledger tap on the same bus; flushed by each command's `finally`.
+    // SAFETY: one structural ts-infra EventBus behind the nominal names (ADR-044).
+    const quotaPersistence = attachAgentQuotaPersistence(bus as unknown as AgentQuotaEventBus, context);
     const svc = new TeamService({
         ...context,
         // SAFETY: TeamServiceEventBus is structurally the same ts-infra EventBus (see workflow.ts:248).
@@ -402,8 +412,12 @@ async function makeTeamServiceWithLedger(
         // 0543 R1: role-only members resolve through the Layer-1 role table —
         // same map AgentService receives for `--agent <role>`.
         roles: context.agentRoles,
+        // 0799 R3: the launch boundary prefers a fresh merged config so a quota
+        // event applied by the updater gates this materialization immediately.
+        // The composition-root closure (ADR-082) owns the loader call.
+        reloadAgentConfig: () => context.loadAgentConfig(context.cwd),
     });
-    return { svc, ledger };
+    return { svc, ledger, quotaPersistence };
 }
 
 /** `spur team up <team> [--check] [--server <url>] [--json]` — materialize + best-effort start. */
@@ -412,7 +426,7 @@ async function runTeamUp(
     options: { check?: boolean; server: string; json?: boolean; jsonEnvelope?: boolean },
     context: CliContext,
 ): Promise<number> {
-    const { svc, ledger } = await makeTeamServiceWithLedger(context);
+    const { svc, ledger, quotaPersistence } = await makeTeamServiceWithLedger(context);
     try {
         let result: MaterializeResult;
         try {
@@ -446,6 +460,8 @@ async function runTeamUp(
     } finally {
         await ledger.flush();
         ledger.unsubscribe();
+        await quotaPersistence.flush();
+        quotaPersistence.unsubscribe();
     }
 }
 
@@ -455,7 +471,7 @@ async function runTeamDown(
     options: { purge?: boolean; server: string; json?: boolean; jsonEnvelope?: boolean },
     context: CliContext,
 ): Promise<number> {
-    const { svc, ledger } = await makeTeamServiceWithLedger(context);
+    const { svc, ledger, quotaPersistence } = await makeTeamServiceWithLedger(context);
     try {
         let result: TeardownResult;
         try {
@@ -481,5 +497,7 @@ async function runTeamDown(
     } finally {
         await ledger.flush();
         ledger.unsubscribe();
+        await quotaPersistence.flush();
+        quotaPersistence.unsubscribe();
     }
 }

@@ -705,6 +705,51 @@ describe('runAgentRun service wiring (0126 / 0370)', () => {
             rmSync(tempDir, { recursive: true, force: true });
         }
     });
+    test('runAgentRun with --drain fails loud on a spec pinned to a disabled executor (0796 R4)', async () => {
+        const tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-drain-disabled-'));
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const output = captureOutput();
+            const ctx = createCliContext({
+                cwd: tempDir,
+                output,
+                db,
+                agentConfig: {
+                    executors: [{ name: 'retired-exec', agent: 'codex', disabled: true }],
+                } as AgentConfig,
+            });
+
+            // Spec references an executor that exists but is disabled in config.
+            await saveAgentSpec(
+                {
+                    id: 'demo-disabled',
+                    name: 'Disabled',
+                    type: 'codex',
+                    executor: 'retired-exec',
+                    workspace: tempDir,
+                    purpose: 'off',
+                    tags: [],
+                    config: {},
+                },
+                join(tempDir, '.spur', 'agents'),
+            );
+
+            const run = mock(() => Promise.resolve(0));
+            const customCtx = {
+                ...ctx,
+                agentService: () => ({ run }) as unknown as ReturnType<CliContext['agentService']>,
+            };
+
+            // Exits non-zero naming the spec, the disabled flag and the enable fix;
+            // never relabeled as a dangling reference; no process spawns.
+            await expect(runAgentRun('prompt', customCtx, { drain: true, agent: 'demo-disabled' })).rejects.toThrow(
+                /Spec "demo-disabled" pins disabled executor "retired-exec" .*disabled: false/,
+            );
+            expect(run).not.toHaveBeenCalled();
+        } finally {
+            rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
 });
 
 describe('runAgentLoop', () => {

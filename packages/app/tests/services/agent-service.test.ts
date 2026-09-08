@@ -240,8 +240,8 @@ describe('AgentService.doctor', () => {
         const { lines, output } = captureOutput();
         const svc = makeService({}, output, {
             executors: [
-                { name: 'omp-dsv4-flash-volc', agent: 'omp' },
-                { name: 'pinned-capable', agent: 'omp', tier: 'capable-2' },
+                { name: 'omp-dsv4-flash-volc', agent: 'omp', disabled: false },
+                { name: 'pinned-capable', agent: 'omp', tier: 'capable-2', disabled: false },
             ],
         } as AgentConfig);
         const doctorRunner = {
@@ -489,8 +489,8 @@ describe('AgentService.doctor', () => {
         // to DoctorRunner so runAll() probes each executor's model health.
         const svc = makeService({}, nullOutput(), {
             executors: [
-                { name: 'omp-zai', agent: 'omp', model: 'zai/glm-5.2' },
-                { name: 'omp-deepseek', agent: 'omp', model: 'deepseek/deepseek-v4-pro' },
+                { name: 'omp-zai', agent: 'omp', model: 'zai/glm-5.2', disabled: false },
+                { name: 'omp-deepseek', agent: 'omp', model: 'deepseek/deepseek-v4-pro', disabled: false },
             ],
         });
         // The deps.doctorRunner mock bypasses real construction, but the
@@ -509,7 +509,7 @@ describe('AgentService.doctor', () => {
         // command emits a warning to stderr naming the executor and model.
         const { errors, output } = captureOutput();
         const svc = makeService({}, output, {
-            executors: [{ name: 'omp-zai-volc', agent: 'omp', model: 'volc/glm-5.2' }],
+            executors: [{ name: 'omp-zai-volc', agent: 'omp', model: 'volc/glm-5.2', disabled: false }],
         });
         const doctorRunner = {
             runAll: mock(() =>
@@ -538,7 +538,7 @@ describe('AgentService.doctor', () => {
         // AC5: no warning when the executor's model is available.
         const { errors, output } = captureOutput();
         const svc = makeService({}, output, {
-            executors: [{ name: 'omp-zai', agent: 'omp', model: 'zai/glm-5.2' }],
+            executors: [{ name: 'omp-zai', agent: 'omp', model: 'zai/glm-5.2', disabled: false }],
         });
         const doctorRunner = {
             runAll: mock(() =>
@@ -561,7 +561,7 @@ describe('AgentService.doctor', () => {
         const { lines, errors, output } = captureOutput();
         const cfg: AgentConfig = {
             default: 'coder',
-            executors: [{ name: 'cap1-exec', agent: 'claude', tier: 'capable-1' }],
+            executors: [{ name: 'cap1-exec', agent: 'claude', tier: 'capable-1', disabled: false }],
         };
         const svc = makeConfiguredService(cfg, {}, roleMap(), output);
         // reviewer is capable-1 -> cap1-exec; but the doctor deems it unusable, so
@@ -585,7 +585,7 @@ describe('AgentService.doctor', () => {
         const { lines, output } = captureOutput();
         const cfg: AgentConfig = {
             default: 'coder',
-            executors: [{ name: 'cap1-exec', agent: 'claude', tier: 'capable-1' }],
+            executors: [{ name: 'cap1-exec', agent: 'claude', tier: 'capable-1', disabled: false }],
         };
         const svc = makeConfiguredService(cfg, {}, roleMap(), output);
         const doctorRunner = {
@@ -608,8 +608,8 @@ describe('AgentService.doctor', () => {
         const cfg: AgentConfig = {
             default: 'coder',
             executors: [
-                { name: 'omp-zai', agent: 'omp', model: 'zai/glm-5.2' },
-                { name: 'bare-claude', agent: 'claude' },
+                { name: 'omp-zai', agent: 'omp', model: 'zai/glm-5.2', disabled: false },
+                { name: 'bare-claude', agent: 'claude', disabled: false },
             ],
         };
         const svc = makeConfiguredService(cfg, {}, roleMap(), output);
@@ -633,8 +633,8 @@ describe('AgentService.doctor', () => {
         const cfg: AgentConfig = {
             default: 'coder',
             executors: [
-                { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
-                { name: 'std-exec', agent: 'omp', tier: 'standard' },
+                { name: 'cheap-exec', agent: 'pi', tier: 'cheap', disabled: false },
+                { name: 'std-exec', agent: 'omp', tier: 'standard', disabled: false },
             ],
         };
         const svc = makeConfiguredService(cfg, {}, roleMap(), output);
@@ -661,8 +661,8 @@ describe('AgentService.doctor', () => {
         const cfg: AgentConfig = {
             default: 'coder',
             executors: [
-                { name: 'dead-cheap', agent: 'pi', tier: 'standard' },
-                { name: 'std-exec', agent: 'omp', tier: 'standard' },
+                { name: 'dead-cheap', agent: 'pi', tier: 'standard', disabled: false },
+                { name: 'std-exec', agent: 'omp', tier: 'standard', disabled: false },
             ],
         };
         const svc = makeConfiguredService(cfg, {}, roleMap(), output);
@@ -695,8 +695,8 @@ describe('AgentService.doctor', () => {
         const cfg: AgentConfig = {
             default: 'coder',
             executors: [
-                { name: 'dead-cheap', agent: 'pi', tier: 'standard' },
-                { name: 'std-exec', agent: 'omp', tier: 'standard', model: 'zai/glm-5.2' },
+                { name: 'dead-cheap', agent: 'pi', tier: 'standard', disabled: false },
+                { name: 'std-exec', agent: 'omp', tier: 'standard', model: 'zai/glm-5.2', disabled: false },
             ],
         };
         const svc = makeConfiguredService(cfg, {}, roleMap(), output);
@@ -1558,7 +1558,7 @@ describe('AgentService.runCapture', () => {
         // Pin `pi` as a configured executor so no bare-binary transition warning is
         // warranted — silence must come from runCapture, not from a warm warn-once marker.
         const svc = makeService({}, output, {
-            executors: [{ name: 'pi', agent: 'pi', tier: 'standard' }],
+            executors: [{ name: 'pi', agent: 'pi', tier: 'standard', disabled: false }],
         } as AgentConfig);
         const { deps } = mockDeps(makeRunResult({ stdout: 'answer' }));
         await svc.runCapture('hello', { agent: 'pi' }, deps);
@@ -1962,9 +1962,9 @@ describe('AgentService phase-aware auto resolution', () => {
     const fullConfig: AgentConfig = {
         default: 'omp',
         executors: [
-            { name: 'omp', agent: 'omp' },
-            { name: 'omp-zai', agent: 'omp', model: 'zai//glm-5.2' },
-            { name: 'claude', agent: 'claude' },
+            { name: 'omp', agent: 'omp', disabled: false },
+            { name: 'omp-zai', agent: 'omp', model: 'zai//glm-5.2', disabled: false },
+            { name: 'claude', agent: 'claude', disabled: false },
         ],
     };
 
@@ -2087,7 +2087,7 @@ describe('AgentService phase-aware auto resolution', () => {
     test('default falls through to priority when the default executor is unusable', async () => {
         const svc = makeConfiguredService({
             default: 'claude',
-            executors: [{ name: 'claude', agent: 'claude' }],
+            executors: [{ name: 'claude', agent: 'claude', disabled: false }],
         });
         // claude unusable → default path miss → Tier-1 priority resolves.
         const { deps, runner } = mockResolutionDeps({ claude: false });
@@ -2103,9 +2103,9 @@ describe('AgentService executor-aware explicit --agent (0346)', () => {
     const cfg: AgentConfig = {
         default: 'omp',
         executors: [
-            { name: 'omp', agent: 'omp' },
-            { name: 'omp-zai', agent: 'omp', model: 'zai//glm-5.2' },
-            { name: 'claude', agent: 'claude' },
+            { name: 'omp', agent: 'omp', disabled: false },
+            { name: 'omp-zai', agent: 'omp', model: 'zai//glm-5.2', disabled: false },
+            { name: 'claude', agent: 'claude', disabled: false },
         ],
     };
 
@@ -2203,9 +2203,9 @@ describe('AgentService executor-aware explicit --agent (0346)', () => {
 describe('AgentService role routing (0536)', () => {
     const roleCfg: AgentConfig = {
         executors: [
-            { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
-            { name: 'std-exec', agent: 'pi', tier: 'standard' },
-            { name: 'cap1-exec', agent: 'claude', tier: 'capable-1' },
+            { name: 'cheap-exec', agent: 'pi', tier: 'cheap', disabled: false },
+            { name: 'std-exec', agent: 'pi', tier: 'standard', disabled: false },
+            { name: 'cap1-exec', agent: 'claude', tier: 'capable-1', disabled: false },
         ],
     };
 
@@ -2263,7 +2263,8 @@ describe('AgentService role routing (0536)', () => {
 
     test('R1: no executor at the role tier → exit 1 naming the role and tier', async () => {
         const svc = makeConfiguredService(
-            { executors: [{ name: 'cheap-exec', agent: 'pi', tier: 'cheap' }] },
+            { executors: [{ name: 'cheap-exec', agent: 'pi', tier: 'cheap', disabled: false }] },
+
             {},
             roleMap(),
         );
@@ -2394,9 +2395,9 @@ describe('AgentService role routing (0536)', () => {
 describe('AgentService role propagation (0551)', () => {
     const roleCfg: AgentConfig = {
         executors: [
-            { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
-            { name: 'std-exec', agent: 'pi', tier: 'standard' },
-            { name: 'cap1-exec', agent: 'claude', tier: 'capable-1' },
+            { name: 'cheap-exec', agent: 'pi', tier: 'cheap', disabled: false },
+            { name: 'std-exec', agent: 'pi', tier: 'standard', disabled: false },
+            { name: 'cap1-exec', agent: 'claude', tier: 'capable-1', disabled: false },
         ],
     };
 
@@ -2535,10 +2536,10 @@ describe('AgentService agent.default role domain (0542)', () => {
     const execCfg: AgentConfig = {
         default: 'omp',
         executors: [
-            { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
-            { name: 'std-exec', agent: 'pi', tier: 'standard' },
-            { name: 'omp', agent: 'omp', tier: 'standard' },
-            { name: 'cap1-exec', agent: 'claude', tier: 'capable-1' },
+            { name: 'cheap-exec', agent: 'pi', tier: 'cheap', disabled: false },
+            { name: 'std-exec', agent: 'pi', tier: 'standard', disabled: false },
+            { name: 'omp', agent: 'omp', tier: 'standard', disabled: false },
+            { name: 'cap1-exec', agent: 'claude', tier: 'capable-1', disabled: false },
         ],
     };
 
@@ -2632,9 +2633,9 @@ describe('AgentService timeout-kill routing', () => {
 describe('AgentService stage-registry adaptive model routing (0319)', () => {
     const stageConfig: AgentConfig = {
         executors: [
-            { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
-            { name: 'std-exec', agent: 'pi', tier: 'standard' },
-            { name: 'capable-exec', agent: 'claude', tier: 'capable-1' },
+            { name: 'cheap-exec', agent: 'pi', tier: 'cheap', disabled: false },
+            { name: 'std-exec', agent: 'pi', tier: 'standard', disabled: false },
+            { name: 'capable-exec', agent: 'claude', tier: 'capable-1', disabled: false },
         ],
     };
 
@@ -2644,7 +2645,7 @@ describe('AgentService stage-registry adaptive model routing (0319)', () => {
         // Subagent run with no /sp: prefix, passing explicit --stage implement
         const code = await svc.run(
             'Implement the user requirement',
-            { agent: 'auto', stage: 'implement', json: true },
+            { agent: 'auto', stage: 'implement', json: true, disabled: false },
             deps,
         );
         expect(code).toBe(0);
@@ -2654,8 +2655,8 @@ describe('AgentService stage-registry adaptive model routing (0319)', () => {
     test('R2: consumes stage model_policy and starts on cheapest eligible executor', async () => {
         const svc = makeConfiguredService({
             executors: [
-                { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
-                { name: 'capable-exec', agent: 'claude', tier: 'capable-1' },
+                { name: 'cheap-exec', agent: 'pi', tier: 'cheap', disabled: false },
+                { name: 'capable-exec', agent: 'claude', tier: 'capable-1', disabled: false },
             ],
         });
         const { deps, runner } = mockResolutionDeps();
@@ -2674,10 +2675,10 @@ describe('AgentService stage-registry adaptive model routing (0319)', () => {
         const svc = makeConfiguredService({
             executors: [
                 // Deliberately declared highest-first so array order would pick capable-3 if it won.
-                { name: 'cap3-exec', agent: 'claude', tier: 'capable-3' },
-                { name: 'cap2-exec', agent: 'grok', tier: 'capable-2' },
-                { name: 'cap1-exec', agent: 'pi', tier: 'capable-1' },
-                { name: 'std-exec', agent: 'omp', tier: 'standard' },
+                { name: 'cap3-exec', agent: 'claude', tier: 'capable-3', disabled: false },
+                { name: 'cap2-exec', agent: 'grok', tier: 'capable-2', disabled: false },
+                { name: 'cap1-exec', agent: 'pi', tier: 'capable-1', disabled: false },
+                { name: 'std-exec', agent: 'omp', tier: 'standard', disabled: false },
             ],
         });
         const { deps, runner } = mockResolutionDeps();
@@ -2690,8 +2691,8 @@ describe('AgentService stage-registry adaptive model routing (0319)', () => {
     test('R9 (task 0413): a sub-tier below the floor is not eligible', async () => {
         const svc = makeConfiguredService({
             executors: [
-                { name: 'std-exec', agent: 'omp', tier: 'standard' },
-                { name: 'cap2-exec', agent: 'grok', tier: 'capable-2' },
+                { name: 'std-exec', agent: 'omp', tier: 'standard', disabled: false },
+                { name: 'cap2-exec', agent: 'grok', tier: 'capable-2', disabled: false },
             ],
         });
         const { deps, runner } = mockResolutionDeps();
@@ -2727,7 +2728,7 @@ describe('AgentService stage-registry adaptive model routing (0319)', () => {
 
     test('R5: stage mapping fails fast when executor maps to unknown agent', async () => {
         const svc = makeConfiguredService({
-            executors: [{ name: 'unknown-agent-exec', agent: 'nonexistent-agent', tier: 'standard' }],
+            executors: [{ name: 'unknown-agent-exec', agent: 'nonexistent-agent', tier: 'standard', disabled: false }],
         });
         const { deps } = mockResolutionDeps();
         const code = await svc.run('/sp:dev-run 0319', { agent: 'auto', stage: 'implement', json: true }, deps);
@@ -2747,8 +2748,8 @@ describe('AgentService automatic tier escalation (0407)', () => {
     // Stage implement has min_tier: standard, so std-exec is the starting tier.
     const escalationConfig: AgentConfig = {
         executors: [
-            { name: 'std-exec', agent: 'pi', tier: 'standard' },
-            { name: 'capable-exec', agent: 'claude', tier: 'capable-1' },
+            { name: 'std-exec', agent: 'pi', tier: 'standard', disabled: false },
+            { name: 'capable-exec', agent: 'claude', tier: 'capable-1', disabled: false },
         ],
     };
 
@@ -2896,7 +2897,7 @@ describe('AgentService automatic tier escalation (0407)', () => {
         // (0536 R4: prompt text never derives a stage; extractPhase is gone).
         const code = await svc.run(
             '/skill:sp-dev-run --mode implement 0482 --auto',
-            { agent: 'std-exec', stage: 'implement', json: false },
+            { agent: 'std-exec', stage: 'implement', json: false, disabled: false },
             deps,
         );
 
@@ -2961,7 +2962,7 @@ describe('AgentService automatic tier escalation (0407)', () => {
 
         const result = await svc.runTraced(
             'Implement the task',
-            { agent: 'auto', stage: 'implement' },
+            { agent: 'auto', stage: 'implement', disabled: false },
             {
                 runner: { runPromptCommand } as unknown as AgentRunDeps['runner'],
                 detector,
@@ -3051,13 +3052,19 @@ describe('AgentService automatic tier escalation (0407)', () => {
     test('0485 R3+R4: exhaustion fails over sideways to a same-tier different-binary executor before escalating up-tier', async () => {
         const sidewaysConfig: AgentConfig = {
             executors: [
-                { name: 'std-a', agent: 'pi', tier: 'standard' },
+                { name: 'std-a', agent: 'pi', tier: 'standard', disabled: false },
                 // Aliases on an exhausted binary must be skipped run-wide.
-                { name: 'std-a-alias', agent: 'pi', model: 'alternate-pi-model', tier: 'standard' },
-                { name: 'std-b', agent: 'claude', tier: 'standard' },
-                { name: 'std-b-alias', agent: 'claude', model: 'alternate-claude-model', tier: 'standard' },
-                { name: 'cap-same-dead-binary', agent: 'pi', tier: 'capable-1' },
-                { name: 'cap-exec', agent: 'codex', tier: 'capable-1' },
+                { name: 'std-a-alias', agent: 'pi', model: 'alternate-pi-model', tier: 'standard', disabled: false },
+                { name: 'std-b', agent: 'claude', tier: 'standard', disabled: false },
+                {
+                    name: 'std-b-alias',
+                    agent: 'claude',
+                    model: 'alternate-claude-model',
+                    tier: 'standard',
+                    disabled: false,
+                },
+                { name: 'cap-same-dead-binary', agent: 'pi', tier: 'capable-1', disabled: false },
+                { name: 'cap-exec', agent: 'codex', tier: 'capable-1', disabled: false },
             ],
         };
         const { errors, output } = captureOutput();
@@ -3328,9 +3335,9 @@ describe('AgentService run→session mapping (E6 / task 0557)', () => {
 describe('AgentService routing decision attribution (0545)', () => {
     const attributionConfig: AgentConfig = {
         executors: [
-            { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
-            { name: 'std-exec', agent: 'pi', tier: 'standard' },
-            { name: 'capable-exec', agent: 'claude', tier: 'capable-1' },
+            { name: 'cheap-exec', agent: 'pi', tier: 'cheap', disabled: false },
+            { name: 'std-exec', agent: 'pi', tier: 'standard', disabled: false },
+            { name: 'capable-exec', agent: 'claude', tier: 'capable-1', disabled: false },
         ],
     };
 
@@ -3553,8 +3560,8 @@ describe('AgentService tier fallback under real failure (0540)', () => {
     // `implement` declares min_tier standard with a timeout → capable-1 entry.
     const ladderConfig: AgentConfig = {
         executors: [
-            { name: 'std-exec', agent: 'pi', tier: 'standard' },
-            { name: 'capable-exec', agent: 'claude', tier: 'capable-1' },
+            { name: 'std-exec', agent: 'pi', tier: 'standard', disabled: false },
+            { name: 'capable-exec', agent: 'claude', tier: 'capable-1', disabled: false },
         ],
     };
 
@@ -3629,8 +3636,8 @@ describe('AgentService tier fallback under real failure (0540)', () => {
         // as exhausted.
         const gapConfig: AgentConfig = {
             executors: [
-                { name: 'omp-deepseek', agent: 'omp', tier: 'capable-1' },
-                { name: 'codex-sol', agent: 'codex', tier: 'capable-3' },
+                { name: 'omp-deepseek', agent: 'omp', tier: 'capable-1', disabled: false },
+                { name: 'codex-sol', agent: 'codex', tier: 'capable-3', disabled: false },
             ],
         };
         const { escalations, errors, svc } = escalationHarness(gapConfig);
@@ -3657,8 +3664,8 @@ describe('AgentService tier fallback under real failure (0540)', () => {
         // Stage `plan` floors at capable-2 — unconfigured in the same fixture.
         const gapConfig: AgentConfig = {
             executors: [
-                { name: 'omp-deepseek', agent: 'omp', tier: 'capable-1' },
-                { name: 'codex-sol', agent: 'codex', tier: 'capable-3' },
+                { name: 'omp-deepseek', agent: 'omp', tier: 'capable-1', disabled: false },
+                { name: 'codex-sol', agent: 'codex', tier: 'capable-3', disabled: false },
             ],
         };
         const { errors, svc } = escalationHarness(gapConfig);
@@ -3728,15 +3735,15 @@ function readCache(fs: FileSystem): { capturedAt: string; schemaVersion: number 
 
 describe('AgentService.doctor — detection cache & --probe-health (B4/0683)', () => {
     test('R3: fingerprint is order-independent and field-sensitive', () => {
-        const z = { name: 'z', agent: 'omp' };
-        expect(executorFingerprint([z, { name: 'a', agent: 'pi', model: 'x/y' }])).toBe(
-            executorFingerprint([{ name: 'a', agent: 'pi', model: 'x/y' }, z]),
+        const z = { name: 'z', agent: 'omp', disabled: false };
+        expect(executorFingerprint([z, { name: 'a', agent: 'pi', model: 'x/y', disabled: false }])).toBe(
+            executorFingerprint([{ name: 'a', agent: 'pi', disabled: false, model: 'x/y' }, z]),
         );
-        expect(executorFingerprint([z, { name: 'a', agent: 'pi', model: 'x/y' }])).not.toBe(
-            executorFingerprint([z, { name: 'a', agent: 'pi', model: 'q/w' }]),
+        expect(executorFingerprint([z, { name: 'a', agent: 'pi', disabled: false, model: 'x/y' }])).not.toBe(
+            executorFingerprint([z, { name: 'a', agent: 'pi', disabled: false, model: 'q/w' }]),
         );
-        expect(executorFingerprint([z, { name: 'a', agent: 'pi', tier: 'capable-2' }])).not.toBe(
-            executorFingerprint([z, { name: 'a', agent: 'pi' }]),
+        expect(executorFingerprint([z, { name: 'a', agent: 'pi', disabled: false, tier: 'capable-2' }])).not.toBe(
+            executorFingerprint([z, { name: 'a', agent: 'pi', disabled: false }]),
         );
         expect(executorFingerprint(undefined)).toBe(executorFingerprint([]));
     });
@@ -3862,8 +3869,8 @@ describe('AgentService.doctor — detection cache & --probe-health (B4/0683)', (
     test('R8: fresh cache covers the selector → served without probe; miss runs one probe and writes nothing', async () => {
         const svc = makeService({}, nullOutput(), {
             executors: [
-                { name: 'a-one', agent: 'claude' },
-                { name: 'b-two', agent: 'omp' },
+                { name: 'a-one', agent: 'claude', disabled: false },
+                { name: 'b-two', agent: 'omp', disabled: false },
             ],
         } as AgentConfig);
         const h = cacheDeps();
@@ -3901,7 +3908,9 @@ describe('AgentService.runTraced capability gate (task 0706)', () => {
     } as const;
 
     test('unknown attestation fails closed BEFORE spawn with an axis-by-axis diagnostic (R5/S2)', async () => {
-        const svc = makeService({}, nullOutput(), { executors: [{ name: 'bare-1', agent: 'pi', tier: 'standard' }] });
+        const svc = makeService({}, nullOutput(), {
+            executors: [{ name: 'bare-1', agent: 'pi', tier: 'standard', disabled: false }],
+        });
         const { deps, runner } = mockDeps();
         const result = await svc.runTraced(
             'prompt',
@@ -3944,7 +3953,7 @@ describe('AgentService.runTraced capability gate (task 0706)', () => {
         const svc = makeService({}, nullOutput(), {
             executors: [
                 attestedExecutor as unknown as AgentExecutorConfig,
-                { name: 'bare-2', agent: 'pi', tier: 'standard' },
+                { name: 'bare-2', agent: 'pi', tier: 'standard', disabled: false },
             ],
         });
         const { deps } = mockDeps();
@@ -3962,7 +3971,9 @@ describe('AgentService.runTraced capability gate (task 0706)', () => {
     });
 
     test('actions without requirements keep dispatching unchanged (R4/S3 backward compat)', async () => {
-        const svc = makeService({}, nullOutput(), { executors: [{ name: 'bare-3', agent: 'pi', tier: 'standard' }] });
+        const svc = makeService({}, nullOutput(), {
+            executors: [{ name: 'bare-3', agent: 'pi', tier: 'standard', disabled: false }],
+        });
         const { deps, runner } = mockDeps();
         const result = await svc.runTraced('prompt', { agent: 'bare-3' }, deps);
         expect(result.exitCode).toBe(0);
@@ -3977,7 +3988,7 @@ describe('AgentService.runTraced capability gate (task 0706)', () => {
         expect(badJson.message).toContain('invalid requiresCapabilities JSON');
         const badAxis = await svc.runTraced(
             'prompt',
-            { agent: 'pi', requiresCapabilities: JSON.stringify({ teleport: 'available' }) },
+            { agent: 'pi', requiresCapabilities: JSON.stringify({ teleport: 'available' }), disabled: false },
             deps,
         );
         expect(badAxis.exitCode).toBe(2);
@@ -3987,7 +3998,7 @@ describe('AgentService.runTraced capability gate (task 0706)', () => {
 
     test('model tier is never a capability signal (R8/S4): tiered executor without attestation still fails', async () => {
         const svc = makeService({}, nullOutput(), {
-            executors: [{ name: 'top-tier', agent: 'pi', tier: 'capable-3' }],
+            executors: [{ name: 'top-tier', agent: 'pi', tier: 'capable-3', disabled: false }],
         });
         const { deps } = mockDeps();
         const result = await svc.runTraced(
@@ -3997,5 +4008,125 @@ describe('AgentService.runTraced capability gate (task 0706)', () => {
         );
         expect(result.exitCode).toBe(2);
         expect(result.message).toContain('actual=unknown');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: disabled executors (0796 / ADR-111)
+describe('disabled executors (0796)', () => {
+    const disabledConfig: AgentConfig = {
+        default: 'live',
+        executors: [
+            { name: 'live', agent: 'omp', disabled: false },
+            { name: 'retired', agent: 'codex', disabled: true },
+        ],
+    };
+
+    test('R3/R4: explicit pin to a disabled executor fails with exitCode 2 before any spawn', async () => {
+        const svc = makeConfiguredService(disabledConfig);
+        const { deps, runner } = mockResolutionDeps();
+        const result = await svc.runTraced('prompt', { agent: 'retired' }, deps);
+        expect(result.exitCode).toBe(2);
+        expect(result.message).toContain("Executor 'retired' is disabled");
+        expect(result.message).toContain('agent.executors.retired.disabled: true');
+        expect(runner.runPromptCommand).not.toHaveBeenCalled();
+    });
+
+    test('R3: stage walk skips disabled executors and dispatches the next eligible one', async () => {
+        const cfg: AgentConfig = {
+            default: 'cheap-exec',
+            executors: [
+                { name: 'cheap-exec', agent: 'pi', tier: 'cheap', disabled: true },
+                { name: 'std-exec', agent: 'omp', tier: 'standard', disabled: false },
+            ],
+        };
+        const svc = makeConfiguredService(cfg, {}, roleMap());
+        const { deps, runner } = mockResolutionDeps();
+        // scribe/changelog starts at the cheap tier: the disabled cheap-exec must
+        // not be dispatched (and the disabled default must not trip the pin guard).
+        const code = await svc.run('Generate the changelog', { agent: 'auto', stage: 'changelog', json: true }, deps);
+        expect(code).toBe(0);
+        // Dispatch target is std-exec's canonical agent; cheap-exec (agent 'pi')
+        // — disabled and default — was never dispatched.
+        expect(resolvedAgent(runner)).toBe('omp');
+    });
+
+    test('R3/R6: a role whose every tier-eligible executor is disabled fails naming the disabled set', async () => {
+        const { lines, errors, output } = captureOutput();
+        const cfg: AgentConfig = {
+            default: 'cap-exec',
+            executors: [{ name: 'cap-exec', agent: 'codex', tier: 'capable-1', disabled: true }],
+        };
+        const svc = makeConfiguredService(cfg, {}, roleMap(), output);
+        const doctorRunner = {
+            runAll: mock(() => Promise.resolve([])),
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ agent: 'cap-exec', usable: false }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const code = await svc.doctor({ json: true, agent: 'reviewer' }, { doctorRunner });
+        expect(code).not.toBe(0);
+        const envelope = JSON.parse(lines.find((l) => l.includes('"error"')) ?? '{}');
+        expect(envelope.error?.message).toContain('disabled: cap-exec');
+        expect(errors).toEqual([]);
+    });
+
+    test('R5: toggling disabled changes the executor fingerprint', () => {
+        const enabled = [{ name: 'a', agent: 'pi', disabled: false }];
+        const disabled = [{ name: 'a', agent: 'pi', disabled: true }];
+        expect(executorFingerprint(enabled)).not.toBe(executorFingerprint(disabled));
+    });
+
+    test('R6: doctor inventories a disabled executor as a synthesized non-probed row', async () => {
+        const { lines, output } = captureOutput();
+        const svc = makeConfiguredService(disabledConfig, {}, undefined, output);
+        // runAll only reports the enabled agent — the disabled row must be
+        // synthesized without a probe (it does not appear in the probe results).
+        const doctorRunner = {
+            runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: 'omp', installed: true, usable: true })])),
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ agent: 'omp', installed: true, usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const runAll = doctorRunner?.runAll as ReturnType<typeof mock>;
+        const exitCode = await svc.doctor({ json: true }, { doctorRunner });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lines.find((l) => l.includes('"agents"')) ?? '');
+        const retired = (parsed.agents as Array<{ agent: string; disabled: boolean; usable: boolean }>).find(
+            (a) => a.agent === 'retired',
+        );
+        expect(retired).toBeDefined();
+        expect(retired?.disabled).toBe(true);
+        expect(retired?.usable).toBe(false);
+        // Inventory rows (omp) plus the one synthesized disabled row (retired);
+        // no probe result exists for the disabled profile.
+        expect(parsed.agents.map((a: { agent: string }) => a.agent).sort()).toEqual(['omp', 'retired']);
+        expect(runAll).toHaveBeenCalledTimes(1);
+    });
+
+    test('R6: a named disabled executor renders its row and exits 1 without a probe', async () => {
+        const { lines, output } = captureOutput();
+        const svc = makeConfiguredService(disabledConfig, {}, undefined, output);
+        const doctorRunner = {
+            runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: 'omp', installed: true, usable: true })])),
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ agent: 'codex', installed: true, usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const runOne = doctorRunner?.runOne as ReturnType<typeof mock>;
+        const exitCode = await svc.doctor({ json: true, agent: 'retired' }, { doctorRunner });
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(lines.find((l) => l.includes('"agents"')) ?? '');
+        expect(parsed.agents).toHaveLength(1);
+        expect(parsed.agents[0].agent).toBe('retired');
+        expect(parsed.agents[0].disabled).toBe(true);
+        expect(parsed.agents[0].usable).toBe(false);
+        expect(runOne).not.toHaveBeenCalled();
+    });
+
+    test('R6: an all-disabled fleet still exits 0 for inventory', async () => {
+        const svc = makeConfiguredService({
+            executors: [{ name: 'retired', agent: 'codex', disabled: true }],
+        } as AgentConfig);
+        const doctorRunner = {
+            runAll: mock(() => Promise.resolve([])),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const exitCode = await svc.doctor({ json: false }, { doctorRunner });
+        expect(exitCode).toBe(0);
     });
 });

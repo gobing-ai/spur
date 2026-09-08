@@ -1,4 +1,5 @@
 import type { Command } from '@commander-js/extra-typings';
+import type { AgentQuotaEventBus } from '@gobing-ai/spur-app';
 import {
     type AgentRunDeps,
     AgentService,
@@ -11,11 +12,12 @@ import {
     type WaitUntil,
     waitForOccupant,
 } from '@gobing-ai/spur-app';
-import { resolveExecutor } from '@gobing-ai/spur-config';
+import { ExecutorDisabledError, resolveExecutor } from '@gobing-ai/spur-config';
 import { SystemEventDao, type SystemEventRow } from '@gobing-ai/spur-domain';
 import { type AgentSpec, isAgentName } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import { attachAgentQuotaPersistence } from '../agent-quota-persistence';
 import type { CliContext } from '../context';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
@@ -469,6 +471,12 @@ export async function runAgentRun(
     // validated agentConfig (0126) is still threaded into resolution.
     const bus = new EventBus() as SystemEventBus;
     const ledger = await attachSystemEventLedger(bus, context);
+    // 0799 R1: quota events from this run persist into `agent_executor_updates`
+    // so the server can apply them even if it was offline during the run.
+    // SAFETY: the ledger's SystemEventBus and AgentQuotaEventBus are nominal
+    // names over one structural ts-infra EventBus instance (ADR-044 event
+    // bridge, same crossing the ledger attach performs above).
+    const quotaPersistence = attachAgentQuotaPersistence(bus as unknown as AgentQuotaEventBus, context);
     const svc = context.agentService({ events: bus });
     try {
         // `--spec <id>` (canonical, 0542 R1) or the legacy `--agent <spec-id>`
@@ -512,6 +520,9 @@ export async function runAgentRun(
     } finally {
         await ledger.flush();
         ledger.unsubscribe();
+        // 0799 R1: flush recorded quota observations before process exit.
+        await quotaPersistence.flush();
+        quotaPersistence.unsubscribe();
     }
 }
 
@@ -579,6 +590,13 @@ function drainAgentSelector(spec: AgentSpec, context: CliContext): string {
     try {
         resolveExecutor(spec.executor, context.agentConfig, { isCanonicalAgent: isAgentName });
     } catch (error) {
+        // 111 R4: a spec pinned to a profile disabled AFTER materialization fails
+        // before spawn with the enable-fix — never relabeled as a dangling ref.
+        if (error instanceof ExecutorDisabledError) {
+            throw new Error(
+                `Spec "${spec.id}" pins disabled executor "${spec.executor}" — enable it via agent.executors.${spec.executor}.disabled: false or repin the spec before drain`,
+            );
+        }
         throw new Error(
             `Spec "${spec.id}" references unknown executor "${spec.executor}" — define it under agent.executors or remove the reference (${error instanceof Error ? error.message : String(error)})`,
         );

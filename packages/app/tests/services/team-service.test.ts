@@ -1656,3 +1656,66 @@ describe('TeamService team.* events (task 0371)', () => {
         }
     });
 });
+
+// ---- disabled executor guard (0796 R4) ----
+
+describe('TeamService disabled executors (0796)', () => {
+    const disabledTeamSpur = spurConfigSchema.parse(
+        yamlParse(`agent:
+  executors:
+    - name: retired
+      agent: codex
+      disabled: true
+  team:
+    demo:
+      name: Demo
+      work_dir: /tmp/demo
+      members:
+        - executor: retired
+          purpose: verify
+`),
+    );
+
+    test('materializeTeam rejects a member pinned to a disabled executor', async () => {
+        const { svc, cleanup } = await makeService(undefined, undefined, undefined, disabledTeamSpur);
+        try {
+            await expect(svc.materializeTeam('demo')).rejects.toThrow(
+                /pins disabled executor "retired" .*enable the profile or repin the member/,
+            );
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('materializeTeam rejects a role member whose every tier-eligible executor is disabled (111 R3)', async () => {
+        const roleTeamSpur = spurConfigSchema.parse(
+            yamlParse(`agent:
+  executors:
+    - name: retired
+      agent: codex
+      tier: capable-1
+      disabled: true
+  team:
+    demo:
+      name: Demo
+      work_dir: /tmp/demo
+      members:
+        - role: reviewer
+          purpose: verify
+`),
+        );
+        const { svc, cleanup } = await makeService(
+            undefined,
+            undefined,
+            new Map<string, AgentRoleDefinition>([['reviewer', { tier: 'capable-1', stages: ['verify'] }]]),
+            roleTeamSpur,
+        );
+        try {
+            await expect(svc.materializeTeam('demo')).rejects.toThrow(
+                /every tier-eligible executor for role "reviewer" .*is disabled \(retired\)/,
+            );
+        } finally {
+            await cleanup();
+        }
+    });
+});

@@ -68,6 +68,7 @@ rules:
             # Synchronous bootstrap & path resolution:
             - "packages/config/src/bundled-config.ts" # sync bundledConfigRoot() directory walk
             - "packages/config/src/loader.ts" # sync resolveConfigFile() / schema specifier lookup
+            - "packages/config/src/executor-update.ts" # atomic single-entry config update (task 0797): O_EXCL lock, fsync'd tmp+rename commit, lstat symlink refusal, mode preservation — ts-runtime FileSystem seam has no lstat/fsync/chmod/O_EXCL
             - "packages/app/src/services/project-start.ts" # sync CLI binary path checks before daemon spawn
 
             # Synchronous template & workflow resolvers:

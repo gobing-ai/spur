@@ -80,6 +80,17 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
         return 1;
     }
 
+    // 0799 (ADR-082): re-load accessor for the quota-update flow (R3 executor
+    // refresh, drain-time binding checks). Only this composition root may call
+    // the loader; commands receive the closure through CliContext.
+    const loadAgentConfig = async (projectRoot: string): Promise<SpurConfig | null> => {
+        try {
+            return await loadSpurConfig(projectRoot, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
+        } catch {
+            return null;
+        }
+    };
+
     try {
         if (configFile !== undefined) {
             // Bootstrap through runNodeApplication — standard path (R1).
@@ -107,6 +118,7 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
                         output,
                         db,
                         spurConfig,
+                        loadAgentConfig,
                     });
                     exitCode = await runCommandDispatch(argv, context, output);
                 },
@@ -114,7 +126,7 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
             await app.stop('shutdown');
         } else {
             // No config file — direct path (pre-init, tests).
-            const context = createCliContext({ cwd, env, output, db, spurConfig });
+            const context = createCliContext({ cwd, env, output, db, spurConfig, loadAgentConfig });
             exitCode = await runCommandDispatch(argv, context, output);
         }
     } finally {

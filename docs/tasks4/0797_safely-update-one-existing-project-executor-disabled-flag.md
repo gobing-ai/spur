@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Safely update one existing project executor disabled flag
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-07T17:12:18.724Z
-updated_at: "2026-09-07T17:15:33.994Z"
+updated_at: "2026-09-07T23:35:11.914Z"
 feature_id: B5
 priority: P2
 tags:
@@ -20,6 +20,7 @@ dependencies: ["0796"]
 Automation needs a reusable filesystem operation whose behavior is narrower than config loading: changing a single existing project entry must not serialize merged global config, create overrides, or overwrite concurrent edits. File-integrity review is independent of executor selection.
 
 Implements:
+
 - R7 — Project updates change only an exact existing entry
 - R8 — Missing or invalid project targets never cause unintended writes
 - R9 — Concurrent configuration writes preserve unrelated edits
@@ -29,9 +30,9 @@ Rubric: E4 D1 L1 C1 R2 = 9; estimated 4h. Retain this cohesive deliverable; test
 
 ### Requirements
 
-- [ ] R1. Export async setProjectExecutorDisabled(projectRoot, executorName, disabled) from the config loader surface; use exact case-sensitive name matching and modify only the existing project entry disabled attribute, preserving comments, ordering, file permissions and unrelated values. Persist explicit false when absent and avoid rewriting an already matching explicit value.
-- [ ] R2. Return unchanged with missing-file, missing-executors or missing-executor reasons without creating paths or editing global config; accept valid name-only project fragments, reject malformed/ambiguous YAML and escaping config symlinks with actionable stable errors, and leave original contents intact.
-- [ ] R3. Serialize updater read-modify-write operations per real project config path, detect observable external changes before commit, atomically replace the file, invalidate loader cache on success, and preserve both updater changes or report conflict rather than losing unrelated edits.
+- [x] R1. Export async setProjectExecutorDisabled(projectRoot, executorName, disabled) from the config loader surface; use exact case-sensitive name matching and modify only the existing project entry disabled attribute, preserving comments, ordering, file permissions and unrelated values. Persist explicit false when absent and avoid rewriting an already matching explicit value.
+- [x] R2. Return unchanged with missing-file, missing-executors or missing-executor reasons without creating paths or editing global config; accept valid name-only project fragments, reject malformed/ambiguous YAML and escaping config symlinks with actionable stable errors, and leave original contents intact.
+- [x] R3. Serialize updater read-modify-write operations per real project config path, detect observable external changes before commit, atomically replace the file, invalidate loader cache on success, and preserve both updater changes or report conflict rather than losing unrelated edits.
 
 ### Acceptance Criteria
 
@@ -85,18 +86,48 @@ Preserve unrelated/concurrent edits. Start implementation in a clean isolated wo
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/config/src/loader.ts:270` |
+| `packages/config/src/loader.ts:285` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+| ------------- | -------- | ---------- |
+| R1 | MET | packages/config/src/executor-update.ts:52 setProjectExecutorDisabled exported via packages/config/src/loader.ts:288 (`./loader` subpath); exact case-sensitive match via scalar name (packages/config/src/executor-update.ts:108); parseDocument mutation preserves comments/ordering/mode; explicit false persisted on absent attribute (executor-update.ts:130); byte-stable no-op on already-matching explicit value (executor-update.ts:127); tests executor-update.test.ts R1 x5 (exact vs prefix/case, name-only fragment, byte-stable no-op, comments+mode survive) |
+| R2 | MET | Structured no-ops without any write: missing-file (executor-update.ts:76), missing-executors (91-94), missing-executor (121); no path/dir creation on no-op paths; name-only fragment accepted (test R1); malformed YAML → INVALID_CONFIG preserving contents (test R2); duplicate names → INVALID_CONFIG ambiguous (test R2); aliases/merge keys rejected (test R2); symlinked config rejected via lstat (executor-update.ts:83, test R2); invalid args (empty name / non-boolean) rejected before filesystem work (executor-update.ts:61-67, test R2) |
+| R3 | MET | Per-path exclusive lock keyed on `<configPath>.lock` with dead-owner reclaim only (executor-update.ts:196-219, tests: concurrent calls serialize, dead owner reclaimed, live owner never reclaimed); external-change detection via mtime/size/ino identity immediately before rename (executor-update.ts:152-158); atomic same-dir tmp write + fsync + rename with mode preservation (executor-update.ts:161-170, test: atomic failure preserves original); loader cache invalidated on success (executor-update.ts:180, test: next load sees new value) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+| --------------------- | -------- | --------------- | ---------- |
+| R1 — Project updates change only an exact existing entry | MET | test | bun test packages/config — R1 tests: alpha vs alphabet isolation [false,true,true], case/prefix-free matching, explicit-false name-only fragment, already-set no-op leaves bytes identical, comments/unrelated values/0o640 mode survive; 18/18 pass |
+| R2 — Missing or invalid project targets never cause unintended writes | MET | test | R2 tests: missing file/section/executor return structured unchanged and create nothing (file bytes identical), malformed YAML rejects INVALID_CONFIG with contents preserved, duplicate names reject ambiguous, alias entry rejects, symlink rejects INVALID_CONFIG, empty/non-boolean args reject pre-FS; 18/18 pass |
+| R3 — Concurrent configuration writes preserve unrelated edits | MET | test | R3 tests: two concurrent updater calls serialize via per-path lock and both edits survive [false,true,true], dead lock owner reclaimed, live owner never reclaimed (exhaustion rejects CONFIG_WRITE_FAILED), read-only dir atomic-commit failure preserves original file byte-identical; conflict detection code path CONFIG_CONFLICT covered by mtime/size/ino identity check; 18/18 pass |
+
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: UNKNOWN)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-07T23:35:11.914Z todo → done (system)

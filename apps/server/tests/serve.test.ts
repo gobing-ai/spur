@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { handleSchedulerCustomJob, registerSystemEventTap } from '@gobing-ai/spur-app';
-import { SystemEventDao } from '@gobing-ai/spur-domain';
+import { AgentExecutorUpdateDao, applyCliMigrations, SystemEventDao } from '@gobing-ai/spur-domain';
+import { createDbAdapter } from '@gobing-ai/ts-db';
 import { EventBus } from '@gobing-ai/ts-infra';
 import type { ApplicationRuntime, ApplicationStopReason, SchedulerJobConfig } from '@gobing-ai/ts-infra/application';
 import { createNodeFileSystem, type FileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -477,6 +478,88 @@ describe('startServer', () => {
         expect(stopReasons).toEqual(['shutdown']);
         expect(exitCodes).toEqual([0]);
         expect(logMessages.some((m) => m.msg === 'Shutting down server')).toBe(true);
+    });
+
+    test('quota update consumer starts before autostart and final-drains on shutdown (0799 R5)', async () => {
+        const { sigHandlers, exitCodes, exitCalled } = installProcessMocks();
+        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
+
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const projectRoot = mkdtempSync(join(tmpdir(), 'quota-consumer-serve-'));
+        mkdirSync(join(projectRoot, '.spur'), { recursive: true });
+        writeFileSync(
+            join(projectRoot, '.spur', 'config.yaml'),
+            ['agent:', '  executors:', '    - name: alpha', '      agent: omp', '      model: gpt-5', ''].join('\n'),
+        );
+        const quotaDb = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(quotaDb);
+        const quotaWarnings: string[] = [];
+
+        const deps = makeDeps({
+            serverBootstrapConfig: () => ({
+                logging: { enabled: false, level: 'info' as const, console: false },
+                telemetry: { enabled: false },
+                events: { enabled: false, diagnostic: false },
+                jobqueue: { enabled: false },
+                scheduler: { enabled: false },
+                teamAutostart: [],
+            }),
+            createServerContext: (() =>
+                ({
+                    eventBus: () => bus,
+                    getDb: () => quotaDb,
+                    cwd: projectRoot,
+                    supervisor: () => ({ stopAll: async () => {} }),
+                }) as unknown as ServerContext) as unknown as StartServerDeps['createServerContext'],
+            runNodeApplication: (async (opts: {
+                config: unknown;
+                start: (rt: ApplicationRuntime) => Promise<void>;
+            }) => {
+                const rt = fakeRuntime();
+                rt.logger.warn = (msg: string) => {
+                    quotaWarnings.push(msg);
+                };
+                await opts.start(rt);
+                return rt;
+            }) as unknown as StartServerDeps['runNodeApplication'],
+        });
+
+        try {
+            await startServer({ port: 5001, host: '127.0.0.1', openBrowser: false, keepAlive: false }, deps);
+
+            // The server was offline when this exhaustion happened: recording while
+            // running must persist a pending row (R5 start-before-autostart wiring).
+            bus.emit('agent.quota.exhausted', {
+                observationId: 'obs-serve-1',
+                observedAt: '2026-02-01T10:00:00.000Z',
+                evidenceSource: 'buffered-error',
+                reason: 'usage_limit_reached',
+                attribution: { projectId: projectRoot, executor: 'alpha', agent: 'omp', model: 'gpt-5' },
+                correlation: { runId: 'run-serve' },
+            });
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            expect(await new AgentExecutorUpdateDao(quotaDb).pendingUpdates()).toHaveLength(1);
+
+            // A rejected (unattributed) event must surface through the runtime
+            // logger and never persist — the consumer owns rejection surfacing.
+            bus.emit('agent.quota.exhausted', { observationId: 'obs-serve-bad' });
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            expect(quotaWarnings.some((w) => w.includes('rejected'))).toBe(true);
+            expect(await new AgentExecutorUpdateDao(quotaDb).pendingUpdates()).toHaveLength(1);
+
+            const sigint = sigHandlers.SIGINT;
+            if (!sigint) throw new Error('SIGINT handler not registered');
+            sigint();
+            await exitCalled;
+            expect(exitCodes).toEqual([0]);
+
+            // The shutdown final drain applied the pending observation to the YAML.
+            const yaml = readFileSync(join(projectRoot, '.spur', 'config.yaml'), 'utf8');
+            expect(yaml).toContain('disabled: true');
+        } finally {
+            quotaDb.close();
+            rmSync(projectRoot, { recursive: true, force: true });
+        }
     });
 
     test('SIGTERM shutdown path and concurrent double-signal latch', async () => {

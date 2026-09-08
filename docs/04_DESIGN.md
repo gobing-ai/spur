@@ -34,7 +34,7 @@ When collaborating with the design team:
 
 | Satellite                                                                                               | Area                                                                                                                                                                                                                                                                                                                      | Status                                                                                                                                                          |                                                                                                                               |             |
 | ------------------------------------------------------------------------------------------------------- | -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------                                                                                                                     | -------------------------------                                                                                                                                 |                                                                                                                               |             |
-| [`executor-availability.md`](design/executor-availability.md) | B5 executor availability, quota events, and project updates | accepted design; ADR-111 | | |
+| [`executor-availability.md`](design/executor-availability.md) | B5 executor availability, quota events, and project updates | implemented (0796–0799); ADR-111 | | |
 | [`rd3-migration-design.md`](design/rd3-migration-design.md)                                             | Planning layer (`spur task`/`spur feature`) — schemas, lifecycle, corpus migration (ADR-020–023)                                                                                                                                                                                                                          | finalized; surface in §1.x / §7                                                                                                                                 |                                                                                                                               |             |
 | [`server-side-adjustment-design.md`](design/server-side-adjustment-design.md)                           | Server/Web slice — ServerContext, runtime-safe imports, EventBus/JobQueue/Scheduler wiring, oRPC surface                                                                                                                                                                                                                  | design (in progress)                                                                                                                                            |                                                                                                                               |             |
 | [`server-side-adjustment-feature-finalized.md`](design/server-side-adjustment-feature-finalized.md)     | Server/Web — finalized feature decisions for the above                                                                                                                                                                                                                                                                    | finalized                                                                                                                                                       |                                                                                                                               |             |
@@ -304,7 +304,9 @@ matches roles first (the vocabulary is closed and pairwise-disjoint from executo
 then reuses the executor-first-then-binary lookup as `agent.default` (`resolveExecutorSelector`):
 if `agent.executors` has an entry whose `name` matches, that profile's `{ agent, model? }` is used
 (the profile's `model` becomes the run model unless the user also passed `--model`); otherwise the
-name is resolved as a legacy coding-agent binary. Collision precedence: when an executor and an
+name is resolved as a legacy coding-agent binary. A profile with `disabled: true` (feature B5 / 0796)
+**fails with exit 2 naming the profile and the enable-fix before any probe or spawn** — disabled
+profiles are never silently substituted. Collision precedence: when an executor and an
 agent binary share a name, **the executor wins** (to reach the bare binary, remove or rename the
 executor entry). An explicit selector never consults phase / `default-by-phase` config (R8).
 **Spec-id addressing (feature G4 / 0537 / 0542).** Under `--drain`, `--spec <id>` (canonical since
@@ -430,6 +432,9 @@ Readiness check per agent (same `DISPLAY_ORDER` as list). Text mode prints an al
   (probe) lines. Health probing is **opt-in** (feature B4 / 0683): `--probe-health` passes pinned models
   through to the runner so it probes them; without the flag the models are withheld from the probe set and
   no network/model check runs. The MODEL column always reflects config either way.
+- **STATUS** shows `disabled` for a profile with `agent.executors[].disabled: true` (feature B5 / 0796):
+such rows are synthesized from config without a probe (`usable: false`, error `disabled by config`), a
+full-set inventory still exits 0, and naming a disabled executor directly exits 1 with its row.
 - **TIER** renders the executor's capability tier (`cheap|standard|capable-*`), distinct from support tier 1/2/3
   (routing introspection only — the task-pipeline size precheck stopped consuming it in 0723), which never appears
   in the table. Declared `agent.executors[].tier`
@@ -442,8 +447,8 @@ Arg semantics: a bare **agent/exec name** prints that executor's detail block; a
 (`coder`, `reviewer`, …) instead renders the full eligible ladder for that role — one line per eligible
 agent with the ELECTED marker and per-row failure reasons plus an `N eligible, M usable, elected: X`
 summary. `--json` emits `{ agents: [...], cache? }`, each entry adding `capabilityTier`, `model` (pinned or null),
-`roles`, and `elected`; a full-set run adds `cache: {hit, ageMs, path}` — detection results are cached for
-60 s at `.spur/run/agent-doctor.json` keyed by an executor-set fingerprint (name/agent/model/tier), served
+`roles`, and `elected`; each entry also carries `disabled` (feature B5 / 0796, config state); a full-set run adds `cache: {hit, ageMs, path}` — detection results are cached for
+60 s at `.spur/run/agent-doctor.json` keyed by an executor-set fingerprint (name/agent/model/tier/disabled), served
 only on an exact fresh match, and corrupted/stale/unwritable states degrade silently to a live run; text
 mode prints a dated footer note on a hit; `--probe-health` never reads or writes the cache and
 `--force-refresh` skips the read, re-runs detection live, and rewrites the file. Under a role selector,
@@ -1587,6 +1592,16 @@ dependency graph stays Workers-safe:
 - `resolvePlanningFolders(fs)` derives the active + registered task/feature folders, degrading to
   defaults on any error (a broken config must not wedge folder resolution). `@gobing-ai/spur-app`
   re-exports it so app/CLI consumers import from the application layer, not the config package.
+- `setProjectExecutorDisabled(projectRoot, executorName, disabled)` (0797/ADR-111) flips one existing
+  `agent.executors[]` entry's `disabled` flag in `<projectRoot>/.spur/config.yaml` via the yaml
+  document model (comments, ordering, unrelated values, file mode preserved). Exact case-sensitive
+  match; absent flag is written explicitly; an already-matching explicit value is a byte-stable
+  no-op. Returns `{status:'updated'}` or `{status:'unchanged',reason}` (`already-set`,
+  `missing-file`, `missing-executors`, `missing-executor`) — nothing is ever created. Errors:
+  `INVALID_CONFIG` (bad args, malformed/ambiguous YAML, aliases/merge keys, symlinked config),
+  `CONFIG_CONFLICT` (external change detected pre-commit), `CONFIG_WRITE_FAILED` (lock/atomic-write
+  failure). Writes serialize under a per-path lock (dead owners reclaimed, live ones never), commit
+  via same-dir temp + fsync + rename, and invalidate the loader cache on success.
 - **Type ownership.** `TaskFoldersConfig`/`TaskFolderEntry` are defined once in the loader; services
   re-export, never redefine, so the loader↔service seam shares one identity.
 - **Guardrail.** `config/rules/boundary/config-loading-ownership.yaml` blocks `loadStructuredConfig`
@@ -1671,6 +1686,7 @@ standard scripts as `node "$(superskill script path sp <rel>.mjs)"`. Repo-only s
 | `history_run_session`                                      | CLI (`RunSessionDao`)        | Run→session mapping (feature E6): `run_id` → `(source, session_id)` with `exactness` (`exact` \| `unresolved` \| `estimated`) and `mechanism` (`observed` \| `supplied` \| `inferred`). `RunSessionObserver` writes boundary observations; import may promote an unresolved row to exact when a session is observed inside that run's `.spur/run/<runId>/agent-sessions/` directory (task 0624). `RetroCorrelator` writes estimated/inferred rows and never shadows exact. Indexed on `run_id` and `(source, session_id)`. |
 | `history_task_session`                                     | CLI (`TaskSessionDao`)       | Task↔session attribution (feature E6, task 0722): evidence-backed `(wbs, source, session_id)` triples recovered during history import. One row per task per session; `exactness` is `estimated` on the import path (first-party operational syntax only, echo rule per run-2 remediation R9 — task-scoped `/sp:dev-*` slash invocations in user rows, structured `spur task <verb> <wbs>` operations **only via tool-call args**; quoted command text in user rows, tool-output echoes, and prose never links and is counted skipped — validated through the task locator) and distinguishable from invoke-boundary `exact` mappings; `evidence_kind`/`evidence_ref` carry a bounded audit locator (`user-command`\|`cli-tool`, `<file basename>#<line>`), never transcript content. The primary key makes re-imports idempotent and enforces exact-over-estimated precedence. Indexed on `(source, session_id)`. |
 | `rule_runs`, `rule_eval_runs`                              | ts-rule-engine (≥0.3.15)  | Persisted rule-run history powering `spur rule trace`; added by migration `0002_spur_cli_rule_history`. `applied_fix_count` is re-stamped by Spur after `applyFixes`.           |
+| `agent_executor_updates`                                  | ts-db (`AgentExecutorUpdateDao`) | Durable newest-pending quota-driven executor update per project/executor (ADR-111): PK `(project_id, executor_name)`; `observation_id`/`observed_at`/`agent`/`model`/`disabled` plus `applied_observation_id`/`applied_at`/`attempts`/`retry_after`/`last_error`; survives event-history pruning. Added by migration `0040_spur_cli_agent_executor_updates`; consumed by the server drain and CLI flush-before-exit persistence (0799). |
 
 ### 3.2 SourceDefinition (history import)
 
@@ -2925,6 +2941,13 @@ Only events registered in `SYSTEM_EVENT_CATALOG` (`packages/app/src/services/eve
 are persisted to `system_events` and pushed over `/api/events/planning`. The catalog
 is the single source of truth — both the tap (`registerSystemEventTap`) and the SSE
 module derive their subscriptions from it.
+
+**Quota events (0799; ADR-111).** `agent.quota.exhausted` / `agent.quota.recovered` ride the
+app/CLI run bus and feed the durable executor-update pipeline — they are **not**
+`SYSTEM_EVENT_CATALOG` entries (bus-consumed, no board persistence until ADR-110 catalog-open
+ingestion ships). Trusted-shape schemas ship on `@gobing-ai/spur-config/agent-quota-events`
+(Workers-safe subpath, like `./loader`); payload fields and contracts live in
+[`executor-availability.md`](design/executor-availability.md) §4.
 
 **Tier rules (task 0221 R5).**
 

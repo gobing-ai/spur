@@ -116,6 +116,13 @@ export interface CliContext {
      */
     spurConfig?: SpurConfig;
     /**
+     * Effective-config accessor for quota updates (0799, ADR-082): the CLI
+     * composition root owns loader calls, so re-loads (R3 executor refresh,
+     * drain-time binding checks) go through this threaded closure instead of
+     * command-level loader calls. Returns `null` when the config cannot load.
+     */
+    loadAgentConfig: (projectRoot: string) => Promise<SpurConfig | null>;
+    /**
      * Provenance of `agentRoles`: 'fallback' iff no config layer supplied an
      * `agent.roles` table at all (whole-table, not per-role). Computed at the
      * CLI root from the merged config; observability only (R3).
@@ -161,6 +168,12 @@ export function createCliContext(options: {
     /** Merged global+project config (A5 / ADR-082) — the only app-config source. */
     spurConfig?: SpurConfig;
     /**
+     * Composition-root-supplied effective-config accessor (0799, ADR-082).
+     * Defaults to the boot snapshot — a command that never re-loads keeps the
+     * exact config it was dispatched with.
+     */
+    loadAgentConfig?: (projectRoot: string) => Promise<SpurConfig | null>;
+    /**
      * Layer-1 role → tier map (0536 R1 / 0572). Defaults to
      * `resolveAgentRoles(agentConfig)` — `DEFAULT_AGENT_ROLES` merged with the
      * project's `agent.roles` override.
@@ -184,6 +197,8 @@ export function createCliContext(options: {
         dbPromise ??= createMigratedDbAdapter(cwd, env, options.dbUrl);
         return dbPromise;
     };
+    const loadAgentConfig =
+        options.loadAgentConfig ?? (async (): Promise<SpurConfig | null> => options.spurConfig ?? null);
 
     return {
         cwd,
@@ -192,6 +207,7 @@ export function createCliContext(options: {
         setExitCode: options.setExitCode ?? noopSetExitCode,
         output: options.output,
         getDb,
+        loadAgentConfig: (projectRoot: string) => loadAgentConfig(projectRoot),
         ...(agentConfig !== undefined ? { agentConfig } : {}),
         ...(options.spurConfig !== undefined ? { spurConfig: options.spurConfig } : {}),
         agentRoles,

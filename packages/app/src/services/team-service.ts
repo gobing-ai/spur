@@ -1,5 +1,6 @@
 import { join, resolve } from 'node:path';
 import {
+    ExecutorDisabledError,
     memberLocalId,
     type NormalizedTeamMember,
     normalizeMember,
@@ -12,6 +13,7 @@ import {
     type DbAdapter,
     InboxMessageDao,
     InboxRecentDao,
+    isTierEligible,
     MarkdownDocument,
 } from '@gobing-ai/spur-domain';
 import {
@@ -27,7 +29,7 @@ import {
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { resolvePlanningFolders } from '../config/planning-folders';
-import { type AgentRoleDefinition, cheapestEligibleExecutors } from './agent-service';
+import { type AgentRoleDefinition, cheapestEligibleExecutors, getExecutorTier } from './agent-service';
 import { TaskLocator } from './task-locator';
 
 // ---------------------------------------------------------------------------
@@ -50,6 +52,8 @@ export interface TeamServiceContext {
      * defaults.
      */
     spurConfig?: SpurConfig | null;
+    /** 0799 R3: launch boundaries reload merged config so quota-driven executor disables apply without a server restart. */
+    reloadAgentConfig?: () => Promise<SpurConfig | null>;
     /** Optional output sink; TeamService does not read it (kept for CLI stdout coupling). */
     output?: TeamServiceOutput;
     getDb(): Promise<DbAdapter>;
@@ -682,7 +686,12 @@ export class TeamService {
      */
     async materializeTeam(teamId: string, opts?: { check?: boolean }): Promise<MaterializeResult> {
         // A5/ADR-082: merged config threaded on the context — no per-slice load.
-        const config = this.ctx.spurConfig ?? null;
+        // 0799 R3: the launch boundary prefers a fresh merged config so a quota
+        // event applied by the updater gates this materialization immediately.
+        const config =
+            this.ctx.reloadAgentConfig !== undefined
+                ? await this.ctx.reloadAgentConfig()
+                : (this.ctx.spurConfig ?? null);
         const teamConfig = config?.agent?.team?.[teamId];
         if (!teamConfig) {
             throw new Error(`Team "${teamId}" not found in agent.team config`);
@@ -717,7 +726,19 @@ export class TeamService {
             let resolved: ResolvedExecutor;
             let executorName: string;
             if (member.executor !== undefined) {
-                resolved = resolveExecutor(member.executor, agentConfig);
+                // 111 R4: an explicit pin to a disabled profile fails at
+                // materialization — before spawn, naming the member and the fix;
+                // never silently substituted with a bare binary.
+                try {
+                    resolved = resolveExecutor(member.executor, agentConfig);
+                } catch (error) {
+                    if (error instanceof ExecutorDisabledError) {
+                        throw new Error(
+                            `Team "${teamId}" member "${localId}" pins disabled executor "${member.executor}" — ${error.message}; enable the profile or repin the member`,
+                        );
+                    }
+                    throw error;
+                }
                 executorName = member.executor;
             } else {
                 const role = member.role;
@@ -737,6 +758,16 @@ export class TeamService {
                 const eligible = cheapestEligibleExecutors(agentConfig?.executors ?? [], roleTier);
                 const winner = eligible[0];
                 if (winner === undefined) {
+                    // 111 R3: distinguish "nothing at that tier" from "all tier-eligible
+                    // profiles are disabled" so the fix is actionable in one read.
+                    const disabledEligible = (agentConfig?.executors ?? [])
+                        .filter((e) => e.disabled === true && isTierEligible(getExecutorTier(e), roleTier))
+                        .map((e) => e.name);
+                    if (disabledEligible.length > 0) {
+                        throw new Error(
+                            `Team "${teamId}" member at index ${index}: every tier-eligible executor for role "${role}" (tier ${roleTier}) is disabled (${disabledEligible.join(', ')}) — enable one via agent.executors.<name>.disabled: false`,
+                        );
+                    }
                     throw new Error(
                         `Team "${teamId}" member at index ${index}: no executor configured to serve role "${role}" (tier ${roleTier}) — define executors under agent.executors`,
                     );
