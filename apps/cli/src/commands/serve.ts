@@ -4,7 +4,7 @@ import type { Command } from '@commander-js/extra-typings';
 import { buildConfigFromEnv, DEFAULT_DATABASE_URL } from '@gobing-ai/spur-config';
 import { startServer } from '@gobing-ai/spur-server';
 import type { CliContext } from '../context';
-import { CommandError } from '../errors';
+import { CommandError, errorMessage } from '../errors';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { resolveSpurBin } from '../workflow/resolve-spur-bin';
 import { SHARED_OPTIONS } from './shared-options';
@@ -107,7 +107,10 @@ export function registerServeCommand(program: Command, context: CliContext, opti
                     ...(projectRoot !== undefined ? { cwd: projectRoot } : {}),
                 });
             } catch (err) {
-                writeJsonError(context.output, options, err instanceof Error ? err.message : String(err));
+                // errorMessage() classifies SQLITE_BUSY (bun:sqlite: message "database is locked",
+                // code SQLITE_BUSY) into the task 0805 R4 remediation — a raw message here read
+                // as an opaque failure with no holder-identification hint (dogfood 2026-09-08).
+                writeJsonError(context.output, options, errorMessage(err));
                 if (context.env?.SPUR_DEBUG === '1' && err instanceof Error && err.stack) {
                     writeJsonError(context.output, options, err.stack, 'INTERNAL_ERROR');
                 }

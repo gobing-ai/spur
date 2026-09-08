@@ -159,6 +159,24 @@ describe('registerServeCommand', () => {
         expect(exit).toContain(1);
         expect(errors.some((e) => e.includes('bind failed'))).toBe(true);
     });
+
+    test('classifies a SQLITE_BUSY startup failure with the busy remediation (2026-09-08)', async () => {
+        const { ctx, errors, exit } = makeCtx();
+        // bun:sqlite busy failure shape, verified live: message "database is locked", code SQLITE_BUSY.
+        const busyError = Object.assign(new Error('database is locked'), { code: 'SQLITE_BUSY' });
+        const { action } = captureServe(ctx, {
+            startServer: (async () => {
+                throw busyError;
+            }) as RegisterServeOptions['startServer'],
+        });
+
+        await action({ port: 3000, host: 'localhost', open: false, json: false });
+
+        expect(exit).toContain(1);
+        const all = errors.join('\n');
+        expect(all).toContain('.spur/spur.db is busy');
+        expect(all).toContain('lsof .spur/spur.db');
+    });
 });
 
 describe('serve --cwd project root (task 0805 R2)', () => {
