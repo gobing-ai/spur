@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.41.0
+version: 1.42.0
 owner: Robin Min
 updated_at: 2026-09-07
 read_before: any structural change; before diverging from a decision
@@ -2315,17 +2315,21 @@ stage cites these notes (not the original body) when scoring authority/derived-d
 
 ## ADR-109: Task Creation Prepares Specifications by Default
 
-- **Status:** Implemented (F21 task 0788) · **Date:** 2026-09-06 · **Feature:** F21 · **Amends:** ADR-020
+- **Status:** Accepted · **Date:** 2026-09-06 · **Feature:** F21 · **Amends:** ADR-020
 - **Decision:** Default task CLI creation invokes the existing ready-preparation competency, with an explicit capture opt-out. Shared task writers remain deterministic; host planning prepares content inline and avoids a second model pass. Structural validity, specification readiness and execution prerequisites remain distinct.
 - **Why:** A newly created task should not require a separate manual refinement action, and shared writers must not acquire hidden agent execution.
 - **Detail:** `03 §12.4`; [task creation surface](design/task-creation-readiness.md). Delivered by task 0788: `create`/`batch-create` prepare to ready depth by default (`preparation-failed` JSON error branch carries the stage and recovery command), `--skip-ready` captures without model execution, and the idea pipeline gained the `ready-prepare` stage writing the ready-evidence sidecar.
 
+**Amendment (2026-09-07).** Status vocabulary corrected to **Accepted** per `99 §6.1` rule 5 (shipped; task 0788 verify PASS): the previous `Implemented (F21 task 0788)` is outside the §6.1 template vocabulary (`Accepted | Accepted (design) | Superseded by ADR-MMM | Skipped`). Per `99 §6.1` rule 3 only the status vocabulary aligns; entry number, date, decision text, and every repo-wide cross-reference are unchanged.
+
 ## ADR-110: System-Event Ingestion Is Catalog-Open, Presentation Stays Cataloged
 
-- **Status:** Proposed · **Date:** 2026-09-07 · **Feature:** J31
+- **Status:** Accepted (design) · **Date:** 2026-09-07 · **Feature:** J31
 - **Decision:** Both `system_events` persistence paths (server tap, CLI emitter) persist every emitted event name, synthesizing a generic catalog entry for names absent from `BASE_CATALOG` (derived prefix, generic renderer, default tier, standard redaction, per-prefix quota bound at the persist site (the resolver enumerates catalog prefixes only)). The catalog stops being an ingestion gate and remains the presentation/promotion layer: cataloged names keep their presenters, tiers, and payload policies.
 - **Why:** Catalog-closed ingestion silently drops any event nobody registered — including upstream ts-libs emissions (e.g. ts-infra `db.*`) and future drift — making the observability board incomplete by construction. The ts-infra EventBus has no wildcard subscription, so the catch-all intercepts at the emit seam (idempotent `emit` wrap at the tap/ledger attach points) rather than subscribing.
 - **Detail:** [observabilities module polish](design/observabilities-module-polish.md). Accepted limitation: uncataloged events are history-visible on refresh, not live-streamed, until ts-infra grows an `onAny`/wildcard seam (upstream follow-up).
+
+**Amendment (2026-09-07).** Status vocabulary corrected to **Accepted (design)** per `99 §6.1` rule 5 (decided, unbuilt): the previous `Proposed` is outside the §6.1 template vocabulary. Per `99 §6.1` rule 3 only the status vocabulary aligns; entry number, date, decision text, and every repo-wide cross-reference are unchanged.
 
 ## ADR-111: Quota-Driven Config Updates Survive Event-History Retention
 
