@@ -850,6 +850,7 @@ export class AgentService {
             usage: normalizeAgentUsage(
                 // SAFETY: dispatchers attach `usage` onto the result object at
                 // runtime; the visible AgentRunResult type predates that field.
+                // pi-lens-ignore: require-safety-comment-for-as-unknown-as
                 (result as unknown as { usage?: unknown }).usage,
                 'runner result carries no structured usage',
             ),
@@ -1463,6 +1464,7 @@ export class AgentService {
             usage: normalizeAgentUsage(
                 // SAFETY: dispatchers attach `usage` onto the result object at
                 // runtime; the visible AgentRunResult type predates that field.
+                // pi-lens-ignore: require-safety-comment-for-as-unknown-as
                 (result as unknown as { usage?: unknown }).usage,
                 'runner result carries no structured usage',
             ),
@@ -1815,6 +1817,7 @@ export class AgentService {
                             agent: canonical,
                             model: executor.model,
                             source: 'stage',
+                            executor: executor.name,
                             stage: {
                                 stageId: stageRecord.id,
                                 policy,
@@ -1907,6 +1910,7 @@ export class AgentService {
                     agent: canonical,
                     model: executor.model,
                     source: 'stage',
+                    executor: executor.name,
                     stage: {
                         stageId: stageRecord.id,
                         policy,
