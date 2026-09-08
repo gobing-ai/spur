@@ -3,7 +3,6 @@ import type { Job } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor, type ProcessExecutor, type ProcessResult } from '@gobing-ai/ts-runtime';
 import {
     handleSchedulerCustomJob,
-    isTimeoutResult,
     resolveSchedulerCustomTimeoutMs,
     SCHEDULER_CUSTOM_JOB,
     SCHEDULER_CUSTOM_TIMEOUT_MS,
@@ -36,6 +35,8 @@ interface RecordedRun {
     maxOutput?: number;
     forceBuffered?: boolean;
     rejectOnError?: boolean;
+    signal?: AbortSignal;
+    onSpawn?: (pid: number) => void;
 }
 
 /** Capturing fake at the ProcessExecutor seam; `result` is merged over a successful default. */
@@ -96,15 +97,16 @@ describe('handleSchedulerCustomJob (task 0734 R6)', () => {
             jobOf({ name: 'nightly', command: 'bun run load-history && echo done' }),
         );
         expect(runs).toHaveLength(1);
-        expect(runs[0]).toEqual({
-            command: '/bin/sh',
-            args: ['-c', 'bun run load-history && echo done'],
-            cwd: '/proj',
-            timeout: SCHEDULER_CUSTOM_TIMEOUT_MS,
-            maxOutput: 1_000_000,
-            forceBuffered: true,
-            rejectOnError: false,
-        });
+        const run = runs[0] as (typeof runs)[number];
+        expect(run.command).toBe('/bin/sh');
+        expect(run.args).toEqual(['-c', 'bun run load-history && echo done']);
+        expect(run.cwd).toBe('/proj');
+        expect(run.timeout).toBe(SCHEDULER_CUSTOM_TIMEOUT_MS);
+        expect(run.maxOutput).toBe(1_000_000);
+        expect(run.forceBuffered).toBe(true);
+        // Containment seam (task 0806 R1): the abort signal and spawn hook ride along.
+        expect(run.signal).toBeInstanceOf(AbortSignal);
+        expect(typeof run.onSpawn).toBe('function');
     });
 
     test('an explicit timeoutMs overrides the ten-minute default', async () => {
@@ -157,11 +159,11 @@ describe('handleSchedulerCustomJob (task 0734 R6)', () => {
         expect(err.message.length).toBeLessThan(500);
     });
 
-    test('a null exit code (signal/timeout) throws naming the signal', async () => {
-        const { executor } = fakeExecutor({ exitCode: null, signal: 'SIGTERM', stderr: 'killed' });
+    test('a null exit code (signal/timeout) throws naming the signal and elapsed time', async () => {
+        const { executor } = fakeExecutor({ exitCode: null, signal: 'SIGTERM', stderr: 'killed', durationMs: 4_321 });
         await expect(
             handleSchedulerCustomJob({ cwd: '/proj', executor }, jobOf({ name: 'slow', command: 'sleep 99' })),
-        ).rejects.toThrow('scheduler job "slow" terminated before a normal exit (SIGTERM): killed');
+        ).rejects.toThrow('scheduler job "slow" terminated before a normal exit (SIGTERM) after 4321ms: killed');
     });
 
     test('a spawn failure propagates to the queue as a failed attempt', async () => {
@@ -212,42 +214,45 @@ describe('resolveSchedulerCustomTimeoutMs (task 0803 R1)', () => {
     });
 });
 
-describe('isTimeoutResult classification (task 0803 R1)', () => {
-    const pr = (partial: Partial<ProcessResult>): ProcessResult => ({
-        command: 'x',
-        args: [],
-        stdout: '',
-        stderr: '',
-        exitCode: 0,
-        durationMs: 0,
-        ...partial,
-    });
-
-    test('a kill at or beyond the deadline is classified as timed out', () => {
-        expect(isTimeoutResult(pr({ exitCode: null, signal: 'SIGKILL', durationMs: 5_000 }), 5_000)).toBe(true);
-    });
-
-    test('a kill before the deadline is not classified as timed out (external kill stays generic)', () => {
-        expect(isTimeoutResult(pr({ exitCode: null, signal: 'SIGTERM', durationMs: 4_999 }), 5_000)).toBe(false);
-        expect(isTimeoutResult(pr({ exitCode: 2, signal: undefined, durationMs: 9_999 }), 5_000)).toBe(false);
-    });
-
+describe('bounded-child timeout containment (task 0803 R1 / 0806 R1)', () => {
+    // Small real deadline: runBoundedChild owns a real abort timer, so this fake
+    // must hang until the abort fires before returning the killed result —
+    // resolving early would race the timer and miss the containment verdict.
     test('the handler labels the deadline kill in the error and keeps the detail tail', async () => {
-        const { executor } = fakeExecutor({
-            exitCode: null,
-            signal: 'SIGKILL',
-            durationMs: 5_000,
-            stderr: 'partial output',
-        });
+        const runs: RecordedRun[] = [];
+        const executor = {
+            run: async (options: RecordedRun) => {
+                runs.push(options);
+                const signal = (options as { signal?: AbortSignal }).signal;
+                await new Promise<void>((resolve) => {
+                    if (signal?.aborted) resolve();
+                    else signal?.addEventListener('abort', () => resolve(), { once: true });
+                });
+                return {
+                    command: options.command,
+                    args: options.args ?? [],
+                    exitCode: null,
+                    stdout: '',
+                    stderr: 'partial output',
+                    signal: 'SIGKILL' as const,
+                    durationMs: 20,
+                };
+            },
+        } as unknown as ProcessExecutor;
         await expect(
-            handleSchedulerCustomJob({ cwd: '/proj', executor, timeoutMs: 5_000 }, jobOf({ name: 'n', command: 'x' })),
-        ).rejects.toThrow('scheduler job "n" timed out after 5000ms (killed): partial output');
+            handleSchedulerCustomJob(
+                { cwd: '/proj', executor, timeoutMs: 20, killGraceMs: 5 },
+                jobOf({ name: 'n', command: 'x' }),
+            ),
+        ).rejects.toThrow(
+            /scheduler job "n" timed out after 20ms \(killed after \d+ms elapsed; termination timeout\); shell chain did not complete, so later configured stages did not run and any exit_code in the tail is a subcommand result, not the chain verdict: partial output/,
+        );
     });
 
     test('a sub-deadline kill keeps the generic terminated message (not a timeout)', async () => {
-        const { executor } = fakeExecutor({ exitCode: null, signal: 'SIGTERM', durationMs: 4_999 });
+        const { executor } = fakeExecutor({ exitCode: null, signal: 'SIGTERM', durationMs: 10 });
         const err = (await handleSchedulerCustomJob(
-            { cwd: '/proj', executor, timeoutMs: 5_000 },
+            { cwd: '/proj', executor, timeoutMs: 500, killGraceMs: 5 },
             jobOf({ name: 'n', command: 'x' }),
         ).catch((e: unknown) => e)) as Error;
         expect(err.message).toContain('terminated before a normal exit (SIGTERM)');

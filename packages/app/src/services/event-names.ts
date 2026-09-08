@@ -257,6 +257,10 @@ const BASE_CATALOG = [
     baseEvent('queue.consumer.started', 'queue', 'queue'),
     baseEvent('queue.consumer.stopped', 'queue', 'queue'),
     baseEvent('queue.job.enqueued', 'queue', 'queue', 'metadata-only', 'diagnostic'),
+    // Task 0806 R5: terminal events alone leave a gap between enqueue and exit;
+    // the started event anchors the handler phase so queued→started→terminal
+    // correlate in the normal observability ledger.
+    baseEvent('queue.job.started', 'queue', 'queue', 'metadata-only', 'diagnostic'),
     baseEvent('queue.job.completed', 'queue', 'queue', 'metadata-only', 'diagnostic'),
     baseEvent('queue.job.failed', 'queue', 'queue'),
     baseEvent('queue.job.retrying', 'queue', 'queue'),
@@ -497,6 +501,18 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             return type !== undefined && jobId !== undefined
                 ? `[queue] ${type} · job ${jobId} enqueued`
                 : '[queue] job enqueued';
+        },
+        outcome: unsupported,
+    },
+    'queue.job.started': {
+        description: 'A queued job handler began executing (job identity and phase anchor).',
+        fields: [field('jobId', 'Job'), field('type', 'Type'), field('name', 'Name')],
+        summary: ({ data }) => {
+            const type = s(data, 'type');
+            const jobId = s(data, 'jobId');
+            return type !== undefined && jobId !== undefined
+                ? `[queue] ${type} · job ${jobId} started`
+                : '[queue] job started';
         },
         outcome: unsupported,
     },

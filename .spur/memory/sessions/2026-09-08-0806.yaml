@@ -1,0 +1,18 @@
+---
+schema_version: 1
+session_id: 2026-09-08-0806
+workflow: task-pipeline
+run_id: edd5d342-015d-4207-9cb9-3f01f4fa0e24
+task_wbs: 0806
+feature_id: A2
+phase: done
+status: done
+last_gate: record
+source_commit: 9e838f7dceab34a4fb9f729e10983a6981426e55
+digest: sha256:e3d2f94b33682696d7cfd38d10495d6873b884e97f92b93e3efc4e777bd37571
+generated_at: 2026-09-08T17:48:08Z
+updated_at: 2026-09-08T17:48:08Z
+next_action: none - task 0806 complete (terminal; advisory only)
+artifacts:
+  - .spur/run/0806-verdict.json
+  - .spur/run/0806-test-gate.log

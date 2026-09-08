@@ -1409,3 +1409,35 @@ describe('importAll bounded SQLITE_BUSY tolerance (task 0803 R3)', () => {
         expect(result.entries.map((e) => e.status)).toEqual(['failed', 'empty']);
     });
 });
+
+describe('importAll per-source timeout containment (task 0806 R2)', () => {
+    /** A source whose import never settles — the caller-side deadline (Promise.race)
+     * must fire, record the source as failed, and halt the remaining fan-out. */
+    class HangingImportService extends HistoryService {
+        readonly attempted: string[] = [];
+
+        override async import(
+            source: string,
+            _opts: { file?: string; root?: string; mode?: string; dryRun?: boolean } = {},
+        ): Promise<Awaited<ReturnType<HistoryService['import']>>> {
+            this.attempted.push(source);
+            return new Promise(() => {});
+        }
+    }
+
+    test('a hung source times out, aborts the whole run, and carries a source-timeout warning', async () => {
+        const svc = new HangingImportService(makeCtx());
+        const err = (await svc
+            .importAll({
+                sources: ['antigravity', 'claude'],
+                mode: 'incremental',
+                root: emptyRoot(),
+                sourceTimeout: 20,
+            })
+            .catch((e: unknown) => e)) as Error;
+        // The whole import aborts (the hung writer may still hold the lock), not just the source.
+        expect(err.message).toContain("source 'antigravity' exceeded its 20ms budget");
+        expect(err.message).toContain('remaining sources not started');
+        expect(svc.attempted).toEqual(['antigravity']);
+    });
+});

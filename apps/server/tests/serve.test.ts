@@ -708,6 +708,7 @@ describe('startServer', () => {
                             pruneCallCount = 10_000;
                         },
                     }),
+                    eventBus: () => ({ emit: () => {}, on: () => {}, off: () => {} }),
                 }) as unknown as ServerContext) as unknown as StartServerDeps['createServerContext'],
             runNodeApplication: runNodeApplicationWith(() => {
                 const rt = fakeRuntime(undefined, { enabled: true, adapter: recordingScheduler(order).adapter });
@@ -1013,15 +1014,23 @@ describe('startServer', () => {
         );
         await registered[2]?.action();
 
-        // The stale row was failed in place with the watchdog reason.
+        // The stale row was failed in place with the watchdog reason. The sweep threshold is the
+        // job's 60000ms budget plus the 5000ms default kill grace (task 0806 R3), so a watchdog
+        // kill still inside its escalation window is not double-swept by the same tick.
         expect(updates).toHaveLength(1);
-        expect(String(updates[0]?.params[0])).toContain('watchdog: processing exceeded 60000ms');
+        expect(String(updates[0]?.params[0])).toContain('watchdog: processing exceeded 65000ms');
         expect(updates[0]?.sql).toContain('processing_at = NULL');
         // The same tick enqueues a fresh job, with ONE attempt — not the default retry policy.
         expect(enqueued).toEqual([
             {
                 type: SCHEDULER_CUSTOM_JOB,
-                payload: { name: 'history-refresh', command: 'bun apps/cli/src/index.ts history daily' },
+                // Task 0806 R6: the re-enqueued configured history job carries the exclusive
+                // producer key so an overlapping configured importer fails its own attempt.
+                payload: {
+                    name: 'history-refresh',
+                    command: 'bun apps/cli/src/index.ts history daily',
+                    exclusiveKey: 'history-daily',
+                },
                 options: { maxRetries: 1 },
             },
         ]);
@@ -1128,6 +1137,7 @@ describe('startServer', () => {
                     systemEventDao: async () => ({
                         pruneQuotas: async () => {},
                     }),
+                    eventBus: () => ({ emit: () => {}, on: () => {}, off: () => {} }),
                 }) as unknown as ServerContext) as unknown as StartServerDeps['createServerContext'],
             runNodeApplication: runNodeApplicationWith(() => {
                 const rt = fakeRuntime(undefined, { enabled: true, adapter: recordingScheduler(order).adapter });
@@ -1138,8 +1148,12 @@ describe('startServer', () => {
             }),
         });
 
+        // Task 0806 R3: the history refresh watchdog is decoupled from the scheduler budget —
+        // each handler is bounded by its own env name.
         const prevTimeout = process.env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS;
+        const prevHistoryTimeout = process.env.SPUR_HISTORY_REFRESH_TIMEOUT_MS;
         process.env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS = '300';
+        process.env.SPUR_HISTORY_REFRESH_TIMEOUT_MS = '300';
         // A hermetic long-running script for the history handler: the handler appends
         // `--no-logo history daily` to the invocation, and macOS BSD `sleep` rejects
         // unknown args, so idle in bun instead (ignores argv, runs until the kill).
@@ -1163,15 +1177,17 @@ describe('startServer', () => {
             shutdownSigint = sigHandlers.SIGINT;
             await expect(
                 registeredHandlers[SCHEDULER_CUSTOM_JOB]?.({ payload: { name: 'slow', command: 'sleep 5' } }),
-            ).rejects.toThrow('scheduler job "slow" timed out after 300ms (killed)');
+            ).rejects.toThrow(/scheduler job "slow" timed out after 300ms \(killed after \d+ms elapsed/);
             await expect(
                 registeredHandlers[HISTORY_REFRESH_JOB]?.({
                     payload: { trigger: 'task-done', triggerId: '0803', windowStart: 1, windowEnd: 2 },
                 }),
-            ).rejects.toThrow('history refresh child timed out after 300ms (killed)');
+            ).rejects.toThrow(/history refresh child timed out after 300ms \(killed after \d+ms elapsed/);
         } finally {
             if (prevTimeout === undefined) delete process.env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS;
             else process.env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS = prevTimeout;
+            if (prevHistoryTimeout === undefined) delete process.env.SPUR_HISTORY_REFRESH_TIMEOUT_MS;
+            else process.env.SPUR_HISTORY_REFRESH_TIMEOUT_MS = prevHistoryTimeout;
             rmSync(sleeper, { force: true });
             // The captured pre-spawn reference — sigHandlers.SIGINT may now hold an
             // executor-registered forwarder, and invoking that would re-raise a real SIGINT.

@@ -148,6 +148,11 @@ export interface FanOutResult {
     exitCode: 0 | 1 | 2;
     /** Per-source warnings: failed sources carry `source-failed`; was-non-empty carry `source-was-nonempty`. */
     warnings: ArtifactWarning[];
+    /**
+     * Rollup-refresh outcome (task 0806 R2, additive): measured duration and failure
+     * surface for the post-import rollup pass. Absent on dry-run or explicit skip.
+     */
+    rollupRefresh?: { status: 'ok' | 'failed'; durationMs: number; error?: string };
 }
 
 /** Options for {@link HistoryService.importAll}. */
@@ -840,19 +845,26 @@ export class HistoryService {
         const attribution = emptyAttributionSummary();
         // Task 0803 R3: consecutive busy-classified source failures (see loop below).
         let consecutiveBusySources = 0;
+        // Task 0806 R2: rollup-refresh outcome marker (absent when skipped/dry-run).
+        let rollupRefresh: FanOutResult['rollupRefresh'];
         // F9: stamp the run start so per-source tool-call counts reflect only rows this
         // run imported (existing rows from prior runs never inflate the count). Dry-run
         // writes nothing, so its counts stay legitimately 0.
         const runStartedAt = new Date().toISOString();
 
         for (const source of sources) {
+            const startedAt = Date.now();
             const { coverageEntry, sourceWarnings, sourceAttribution } = await this.importOneIsolated(
                 source,
                 opts,
                 timeoutMs,
                 runStartedAt,
             );
-            entries.push(coverageEntry);
+            const timedEntry: CoverageEntry =
+                coverageEntry.durationMs === undefined && sourceWarnings.every((w) => w.code !== 'source-timeout')
+                    ? { ...coverageEntry, durationMs: Date.now() - startedAt }
+                    : coverageEntry;
+            entries.push(timedEntry);
             warnings.push(...sourceWarnings);
             if (sourceAttribution !== null) {
                 attribution.sessionsEvaluated += sourceAttribution.sessionsEvaluated;
@@ -861,12 +873,25 @@ export class HistoryService {
                 attribution.skippedEvidence += sourceAttribution.skippedEvidence;
                 attribution.ambiguousEvidence += sourceAttribution.ambiguousEvidence;
             }
+            // Task 0806 R2: a per-source budget kill halts the fan-out. The importer cannot
+            // be interrupted cooperatively (no AbortSignal in ImportOptions), so a timed-out
+            // source may still hold the write lock and finishing the remaining sources only
+            // queues more failed attempts behind it. Surface the timeout as its own warning
+            // code (distinguishable from generic `source-failed`) and stop before the next
+            // source starts — the queue run fails and the next scheduled run resumes from
+            // the checkpoint (R7).
+            if (sourceWarnings.some((w) => w.code === 'source-timeout')) {
+                throw new Error(
+                    `history import aborted: source '${source}' exceeded its ${timeoutMs}ms budget ` +
+                        `(elapsed ${timedEntry.durationMs ?? 'unknown'}ms); remaining sources not started`,
+                );
+            }
             // Task 0803 R3: bounded BUSY tolerance. Two consecutive busy-classified failures
             // mean a live writer holds the WAL write lock — continuing only queues more 30s
             // waits behind it, so abort the remaining sources and fail the run fast. Any
             // non-busy outcome (success, empty, non-lock failure) resets the counter.
             if (
-                coverageEntry.status === 'failed' &&
+                timedEntry.status === 'failed' &&
                 sourceWarnings.some((w) => w.code === 'source-failed' && HISTORY_BUSY_ERROR_PATTERN.test(w.detail))
             ) {
                 consecutiveBusySources += 1;
@@ -880,18 +905,38 @@ export class HistoryService {
             }
         }
 
-        // Incrementally refresh board rollups so newly imported rows do not leave rollups stale
-        // and degrade web queries to raw table scans (Watermark Granularity).
+        // Incrementally refresh board rollups so newly imported rows do not leave rollups
+        // stale and degrade web queries to raw table scans (Watermark Granularity).
+        // Task 0806 R2: the outcome is surfaced, not swallowed — a failed rollup refresh
+        // becomes a `rollup-refresh-failed` warning plus the fan-out marker, so a silent
+        // degraded web view cannot masquerade as a healthy run. The import itself still
+        // succeeded, so this stays a warning: the fan-out exit code is data-plane truth.
         if (opts.dryRun !== true && opts.skipRollupRefresh !== true) {
             const db = await this.ctx.getDb();
+            const rollupStartedAt = Date.now();
             try {
                 await refreshHistoryRollups(db);
-            } catch {
-                // Best-effort rollup refresh: an error must never abort or fail the import fan-out.
+                rollupRefresh = { status: 'ok', durationMs: Date.now() - rollupStartedAt };
+            } catch (e) {
+                rollupRefresh = {
+                    status: 'failed',
+                    durationMs: Date.now() - rollupStartedAt,
+                    error: (e as Error).message,
+                };
+                warnings.push({
+                    code: 'rollup-refresh-failed',
+                    detail: `board rollup refresh failed after import: ${(e as Error).message}`,
+                });
             }
         }
 
-        return { entries, exitCode: computeExitCode(entries), warnings, attribution };
+        return {
+            entries,
+            exitCode: computeExitCode(entries),
+            warnings,
+            attribution,
+            ...(rollupRefresh !== undefined ? { rollupRefresh } : {}),
+        };
     }
 
     /**
@@ -966,12 +1011,19 @@ export class HistoryService {
     }> {
         const db = await this.ctx.getDb();
         const sourceWarnings: ArtifactWarning[] = [];
+        // Task 0806 R2: per-source spend measurement starts at the attempt boundary.
+        const attemptStartedAt = Date.now();
 
         // R4 - was-non-empty detection via checkpoint rows (no artifact chaining).
         const checkpointCount = await countCheckpointsBySource(db, source);
         const wasNonEmpty = checkpointCount > 0;
 
         try {
+            // Task 0806 R2: the importer has no AbortSignal (ImportOptions), so the deadline
+            // is a caller-side race, not a cooperative cancel. The losing importPromise may
+            // still finish later; Promise.race subscribes to it, so a post-timeout
+            // rejection is observed and cannot escape as an unhandled rejection. Its rows
+            // are checkpointed and a later run resumes safely (R7).
             const importPromise = this.import(source, {
                 file: opts.file,
                 root: opts.root,
@@ -990,6 +1042,33 @@ export class HistoryService {
             let result: HistoryImportResult;
             try {
                 result = await Promise.race([importPromise, timeoutPromise]);
+            } catch (e) {
+                if (abort.signal.aborted) {
+                    const elapsedMs = Date.now() - attemptStartedAt;
+                    const detail =
+                        `source '${source}' exceeded its ${timeoutMs}ms budget ` +
+                        `(elapsed ${elapsedMs}ms); import attempt was abandoned mid-flight and may still hold the write lock until the process exits`;
+                    sourceWarnings.push({ code: 'source-timeout', source, detail });
+                    return {
+                        coverageEntry: {
+                            source,
+                            status: 'failed',
+                            files: 0,
+                            messages: 0,
+                            toolCalls: 0,
+                            unknownRecords: 0,
+                            lastImportedAt: null,
+                            parseErrors: 0,
+                            validationErrors: 0,
+                            parseErrorSamples: [],
+                            validationErrorSamples: [],
+                            durationMs: elapsedMs,
+                        },
+                        sourceWarnings,
+                        sourceAttribution: null,
+                    };
+                }
+                throw e;
             } finally {
                 clearTimeout(timer);
             }
@@ -1057,6 +1136,7 @@ export class HistoryService {
                 // 0505 R1: preserve the importer's full-mode reconciliation summary so
                 // `history import --json` can report stale-row preview/applied counts.
                 ...(result.reconciliation ? { reconciliation: result.reconciliation } : {}),
+                durationMs: Date.now() - attemptStartedAt,
             };
 
             return { coverageEntry, sourceWarnings, sourceAttribution: result.attribution ?? null };
@@ -1076,6 +1156,7 @@ export class HistoryService {
                     validationErrors: 0,
                     parseErrorSamples: [],
                     validationErrorSamples: [],
+                    durationMs: Date.now() - attemptStartedAt,
                 },
                 sourceWarnings,
                 sourceAttribution: null,

@@ -1230,6 +1230,41 @@ A watchdog additionally bounds each child at the daemon-resolved `SPUR_SCHEDULER
 deadline is labeled `timed out after <n>ms (killed)` — so a wedged child can no longer hold the
 queue row, and the WAL write lock its imports take, for the full visibility window.
 
+**Containment hardening (task 0806).** Four bounded knobs close the residual gaps:
+
+- **Group kill (R1).** `runBoundedChild` arms SIGTERM→SIGKILL escalation on the detached process
+  group (`kill(-pid)`, grace `SPUR_SCHEDULER_KILL_GRACE_MS`, default 5,000 ms) so descendants that
+  ignore SIGTERM cannot outlive the watchdog. The per-source import deadline is a caller-side race:
+  the loser is abandoned mid-flight (checkpoint resume, R7) and the whole `history daily` run aborts
+  when a source exceeds its budget — a timed-out writer may still hold the write lock, so later
+  sources are not started and the queue run fails (distinct `source-timeout` warning code).
+- **Per-job budgets (R3).** Configured scheduler jobs resolve an effective deadline via
+  `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` (upper-snake of the configured name), falling back to the
+  global `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` on absent/invalid values; the `history.refresh`
+  watchdog is decoupled via `SPUR_HISTORY_REFRESH_TIMEOUT_MS` so raising the chain budget cannot
+  lengthen the completion-triggered watchdog.
+- **Single history producer (R6).** The completion-triggered `history.refresh` job holds an
+  in-process exclusive key (`history-daily`); a configured `scheduler.custom` job whose command
+  runs `history daily`/`history import` is stamped with the same key at enqueue (word-boundary
+  match), so an overlapping start fails its own attempt cleanly instead of racing the scheduled
+  importer into `SQLITE_BUSY`. Same-process advisory scope: the daemon is the only handler host;
+  manual CLI runs are bounded by per-source busy-abort + the watchdog.
+- **Maintenance ordering (R7).** Preserved chain semantics: success-path order is import → report →
+  maintenance (prune/smoke last); a failed or timed-out import marks maintenance skipped in the run
+  outcome (recorded, not silently dropped) rather than pruning under contention; manual deep
+  maintenance semantics are unchanged. Bounded policy, not a new mechanism: the queue serializes
+  attempts and the exclusive key prevents producer overlap.
+
+**Job lifecycle observability (R4/R5).** The daemon emits `queue.job.started` (metadata-only:
+`jobId`, `type`, optional `name`, `entityId`) when one of the two child-spawning handlers begins
+(`history-refresh`, `scheduler-custom` — the only kinds serving.ts wires a started anchor for), so
+ledger queries can correlate queued→started→terminal even though the domain queue projection
+clears `processing_at` on completion; other job kinds keep a null started anchor. `GET /api/jobs` enriches terminal rows whose `durationMs` is null from persisted
+terminal events (`queue.job.completed`/`queue.job.failed` carry the handler `durationMs`); the
+started anchor supplies `startedAt`. Unknown values stay null — a legacy row is never assigned its
+enqueue time as its start. Enrichment is one bounded event query per page and degrades silently to
+the raw projection.
+
 **Failure policy.** A degraded fan-out (per-source failures) emits `history.daily.failed` and does
 **not** rethrow — the refresh is idempotent (checkpoint resume) and the next completion re-triggers
 it. An exception from `daily` itself emits and rethrows so the queue records the job failed.

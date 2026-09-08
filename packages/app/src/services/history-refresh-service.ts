@@ -5,7 +5,9 @@ import { enqueueCoalesced } from '@gobing-ai/spur-domain';
 import type { Job } from '@gobing-ai/ts-infra';
 import type { ProcessExecutor } from '@gobing-ai/ts-runtime';
 import { splitLaunchCommand } from '../workflow/split-launch-command';
-import { isTimeoutResult, SCHEDULER_CUSTOM_TIMEOUT_MS } from './scheduler-custom-job-service';
+import { type BoundedChildResult, describeBoundedFailure, runBoundedChild } from './bounded-child-run';
+import { acquireExclusiveJob, HISTORY_PRODUCER_EXCLUSIVE_KEY, releaseExclusiveJob } from './job-exclusion-guard';
+import { SCHEDULER_CUSTOM_TIMEOUT_MS } from './scheduler-custom-job-service';
 
 /**
  * Completion-triggered history refresh (task 0549).
@@ -249,6 +251,20 @@ export interface HistoryRefreshJobDeps {
 }
 
 /**
+ * Resolve the history-refresh child watchdog from the environment (task 0806 R3).
+ * Decoupled from the scheduler.custom global: raising
+ * `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` to bound a long configured chain must NOT
+ * lengthen this short completion-triggered watchdog. Default stays the short
+ * ten-minute watchdog (task 0803 R1); invalid values fall back to it.
+ */
+export function resolveHistoryRefreshTimeoutMs(env: Record<string, string | undefined>): number {
+    const raw = env.SPUR_HISTORY_REFRESH_TIMEOUT_MS;
+    if (raw === undefined || raw.trim() === '') return SCHEDULER_CUSTOM_TIMEOUT_MS;
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : SCHEDULER_CUSTOM_TIMEOUT_MS;
+}
+
+/**
  * Queue-job body (task 0717): run the refresh as an isolated child process —
  * `<invocation> --no-logo history daily` in the project root — and only await its exit,
  * so a long import never blocks the server event loop (R1) and the entrypoint is
@@ -260,6 +276,13 @@ export interface HistoryRefreshJobDeps {
  * throws so the queue's `failOrRetry` records the retry/failure state and emits
  * `queue.job.*` truthfully. The child's exit code is the verdict; its stdout is failure
  * detail only, never a payload the parent parses.
+ *
+ * Task 0806: the child is contained by {@link runBoundedChild} (deadline abort → group
+ * SIGTERM → group SIGKILL after the termination grace) so a wedged `history daily` can
+ * neither outlive the watchdog through descendants nor outwait it, and the failure
+ * message separates the configured deadline from the measured elapsed time (R5). The
+ * short watchdog is preserved (R3) — decouple budgets via
+ * {@link resolveHistoryRefreshTimeoutMs}, never by widening this handler's default.
  */
 export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, job: Job<unknown>): Promise<void> {
     // Strict payload validation at the boundary: envelope/payload drift must fail the
@@ -271,33 +294,50 @@ export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, job: 
     // Task 0803 R1: bound the child the same way scheduler.custom children are bounded —
     // a wedged `history daily` holds the shared WAL write lock until killed.
     const timeoutMs = deps.timeoutMs ?? SCHEDULER_CUSTOM_TIMEOUT_MS;
-    const result = await deps.executor.run({
-        command: split.command,
-        // Human summary, not `--json`: the child's exit code is the whole success contract
-        // here (it owns every `history.*` event and writes the artifact itself), while the
-        // JSON envelope would ship the entire analyze artifact through the pipe for nothing.
-        // `--no-logo` keeps the startup banner off now that `--json` no longer suppresses it.
-        args: [...split.leadingArgs, '--no-logo', 'history', 'daily'],
-        cwd: deps.cwd,
-        timeout: timeoutMs,
-        env: {
-            [HISTORY_REFRESH_CONTEXT_ENV]: JSON.stringify(payload),
-            ...(deps.databaseUrl !== undefined ? { DATABASE_URL: deps.databaseUrl } : {}),
-        },
-        maxOutput: HISTORY_REFRESH_MAX_OUTPUT,
-    });
+    // Task 0806 R6: the refresh IS a history producer — never overlap the configured
+    // history chain's importer in the same daemon process.
+    acquireExclusiveJob(HISTORY_PRODUCER_EXCLUSIVE_KEY, 'history.refresh');
+    let outcome: BoundedChildResult;
+    try {
+        outcome = await runBoundedChild(deps.executor, {
+            command: split.command,
+            // Human summary, not `--json`: the child's exit code is the whole success contract
+            // here (it owns every `history.*` event and writes the artifact itself), while the
+            // JSON envelope would ship the entire analyze artifact through the pipe for nothing.
+            // `--no-logo` keeps the startup banner off now that `--json` no longer suppresses it.
+            args: [...split.leadingArgs, '--no-logo', 'history', 'daily'],
+            cwd: deps.cwd,
+            timeoutMs,
+            ...(deps.databaseUrl !== undefined
+                ? { env: { [HISTORY_REFRESH_CONTEXT_ENV]: JSON.stringify(payload), DATABASE_URL: deps.databaseUrl } }
+                : { env: { [HISTORY_REFRESH_CONTEXT_ENV]: JSON.stringify(payload) } }),
+            maxOutput: HISTORY_REFRESH_MAX_OUTPUT,
+        });
+    } finally {
+        releaseExclusiveJob(HISTORY_PRODUCER_EXCLUSIVE_KEY, 'history.refresh');
+    }
+    const { result } = outcome;
     // Bounded child output as failure detail for queue events: last 400 chars. The daily
     // summary reports the failing sources on stdout, so it leads; stderr is the fallback.
     const stderrDetail = outputTail(result.stderr);
+    const stdoutDetail = outputTail(result.stdout);
+    if (outcome.timedOut) {
+        throw new Error(
+            describeBoundedFailure({
+                subject: 'history refresh child',
+                outcome,
+                outputTail: stdoutDetail || stderrDetail,
+            }),
+        );
+    }
     if (result.exitCode === null) {
-        if (isTimeoutResult(result, timeoutMs)) {
-            throw new Error(`history refresh child timed out after ${timeoutMs}ms (killed)${stderrDetail}`);
-        }
         const signalDetail = result.signal === undefined ? '' : ` (${result.signal})`;
-        throw new Error(`history refresh child terminated before a normal exit${signalDetail}${stderrDetail}`);
+        throw new Error(
+            `history refresh child terminated before a normal exit${signalDetail} after ${Math.round(outcome.elapsedMs)}ms${stderrDetail}`,
+        );
     }
     if (result.exitCode !== 0) {
-        throw new Error(`history daily exited ${result.exitCode}${outputTail(result.stdout) || stderrDetail}`);
+        throw new Error(`history daily exited ${result.exitCode}${stdoutDetail || stderrDetail}`);
     }
 }
 

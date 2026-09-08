@@ -90,6 +90,12 @@ export {
     qualifySectionBody,
     resolveConfiguredTaskDirs,
 } from './services/anchor-qualifier';
+export type { BoundedChildOptions, BoundedChildResult } from './services/bounded-child-run';
+export {
+    CHILD_KILL_GRACE_MS,
+    resolveKillGraceMs,
+    runBoundedChild,
+} from './services/bounded-child-run';
 export type { CorpusSeverity } from './services/corpus-check';
 export { resolveFogRange, runCorpusCheck } from './services/corpus-check';
 export type {
@@ -199,6 +205,7 @@ export {
     HISTORY_REFRESH_JOB,
     handleHistoryRefreshJob,
     parseHistoryRefreshContext,
+    resolveHistoryRefreshTimeoutMs,
     validateHistoryRefreshPayload,
 } from './services/history-refresh-service';
 export type {
@@ -229,6 +236,13 @@ export {
     runHistoryReport,
     UnsafeHistoryImporterError,
 } from './services/history-service';
+export {
+    acquireExclusiveJob,
+    HISTORY_PRODUCER_EXCLUSIVE_KEY,
+    historyProducerExclusiveKeyFor,
+    isExclusiveJobActive,
+    releaseExclusiveJob,
+} from './services/job-exclusion-guard';
 export type { JobWorkerConsumer, JobWorkerServiceOptions } from './services/job-worker-service';
 export { JobHandlerRegistry, JobWorkerService } from './services/job-worker-service';
 export type {
@@ -371,10 +385,11 @@ export type {
 } from './services/scheduler-custom-job-service';
 export {
     handleSchedulerCustomJob,
-    isTimeoutResult,
     resolveSchedulerCustomTimeoutMs,
+    resolveSchedulerJobTimeoutMs,
     SCHEDULER_CUSTOM_JOB,
     SCHEDULER_CUSTOM_TIMEOUT_MS,
+    schedulerJobTimeoutEnvName,
     validateSchedulerCustomJobPayload,
 } from './services/scheduler-custom-job-service';
 export type {

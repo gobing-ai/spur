@@ -9,14 +9,18 @@ import {
     HISTORY_REFRESH_JOB,
     handleHistoryRefreshJob,
     handleSchedulerCustomJob,
+    historyProducerExclusiveKeyFor,
     installSystemEventCatchAll,
     JobHandlerRegistry,
     JobWorkerService,
     ProjectRegistry,
     resolveAutostartSet,
+    resolveHistoryRefreshTimeoutMs,
+    resolveKillGraceMs,
     resolvePlanningFolders,
     resolveRetentionQuotas,
     resolveSchedulerCustomTimeoutMs,
+    resolveSchedulerJobTimeoutMs,
     SCHEDULER_CUSTOM_JOB,
     startAgentQuotaUpdateConsumer,
     type TaskActionJob,
@@ -138,11 +142,17 @@ export const defaultDeps: StartServerDeps = {
 /** Options for {@link registerSchedulerEntries} (task 0803 R4). */
 export interface SchedulerTickOptions {
     /**
-     * The R1-resolved scheduler.custom child timeout in ms — the stale-processing sweep
-     * threshold. Defaults to the env-resolved value so standalone callers agree with the
-     * daemon boot resolution.
+     * The R1-resolved scheduler.custom child timeout in ms — base budget the
+     * stale-processing sweep threshold builds on. Defaults to the env-resolved
+     * value so standalone callers agree with the daemon boot resolution.
      */
     timeoutMs?: number;
+    /**
+     * Task 0806 R3: environment for per-job budget resolution. Defaults to
+     * `process.env` so a per-job override agrees between the handler deadline
+     * and the tick's stale sweep without an explicit double-configuration.
+     */
+    env?: Record<string, string | undefined>;
 }
 
 /** Register built-in scheduled queue entries for the Bun serve runtime.
@@ -167,6 +177,7 @@ export function registerSchedulerEntries(
 ): void {
     const timeoutMs =
         options.timeoutMs ?? resolveSchedulerCustomTimeoutMs(process.env as Record<string, string | undefined>);
+    const env = options.env ?? (process.env as Record<string, string | undefined>);
     const registrations: SchedulerScheduleRegistration[] = [];
     const now = Date.now();
 
@@ -217,6 +228,11 @@ export function registerSchedulerEntries(
     // command execution, and `queue.job.*` events report the attempt outcome.
     for (const job of jobs) {
         const schedule = job.cron ?? String(job.intervalMinutes * 60_000);
+        // Task 0806 R3: the stale-row sweep threshold is this job's effective
+        // budget (global default or `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS`) plus the
+        // kill grace, so a row is only swept after the handler's own kill
+        // deadline + escalation window has demonstrably elapsed.
+        const sweepThresholdMs = resolveSchedulerJobTimeoutMs(job.name, env, timeoutMs) + resolveKillGraceMs(env);
         register(schedule, `${SCHEDULER_CUSTOM_JOB}:${job.name}`, async () => {
             const queue = await ctx.jobQueue();
             // Single-flight: skip if an active job with the same name already exists.
@@ -233,9 +249,10 @@ export function registerSchedulerEntries(
                 // single-flight skip.
                 const now = Date.now();
                 const stale =
-                    active.status === 'processing' && now - (active.processingAt ?? active.updatedAt) > timeoutMs;
+                    active.status === 'processing' &&
+                    now - (active.processingAt ?? active.updatedAt) > sweepThresholdMs;
                 if (stale) {
-                    const reason = `watchdog: processing exceeded ${timeoutMs}ms`;
+                    const reason = `watchdog: processing exceeded ${sweepThresholdMs}ms`;
                     const swept = await failStaleSchedulerCustomJob(db, active.id, now, reason);
                     if (swept) {
                         ctx.eventBus().emit('scheduler.job.executed', {
@@ -261,7 +278,19 @@ export function registerSchedulerEntries(
             // failed row, and the single-flight lookup counts `pending` as active, so retries
             // would suppress later ticks for the whole backoff window. The next tick is the
             // natural retry for an idempotent periodic command.
-            await queue.enqueue(SCHEDULER_CUSTOM_JOB, { name: job.name, command: job.command }, { maxRetries: 1 });
+            await queue.enqueue(
+                SCHEDULER_CUSTOM_JOB,
+                {
+                    name: job.name,
+                    command: job.command,
+                    // Task 0806 R6: history-producer commands join the shared
+                    // in-process exclusion with the completion-triggered refresh.
+                    ...(historyProducerExclusiveKeyFor(job.command) !== undefined && {
+                        exclusiveKey: historyProducerExclusiveKeyFor(job.command),
+                    }),
+                },
+                { maxRetries: 1 },
+            );
         });
         registrations.push({
             name: job.name,
@@ -272,6 +301,35 @@ export function registerSchedulerEntries(
     }
 
     setRegisteredSchedules(registrations);
+}
+
+/** Task 0806 R5: emit the started lifecycle anchor so queued→started→terminal
+ * correlate in the normal observability ledger. Payload is bounded metadata:
+ * job identity plus the configured name when the payload carries one. */
+async function emitQueueJobStarted(
+    ctx: ServerContext,
+    job: { id: string; type: string; payload: unknown },
+): Promise<void> {
+    let name: string | undefined;
+    let candidate: unknown;
+    if (typeof job.payload === 'string') {
+        try {
+            candidate = (JSON.parse(job.payload) as { name?: unknown } | null)?.name;
+        } catch {
+            // Unparsable payload: the anchor still carries job identity.
+        }
+    } else if (job.payload !== null && typeof job.payload === 'object') {
+        candidate = (job.payload as { name?: unknown }).name;
+    }
+    if (typeof candidate === 'string') name = candidate;
+    await ctx.eventBus().emit('queue.job.started', {
+        jobId: job.id,
+        type: job.type,
+        // Correlation column: lets event queries filter by entity_id (R4/R5 join path).
+        entityId: job.id,
+        ...(name !== undefined && { name }),
+        severity: 'info',
+    });
 }
 
 /** Parse and validate the queue payload for a board-triggered task workflow action. */
@@ -641,28 +699,40 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 // `history daily` in an isolated child process, so the server only
                 // awaits its exit — the child owns every `history.*` event.
                 const childExecutor = new NodeProcessExecutor();
-                registry.register(HISTORY_REFRESH_JOB, (job) =>
-                    handleHistoryRefreshJob(
+                registry.register(HISTORY_REFRESH_JOB, async (job) => {
+                    await emitQueueJobStarted(ctx, job);
+                    return handleHistoryRefreshJob(
                         {
                             cwd: ctx.cwd,
                             ...(options.dbUrl !== undefined ? { databaseUrl: options.dbUrl } : {}),
                             // Omitted invocation fails loudly in splitLaunchCommand at run time.
                             invocation: options.spurInvocation ?? '',
                             executor: childExecutor,
-                            timeoutMs: schedulerCustomTimeoutMs,
+                            // Task 0806 R3: the refresh watchdog is decoupled from the
+                            // scheduler.custom default so its budget is tuned on its own env.
+                            timeoutMs: resolveHistoryRefreshTimeoutMs(env),
                         },
                         job,
-                    ),
-                );
+                    );
+                });
                 // Configured `bootstrap.scheduler.jobs` ticks (task 0734): the
                 // scheduler only enqueues; the command runs here, in a child, under
                 // the queue's existing attempt/retry policy.
-                registry.register(SCHEDULER_CUSTOM_JOB, (job) =>
-                    handleSchedulerCustomJob(
-                        { cwd: ctx.cwd, executor: childExecutor, timeoutMs: schedulerCustomTimeoutMs },
+                registry.register(SCHEDULER_CUSTOM_JOB, async (job) => {
+                    await emitQueueJobStarted(ctx, job);
+                    return handleSchedulerCustomJob(
+                        {
+                            cwd: ctx.cwd,
+                            executor: childExecutor,
+                            // Task 0806 R3: per-job budget override via
+                            // `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS`, falling back to the global
+                            // daemon-boot default.
+                            resolveTimeoutMs: (name) =>
+                                resolveSchedulerJobTimeoutMs(name, env, schedulerCustomTimeoutMs),
+                        },
                         job,
-                    ),
-                );
+                    );
+                });
                 // Startup sweep: fail orphaned `processing` jobs left by a prior server
                 // crash/restart. Without this, rows stuck in `processing` are never retried
                 // and hold conceptual locks on resources like the SQLite database.
@@ -687,6 +757,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 // tests). Configured jobs come only from the resolved runtime config.
                 registerSchedulerEntries(scheduler, ctx, appRt.config.scheduler.jobs, {
                     timeoutMs: schedulerCustomTimeoutMs,
+                    env,
                 });
                 appRt.logger.info('Scheduler entries registered', { jobs: appRt.config.scheduler.jobs.length });
             }

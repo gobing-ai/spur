@@ -68,6 +68,12 @@ export interface CoverageEntry {
      * only on `mode: 'full'` runs of importer 0.4.25+. Additive; absent on incremental runs.
      */
     reconciliation?: ReconcileSummary;
+    /**
+     * Measured wall-clock duration of this source's import attempt in ms (task 0806 R2,
+     * additive): budget-vs-spend is visible per source. Present on timed entries —
+     * attempts that died before measurement (spawn failure) may omit it.
+     */
+    durationMs?: number;
 }
 
 /**

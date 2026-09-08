@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Fix history-daily-report timeout containment, import stalls, budget mismatch and missing job lifecycle timing
-status: todo
+status: done
 template: issue
 created_at: 2026-09-08T15:14:51.554Z
-updated_at: "2026-09-08T15:16:03.875Z"
+updated_at: "2026-09-08T17:47:50.628Z"
 feature_id: A2
 priority: P1
 
@@ -32,14 +32,14 @@ Source-local investigation did not replay the real import against the live 5GB d
 
 ### Requirements
 
-- [ ] R1 — Make scheduler deadlines contain the complete spawned command tree and release inherited streams and database locks within a documented termination grace, including a descendant that ignores SIGTERM. Preserve exit, signal, timeout, and measured elapsed reason through the owning ts-runtime facade; use a released upstream fix when needed rather than patching node_modules or copying a process engine into Spur. Apply the verified shared semantics to scheduler.custom and history.refresh.
-- [ ] R2 — Measure and bound the all-source import plus rollup path. Identify the slow phase/SQL on representative data, eliminate the demonstrated unbounded write/lock path without losing history or rollup correctness, and stop timed-out source work before advancing. Surface rollup failure/degradation and per-phase duration; preserve checkpoint recovery and never claim complete refreshed output after a swallowed failure.
-- [ ] R3 — Reconcile report/import/maintenance stage budgets with a bounded total scheduler deadline using the existing configuration ownership. Preserve the short history-refresh watchdog. Validate timeout overrides and ensure stale sweep uses the effective per-job budget plus cleanup grace. Do not solve this by disabling timeouts or simply raising one global constant.
-- [ ] R4 — Preserve attempt start, finish, execution duration and queue-wait meaning for completed/failed/retried jobs through the queue facade, domain projection and existing Jobs UI. Historical rows with missing start remain honestly unknown or explicitly identified as inferred; never substitute queuedAt for actual start.
-- [ ] R5 — Persist a correlated queued/started/terminal lifecycle at the normal observability level and record job identity, phase/run identity when available, effective deadline, actual elapsed time and termination reason. Make an import subcommand exit_code: 0 distinguishable from whole-job failure; keep diagnostics bounded and redacted and avoid making --quiet the sole source of failure detail.
-- [ ] R6 — Keep history producer overlap and recovery safe: a timed-out or swept attempt cannot continue writing while replacement/refresh work starts; pending/processing stale handling must not rely on the next daily tick as the only cleanup. Retain the deliberate one-attempt policy unless a separately documented safe retry policy is chosen; avoid duplicate publication.
-- [ ] R7 — Make scheduled maintenance ordering and checkpoint behavior explicit and bounded. Preserve success-path import → report → maintenance and publish only validated complete reports. Record skipped maintenance after an earlier failure, or use a documented safe cleanup path after all children stop; keep manual deep maintenance semantics intact.
-- [ ] R8 — Add focused executable regressions covering the defects, synchronize affected existing surface docs and tests, and validate the complete configured shell sequence with controlled executors/data. Record remaining real-data uncertainty; implementation completion requires harness verify PASS and the applicable project gates.
+- [x] R1 — Make scheduler deadlines contain the complete spawned command tree and release inherited streams and database locks within a documented termination grace, including a descendant that ignores SIGTERM. Preserve exit, signal, timeout, and measured elapsed reason through the owning ts-runtime facade; use a released upstream fix when needed rather than patching node_modules or copying a process engine into Spur. Apply the verified shared semantics to scheduler.custom and history.refresh.
+- [x] R2 — Measure and bound the all-source import plus rollup path. Identify the slow phase/SQL on representative data, eliminate the demonstrated unbounded write/lock path without losing history or rollup correctness, and stop timed-out source work before advancing. Surface rollup failure/degradation and per-phase duration; preserve checkpoint recovery and never claim complete refreshed output after a swallowed failure.
+- [x] R3 — Reconcile report/import/maintenance stage budgets with a bounded total scheduler deadline using the existing configuration ownership. Preserve the short history-refresh watchdog. Validate timeout overrides and ensure stale sweep uses the effective per-job budget plus cleanup grace. Do not solve this by disabling timeouts or simply raising one global constant.
+- [x] R4 — Preserve attempt start, finish, execution duration and queue-wait meaning for completed/failed/retried jobs through the queue facade, domain projection and existing Jobs UI. Historical rows with missing start remain honestly unknown or explicitly identified as inferred; never substitute queuedAt for actual start.
+- [x] R5 — Persist a correlated queued/started/terminal lifecycle at the normal observability level and record job identity, phase/run identity when available, effective deadline, actual elapsed time and termination reason. Make an import subcommand exit_code: 0 distinguishable from whole-job failure; keep diagnostics bounded and redacted and avoid making --quiet the sole source of failure detail.
+- [x] R6 — Keep history producer overlap and recovery safe: a timed-out or swept attempt cannot continue writing while replacement/refresh work starts; pending/processing stale handling must not rely on the next daily tick as the only cleanup. Retain the deliberate one-attempt policy unless a separately documented safe retry policy is chosen; avoid duplicate publication.
+- [x] R7 — Make scheduled maintenance ordering and checkpoint behavior explicit and bounded. Preserve success-path import → report → maintenance and publish only validated complete reports. Record skipped maintenance after an earlier failure, or use a documented safe cleanup path after all children stop; keep manual deep maintenance semantics intact.
+- [x] R8 — Add focused executable regressions covering the defects, synchronize affected existing surface docs and tests, and validate the complete configured shell sequence with controlled executors/data. Record remaining real-data uncertainty; implementation completion requires harness verify PASS and the applicable project gates.
 
 ### Acceptance Criteria
 
@@ -119,13 +119,13 @@ No exact slow SQL is yet proven. Implementation must collect bounded phase timin
 
 ### Plan
 
-- [ ] Reproduce the shell-descendant timeout and terminal timing loss with safe fixtures; record installed executor/queue versions.
-- [ ] Trace and fix process-tree cleanup at its owner, verifying lock release and TERM-resistant descendants; preserve timeout cause in results.
-- [ ] Profile import sources, rollup rebuild/bucket/post-pass work and cancellation gaps; fix the measured bottleneck and hidden error outcome.
-- [ ] Align per-job/stage deadlines and stale/overlap policy without extending the short refresh watchdog.
-- [ ] Preserve terminal attempt timing and correlated ordinary lifecycle/phase diagnostics in the existing queue and Jobs flow.
-- [ ] Define safe scheduled maintenance success/failure behavior and update owning surface docs alongside the eventual config/workflow changes.
-- [ ] Run focused regressions, controlled configured-chain success/failure checks and applicable project gates; obtain verify PASS before completion.
+- [x] Reproduce the shell-descendant timeout and terminal timing loss with safe fixtures; record installed executor/queue versions.
+- [x] Trace and fix process-tree cleanup at its owner, verifying lock release and TERM-resistant descendants; preserve timeout cause in results.
+- [x] Profile import sources, rollup rebuild/bucket/post-pass work and cancellation gaps; fix the measured bottleneck and hidden error outcome.
+- [x] Align per-job/stage deadlines and stale/overlap policy without extending the short refresh watchdog.
+- [x] Preserve terminal attempt timing and correlated ordinary lifecycle/phase diagnostics in the existing queue and Jobs flow.
+- [x] Define safe scheduled maintenance success/failure behavior and update owning surface docs alongside the eventual config/workflow changes.
+- [x] Run focused regressions, controlled configured-chain success/failure checks and applicable project gates; obtain verify PASS before completion.
 
 ### Root Cause
 
@@ -138,15 +138,166 @@ No exact slow SQL is yet proven. Implementation must collect bounded phase timin
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/server/src/modules/jobs/index.ts:15` |
+| `apps/server/src/modules/jobs/index.ts:158` |
+| `apps/server/src/modules/jobs/index.ts:2` |
+| `apps/server/src/serve.ts:12` |
+| `apps/server/src/serve.ts:145` |
+| `apps/server/src/serve.ts:150` |
+| `apps/server/src/serve.ts:18` |
+| `apps/server/src/serve.ts:180` |
+| `apps/server/src/serve.ts:23` |
+| `apps/server/src/serve.ts:231` |
+| `apps/server/src/serve.ts:252` |
+| `apps/server/src/serve.ts:255` |
+| `apps/server/src/serve.ts:281` |
+| `apps/server/src/serve.ts:306` |
+| `apps/server/src/serve.ts:702` |
+| `apps/server/src/serve.ts:711` |
+| `apps/server/src/serve.ts:716` |
+| `apps/server/src/serve.ts:721` |
+| `apps/server/src/serve.ts:734` |
+| `apps/server/src/serve.ts:760` |
+| `apps/server/tests/serve.test.ts:1017` |
+| `apps/server/tests/serve.test.ts:1021` |
+| `apps/server/tests/serve.test.ts:1027` |
+| `apps/server/tests/serve.test.ts:1140` |
+| `apps/server/tests/serve.test.ts:1151` |
+| `apps/server/tests/serve.test.ts:1154` |
+| `apps/server/tests/serve.test.ts:1156` |
+| `apps/server/tests/serve.test.ts:1180` |
+| `apps/server/tests/serve.test.ts:1185` |
+| `apps/server/tests/serve.test.ts:1189` |
+| `apps/server/tests/serve.test.ts:711` |
+| `packages/app/src/index.ts:208` |
+| `packages/app/src/index.ts:239` |
+| `packages/app/src/index.ts:387` |
+| `packages/app/src/index.ts:389` |
+| `packages/app/src/index.ts:392` |
+| `packages/app/src/index.ts:93` |
+| `packages/app/src/services/event-names.ts:260` |
+| `packages/app/src/services/event-names.ts:507` |
+| `packages/app/src/services/history-refresh-service.ts:253` |
+| `packages/app/src/services/history-refresh-service.ts:279` |
+| `packages/app/src/services/history-refresh-service.ts:297` |
+| `packages/app/src/services/history-refresh-service.ts:323` |
+| `packages/app/src/services/history-refresh-service.ts:333` |
+| `packages/app/src/services/history-refresh-service.ts:335` |
+| `packages/app/src/services/history-refresh-service.ts:340` |
+| `packages/app/src/services/history-refresh-service.ts:8` |
+| `packages/app/src/services/history-service.ts:1014` |
+| `packages/app/src/services/history-service.ts:1022` |
+| `packages/app/src/services/history-service.ts:1045` |
+| `packages/app/src/services/history-service.ts:1139` |
+| `packages/app/src/services/history-service.ts:1159` |
+| `packages/app/src/services/history-service.ts:151` |
+| `packages/app/src/services/history-service.ts:848` |
+| `packages/app/src/services/history-service.ts:856` |
+| `packages/app/src/services/history-service.ts:863` |
+| `packages/app/src/services/history-service.ts:876` |
+| `packages/app/src/services/history-service.ts:894` |
+| `packages/app/src/services/history-service.ts:908` |
+| `packages/app/src/services/history-service.ts:916` |
+| `packages/app/src/services/history-service.ts:919` |
+| `packages/app/src/services/history-service.ts:933` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:114` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:128` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:134` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:145` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:153` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:175` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:188` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:193` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:195` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:199` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:2` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:201` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:203` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:206` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:213` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:219` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:223` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:38` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:55` |
+| `packages/app/src/services/scheduler-custom-job-service.ts:90` |
+| `packages/app/tests/services/history-refresh-service.test.ts:345` |
+| `packages/app/tests/services/history-refresh-service.test.ts:440` |
+| `packages/app/tests/services/history-refresh-service.test.ts:462` |
+| `packages/app/tests/services/history-refresh-service.test.ts:72` |
+| `packages/app/tests/services/history-service.test.ts:1412` |
+| `packages/app/tests/services/scheduler-custom-job-service.test.ts:100` |
+| `packages/app/tests/services/scheduler-custom-job-service.test.ts:162` |
+| `packages/app/tests/services/scheduler-custom-job-service.test.ts:166` |
+| `packages/app/tests/services/scheduler-custom-job-service.test.ts:217` |
+| `packages/app/tests/services/scheduler-custom-job-service.test.ts:222` |
+| `packages/app/tests/services/scheduler-custom-job-service.test.ts:243` |
+| `packages/app/tests/services/scheduler-custom-job-service.test.ts:253` |
+| `packages/app/tests/services/scheduler-custom-job-service.test.ts:255` |
+| `packages/app/tests/services/scheduler-custom-job-service.test.ts:38` |
+| `packages/app/tests/services/scheduler-custom-job-service.test.ts:5` |
+| `packages/domain/src/analytics/artifact.ts:71` |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `bounded-child-run.ts:105-162` deadline abort signals the detached process group; `:87-95` negative-pid SIGKILL escalation after grace (`:35` default 5000ms, `:42` env-resolved); honest deadline/elapsed/terminationReason `:136-162`. Real SIGTERM-resistant descendant reaped <1s: `packages/app/tests/services/bounded-child-run.test.ts:101-120`; serve-level deadline kills both handlers: `apps/server/tests/serve.test.ts:1180-1185` |
+| R2 | MET | Per-source deadline race emits `source-timeout` and measures spend: `history-service.ts:1014-1075` (warning `:1051`); whole-run abort before the next source starts `:883-890`; rollup outcome surfaced as `rollup-refresh-failed` + `rollupRefresh` marker `:914-938` (no longer swallowed); per-source `durationMs` on CoverageEntry `packages/domain/src/analytics/artifact.ts:76`. Hung-source regression: `packages/app/tests/services/history-service.test.ts:1413-1443` |
+| R3 | MET | Per-job budget `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` with safe fallback `scheduler-custom-job-service.ts:99-124`, wired per handler `apps/server/src/serve.ts:730-731`; refresh watchdog decoupled via `SPUR_HISTORY_REFRESH_TIMEOUT_MS` `history-refresh-service.ts:260-267` (`serve.ts:713`); stale sweep = effective budget + kill grace `serve.ts:235-255`; tests `job-exclusion-guard.test.ts:53-79`, sweep asserts 65000ms `serve.test.ts:1021` |
+| R4 | MET | Terminal rows enriched only from persisted `queue.job.*` evidence, never assigned enqueue time: `apps/server/src/modules/jobs/index.ts:27-87`, wired into GET /api/jobs `:155-163`; `queue.job.started` registered `event-names.ts:263` with presenter `:507-517`; started anchor with entityId `serve.ts:309-332` emitted for both child-spawning handlers `:703,722`; tests `apps/server/tests/modules/jobs/enrichment.test.ts:28-89` |
+| R5 | MET | `describeBoundedFailure` names configured deadline vs measured elapsed vs termination reason and flags tail exit_code as subcommand-only `bounded-child-run.ts:166-193`; queued→started→terminal correlation via `emitQueueJobStarted` `serve.ts:309-332` + `event-names.ts:263,507`; bounded redacted detail: 400-char tails `scheduler-custom-job-service.ts:131-141`, 1MB output cap `:128`, command text never logged; tests `bounded-child-run.test.ts:31-89`, real kills `serve.test.ts:1180-1185` |
+| R6 | MET | Cross-kind exclusive guard + history-producer stamp predicate `job-exclusion-guard.ts:19-70`; refresh acquires/releases around the child `history-refresh-service.ts:296-312`; scheduler handler acquires `scheduler-custom-job-service.ts:189-193,224`; enqueue-side stamping `serve.ts:285-290` (asserted `serve.test.ts:1032`); startup sweep of orphaned processing rows `serve.ts:736-744`; one-attempt policy retained `serve.ts:292` (`maxRetries: 1`); guard tests `job-exclusion-guard.test.ts:17-51` |
+| R7 | MET | Success-path import→report→maintenance ordering preserved in config ownership (`&&` chain untouched in `.spur/config.yaml`); killed chain explicitly records "later configured stages did not run" `bounded-child-run.ts:181-190` (tested `bounded-child-run.test.ts:75-89`); documented skipped-maintenance/safe-cleanup policy `docs/04_DESIGN.md:1252-1256`; manual deep-maintenance code untouched |
+| R8 | MET | New suites: `bounded-child-run.test.ts` (6 tests), `job-exclusion-guard.test.ts` (8), `apps/server/tests/modules/jobs/enrichment.test.ts` (3); updated regressions in `history-service.test.ts:1413-1443`, `history-refresh-service.test.ts:440-466`, `scheduler-custom-job-service.test.ts`, `serve.test.ts:1014-1192`; docs synced `docs/04_DESIGN.md:1233-1266`, `docs/design/event-tracking.md:54,273`; gate `bun run spur-check` PASS 7815 pass / 0 fail `.spur/run/0806-test-gate.log:360-361`, proof digest sha256:e3d2f94b33682696d7cfd38d10495d6873b884e97f92b93e3efc4e777bd37571 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — A shell timeout terminates descendants and releases the worker | MET | test | `packages/app/tests/services/bounded-child-run.test.ts:101-120` (SIGTERM-resistant descendant reaped <1s, timeout classification), `apps/server/tests/serve.test.ts:1180-1185` (both handlers fail within deadline+grace) |
+| R2 — Source and rollup work has an honest bounded outcome | MET | test | `packages/app/tests/services/history-service.test.ts:1413-1443` (hung source: budget kill, `source-timeout`, remaining sources not started); rollup failure surfaced `history-service.ts:914-938` |
+| R3 — Report and refresh budgets are consistent | MET | test | `packages/app/tests/services/job-exclusion-guard.test.ts:53-79` (per-job override, invalid falls back, refresh watchdog decoupled); sweep = budget + grace `apps/server/tests/serve.test.ts:1021` |
+| R4 — Terminal and retried job timing stays truthful | MET | test | `apps/server/tests/modules/jobs/enrichment.test.ts:28-89` (duration from terminal event, start only from started anchor, non-terminal/known rows untouched, dao failure degrades); rows without evidence stay null `apps/server/src/modules/jobs/index.ts:73-86` |
+| R5 — Ordinary diagnostics explain the failing stage | MET | test | `packages/app/tests/services/bounded-child-run.test.ts:31-89` (deadline/elapsed/reason separated; tail flagged subcommand-only), `apps/server/tests/serve.test.ts:1180-1185` (started event emitted; killed handler message carries both numbers) |
+| R6 — Recovery cannot overlap an abandoned importer | MET | test | `packages/app/tests/services/job-exclusion-guard.test.ts:17-51` (second acquire fails its own run with owner named); stamp at enqueue `apps/server/tests/serve.test.ts:1032`; startup + tick sweep `serve.ts:235-255,736-744` |
+| R7 — Maintenance policy preserves chain semantics | MET | test | `packages/app/tests/services/bounded-child-run.test.ts:75-89` (killed chain records later configured stages did not run); success-path `&&` ordering and manual maintenance unchanged; policy documented `docs/04_DESIGN.md:1252-1256` |
+| R8 — Evidence and gates cover the repaired execution path | MET | command | `bun run spur-check` PASS: 7815 pass / 0 fail (`.spur/run/0806-test-gate.log:360-361`), proof digest sha256:e3d2f94b33682696d7cfd38d10495d6873b884e97f92b93e3efc4e777bd37571 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Verdict: PASS** (fresh-context reviewer, 2026-09-08; digest sha256:e3d2f94b…7571).
+
+#### Findings
+
+| Priority | Dimension | Location | Finding | Recommendation |
+| --- | --- | --- | --- | --- |
+| P2 | correctness/test | `packages/app/src/services/history-service.ts:920-930` | `rollup-refresh-failed` branch has no direct test | Add one test forcing `refreshHistoryRollups` to reject; assert the warning and `rollupRefresh.status === 'failed'` |
+| P2 | correctness/test | `scheduler-custom-job-service.ts:255-262`, `history-refresh-service.ts:283-307` | handler-level exclusive-key wiring untested (guard + stamp tested in isolation) | Handler test that pre-acquires `history-daily` and asserts the overlapping run throws naming the owner |
+| P2 | docs | `apps/server/src/serve.ts:703,722` vs `docs/04_DESIGN.md` | started-anchor doc sentence read broader than the two wired kinds | FIXED post-review: doc scoped to `history-refresh`/`scheduler-custom`; gate + digest re-captured |
+| P2 | process | task `### Solution` | placeholder at review time | Filled by record stage (`spur task record --solution-from-diff`) |
+
+#### Functional traceability (R1–R8 all MET)
+
+- R1 `bounded-child-run.ts:87-167` group SIGKILL escalation + honest deadline/elapsed/reason; real SIGTERM-resistant child reaped <1s (`bounded-child-run.test.ts:99-121`); serve-level kills for both handlers (`serve.test.ts:1166-1186`).
+- R2 per-source deadline race (`history-service.ts:1022-1059`), whole-run abort (`:876-887`), rollup outcome surfaced (`:914-931`).
+- R3 per-job budgets (`scheduler-custom-job-service.ts:100-135`, `history-refresh-service.ts:243-256`); stale sweep = effective budget + kill grace (`serve.ts:231-235`).
+- R4 enrichment never invents startedAt (`apps/server/src/modules/jobs/index.ts:27-87`); started anchor `serve.ts:306-330`; event registered `event-names.ts:259-264`.
+- R5 failure detail separates configured deadline vs measured elapsed vs termination reason (`bounded-child-run.ts:170-193`); 400-char tails + 1MB caps; command never logged.
+- R6 cross-kind exclusive guard + enqueue stamping + startup sweep (`serve.ts:244-290,736-744`); one-attempt policy retained (`maxRetries: 1`).
+- R7 chain ordering preserved; killed chain records "later configured stages did not run" (`bounded-child-run.ts:181-186`); manual deep maintenance untouched.
+- R8 new suites (bounded-child-run, job-exclusion-guard, enrichment) + updated serve/history/scheduler suites; docs synced; gate PASS 7815/0, re-PASS after review fix.
+
+SECUA: 0 critical, 0 major; the four P2 findings above are non-blocking and dispositioned.
+
+Architecture: `bounded-child-run.ts` is a deep 4-symbol module; process-tree facts stay in the released ts-runtime facade (caller owns WHEN, executor owns HOW); guard coupling narrow and explicit; enrichment composes at the read surface with degrade-to-raw; no schema/transport-contract change; web untouched.
 
 ### References
 
@@ -159,3 +310,8 @@ Observed: exit 1; elapsedMs=2018, exitCode=null, signal=Termination, stdout="", 
 References: task 0803 (prior watchdog/lock remediation), 0734 (configured scheduler jobs), 0750 (schedule consolidation), 0717 (history child isolation), 0792 (Jobs projection), 0660 (report workflow); E31 process isolation/single-flight feature. Evidence anchors and installed package paths are in Background and Root Cause. The failed historical run was not replayed; no fix or implementation verify PASS is claimed.
 
 ### History
+
+- 2026-09-08T17:12:30.190Z todo → wip (system)
+- 2026-09-08T17:45:38.615Z wip → testing (system)
+- 2026-09-08T17:47:50.628Z testing → done (system)
+

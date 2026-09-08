@@ -69,6 +69,8 @@ interface RecordedRun {
     env?: Record<string, string>;
     maxOutput?: number;
     timeout?: number;
+    signal?: AbortSignal;
+    onSpawn?: (pid: number) => void;
 }
 
 /** Capturing fake at the ProcessExecutor seam; `result` is merged over a successful default. */
@@ -340,7 +342,7 @@ describe('handleHistoryRefreshJob (task 0717: isolated child process)', () => {
         const { executor } = fakeExecutor({ exitCode: null, stderr: 'spawn ENOENT' });
         await expect(
             handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor }, jobOf(validPayload)),
-        ).rejects.toThrow('history refresh child terminated before a normal exit: spawn ENOENT');
+        ).rejects.toThrow('history refresh child terminated before a normal exit after 1ms: spawn ENOENT');
     });
 
     test('R4: signaled/output-limited child reports termination, not spawn failure', async () => {
@@ -435,10 +437,30 @@ describe('handleHistoryRefreshJob watchdog timeout (task 0803 R1)', () => {
     });
 
     test('a deadline kill is labelled as a timeout, not a generic termination', async () => {
-        const { executor } = fakeExecutor({ exitCode: null, signal: 'SIGKILL', durationMs: 5_000, stderr: 'partial' });
+        // Real abort contract: the fake child hangs until the abort signal, then reports SIGKILL —
+        // so runBoundedChild's own 20ms deadline (not a simulated duration) produces timedOut.
+        const executor = {
+            run: (options: RecordedRun) =>
+                new Promise((resolve) => {
+                    options.signal?.addEventListener(
+                        'abort',
+                        () =>
+                            resolve({
+                                command: options.command,
+                                args: options.args ?? [],
+                                exitCode: null,
+                                signal: 'SIGKILL',
+                                stdout: '',
+                                stderr: 'partial',
+                                durationMs: options.timeout ?? 0,
+                            }),
+                        { once: true },
+                    );
+                }),
+        } as unknown as ProcessExecutor;
         await expect(
-            handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor, timeoutMs: 5_000 }, jobOf(validPayload)),
-        ).rejects.toThrow('history refresh child timed out after 5000ms (killed): partial');
+            handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor, timeoutMs: 20 }, jobOf(validPayload)),
+        ).rejects.toThrow(/history refresh child timed out after 20ms \(killed after \d+ms elapsed/);
     });
 
     test('a sub-deadline kill keeps the generic termination message', async () => {

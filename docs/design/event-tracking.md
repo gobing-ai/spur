@@ -51,13 +51,14 @@ Scores are family-uniform **by construction** — the defect from §2.1 means pr
 | 7 | `queue.consumer.started` | `context.ts:411` → ts-infra `QueueConsumer` | – | ~ | P | ~ | – | ~ |
 | 8 | `queue.consumer.stopped` | `context.ts:411` → ts-infra `QueueConsumer` | – | ~ | P | ~ | – | ~ |
 | 9 | `queue.job.enqueued` | `context.ts:411` → ts-infra `JobQueue` | – | ~ | P | ~ | – | ~ |
-| 10 | `queue.job.completed` | `context.ts:411` → ts-infra `JobQueue` | – | ~ | P | ~ | – | P |
-| 11 | `queue.job.failed` | `context.ts:411` → ts-infra `JobQueue` | – | ~ | P | ~ | P | P |
-| 12 | `queue.job.retrying` | `context.ts:411` → ts-infra `JobQueue` | – | ~ | P | ~ | P | P |
-| 13 | `queue.stats` | `context.ts:411` → ts-infra `QueueConsumer` | – | ~ | P | ~ | – | ~ |
-| 14 | `scheduler.job.executed` | `context.ts:411` → ts-infra scheduler | – | ~ | P | ~ | – | P |
-| 15 | `message.sent` | `team-service.ts:314` | ~ | ~ | P | ~ | – | – |
-| 16 | `message.replied` | `team-service.ts:314` | ~ | ~ | P | ~ | – | – |
+| 10 | `queue.job.started` | `serve.ts` (task 0806 R5) → ts-infra `JobQueue` | – | ~ | P | ~ | – | ~ |
+| 11 | `queue.job.completed` | `context.ts:411` → ts-infra `JobQueue` | – | ~ | P | ~ | – | P |
+| 12 | `queue.job.failed` | `context.ts:411` → ts-infra `JobQueue` | – | ~ | P | ~ | P | P |
+| 13 | `queue.job.retrying` | `context.ts:411` → ts-infra `JobQueue` | – | ~ | P | ~ | P | P |
+| 14 | `queue.stats` | `context.ts:411` → ts-infra `QueueConsumer` | – | ~ | P | ~ | – | ~ |
+| 15 | `scheduler.job.executed` | `context.ts:411` → ts-infra scheduler | – | ~ | P | ~ | – | P |
+| 16 | `message.sent` | `team-service.ts:314` | ~ | ~ | P | ~ | – | – |
+| 17 | `message.replied` | `team-service.ts:314` | ~ | ~ | P | ~ | – | – |
 | 17 | `process.spawned` | `supervisor-service.ts:244` | ~ | ~ | ~ | – | – | ~ |
 | 18 | `process.exited` | `supervisor-service.ts:263` | ~ | ~ | ~ | – | P | P |
 | 19 | `process.stopped` | `supervisor-service.ts:353` | ~ | ~ | ~ | – | P | P |
@@ -269,6 +270,7 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `queue.consumer.started` | `queueName`, `startedAt`, polling/concurrency settings | `[queue] {queueName} : consumer started` | `startedAt` → `running` |
 | `queue.consumer.stopped` | `queueName`, `stoppedAt`, `drainTimeoutMs`, `inFlightAtStop`, `drained` | `[queue] {queueName} : consumer stopped` | `drained` → `drained` / `timeout` |
 | `queue.job.enqueued` | `jobId`, `type`, enqueue/retry timing | `[queue] {type} · job {jobId} enqueued` | — |
+| `queue.job.started` | `jobId`, `type`, `name` | `[queue] {type} · job {jobId} started` | — |
 | `queue.job.completed` | `jobId`, `type`, `attempt`, `durationMs` | `[queue] {type} · job {jobId} completed` | — |
 | `queue.job.failed` | `jobId`, `type`, attempts, `durationMs`, `error` | `[queue] {type} · job {jobId} failed` | `error` |
 | `queue.job.retrying` | `jobId`, `type`, attempts, `nextRetryAt`, `error` | `[queue] {type} · job {jobId} retrying` | `attempt` / `maxRetries` |
