@@ -37,6 +37,10 @@
             "twin": "history-anatomy-cache.mjs"
         },
         {
+            "rel": "inline-run-setup.ts",
+            "contract": "repo-only"
+        },
+        {
             "rel": "inline-pipeline-parity-check.ts",
             "contract": "repo-only"
         },

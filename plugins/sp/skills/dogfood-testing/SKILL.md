@@ -39,7 +39,8 @@ sinks; this skill owns the protocol.
 testee (a /sp:... command, Skill(...), or shell CLI invocation)
   → PLAN     classify + derive steps + open dual artifacts (live + docs/dogfood) with status:running
   → EXECUTE  run each step as a user; on failure, bounded diagnose→fix→re-run (or observe-only)
-  → MONITOR  dual-write ledger row to disk on every step resolve — never reconstruct from memory
+  → MONITOR  live-ledger row to disk every step resolve; mirror frozen inside a proof window —
+             never reconstruct from memory
   → REPORT   finalize-or-abort (non-skippable): status complete|aborted, Cost block, both paths, footer
 ```
 
@@ -105,9 +106,8 @@ The command forwards these via `$ARGUMENTS`:
    ```
 
    - Exit **2** → print the stdout refuse line and **stop** (do not plan). The CLI refuses on either
-     of two independent mutation sources (task 0293); print whichever refuse message it emits:
-     - pipeline-driving: `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
-     - mutating `--fix`: `⚠ mutating --fix mode detected (--fix all | --fix blockers-first); pass --max-retry 0 (observe-only for the driver; the testee still mutates the tree) or --max-retry N (fix mode, driver + testee both mutate)`.
+     of two independent mutation sources (task 0293); its two refuse lines are the ones quoted
+     verbatim in the repo-mutation warning above.
    - Exit **0** → proceed. Do not auto-substitute `--max-retry 0`.
    - The matcher contract is unit-checked by `tests/dogfood-testing/pipeline-detect.test.ts`.
      See [§Pipeline-driving word-boundary contract](#pipeline-driving-word-boundary-contract) and
@@ -186,17 +186,18 @@ report — the report is assembled from the files, not from memory.
 On **every** step resolve:
 
 1. Append/update the ledger row on the **live** file first.
-2. Mirror the same row to the **report** path under `docs/dogfood/`.
+2. Mirror the same row to the **report** path under `docs/dogfood/` — unconditional **outside** a
+   pipeline proof window; **inside** one the mirror stays **frozen** (live rows only) until the
+   window closes, then sync/validate with live-based recovery (task 0804 R2 —
+   [monitor-ledger.md](references/monitor-ledger.md) live-ledger rule 3).
 3. Do **not** batch rows until Phase 4.
 
-The final report MUST include a `### 3. Monitor Ledger` section containing those rows, and the
-ledger's data-row count MUST equal the `**Steps:** N derived, N executed` declared in §2 of the report (N/A steps
-documented explicitly as rows) — the cardinality rule in
-[monitor-ledger.md](references/monitor-ledger.md). Full
-methodology, column contract, token/cache estimation, multi-source Cost honesty, the cache-health
-finding rule, and the **cache-conservation discipline** live in
-**[monitor-ledger.md](references/monitor-ledger.md)**. Apply the conservation discipline while
-monitoring — low cache% is usually the driver re-fetching data it already holds.
+The final report MUST include a `### 3. Monitor Ledger` section containing those rows (cardinality:
+row count == the declared executed steps). Cardinality, full methodology, column contract,
+token/cache estimation, multi-source Cost honesty, the cache-health finding rule, and the
+**cache-conservation discipline** live in
+**[monitor-ledger.md](references/monitor-ledger.md)** — apply conservation while monitoring; low
+cache% is usually the driver re-fetching data it already holds.
 
 ## Phase 4 — Report (finalize-or-abort — non-skippable)
 
@@ -214,8 +215,9 @@ contract violation**.
    declared in §2 (N/A steps documented explicitly as rows). A mismatch refuses `complete`.
 4. Write the **Cost** block under §2 (ledger `~estimate` + Method + confidence; `Meter: n/a` or
    optional ccusage/agent usage when real). For any `chained:<step>` ledger row whose meter is not
-   observable, Fresh/Cached MUST be `~unknown` (or Cached `~0` with Basis `unobservable`) **and**
-   emit finding `P3 — chained-step cost not observable` — never invent chained totals.
+   observable, Fresh/Cached MUST be `~unknown` — excluded from the cache% aggregate (or surfaced as
+   a separate unknown bucket), never counted as `Cached ~0` — **and** emit finding
+   `P3 — chained-step cost not observable`; never invent chained totals.
 5. **R2 drift check at finalize.** If a workspace fingerprint was recorded in Phase 1, re-take
    the snapshot and diff against baseline minus the run's own touched files. If drift is detected,
    append a `drift:external` warning row to the ledger and emit a mandatory P2 report finding
@@ -292,13 +294,15 @@ Do **not** use this skill for:
    mutating pipeline — pass `--max-retry 0` first and inspect the findings before letting it apply
    fixes.
 2. **The ledger is live on disk, not reconstructed.** Honest fixed-vs-unresolved accounting depends
-   on dual-writing each step *as it happens* to both artifacts. Reconstructing at the end produces
-   fiction. Working-memory-only ledgers are a contract violation.
+   on writing each step *as it happens* to the live file (mirror per Phase 3 — frozen inside a proof
+   window). Reconstructing at the end produces fiction. Working-memory-only ledgers are a contract
+   violation.
 3. **A hiding fix is a finding.** If "fixing" a step would mask the bug, log it as a finding and
    leave the step unresolved.
 4. **Token numbers are estimates, but cache math is not free-form.** A skill cannot read its own
    exact token meter, so label numbers `~estimate` and put Method + confidence in the Cost block;
-   however, cache% must be recomputable from Monitor Ledger row sums. Never invent or reuse a fixed
+   however, cache% must be recomputable from Monitor Ledger row sums of observable rows (`~unknown`
+   rows are excluded from the aggregate, never counted as `~0` cached). Never invent or reuse a fixed
    percentage. Optional meters (`ccusage`, agent usage) are session/day scope — never fake per-step.
 5. **Testee-scoped `--agent`.** Don't confuse the driver agent (always current) with the testee
    agent (the forwarded value).
@@ -431,11 +435,10 @@ baseline is drift.
 ### Worktree advisory (mutating dogfoods)
 
 For fix-mode dogfoods of **pipeline-driving** or **mutating-`--fix`** testees (the two refuse-gate
-cases above), the §Mutating `--fix` mode contract recommends running the dogfood in an **isolated
-`git worktree`** so concurrent external writers cannot collide with the run. This is **advisory,
-not a hard gate** — the refuse-gate semantics from task 0293 are unchanged. A worktree removes the
-drift case entirely (no concurrent writer can reach the isolated checkout), which is why it is the
-preferred setup for mutating dogfoods where the operator cares about clean attribution.
+cases above), run in an **isolated `git worktree`** — **advisory, not a hard gate**. Phase 1 must
+print this advisory whenever the driver or testee may mutate and the tree is dirty, **or** the
+testee drives a pipeline (incl. observe-only over a mutating testee). Rationale, trigger matrix
+and wording: `references/monitor-ledger.md`.
 
 ## Step-splitting recipe (implement-heavy pipeline dogfoods)
 
@@ -486,8 +489,9 @@ Rules:
 2. When the chained step ran in a subagent or session whose usage data the driver cannot read, label
    the chained row `~unknown` and emit a **P3** finding: "chained-step cost not observable — candidate
    for surfacing subagent usage in the driver context." Do not invent a number.
-3. The chained row still counts toward the aggregate cache% — but mark it pessimistically
-   (`Cached = ~0`) when the basis is missing, per the anti-fiction rule in
+3. An observable chained row counts toward the aggregate cache%. A `~unknown` chained row is
+   **excluded** from the aggregate (or surfaced as a separate unknown bucket) — never folded in as
+   `Cached = ~0` — per the anti-fiction rule in
    [monitor-ledger.md](references/monitor-ledger.md).
 
 ## `--next` chain stop-at-testing
@@ -518,18 +522,17 @@ Do NOT:
   driver permission to read the chained leg's named artifacts (`.spur/run/<wbs>-verdict.json`,
   task-file section diffs, review tables) after the leg completes and attribute normally. The flag
   licenses **reading** chained-leg evidence that already exists — it does NOT license the driver to
-  execute the chained leg itself. The legacy "operator may direct" prose direction is still honored
-  for back-compat; `--chain-follow` is the explicit, machine-recognizable form. Omitting the flag
-  keeps stop-at-testing as the **default**. The flag is a driver attribute only — it does not change
-  `detect-pipeline-driving` gate semantics (it is not a testee mutation source). See
-  [§Arguments](#arguments).
+  execute the chained leg itself. The legacy "operator may direct" prose direction stays honored for
+  back-compat; omitting the flag keeps stop-at-testing as the **default**. The flag is a driver
+  attribute only — it does not change `detect-pipeline-driving` gate semantics (it is not a testee
+  mutation source). See [§Arguments](#arguments).
 
 ## Additional Resources
 
-- [references/report-template.md](references/report-template.md) — the report section contract +
-  mandatory summary footer + task-sink L3 rule.
-- [references/monitor-ledger.md](references/monitor-ledger.md) — the live-ledger column contract,
-  token/cache estimation heuristic, and the cache-health finding rule.
+- [references/report-template.md](references/report-template.md) — report section contract,
+  mandatory footer, task-sink L3 rule.
+- [references/monitor-ledger.md](references/monitor-ledger.md) — live-ledger column contract,
+  token/cache estimation, cache-health finding rule.
 
 ## Platform Notes
 
@@ -565,8 +568,10 @@ shape just because `report-template.md` wasn't auto-loaded.
 - Report: `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`
 
 Both start with YAML frontmatter including `status: running | aborted | complete`, `run_id`,
-`protocol: sp:dogfood-testing@1.2`, and paths. Dual-write a ledger row to both files on every step
-resolve. On stop, set `status` to `complete` or `aborted` (finalize-or-abort — non-skippable).
+`protocol: sp:dogfood-testing@1.2`, and paths. Write each ledger row to the live file on every step
+resolve; mirror it to the report only outside a proof window — frozen inside one, synced at
+finalize (Phase 3). On stop, set `status` to `complete` or
+`aborted` (finalize-or-abort — non-skippable).
 
 **The six mandatory section headings** (in order, each report MUST contain all six):
 

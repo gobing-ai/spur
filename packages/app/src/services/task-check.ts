@@ -330,28 +330,33 @@ export function classifyExternalEvidence(
  * evidence text carries, so the anchor-checker can require the cited window to
  * name them (task 0583 R4/R5; the exclude-citation argument was removed by 0688).
  * Row metadata (status words, the citation itself) never becomes a token.
+ *
+ * 0804 R9: the row is scanned with complete parsed citation spans removed —
+ * not with a post-hoc token blacklist. A blacklist only matched the whole
+ * `path:line` token, so the bare-identifier scans still lifted snake_case/
+ * CamelCase fragments of the cited filename (`cmd_example` out of
+ * `docs/help/cmd_example.md:12`) and could reject an otherwise valid row whose
+ * cited lines never repeat their own filename.
  */
 export function extractSubjectTokens(row: string): string[] {
     const tokens = new Set<string>();
 
     // Tokens that can never appear in cited SOURCE lines, so keeping them only
     // guarantees a mismatch on well-formed rows:
-    //   - every backticked line-anchor in the row — code never contains its own
-    //     `path:line`, and a sibling anchor's path is not in this citation's
-    //     source either (task 0688 R2: excluding only the anchor under test left
-    //     multi-anchor evidence rows guaranteed to mismatch);
     //   - verdict-table metadata (`MET`, `PARTIAL`, …) — row status, not subject.
-    // A minimal, correct evidence row (`| R1 | MET | \`path.ts:12-20\` |`) yields
-    // exactly these and nothing else, so without the exclusion every such row
-    // reports (task 0583 R5 verify).
+    //     Citation spans are removed below before any scan (0804 R9), which also
+    //     keeps the multi-anchor policy from 0688 R2: every parsed anchor in the
+    //     row disappears, not only the one under test.
     const ROW_METADATA = new Set(['met', 'partial', 'unmet', 'n/a', 'na', 'pass', 'fail', 'todo', 'done']);
-    const excluded = new Set<string>();
+    // 0804 R9: blank every parsed anchor span before scanning, replacing each
+    // with a space so adjacent tokens cannot splice across the removed citation.
+    let citationFree = row;
     for (const anchor of extractBacktickLineAnchors(row)) {
-        excluded.add(anchor.raw.toLowerCase());
-        excluded.add(anchor.path.toLowerCase());
+        citationFree = citationFree.split(`\u0060${anchor.raw}\u0060`).join(' ');
     }
-    // Backticked symbols/identifiers in the row (the strongest subject signal).
-    for (const m of row.matchAll(/`([^`]+)`/g)) {
+    // Backticked symbols/identifiers in the row outside parsed citations (the
+    // strongest subject signal).
+    for (const m of citationFree.matchAll(/`([^`]+)`/g)) {
         const t = m[1]?.trim();
         if (!t || !/[A-Za-z0-9_./-]+/.test(t)) continue;
         tokens.add(t.toLowerCase());
@@ -376,18 +381,19 @@ export function extractSubjectTokens(row: string): string[] {
             if (last !== undefined && last.length >= 3) tokens.add(last.toLowerCase());
         }
     }
-    // CamelCase / PascalCase / snake_case identifiers (bare symbols).
-    for (const m of row.matchAll(/\b[A-Za-z_][A-Za-z0-9_]*[A-Z][A-Za-z0-9_]*\b/g)) {
+    // CamelCase / PascalCase / snake_case identifiers (bare symbols) — scanned
+    // on the citation-free text so filename fragments never leak in (0804 R9).
+    for (const m of citationFree.matchAll(/\b[A-Za-z_][A-Za-z0-9_]*[A-Z][A-Za-z0-9_]*\b/g)) {
         if (m[0]) tokens.add(m[0].toLowerCase());
     }
-    for (const m of row.matchAll(/\b[a-z0-9_]+_[a-z0-9_]+\b/g)) {
+    for (const m of citationFree.matchAll(/\b[a-z0-9_]+_[a-z0-9_]+\b/g)) {
         if (m[0]) tokens.add(m[0].toLowerCase());
     }
     // R-/AC- references.
-    for (const m of row.matchAll(/\b(R|AC)-?\d+\b/g)) {
+    for (const m of citationFree.matchAll(/\b(R|AC)-?\d+\b/g)) {
         if (m[0]) tokens.add(m[0].toLowerCase());
     }
-    return [...tokens].filter((t) => !excluded.has(t) && !ROW_METADATA.has(t));
+    return [...tokens].filter((t) => !ROW_METADATA.has(t));
 }
 
 /**

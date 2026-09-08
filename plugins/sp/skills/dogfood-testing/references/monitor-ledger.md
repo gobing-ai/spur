@@ -28,9 +28,14 @@ artifacts):
 1. **Open both artifacts in Phase 1**, before the first step runs (frontmatter `status: running` +
    empty ledger table in each).
 2. **Write a row the instant a step resolves** (pass, fixed, unresolved, or N/A) — not after the run.
-3. **Dual-write every step:** append/update the row on the **live** file first, then mirror to the
-   **report** path. Do not batch rows until Phase 4. If the report write fails, continue with live
-   as SSOT, emit a P2 finding, and retry promote on finalize.
+3. **Dual-write every step — EXCEPT inside a proof window (task 0804 R2).** Append/update the row
+   on the **live** file first; the live file is SSOT. While a pipeline proof window is open (from
+   the first proof capture until the final proof-sensitive action, including done/provenance
+   checks), the tracked report mirror stays **frozen**: append each observation to the live ledger
+   only, and sync/validate the mirror after the window closes (or after abort). Tracked reports are
+   proof-input fingerprint inputs — writing them mid-window churns the fingerprint and voids the
+   proof. If the report write fails at finalize, recover by recreating the mirror from the valid
+   live content and re-validate; missing live evidence cannot manufacture complete.
 4. **The report reads the on-disk ledger, not your memory.** Every number in the report traces to a
    ledger row on disk. If it is not in the ledger file, it does not go in the report.
 5. **Cardinality (@1.2).** The ledger's data-row count MUST equal the `**Steps:** N derived, N executed` declared
@@ -43,6 +48,19 @@ artifacts):
    and `Basis: <fingerprint diff>`. A drift row never changes a step's outcome and never results in
    a `FIXED` / `PASS` outcome — it is purely documentary. Cache columns carry `—` (not estimated).
    See [SKILL.md §Workspace-drift guard](../SKILL.md#workspace-drift-guard-r2--task-0296).
+
+### Worktree advisory — planning-time surfacing (task 0804 R5)
+
+The worktree advisory (SKILL.md §Worktree advisory) is surfaced at planning time, not only when
+drift is detected. Phase 1 prints it whenever the **driver or the testee may mutate** and the tree
+is dirty (`git status --porcelain` non-empty) **or** the testee itself drives a pipeline —
+including observe-only driver mode over a mutating testee. The advisory is **not a hard gate** (the
+refuse-gate semantics from task 0293 are unchanged); the isolated checkout is simply the preferred
+setup for mutating dogfoods because no concurrent writer can reach it, so attribution stays clean
+— which is why the §Mutating `--fix` mode contract recommends it for those two refuse-gate cases.
+Dirtiness alone is not proof of a concurrent writer and must not be reported as one; known
+concurrent writes still follow the project's one-writer rule. A clean, read-only run adds no
+warning.
 
 ### Fast-run exemption (task 0294 R6a)
 
@@ -81,7 +99,7 @@ in the report's §6 Findings (no exemption applies).
 | `Finding` | One-line finding surfaced at this step, or `—`. A finding does **not** change `Outcome`. |
 | `Fresh Tokens` | Estimated fresh context for the step. Prefix with `~`. |
 | `Cached Tokens` | Estimated reused context for the step. Prefix with `~`. |
-| `Cache %` | `Cached Tokens / (Fresh Tokens + Cached Tokens)`, rounded to the nearest whole percent. |
+| `Cache %` | `Cached Tokens / (Fresh Tokens + Cached Tokens)`, rounded to the nearest whole percent. An `~unknown` row carries `—`, never `0%` — unknown basis is not an observed zero. |
 | `Basis` | Observable basis for the estimate: command output, prior file read reused, generated text, etc. |
 | `Wall-clock` | Elapsed time for the step. |
 
@@ -98,8 +116,10 @@ A skill **cannot read its own exact token meter** — derive an estimate and lab
    reused by reference in this step. Use the same `ceil(characters / 4)` basis and round to the
    nearest 100. Do not count fresh command output, newly read files, or regenerated scaffolding as
    cached.
-3. Compute each row: `Cache % = round(Cached Tokens / (Fresh Tokens + Cached Tokens) * 100)`.
-4. Compute the report aggregate from row sums:
+3. Compute each row: `Cache % = round(Cached Tokens / (Fresh Tokens + Cached Tokens) * 100)`. A row
+   whose basis is unknown carries `—`, never `0%`.
+4. Compute the report aggregate from **observable rows only** — `~unknown` rows are excluded from
+   both sums (or surfaced as a separate unknown bucket), never folded in as `Cached ~0`:
    `aggregate cache% = round(sum(Cached Tokens) / sum(Fresh Tokens + Cached Tokens) * 100)`.
 
 The **trend across runs** is the signal, not the absolute value: rising cache% = the testee is
@@ -132,8 +152,10 @@ step stays on the driver's own row.
 - Observable chained usage (subagent output in driver context, or the operator explicitly provided
   the artifact) → estimate Fresh/Cached from that output normally.
 - Unobservable chained usage (subagent ran in a different session, usage data never surfaced) →
-  label Fresh `~unknown`, Cached `~0`, Basis `chained-leg usage not observable from driver`. **MUST**
-  emit a P3 finding: `P3 — chained-step cost not observable` (task 0278 R3). Do not invent totals.
+  label Fresh `~unknown`, Cached `~unknown`, Basis `chained-leg usage not observable from driver`,
+  and **exclude the row from the aggregate cache%** (or surface it as a separate unknown bucket) —
+  unknown cache use is not an observed zero. **MUST** emit a P3 finding: `P3 — chained-step cost
+  not observable` (task 0278 R3). Do not invent totals.
 
 Never fold a chained row into the driver's row; the whole point of dogfooding a pipeline-driving
 testee is to see the testee's own cost separately from the driver's monitoring cost. See
@@ -142,8 +164,10 @@ testee is to see the testee's own cost separately from the driver's monitoring c
 ## Anti-fiction rule
 
 Never reuse a convenient cache percentage such as `45%` because it "feels right." A cache percentage
-is valid only when it can be recomputed from the ledger row sums. If the basis is missing, mark the
-row pessimistically (`Cached Tokens = ~0`) and explain the missing basis.
+is valid only when it can be recomputed from the ledger row sums of observable rows. If the basis is
+missing, mark the row `~unknown`, exclude it from the aggregate (or surface it as a separate unknown
+bucket), and explain the missing basis — never fold it in as `Cached Tokens = ~0`: unknown cache use
+is not an observed zero-percent hit rate, and a low-cache diagnosis needs observed data.
 
 ## Cache-health finding rule
 

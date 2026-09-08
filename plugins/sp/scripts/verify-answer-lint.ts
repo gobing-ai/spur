@@ -257,29 +257,125 @@ function extractRequirementIds(taskContent: string): string[] {
     return [...ids];
 }
 
-function extractAcIdentities(taskContent: string, featureContent: string | null): string[] {
-    const identities = new Set<string>();
+// ─── Canonical AC identity resolution (task 0804 R4) ─────────────────────────
+
+/**
+ * Normalize an AC identity to its canonical key, mirroring the documented
+ * matching behavior of feature-check `rowMatchesScenario` + ac-style-guide
+ * "Four accepted id forms" (exact/bare title, `Scenario:` prefix, bracket
+ * tags, `AC-N` ordinal) without importing that private matcher or adopting
+ * its permissive trailing-Gherkin fallback (0804 R4). Repeatedly strips
+ * bracket tags and the `Scenario:` prefix, then one R-id prefix; comparison
+ * is case/quote/whitespace-insensitive. A paraphrase normalizes differently
+ * and still fails.
+ */
+function normalizeAcTitle(title: string): string {
+    let out = title.trim();
+    let prev: string;
+    do {
+        prev = out;
+        out = out
+            .replace(/^\[[^\]]*\]\s*/, '')
+            .replace(/\s*\[[^\]]*\]\s*$/, '')
+            .replace(/^Scenario:\s*/i, '')
+            .trim();
+    } while (out !== prev);
+    return out
+        .replace(/^R\d+\s*[:\-—]?\s*/, '')
+        .toLowerCase()
+        .replace(/[\u0027\u2018\u2019\u201c\u201d]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+/**
+ * Declared AC identities keyed by canonical normalized title, plus the two
+ * AC-N ordinal sources (task scenario list and linked-feature scenario list).
+ * A checklist-declared spelling always wins over the positional alias.
+ */
+interface AcIdentityIndex {
+    /** normalized canonical title → a declared spelling (label, token, or title). */
+    readonly byTitle: Map<string, string>;
+    /** AC-N → task scenario title at that 1-based ordinal. */
+    readonly taskScenarios: string[];
+    /** AC-N → feature scenario title at that 1-based ordinal. */
+    readonly featureScenarios: string[];
+}
+
+function buildAcIdentityIndex(taskContent: string, featureContent: string | null): AcIdentityIndex {
+    const byTitle = new Map<string, string>();
+    // Not named `declare`: Bun's TS transpiler treats a call to an identifier
+    // named `declare` as an ambient-declaration modifier and drops it.
+    const declareIdentity = (spelling: string): void => {
+        const key = normalizeAcTitle(spelling);
+        if (key !== '' && !byTitle.has(key)) byTitle.set(key, spelling);
+    };
     const section = sectionBetween(taskContent, 'Acceptance Criteria');
-    // Checkbox labels (`- [x] AC1 (R1): …`, 0726) and plain bullets (`- AC1: Given …`,
-    // 0713/0727) both yield the label text up to `:` plus its leading token.
     for (const m of section.matchAll(/^[-*]\s+(?:\[[ xX]\]\s+)?(.+?)\s*(?::|$)/gm)) {
         const label = (m[1] ?? '').trim();
         if (!label) continue;
-        identities.add(label);
+        declareIdentity(label);
         const leading = label.split(/\s+/)[0] ?? '';
-        if (leading && leading !== label) identities.add(leading);
+        if (leading && leading !== label) declareIdentity(leading);
     }
-    for (const m of section.matchAll(/^[ \t]*Scenario:\s*(.+)\s*$/gm)) {
-        const title = (m[1] ?? '').trim();
-        if (title) identities.add(title);
-    }
-    if (featureContent !== null) {
-        for (const m of featureContent.matchAll(/^[ \t]*Scenario:\s*(.+)\s*$/gm)) {
-            const title = (m[1] ?? '').trim();
-            if (title) identities.add(title);
+    const scenarioTitles = (content: string): string[] =>
+        [...content.matchAll(/^[ \t]*Scenario:\s*(.+)\s*$/gm)].map((m) => (m[1] ?? '').trim()).filter((t) => t !== '');
+    const taskScenarios = scenarioTitles(sectionBetween(taskContent, 'Acceptance Criteria'));
+    const featureScenarios = featureContent !== null ? scenarioTitles(featureContent) : [];
+    for (const title of [...taskScenarios, ...featureScenarios]) declareIdentity(title);
+    return { byTitle, taskScenarios, featureScenarios };
+}
+
+/** Resolution outcome for one AC row id. */
+type AcIdentityResolution = { ok: true; canonical: string } | { ok: false; error: string };
+
+/**
+ * Resolve an answer-file AC row id to one canonical task identity (0804 R4):
+ * exact/declared title forms first, then the documented `AC-N` positional
+ * alias — accepted only against a real scenario ordinal, and refused with an
+ * actionable diagnostic when task and feature ordinals disagree. Undeclared
+ * `ACn` tokens, paraphrases and invented ordinals never resolve.
+ */
+function resolveAcIdentity(rowId: string, index: AcIdentityIndex): AcIdentityResolution {
+    const canonical = index.byTitle.get(normalizeAcTitle(rowId));
+    if (canonical !== undefined) return { ok: true, canonical };
+    // Strip the tolerated wrappers, then try the documented `AC-N` alias.
+    let stripped = rowId.trim();
+    let prev: string;
+    do {
+        prev = stripped;
+        stripped = stripped
+            .replace(/^\[[^\]]*\]\s*/, '')
+            .replace(/\s*\[[^\]]*\]\s*$/, '')
+            .replace(/^Scenario:\s*/i, '')
+            .trim();
+    } while (stripped !== prev);
+    const ordinal = /^AC-(\d+)$/i.exec(stripped);
+    if (ordinal !== null) {
+        const n = Number(ordinal[1]);
+        const taskTitle = index.taskScenarios[n - 1];
+        const featureTitle = index.featureScenarios[n - 1];
+        const candidates = [...new Set([taskTitle, featureTitle].filter((t): t is string => t !== undefined))];
+        if (candidates.length === 0) {
+            return {
+                ok: false,
+                error:
+                    `AC id "${rowId}" uses the AC-${n} positional alias but no scenario exists at that ordinal ` +
+                    '(task scenario list and linked-feature scenario list) — cite the exact scenario title or checklist label',
+            };
         }
+        if (candidates.length > 1) {
+            return {
+                ok: false,
+                error:
+                    `AC id "${rowId}" is ambiguous: task AC #${n} ("${taskTitle}") and feature scenario #${n} ` +
+                    `("${featureTitle}") are different scenarios with different ordering — cite the exact title`,
+            };
+        }
+        const resolved = index.byTitle.get(normalizeAcTitle(candidates[0] ?? ''));
+        if (resolved !== undefined) return { ok: true, canonical: resolved };
     }
-    return [...identities];
+    return { ok: false, error: '' };
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -341,7 +437,7 @@ function main(): void {
     }
 
     const reqIds = extractRequirementIds(taskContent);
-    const acIdentities = extractAcIdentities(taskContent, featureContent);
+    const acIndex = buildAcIdentityIndex(taskContent, featureContent);
 
     // Requirement rows: completeness, no unknowns, no duplicates, valid status, non-empty evidence.
     const seenReq = new Set<string>();
@@ -358,19 +454,31 @@ function main(): void {
         if (!seenReq.has(id)) add(`missing requirement row for "${id}"`);
     }
 
-    // AC rows: identity must exactly match a checklist label/token or a scenario title;
-    // status and evidence type must normalize; evidence non-empty. AC completeness is the
-    // verifier's authoring contract, not a lint rejection class (0726 R3).
-    const seenAc = new Set<string>();
+    // AC rows: identity must resolve to ONE canonical task AC identity — a
+    // checklist label/token or a scenario title in any ac-style-guide form
+    // (exact/bare title, `Scenario:` prefix, bracket tags, declared AC-N
+    // alias; 0804 R4). Alias-equivalent spellings of the same identity are
+    // duplicates even when the raw strings differ. Status and evidence type
+    // must normalize; evidence non-empty. AC completeness is the verifier's
+    // authoring contract, not a lint rejection class (0726 R3).
+    const seenAc = new Map<string, string>(); // canonical key → first raw row id
     for (const row of tables.acs) {
-        if (!acIdentities.includes(row.id)) {
+        const resolution = resolveAcIdentity(row.id, acIndex);
+        const canonicalKey = resolution.ok ? normalizeAcTitle(resolution.canonical) : null;
+        if (!resolution.ok) {
+            if (resolution.error !== '') add(`line ${row.line}: ${resolution.error}`);
+            else
+                add(
+                    `line ${row.line}: AC ID "${row.id.slice(0, 60)}" matches no task AC checklist label or scenario title ` +
+                        '(accepted forms: exact title, bare title, `Scenario:` prefix, bracket tags, declared AC-N alias)',
+                );
+        } else if (canonicalKey !== null && seenAc.has(canonicalKey)) {
+            const first = seenAc.get(canonicalKey) ?? '';
             add(
-                `line ${row.line}: AC ID "${row.id.slice(0, 60)}" matches no task AC checklist label or scenario title`,
+                `line ${row.line}: duplicate AC row "${row.id.slice(0, 60)}" — alias-equivalent to "${first.slice(0, 60)}"`,
             );
-        } else if (seenAc.has(row.id)) {
-            add(`line ${row.line}: duplicate AC row "${row.id.slice(0, 60)}"`);
         }
-        seenAc.add(row.id);
+        if (canonicalKey !== null && !seenAc.has(canonicalKey)) seenAc.set(canonicalKey, row.id);
         if (normalizeAcStatus(row.status) === null)
             add(`line ${row.line}: invalid AC status "${row.status}" (MET | PARTIAL | UNMET | N/A)`);
         if (normalizeEvidenceType(row.evidenceType) === null)
@@ -396,4 +504,5 @@ function main(): void {
     process.exit(0);
 }
 
-main();
+// CLI entry (guarded so the helpers stay importable for focused tests).
+if (import.meta.main) main();

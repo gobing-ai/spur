@@ -270,12 +270,20 @@ states:
           # WorkflowAppService.run(); the wbs fallback keeps a driver-less invocation from writing to
           # a bare "-route-reason.txt". The log line carries the run id for the same reason — an
           # unattributed append is log scraping, which R5 explicitly rejects as evidence.
+          # 0804 R8: the run id must be a single safe filename component before it
+          # becomes REASON_FILE — unresolved interpolation ($ { } vars.), path
+          # separators and dot traversal are a failed action (nonzero, no artifact).
+          # NOTE: no `#` comments inside the folded scalar — `>-` joins all same-indent
+          # lines into ONE shell line, so an in-scalar `#` comments out the rest of the
+          # command (the original R8 draft broke exactly this way; the case statement
+          # must stay one line).
           - kind: shell
             options:
                 command: >-
                     mkdir -p .spur/run .spur/memory &&
                     RUN_ID="$__runId" &&
                     if [ -z "$RUN_ID" ]; then RUN_ID="pipeline-$wbs"; fi &&
+                    case "$RUN_ID" in *'$'*|*'{'*|*'}'*|*vars.*|*/*|*'\'*|*..*) echo "route-reason: refusing unsafe run id: $RUN_ID" >&2; exit 1 ;; *) : ;; esac &&
                     REASON_FILE=".spur/run/$RUN_ID-route-reason.txt" &&
                     if [ "$mode" = "fast" ]; then
                       echo "fast:evidence complete+consistent" > "$REASON_FILE";
@@ -335,7 +343,7 @@ states:
                       RETRY_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
                       printf '%s\n' "$RETRY_OUTPUT";
                       if [ "$RETRY_RC" -eq 0 ]; then return 0; fi;
-                      if ! printf '%s' "$RETRY_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return "$RETRY_RC"; fi;
+                      if ! printf '%s' "$RETRY_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked|SQLite database .*is busy|SQLITE_BUSY'; then return "$RETRY_RC"; fi;
                       sleep 2;
                       RETRY_SECOND_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
                       printf '%s\n' "$RETRY_SECOND_OUTPUT";
@@ -431,7 +439,7 @@ states:
                       ATTEMPT_LOG="$LOG_FILE.attempt-$gate_attempt";
                       sh -c "$qualityGateCmd" > "$ATTEMPT_LOG" 2>&1; gate_rc=$?;
                       gate_locked=0;
-                      grep -q 'SQLiteError: database is locked' "$ATTEMPT_LOG" && gate_locked=1;
+                      grep -Eq 'SQLiteError: database is locked|SQLite database .*is busy|SQLITE_BUSY' "$ATTEMPT_LOG" && gate_locked=1;
                       cat "$ATTEMPT_LOG" >> "$LOG_FILE";
                       rm -f "$ATTEMPT_LOG";
                       if [ "$gate_rc" -eq 0 ] || [ "$gate_locked" -ne 1 ] || [ "$gate_attempt" -ge 5 ]; then break; fi;
@@ -547,7 +555,7 @@ states:
                         ATTEMPT_LOG="$LOG_FILE.attempt-$gate_attempt";
                         sh -c "$qualityGateCmd" > "$ATTEMPT_LOG" 2>&1; gate_rc=$?;
                         gate_locked=0;
-                        grep -q 'SQLiteError: database is locked' "$ATTEMPT_LOG" && gate_locked=1;
+                        grep -Eq 'SQLiteError: database is locked|SQLite database .*is busy|SQLITE_BUSY' "$ATTEMPT_LOG" && gate_locked=1;
                         cat "$ATTEMPT_LOG" >> "$LOG_FILE";
                         rm -f "$ATTEMPT_LOG";
                         if [ "$gate_rc" -eq 0 ] || [ "$gate_locked" -ne 1 ] || [ "$gate_attempt" -ge 5 ]; then break; fi;
@@ -747,7 +755,7 @@ states:
                       RETRY_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
                       printf '%s\n' "$RETRY_OUTPUT";
                       if [ "$RETRY_RC" -eq 0 ]; then return 0; fi;
-                      if ! printf '%s' "$RETRY_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return "$RETRY_RC"; fi;
+                      if ! printf '%s' "$RETRY_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked|SQLite database .*is busy|SQLITE_BUSY'; then return "$RETRY_RC"; fi;
                       sleep 2;
                       RETRY_SECOND_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
                       printf '%s\n' "$RETRY_SECOND_OUTPUT";
@@ -794,7 +802,7 @@ states:
                       RETRY_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
                       printf '%s\n' "$RETRY_OUTPUT";
                       if [ "$RETRY_RC" -eq 0 ]; then return 0; fi;
-                      if ! printf '%s' "$RETRY_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked'; then return "$RETRY_RC"; fi;
+                      if ! printf '%s' "$RETRY_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked|SQLite database .*is busy|SQLITE_BUSY'; then return "$RETRY_RC"; fi;
                       sleep 2;
                       RETRY_SECOND_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
                       printf '%s\n' "$RETRY_SECOND_OUTPUT";
@@ -1016,8 +1024,13 @@ transitions:
       guard:
           kind: shell
           options:
+              # 0804 R6: `--as done` projects the check onto the done target so open
+              # Plan/AC checkboxes fail HERE — before the done action runs — mirroring
+              # the CLI's own target-aware `--no-lifecycle` backstop (F92 R3). No `#`
+              # comments inside the folded scalar: `>-` joins same-indent lines into
+              # one shell line.
               command: >-
-                  $spurBin task check $wbs &&
+                  $spurBin task check $wbs --as done &&
                   test "$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)" = PASS &&
                   test "$(jq -r '.proof.digest // ""' .spur/run/$wbs-verdict.json 2>/dev/null)" = "$proofDigest"
     - from: record

@@ -2917,6 +2917,40 @@ describe('subject-token exclusion (0583 R5 verify)', () => {
         const row = `| R1 | MET | \`${cite}\` (\`renderForensics\` builds the report) |`;
         expect(citedLinesNameSubject(extractSubjectTokens(row), cited)).toBe(false);
     });
+
+    // 0804 R9: the bare-identifier scans must see the row with parsed citation
+    // spans removed — filename fragments (snake_case/CamelCase pieces of the
+    // cited path) are not evidence subjects and must never manufacture a
+    // mismatch against lines that never repeat their own filename.
+    test('snake_case filename fragments inside the anchor never become subjects (0804 R9)', () => {
+        const row = '| R1 | MET | `docs/help/cmd_example.md:12` |';
+        const tokens = extractSubjectTokens(row);
+        expect(tokens).not.toContain('cmd_example');
+        expect(tokens).not.toContain('cmd_example.md');
+        // No subject outside the anchor ⇒ tokenless row ⇒ matching, not mismatch.
+        expect(citedLinesNameSubject(tokens, 'example usage of the command')).toBe(true);
+    });
+
+    test('CamelCase filename fragments inside the anchor never become subjects (0804 R9)', () => {
+        const row = '| R1 | MET | `docs/guide/UsageGuide.md:3-7` |';
+        const tokens = extractSubjectTokens(row);
+        expect(tokens).not.toContain('usageguide');
+        expect(citedLinesNameSubject(tokens, '# Overview\nbody text')).toBe(true);
+    });
+
+    test('multi-anchor rows lose every citation span (0804 R9 / 0688 R2 policy kept)', () => {
+        const row = '| R1 | MET | `src/alpha_one.ts:10` `src/beta_two.ts:20` |';
+        const tokens = extractSubjectTokens(row);
+        expect(tokens).not.toContain('alpha_one');
+        expect(tokens).not.toContain('beta_two');
+        expect(citedLinesNameSubject(tokens, 'const x = 1;')).toBe(true);
+    });
+
+    test('a real subject outside the anchor still reports on absent symbols (0804 R9)', () => {
+        const row = '| R1 | MET | `docs/help/cmd_example.md:12` (`probeQuota` gate) |';
+        expect(citedLinesNameSubject(extractSubjectTokens(row), 'unrelated lines')).toBe(false);
+        expect(citedLinesNameSubject(extractSubjectTokens(row), 'const probeQuota = 3;')).toBe(true);
+    });
 });
 
 describe('classifyExternalEvidence — frozen external form (0584 R1/R2)', () => {

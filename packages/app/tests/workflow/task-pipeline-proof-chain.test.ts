@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { extractResolvedWorkflowFacts } from '../../src/workflow/composition-baseline';
@@ -339,5 +340,188 @@ describe('task-pipeline proof-input completeness and honest review evidence (tas
         expect(guard).toContain('.proof.stages.review.digest');
         expect(guard).toContain('.proof.definitionDigest');
         expect(guard).toContain('.proof.runId');
+    });
+});
+
+describe('task-pipeline busy-retry classifiers, done guard projection, route-id safety (task 0804 R3/R6/R8)', () => {
+    // Raw YAML text (not the parsed tree) so classifier expressions are pinned verbatim.
+    const RAW = readFileSync(join(WORKFLOWS_DIR, 'task-pipeline.yaml'), 'utf8');
+
+    /** Extract a `name() { ... };` shell function body from a YAML command string. */
+    const fnOf = (command: string, name: string): string => {
+        const start = command.indexOf(`${name}() {`);
+        if (start < 0) return '';
+        const end = command.indexOf('\n};', start);
+        return command.slice(start, end + 3);
+    };
+
+    const runSh = (script: string, cwd: string, env?: Record<string, string>): { code: number; stderr: string } => {
+        const proc = Bun.spawnSync(['sh', '-c', script], {
+            cwd,
+            env: env === undefined ? { ...process.env } : { ...process.env, ...env },
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        return { code: proc.exitCode, stderr: proc.stderr.toString() };
+    };
+
+    function makeTmpDir(): { dir: string; cleanup: () => void } {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0804-yaml-'));
+        mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+        mkdirSync(join(dir, '.spur', 'memory'), { recursive: true });
+        return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+    }
+
+    // ── R3: all five retry classifiers recognize raw locks, SQLITE_BUSY and the
+    // path-bearing busy message; budgets and non-lock behavior stay unchanged.
+
+    test('all five classifier sites carry the expanded path-aware alternation (R3)', () => {
+        // Three retry-once sites (task update transitions) + two quality-gate loop sites.
+        const retrySites =
+            RAW.match(
+                /grep -Eq 'ENOENT\|EBUSY\|ENOTEMPTY\|database is locked\|SQLite database \.\*is busy\|SQLITE_BUSY'/g,
+            ) ?? [];
+        const gateSites =
+            RAW.match(/grep -Eq 'SQLiteError: database is locked\|SQLite database \.\*is busy\|SQLITE_BUSY'/g) ?? [];
+        expect(retrySites.length).toBe(3);
+        expect(gateSites.length).toBe(2);
+        // Every `database is locked`-bearing classifier now carries the full expansion —
+        // no leftover narrow expression.
+        const narrow = RAW.match(/grep -Eq '[^']*database is locked[^']*'/g) ?? [];
+        expect(narrow.length).toBe(5);
+        // Existing budgets preserved: retry-once keeps its 2s delay, gate loops keep at
+        // most five attempts with 10s delays.
+        expect((RAW.match(/sleep 2;/g) ?? []).length).toBe(3);
+        expect((RAW.match(/sleep 10;/g) ?? []).length).toBe(2);
+        expect((RAW.match(/-ge 5 \]/g) ?? []).length).toBe(2);
+    });
+
+    test('behavioral: the retry-once classifier retries only lock-class failures (R3)', () => {
+        // The three retry-once sites share one byte-identical function; proving the
+        // shared body pins all three sites.
+        const bodies = DEF.states
+            .flatMap((s) => (s.onEnter ?? []).map((a) => String(a.options?.command ?? '')))
+            .filter((c) => c.includes('retry_transient() {'))
+            .map((c) => fnOf(c, 'retry_transient'));
+        expect(bodies.length).toBe(3);
+        expect(new Set(bodies).size).toBe(1);
+        const fn = bodies[0];
+        expect(fn).not.toBe('');
+
+        const { dir, cleanup } = makeTmpDir();
+        try {
+            writeFileSync(
+                join(dir, 'busy.sh'),
+                '#!/bin/sh\necho "SQLite database $PWD/.spur/spur.db is busy" >&2\necho call >> calls.log\nexit 16\n',
+            );
+            writeFileSync(
+                join(dir, 'other.sh'),
+                '#!/bin/sh\necho "ENOCONFIG: totally unrelated failure" >&2\necho call >> calls.log\nexit 5\n',
+            );
+            writeFileSync(join(dir, 'ok.sh'), '#!/bin/sh\necho call >> calls.log\nexit 0\n');
+            const run = (stub: string): { code: number; calls: number } => {
+                rmSync(join(dir, 'calls.log'), { force: true });
+                const res = runSh(`${fn}\nretry_transient sh ${dir}/${stub}`, dir);
+                const calls = readFileSync(join(dir, 'calls.log'), 'utf8').trim().split('\n').length;
+                return { code: res.code, calls };
+            };
+            // Path-bearing busy message → exactly one retry, then the original rc.
+            expect(run('busy.sh')).toEqual({ code: 16, calls: 2 });
+            // Non-lock failure → no retry, original rc, single invocation.
+            expect(run('other.sh')).toEqual({ code: 5, calls: 1 });
+            // First-attempt success → never retries.
+            expect(run('ok.sh')).toEqual({ code: 0, calls: 1 });
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('behavioral: the quality-gate classifier rejects only lock-class failures (R3)', () => {
+        // The two gate sites classify one captured attempt log line with the same
+        // `grep -Eq` alternation (verbatim pin) — the loop budget shape (`-ge 5`,
+        // `sleep 10`) is pinned structurally above; here the classification predicate
+        // is proven against both stub classes.
+        const gateLine =
+            /grep -Eq 'SQLiteError: database is locked\|SQLite database \.\*is busy\|SQLITE_BUSY' "\$ATTEMPT_LOG" && gate_locked=1/;
+        expect((RAW.match(new RegExp(gateLine.source, 'g')) ?? []).length).toBe(2);
+        // Extract the alternation verbatim from the YAML (not from a regex source, whose
+        // escaping would change grep -E semantics).
+        const anchor = RAW.indexOf("grep -Eq 'SQLiteError");
+        const alternation = RAW.slice(RAW.indexOf("'", anchor) + 1, RAW.indexOf("'", RAW.indexOf("'", anchor) + 1));
+        expect(alternation).toContain('SQLITE_BUSY');
+        const { dir, cleanup } = makeTmpDir();
+        try {
+            const probe = (text: string): boolean =>
+                runSh(`printf '%s' "$PROBE" | grep -Eq '${alternation}'`, dir, { PROBE: text }).code === 0;
+            expect(probe('SQLiteError: database is locked')).toBe(true);
+            expect(probe('SQLite database /tmp/x/.spur/spur.db is busy')).toBe(true);
+            expect(probe('SQLITE_BUSY: checkpoint starvation')).toBe(true);
+            expect(probe('ENOCONFIG: unrelated failure')).toBe(false);
+        } finally {
+            cleanup();
+        }
+    });
+
+    // ── R6: the record→done guard projects the structural check onto the done target.
+
+    test('the record→done guard checks the done target with --as done and keeps verdict/proof backstops (R6)', () => {
+        const guard = cmdOf('record', 'done');
+        expect(guard).toContain('task check $wbs --as done');
+        // The pre-existing backstops stay: PASS verdict + digest match on the proof block.
+        expect(guard).toContain('"$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)" = PASS');
+        expect(guard).toContain('.proof.digest');
+        // No unprojected plain check remains.
+        expect(guard.includes('task check $wbs &&')).toBe(false);
+    });
+
+    // ── R8: the route-reason action validates the run id before creating its artifact.
+
+    test('behavioral: empty falls back, valid ids write, unsafe ids fail without a reason artifact (R8)', () => {
+        // 0759 R5: the route claim is a precheck-state shell action.
+        const routeCmd = (DEF.states.find((s) => s.id === 'precheck')?.onEnter ?? [])
+            .filter((a) => a.kind === 'shell')
+            .map((a) => String(a.options?.command ?? ''))
+            .find((c) => c.includes('REASON_FILE='));
+        expect(routeCmd).toBeDefined();
+        if (routeCmd === undefined) return;
+        const { dir, cleanup } = makeTmpDir();
+        try {
+            const runRoute = (runId: string): { code: number; stderr: string } =>
+                runSh(routeCmd, dir, { __runId: runId, wbs: 't0804', mode: 'fast' });
+            const reasonExists = (id: string): boolean => {
+                try {
+                    readFileSync(join(dir, '.spur', 'run', `${id}-route-reason.txt`), 'utf8');
+                    return true;
+                } catch {
+                    return false;
+                }
+            };
+
+            // Empty id → pipeline-$wbs fallback artifact.
+            expect(runRoute('').code).toBe(0);
+            expect(readFileSync(join(dir, '.spur', 'run', 'pipeline-t0804-route-reason.txt'), 'utf8')).toContain(
+                'fast:evidence complete+consistent',
+            );
+
+            // Valid UUID form → its own artifact.
+            expect(runRoute('0d90b4e7-1c2d-4e5f-a6b7-8c9d0e1f2a3b').code).toBe(0);
+            expect(reasonExists('0d90b4e7-1c2d-4e5f-a6b7-8c9d0e1f2a3b')).toBe(true);
+
+            // Unsafe ids → nonzero, refusal diagnostic, no artifact for that id.
+            for (const unsafe of ['$spurBin', 'a{b}', '../evil', 'a/b', 'vars.wbs']) {
+                const res = runRoute(unsafe);
+                expect(res.code).not.toBe(0);
+                expect(res.stderr).toContain('refusing unsafe run id');
+                expect(reasonExists(unsafe)).toBe(false);
+            }
+
+            // The routes log records only the successful runs.
+            const log = readFileSync(join(dir, '.spur', 'memory', 'task-pipeline-routes.log'), 'utf8');
+            expect(log).toContain('pipeline-t0804');
+            expect(log).toContain('0d90b4e7-1c2d-4e5f-a6b7-8c9d0e1f2a3b');
+            expect(log.includes('$spurBin')).toBe(false);
+        } finally {
+            cleanup();
+        }
     });
 });

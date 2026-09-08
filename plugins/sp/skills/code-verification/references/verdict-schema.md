@@ -116,6 +116,13 @@ linked feature scenario title, invalid status (`MET | PARTIAL | UNMET` for requi
 manual-review | llm-judge | n/a`, or a `+` compound), and empty evidence. Interrupted runs keep the
 rows that pass the lint and complete only the missing IDs on retry.
 
+**Concrete anchors only (task 0804 R9).** An evidence anchor must be a concrete existing `file:line`
+(or `file:start-end`) path. A glob or directory summary (`src/services/*.ts`, `the retry
+classifiers in task-pipeline.yaml`) is not an anchor: expand it into the specific cited files/ranges
+the run actually verified. Since 0804 R9 the checker ignores complete parsed citation spans before
+scanning for subjects, so a citation's filename (including snake_case paths) can never become a
+false subject — a real absent symbol, nonexistent file, or invalid range still reports.
+
 ## Checks evidence
 
 Wave C verification can emit the following additive `checks[]` rows:

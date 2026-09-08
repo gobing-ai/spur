@@ -1713,7 +1713,7 @@ export class WorkflowAppService {
  * is reserved for pre-0768 rows with no recorded identity and is never derived
  * from a definition.
  */
-function workflowVersionLiteral(workflow: WorkflowDef): string | null {
+export function workflowVersionLiteral(workflow: WorkflowDef): string | null {
     return typeof workflow.version === 'string' && workflow.version !== '' ? workflow.version : null;
 }
 

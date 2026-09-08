@@ -27,7 +27,7 @@ Every dogfood run **always** writes **two** files — with or without `--save`:
 | Artifact | Path | Role |
 | ---------- | ------ | ------ |
 | **Live** | `.spur/run/dogfood/<run_id>.md` | Mid-run SSOT; opened in Phase 1; ledger rows appended on every step resolve |
-| **Report** | `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md` | Operator artifact; same content promoted on open + every step + finalize |
+| **Report** | `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md` | Operator artifact; same content promoted on open + every step + finalize — **except inside a pipeline proof window (task 0804 R2): the mirror stays frozen (live ledger only) until the window closes, then sync/validate, recovering from live if the write failed** — [monitor-ledger.md](monitor-ledger.md) → live-ledger rule 3 |
 
 `--save` is **back-compat no-op** for delivery: it still documents/prints the report path but is
 **not required** to create the file. A run that ends with no file under `docs/dogfood/` (and no live
@@ -158,14 +158,17 @@ it is the audit trail for step outcomes, fix attempts, findings, and cache math.
 |------|----------|---------|-------------|---------|--------------|---------------|---------|-------|------------|
 | resolve | 1 | PASS | — | — | ~800 | ~300 | 27% | 1 command + reused task summary | ~3s |
 
-**Cache calculation:** aggregate cache% = round((sum(Cached Tokens) / sum(Fresh Tokens + Cached Tokens)) * 100).
+**Cache calculation:** aggregate cache% = round((sum(Cached Tokens) / sum(Fresh Tokens + Cached Tokens)) * 100),
+computed over **observable rows only** — `~unknown` rows are excluded from both sums (or surfaced as
+a separate unknown bucket), never counted as `~0` cached.
 ```
 
 Ledger rules:
 
 - Every executed step gets exactly one row, recorded when the step resolves (**on disk**, both files).
-- `Fresh Tokens` and `Cached Tokens` must be numbers with `~` prefixes; `Cache %` must be computed
-  from those two cells, not guessed.
+- `Fresh Tokens` and `Cached Tokens` must be `~`-prefixed numbers, or `~unknown` when the basis is
+  unobservable (that row is then excluded from the aggregate, never counted as `~0` cached);
+  `Cache %` must be computed from those two cells, not guessed.
 - `Basis` is mandatory. It names the observable inputs used for the estimate: command output,
   previously-read file reused from context, generated report text, or similar.
 - The aggregate cache line in `#### Cost` under §2 must equal the ledger formula above. If it
@@ -173,8 +176,9 @@ Ledger rules:
 - **Cardinality (@1.2):** the number of ledger data rows MUST equal the `**Steps:** N derived, N executed`
   declared in §2. Steps marked N/A are documented explicitly as their own rows (`Outcome: N/A`);
   an unaccounted step or an extra row refuses `status: complete` at finalize.
-- If the driver cannot make a defensible estimate for a row, write `~0` cached and explain the
-  missing basis in `Basis`; do not invent a stable percentage.
+- If the driver cannot make a defensible estimate for a row, write `~unknown`, exclude it from the
+  aggregate cache% (or surface it as a separate unknown bucket), and explain the missing basis in
+  `Basis`; do not fold it in as `~0` cached or invent a stable percentage.
 
 ### 4. What We Did
 

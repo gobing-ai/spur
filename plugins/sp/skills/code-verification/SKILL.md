@@ -117,8 +117,8 @@ assign a per-requirement status:
 | **PARTIAL** | Evidence for part of the requirement only |
 | **UNMET** | No implementation evidence found |
 
-Record the evidence string (repo-relative path `file:line`, e.g. `packages/app/src/services/task-check.ts:42`, command, or test name) per requirement — this is what lands
-in `## Testing`.
+Record the evidence string (repo-relative `file:line`, command, or test name) per requirement —
+this lands in `## Testing`.
 
 **Line-anchor verification (anti-stale-citation rule).** Every `file:line` evidence citation
 written into the Testing table MUST be re-read at the cited lines this run, and the re-read content
@@ -141,6 +141,8 @@ source under `~/xprojects/ts-libs`, or a gitignored `.spur/run/**` artifact). `c
 classifies it as external and never raises `L4.stale-line-anchor` for it (R1). Do NOT use it for a file
 that lives in this repo — in-repo evidence MUST use the repo-relative backtick form
 `` `path:line` `` / `` `path:start-end` ``, and citing it in the external form still reports (R2).
+
+**Concrete anchors (0804 R9):** cite existing `file:line`s, never globs — `references/verdict-schema.md`.
 
 ### Step 5 — Acceptance Criteria guard
 

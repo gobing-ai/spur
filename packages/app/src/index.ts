@@ -243,6 +243,18 @@ export {
     isExclusiveJobActive,
     releaseExclusiveJob,
 } from './services/job-exclusion-guard';
+// Authoritative inline full-pipeline run identity (task 0804 R1)
+export type {
+    InlineRunSetupFailure,
+    InlineRunSetupInput,
+    InlineRunSetupOutcome,
+    InlineRunSetupSuccess,
+} from './services/inline-run-setup';
+export {
+    createOrAttachInlineRun,
+    type InlineRunProjectDb,
+    openInlineRunProjectDb,
+} from './services/inline-run-setup';
 export type { JobWorkerConsumer, JobWorkerServiceOptions } from './services/job-worker-service';
 export { JobHandlerRegistry, JobWorkerService } from './services/job-worker-service';
 export type {

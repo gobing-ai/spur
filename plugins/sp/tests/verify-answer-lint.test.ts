@@ -444,3 +444,74 @@ describe('task-pipeline verify wiring (0726 R3)', () => {
         expect(verdictIdx).toBeGreaterThan(lintIdx);
     });
 });
+
+describe('canonical AC identity resolution (task 0804 R4)', () => {
+    const acRow = (id: string): string =>
+        completeAnswer().replace(
+            '| AC1 | MET | test | `tests/a.test.ts:9` |',
+            `| ${id} | MET | test | \`tests/a.test.ts:9\` |`,
+        );
+
+    const FEATURE_TITLE = 'R1 — the importer guard rejects unsafe versions';
+
+    test('the `Scenario:` prefix form resolves to the same identity as the bare title', () => {
+        const sb = makeSandbox();
+        expect(sb.exec(acRow(`Scenario: ${FEATURE_TITLE}`)).code).toBe(0);
+    });
+
+    test('alias-equivalent spellings of one identity are duplicates (scenario + bare title)', () => {
+        const sb = makeSandbox();
+        const answer = completeAnswer().replace(
+            '| AC1 | MET | test | `tests/a.test.ts:9` |',
+            `| Scenario: ${FEATURE_TITLE} | MET | test | \`tests/a.test.ts:9\` |\n| ${FEATURE_TITLE} | MET | test | \`tests/a.test.ts:9\` |`,
+        );
+        const r = sb.exec(answer);
+        expect(r.code).not.toBe(0);
+        expect(r.stderr).toContain('alias-equivalent');
+    });
+
+    test('an undeclared ACn token (no hyphen) is never a positional alias', () => {
+        const sb = makeSandbox();
+        const r = sb.exec(acRow('AC3'));
+        expect(r.code).not.toBe(0);
+        expect(r.stderr).toContain('matches no task AC checklist label or scenario title');
+    });
+
+    test('AC-N with no scenario at that ordinal fails with an actionable diagnostic', () => {
+        const sb = makeSandbox();
+        const r = sb.exec(acRow('AC-3'));
+        expect(r.code).not.toBe(0);
+        expect(r.stderr).toContain('no scenario exists at that ordinal');
+    });
+
+    test('AC-N resolves through the linked-feature scenario list when the task declares none', () => {
+        const sb = makeSandbox();
+        expect(sb.exec(acRow('AC-1')).code).toBe(0);
+    });
+
+    test('an ambiguous task/feature ordinal mapping fails and names both scenarios', () => {
+        const task = `${TASK_CONTENT}\n\nScenario: task-first scenario about the guard\nScenario: task-second scenario about the lint\n`;
+        const sb = makeSandbox(task);
+        const r = sb.exec(acRow('AC-1'));
+        expect(r.code).not.toBe(0);
+        expect(r.stderr).toContain('ambiguous');
+        expect(r.stderr).toContain('task-first scenario about the guard');
+        expect(r.stderr).toContain(FEATURE_TITLE);
+    });
+
+    test('a paraphrase never resolves, even when it describes the same AC', () => {
+        const sb = makeSandbox();
+        const r = sb.exec(acRow('the guard rejects bad importers overall'));
+        expect(r.code).not.toBe(0);
+        expect(r.stderr).toContain('matches no task AC checklist label or scenario title');
+    });
+
+    test('an explicitly declared AC-1 checklist token resolves exactly', () => {
+        const task = TASK_CONTENT.replace(
+            '- [ ] AC1 (R1): first acceptance criterion passes.',
+            '- [ ] AC-1 (R1): first acceptance criterion passes.',
+        );
+        const sb = makeSandbox(task);
+        expect(sb.exec(acRow('AC-1')).code).toBe(0);
+    });
+});

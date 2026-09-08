@@ -48,11 +48,28 @@ command, skill, script, or second workflow.
    chooses the subprocess workflow path.
 2. Allocate a collision-resistant inline run id (`uuidgen`, with a timestamp/pid fallback), create
    `.spur/run/`, and use `.spur/run/<run-id>.log` as the run log.
-3. Resolve the host session id from `.spur/context/.session.json`, accepting the normalized hook key
+3. **Authoritative run identity (task 0804 R1, fail-closed).** Persist the run row through the
+   internal delegate before any stage executes — this is what makes bound `run.artifact` record
+   accept the inline run (0785 R3):
+
+   ```bash
+   SETUP_SCRIPT="plugins/sp/scripts/inline-run-setup.ts";
+   [ -f "$SETUP_SCRIPT" ] || SETUP_SCRIPT="$(superskill script path sp inline-run-setup.ts 2>/dev/null)";
+   [ -n "$SETUP_SCRIPT" ] && [ -f "$SETUP_SCRIPT" ] && \
+     bun "$SETUP_SCRIPT" --run-id "$RUN_ID" --file <selected-pipeline-yaml> \
+     || { echo "inline run setup failed closed — checker not found; run 'superskill install sp'" >&2; exit 1; }
+   ```
+
+   The delegate resolves the app service from the SPUR_BIN chain, creates-or-attaches the row,
+   and writes `.spur/run/<run-id>-inline-setup.json`. Seed `__runId` and `__definitionDigest`
+   from that file so proof capture and bound registration verify against the persisted identity.
+   A non-zero exit (missing row identity, changed definition, bundle-only install) stops the run —
+   never continue unbound and never fabricate a PASS.
+4. Resolve the host session id from `.spur/context/.session.json`, accepting the normalized hook key
    `session` and the Codex key `session_id` (in that order). If neither is available, allocate
    `host-session-<run-id>` and record that fallback in the log; provenance must never be blank or
    guessed from an executor subprocess.
-4. Render the two-layer plan into the host todo list (task 0596):
+5. Render the two-layer plan into the host todo list (task 0596):
    - **Layer 1** = `spur workflow show <pipeline-yaml> --format todo --json` → its `steps[]`: the
      declared state inventory in declaration order with `initial` / `terminal` / `failure` /
      `pause` / `loopBack` / `conditional` markers. Mark the active state. Never re-derive this
@@ -69,7 +86,7 @@ command, skill, script, or second workflow.
      ended 0/11 with precheck and implement still open).
    - **Source of truth** = the CLI projection for layer 1; the YAML parsed in step 1 for layer 2.
      Never hand-copy or hand-derive the state list into the driver, a command, a skill, or a script.
-5. For task execution only, record lifecycle provenance before entering the FSM:
+6. For task execution only, record lifecycle provenance before entering the FSM:
 
    ```bash
    spur task run-link <wbs> --source inline-full --run-id <run-id> --json
@@ -214,10 +231,11 @@ tasks (0617, 0619) because the sections were hand-written **before** the verdict
    and `L3.required-section-placeholder` before the transition, not after.
 3. **Solution change-map anchor rule (L4.anchor-subject-mismatch).** A Solution change-map table must
    list **one `file:line` per row**. A ·-joined paragraph makes every anchor's "subject" the other
-   anchors and trips the L4 subject check. Paths containing `_` (e.g. `docs/help/cmd_*.md`,
-   `spur-cli-matrix.md`) can **never** match their cited line — the snake_case filename token is
-   extracted as the subject and cannot appear in the line content — so drop those rows from the table
-   (prose still covers them).
+   anchors and trips the L4 subject check. Since 0804 R9, subject extraction ignores complete parsed
+   citation spans, so a path's underscores no longer manufacture a subject: an underscore path row
+   (`docs/help/cmd_example.md:12`) is checked exactly like any other row — cite an **existing file**
+   with a **valid line or line range** whose content names the requirement's subject. A real absent
+   symbol, nonexistent file or invalid range still reports; never replace a citable row with prose.
 
 ## Failure contract
 
