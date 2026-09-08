@@ -87,6 +87,10 @@ export default function ObservabilityShell() {
                     </div>
                 </div>
 
+                {/* Shell-owned time-range presets — visible on every tab (task 0793 R2/D2).
+                    ADR-081 header anatomy: filters middle, tab strip right. */}
+                <TimeRangePresets timeRange={timeRange} onTimeRangeChange={setTimeRange} />
+
                 {/* Tab Strip */}
                 <div
                     role="tablist"
@@ -115,9 +119,6 @@ export default function ObservabilityShell() {
                         );
                     })}
                 </div>
-
-                {/* Shell-owned time-range presets — visible on every tab (task 0793 R2/D2) */}
-                <TimeRangePresets timeRange={timeRange} onTimeRangeChange={setTimeRange} />
             </div>
 
             {/* Tab Panel */}

@@ -287,6 +287,9 @@ describe('observability components', () => {
         expect(
             container.querySelector('[data-system-events-tab] fieldset[aria-label="Time range presets"]'),
         ).toBeNull();
+        // ADR-081: filters sit before the tab strip (title · time range · tabs).
+        const tablist = getByRole('tablist', { name: 'Observability tabs' });
+        expect(presets.compareDocumentPosition(tablist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
 
         const summaryTab = getByRole('tab', { name: 'Summary' });
         expect(summaryTab.getAttribute('aria-selected')).toBe('true');
