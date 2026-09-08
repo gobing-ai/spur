@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A2"
 name: "Embedded job queue and scheduler"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:26.008Z"
-updated_at: "2026-09-02T07:07:35.557Z"
+updated_at: "2026-09-08T17:57:04.253Z"
 ---
 
 # A2: Embedded job queue and scheduler
@@ -81,6 +81,7 @@ Feature: Embedded job queue and scheduler
 | 0201 | Scheduler entries, job events, stats API, Jobs tab (0190 wave B) | done |
 | 0734 | Configurable scheduler jobs (interval + real cron) in ts-libs adapter and spur serve | done |
 | 0750 | Retire history.refresh.schedule_minutes in favor of bootstrap.scheduler.jobs | done |
+| 0806 | Fix history-daily-report timeout containment, import stalls, budget mismatch and missing job lifecycle timing | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -91,3 +92,4 @@ Feature: Embedded job queue and scheduler
 - 2026-07-25T19:33:15.312Z active → verifying (system)
 - 2026-07-25T19:33:15.547Z verifying → done (system)
 - 2026-09-02T07:07:35.557Z done → active (system)
+- 2026-09-08T17:57:04.253Z active → verifying (system)
