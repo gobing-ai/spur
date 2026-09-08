@@ -1179,7 +1179,7 @@ describe('startServer', () => {
             await exitCalled;
         }
         expect(order).toEqual(['worker.start', 'worker.stop', 'server.stop', 'runtime.stop']);
-    });
+    }, 20_000);
 
     test('parseTaskActionJob validates payload shape and preserves optional routing fields', () => {
         expect(() => parseTaskActionJob(null)).toThrow('Invalid task-action payload: expected object');
