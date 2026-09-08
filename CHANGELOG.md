@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.3.77] - 2026-09-08
+
+### Added
+
+- 0804: inline pipeline proof binding, run-artifact registration, and dogfood/gate contracts (ee3e448b0)
+
+### Fixed
+
+- cli: align serve --cwd docs; pin --json probe fail-fast (01f1b559f)
+- cli: task done-guard denial names target probe + findings (ed5a271af)
+- session triage — history-board time-window flake, serve --cwd scoping, startup drain, SQLITE_BUSY wording (0805) (c8d9d190c)
+- history: contain shell-descendant timeouts, bound imports, reconcile budgets, and preserve job lifecycle timing (669ab7819)
+
+### Other
+
+- queue: close 0807 coverage gaps and sync escalation event matrix (5c93fe643)
+- server: restore env in finally and clean temp dir in 0805 R2 test (328d5d056)
+- tasks: record 0808 review follow-ups; refresh 0805 anchors (91d0aeef7)
+- plugins: document run.artifact inline registration convention (914df57b8)
+- tasks: apply markdownlint table-format autofix to 0805 record evidence (8d35eb582)
+- tasks: re-audit 0806 with fresh gate evidence and corrected line anchors (1a70cb953)
+- events: renumber catalog after queue.job.started insert and refresh count literals (5bdc88fde)
+- features: refine features after the implementation (48ee4b969)
+- tasks: refine 0805 scope and evidence for current source (dab56ffd5)
+- tasks: capture daily report timeout and lifecycle defects (4eec79aeb)
+- tasks: refine 0804 against current harness contracts (f6bca5c55)
+- review: triage session-review findings from run c8c496fc (b8adc2f0d)
+- config: update the spur config file (d29b49022)
+- config: update the spur config file (5a9dd4113)
+- config: update the spur config file (9e838f7dc)
+
 ## [0.3.76] - 2026-09-07
 
 ### Added
