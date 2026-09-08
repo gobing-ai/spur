@@ -128,12 +128,7 @@ export default function ObservabilityShell() {
                 className="mt-2 flex flex-col gap-4"
             >
                 {Active ? (
-                    <Active
-                        onLivenessChange={handleLivenessChange}
-                        timeRange={timeRange}
-                        onTimeRangeChange={setTimeRange}
-                        onNavigate={handleNavigate}
-                    />
+                    <Active onLivenessChange={handleLivenessChange} timeRange={timeRange} onNavigate={handleNavigate} />
                 ) : null}
             </div>
         </div>

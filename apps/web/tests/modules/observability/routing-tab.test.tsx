@@ -13,7 +13,7 @@ import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
  * Bare renders use `all`: no since bound, so the legacy exact-URL assertion
  * (endpoint without a query) still holds (task 0793 R3/R4).
  */
-const baseProps = { timeRange: 'all', onTimeRangeChange: () => {} } as const;
+const baseProps = { timeRange: 'all' } as const;
 
 function jsonResponse(body: unknown): Response {
     return new Response(JSON.stringify(body), {
@@ -239,7 +239,7 @@ describe('RoutingTab (task 0552)', () => {
     test('0793 R3: carries the derived since for a preset range and refetches when it changes', async () => {
         stubRouting({ pairs: [], roles: [] });
 
-        const view = render(<RoutingTab timeRange="4h" onTimeRangeChange={() => {}} />);
+        const view = render(<RoutingTab timeRange="4h" />);
         await view.findByText(/No routing attribution has been recorded/i);
         const firstCall = requestedUrls.find((u) => u.includes('/observability/routing-summary'));
         expect(firstCall).toBeDefined();
@@ -249,7 +249,7 @@ describe('RoutingTab (task 0552)', () => {
         expect(Number.isNaN(Date.parse(since as string))).toBe(false);
 
         // timeRange is an effect dep: changing the shell range refetches.
-        view.rerender(<RoutingTab timeRange="24h" onTimeRangeChange={() => {}} />);
+        view.rerender(<RoutingTab timeRange="24h" />);
         await waitFor(() =>
             expect(requestedUrls.filter((u) => u.includes('/observability/routing-summary')).length).toBe(2),
         );
@@ -258,7 +258,7 @@ describe('RoutingTab (task 0552)', () => {
     test('0793 R4: the all range sends no since bound', async () => {
         stubRouting({ pairs: [], roles: [] });
 
-        const view = render(<RoutingTab timeRange="all" onTimeRangeChange={() => {}} />);
+        const view = render(<RoutingTab timeRange="all" />);
         await view.findByText(/No routing attribution has been recorded/i);
         const call = requestedUrls.find((u) => u.includes('/observability/routing-summary')) ?? '';
         expect(call).not.toBe('');
