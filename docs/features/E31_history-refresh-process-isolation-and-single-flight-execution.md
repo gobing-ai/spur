@@ -92,6 +92,7 @@ Feature: Isolated single-flight history refresh
 | --- | ---- | ------ |
 | 0716 | Enforce database single-flight for every history refresh producer | done |
 | 0717 | Run queued history refreshes in an isolated child process | done |
+| 0803 | Bound the periodic history-refresh job: child watchdog timeout, PASSIVE checkpoint in daily path, bounded BUSY retry — a wedged history-daily child held the WAL write lock 30+ min and blocked all corpus writes | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
