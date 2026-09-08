@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Command } from '@commander-js/extra-typings';
+import type { AgentQuotaEventBus } from '@gobing-ai/spur-app';
 import {
     buildWorkflowSteps,
     configuredSecretValues,
@@ -44,6 +45,7 @@ import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import type { ActionCost } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import { attachAgentQuotaPersistence } from '../agent-quota-persistence';
 import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
 import type { CliContext } from '../context';
 import { maybeTriggerHistoryRefresh } from '../history-refresh';
@@ -396,6 +398,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         return new WorkflowAppService({
             cwd: context.cwd,
             spurConfig: context.spurConfig ?? null,
+            // 0799 R3: the launch boundary prefers a fresh merged config so a quota
+            // event applied by the updater gates this workflow run immediately.
+            // The composition-root closure (ADR-082) owns the loader call.
+            reloadAgentConfig: () => context.loadAgentConfig(context.cwd),
             secretValues: configuredSecretValues(context.env),
             warn: (message) => context.output.error(`Warning: ${message}`),
             getDb: () => context.getDb(),
@@ -729,6 +735,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             // SAFETY: the same EventBus serves as both the workflow observability bus and the system-event
             // ledger bridge; the nominal WorkflowObservabilityBus/SystemEventBus types are structurally one.
             const ledger = await attachSystemEventLedger(bus as unknown as SystemEventBus, context);
+            // 0799 R1: persist quota events from this run's agent dispatches so the
+            // server can apply them after restart, independent of this process's exit.
+            // SAFETY: one structural ts-infra EventBus behind the nominal names (ADR-044).
+            const quotaPersistence = attachAgentQuotaPersistence(bus as unknown as AgentQuotaEventBus, context);
             let traceWriter: WorkflowTraceWriter | undefined;
             const heartbeats = new Map<string, ReturnType<typeof setInterval>>();
             if (options.traceFile === true) {
@@ -936,6 +946,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 await escalationSink?.flush();
                 await ledger.flush();
                 ledger.unsubscribe();
+                // 0799 R1: flush recorded quota observations before process exit.
+                await quotaPersistence.flush();
+                quotaPersistence.unsubscribe();
                 steeringInput?.close();
             }
             if (json) context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
@@ -988,6 +1001,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             // SAFETY: the same EventBus instance is bridged as the system-event ledger (structurally identical
             // nominal types; ADR-044 event bridge).
             const ledger = await attachSystemEventLedger(bus as unknown as SystemEventBus, context);
+            // 0799 R1: same persistence bridge as a fresh run — resumed runs emit
+            // agent dispatches that must reach `agent_executor_updates` too.
+            // SAFETY: one structural ts-infra EventBus behind the nominal names (ADR-044).
+            const quotaPersistence = attachAgentQuotaPersistence(bus as unknown as AgentQuotaEventBus, context);
             // Escalation packets (task 0709): resumed runs project the same
             // canonical packet on terminal failure; idempotent per run.
             const escalationSink = await makeEscalationPacketSink(bus, context);
@@ -1044,6 +1061,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 await escalationSink?.flush();
                 await ledger.flush();
                 ledger.unsubscribe();
+                // 0799 R1: flush recorded quota observations before process exit.
+                await quotaPersistence.flush();
+                quotaPersistence.unsubscribe();
             }
         });
 

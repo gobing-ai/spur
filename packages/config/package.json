@@ -5,7 +5,8 @@
     "private": true,
     "exports": {
         ".": "./src/index.ts",
-        "./loader": "./src/loader.ts"
+        "./loader": "./src/loader.ts",
+        "./agent-quota-events": "./src/agent-quota-events.ts"
     },
     "scripts": {
         "build": "bun build src/index.ts --outdir dist --target bun",

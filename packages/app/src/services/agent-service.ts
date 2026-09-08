@@ -848,6 +848,8 @@ export class AgentService {
             // runner exposes no structured usage, so this normalizes to the
             // honest `unavailable` shape until the facade supplies typed fields.
             usage: normalizeAgentUsage(
+                // SAFETY: dispatchers attach `usage` onto the result object at
+                // runtime; the visible AgentRunResult type predates that field.
                 (result as unknown as { usage?: unknown }).usage,
                 'runner result carries no structured usage',
             ),
@@ -997,6 +999,21 @@ export class AgentService {
         let currentTier = resolved.tier;
         let currentExecutor = resolved.executor;
         const attemptedExecutors = new Set<string>(currentStage ? [currentStage.executorName] : []);
+        // 0799 R3: structured quota exhaustion excludes the executor from THIS
+        // invocation's fallback set immediately — the event is filtered to this
+        // run's correlation id, so only executors this run actually drove are
+        // captured; the durable application is the separate consumer's job.
+        const runQuotaExhaustedExecutors = new Set<string>();
+        const onQuotaExhausted = (event: unknown): void => {
+            const candidate = event as
+                | { attribution?: { executor?: string }; correlation?: { runId?: string } }
+                | undefined;
+            if (candidate?.correlation?.runId !== lifecycle.identity.runId) return;
+            const executor = candidate.attribution?.executor ?? currentExecutor;
+            if (typeof executor === 'string' && executor.length > 0) runQuotaExhaustedExecutors.add(executor);
+        };
+        const quotaEventBridge = this.ctx.events;
+        if (quotaEventBridge !== undefined) quotaEventBridge.on('agent.quota.exhausted', onQuotaExhausted);
         // 0540 R2: the tiers in play ride the exhaustion report alongside the
         // executors tried — a bare executor list cannot say how far the ladder
         // climbed.
@@ -1257,6 +1274,18 @@ export class AgentService {
                         ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
                         signal: controller.signal,
                         correlation: lifecycle.identity,
+                        // 0799 R1: exact attribution rides every dispatch so the
+                        // runner's quota events name this project + executor verbatim.
+                        ...(currentExecutor !== undefined
+                            ? {
+                                  quotaContext: {
+                                      projectId: this.ctx.cwd,
+                                      executor: currentExecutor,
+                                      agent,
+                                      ...(model !== undefined ? { model } : {}),
+                                  },
+                              }
+                            : {}),
                         onOutput: (output) => lifecycle.observe(output),
                     });
                 } catch (error) {
@@ -1290,7 +1319,13 @@ export class AgentService {
                 if (result.exitCode === 0) break;
 
                 // Attempt escalation (0407 R1/R2/R6).
-                const escalationSignal = classifyObjectiveFailure(result);
+                // 0799 R3: a structured quota event for the current executor is a
+                // confirmed resource-exhaustion signal even when the bounded prose
+                // classifier misses the provider's phrasing — the ladder escalates
+                // and the run-scoped attempted set excludes the exhausted executor.
+                const quotaConfirmed = currentExecutor !== undefined && runQuotaExhaustedExecutors.has(currentExecutor);
+                const classifiedSignal = classifyObjectiveFailure(result);
+                const escalationSignal = quotaConfirmed ? ('resource-exhaustion' as const) : classifiedSignal;
                 if (escalationSignal === undefined || currentStage === undefined) {
                     break;
                 }
@@ -1389,6 +1424,7 @@ export class AgentService {
                 tiersAttempted.add(nextResolved.stage.executorTier);
             }
         } finally {
+            if (quotaEventBridge !== undefined) quotaEventBridge.off('agent.quota.exhausted', onQuotaExhausted);
             process.off('SIGTERM', onTerminate);
             process.off('SIGINT', onTerminate);
             options.execution?.signal?.removeEventListener('abort', onExternalAbort);
@@ -1425,6 +1461,8 @@ export class AgentService {
             exitCode: result.exitCode,
             durationMs: result.durationMs,
             usage: normalizeAgentUsage(
+                // SAFETY: dispatchers attach `usage` onto the result object at
+                // runtime; the visible AgentRunResult type predates that field.
                 (result as unknown as { usage?: unknown }).usage,
                 'runner result carries no structured usage',
             ),

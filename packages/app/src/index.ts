@@ -53,6 +53,19 @@ export {
     resolveAgentSelector,
     resolveRoleTarget,
 } from './services/agent-instance-store';
+export {
+    type AgentQuotaDrainSummary,
+    type AgentQuotaEventBus,
+    type AgentQuotaRecordOutcome,
+    type AgentQuotaUpdateConsumer,
+    type AgentQuotaUpdatesAttachment,
+    type AgentQuotaUpdatesContext,
+    attachAgentQuotaUpdates,
+    drainPendingAgentQuotaUpdates,
+    MAX_QUOTA_DRAIN_ATTEMPTS_PER_ACTIVATION,
+    recordAgentQuotaEvent,
+    startAgentQuotaUpdateConsumer,
+} from './services/agent-quota-updates';
 export type {
     AgentConfig,
     AgentExecutorConfig,

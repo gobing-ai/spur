@@ -2329,7 +2329,7 @@ stage cites these notes (not the original body) when scoring authority/derived-d
 
 ## ADR-111: Quota-Driven Config Updates Survive Event-History Retention
 
-**Status:** Accepted (design) · **Date:** 2026-09-07 · **Feature:** B5
+**Status:** Accepted · **Date:** 2026-09-07 · **Feature:** B5
 
 **Decision.** Deliver quota-driven executor configuration updates through a durable latest-observation
 record per project/executor; retain YAML as the execution-availability authority.

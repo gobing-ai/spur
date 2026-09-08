@@ -471,6 +471,8 @@ export interface WorkflowAppServiceContext {
      * consumers degrade to today's defaults.
      */
     spurConfig?: SpurConfig | null;
+    /** 0799 R3: launch boundaries reload merged config so quota-driven executor disables apply without a server restart. */
+    reloadAgentConfig?: () => Promise<SpurConfig | null>;
     /** Secret values redacted before workflow action results are persisted. */
     secretValues?: readonly string[];
     /** Optional operational warning sink (CLI stderr / server logger). */
@@ -1610,7 +1612,12 @@ export class WorkflowAppService {
             ...(this.ctx.secretValues !== undefined ? { secretValues: this.ctx.secretValues } : {}),
         };
         // A5/ADR-082: the merged config is threaded on the context — no per-slice load.
-        const agent = this.ctx.spurConfig?.agent;
+        // 0799 R3: the launch boundary prefers a fresh merged config so a quota
+        // event applied by the updater gates this workflow run immediately.
+        const agent =
+            this.ctx.reloadAgentConfig !== undefined
+                ? (await this.ctx.reloadAgentConfig())?.agent
+                : this.ctx.spurConfig?.agent;
         agentSlice = {
             ...agentSlice,
             ...(agent?.default !== undefined ? { default: agent.default } : {}),

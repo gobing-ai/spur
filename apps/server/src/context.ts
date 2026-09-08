@@ -49,6 +49,7 @@ import {
     IN_MEMORY_DATABASE_URL,
     type SpurConfig,
 } from '@gobing-ai/spur-config';
+import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import {
     createMigratedDbViaRuntime,
     type DbAdapter,
@@ -325,6 +326,9 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     const cwd = options.cwd;
     const fs = options.fs;
     const dbUrl = options.dbUrl ?? join(cwd, DEFAULT_DATABASE_URL);
+    // SAFETY: ApplicationRuntime.events is an unparameterized ts-infra EventBus
+    // carrying the same server event names; the cast narrows the nominal map for
+    // consumers (bridgeEventBus<SystemEventMap>) without changing the instance.
     const eventsBus = options.eventsBus ?? (appRt.events as unknown as EventBus<ServerEventMap>);
     const jobQueueEnabled = options.jobQueueEnabled ?? false;
     const eventProjectContext = makeSystemEventProjectContext(cwd);
@@ -465,6 +469,17 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                     eventBus: bridgeEventBus(eventsBus),
                     events: bridgeEventBus(eventsBus),
                     ...(options.spurConfig !== undefined ? { spurConfig: options.spurConfig } : {}),
+                    // 0799 R3: launch boundaries reload the merged config so a quota
+                    // event applied by the updater gates the next materialization
+                    // without a server restart. Reload failure degrades to the boot
+                    // snapshot rather than failing the team operation.
+                    reloadAgentConfig: async () => {
+                        try {
+                            return await loadSpurConfig(cwd);
+                        } catch {
+                            return null;
+                        }
+                    },
                 });
             }
             return teamSvc;
@@ -545,6 +560,16 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 ruleService: this.ruleService.bind(this),
                 hitlResponder: this.hitlResponder.bind(this),
                 ...(options.spurConfig !== undefined ? { spurConfig: options.spurConfig } : {}),
+                // 0799 R3: launch boundaries reload the merged config so a quota
+                // event applied by the updater gates subsequent dispatches without
+                // a server restart. Reload failure degrades to the boot snapshot.
+                reloadAgentConfig: async () => {
+                    try {
+                        return await loadSpurConfig(cwd);
+                    } catch {
+                        return null;
+                    }
+                },
                 // Wire both buses onto the canonical server EventBus so the
                 // system_events tap + SSE stream capture engine-native names
                 // (via `events` → bridgeEngineEvents) AND the adapter's richer

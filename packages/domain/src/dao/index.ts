@@ -1,5 +1,12 @@
 export { type InboxMessage, InboxMessageDao } from '@gobing-ai/ts-db';
 export { ActionRunDao, type ActionRunRow } from './action-run-dao';
+export {
+    AgentExecutorUpdateDao,
+    type AgentExecutorUpdateRow,
+    observationIsNewer,
+    type RecordAgentExecutorUpdateInput,
+    type RecordAgentExecutorUpdateOutcome,
+} from './agent-executor-update-dao';
 export { ArtifactDao, type ArtifactRecord, type CreateArtifactInput } from './artifact-dao';
 export { createId } from './base';
 export {

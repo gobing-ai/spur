@@ -1,6 +1,7 @@
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import type { SectionMatrix } from '@gobing-ai/spur-app';
 import {
+    type AgentQuotaUpdateConsumer,
     AgentService,
     configuredSecretValues,
     createSystemEventCatchAllSink,
@@ -16,6 +17,7 @@ import {
     resolvePlanningFolders,
     resolveRetentionQuotas,
     SCHEDULER_CUSTOM_JOB,
+    startAgentQuotaUpdateConsumer,
     type TaskActionJob,
 } from '@gobing-ai/spur-app';
 import { IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
@@ -471,6 +473,35 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             });
             let jobWorker: JobWorkerService<unknown> | undefined;
 
+            // 0799 R5: the ONE project-scoped quota-update consumer starts BEFORE
+            // autostart or any dispatch acceptance, so pending durable updates
+            // (including work emitted by CLI runs while the server was offline)
+            // apply through setProjectExecutorDisabled before supervised agents
+            // can select executors. The consumer owns the exhaustion/recovery
+            // subscriptions and drains them serially; startup failure is logged
+            // and non-fatal so the server still serves (rows stay pending and
+            // retry on the next start).
+            let quotaConsumer: AgentQuotaUpdateConsumer | undefined;
+            try {
+                quotaConsumer = startAgentQuotaUpdateConsumer(ctx.eventBus(), {
+                    getDb: () => ctx.getDb(),
+                    projectRoot: ctx.cwd,
+                    // Composition-root-owned loader call (ADR-082): serve.ts is
+                    // an allowed root; the consumer gets the closed-over accessor.
+                    loadAgentConfig: async () => {
+                        try {
+                            return await loadSpurConfig(ctx.cwd);
+                        } catch {
+                            return null;
+                        }
+                    },
+                    warn: (message) => appRt.logger.warn(message),
+                });
+                appRt.logger.debug('agent quota update consumer started');
+            } catch (error) {
+                appRt.logger.warn('agent quota update consumer failed to start', { error: String(error) });
+            }
+
             // Team process autostart (0195/0207 + 0258 R8): members whose effective
             // autostart is true across `agent.team.*`, unioned with the SPUR_TEAM_AUTOSTART
             // env. `resolveAutostartSet` handles both; a load failure degrades to env-only.
@@ -621,6 +652,16 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 process.off('SIGINT', onSigInt);
                 process.off('SIGTERM', onSigTerm);
                 appRt.logger.info('Shutting down server', { signal });
+                // 0799 R5: detach quota subscriptions and drain active persistence
+                // writes (plus one final drain) before supervisor teardown and DB
+                // close — a shutdown must never race or drop a recorded update.
+                if (quotaConsumer) {
+                    try {
+                        await quotaConsumer.stop();
+                    } catch (error) {
+                        appRt.logger.warn('Agent quota update consumer shutdown error', { error: String(error) });
+                    }
+                }
                 try {
                     await projectRegistry.setPort(projectCwd, 0);
                 } catch (err) {

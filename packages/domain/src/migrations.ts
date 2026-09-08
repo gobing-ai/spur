@@ -186,9 +186,37 @@ CREATE INDEX IF NOT EXISTS idx_history_task_session_source_session ON history_ta
 CREATE INDEX IF NOT EXISTS idx_history_task_session_session_id ON history_task_session (session_id);
 `;
 
+/**
+ * DDL for the `agent_executor_updates` latest-observation delivery record (feature B5 /
+ * task 0799, ADR-111). One row per `(project_id, executor_name)` in the project SQLite
+ * database — independent of the prunable `system_events` ledger, which stays audit
+ * history. Timestamps are UTC ISO-8601 ms so lexical comparison is chronological;
+ * `disabled` is constrained to 0/1. Kept byte-compatible with
+ * `drizzle/0040_spur_cli_agent_executor_updates.sql` (the regenerate-on-release mirror).
+ */
+export const AGENT_EXECUTOR_UPDATES_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS agent_executor_updates (
+    project_id TEXT NOT NULL,
+    executor_name TEXT NOT NULL,
+    observation_id TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    agent TEXT,
+    model TEXT,
+    disabled INTEGER NOT NULL CHECK (disabled IN (0, 1)),
+    applied_observation_id TEXT,
+    applied_at TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    retry_after TEXT,
+    last_error TEXT,
+    PRIMARY KEY (project_id, executor_name)
+);
+`;
+
 /** SQL that creates the Spur CLI-owned domain tables plus package-owned tables. */
 
 export const CLI_SCHEMA_SQL = `
+${AGENT_EXECUTOR_UPDATES_SCHEMA_SQL}
+
 ${DOMAIN_SCHEMA_SQL}
 
 ${PLANNING_SCHEMA_SQL}
@@ -717,6 +745,7 @@ CREATE INDEX IF NOT EXISTS idx_history_message_provenance_run ON history_message
  * `0021` adds measured History Board aggregate read models (task 0629 R2).
  * `0022` adds E9 History data-plane performance indexes (task 0631).
  * `0028` adds the `history_task_session` direct task↔session attribution table (task 0722, feature E6).
+ * `0040` adds the `agent_executor_updates` latest-observation quota delivery record (task 0799, ADR-111).
  * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
  * safe regardless of the database's age.
  */
@@ -1197,6 +1226,13 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         id: '0039_spur_cli_bounded_rollup_derivations',
         sql: BOUNDED_ROLLUP_DERIVATIONS_SCHEMA_SQL,
         addColumnIfMissing: { table: 'history_board_source_daily', column: 'raw_messages' },
+    },
+    {
+        // 0799 (feature B5): durable latest-observation delivery record for quota-driven
+        // executor disabling (ADR-111). Standalone `CREATE TABLE IF NOT EXISTS` — applies
+        // unconditionally on any database, the 0028 precedent.
+        id: '0040_spur_cli_agent_executor_updates',
+        sql: AGENT_EXECUTOR_UPDATES_SCHEMA_SQL,
     },
 ];
 

@@ -52,6 +52,8 @@ export interface TeamServiceContext {
      * defaults.
      */
     spurConfig?: SpurConfig | null;
+    /** 0799 R3: launch boundaries reload merged config so quota-driven executor disables apply without a server restart. */
+    reloadAgentConfig?: () => Promise<SpurConfig | null>;
     /** Optional output sink; TeamService does not read it (kept for CLI stdout coupling). */
     output?: TeamServiceOutput;
     getDb(): Promise<DbAdapter>;
@@ -684,7 +686,12 @@ export class TeamService {
      */
     async materializeTeam(teamId: string, opts?: { check?: boolean }): Promise<MaterializeResult> {
         // A5/ADR-082: merged config threaded on the context — no per-slice load.
-        const config = this.ctx.spurConfig ?? null;
+        // 0799 R3: the launch boundary prefers a fresh merged config so a quota
+        // event applied by the updater gates this materialization immediately.
+        const config =
+            this.ctx.reloadAgentConfig !== undefined
+                ? await this.ctx.reloadAgentConfig()
+                : (this.ctx.spurConfig ?? null);
         const teamConfig = config?.agent?.team?.[teamId];
         if (!teamConfig) {
             throw new Error(`Team "${teamId}" not found in agent.team config`);
