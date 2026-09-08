@@ -47,7 +47,10 @@ export const SHARED_OPTIONS = {
     agentIdMessage: ['--agent <id>', 'Agent id'] as const,
     agentIdWatch: ['--agent <id>', 'Agent id to watch'] as const,
     agentIdLegacyRecipient: ['--agent <id>', 'Agent spec id / message recipient (legacy — prefer --spec)'] as const,
-    cwdServe: ['--cwd <path>', 'Working directory'] as const,
+    cwdServe: [
+        '--cwd <path>',
+        'Project root for server config, DB defaults and project-scoped work (resolved against the invocation directory)',
+    ] as const,
     cwdAgent: ['--cwd <path>', 'Working directory for agent execution'] as const,
     modeAgent: ['--mode <mode>', 'Agent output mode: text|json'] as const,
     modeHistory: ['--mode <mode>', 'full|incremental|force-file'] as const,

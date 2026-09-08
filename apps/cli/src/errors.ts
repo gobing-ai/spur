@@ -25,20 +25,22 @@ function isSqliteBusy(error: unknown): boolean {
 const SQLITE_BUSY_DB_PATH = '.spur/spur.db';
 
 /**
- * User-facing remediation hint for SQLITE_BUSY failures. The hint names the
- * db path so the holder can be identified (`lsof .spur/spur.db`) and the two
- * ways to release it (stop a stale Spur process or `spur serve`). Static text
- * only — never shell-out from the error seam.
+ * User-facing remediation hint for SQLITE_BUSY failures (task 0805 R4). The
+ * hint names the lock, points at holder identification (`lsof .spur/spur.db`)
+ * and makes the release path an explicit operator decision after inspection:
+ * let active work finish or retry first, and only stop a process after that
+ * inspection. It does not presume the holder is stale and never recommends an
+ * unconditional kill — a live writer is legitimate and gates can contend.
+ * Static text only — never shell-out from the error seam.
  */
 const SQLITE_BUSY_REMEDIATION =
-    'identify the holder: lsof .spur/spur.db; stop the stale Spur process or spur serve, then retry';
+    'identify the holder (lsof .spur/spur.db), let active work finish or retry, and decide to stop a process only after that inspection';
 
 /** Convert unknown thrown values into a readable error message. */
 export function errorMessage(error: unknown): string {
     if (isSqliteBusy(error)) {
         return (
-            `SQLite database ${SQLITE_BUSY_DB_PATH} is busy; another Spur process is holding the lock. ` +
-            `${SQLITE_BUSY_REMEDIATION}.`
+            `SQLite database ${SQLITE_BUSY_DB_PATH} is busy (a writer holds the lock). ` + `${SQLITE_BUSY_REMEDIATION}.`
         );
     }
     return error instanceof Error ? error.message : String(error);

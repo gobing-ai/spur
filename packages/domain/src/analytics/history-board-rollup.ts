@@ -1280,9 +1280,17 @@ const SKILL_BUCKET_5M_SQL = `strftime('%Y-%m-%dT%H:%M:00Z', CAST(strftime('%s', 
  * table, once per bucket, which made the delta refresh grow with total corpus size. This range
  * narrows the scan to the bucket's own minute; the exact bucket equality stays as the residual
  * filter, so the selected set is unchanged. Binds the bucket twice, before that equality.
+ *
+ * The lower bound is deliberately `bucket - 1 second`, not `bucket`: stored `ts` values carry
+ * fractional seconds (`2026-09-08T04:34:00.123Z`) while the bucket bound is whole-second
+ * (`2026-09-08T04:34:00Z`). In ISO text order `'.'` sorts below `'Z'`, so a delta row whose
+ * `ts` lands in the FIRST second of its minute (`SS = 00`) compared below the whole-second
+ * bound and was dropped from its own bucket's incremental recompute — the intermittent
+ * history-board 4h flake (task 0805 R1). Widening by one second keeps every first-second row
+ * in the scan; the `MSG_BUCKET_5M_SQL = bucket` equality remains the authoritative filter.
  */
 function bucketWindow(column: string): string {
-    return `${column} >= ? AND ${column} < strftime('%Y-%m-%dT%H:%M:%SZ', ?, '+60 seconds')`;
+    return `${column} > strftime('%Y-%m-%dT%H:%M:%SZ', ?, '-1 second') AND ${column} < strftime('%Y-%m-%dT%H:%M:%SZ', ?, '+60 seconds')`;
 }
 
 /** Newest `imported_at` across the whole corpus. */

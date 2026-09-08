@@ -65,7 +65,7 @@ describe('errors', () => {
             const message = errorMessage(err);
             expect(message).toContain(SQLITE_BUSY_MESSAGE_CONSTANTS.dbPath);
             expect(message).toContain('lsof .spur/spur.db');
-            expect(message).toContain('spur serve');
+            expect(message).toContain('retry');
         });
 
         test('handles non-Error values', () => {
@@ -95,9 +95,17 @@ describe('errors', () => {
             expect(SQLITE_BUSY_MESSAGE_CONSTANTS.remediation).toContain('lsof .spur/spur.db');
         });
 
-        test('remediation names both recovery paths (stale process and spur serve)', () => {
-            expect(SQLITE_BUSY_MESSAGE_CONSTANTS.remediation).toContain('stale Spur process');
-            expect(SQLITE_BUSY_MESSAGE_CONSTANTS.remediation).toContain('spur serve');
+        test('remediation names inspection/retry and keeps any stop an explicit operator decision (0805 R4)', () => {
+            const remediation = SQLITE_BUSY_MESSAGE_CONSTANTS.remediation;
+            expect(remediation).toContain('lsof .spur/spur.db');
+            // Inspection + retry before any stop; the holder is never presumed stale
+            // and no unconditional kill is recommended.
+            expect(remediation).toContain('identify the holder');
+            expect(remediation).toContain('retry');
+            expect(remediation).toContain('only after that inspection');
+            expect(remediation).not.toContain('stale');
+            expect(remediation).not.toContain('kill');
+            expect(remediation).not.toContain('spur serve');
         });
     });
 });

@@ -55,9 +55,8 @@ import { openUrl } from './open-url';
  * reachable — no permissive hand-maintained fallback (it would make the same task
  * render differently by installation layout).
  */
-async function loadServerSectionMatrix(): Promise<SectionMatrix> {
-    const cwd = process.cwd();
-    const nodeFs = createNodeFileSystem(cwd);
+async function loadServerSectionMatrix(projectRoot: string): Promise<SectionMatrix> {
+    const nodeFs = createNodeFileSystem(projectRoot);
     const localPath = nodeFs.resolve('.spur', 'tasks', 'section-matrix.yaml');
     if (await nodeFs.exists(localPath)) {
         // SAFETY: the path pins the document shape — `.spur/tasks/section-matrix.yaml` is by contract a SectionMatrix; loader returns the generic structured-config envelope.
@@ -111,6 +110,13 @@ export interface StartServerOptions {
     keepAlive?: boolean;
     /** PATH-independent Spur invocation for the isolated history-refresh child (task 0717). */
     spurInvocation?: string;
+    /**
+     * Resolved project root that scopes server config, filesystem/context, planning
+     * folders, DB defaults, quota updates and project-scoped scheduled/child work
+     * (task 0805 R2). The CLI resolves `serve --cwd` against the invocation directory
+     * and passes the absolute result. Omitted → `process.cwd()` (previous behavior).
+     */
+    cwd?: string;
 }
 
 /**
@@ -489,20 +495,26 @@ export async function handleFeatureActionJob(
  * Resolve the directory that holds the built Spur Board (Astro) static assets.
  *
  * Search order when no explicit path is configured:
- * 1. `cwd/dist/web` — monorepo / local `bun run build` output
+ * 1. `<projectRoot>/dist/web` — monorepo / local `bun run build` output
  * 2. `import.meta.dir/web` — npm package layout (`web/` next to bundled `spur.js`)
  * 3. `dirname(process.execPath)/web` — standalone binary with sibling `web/`
  * 4. `dirname(process.execPath)/../web` — binary under `bin/` with `web/` as sibling of parent
  * 5. `import.meta.dir/../../../dist/web` — unbundled server source under `apps/server/src`
  *
- * When a configured path is set, only that path is tried (absolute, or relative to cwd).
+ * When a configured path is set, only that path is tried (absolute, or relative to
+ * `projectRoot`). The project-relative candidates use `projectRoot` (the serve --cwd
+ * root) while the package-adjacent fallbacks stay tied to the installed package
+ * location — the two are deliberately distinct (task 0805 R2).
  */
-export async function resolveWebDistPath(configuredPath: string | null | undefined): Promise<string | undefined> {
+export async function resolveWebDistPath(
+    configuredPath: string | null | undefined,
+    projectRoot: string = process.cwd(),
+): Promise<string | undefined> {
     const candidates =
         configuredPath && configuredPath.trim() !== ''
-            ? [isAbsolute(configuredPath) ? configuredPath : join(process.cwd(), configuredPath)]
+            ? [isAbsolute(configuredPath) ? configuredPath : join(projectRoot, configuredPath)]
             : [
-                  join(process.cwd(), 'dist/web'),
+                  join(projectRoot, 'dist/web'),
                   // npm global/local install: package ships `web/` next to spur.js
                   join(import.meta.dir, 'web'),
                   join(dirname(process.execPath), 'web'),
@@ -532,14 +544,20 @@ export async function resolveWebDistPath(configuredPath: string | null | undefin
  */
 export async function startServer(options: StartServerOptions, deps: StartServerDeps = defaultDeps): Promise<void> {
     const env = process.env as Record<string, string | undefined>;
+    // One coherent project root for every project-scoped surface (task 0805 R2):
+    // config/bootstrap loading, filesystem/context creation, planning folders,
+    // project asset lookup, DB defaults and scheduled/child work. The CLI resolves
+    // `serve --cwd` against the invocation directory; embedding callers omit it and
+    // keep the previous process.cwd() behavior.
+    const projectRoot = options.cwd ?? process.cwd();
     const bootConfig = deps.serverBootstrapConfig(env);
-    const configFile = deps.resolveConfigFile();
+    const configFile = deps.resolveConfigFile(projectRoot);
 
     await deps.runNodeApplication({
         config: bootConfig,
         configLoader: configFile ? { configFile, bootstrapSection: 'bootstrap' } : undefined,
         async start(appRt: ApplicationRuntime) {
-            const fs = deps.createNodeFileSystem(process.cwd());
+            const fs = deps.createNodeFileSystem(projectRoot);
             if (options.dbUrl && options.dbUrl !== IN_MEMORY_DATABASE_URL) {
                 await fs.ensureDir(dirname(options.dbUrl));
             }
@@ -551,7 +569,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             // nothing to register.
             const scheduler = appRt.config.scheduler.enabled ? appRt.scheduler : undefined;
 
-            const webDistPath = await resolveWebDistPath(options.webDistPath);
+            const webDistPath = await resolveWebDistPath(options.webDistPath, projectRoot);
             if (!webDistPath) {
                 appRt.logger.warn(
                     'Board UI static assets not found — /board will return 404. ' +
@@ -564,14 +582,14 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             // it into the server context so Team/Workflow services + the history-
             // refresh job (J8 R2) never re-read the config per slice. A load failure
             // degrades to null (env-only) here, same tolerance as the CLI root.
-            const spurConfig = await loadSpurConfig(process.cwd()).catch(() => null);
+            const spurConfig = await loadSpurConfig(projectRoot).catch(() => null);
 
             const ctx: ServerContext = deps.createServerContext(appRt, {
-                cwd: process.cwd(),
+                cwd: projectRoot,
                 fs,
                 dbUrl: options.dbUrl,
                 folders: await resolvePlanningFolders(fs),
-                sectionMatrix: await loadServerSectionMatrix(),
+                sectionMatrix: await loadServerSectionMatrix(projectRoot),
                 webDistPath,
                 jobQueueEnabled: bootConfig.jobqueue.enabled,
                 scheduler,
@@ -585,9 +603,12 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             // autostart or any dispatch acceptance, so exhaustion/recovery
             // events (including CLI work emitted while the server was offline)
             // are subscribed before supervised agents can select executors.
-            // Pending rows drain on the 30s poll cadence, not synchronously at
-            // startup (dogfood 54D294E4D301 F1); the disable lands at the next
-            // launch boundary. The consumer owns the exhaustion/recovery
+            // 0805 R3: startup awaits ONE bounded drain pass of the existing
+            // serialized drain BEFORE the server admits workflow/executor
+            // dispatch — a persisted disable (written by CLI work while the
+            // server was offline) is applied synchronously, so the first
+            // workflow launch reloading the config observes it without waiting
+            // for a poll tick. The consumer owns the exhaustion/recovery
             // subscriptions and drains them serially; startup failure is logged
             // and non-fatal so the server still serves (rows stay pending and
             // retry on the next start).
@@ -607,6 +628,21 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                     },
                     warn: (message) => appRt.logger.warn(message),
                 });
+                // 0805 R3: one bounded startup drain pass. The consumer's bounded
+                // attempts own retry limits; failed/deferred rows stay visible and
+                // pending under the nonfatal startup policy — the server never
+                // claims disabled-executor exclusion when the disable apply failed.
+                // An empty queue resolves immediately (one pass, no startup retry).
+                try {
+                    const summary = await quotaConsumer.drain();
+                    if (summary.applied > 0 || summary.failed > 0 || summary.deferred > 0) {
+                        appRt.logger.info('Agent quota update startup drain complete', { ...summary });
+                    } else {
+                        appRt.logger.debug('Agent quota update startup drain complete', { ...summary });
+                    }
+                } catch (error) {
+                    appRt.logger.warn('Agent quota update startup drain failed', { error: String(error) });
+                }
                 appRt.logger.debug('agent quota update consumer started');
             } catch (error) {
                 appRt.logger.warn('agent quota update consumer failed to start', { error: String(error) });
@@ -769,7 +805,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             });
 
             const projectRegistry = new ProjectRegistry();
-            const projectCwd = process.cwd();
+            const projectCwd = projectRoot;
             const projectName = basename(projectCwd);
             try {
                 await projectRegistry.upsert({ path: projectCwd, name: projectName, port: server.port });

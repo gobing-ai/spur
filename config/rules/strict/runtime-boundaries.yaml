@@ -70,6 +70,7 @@ rules:
             - "packages/config/src/loader.ts" # sync resolveConfigFile() / schema specifier lookup
             - "packages/config/src/executor-update.ts" # atomic single-entry config update (task 0797): O_EXCL lock, fsync'd tmp+rename commit, lstat symlink refusal, mode preservation — ts-runtime FileSystem seam has no lstat/fsync/chmod/O_EXCL
             - "packages/app/src/services/project-start.ts" # sync CLI binary path checks before daemon spawn
+            - "apps/cli/src/commands/serve.ts" # sync resolveServeCwd() directory validation before server startup (task 0805 R2); mirrors task.ts sync-template exemption
 
             # Synchronous template & workflow resolvers:
             - "apps/cli/src/commands/task.ts" # sync loadTemplateContent/Bodies callbacks

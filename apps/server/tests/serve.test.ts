@@ -70,6 +70,21 @@ function runNodeApplicationWith(build: () => ApplicationRuntime): StartServerDep
     }) as unknown as StartServerDeps['runNodeApplication'];
 }
 
+/** Fake runtime whose logger captures info/warn/debug for assertions (task 0805 R3). */
+function capturingRuntime(
+    log: { msg: string; data?: Record<string, unknown> }[],
+    scheduler: FakeRuntimeScheduler = {},
+): ApplicationRuntime {
+    const rt = fakeRuntime(log, scheduler);
+    rt.logger.warn = (msg: string, data?: Record<string, unknown>) => {
+        log.push({ msg, data });
+    };
+    rt.logger.debug = (msg: string, data?: Record<string, unknown>) => {
+        log.push({ msg, data });
+    };
+    return rt;
+}
+
 /** Recording scheduler adapter; `register` captures cron + action per entry. */
 function recordingScheduler(order?: string[]) {
     const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
@@ -560,6 +575,340 @@ describe('startServer', () => {
             quotaDb.close();
             rmSync(projectRoot, { recursive: true, force: true });
         }
+    });
+
+    test('0805 R2: options.cwd threads the project root into context, config, fs and project work', async () => {
+        installProcessMocks();
+        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
+
+        const b = mkdtempSync(join(tmpdir(), 'spur-0805-r2-b-'));
+        mkdirSync(join(b, '.spur'), { recursive: true });
+        writeFileSync(
+            join(b, '.spur', 'config.yaml'),
+            ['agent:', '  executors:', '    - name: alpha', '      agent: omp', '      model: gpt-5', ''].join('\n'),
+        );
+
+        const captured: {
+            fsRoot?: string;
+            ctxCwd?: string;
+            configFileRoot?: string;
+            spurConfigExecutor?: string;
+        } = {};
+        // Isolate from the host global config layer so B's config is the ONLY layer:
+        // the loaded spurConfig executor must come from B, never the host.
+        const prevSkipGlobal = process.env.SPUR_SKIP_GLOBAL_CONFIG;
+        process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+        const deps = makeDeps({
+            serverBootstrapConfig: () => ({
+                logging: { enabled: false, level: 'info' as const, console: false },
+                telemetry: { enabled: false },
+                events: { enabled: false, diagnostic: false },
+                jobqueue: { enabled: false },
+                scheduler: { enabled: false },
+                teamAutostart: [],
+            }),
+            createNodeFileSystem: (root: string) => {
+                captured.fsRoot = root;
+                return fakeFs;
+            },
+            createServerContext: ((_rt: ApplicationRuntime, options: CreateServerContextOptions) => {
+                captured.ctxCwd = options.cwd;
+                captured.spurConfigExecutor = options.spurConfig?.agent?.executors?.[0]?.name;
+                return {};
+            }) as unknown as StartServerDeps['createServerContext'],
+            resolveConfigFile: (root?: string) => {
+                captured.configFileRoot = root;
+                return undefined;
+            },
+        });
+
+        await startServer({ port: 5004, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: b }, deps);
+
+        if (prevSkipGlobal === undefined) delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
+        else process.env.SPUR_SKIP_GLOBAL_CONFIG = prevSkipGlobal;
+
+        expect(captured.fsRoot).toBe(b);
+        expect(captured.ctxCwd).toBe(b);
+        expect(captured.configFileRoot).toBe(b);
+        // The merged config was loaded from B (executor alpha), not the invocation dir.
+        expect(captured.spurConfigExecutor).toBe('alpha');
+    });
+
+    test('0805 R3: startup drain applies a persisted quota disable before the first workflow launch', async () => {
+        installProcessMocks();
+        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
+
+        const projectRoot = mkdtempSync(join(tmpdir(), 'spur-0805-r3-'));
+        mkdirSync(join(projectRoot, '.spur'), { recursive: true });
+        writeFileSync(
+            join(projectRoot, '.spur', 'config.yaml'),
+            ['agent:', '  executors:', '    - name: alpha', '      agent: omp', '      model: gpt-5', ''].join('\n'),
+        );
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const ctx = createServerContext((await import('./middleware/helpers')).mockRuntime(), {
+            cwd: projectRoot,
+            fs: createNodeFileSystem(projectRoot),
+            dbUrl: ':memory:',
+            eventsBus: bus,
+        });
+        const quotaDb = await ctx.getDb();
+        const dao = new AgentExecutorUpdateDao(quotaDb);
+        // Persisted while the server was offline: a pending disable observation.
+        await dao.recordObservation({
+            project_id: projectRoot,
+            executor_name: 'alpha',
+            observation_id: 'obs-0805-r3',
+            observed_at: '2026-02-01T10:00:00.000Z',
+            agent: 'omp',
+            model: 'gpt-5',
+            disabled: true,
+        });
+        expect(await dao.pendingUpdates()).toHaveLength(1);
+        expect(readFileSync(join(projectRoot, '.spur', 'config.yaml'), 'utf8')).not.toContain('disabled: true');
+
+        const logMessages: { msg: string; data?: Record<string, unknown> }[] = [];
+        const prevProjectsFile = process.env.SPUR_PROJECTS_FILE;
+        process.env.SPUR_PROJECTS_FILE = join(projectRoot, 'projects.json');
+        const deps = makeDeps({
+            serverBootstrapConfig: () => ({
+                logging: { enabled: false, level: 'info' as const, console: false },
+                telemetry: { enabled: false },
+                events: { enabled: false, diagnostic: false },
+                jobqueue: { enabled: false },
+                scheduler: { enabled: false },
+                teamAutostart: [],
+            }),
+            createServerContext: () => ctx,
+            runNodeApplication: (async (opts: {
+                config: unknown;
+                start: (rt: ApplicationRuntime) => Promise<void>;
+            }) => {
+                const rt = capturingRuntime(logMessages);
+                await opts.start(rt);
+                return rt;
+            }) as unknown as StartServerDeps['runNodeApplication'],
+        });
+
+        try {
+            await startServer(
+                { port: 5005, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: projectRoot },
+                deps,
+            );
+
+            // The startup drain applied the disable synchronously — the consumer's
+            // 30s poll tick cannot have fired inside startServer's composition, so
+            // this is the awaited initial drain, not a poll.
+            expect(readFileSync(join(projectRoot, '.spur', 'config.yaml'), 'utf8')).toContain('disabled: true');
+            expect(await dao.pendingUpdates()).toHaveLength(0);
+            const drainLog = logMessages.find((m) => m.msg === 'Agent quota update startup drain complete');
+            expect(drainLog?.data?.applied).toBe(1);
+
+            // First workflow dispatch executor-resolution boundary: the workflow
+            // launch path (context.ts reloadAgentConfig) reloads the merged config
+            // — a fresh load observes the disable without waiting for a poll tick.
+            const { loadSpurConfig } = await import('@gobing-ai/spur-config/loader');
+            const reloaded = await loadSpurConfig(projectRoot);
+            expect(reloaded.agent?.executors?.find((e) => e.name === 'alpha')?.disabled).toBe(true);
+
+            // Exercise the real workflow-launch boundary (createEngineService →
+            // reloadAgentConfig → loadSpurConfig) through the server context: a
+            // first dispatch admission after the drain resolves cleanly and the
+            // reloaded config carries the persisted disable.
+            const workflow = ctx.workflowService();
+            const paused = await workflow.latestPausedRun();
+            expect(paused).toBeNull(); // empty DB, no paused runs — boundary ran once
+        } finally {
+            if (prevProjectsFile === undefined) delete process.env.SPUR_PROJECTS_FILE;
+            else process.env.SPUR_PROJECTS_FILE = prevProjectsFile;
+            quotaDb.close();
+            rmSync(projectRoot, { recursive: true, force: true });
+        }
+    });
+
+    test('0805 R3: an empty pending queue proceeds once (one pass, no startup retry)', async () => {
+        installProcessMocks();
+        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
+
+        const projectRoot = mkdtempSync(join(tmpdir(), 'spur-0805-r3-empty-'));
+        mkdirSync(join(projectRoot, '.spur'), { recursive: true });
+        writeFileSync(
+            join(projectRoot, '.spur', 'config.yaml'),
+            ['agent:', '  executors:', '    - name: alpha', '      agent: omp', '      model: gpt-5', ''].join('\n'),
+        );
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const ctx = createServerContext((await import('./middleware/helpers')).mockRuntime(), {
+            cwd: projectRoot,
+            fs: createNodeFileSystem(projectRoot),
+            dbUrl: ':memory:',
+            eventsBus: bus,
+        });
+        const quotaDb = await ctx.getDb();
+        expect(await new AgentExecutorUpdateDao(quotaDb).pendingUpdates()).toHaveLength(0);
+
+        const logMessages: { msg: string; data?: Record<string, unknown> }[] = [];
+        const prevProjectsFile = process.env.SPUR_PROJECTS_FILE;
+        process.env.SPUR_PROJECTS_FILE = join(projectRoot, 'projects.json');
+        const deps = makeDeps({
+            serverBootstrapConfig: () => ({
+                logging: { enabled: false, level: 'info' as const, console: false },
+                telemetry: { enabled: false },
+                events: { enabled: false, diagnostic: false },
+                jobqueue: { enabled: false },
+                scheduler: { enabled: false },
+                teamAutostart: [],
+            }),
+            createServerContext: () => ctx,
+            runNodeApplication: (async (opts: {
+                config: unknown;
+                start: (rt: ApplicationRuntime) => Promise<void>;
+            }) => {
+                const rt = capturingRuntime(logMessages);
+                await opts.start(rt);
+                return rt;
+            }) as unknown as StartServerDeps['runNodeApplication'],
+        });
+
+        try {
+            await startServer(
+                { port: 5006, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: projectRoot },
+                deps,
+            );
+
+            // Empty queue: the single startup pass resolved immediately (no retry
+            // loop, no failure), and the server started normally.
+            const drainLog = logMessages.find((m) => m.msg === 'Agent quota update startup drain complete');
+            expect(drainLog?.data?.applied).toBe(0);
+            expect(drainLog?.data?.failed).toBe(0);
+            expect(logMessages.some((m) => m.msg === 'Agent quota update startup drain failed')).toBe(false);
+        } finally {
+            if (prevProjectsFile === undefined) delete process.env.SPUR_PROJECTS_FILE;
+            else process.env.SPUR_PROJECTS_FILE = prevProjectsFile;
+            quotaDb.close();
+            rmSync(projectRoot, { recursive: true, force: true });
+        }
+    });
+
+    test('0805 R3: drain failure/deferred is reported and retained without false ack or startup retry', async () => {
+        installProcessMocks();
+        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
+
+        const projectRoot = mkdtempSync(join(tmpdir(), 'spur-0805-r3-fail-'));
+        mkdirSync(join(projectRoot, '.spur'), { recursive: true });
+        const configPath = join(projectRoot, '.spur', 'config.yaml');
+        writeFileSync(
+            configPath,
+            ['agent:', '  executors:', '    - name: alpha', '      agent: omp', '      model: gpt-5', ''].join('\n'),
+        );
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const ctx = createServerContext((await import('./middleware/helpers')).mockRuntime(), {
+            cwd: projectRoot,
+            fs: createNodeFileSystem(projectRoot),
+            dbUrl: ':memory:',
+            eventsBus: bus,
+        });
+        const quotaDb = await ctx.getDb();
+        const dao = new AgentExecutorUpdateDao(quotaDb);
+        await dao.recordObservation({
+            project_id: projectRoot,
+            executor_name: 'alpha',
+            observation_id: 'obs-0805-r3-fail',
+            observed_at: '2026-02-01T10:00:00.000Z',
+            agent: 'omp',
+            model: 'gpt-5',
+            disabled: true,
+        });
+        // Block ONLY the updater's atomic temp write: a directory squatting on the
+        // `.config.yaml.tmp-<pid>` path makes the updater fail fast while the real
+        // config still loads (same trick as the app-level drain tests).
+        const tmpBlocker = join(projectRoot, '.spur', `.${basename(configPath)}.tmp-${process.pid}`);
+        mkdirSync(tmpBlocker);
+
+        const logMessages: { msg: string; data?: Record<string, unknown> }[] = [];
+        const prevProjectsFile = process.env.SPUR_PROJECTS_FILE;
+        process.env.SPUR_PROJECTS_FILE = join(projectRoot, 'projects.json');
+        const deps = makeDeps({
+            serverBootstrapConfig: () => ({
+                logging: { enabled: false, level: 'info' as const, console: false },
+                telemetry: { enabled: false },
+                events: { enabled: false, diagnostic: false },
+                jobqueue: { enabled: false },
+                scheduler: { enabled: false },
+                teamAutostart: [],
+            }),
+            createServerContext: () => ctx,
+            runNodeApplication: (async (opts: {
+                config: unknown;
+                start: (rt: ApplicationRuntime) => Promise<void>;
+            }) => {
+                const rt = capturingRuntime(logMessages);
+                await opts.start(rt);
+                return rt;
+            }) as unknown as StartServerDeps['runNodeApplication'],
+        });
+
+        try {
+            // Nonfatal: the server still starts even though the disable apply failed.
+            await startServer(
+                { port: 5007, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: projectRoot },
+                deps,
+            );
+
+            const drainLog = logMessages.find((m) => m.msg === 'Agent quota update startup drain complete');
+            expect(drainLog?.data?.applied).toBe(0);
+            expect(drainLog?.data?.failed).toBe(1);
+            expect(drainLog?.data?.deferred).toBe(1);
+            // No false ack: the row stays pending, never acknowledged.
+            expect(await dao.pendingUpdates()).toHaveLength(1);
+            const row = await dao.getUpdate(projectRoot, 'alpha');
+            expect(row?.applied_observation_id).toBeNull();
+            expect(row?.attempts).toBe(3);
+            expect(row?.last_error).toContain('failed to commit project config update');
+        } finally {
+            if (prevProjectsFile === undefined) delete process.env.SPUR_PROJECTS_FILE;
+            else process.env.SPUR_PROJECTS_FILE = prevProjectsFile;
+            quotaDb.close();
+            rmSync(projectRoot, { recursive: true, force: true });
+        }
+    });
+
+    test('0805 R3: a thrown startup drain failure is reported and the server still starts', async () => {
+        installProcessMocks();
+        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
+
+        const logMessages: { msg: string; data?: Record<string, unknown> }[] = [];
+        const deps = makeDeps({
+            serverBootstrapConfig: () => ({
+                logging: { enabled: false, level: 'info' as const, console: false },
+                telemetry: { enabled: false },
+                events: { enabled: false, diagnostic: false },
+                jobqueue: { enabled: false },
+                scheduler: { enabled: false },
+                teamAutostart: [],
+            }),
+            createServerContext: (() =>
+                ({
+                    eventBus: () => ({ on: () => {}, off: () => {}, emit: () => {} }),
+                    getDb: async () => {
+                        throw new Error('db unavailable');
+                    },
+                    cwd: '/tmp/project-root',
+                }) as unknown as ServerContext) as unknown as StartServerDeps['createServerContext'],
+            runNodeApplication: (async (opts: {
+                config: unknown;
+                start: (rt: ApplicationRuntime) => Promise<void>;
+            }) => {
+                const rt = capturingRuntime(logMessages);
+                await opts.start(rt);
+                return rt;
+            }) as unknown as StartServerDeps['runNodeApplication'],
+        });
+
+        await startServer({ port: 5008, host: '127.0.0.1', openBrowser: false, keepAlive: false }, deps);
+
+        // The thrown drain failure is reported, and the nonfatal policy still lets
+        // the server start (no infinite startup retry).
+        expect(logMessages.some((m) => m.msg === 'Agent quota update startup drain failed')).toBe(true);
+        expect(logMessages.some((m) => m.msg === 'agent quota update consumer started')).toBe(true);
     });
 
     test('SIGTERM shutdown path and concurrent double-signal latch', async () => {

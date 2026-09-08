@@ -29,6 +29,7 @@ const PINNED_DERIVATION_DIGEST: Record<string, string> = {
     v3: '02e476217b3ef1c4b4094a3ded4f3decb5e7f09451a1ab2359b9985d7cba0951',
     v4: 'f71856d6de327c5ff913bdb87dfd36b82d0d0819565148e00b8a549377491fbc',
     v5: '09c671a793c96179212f92a8382b20d8adc03db3629bf93af74775845cef3a25',
+    v6: '459b778d690941ba035280dc5f2c1e0ed6717d321fa94f6665e140bfb253d6aa',
 };
 
 const EMPTY_SEED: HistoryBoardRollupSeed = {

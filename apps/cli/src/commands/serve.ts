@@ -1,8 +1,10 @@
-import { join } from 'node:path';
+import { statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import { buildConfigFromEnv, DEFAULT_DATABASE_URL } from '@gobing-ai/spur-config';
 import { startServer } from '@gobing-ai/spur-server';
 import type { CliContext } from '../context';
+import { CommandError } from '../errors';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { resolveSpurBin } from '../workflow/resolve-spur-bin';
 import { SHARED_OPTIONS } from './shared-options';
@@ -12,8 +14,42 @@ export function resolveServeDbUrl(cwd: string, env: Record<string, string | unde
     return env.DATABASE_URL === undefined ? join(cwd, DEFAULT_DATABASE_URL) : configuredUrl;
 }
 
+/**
+ * Resolve the `serve --cwd` project root (task 0805 R2): a relative target is
+ * resolved against the invocation directory (path.resolve), and the result must
+ * exist and be a directory BEFORE server startup. A missing/non-directory target
+ * is a command error, not a server that silently serves the wrong root. Both the
+ * canonical `self serve` spelling and the hidden `serve` alias share this path.
+ */
+export function resolveServeCwd(cwd: string): string {
+    const resolved = resolve(cwd);
+    let isDirectory = false;
+    try {
+        isDirectory = statSync(resolved).isDirectory();
+    } catch {
+        isDirectory = false;
+    }
+    if (!isDirectory) {
+        throw new CommandError(`--cwd ${cwd} does not resolve to an existing directory (resolved: ${resolved})`, 1);
+    }
+    return resolved;
+}
+
+/** Options for {@link registerServeCommand}. */
+export interface RegisterServeOptions {
+    /** Hide the command from the top-level help listing (legacy alias). */
+    hidden?: boolean;
+    /**
+     * Injectable `startServer` for tests (defaults to the real server entry).
+     * Mirrors the server's StartServerDeps seam so the CLI startup composition
+     * can be exercised with injected dependencies (task 0805 AC2).
+     */
+    startServer?: typeof startServer;
+}
+
 /** Register `spur serve` command (optionally hidden from the top-level help listing). */
-export function registerServeCommand(program: Command, context: CliContext, options: { hidden?: boolean } = {}): void {
+export function registerServeCommand(program: Command, context: CliContext, options: RegisterServeOptions = {}): void {
+    const launch = options.startServer ?? startServer;
     program
         .command('serve', { hidden: options.hidden === true })
         .summary('start the Spur web server (local fallback)')
@@ -30,7 +66,13 @@ export function registerServeCommand(program: Command, context: CliContext, opti
 
                 const port = options.port ?? config.server.port;
                 const host = options.host ?? config.server.host;
-                const cwd = options.cwd ?? context.cwd;
+                // 0805 R2: one coherent project root. A relative --cwd resolves against
+                // the invocation directory and must exist as a directory before any
+                // server startup. Omitted --cwd passes nothing to startServer (it falls
+                // back to process.cwd()); the default DB still scopes to the invocation
+                // directory, preserving prior behavior.
+                const projectRoot = options.cwd !== undefined ? resolveServeCwd(options.cwd) : undefined;
+                const cwd = projectRoot ?? context.cwd;
                 const dbUrl = resolveServeDbUrl(cwd, env, config.database.url);
                 if (options.json) {
                     // --json is a dry machine-readable probe: no server is started, so
@@ -51,7 +93,7 @@ export function registerServeCommand(program: Command, context: CliContext, opti
 
                 context.output.write(`Starting Spur server on http://${host}:${port} …`);
 
-                await startServer({
+                await launch({
                     port,
                     host,
                     dbUrl,
@@ -59,6 +101,7 @@ export function registerServeCommand(program: Command, context: CliContext, opti
                     webDistPath: config.server.webDistPath,
                     // PATH-independent child invocation for queued history refreshes (task 0717).
                     spurInvocation: resolveSpurBin(),
+                    ...(projectRoot !== undefined ? { cwd: projectRoot } : {}),
                 });
             } catch (err) {
                 writeJsonError(context.output, options, err instanceof Error ? err.message : String(err));

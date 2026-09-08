@@ -1828,6 +1828,78 @@ describe('refreshHistoryBoardRollupsIncremental (task 0741)', () => {
         ).toEqual({ n: 1 });
     });
 
+    test('delta row at the first second of its minute survives the incremental refresh (0805 R1)', async () => {
+        // Regression for the intermittent history-board 4h flake (task 0805 R1): a delta message
+        // whose ts falls in the FIRST second of its minute bucket (`...T09:59:00.000Z`) compared
+        // below the whole-second bucketWindow bound (`...T09:59:00Z`) in ISO text order ('.' < 'Z'),
+        // so the incremental refresh dropped it from its own bucket's recompute and the materialized
+        // read reported 0 sessions. The exact-minute-boundary row must be materialized.
+        const db = await setup();
+        // Baseline (whole-second ts, same minute-00 shape as the corpus seeds).
+        await insertMessage(db, {
+            recordHash: 'bl-1',
+            sessionId: 'bl-s1',
+            seq: 1,
+            ts: '2026-06-01T09:58:00Z',
+            model: 'gpt-5',
+            input: 100,
+            output: 50,
+            importedAt: '2026-06-01T05:00:00Z',
+        });
+        await insertToolCall(db, { recordHash: 'bl-t1', messageHash: 'bl-1', sessionId: 'bl-s1', seq: 1 });
+        await refreshHistoryBoardRollupsIncremental(db); // no watermark → full rebuild
+
+        // Delta: fractional-second ts at SS=00 (the bug trigger), imported later.
+        await insertMessage(db, {
+            recordHash: 'delta-00',
+            sessionId: 'bl-s1',
+            seq: 2,
+            ts: '2026-06-01T09:59:00.000Z',
+            model: 'gpt-5',
+            input: 12,
+            output: 6,
+            importedAt: '2026-06-01T07:00:00Z',
+        });
+        await insertToolCall(db, {
+            recordHash: 'delta-00-t',
+            messageHash: 'delta-00',
+            sessionId: 'bl-s1',
+            seq: 2,
+            toolName: 'run_terminal_command',
+        });
+        await refreshHistoryBoardRollupsIncremental(db); // incremental delta
+
+        // The exact-boundary message AND tool rows must be materialized (the tool-filtered read
+        // is the reported symptom: sessionsCount expected 1, got 0).
+        expect(
+            await db.queryFirst<{ n: number }>(
+                "SELECT COUNT(*) AS n FROM history_board_message_5m WHERE bucket_start = '2026-06-01T09:59:00Z'",
+            ),
+        ).toEqual({ n: 1 });
+        expect(
+            await db.queryFirst<{ n: number }>(
+                "SELECT COUNT(*) AS n FROM history_board_tool_5m WHERE bucket_start = '2026-06-01T09:59:00Z' AND tool_name = 'run_terminal_command'",
+            ),
+        ).toEqual({ n: 1 });
+        // Sanity: a mid-minute fractional delta is still handled (no regression for ordinary rows).
+        await insertMessage(db, {
+            recordHash: 'delta-30',
+            sessionId: 'bl-s1',
+            seq: 3,
+            ts: '2026-06-01T10:00:30.500Z',
+            model: 'gpt-5',
+            input: 1,
+            output: 1,
+            importedAt: '2026-06-01T07:00:00Z',
+        });
+        await refreshHistoryBoardRollupsIncremental(db);
+        expect(
+            await db.queryFirst<{ n: number }>(
+                "SELECT COUNT(*) AS n FROM history_board_message_5m WHERE bucket_start = '2026-06-01T10:00:00Z'",
+            ),
+        ).toEqual({ n: 1 });
+    });
+
     test('incremental keyed aggregates equal a full rebuild on the same corpus (R6)', async () => {
         const base = async (db: DbAdapter): Promise<void> => {
             await insertMessage(db, {

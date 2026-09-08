@@ -20,7 +20,10 @@ import type { DbAdapter } from '@gobing-ai/ts-db';
 // v5: resolve session model in incremental 5m buckets and raw query fallbacks
 // so brand-new/sparse models (e.g. gpt-6-astra) are accurately attributed.
 // Marts materialized under v4 must rebuild rather than extend.
-export const ROLLUP_DEFINITION_VERSION = 'v5';
+// v6: bucketWindow() lower bound widened by one second so first-second-of-minute
+// rows with fractional-second ts values are not dropped from their own bucket's
+// incremental recompute (task 0805 R1). Marts materialized under v5 must rebuild.
+export const ROLLUP_DEFINITION_VERSION = 'v6';
 
 /** A table with no watermark row reports this sentinel state (empty watermark → stale). */
 export const EMPTY_ROLLUP_WATERMARK: RollupWatermarkState = {
