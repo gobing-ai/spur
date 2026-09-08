@@ -210,7 +210,7 @@ describe('serve --cwd project root (task 0805 R2)', () => {
         expect(launched[0]?.dbUrl).toBe(join(resolve(rel), DEFAULT_DATABASE_URL));
     });
 
-    test('omitted --cwd passes no cwd to startServer (process.cwd fallback) and DB uses the invocation dir', async () => {
+    test('direct action call without --cwd passes no cwd to startServer (process.cwd fallback); the real CLI defaults --cwd to context.cwd via commander', async () => {
         const { ctx } = makeCtx({ cwd: '/tmp/project-a' });
         const { action, launched } = captureServe(ctx);
 
@@ -248,6 +248,21 @@ describe('serve --cwd project root (task 0805 R2)', () => {
         expect(launched).toHaveLength(0); // startServer was never reached
         expect(exit).toContain(1);
         expect(errors.some((e) => e.includes('does not resolve to an existing directory'))).toBe(true);
+    });
+
+    test('--json --cwd <missing> fails with exit 1 before the probe emits (0808 R1)', async () => {
+        const b = mkdtempSync(join(tmpdir(), 'spur-serve-probe-cwd-'));
+        const { ctx, writes, errors, exit } = makeCtx({ cwd: '/tmp/project-a' });
+        const { action, launched } = captureServe(ctx);
+
+        await action({ port: 3000, host: 'localhost', open: false, json: true, cwd: join(b, 'does-not-exist') });
+
+        expect(exit).toContain(1);
+        expect(launched).toHaveLength(0); // startServer was never reached
+        const all = [...writes, ...errors].join('\n');
+        expect(all).toContain('does not resolve to an existing directory');
+        // The probe payload {port,url,pid,running} was never emitted — only the error.
+        expect(writes.some((w) => w.includes('"port"'))).toBe(false);
     });
 
     test('canonical self serve and hidden serve alias behave identically for --cwd', async () => {

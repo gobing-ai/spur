@@ -68,9 +68,12 @@ export function registerServeCommand(program: Command, context: CliContext, opti
                 const host = options.host ?? config.server.host;
                 // 0805 R2: one coherent project root. A relative --cwd resolves against
                 // the invocation directory and must exist as a directory before any
-                // server startup. Omitted --cwd passes nothing to startServer (it falls
-                // back to process.cwd()); the default DB still scopes to the invocation
-                // directory, preserving prior behavior.
+                // server startup. Through the real CLI, commander defaults --cwd to
+                // context.cwd (the invocation directory), so options.cwd is always set
+                // and the resolved root is always passed; the undefined branch covers
+                // direct action invocation (tests/embeddings) and keeps the
+                // process.cwd() fallback. The default DB still scopes to the resolved
+                // root, preserving prior behavior.
                 const projectRoot = options.cwd !== undefined ? resolveServeCwd(options.cwd) : undefined;
                 const cwd = projectRoot ?? context.cwd;
                 const dbUrl = resolveServeDbUrl(cwd, env, config.database.url);
