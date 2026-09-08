@@ -471,7 +471,16 @@ describe('observability routing-summary (task 0552)', () => {
                                 bySeverity: { info: 3, warning: 1, error: 1, unknown: 0 },
                             },
                         ],
-                        topEventTypes: [{ name: 'task.updated', prefix: 'task', count: 5, latestAt: spec.since }],
+                        topEventTypes: [
+                            {
+                                name: 'task.updated',
+                                prefix: 'task',
+                                count: 5,
+                                latestAt: spec.since,
+                                avgDurationMs: 800,
+                                failureCount: 1,
+                            },
+                        ],
                         recentErrors: [
                             { id: 'err-1', name: 'task.failed', occurredAt: spec.since, message: 'Gate red' },
                         ],

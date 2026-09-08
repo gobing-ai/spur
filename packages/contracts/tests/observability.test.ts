@@ -39,6 +39,16 @@ describe('observability contracts', () => {
                     prefix: 'task',
                     count: 3,
                     latestAt: '2026-09-06T12:30:00.000Z',
+                    avgDurationMs: 1500,
+                    failureCount: 1,
+                },
+                {
+                    name: 'system.startup',
+                    prefix: 'system',
+                    count: 1,
+                    latestAt: '2026-09-06T12:01:00.000Z',
+                    avgDurationMs: null,
+                    failureCount: 0,
                 },
             ],
             recentErrors: [

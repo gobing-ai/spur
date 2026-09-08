@@ -1260,6 +1260,9 @@ describe('SystemEventDao.routingSummary (task 0546)', () => {
         expect(summary.topEventTypes).toHaveLength(4);
         expect(summary.topEventTypes.map((t) => t.name)).toContain('task.failed');
         expect(summary.topEventTypes.find((t) => t.name === 'task.failed')?.prefix).toBe('task');
+        expect(summary.topEventTypes.find((t) => t.name === 'task.failed')?.avgDurationMs).toBeNull();
+        expect(summary.topEventTypes.find((t) => t.name === 'task.failed')?.failureCount).toBe(1);
+        expect(summary.topEventTypes.find((t) => t.name === 'agent.invoke.start')?.failureCount).toBe(0);
 
         // Recent errors
         expect(summary.recentErrors).toHaveLength(1);
@@ -1277,6 +1280,77 @@ describe('SystemEventDao.routingSummary (task 0546)', () => {
         expect(emptySummary.warningEventCount).toBe(0);
         expect(emptySummary.recentErrors).toEqual([]);
         expect(emptySummary.topEventTypes).toEqual([]);
+
+        adapter.close();
+    });
+
+    test('eventSummary top event types fold avg duration and error-severity failures', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        const since = '2026-09-06T12:00:00.000Z';
+        const until = '2026-09-06T13:00:00.000Z';
+
+        // v2 envelope with duration (info)
+        await dao.insert({
+            id: 'dur-1',
+            event_name: 'queue.job.completed',
+            occurred_at: '2026-09-06T12:10:00.000Z',
+            payload_json: JSON.stringify({
+                schemaVersion: 2,
+                data: { durationMs: 1000 },
+                presentation: { severity: 'info' },
+            }),
+        });
+        // legacy top-level duration (error) — same type, both durations must fold; untimed row ignored
+        await dao.insert({
+            id: 'dur-2',
+            event_name: 'queue.job.completed',
+            occurred_at: '2026-09-06T12:20:00.000Z',
+            payload_json: JSON.stringify({
+                durationMs: 3000,
+                presentation: { severity: 'error' },
+            }),
+        });
+        await dao.insert({
+            id: 'dur-3',
+            event_name: 'queue.job.completed',
+            occurred_at: '2026-09-06T12:30:00.000Z',
+            payload_json: JSON.stringify({
+                schemaVersion: 2,
+                data: {},
+                presentation: { severity: 'info' },
+            }),
+        });
+        // untimed errors still count as failures
+        await dao.insert({
+            id: 'dur-4',
+            event_name: 'task.failed',
+            occurred_at: '2026-09-06T12:40:00.000Z',
+            payload_json: JSON.stringify({
+                presentation: { severity: 'error', summary: 'gate red' },
+            }),
+        });
+        await dao.insert({
+            id: 'dur-5',
+            event_name: 'task.failed',
+            occurred_at: '2026-09-06T12:50:00.000Z',
+            payload_json: JSON.stringify({
+                presentation: { severity: 'error', summary: 'timeout' },
+            }),
+        });
+
+        const summary = await dao.eventSummary({ since, until, bucketMs: 3_600_000 });
+        const completed = summary.topEventTypes.find((t) => t.name === 'queue.job.completed');
+        const failed = summary.topEventTypes.find((t) => t.name === 'task.failed');
+
+        expect(completed?.count).toBe(3);
+        expect(completed?.avgDurationMs).toBe(2000);
+        expect(completed?.failureCount).toBe(1);
+        expect(failed?.count).toBe(2);
+        expect(failed?.avgDurationMs).toBeNull();
+        expect(failed?.failureCount).toBe(2);
 
         adapter.close();
     });

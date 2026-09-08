@@ -44,6 +44,10 @@ export const observabilityTopEventTypeSchema = z.object({
     prefix: z.string(),
     count: z.number(),
     latestAt: z.string(),
+    /** Mean `durationMs` for this type in the window; `null` when none recorded a duration. */
+    avgDurationMs: z.number().nullable(),
+    /** Count of this type with `presentation.severity === 'error'`. */
+    failureCount: z.number(),
 });
 /**
  * Top occurring event type aggregated by name.

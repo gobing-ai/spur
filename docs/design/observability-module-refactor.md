@@ -3,7 +3,7 @@ doc: design/observability-module-refactor
 feature_id: J93
 owns: SURFACE + mechanism for the Observability Board module refactor (Summary tab, 4h default, queue_jobs table, and schedule tracing)
 authority: derived (ADR wins on conflict)
-updated_at: 2026-09-06
+updated_at: 2026-09-07
 ---
 
 # Observability Board Module Refactor: Summary Tab, 4h Default, Truthful Jobs Table, and Schedule Tracing
@@ -130,6 +130,8 @@ export interface ObservabilitySummaryResponse {
         prefix: string;
         count: number;
         latestAt: string;
+        avgDurationMs: number | null; // mean durationMs; null when none of the type recorded a duration
+        failureCount: number; // events of this type with presentation.severity === 'error'
     }>;
     recentErrors: Array<{
         id: string;
@@ -141,6 +143,8 @@ export interface ObservabilitySummaryResponse {
     }>;
 }
 ```
+
+**Top event types KPIs.** `avgDurationMs` is the mean of v2 `$.data.durationMs` else legacy `$.durationMs` (numeric values only; untimed rows are excluded, never treated as 0). `failureCount` is the count of that type with `presentation.severity = 'error'`. The Summary tab **Top Event Types** card renders `avgDurationMs / 1000` as `Avg(Duration - s)` (em dash when null) and `failureCount` as `Failures`.
 
 ### 3.2 `GET /api/jobs`
 ```ts

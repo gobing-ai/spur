@@ -43,9 +43,30 @@ const mockSummary: ObservabilitySummaryResponse = {
         },
     ],
     topEventTypes: [
-        { name: 'task.created', prefix: 'task', count: 90, latestAt: '2026-09-06T11:50:00.000Z' },
-        { name: 'scheduler.run', prefix: 'scheduler', count: 40, latestAt: '2026-09-06T11:45:00.000Z' },
-        { name: 'queue.job.retry', prefix: 'queue', count: 20, latestAt: '2026-09-06T11:30:00.000Z' },
+        {
+            name: 'task.created',
+            prefix: 'task',
+            count: 90,
+            latestAt: '2026-09-06T11:50:00.000Z',
+            avgDurationMs: 1500,
+            failureCount: 3,
+        },
+        {
+            name: 'scheduler.run',
+            prefix: 'scheduler',
+            count: 40,
+            latestAt: '2026-09-06T11:45:00.000Z',
+            avgDurationMs: null,
+            failureCount: 0,
+        },
+        {
+            name: 'queue.job.retry',
+            prefix: 'queue',
+            count: 20,
+            latestAt: '2026-09-06T11:30:00.000Z',
+            avgDurationMs: 250,
+            failureCount: 1,
+        },
     ],
     recentErrors: [
         {
@@ -195,9 +216,17 @@ describe('SummaryTab (task 0791)', () => {
             expect(getByTestId('top-event-types-table')).toBeDefined();
         });
 
-        // Top event types table
+        // Top event types table — name, avg processing seconds, failures
         expect(getByText('task.created')).toBeDefined();
         expect(getByText('scheduler.run')).toBeDefined();
+        expect(getByText('Avg(Duration - s)')).toBeDefined();
+        expect(getByText('Failures')).toBeDefined();
+        expect(getByTestId('top-event-avg-task.created').textContent).toBe('1.50');
+        expect(getByTestId('top-event-failures-task.created').textContent).toBe('3');
+        expect(getByTestId('top-event-avg-scheduler.run').textContent).toBe('—');
+        expect(getByTestId('top-event-failures-scheduler.run').textContent).toBe('0');
+        expect(getByTestId('top-event-avg-queue.job.retry').textContent).toBe('0.25');
+        expect(getByTestId('top-event-failures-queue.job.retry').textContent).toBe('1');
 
         // Recent failures feed
         const jobFailure = getByTestId('failure-row-job-job-err-1');

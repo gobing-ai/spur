@@ -40,6 +40,12 @@ function getPrefixColor(prefix: string): string {
     return PALETTE[idx] ?? '#38bdf8';
 }
 
+/** Mean duration in seconds for Top Event Types. Missing durations render as an em dash, never as `0`. */
+function formatAvgProcessingSeconds(avgDurationMs: number | null | undefined): string {
+    if (avgDurationMs == null || !Number.isFinite(avgDurationMs)) return '—';
+    return (avgDurationMs / 1000).toFixed(2);
+}
+
 // ─── Delta Badge & KPI Card ──────────────────────────────────────────────────
 
 const deltaPct = (current: number, previous: number | undefined): number | null => {
@@ -431,6 +437,12 @@ export default function SummaryTab(props: ObservabilityTabProps) {
                                     <th>Event Name</th>
                                     <th>Prefix</th>
                                     <th className="text-right">Count</th>
+                                    <th className="text-right" title="Average duration in seconds">
+                                        Avg(Duration - s)
+                                    </th>
+                                    <th className="text-right" title="Events with error severity">
+                                        Failures
+                                    </th>
                                     <th className="text-right">Latest</th>
                                 </tr>
                             </thead>
@@ -449,7 +461,23 @@ export default function SummaryTab(props: ObservabilityTabProps) {
                                                 {t.prefix}
                                             </span>
                                         </td>
-                                        <td className="text-right text-base-content/80">{t.count.toLocaleString()}</td>
+                                        <td className="text-right text-base-content/80 tabular-nums">
+                                            {t.count.toLocaleString()}
+                                        </td>
+                                        <td
+                                            className="text-right text-base-content/80 tabular-nums"
+                                            data-testid={`top-event-avg-${t.name}`}
+                                        >
+                                            {formatAvgProcessingSeconds(t.avgDurationMs)}
+                                        </td>
+                                        <td
+                                            className={`text-right tabular-nums ${
+                                                t.failureCount > 0 ? 'text-error font-semibold' : 'text-base-content/80'
+                                            }`}
+                                            data-testid={`top-event-failures-${t.name}`}
+                                        >
+                                            {t.failureCount.toLocaleString()}
+                                        </td>
                                         <td className="text-right text-base-content/50">
                                             {new Date(t.latestAt).toLocaleTimeString()}
                                         </td>
@@ -457,7 +485,7 @@ export default function SummaryTab(props: ObservabilityTabProps) {
                                 ))}
                                 {(!data || (data.topEventTypes ?? []).length === 0) && (
                                     <tr>
-                                        <td colSpan={4} className="text-center text-base-content/40 py-4">
+                                        <td colSpan={6} className="text-center text-base-content/40 py-4">
                                             No events recorded
                                         </td>
                                     </tr>

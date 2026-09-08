@@ -175,12 +175,19 @@ export interface EventSummaryVolumeBucket {
 
 /**
  * Aggregate summary for a top occurring event type.
+ *
+ * `avgDurationMs` is the mean of recorded durations (v2 `data.durationMs` or
+ * legacy top-level `durationMs`); `null` when none of the type's events
+ * recorded a duration. `failureCount` is the number of events of this type
+ * with presentation severity `error`.
  */
 export interface EventSummaryTopType {
     name: string;
     prefix: string;
     count: number;
     latestAt: string;
+    avgDurationMs: number | null;
+    failureCount: number;
 }
 
 /**
@@ -632,18 +639,40 @@ export class SystemEventDao {
                 }
             }
 
-            // 3. Top event types
+            // 3. Top event types — count, latest, mean duration, error-severity failures
             const topRows = await this.db.queryAll<{
                 name: string;
                 prefix: string;
                 count: number;
                 latest_at: string;
+                avg_duration_ms: number | null;
+                failure_count: number | null;
             }>(
                 `SELECT
                     event_name AS name,
                     CASE WHEN instr(event_name, '.') > 0 THEN substr(event_name, 1, instr(event_name, '.') - 1) ELSE event_name END AS prefix,
                     COUNT(*) AS count,
-                    MAX(occurred_at) AS latest_at
+                    MAX(occurred_at) AS latest_at,
+                    AVG(
+                        CASE
+                            WHEN typeof(COALESCE(
+                                json_extract(payload_json, '$.data.durationMs'),
+                                json_extract(payload_json, '$.durationMs')
+                            )) IN ('integer', 'real')
+                            THEN COALESCE(
+                                json_extract(payload_json, '$.data.durationMs'),
+                                json_extract(payload_json, '$.durationMs')
+                            )
+                            ELSE NULL
+                        END
+                    ) AS avg_duration_ms,
+                    SUM(
+                        CASE
+                            WHEN COALESCE(json_extract(payload_json, '$.presentation.severity'), '') = 'error'
+                            THEN 1
+                            ELSE 0
+                        END
+                    ) AS failure_count
                 FROM system_events
                 WHERE occurred_at >= ?1 AND occurred_at < ?2
                 GROUP BY event_name
@@ -692,6 +721,8 @@ export class SystemEventDao {
                     prefix: r.prefix,
                     count: Number(r.count),
                     latestAt: r.latest_at,
+                    avgDurationMs: r.avg_duration_ms == null ? null : Number(r.avg_duration_ms),
+                    failureCount: Number(r.failure_count ?? 0),
                 })),
                 recentErrors: recentRows.map((r) => ({
                     id: r.id,
