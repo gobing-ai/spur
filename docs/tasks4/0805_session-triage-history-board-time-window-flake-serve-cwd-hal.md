@@ -4,7 +4,7 @@ name: "Session triage: history-board time-window flake, serve --cwd half-scoping
 status: todo
 template: issue
 created_at: 2026-09-08T05:46:02.113Z
-updated_at: "2026-09-08T06:10:01.327Z"
+updated_at: "2026-09-08T15:26:15.751Z"
 
 ---
 
@@ -12,66 +12,83 @@ updated_at: "2026-09-08T06:10:01.327Z"
 
 ### Background
 
-Complete inventory of unsolved issues and findings from the 2026-09-07/08 session (B5 batch 0796-0799 + dogfood + merge), consolidated so none is re-discovered. Each item carries symptom, evidence, root-cause status, and fix direction. Resolved-by-fix items are NOT here (see Notes for what was fixed where): the serve.ts quota-consumer comment overpromise was corrected in ac6754991; the two lens SAFETY-comment false positives were durably suppressed inline.
+Revalidated on 2026-09-08 against the 0.3.76 source baseline d37c1f6b3 (subsequent HEAD changes during refinement are task documentation only). This register separates confirmed source gaps from historical observations. Requirements-only refinement: no production code, host configuration, daemon or runtime data was changed.
 
-1. **Flaky time-window test — history-board 4h rollup** — `packages/app/tests/services/history-board-service.test.ts:293`, assertion `expect(rtcSummary.kpis.sessionsCount).toBe(1)` (Expected 1, Received 0).
-   - Evidence matrix: full-suite runs at 05:04 / 05:10 / 05:13 UTC → 7795 pass / 1 fail each, same assertion; identical command at 05:32 UTC → 7796/0. All subset/prefix combos green (8/8): `./packages` 4303/0; cli+server+web+packages 6440/0; full-minus-scripts 7713/0; full-minus-plugins 6523/0; cli+file 1011/0; server+app 3135/0; web+file 785/0; apps-prefix+file 2162/0. Failure output appears ~30% into the dot stream (~2300 tests in).
-   - Boundary facts: manifestation required BOTH `./plugins` and `./scripts` in the invocation; `rg setSystemTime|MockDate|TZ=` across plugins/ and scripts/ returned empty (no clock mutator found). Neither merge side touched history-board code (git log on both sides of merge-base `5d435e63a` empty for the file). Pre-merge main (`b524a6e76`) full run at 05:15 UTC passed (7724/0) — inconclusive exoneration (ran just outside the failing window).
-   - Test seeds: `nowTs = Date.now() - 30min`, `imported_at` literal '2026-08-31T00:00:00Z', range '4h' (`refreshHistoryRollups` / `LiveHistoryBoardService.getSummary` path).
-   - Hypothesis (unproven): UTC clock-boundary math in the 4h rollup window; the failing window started 4-13 minutes past the 05:00 UTC hour boundary. Needs confirmation by frozen-clock repro at 05:04-05:13 UTC or direct read of the window computation.
-   - URGENCY: recurs daily in the ~05:04-05:13 UTC window until fixed; will fail tomorrow's morning gate run.
-   - Fix direction: inject a clock into the rollup service (or correct the boundary condition). The test is the victim — do NOT weaken its semantics.
+| Original item | Disposition | Current evidence / corrected scope |
+| --- | --- | --- |
+| R1 history-board flake | Retain as bounded investigation; root cause unresolved | The fixture still inserts a message at Date.now minus 30 minutes, refreshes rollups and expects one tool-filtered session. The report establishes intermittent failures, not a daily 05:04–05:13 UTC recurrence or a proven clock bug. |
+| R2 serve --cwd | Retain; correct source ownership and select full scoping | The CLI scopes the default DB path but does not pass cwd to startServer. Server configuration, filesystem/context and scheduled child work derive from process.cwd. The server code is now in apps/server/src/serve.ts, not the old long CLI file. |
+| R3 startup drain | Retain; use existing awaited async drain | startAgentQuotaUpdateConsumer already returns drain(). Startup subscribes and starts polling without awaiting it. This is a pending-update-before-dispatch gap; supervised-agent autostart is not itself proof of executor selection. |
+| R4 DB-lock incident | Narrow to accurate remediation wording | 0801 and 0803 are done and already own busy handling/watchdog work. errorMessage still says to stop the stale process or serve without establishing staleness. No daemon classifier, idle TTL or impossible zero-contention guarantee is needed. |
+| R5 editor schema resolution | Defer outside implementation requirements | Current $schema is a package reference supported by the runtime loader. The old editor treated it as document-relative. No current yaml-ls diagnostic or active editor mapping was captured in this refinement; reinstalls and local copies may have changed that environment. |
+| Background concurrent writes | Drop as new product work | One writer per worktree is already project policy. No evidence justifies a new cross-session commit guard. 0804 R5 owns the small dogfood advisory gap. |
+| Background cast advisories | Drop as already mitigated | Both pi-lens-ignore comments remain adjacent to the documented SAFETY casts. No new suppression or checker work is requested. |
 
-2. **`serve --cwd` half-scoping** — `apps/cli/src/commands/serve.ts:11` `resolveServeDbUrl(cwd, env, configuredUrl)` scopes ONLY the dbUrl; `projectRoot`/`loadSpurConfig` derive from `process.cwd()` throughout serve.ts (:49, :434, :459, :462, :631).
-   - Symptom: launching from tree A with `--cwd` tree B half-scopes — config from A, DB from B — silently. Cost a full dogfood diagnosis cycle during B5 (dogfood S3/S5 were drive bugs caused by exactly this), before the drive switched to in-project subshell launch.
-   - Verified sound (no need to re-check): consumer lifecycle (SIGINT handlers, `quotaConsumer.stop()` final drain before teardown); direct `drainPendingAgentQuotaUpdates` call applied 1 row and acked ({applied:1}).
-   - Fix is a public-surface decision (full scoping vs loud failure on cwd mismatch) requiring operator design consent per harness-surface governance (`docs/design/harness-surface-governance.md`). Dogfood report: `docs/dogfood/2026-09-07-B5-executor-quota-dogfood.md` finding F2 (RUN_ID 54D294E4D301).
-
-3. **No synchronous first drain in the quota consumer** — consumer start only subscribes; first drain is the 30s `setInterval` poll, so an autostarted agent can select a to-be-disabled executor within the first poll interval; the disable lands at the next launch boundary (now documented in serve.ts:523-529).
-   - Observe-only dogfood finding F1; AC letter was met (subscriptions precede autostart). Product decision needed: drain-at-start (synchronous first drain at consumer start; drain path verified sound via shutdown final drain) or explicit not-wanted with rationale.
-
-4. **DB-lock incident: gate remediation recommends SIGTERM on a daemon that was working, not stale** — `test-post-check` inside `bun run spur-check` failed on `.spur/spur.db` lock; holder was `spur self serve` PID 64749 (started 21:40:31) with active child 94051 (`history daily`, a scheduled job). Gate's remediation message (identify via `lsof .spur/spur.db`, stop stale serve) was followed and worked.
-   - Nuance: remediation guidance assumes "stale", but a serve daemon running scheduled jobs is a legitimate holder; killing it is operator judgment, not a mechanical step. Earlier in the session, dogfood S-series also hit DB contention (compacted evidence).
-   - Fix direction (pick one, needs small design): gate distinguishes active serve (live scheduled child) from truly stale daemon before recommending SIGTERM; OR serve daemon auto-exits after idle TTL; OR daemon releases/uses WAL + busy_timeout so gates never block.
-
-5. **Parallel-session concurrent writes in the shared checkout** — a second agent session worked in the same tree during this session's merge phase: `c7f56a616` (ts-libs version bump) landed on main mid-gates (between 22:32 and 22:39 checks); `packages/app/tests/services/agent-service.test.ts` (+131) and `docs/tasks4/0796-0799_*.md` went dirty unannounced; at ~23:00 `packages/app/src/services/agent-service.ts` gained concurrent `executor: executor.name` hunks interleaved with this task's suppress comments (selective-staged around: commit landed with only the 2 comment hunks).
-   - Risk: one-writer violations (repo convention: "One writer per working tree" — parallel agents must use worktrees), mixed-task diffs, accidental commits of others' work.
-   - Fix direction: process enforcement — adopt worktree-per-session for any concurrent work; optionally a pre-commit guard warning when staged files overlap a second session's dirty set.
-
-6. **pi-lens advisory false positives persist in the blocker view** — (a) `agent-service.ts` L853/L1466 "as unknown as without SAFETY comment": rule cannot see the SAFETY comments 2 lines above (invariant IS stated; pre-existing since `d054d1282`); 4 false-positive dispositions recorded, advisory refired twice; durable inline `// pi-lens-ignore: require-safety-comment-for-as-unknown-as` written at both sites (committed). (b) yaml-ls cannot load `spur-config.schema.json` for `.spur/config.yaml` and `config/config.example.yaml`: schemaPath mapping points at the linked-CLI bundle layout (`.spur/@gobing-ai/spur/schemas/`, `config/@gobing-ai/spur/schemas/`) which does not exist in a fresh checkout (`ls` confirmed); real schema at `apps/cli/schemas/spur-config.schema.json`; gates green (spur-check exit 0) proves the files are valid.
-   - Fix direction for (b): generate/symlink schemas into the referenced bundle paths at build time, OR update the lens yaml-ls schemaPath mapping to a path that exists in fresh checkouts (host-side lens config, outside repo — coordinate with operator).
+Historical evidence remains in docs/dogfood/2026-09-07-B5-executor-quota-dogfood.md (run 54D294E4D301) and this task's Git history. Original full-suite counts and /tmp paths are historical observations, not current verification results.
 
 ### Requirements
 
-- R1: History-board 4h-rollup flake root-caused with a reproducible failing-window demonstration (frozen/mocked clock at ~05:04-05:13 UTC or equivalent proof); existing test semantics preserved — no weakening of `sessionsCount` assertion or seeds.
-- R2: `serve --cwd` scoping made coherent — either full scoping (config AND projectRoot AND dbUrl all follow `--cwd`) or loud failure when `--cwd` differs from `process.cwd()` — after recorded operator design consent (public surface).
-- R3: Quota consumer at-launch behavior explicitly decided: synchronous first drain at consumer start, or documented not-wanted decision with rationale referencing dogfood F1.
-- R4: DB-lock holder classification: gate remediation (or serve daemon behavior) distinguishes an active serve daemon (live scheduled child such as `history daily`) from a truly stale one before recommending SIGTERM; OR the daemon self-retires (idle TTL) / unlocks (WAL + busy_timeout) so gates never block on it.
-- R5: yaml-ls schema resolution for `spur-config.schema.json` succeeds in a fresh checkout — schemas present at the mapped paths (generated/symlinked by build) or the mapping updated to an existing path (host-side, coordinated with operator).
+- [ ] R1. Establish the cause or an explicitly unresolved disposition for the historical history-board tool-filtered 4h flake using a bounded, reproducible investigation. Preserve the one-session/700-token assertions and tool/model/source series semantics. Test controlled time and rollup freshness/read-path hypotheses before selecting a fix. If reproduced, correct the confirmed cause and retain the smallest regression; if not, record attempted cases and missing evidence without inventing a clock defect or making speculative production edits.
+- [ ] R2. Make the existing serve --cwd option select one coherent project root for server configuration, filesystem/task folders, DB defaults, quota updates and project-scoped scheduled/child work. Both canonical self serve and the hidden serve alias follow the same behavior. Resolve relative cwd against the invocation directory, validate the directory and preserve explicit DATABASE_URL precedence. Omitted cwd preserves existing behavior. Select full scoping, not a new mismatch-refusal mode; no new public command is proposed.
+- [ ] R3. Before startup admits workflow/executor dispatch, await one bounded pass of the existing quota consumer drain so successfully applied pending observations are visible at the first subsequent executor-resolution boundary. Preserve serialization, poll/event handling, version-aware acknowledgment and shutdown drain. Failed/deferred updates stay visible and pending under the existing nonfatal startup policy; do not claim disabled-executor exclusion when applying the disable failed. This does not redefine supervised team-agent eligibility.
+- [ ] R4. SQLite-busy remediation distinguishes the observed lock from unverified holder liveness: identify the holder, allow active work to finish/retry, and make any stop action an explicit operator decision after inspection. Do not call an arbitrary holder stale, recommend an unconditional kill or assert gates never contend. Preserve the recognizable busy-error classification for 0804 R3 and existing nonzero exits.
+
+Non-goals: implementation in this refinement; new public nouns/verbs; global process.chdir as a server embedding workaround; clock injection without demonstrated need; daemon idle TTL/liveness framework; additional timeout tuning; automatic process termination; host lens configuration edits; schema copies/symlinks per YAML directory; new concurrency guards. Former R5 is an environment follow-up, not a completion condition.
 
 ### Acceptance Criteria
 
-- AC1: Failing time window reproduced (mocked clock or written proof naming the exact boundary condition and file:line in the rollup window math); fix applied; full suite green at the previously failing window (05:04-05:13 UTC equivalent, via clock injection); `sessionsCount` test semantics unchanged; targeted run `cd packages/app && bun test tests/services/history-board-service.test.ts` green plus one full `bun run test` green.
-- AC2: Design decision for `serve --cwd` recorded in this task's Design section with operator consent evidence; chosen behavior implemented; targeted tests cover the cross-tree launch scenario (config/db co-location); `apps/cli` tests green.
-- AC3: Decision recorded (drain-at-start implemented with a targeted test proving an autostart-spawned agent observes the disable before the first poll tick) OR not-wanted decision documented in this task with rationale; either way the serve.ts comment and behavior agree.
-- AC4: Chosen remediation (gate-side holder classification, daemon idle TTL, or WAL/busy_timeout) implemented; a full `bun run spur-check` passes while a serve daemon with a scheduled child is alive, or the scenario is proven impossible; targeted test or documented manual repro evidence.
-- AC5: `yaml-ls` loads `spur-config.schema.json` without error in a fresh checkout (simulate: clone/worktree without `.spur/@gobing-ai`, verify no schema-load diagnostic; or lens config change verified against both yaml files).
+- [ ] AC1 (R1): Given the original fixture semantics, when a bounded investigation exercises controlled times around the reported window and outside it, plus fresh/stale rollup paths and test isolation, then evidence identifies either a reproducible cause with a failing-before/passing-after regression or an explicitly unresolved result with exact commands, clock values and missing observations. No unsupported daily recurrence or forced production fix is claimed. A reproduced fix preserves session/token/series assertions and passes focused tests plus one full suite.
+- [ ] AC2 (R2): Given distinct projects A and B with different config/task roots, when either serve spelling launches from A with absolute or relative --cwd B, then server context/config, default DB and project-scoped child invocation use B while A is unchanged. Explicit DATABASE_URL retains precedence; omitted cwd uses A. A missing/non-directory target fails before server startup. Exercise the real startup composition with injected dependencies; the --json probe alone is insufficient.
+- [ ] AC3 (R3): Given a pending quota-disable observation and an eligible alternative executor, when server startup completes its initial drain and the first workflow dispatch resolves an executor, then it observes the persisted disable before a poll tick. An empty queue proceeds once; drain failure/deferred work is reported and retained without false acknowledgment or an infinite startup retry. Existing subscription, later poll, recovery and shutdown behavior remains covered.
+- [ ] AC4 (R4): Given a SQLITE_BUSY failure with no process-state evidence, when errorMessage renders remediation, then it names the lock and inspection/retry steps without declaring the holder stale or requiring a kill. Existing busy classification and CLI failure exit remain intact; 0804 retry fixtures accept the resulting diagnostic.
 
 ### Q&A
 
 <!-- Clarifications and triage decisions. Keep empty if none. -->
 
+#### Q&A entry — 2026-09-08T15:26:15.750Z
+
+2026-09-08 operator instruction: evaluate/refine both tasks against the reinstalled current version, correct or drop stale items and add substantiated findings; do not implement. Both tasks remain todo.
+
+Selected design directions: full project-root scoping for the existing --cwd option; reuse awaited async drain; diagnostic-only lock remediation. Rejected prescriptions: guaranteed daily flake recurrence, mandatory new clock interface, zero-contention guarantee, daemon TTL/liveness machinery, per-directory schema copies and new shared-checkout guards. Current history-flake cause remains unresolved; current host yaml-ls recurrence remains unverified. Neither uncertainty grants permission for speculative code or host edits.
+
 ### Design
 
-<!-- Fix approach and tradeoffs. Keep this short unless the issue changes architecture. -->
+Future implementation direction; not evidence of implemented behavior.
+
+R1 — Investigation first. Follow getSummary -> toArtifactSelector -> historyBoardRollupsFresh -> selected rollup/mart/raw read path. The current selector subtracts four hours from Date.now; a message only 30 minutes old is well inside that window. An hour-boundary explanation therefore needs additional evidence. Compare message.ts, minute-normalized rollup timestamps and imported_at freshness independently. Use a controlled Date.now/test clock or explicit existing from/to filters before adding a service-wide clock interface. Isolate temporary DB/clock state and restore it after each case. Budget: at most six targeted controlled cases and one reduced-order run before recording an unresolved checkpoint; do not repeatedly launch the full suite to chase timing. An unresolved result retains the issue explicitly in Notes and does not count as a fixed defect.
+
+R2 — CLI owns path normalization and passes the resolved project root through StartServerOptions into apps/server/src/serve.ts. Thread that root through existing config/bootstrap loading, filesystem/context creation, planning folders, project asset lookup and scheduled child cwd. Keep package-adjacent asset fallback distinct from project-relative paths. Reuse the existing server dependency-injection seam and CLI serve tests; avoid process.chdir because startServer is also an embedding API. Preserve existing environment/explicit database precedence and document the base for relative DATABASE_URL consistently with current behavior. Update docs/04_DESIGN.md with the existing --cwd contract when implementing. This refinement selects the intended fix but does not authorize implementation/public-surface mutations.
+
+R3 — Await quotaConsumer.drain() at the composition root after subscription and before dispatch acceptance. No new synchronous consumer API or polling framework. Inspect the returned failed/deferred counts as well as thrown failures and preserve the current nonfatal server policy. The consumer's bounded attempts own retry limits. Test the workflow launch path that reloads config (apps/server/src/context.ts), rather than asserting startAutostart inherently reads executor profiles. Keep successful-drain visibility and failed-drain limitations explicit.
+
+R4 — Edit the existing diagnostic and its tests only. Retain the SQLite database ... is busy prefix, removing the assumption of staleness from remediation prose. Holder inspection cannot prove a process is stale merely from a live child or lsof entry. 0803 owns periodic-job containment; 0804 R3 owns retry matching. No automatic signaling or process probing is added.
+
+Deferred R5 owner: operator's active editor/lens adapter. If a fresh diagnostic recurs, capture its resolved schema URI and resolver/version; compare it with apps/cli/schemas/spur-config.schema.json and the installed package schema. Correct the owning editor association using its supported configuration after authorization. Runtime package-schema loading and editor URI resolution are separate contracts; a passing Spur gate does not prove yaml-ls resolution. Do not add build-time mirrors or change package schema semantics to accommodate an unverified host mapping.
 
 ### Plan
 
-<!-- Ordered debugging/fix checklist. Fill before moving to todo/wip. -->
+- [ ] R1: Run the bounded controlled-time/read-path investigation, preserving exact fixture assertions; record cause and regression or the explicitly unresolved evidence gap.
+- [ ] R2: Trace all startServer callers and project-root consumers, thread one resolved root through existing composition seams, and cover A-to-B absolute/relative launches and override precedence.
+- [ ] R3: Await the existing initial drain, report failed/deferred summaries and prove successful updates affect first workflow executor resolution without waiting for polling.
+- [ ] R4: Correct remediation wording and coordinate busy-message compatibility with 0804 R3; retain current lock handling and watchdog behavior.
+- [ ] Close: Run focused tests and final code gates once for implemented changes; update the affected surface docs and task evidence through Spur. Report any unresolved R1 investigation separately from fixed behavior. Former R5 does not block completion.
 
 ### Root Cause
 
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
+Confirmed:
+- serve.ts CLI computes dbUrl from options.cwd but passes no project root into startServer. apps/server/src/serve.ts still uses process.cwd for bootstrap/config/context and project work. This establishes mixed scope when invoked outside the target project.
+- startAgentQuotaUpdateConsumer installs subscriptions and a 30-second interval and exposes drain(); apps/server/src/serve.ts does not await a startup drain. Existing workflow launch config reload cannot observe a persisted disable before that update is applied.
+- apps/cli/src/errors.ts renders a static stale-process/serve stop hint without checking holder state.
+
+Unresolved:
+- The history-board flake's underlying cause is not established. Current source retains the original seed and assertion, and its selector uses a relative four-hour subtraction. Historical passing/failing timestamps do not prove daily recurrence or clock-boundary causation.
+- Current editor schema failure is not reproduced. Package $schema declarations and runtime package resolution exist; the old editor's document-relative resolution is a historical observation, not a confirmed missing-schema defect in the current product.
+
+Already covered:
+- Task 0801 owns CLI busy diagnostics/connection handling; this task narrows the remaining prose issue.
+- Task 0803 owns scheduled history-child timeout/lock containment.
+- Task 0804 R3 owns YAML retry classification; R5 owns dogfood worktree advice.
 
 ### Solution
 
@@ -87,22 +104,32 @@ Complete inventory of unsolved issues and findings from the 2026-09-07/08 sessio
 
 ### References
 
-- Merge: `02dbb8716` (parents `b524a6e76` + `194ed5daf`); branch tip `194ed5daf`; merge-base `5d435e63a`.
-- Direct fixes this session: `ac6754991` serve.ts drain-cadence comment (F1); suppress commit (agent-service.ts L853/L1468 `pi-lens-ignore`); `.gitignore` + local schema copies for lens yaml mapping.
-- Task artifacts: task file `docs/tasks4/0805_session-triage-history-board-time-window-flake-serve-cwd-hal.md`; commits "docs(tasks): file task 0805 ..." (94c7d6427) and this update.
-- Dogfood: `docs/dogfood/2026-09-07-B5-executor-quota-dogfood.md` (RUN_ID `54D294E4D301`, findings F1/F2, S-series); live evidence `.spur/run/dogfood/54D294E4D301.md`; `docs/dogfood/INDEX.md`.
-- Flake evidence: `packages/app/tests/services/history-board-service.test.ts:293`; gate logs `/tmp/merge-gate-final.log` (spur-check exit 0), `/tmp/merge-testcf.log` (test-cf exit 0); full-suite green run 05:32 UTC → 7796/0.
-- Governance: `docs/design/harness-surface-governance.md` (R2 consent path); repo convention "One writer per working tree" (AGENTS.md).
+Current-source evidence reviewed 2026-09-08:
+- `packages/app/tests/services/history-board-service.test.ts:275` — relative seed; `:293` — one-session assertion.
+- `packages/app/src/services/history-board-service.ts:155` — selector clock; `:919` — read-path selection.
+- `packages/domain/src/analytics/history-board-rollup.ts:338` — minute timestamps; `:637` — selector normalization.
+- `apps/cli/src/commands/shared-options.ts:50` — --cwd described as Working directory.
+- `apps/cli/src/commands/serve.ts:33` — DB scoping; `:53` — startServer invocation without root.
+- `apps/server/src/serve.ts:484`, `:509`, `:512` — filesystem/config/context root; `:538` — consumer startup; `:561` — separate supervised-agent autostart; `:701` — project cwd.
+- `packages/app/src/services/agent-quota-updates.ts:318` — existing drain API; `:331` — consumer; `:352` — explicit serialized drain.
+- `apps/server/src/context.ts:496` — supervisor config directory; `:566` — workflow launch config reload.
+- `apps/cli/src/errors.ts:34` — static remediation; `:37` — error renderer.
+- `config/config.example.yaml:6` — package schema declaration; apps/cli/schemas/spur-config.schema.json — schema source.
+- `packages/config/src/loader.ts:194` — package/embedded schema resolution.
+- `packages/app/src/services/agent-service.ts:853` and `:1467` — existing cast suppressions.
+- Historical dogfood: docs/dogfood/2026-09-07-B5-executor-quota-dogfood.md, run 54D294E4D301. Old merge evidence: 02dbb8716, b524a6e76, 194ed5daf.
+- Governance: docs/99_PROJECT_CONSTITUTION.md T11; docs/design/harness-surface-governance.md.
+- Related tasks verified done: 0800, 0801, 0803.
 
 ### History
 ### Notes
 
-Process and environment notes from the session (no code fix required; recorded to prevent re-diagnosis):
+Historical process observations, not additional implementation scope:
+- Parallel sessions must follow the existing one-writer/worktree policy. No new guard is justified by this incident alone.
+- Both cast false positives already have durable suppressions. Host diagnostic cache and registry state were not revalidated.
+- Historical local schema copies and the prediction that a language-server restart would clear the remaining diagnostic are unverified today. Do not treat them as a durable product fix.
+- Conventional merge messages and dependency installation after catalog-changing merges are existing operating conventions.
+- R1 remains a real unresolved reliability report, with a bounded investigation contract instead of a fabricated root cause. R5 is deferred to the active editor/lens owner if a fresh diagnostic recurs.
 
-- **cog commit-msg hook rejects default merge messages** ("Missing commit type separator `:`"). Convention: `chore: merge branch '<name>' (<description>)`. Precedents: `65a1ef486`, `df48b7900`, `a343bf7aa`; this session's `02dbb8716` followed it.
-- **Commit `c7f56a616` carries type typo `docs(proect):`** (parallel session's ts-libs version bump). Pushed local main; amending would rewrite shared history — left as-is.
-- **Dependency drift after merge is expected**: when a merge carries catalog bumps (this session: ts-* 0.4.56→0.4.57, 18 packages), run `bun install` before gates. The drift gate caught it pre-test — working as designed.
-- **Lens suppression state**: 2 cast sites carry durable `pi-lens-ignore:` comments (commit "chore(app): suppress known-false-positive SAFETY-comment advisory"); first insertion landed mid-sentence and was repositioned adjacent to the cast (amended into same commit). 6 false-positive dispositions also recorded in the lens registry. yaml-ls remnant on `config/config.example.yaml` is a cached load failure: local schema copies now exist at both mapped paths (`.spur/@gobing-ai/`, `config/@gobing-ai/`, gitignored); the sibling `.spur/config.yaml` cleared with the identical fix, so the remaining diagnostic should clear on yaml-ls server restart.
-- **Bun coverage pitfall (documented, task 0699 R4)**: single-file test runs from repo root fail the whole-repo coverage denominator; run targeted tests from inside the workspace.
-- **Session shape**: two compactions; pre-compaction timing evidence unavailable (marked n/a in review). flake diagnosis was the avoidable-cost center: 3 failed full-gate runs before the time-window classification; a frozen-clock repro at the failing window is the cheapest path for AC1.
+Refinement verification: source inspection only for 0805; no full-suite reproduction, server launch, daemon stop or host configuration mutation. Future implementation tests are specified in Acceptance Criteria, not claimed as passed.
 
