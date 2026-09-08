@@ -2702,7 +2702,12 @@ Only this section exists.
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'update', wbs, 'testing', '--no-lifecycle'], { cwd, output });
         expect(exitCode).toBe(1);
-        expect(output.errors.join('\n')).toContain('Lifecycle transition blocked');
+        const blocked = output.errors.join('\n');
+        expect(blocked).toContain('Lifecycle transition blocked');
+        // 0808 R3: the message names the target-status probe and its error findings,
+        // so a passing plain check no longer reads as a contradiction.
+        expect(blocked).toContain(`spur task check ${wbs} --as testing`);
+        expect(blocked).toContain('L3.');
         expect(await readStatus(wbs)).toBe('wip');
     });
 

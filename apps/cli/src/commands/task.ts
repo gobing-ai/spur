@@ -6,6 +6,7 @@ import type { Command } from '@commander-js/extra-typings';
 import {
     aggregateBatchVerdicts,
     anchorQualify,
+    type CheckFindings,
     CorpusMigrator,
     DependencyMutationError,
     DuplicateFollowUpError,
@@ -540,12 +541,19 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                                         'Restore the bundled task-lifecycle workflow to re-enable the real guard.',
                                 );
                             }
-                            const ok = await runDoneGateCheck(context, wbs, options.folder, status);
-                            if (!ok) {
+                            const gate = await runDoneGateCheck(context, wbs, options.folder, status);
+                            if (!gate.pass) {
+                                // 0808 R3: name the target-status probe (`--as <status>`) and
+                                // list its error findings — a bare "check failed" reads as a
+                                // contradiction when the plain current-status check passes.
+                                const errors = gate.findings.filter((f) => f.severity === 'error');
+                                const listed = (errors.length > 0 ? errors : gate.findings)
+                                    .map((f) => `${f.code}${f.section === '' ? '' : ` [${f.section}]`}: ${f.message}`)
+                                    .join('; ');
                                 writeJsonError(
                                     context.output,
                                     options,
-                                    `Lifecycle transition blocked: \`spur task check ${wbs}\` failed. Fix the findings before transitioning to ${status}.`,
+                                    `Lifecycle transition blocked: \`spur task check ${wbs} --as ${status}\` failed${listed === '' ? '' : ` — ${listed}`}. Fix the findings before transitioning to ${status}.`,
                                     'GUARD_DENIED',
                                 );
                                 context.setExitCode(1);
@@ -1704,13 +1712,13 @@ async function runDoneGateCheck(
     wbs: string,
     folderOverride: string | undefined,
     targetStatus: string,
-): Promise<boolean> {
+): Promise<{ pass: boolean; findings: CheckFindings[] }> {
     const planningFolders = await resolvePlanningFolders(context.fs);
     const foldersConfig = planningFolders.foldersConfig;
     const tasksDir = folderOverride ?? context.fs.resolve(foldersConfig.active_folder);
     const hit = await new TaskLocator({ fs: context.fs, tasksDir, foldersConfig }).findByWbs(wbs);
     if (!hit) {
-        return false; // missing task — let updateStatus throw the real error
+        return { pass: false, findings: [] }; // missing task — let updateStatus throw the real error
     }
     const svc = new TaskCheckService(context.fs, await loadSectionMatrix(context.cwd), await makeTaskLocator(context));
     // Default severity (not --strict, not --strict-core) — hard-core L3/L2-gate
@@ -1720,7 +1728,7 @@ async function runDoneGateCheck(
         asStatus: targetStatus,
         severityOverrides: planningFolders.severityOverrides,
     });
-    return result.pass;
+    return { pass: result.pass, findings: result.findings };
 }
 /**
  * Load the Section-Status-Matrix (design §3.2, R2) — the SOLE section authority
