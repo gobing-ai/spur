@@ -3,6 +3,8 @@ import type { Job } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor, type ProcessExecutor, type ProcessResult } from '@gobing-ai/ts-runtime';
 import {
     handleSchedulerCustomJob,
+    isTimeoutResult,
+    resolveSchedulerCustomTimeoutMs,
     SCHEDULER_CUSTOM_JOB,
     SCHEDULER_CUSTOM_TIMEOUT_MS,
     validateSchedulerCustomJobPayload,
@@ -105,7 +107,7 @@ describe('handleSchedulerCustomJob (task 0734 R6)', () => {
         });
     });
 
-    test('an explicit timeoutMs overrides the one-hour default', async () => {
+    test('an explicit timeoutMs overrides the ten-minute default', async () => {
         const { executor, runs } = fakeExecutor({});
         await handleSchedulerCustomJob(
             { cwd: '/proj', executor, timeoutMs: 5_000 },
@@ -187,5 +189,68 @@ describe('handleSchedulerCustomJob (task 0734 R6)', () => {
         await expect(handleSchedulerCustomJob(deps, jobOf({ name: 'smoke-fail', command: 'exit 7' }))).rejects.toThrow(
             'scheduler job "smoke-fail" exited 7',
         );
+    });
+});
+
+describe('resolveSchedulerCustomTimeoutMs (task 0803 R1)', () => {
+    test('defaults to 600000ms — ten minutes, not the one-hour default that wedged the daemon', () => {
+        expect(SCHEDULER_CUSTOM_TIMEOUT_MS).toBe(600_000);
+        expect(resolveSchedulerCustomTimeoutMs({})).toBe(600_000);
+    });
+
+    test('parses a positive integer SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS override', () => {
+        expect(resolveSchedulerCustomTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: '5000' })).toBe(5_000);
+    });
+
+    test('falls back to the default for empty, non-numeric, zero, negative, or fractional values', () => {
+        const env = { SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: '  ' };
+        expect(resolveSchedulerCustomTimeoutMs(env)).toBe(600_000);
+        expect(resolveSchedulerCustomTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: 'abc' })).toBe(600_000);
+        expect(resolveSchedulerCustomTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: '0' })).toBe(600_000);
+        expect(resolveSchedulerCustomTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: '-5' })).toBe(600_000);
+        expect(resolveSchedulerCustomTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: '3.5' })).toBe(600_000);
+    });
+});
+
+describe('isTimeoutResult classification (task 0803 R1)', () => {
+    const pr = (partial: Partial<ProcessResult>): ProcessResult => ({
+        command: 'x',
+        args: [],
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+        durationMs: 0,
+        ...partial,
+    });
+
+    test('a kill at or beyond the deadline is classified as timed out', () => {
+        expect(isTimeoutResult(pr({ exitCode: null, signal: 'SIGKILL', durationMs: 5_000 }), 5_000)).toBe(true);
+    });
+
+    test('a kill before the deadline is not classified as timed out (external kill stays generic)', () => {
+        expect(isTimeoutResult(pr({ exitCode: null, signal: 'SIGTERM', durationMs: 4_999 }), 5_000)).toBe(false);
+        expect(isTimeoutResult(pr({ exitCode: 2, signal: undefined, durationMs: 9_999 }), 5_000)).toBe(false);
+    });
+
+    test('the handler labels the deadline kill in the error and keeps the detail tail', async () => {
+        const { executor } = fakeExecutor({
+            exitCode: null,
+            signal: 'SIGKILL',
+            durationMs: 5_000,
+            stderr: 'partial output',
+        });
+        await expect(
+            handleSchedulerCustomJob({ cwd: '/proj', executor, timeoutMs: 5_000 }, jobOf({ name: 'n', command: 'x' })),
+        ).rejects.toThrow('scheduler job "n" timed out after 5000ms (killed): partial output');
+    });
+
+    test('a sub-deadline kill keeps the generic terminated message (not a timeout)', async () => {
+        const { executor } = fakeExecutor({ exitCode: null, signal: 'SIGTERM', durationMs: 4_999 });
+        const err = (await handleSchedulerCustomJob(
+            { cwd: '/proj', executor, timeoutMs: 5_000 },
+            jobOf({ name: 'n', command: 'x' }),
+        ).catch((e: unknown) => e)) as Error;
+        expect(err.message).toContain('terminated before a normal exit (SIGTERM)');
+        expect(err.message).not.toContain('timed out');
     });
 });

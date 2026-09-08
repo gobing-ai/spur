@@ -73,3 +73,23 @@ describe('maintainDatabase', () => {
         await db.close();
     });
 });
+
+describe('maintainDatabase checkpoint mode (task 0803 R2)', () => {
+    test('maintain keeps the TRUNCATE checkpoint — the manual path may reclaim the WAL fully', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        const execSql: string[] = [];
+        const originalExec = db.exec.bind(db);
+        db.exec = async (sql: string) => {
+            execSql.push(sql);
+            return originalExec(sql);
+        };
+        try {
+            const result = await maintainDatabase(db);
+            expect(result.checkpointed).toBe(true);
+            expect(execSql.some((sql) => sql.includes('wal_checkpoint(TRUNCATE)'))).toBe(true);
+            expect(execSql.some((sql) => sql.includes('PASSIVE'))).toBe(false);
+        } finally {
+            await db.close();
+        }
+    });
+});

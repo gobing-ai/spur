@@ -15,6 +15,7 @@ import {
     resolveAutostartSet,
     resolvePlanningFolders,
     resolveRetentionQuotas,
+    resolveSchedulerCustomTimeoutMs,
     SCHEDULER_CUSTOM_JOB,
     type TaskActionJob,
 } from '@gobing-ai/spur-app';
@@ -25,7 +26,12 @@ import {
     loadStructuredSpurConfig,
     resolveConfigFile,
 } from '@gobing-ai/spur-config/loader';
-import { failOrphanedProcessingJobs, findActiveSchedulerCustomJob, SystemEventDao } from '@gobing-ai/spur-domain';
+import {
+    failOrphanedProcessingJobs,
+    failStaleSchedulerCustomJob,
+    findActiveSchedulerCustomJob,
+    SystemEventDao,
+} from '@gobing-ai/spur-domain';
 import type { ApplicationRuntime, ApplicationStopReason, SchedulerJobConfig } from '@gobing-ai/ts-infra/application';
 import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
@@ -127,6 +133,16 @@ export const defaultDeps: StartServerDeps = {
     resolveConfigFile,
 };
 
+/** Options for {@link registerSchedulerEntries} (task 0803 R4). */
+export interface SchedulerTickOptions {
+    /**
+     * The R1-resolved scheduler.custom child timeout in ms — the stale-processing sweep
+     * threshold. Defaults to the env-resolved value so standalone callers agree with the
+     * daemon boot resolution.
+     */
+    timeoutMs?: number;
+}
+
 /** Register built-in scheduled queue entries for the Bun serve runtime.
  * Each scheduled action emits `scheduler.job.executed` to the server EventBus
  * so the System Events tab surfaces scheduler activity alongside queue events.
@@ -135,12 +151,20 @@ export const defaultDeps: StartServerDeps = {
  * resolved by the upstream runtime. Each configured job registers one entry
  * using its cron string or `intervalMinutes * 60_000`, enqueuing
  * `scheduler.custom` with payload `{ name, command }`. An absent/empty jobs
- * array leaves the built-in registrations unchanged. */
+ * array leaves the built-in registrations unchanged.
+ *
+ * Task 0803 R3/R4: the tick enqueue carries `{ maxRetries: 1 }` so a failed
+ * attempt goes terminal instead of re-pending and suppressing later ticks, and
+ * a `processing` row older than `options.timeoutMs` is swept (failed in place,
+ * `swept: true` event) before a fresh job is enqueued on the same tick. */
 export function registerSchedulerEntries(
     scheduler: ServerScheduler,
     ctx: ServerContext,
     jobs: readonly SchedulerJobConfig[] = [],
+    options: SchedulerTickOptions = {},
 ): void {
+    const timeoutMs =
+        options.timeoutMs ?? resolveSchedulerCustomTimeoutMs(process.env as Record<string, string | undefined>);
     const registrations: SchedulerScheduleRegistration[] = [];
     const now = Date.now();
 
@@ -200,16 +224,42 @@ export function registerSchedulerEntries(
             const db = await ctx.getDb();
             const active = await findActiveSchedulerCustomJob(db, job.name);
             if (active !== undefined) {
-                ctx.eventBus().emit('scheduler.job.executed', {
-                    name: `${SCHEDULER_CUSTOM_JOB}:${job.name}`,
-                    durationMs: 0,
-                    severity: 'info',
-                    skipped: true,
-                    reason: `active job ${active.id} already exists`,
-                });
-                return;
+                // Task 0803 R4: a `processing` row older than the resolved timeout means the
+                // child was killed but the row never resolved (kill-delivery failure, handler
+                // wedge). Sweep it and enqueue a fresh job on this same tick — no daemon
+                // restart needed. Younger processing rows and any pending row keep the
+                // single-flight skip.
+                const now = Date.now();
+                const stale =
+                    active.status === 'processing' && now - (active.processingAt ?? active.updatedAt) > timeoutMs;
+                if (stale) {
+                    const reason = `watchdog: processing exceeded ${timeoutMs}ms`;
+                    const swept = await failStaleSchedulerCustomJob(db, active.id, now, reason);
+                    if (swept) {
+                        ctx.eventBus().emit('scheduler.job.executed', {
+                            name: `${SCHEDULER_CUSTOM_JOB}:${job.name}`,
+                            durationMs: 0,
+                            severity: 'info',
+                            swept: true,
+                            reason,
+                        });
+                    }
+                } else {
+                    ctx.eventBus().emit('scheduler.job.executed', {
+                        name: `${SCHEDULER_CUSTOM_JOB}:${job.name}`,
+                        durationMs: 0,
+                        severity: 'info',
+                        skipped: true,
+                        reason: `active job ${active.id} already exists`,
+                    });
+                    return;
+                }
             }
-            await queue.enqueue(SCHEDULER_CUSTOM_JOB, { name: job.name, command: job.command });
+            // Task 0803 R3: one attempt per enqueue — the default 3-attempt policy re-pends a
+            // failed row, and the single-flight lookup counts `pending` as active, so retries
+            // would suppress later ticks for the whole backoff window. The next tick is the
+            // natural retry for an idempotent periodic command.
+            await queue.enqueue(SCHEDULER_CUSTOM_JOB, { name: job.name, command: job.command }, { maxRetries: 1 });
         });
         registrations.push({
             name: job.name,
@@ -528,6 +578,11 @@ export async function startServer(options: StartServerOptions, deps: StartServer
 
             const app = deps.createApp(appRt, { fs, ctx });
 
+            // Task 0803 R1: the child watchdog timeout is resolved once at daemon boot and
+            // threads into both child-spawning queue handlers and the tick's stale-row
+            // sweep threshold, so env, kill deadline, and watchdog agree on one number.
+            const schedulerCustomTimeoutMs = resolveSchedulerCustomTimeoutMs(env);
+
             if (bootConfig.jobqueue.enabled) {
                 const registry = new JobHandlerRegistry();
                 // Scheduled per-prefix retention prune (task 0368 R2): every
@@ -554,6 +609,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                             // Omitted invocation fails loudly in splitLaunchCommand at run time.
                             invocation: options.spurInvocation ?? '',
                             executor: childExecutor,
+                            timeoutMs: schedulerCustomTimeoutMs,
                         },
                         job,
                     ),
@@ -562,7 +618,10 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 // scheduler only enqueues; the command runs here, in a child, under
                 // the queue's existing attempt/retry policy.
                 registry.register(SCHEDULER_CUSTOM_JOB, (job) =>
-                    handleSchedulerCustomJob({ cwd: ctx.cwd, executor: childExecutor }, job),
+                    handleSchedulerCustomJob(
+                        { cwd: ctx.cwd, executor: childExecutor, timeoutMs: schedulerCustomTimeoutMs },
+                        job,
+                    ),
                 );
                 // Startup sweep: fail orphaned `processing` jobs left by a prior server
                 // crash/restart. Without this, rows stuck in `processing` are never retried
@@ -586,7 +645,9 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 // scheduler plugin auto-starts (registration order: user callback
                 // runs before scheduler start — verified in ts-infra application
                 // tests). Configured jobs come only from the resolved runtime config.
-                registerSchedulerEntries(scheduler, ctx, appRt.config.scheduler.jobs);
+                registerSchedulerEntries(scheduler, ctx, appRt.config.scheduler.jobs, {
+                    timeoutMs: schedulerCustomTimeoutMs,
+                });
                 appRt.logger.info('Scheduler entries registered', { jobs: appRt.config.scheduler.jobs.length });
             }
 

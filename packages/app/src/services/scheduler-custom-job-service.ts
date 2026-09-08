@@ -1,5 +1,5 @@
 import type { Job } from '@gobing-ai/ts-infra';
-import type { ProcessExecutor } from '@gobing-ai/ts-runtime';
+import type { ProcessExecutor, ProcessResult } from '@gobing-ai/ts-runtime';
 
 /**
  * Configured scheduler command execution (task 0734).
@@ -37,10 +37,38 @@ export interface SchedulerCustomJobDeps {
 }
 
 /**
- * One hour — comfortably under the server queue's two-hour visibility timeout, so a hung
- * command fails its own attempt instead of being re-delivered while still running.
+ * Ten minutes (task 0803 R1) — ~6× the observed healthy `history daily` runtime (83–110s), and
+ * comfortably under the server queue's two-hour visibility timeout, so a hung command fails its
+ * own attempt instead of being re-delivered while still running. A wedged child is killed at the
+ * deadline (SIGTERM, then SIGKILL after the executor's grace) instead of pinning the shared
+ * SQLite write lock for an hour.
  */
-export const SCHEDULER_CUSTOM_TIMEOUT_MS = 3_600_000;
+export const SCHEDULER_CUSTOM_TIMEOUT_MS = 600_000;
+
+/**
+ * Resolve the scheduler.custom child timeout from the environment (task 0803 R1). Accepted:
+ * a positive integer number of milliseconds. Absent or invalid values fall back to
+ * {@link SCHEDULER_CUSTOM_TIMEOUT_MS} — a bad override must never disable the watchdog.
+ * Resolved once at daemon boot; follows the ad-hoc env convention (`SPUR_TEAM_AUTOSTART`,
+ * `SPUR_SKIP_GLOBAL_CONFIG`).
+ */
+export function resolveSchedulerCustomTimeoutMs(env: Record<string, string | undefined>): number {
+    const raw = env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS;
+    if (raw === undefined || raw.trim() === '') return SCHEDULER_CUSTOM_TIMEOUT_MS;
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : SCHEDULER_CUSTOM_TIMEOUT_MS;
+}
+
+/**
+ * Classify a child result as an executor-enforced timeout kill (task 0803 R1):
+ * no exit code (signaled) at or past the deadline. execa kills exactly at the deadline, so a
+ * non-timeout exit cannot overshoot it; an external kill past the deadline is conservatively
+ * labelled a timeout. (`ProcessResult` drops execa's `timedOut` flag — upstream facade fix
+ * deferred, so this comparison is the classification seam.)
+ */
+export function isTimeoutResult(result: ProcessResult, timeoutMs: number): boolean {
+    return result.exitCode === null && result.durationMs >= timeoutMs;
+}
 
 /** Output cap. Buffered, so an unbounded-output command cannot exhaust server memory. */
 const SCHEDULER_CUSTOM_MAX_OUTPUT = 1_000_000;
@@ -92,12 +120,13 @@ export async function handleSchedulerCustomJob(deps: SchedulerCustomJobDeps, job
         );
     }
     activeJobs.add(payload.name);
+    const timeoutMs = deps.timeoutMs ?? SCHEDULER_CUSTOM_TIMEOUT_MS;
     try {
         const result = await deps.executor.run({
             command: '/bin/sh',
             args: ['-c', payload.command],
             cwd: deps.cwd,
-            timeout: deps.timeoutMs ?? SCHEDULER_CUSTOM_TIMEOUT_MS,
+            timeout: timeoutMs,
             maxOutput: SCHEDULER_CUSTOM_MAX_OUTPUT,
             forceBuffered: true,
             // The handler owns the failure message so the command text stays out of it.
@@ -107,6 +136,9 @@ export async function handleSchedulerCustomJob(deps: SchedulerCustomJobDeps, job
         const detail = outputTail(result.stderr) || outputTail(result.stdout);
         if (result.exitCode === null) {
             const signalDetail = result.signal === undefined ? '' : ` (${result.signal})`;
+            if (isTimeoutResult(result, timeoutMs)) {
+                throw new Error(`scheduler job "${payload.name}" timed out after ${timeoutMs}ms (killed)${detail}`);
+            }
             throw new Error(`scheduler job "${payload.name}" terminated before a normal exit${signalDetail}${detail}`);
         }
         if (result.exitCode !== 0) {

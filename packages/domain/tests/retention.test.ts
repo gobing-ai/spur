@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMigratedDb, type DbAdapter } from '../src';
-import { runRetention } from '../src/retention';
+import { compactDatabase, runRetention } from '../src/retention';
 
 /** Fixed "now" so cutoffs are deterministic. */
 const NOW = new Date('2026-08-20T00:00:00Z');
@@ -166,5 +166,29 @@ describe('data retention (0622 R8)', () => {
         // pass (best-effort) and must report a consistent before/after size.
         expect(typeof result.compaction.ran).toBe('boolean');
         expect(result.compaction.bytesBefore).toBe(result.compaction.bytesAfter);
+    });
+});
+
+describe('compactDatabase WAL checkpoint mode (task 0803 R2)', () => {
+    test('compaction checkpoints PASSIVE — the periodic path never holds an exclusive checkpoint (TRUNCATE is maintain-only)', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        const execSql: string[] = [];
+        const originalExec = db.exec.bind(db);
+        db.exec = async (sql: string) => {
+            execSql.push(sql);
+            return originalExec(sql);
+        };
+        try {
+            const result = await compactDatabase(db, {
+                dbPath: join(tmpdir(), `spur-0803-passive-${Date.now()}.db`),
+                now: NOW,
+                estimateReclaim: async () => 10_000_000,
+            });
+            expect(result.ran).toBe(true);
+            expect(execSql).toContain('PRAGMA wal_checkpoint(PASSIVE)');
+            expect(execSql.some((sql) => sql.includes('TRUNCATE'))).toBe(false);
+        } finally {
+            await db.close();
+        }
     });
 });

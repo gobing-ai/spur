@@ -1329,3 +1329,83 @@ describe('HistoryService', () => {
         });
     });
 });
+
+describe('importAll bounded SQLITE_BUSY tolerance (task 0803 R3)', () => {
+    /** Scripted per-source failures at the public `import` seam — exercises the importAll
+     * BUSY-tolerance loop without real SQLite contention (tests are typechecked, so the
+     * override keeps the real signature). */
+    class ScriptedFailureHistoryService extends HistoryService {
+        private readonly failures: Map<string, string>;
+        readonly attempted: string[] = [];
+
+        constructor(ctx: HistoryServiceContext, failures: Map<string, string>) {
+            super(ctx);
+            this.failures = failures;
+        }
+
+        override async import(
+            source: string,
+            opts: { file?: string; root?: string; mode?: string; dryRun?: boolean } = {},
+        ): Promise<Awaited<ReturnType<HistoryService['import']>>> {
+            this.attempted.push(source);
+            const failure = this.failures.get(source);
+            if (failure !== undefined) throw new Error(failure);
+            return super.import(source, opts);
+        }
+    }
+
+    async function catchAsError(promise: Promise<unknown>): Promise<Error> {
+        try {
+            await promise;
+        } catch (e) {
+            return e as Error;
+        }
+        throw new Error('expected the promise to reject');
+    }
+
+    test('two consecutive busy-classified source failures abort the remaining sources', async () => {
+        const svc = new ScriptedFailureHistoryService(
+            makeCtx(),
+            new Map([
+                ['antigravity', 'SQLiteError: database is locked'],
+                ['claude', 'SQLITE_BUSY: database table is locked'],
+            ]),
+        );
+        const err = await catchAsError(
+            svc.importAll({ sources: ['antigravity', 'claude', 'codex'], mode: 'incremental', root: emptyRoot() }),
+        );
+        expect(err.message).toBe('history import aborted: sustained SQLITE_BUSY contention (2 consecutive sources)');
+        // codex was never attempted — the abort short-circuits the remaining fan-out.
+        expect(svc.attempted).toEqual(['antigravity', 'claude']);
+    });
+
+    test('a non-busy failure between busy failures resets the counter (B/N/B does not abort)', async () => {
+        const svc = new ScriptedFailureHistoryService(
+            makeCtx(),
+            new Map([
+                ['antigravity', 'SQLiteError: database is locked'],
+                ['codex', 'exploded: not a lock error'],
+                ['gemini', 'database is locked (SQLITE_BUSY)'],
+            ]),
+        );
+        const result = await svc.importAll({
+            sources: ['antigravity', 'codex', 'gemini'],
+            mode: 'incremental',
+            root: emptyRoot(),
+        });
+        expect(svc.attempted).toEqual(['antigravity', 'codex', 'gemini']);
+        expect(result.entries.map((e) => e.status)).toEqual(['failed', 'failed', 'failed']);
+        expect(result.exitCode).toBe(1); // all failed (0 ok/empty, 1 all failed, 2 mixed)
+    });
+
+    test('a single busy failure does not abort and a subsequent clean source still runs', async () => {
+        const svc = new ScriptedFailureHistoryService(makeCtx(), new Map([['antigravity', 'database is locked']]));
+        const result = await svc.importAll({
+            sources: ['antigravity', 'claude'],
+            mode: 'incremental',
+            root: emptyRoot(),
+        });
+        expect(svc.attempted).toEqual(['antigravity', 'claude']);
+        expect(result.entries.map((e) => e.status)).toEqual(['failed', 'empty']);
+    });
+});

@@ -5,6 +5,7 @@ import { enqueueCoalesced } from '@gobing-ai/spur-domain';
 import type { Job } from '@gobing-ai/ts-infra';
 import type { ProcessExecutor } from '@gobing-ai/ts-runtime';
 import { splitLaunchCommand } from '../workflow/split-launch-command';
+import { isTimeoutResult, SCHEDULER_CUSTOM_TIMEOUT_MS } from './scheduler-custom-job-service';
 
 /**
  * Completion-triggered history refresh (task 0549).
@@ -239,6 +240,12 @@ export interface HistoryRefreshJobDeps {
     invocation: string;
     /** Process seam — the real server wires `NodeProcessExecutor`. */
     executor: ProcessExecutor;
+    /**
+     * Child wall-clock timeout in ms (task 0803 R1). Defaults to
+     * `SCHEDULER_CUSTOM_TIMEOUT_MS`; the server resolves it once from
+     * `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` and threads the same value into both child handlers.
+     */
+    timeoutMs?: number;
 }
 
 /**
@@ -261,6 +268,9 @@ export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, job: 
     const payload = validateHistoryRefreshPayload(job.payload);
     const split = splitLaunchCommand(deps.invocation, 'history refresh "invocation"');
     if ('error' in split) throw new Error(split.error);
+    // Task 0803 R1: bound the child the same way scheduler.custom children are bounded —
+    // a wedged `history daily` holds the shared WAL write lock until killed.
+    const timeoutMs = deps.timeoutMs ?? SCHEDULER_CUSTOM_TIMEOUT_MS;
     const result = await deps.executor.run({
         command: split.command,
         // Human summary, not `--json`: the child's exit code is the whole success contract
@@ -269,6 +279,7 @@ export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, job: 
         // `--no-logo` keeps the startup banner off now that `--json` no longer suppresses it.
         args: [...split.leadingArgs, '--no-logo', 'history', 'daily'],
         cwd: deps.cwd,
+        timeout: timeoutMs,
         env: {
             [HISTORY_REFRESH_CONTEXT_ENV]: JSON.stringify(payload),
             ...(deps.databaseUrl !== undefined ? { DATABASE_URL: deps.databaseUrl } : {}),
@@ -279,6 +290,9 @@ export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, job: 
     // summary reports the failing sources on stdout, so it leads; stderr is the fallback.
     const stderrDetail = outputTail(result.stderr);
     if (result.exitCode === null) {
+        if (isTimeoutResult(result, timeoutMs)) {
+            throw new Error(`history refresh child timed out after ${timeoutMs}ms (killed)${stderrDetail}`);
+        }
         const signalDetail = result.signal === undefined ? '' : ` (${result.signal})`;
         throw new Error(`history refresh child terminated before a normal exit${signalDetail}${stderrDetail}`);
     }

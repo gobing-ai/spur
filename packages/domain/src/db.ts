@@ -60,7 +60,13 @@ export async function createMigratedDbViaRuntime(config: DatabaseConfig): Promis
     // because the typed pragmas option only accepts journalMode/synchronous/
     // foreignKeys — the runtime constructor only applies those three.)
     await runtimeAdapter.exec(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+    // SAFETY: the runtime factory's Bun/Node adapter implements the full ts-db DbAdapter
+    // surface; its declared factory return type is the narrower runtime subset, so the
+    // widening cast is a static-superset claim exercised immediately below —
+    // applyCliMigrations drives every migrated table through the adapter.
     await applyCliMigrations(runtimeAdapter as unknown as DbAdapter);
+    // SAFETY: same widening as the applyCliMigrations call above — migrations just ran
+    // through this adapter, so it is the full DbAdapter surface by construction.
     return runtimeAdapter as unknown as DbAdapter;
 }
 
@@ -275,9 +281,17 @@ export async function enqueueCoalesced(db: DbAdapter, spec: CoalescedEnqueueSpec
             )
             .then((row) => row ?? undefined);
 
-    const parsePayload = (raw: string): unknown => {
+    /** A `queue_jobs.payload` document read back: parsed JSON when valid, else the raw string. */
+    type ParsedQueueJobPayload =
+        | string
+        | number
+        | boolean
+        | null
+        | ParsedQueueJobPayload[]
+        | { [key: string]: ParsedQueueJobPayload };
+    const parsePayload = (raw: string): ParsedQueueJobPayload => {
         try {
-            return JSON.parse(raw) as unknown;
+            return JSON.parse(raw) as ParsedQueueJobPayload;
         } catch {
             return raw;
         }
@@ -637,20 +651,69 @@ export async function queryScheduleLastExecution(
 }
 
 /**
- * Single-flight lookup for a configured `scheduler.custom` job: returns the id of
- * an active (pending/processing) row for the named job, or `undefined` when none
- * is active. A scheduler tick uses this to skip enqueueing behind its own
- * still-running predecessor instead of piling duplicate rows onto the queue.
+ * Single-flight lookup for a configured `scheduler.custom` job: returns an active
+ * (pending/processing) row for the named job, or `undefined` when none is active. A scheduler
+ * tick uses this to skip enqueueing behind its own still-running predecessor instead of piling
+ * duplicate rows onto the queue. Task 0803 R4 adds `status`/`processingAt`/`updatedAt` so the
+ * tick can tell a healthy in-flight row from a stale `processing` row (watchdog sweep) without
+ * a second query.
  */
-export async function findActiveSchedulerCustomJob(db: DbAdapter, name: string): Promise<{ id: string } | undefined> {
-    const row = await db.queryFirst<{ id: string }>(
-        `SELECT id FROM queue_jobs
+export async function findActiveSchedulerCustomJob(
+    db: DbAdapter,
+    name: string,
+): Promise<ActiveSchedulerCustomJob | undefined> {
+    const row = await db.queryFirst<{
+        id: string;
+        status: 'pending' | 'processing';
+        processing_at: number | null;
+        updated_at: number;
+    }>(
+        `SELECT id, status, processing_at, updated_at FROM queue_jobs
          WHERE type = 'scheduler.custom' AND status IN ('pending', 'processing')
            AND json_extract(payload, '$.name') = ?
          LIMIT 1`,
         name,
     );
-    return row ?? undefined;
+    if (!row) return undefined;
+    return { id: row.id, status: row.status, processingAt: row.processing_at, updatedAt: row.updated_at };
+}
+
+/** Active `scheduler.custom` row shape returned by {@link findActiveSchedulerCustomJob} (task 0803 R4). */
+export interface ActiveSchedulerCustomJob {
+    id: string;
+    status: 'pending' | 'processing';
+    /** When the row was claimed for processing; null while merely pending. */
+    processingAt: number | null;
+    /** Last status transition time (epoch ms). */
+    updatedAt: number;
+}
+
+/**
+ * Fail a single stale `processing` `scheduler.custom` row (task 0803 R4). The tick-side
+ * watchdog: when the owning child was killed but the row never resolved (kill-delivery
+ * failure, handler wedge), the next tick of the same job name fails the row in place and a
+ * fresh job is enqueued — no daemon restart required (`failOrphanedProcessingJobs` is
+ * startup-only). The `status = 'processing'` guard leaves a row that completed between the
+ * tick's read and this update untouched.
+ *
+ * @returns whether a row was flipped to `failed`.
+ */
+export async function failStaleSchedulerCustomJob(
+    db: DbAdapter,
+    id: string,
+    now: number,
+    reason: string,
+): Promise<boolean> {
+    await db.run(
+        `UPDATE queue_jobs
+         SET status = 'failed', last_error = ?, processing_at = NULL, updated_at = ?
+         WHERE id = ? AND status = 'processing'`,
+        reason,
+        now,
+        id,
+    );
+    const changed = await db.queryFirst<{ n: number }>('SELECT changes() AS n');
+    return (changed?.n ?? 0) > 0;
 }
 
 /**

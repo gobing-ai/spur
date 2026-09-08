@@ -12,6 +12,7 @@ import {
     dbHealthCheck,
     enqueueCoalesced,
     failOrphanedProcessingJobs,
+    failStaleSchedulerCustomJob,
     findActiveSchedulerCustomJob,
     findPendingQueueJob,
     SQLITE_BUSY_TIMEOUT_MS,
@@ -765,13 +766,20 @@ describe('findPendingQueueJob / updatePendingQueueJob', () => {
 });
 
 describe('findActiveSchedulerCustomJob', () => {
-    const insertCustomJob = (db: DbAdapter, id: string, name: string, status: string) =>
+    const insertCustomJob = (
+        db: DbAdapter,
+        id: string,
+        name: string,
+        status: string,
+        processingAt: number | null = null,
+    ) =>
         db.run(
-            `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, next_retry_at)
-             VALUES (?, 'scheduler.custom', ?, ?, 0, 3, 1000, 1000, NULL)`,
+            `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, next_retry_at, processing_at)
+             VALUES (?, 'scheduler.custom', ?, ?, 0, 3, 1000, 1000, NULL, ?)`,
             id,
             JSON.stringify({ name, command: 'true' }),
             status,
+            processingAt,
         );
 
     test('returns undefined when no active row exists for the name', async () => {
@@ -791,7 +799,7 @@ describe('findActiveSchedulerCustomJob', () => {
         try {
             await insertCustomJob(db, 'pending-1', 'history-refresh', 'pending');
             const found = await findActiveSchedulerCustomJob(db, 'history-refresh');
-            expect(found).toEqual({ id: 'pending-1' });
+            expect(found).toEqual({ id: 'pending-1', status: 'pending', processingAt: null, updatedAt: 1000 });
         } finally {
             db.close();
         }
@@ -800,9 +808,79 @@ describe('findActiveSchedulerCustomJob', () => {
     test('returns the id of a processing row matching the name', async () => {
         const db = await createMigratedDb({ url: ':memory:' });
         try {
-            await insertCustomJob(db, 'running-1', 'history-refresh', 'processing');
+            await insertCustomJob(db, 'running-1', 'history-refresh', 'processing', 1500);
             const found = await findActiveSchedulerCustomJob(db, 'history-refresh');
-            expect(found).toEqual({ id: 'running-1' });
+            expect(found).toEqual({ id: 'running-1', status: 'processing', processingAt: 1500, updatedAt: 1000 });
+        } finally {
+            db.close();
+        }
+    });
+});
+
+describe('failStaleSchedulerCustomJob (task 0803 R4)', () => {
+    const insertProcessingJob = (db: DbAdapter, id: string, status = 'processing') =>
+        db.run(
+            `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, processing_at)
+             VALUES (?, 'scheduler.custom', '{"name":"history-refresh"}', ?, 0, 1, 1000, 1000, 1500)`,
+            id,
+            status,
+        );
+
+    test('flips a stale processing row to failed with the watchdog reason and clears processing_at', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await insertProcessingJob(db, 'stale-1');
+            const swept = await failStaleSchedulerCustomJob(
+                db,
+                'stale-1',
+                9000,
+                'watchdog: processing exceeded 600000ms',
+            );
+            expect(swept).toBe(true);
+            const row = await db.queryFirst<{
+                status: string;
+                last_error: string | null;
+                processing_at: number | null;
+                updated_at: number;
+            }>("SELECT status, last_error, processing_at, updated_at FROM queue_jobs WHERE id = 'stale-1'");
+            expect(row?.status).toBe('failed');
+            expect(row?.last_error).toBe('watchdog: processing exceeded 600000ms');
+            expect(row?.processing_at).toBeNull();
+            expect(row?.updated_at).toBe(9000);
+        } finally {
+            db.close();
+        }
+    });
+
+    test('returns false and leaves the row untouched when it completed between read and update', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await insertProcessingJob(db, 'done-1', 'completed');
+            const swept = await failStaleSchedulerCustomJob(
+                db,
+                'done-1',
+                9000,
+                'watchdog: processing exceeded 600000ms',
+            );
+            expect(swept).toBe(false);
+            const row = await db.queryFirst<{ status: string; last_error: string | null; updated_at: number }>(
+                "SELECT status, last_error, updated_at FROM queue_jobs WHERE id = 'done-1'",
+            );
+            expect(row?.status).toBe('completed');
+            expect(row?.last_error).toBeNull();
+            expect(row?.updated_at).toBe(1000);
+        } finally {
+            db.close();
+        }
+    });
+
+    test('returns false for a pending row id (status guard)', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await insertProcessingJob(db, 'queued-1', 'pending');
+            expect(await failStaleSchedulerCustomJob(db, 'queued-1', 9000, 'watchdog')).toBe(false);
+            const row = await db.queryFirst<{ status: string }>("SELECT status FROM queue_jobs WHERE id = 'queued-1'");
+            expect(row?.status).toBe('pending');
         } finally {
             db.close();
         }

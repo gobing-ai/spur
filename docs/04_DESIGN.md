@@ -803,6 +803,19 @@ MIN/MAX message `ts` the analyze covered (`{ since, until }`) so a reader can te
 without inspecting the database. A failed full-fidelity source drops out of `refreshed` (surfaced via
 `fanOut`/exit code) rather than being silently counted as refreshed.
 
+**Bounded `SQLITE_BUSY` tolerance (task 0803 R3).** The `importAll` fan-out classifies each
+per-source failure against `/database is locked|SQLITE_BUSY/i`; **two consecutive** busy-classified
+failures abort the remaining sources with `history import aborted: sustained SQLITE_BUSY contention
+(<n> consecutive sources)`, because a shared WAL write lock that busy-times out repeatedly will not
+recover mid-fan-out and every later source would only burn its own timeout. Any non-busy outcome —
+success, empty, or a different failure — resets the counter, and a lone busy failure still degrades
+to that source's `source-failed` warning under the usual per-source isolation.
+
+**Passive WAL checkpoint (task 0803 R2).** The retention pass inside `daily` checkpoints the WAL
+with `PRAGMA wal_checkpoint(PASSIVE)` after compaction — never `TRUNCATE`, which takes an exclusive
+lock and would block every other writer for the checkpoint's duration. Full WAL truncation stays on
+the manual `spur self maintain` path, where the operator explicitly accepts the exclusive-lock cost.
+
 **`--mode <name>` (task 0555 R4) is a pure pass-through:** when set, `daily` additionally writes a
 `.md` sidecar next to the artifact rendered in that report mode (`reportPath` in `DailyResult`,
 `report:` line in the human output). The mode is validated up front — an unknown name fails before
@@ -1206,6 +1219,10 @@ standalone server resolves the source-local CLI or its sibling compiled `dist/cl
 refresh producers share `max_retries = 3`; this intentionally replaces the old scheduler-only value of 1.
 The server queue visibility timeout is two hours because `history daily` can spend ten minutes on each
 of six sequential sources before analysis; the generic 30-second default would duplicate a live child.
+A watchdog additionally bounds each child at the daemon-resolved `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS`
+(default 600,000 ms, shared with the `scheduler.custom` handler; task 0803 R1) — a kill at the
+deadline is labeled `timed out after <n>ms (killed)` — so a wedged child can no longer hold the
+queue row, and the WAL write lock its imports take, for the full visibility window.
 
 **Failure policy.** A degraded fan-out (per-source failures) emits `history.daily.failed` and does
 **not** rethrow — the refresh is idempotent (checkpoint resume) and the next completion re-triggers
@@ -1276,7 +1293,7 @@ Scaffold BDD `test.todo` stubs from task Acceptance Criteria into `<workspace>/t
 | `spur serve [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]` | Start the web server (local fallback) and serve the Spur Board SPA when static assets resolve. Options: `--port` (env PORT, default 3000), `--host` (env HOST, default localhost), `--no-open` skip browser, `--json` print {port,url,pid}. Board assets ship in the npm package as `web/` next to `spur.js` (`resolveWebDistPath`); without them `/board` returns JSON 404 and the server logs a warning. Hidden alias — canonical: `spur self serve`. |
 | `spur projects [add                                                           | remove                                                                                                                                                                                                                                                                                                                                                                                                     | list | start | stop] [args] [--json]` | Multi-project registry management: `add <path>` registers project, `remove <target>` unregisters, `list` shows registered projects and health status, `start <target>` spawns server on allocated port, `stop <target>` stops server process. `--json` shapes for scripting. |
 | `spur migrate [--json]`                                                       | Temporary helper: apply CLI-owned schema migrations; reports `{ ok, applied }`. Hidden alias — canonical: `spur self migrate`. |
-| `spur maintain [--vacuum] [--json]`                                           | Run database maintenance: PRAGMA optimize, WAL truncation, optional VACUUM compaction. Hidden alias — canonical: `spur self maintain`. |
+| `spur maintain [--vacuum] [--json]`                                           | Run database maintenance: PRAGMA optimize, WAL truncation, optional VACUUM compaction. Hidden alias — canonical: `spur self maintain`. The `TRUNCATE` checkpoint is manual-path only; the periodic retention path checkpoints `PASSIVE` (task 0803 R2). |
 
 | `spur --help` / `spur --version` | Commander-rendered usage / binary version (ADR-014). |
 
@@ -1973,11 +1990,17 @@ or a log line — only the job `name` is. Spur adds no per-job `cwd`, `env`, `en
 concurrency knob; a job that needs those wraps them in the script it invokes.
 
 **Execution bounds** (`handleSchedulerCustomJob`): buffered output capped at 1,000,000 bytes, a
-3,600,000 ms timeout (deliberately under the server queue's two-hour visibility timeout so the
-queue never reclaims a still-running command), and the child's exit code as the only success
-verdict. A non-zero exit, signal, or spawn failure throws an error naming the job plus at most the
-final 400 characters of stderr (stdout only when stderr is empty), so retry and failure records
-carry bounded, non-secret detail.
+watchdog timeout of 600,000 ms — overridable per environment via `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS`
+(positive-integer milliseconds; anything else falls back to the default), deliberately under the
+server queue's two-hour visibility timeout so the queue never reclaims a still-running command —
+and the child's exit code as the only success verdict. A non-zero exit, signal, or spawn failure
+throws an error naming the job plus at most the final 400 characters of stderr (stdout only when
+stderr is empty), so retry and failure records carry bounded, non-secret detail. A kill at or
+beyond the resolved deadline (`exitCode === null` with `durationMs >= timeoutMs`, the shared
+`isTimeoutResult` classifier in `packages/app`) is labeled `timed out after <n>ms (killed)` in the
+error, so a wedged child is distinguishable from an externally signaled one; the same resolved
+timeout bounds the `history daily` child (`handleHistoryRefreshJob`) so both periodic paths share
+one number per daemon.
 
 **Observability — enqueue vs. attempt.** The two are separate on purpose and reuse existing events:
 
@@ -1986,9 +2009,17 @@ carry bounded, non-secret detail.
 | `scheduler.job.executed` (name `scheduler.custom:<name>`) | the scheduler tick    | the tick fired and enqueued (or failed to) |
 | `queue.job.completed` / `.retrying` / `.failed`           | the queue consumer    | one execution **attempt** of the command |
 
-A tick is a normal non-coalesced enqueue of `scheduler.custom` with payload `{ name, command }`, so
-it inherits the queue's default three-total-attempt policy. No new table, column, event name, API
-route, or UI component: the Jobs tab and System Events already render both families.
+A tick is a normal non-coalesced enqueue of `scheduler.custom` with payload `{ name, command }` and
+`maxRetries: 1` (task 0803 R3): one attempt per enqueue, and a failed attempt goes terminal instead
+of re-pending — a `pending` row counts as active in the single-flight lookup, so queue-level
+retries would suppress later ticks for the whole backoff window. The next tick is the retry for an
+idempotent periodic command. The same tick sweeps a wedged row (task 0803 R4): a `processing` row
+whose `processing_at` (falling back to `updated_at`) is older than the resolved timeout is failed
+in place by `failStaleSchedulerCustomJob` (guarded `status = 'processing'` update, reported via a
+`swept: true` `scheduler.job.executed` event) and a fresh job is enqueued on that same tick — no
+daemon restart needed. Younger processing rows and any pending row keep the single-flight skip.
+No new table, column, event name, API route, or UI component: the Jobs tab and System Events
+already render both families.
 
 ## 6. Plugin System (Removed — ADR-012 amended 2026-06-09)
 

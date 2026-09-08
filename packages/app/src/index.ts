@@ -358,6 +358,8 @@ export type {
 } from './services/scheduler-custom-job-service';
 export {
     handleSchedulerCustomJob,
+    isTimeoutResult,
+    resolveSchedulerCustomTimeoutMs,
     SCHEDULER_CUSTOM_JOB,
     SCHEDULER_CUSTOM_TIMEOUT_MS,
     validateSchedulerCustomJobPayload,

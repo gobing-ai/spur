@@ -3,6 +3,7 @@ export * from './analytics';
 export * from './bdd';
 export * from './dao';
 export {
+    type ActiveSchedulerCustomJob,
     type CoalescedEnqueueResult,
     type CoalescedEnqueueSpec,
     type CreateDomainDbOptions,
@@ -15,6 +16,7 @@ export {
     dbHealthCheck,
     enqueueCoalesced,
     failOrphanedProcessingJobs,
+    failStaleSchedulerCustomJob,
     findActiveSchedulerCustomJob,
     findPendingQueueJob,
     type JobQueue,

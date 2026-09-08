@@ -409,6 +409,15 @@ const MODES: readonly ImportMode[] = ['full', 'incremental', 'force-file'];
 const MAX_ERROR_SAMPLES = 20;
 /** Per-source import timeout default (10 minutes, task 0470 R5). */
 const DEFAULT_SOURCE_TIMEOUT_MS = 600_000;
+/**
+ * Task 0803 R3: after this many CONSECUTIVE busy-classified source failures, `importAll`
+ * aborts the remaining sources and throws instead of letting each one burn its own
+ * 30s `busy_timeout` against a locked writer — the daily path fails fast and the
+ * next refresh tick is the natural retry.
+ */
+const HISTORY_BUSY_ABORT_THRESHOLD = 2;
+/** Matches the per-source failure detail of a SQLite write-lock timeout (task 0803 R3). */
+const HISTORY_BUSY_ERROR_PATTERN = /database is locked|SQLITE_BUSY/i;
 /** Report retention window for the daily prune (task 0470 R6). */
 const REPORT_RETENTION_DAYS = 90;
 
@@ -829,6 +838,8 @@ export class HistoryService {
         const entries: CoverageEntry[] = [];
         const warnings: ArtifactWarning[] = [];
         const attribution = emptyAttributionSummary();
+        // Task 0803 R3: consecutive busy-classified source failures (see loop below).
+        let consecutiveBusySources = 0;
         // F9: stamp the run start so per-source tool-call counts reflect only rows this
         // run imported (existing rows from prior runs never inflate the count). Dry-run
         // writes nothing, so its counts stay legitimately 0.
@@ -850,6 +861,23 @@ export class HistoryService {
                 attribution.linksAlreadyPresent += sourceAttribution.linksAlreadyPresent;
                 attribution.skippedEvidence += sourceAttribution.skippedEvidence;
                 attribution.ambiguousEvidence += sourceAttribution.ambiguousEvidence;
+            }
+            // Task 0803 R3: bounded BUSY tolerance. Two consecutive busy-classified failures
+            // mean a live writer holds the WAL write lock — continuing only queues more 30s
+            // waits behind it, so abort the remaining sources and fail the run fast. Any
+            // non-busy outcome (success, empty, non-lock failure) resets the counter.
+            if (
+                coverageEntry.status === 'failed' &&
+                sourceWarnings.some((w) => w.code === 'source-failed' && HISTORY_BUSY_ERROR_PATTERN.test(w.detail))
+            ) {
+                consecutiveBusySources += 1;
+                if (consecutiveBusySources >= HISTORY_BUSY_ABORT_THRESHOLD) {
+                    throw new Error(
+                        `history import aborted: sustained SQLITE_BUSY contention (${consecutiveBusySources} consecutive sources)`,
+                    );
+                }
+            } else {
+                consecutiveBusySources = 0;
             }
         }
 

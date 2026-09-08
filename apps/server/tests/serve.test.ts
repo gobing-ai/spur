@@ -883,6 +883,221 @@ describe('startServer', () => {
         expect(String(skipPayload?.reason)).toContain('existing-active-1');
     });
 
+    test('registerSchedulerEntries sweeps a stale processing row and re-enqueues with maxRetries 1 (task 0803 R3/R4)', async () => {
+        const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+        const enqueued: Array<{ type: string; payload: unknown; options?: unknown }> = [];
+        const emitted: Array<{ name: string; payload: unknown }> = [];
+        const updates: Array<{ sql: string; params: unknown[] }> = [];
+        const scheduler = {
+            register: (cron: string, action: () => Promise<void>) => {
+                registered.push({ cron, action });
+            },
+            start: async () => {},
+            stop: async () => {},
+        };
+        const ctx = {
+            jobQueue: async () => ({
+                enqueue: async (type: string, payload: unknown, options?: unknown) => {
+                    enqueued.push({ type, payload, options });
+                    return `${type}-id`;
+                },
+            }),
+            // A processing row whose activity is far older than the 60000ms threshold.
+            getDb: async () => ({
+                queryFirst: async (sql: string, ...params: unknown[]) => {
+                    if (sql.includes('scheduler.custom') && params[0] === 'history-refresh') {
+                        return { id: 'stale-1', status: 'processing', processing_at: 1000, updated_at: 1000 };
+                    }
+                    if (sql.includes('changes()')) return { n: 1 };
+                    return undefined;
+                },
+                run: async (sql: string, ...params: unknown[]) => {
+                    updates.push({ sql, params });
+                },
+            }),
+            eventBus: () => ({
+                emit: (name: string, payload: unknown) => {
+                    emitted.push({ name, payload });
+                },
+            }),
+        } as unknown as ServerContext;
+
+        registerSchedulerEntries(
+            scheduler,
+            ctx,
+            [{ name: 'history-refresh', cron: '*/15 7-23 * * *', command: 'bun apps/cli/src/index.ts history daily' }],
+            { timeoutMs: 60_000 },
+        );
+        await registered[2]?.action();
+
+        // The stale row was failed in place with the watchdog reason.
+        expect(updates).toHaveLength(1);
+        expect(String(updates[0]?.params[0])).toContain('watchdog: processing exceeded 60000ms');
+        expect(updates[0]?.sql).toContain('processing_at = NULL');
+        // The same tick enqueues a fresh job, with ONE attempt — not the default retry policy.
+        expect(enqueued).toEqual([
+            {
+                type: SCHEDULER_CUSTOM_JOB,
+                payload: { name: 'history-refresh', command: 'bun apps/cli/src/index.ts history daily' },
+                options: { maxRetries: 1 },
+            },
+        ]);
+        const swept = emitted.map((e) => e.payload as Record<string, unknown>).find((p) => p.swept === true);
+        expect(swept?.name).toBe(`${SCHEDULER_CUSTOM_JOB}:history-refresh`);
+        expect(swept?.severity).toBe('info');
+        expect(String(swept?.reason)).toContain('watchdog');
+    });
+
+    test('registerSchedulerEntries keeps the single-flight skip for a young processing row (task 0803 R4)', async () => {
+        const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+        const enqueued: Array<{ type: string; payload: unknown }> = [];
+        const emitted: Array<{ name: string; payload: unknown }> = [];
+        const updates: Array<{ sql: string; params: unknown[] }> = [];
+        const scheduler = {
+            register: (cron: string, action: () => Promise<void>) => {
+                registered.push({ cron, action });
+            },
+            start: async () => {},
+            stop: async () => {},
+        };
+        const now = Date.now();
+        const ctx = {
+            jobQueue: async () => ({
+                enqueue: async (type: string, payload: unknown) => {
+                    enqueued.push({ type, payload });
+                    return `${type}-id`;
+                },
+            }),
+            getDb: async () => ({
+                queryFirst: async (sql: string, ...params: unknown[]) => {
+                    if (sql.includes('scheduler.custom') && params[0] === 'history-refresh') {
+                        return { id: 'live-1', status: 'processing', processing_at: now, updated_at: now };
+                    }
+                    if (sql.includes('changes()')) return { n: 1 };
+                    return undefined;
+                },
+                run: async (sql: string, ...params: unknown[]) => {
+                    updates.push({ sql, params });
+                },
+            }),
+            eventBus: () => ({
+                emit: (name: string, payload: unknown) => {
+                    emitted.push({ name, payload });
+                },
+            }),
+        } as unknown as ServerContext;
+
+        registerSchedulerEntries(
+            scheduler,
+            ctx,
+            [{ name: 'history-refresh', cron: '*/15 7-23 * * *', command: 'bun apps/cli/src/index.ts history daily' }],
+            { timeoutMs: 60_000 },
+        );
+        await registered[2]?.action();
+
+        expect(updates).toEqual([]); // no sweep — the row is younger than the threshold
+        expect(enqueued).toEqual([]); // and single-flight still suppresses the enqueue
+        const skipPayload = emitted.map((e) => e.payload as Record<string, unknown>).find((p) => p.skipped === true);
+        expect(String(skipPayload?.reason)).toContain('live-1');
+    });
+
+    test('SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS resolves once at boot and bounds both child handlers (task 0803 R1)', async () => {
+        const { sigHandlers, exitCalled } = installProcessMocks();
+        const order: string[] = [];
+
+        Bun.serve = (() => ({
+            stop: () => {
+                order.push('server.stop');
+            },
+        })) as unknown as typeof Bun.serve;
+
+        const registeredHandlers: Record<string, (payload?: unknown) => Promise<void>> = {};
+        const queueConsumer = {
+            register: (type: string, handler: (payload?: unknown) => Promise<void>) => {
+                registeredHandlers[type] = handler;
+            },
+            start: async () => {
+                order.push('worker.start');
+            },
+            stop: async () => {
+                order.push('worker.stop');
+            },
+            stats: async () => ({ pending: 0, processing: 0, completed: 0, failed: 0 }),
+            processOnce: async () => 0,
+        };
+
+        const deps = makeDeps({
+            serverBootstrapConfig: () => ({
+                logging: { enabled: false, level: 'info' as const, console: false },
+                telemetry: { enabled: false },
+                events: { enabled: false, diagnostic: false },
+                jobqueue: { enabled: true },
+                scheduler: { enabled: true },
+                teamAutostart: [],
+            }),
+            createServerContext: (() =>
+                ({
+                    queueConsumer: async () => queueConsumer,
+                    getDb: async () => ({
+                        queryFirst: async () => undefined,
+                        run: async () => {},
+                    }),
+                    systemEventDao: async () => ({
+                        pruneQuotas: async () => {},
+                    }),
+                }) as unknown as ServerContext) as unknown as StartServerDeps['createServerContext'],
+            runNodeApplication: runNodeApplicationWith(() => {
+                const rt = fakeRuntime(undefined, { enabled: true, adapter: recordingScheduler(order).adapter });
+                rt.stop = (async () => {
+                    order.push('runtime.stop');
+                }) as ApplicationRuntime['stop'];
+                return rt;
+            }),
+        });
+
+        const prevTimeout = process.env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS;
+        process.env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS = '300';
+        // A hermetic long-running script for the history handler: the handler appends
+        // `--no-logo history daily` to the invocation, and macOS BSD `sleep` rejects
+        // unknown args, so idle in bun instead (ignores argv, runs until the kill).
+        const sleeper = join(tmpdir(), `spur-0803-idle-${process.pid}.ts`);
+        writeFileSync(sleeper, 'setTimeout(() => {}, 60_000);\n');
+        // Assigned inside try AFTER startServer but BEFORE any child spawns: NodeProcessExecutor
+        // registers its own signal forwarders through the mocked process.on and would otherwise
+        // overwrite the serve.ts SIGINT entry in `sigHandlers`.
+        let shutdownSigint: SigHandler | undefined;
+        try {
+            await startServer(
+                {
+                    port: 5003,
+                    host: '127.0.0.1',
+                    openBrowser: false,
+                    keepAlive: false,
+                    spurInvocation: `bun ${sleeper}`,
+                },
+                deps,
+            );
+            shutdownSigint = sigHandlers.SIGINT;
+            await expect(
+                registeredHandlers[SCHEDULER_CUSTOM_JOB]?.({ payload: { name: 'slow', command: 'sleep 5' } }),
+            ).rejects.toThrow('scheduler job "slow" timed out after 300ms (killed)');
+            await expect(
+                registeredHandlers[HISTORY_REFRESH_JOB]?.({
+                    payload: { trigger: 'task-done', triggerId: '0803', windowStart: 1, windowEnd: 2 },
+                }),
+            ).rejects.toThrow('history refresh child timed out after 300ms (killed)');
+        } finally {
+            if (prevTimeout === undefined) delete process.env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS;
+            else process.env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS = prevTimeout;
+            rmSync(sleeper, { force: true });
+            // The captured pre-spawn reference — sigHandlers.SIGINT may now hold an
+            // executor-registered forwarder, and invoking that would re-raise a real SIGINT.
+            shutdownSigint?.();
+            await exitCalled;
+        }
+        expect(order).toEqual(['worker.start', 'worker.stop', 'server.stop', 'runtime.stop']);
+    });
+
     test('parseTaskActionJob validates payload shape and preserves optional routing fields', () => {
         expect(() => parseTaskActionJob(null)).toThrow('Invalid task-action payload: expected object');
         expect(() => parseTaskActionJob({ wbs: '0001' })).toThrow('Invalid task-action payload: missing wbs/action');
@@ -1266,7 +1481,7 @@ describe('serverBootstrapConfig retention env parsing', () => {
  * scheduler only *enqueues* and the queue owns command execution and retries.
  */
 describe('configured scheduler jobs round-trip through the real queue (task 0734)', () => {
-    test('a successful tick completes and a failing tick retries, both persisted', async () => {
+    test('a successful tick completes and a failing tick goes terminal, both persisted (task 0803 R3)', async () => {
         const cwd = mkdtempSync(join(tmpdir(), 'spur-0734-'));
         const bus = new EventBus<Record<string, (event: unknown) => void>>();
         const ctx = createServerContext((await import('./middleware/helpers')).mockRuntime(), {
@@ -1323,9 +1538,11 @@ describe('configured scheduler jobs round-trip through the real queue (task 0734
             const byName = new Map(rows.map((r) => [(JSON.parse(r.payload) as { name: string }).name, r] as const));
             expect(rows.every((r) => r.type === SCHEDULER_CUSTOM_JOB)).toBe(true);
             expect(byName.get('ok-job')?.status).toBe('completed');
-            // maxRetries defaults to 3, so the first non-zero exit retries rather
-            // than failing outright — the queue owns the attempt policy, not us.
-            expect(byName.get('bad-job')?.status).toBe('pending');
+            // Task 0803 R3: the tick enqueue carries maxRetries 1 — a failed attempt goes
+            // terminal instead of re-pending, because a `pending` row counts as active in
+            // the single-flight lookup and would suppress later ticks. The next tick is
+            // the retry for an idempotent periodic command.
+            expect(byName.get('bad-job')?.status).toBe('failed');
             expect(byName.get('bad-job')?.attempts).toBe(1);
 
             await tap.flush();
@@ -1340,13 +1557,9 @@ describe('configured scheduler jobs round-trip through the real queue (task 0734
                     .sort(),
             ).toEqual([`${SCHEDULER_CUSTOM_JOB}:bad-job`, `${SCHEDULER_CUSTOM_JOB}:ok-job`]);
             expect(named('queue.job.completed')).toHaveLength(1);
+            // No retry under the R3 bounded policy — the row went terminal above.
             const retrying = named('queue.job.retrying');
-            expect(retrying).toHaveLength(1);
-            expect(data(retrying[0])).toMatchObject({
-                type: SCHEDULER_CUSTOM_JOB,
-                attempt: 1,
-                error: 'scheduler job "bad-job" exited 3',
-            });
+            expect(retrying).toHaveLength(0);
         } finally {
             tap.unsubscribe();
             db.close();

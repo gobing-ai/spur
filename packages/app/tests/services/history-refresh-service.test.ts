@@ -15,6 +15,7 @@ import {
     parseHistoryRefreshContext,
     validateHistoryRefreshPayload,
 } from '../../src/services/history-refresh-service';
+import { SCHEDULER_CUSTOM_TIMEOUT_MS } from '../../src/services/scheduler-custom-job-service';
 
 /** Config fixture — only `history.refresh` matters to the trigger. */
 function config(onCompletion: boolean, debounceMs = 60_000): SpurConfig {
@@ -67,6 +68,7 @@ interface RecordedRun {
     cwd?: string;
     env?: Record<string, string>;
     maxOutput?: number;
+    timeout?: number;
 }
 
 /** Capturing fake at the ProcessExecutor seam; `result` is merged over a successful default. */
@@ -413,5 +415,39 @@ describe('handleHistoryRefreshJob (task 0717: isolated child process)', () => {
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
+    });
+});
+
+describe('handleHistoryRefreshJob watchdog timeout (task 0803 R1)', () => {
+    const validPayload = { trigger: 'task-done', triggerId: '0803', windowStart: 1, windowEnd: 2 };
+
+    test('deps.timeoutMs flows into the bounded executor run (default is the shared 600000ms constant)', async () => {
+        const { executor, runs } = fakeExecutor({});
+        await handleHistoryRefreshJob(
+            { cwd: '/p', invocation: 'bun', executor, timeoutMs: 4_321 },
+            jobOf(validPayload),
+        );
+        expect(runs[0]?.timeout).toBe(4_321);
+
+        const { executor: defaultExecutor, runs: defaultRuns } = fakeExecutor({});
+        await handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor: defaultExecutor }, jobOf(validPayload));
+        expect(defaultRuns[0]?.timeout).toBe(SCHEDULER_CUSTOM_TIMEOUT_MS);
+    });
+
+    test('a deadline kill is labelled as a timeout, not a generic termination', async () => {
+        const { executor } = fakeExecutor({ exitCode: null, signal: 'SIGKILL', durationMs: 5_000, stderr: 'partial' });
+        await expect(
+            handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor, timeoutMs: 5_000 }, jobOf(validPayload)),
+        ).rejects.toThrow('history refresh child timed out after 5000ms (killed): partial');
+    });
+
+    test('a sub-deadline kill keeps the generic termination message', async () => {
+        const { executor } = fakeExecutor({ exitCode: null, signal: 'SIGTERM', durationMs: 4_999 });
+        const err = (await handleHistoryRefreshJob(
+            { cwd: '/p', invocation: 'bun', executor, timeoutMs: 5_000 },
+            jobOf(validPayload),
+        ).catch((e: unknown) => e)) as Error;
+        expect(err.message).toContain('terminated before a normal exit (SIGTERM)');
+        expect(err.message).not.toContain('timed out');
     });
 });

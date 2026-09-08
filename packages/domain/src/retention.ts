@@ -165,8 +165,12 @@ export async function compactDatabase(
         }
 
         await db.exec('VACUUM');
-        // Truncate the WAL immediately: VACUUM writes the entire database into WAL in WAL mode.
-        await db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+        // Task 0803 R2: PASSIVE, never TRUNCATE. VACUUM writes the entire database into the
+        // WAL, but TRUNCATE holds the write lock while waiting for readers to drain — on the
+        // DB shared with the always-on daemon that is exactly the writer starvation the
+        // 2026-09-07 history-daily incident showed. PASSIVE checkpoints what it can without
+        // blocking and SQLite auto-checkpoint reclaims the rest once readers drain.
+        await db.exec('PRAGMA wal_checkpoint(PASSIVE)');
         const bytesAfter = await databaseBytes(db);
         await db.run("INSERT INTO spur_retention_meta (kind, ran_at) VALUES ('compaction', ?)", now.getTime());
         return { ran: true, bytesBefore, bytesAfter };
