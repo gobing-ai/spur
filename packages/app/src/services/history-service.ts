@@ -846,7 +846,6 @@ export class HistoryService {
         const runStartedAt = new Date().toISOString();
 
         for (const source of sources) {
-            // eslint-disable-next-line no-await-in-loop -- fan-out is deliberately sequential (R7, task 0470 Design)
             const { coverageEntry, sourceWarnings, sourceAttribution } = await this.importOneIsolated(
                 source,
                 opts,

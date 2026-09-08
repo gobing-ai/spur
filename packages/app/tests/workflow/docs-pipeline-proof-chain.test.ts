@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 
@@ -55,23 +57,13 @@ describe('docs-pipeline task-path lookup fails closed (task 0760 R1/R2)', () => 
     });
 
     test('behavioral: an unresolved task path fails the rendered command (R1)', () => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { execSync } = require('node:child_process') as typeof import('node:child_process');
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { mkdtempSync, rmSync, writeFileSync, chmodSync, mkdirSync } =
-            require('node:fs') as typeof import('node:fs');
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { tmpdir } = require('node:os') as typeof import('node:os');
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const joinPath = require('node:path') as typeof import('node:path');
-
         const { command } = resolveShell();
-        const dir = mkdtempSync(joinPath.join(tmpdir(), 't0760-docs-taskpath-'));
+        const dir = mkdtempSync(join(tmpdir(), 't0760-docs-taskpath-'));
         try {
-            mkdirSync(joinPath.join(dir, '.spur', 'run'), { recursive: true });
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
             // Emit the same JSON shape `spur task path --json` does when the task
             // cannot be resolved: no path field, so jq drains to `empty`.
-            const emit = joinPath.join(dir, 'emit.sh');
+            const emit = join(dir, 'emit.sh');
             writeFileSync(emit, "#!/bin/sh\nprintf '{}'\n");
             chmodSync(emit, 0o755);
             const rendered = command.replaceAll('$spurBin', emit).replaceAll('$wbs', 't9002');
