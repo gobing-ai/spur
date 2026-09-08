@@ -260,16 +260,11 @@ function extractRequirementIds(taskContent: string): string[] {
 // ─── Canonical AC identity resolution (task 0804 R4) ─────────────────────────
 
 /**
- * Normalize an AC identity to its canonical key, mirroring the documented
- * matching behavior of feature-check `rowMatchesScenario` + ac-style-guide
- * "Four accepted id forms" (exact/bare title, `Scenario:` prefix, bracket
- * tags, `AC-N` ordinal) without importing that private matcher or adopting
- * its permissive trailing-Gherkin fallback (0804 R4). Repeatedly strips
- * bracket tags and the `Scenario:` prefix, then one R-id prefix; comparison
- * is case/quote/whitespace-insensitive. A paraphrase normalizes differently
- * and still fails.
+ * Strip the tolerated AC-id wrappers (bracket tags, `Scenario:` prefix) until
+ * fixpoint — the shared first step of `normalizeAcTitle` and the `AC-N` alias
+ * path in `resolveAcIdentity`.
  */
-function normalizeAcTitle(title: string): string {
+function stripAcWrappers(title: string): string {
     let out = title.trim();
     let prev: string;
     do {
@@ -280,10 +275,23 @@ function normalizeAcTitle(title: string): string {
             .replace(/^Scenario:\s*/i, '')
             .trim();
     } while (out !== prev);
-    return out
+    return out;
+}
+
+/**
+ * Normalize an AC identity to its canonical key, mirroring the documented
+ * matching behavior of feature-check `rowMatchesScenario` + ac-style-guide
+ * "Four accepted id forms" (exact/bare title, `Scenario:` prefix, bracket
+ * tags, `AC-N` ordinal) without importing that private matcher or adopting
+ * its permissive trailing-Gherkin fallback (0804 R4). Comparison is
+ * case/quote/whitespace-insensitive. A paraphrase normalizes differently
+ * and still fails.
+ */
+function normalizeAcTitle(title: string): string {
+    return stripAcWrappers(title)
         .replace(/^R\d+\s*[:\-—]?\s*/, '')
         .toLowerCase()
-        .replace(/[\u0027\u2018\u2019\u201c\u201d]/g, '')
+        .replace(/[ʼ‘’“”]/g, '')
         .replace(/\s+/g, ' ')
         .trim();
 }
@@ -340,16 +348,7 @@ function resolveAcIdentity(rowId: string, index: AcIdentityIndex): AcIdentityRes
     const canonical = index.byTitle.get(normalizeAcTitle(rowId));
     if (canonical !== undefined) return { ok: true, canonical };
     // Strip the tolerated wrappers, then try the documented `AC-N` alias.
-    let stripped = rowId.trim();
-    let prev: string;
-    do {
-        prev = stripped;
-        stripped = stripped
-            .replace(/^\[[^\]]*\]\s*/, '')
-            .replace(/\s*\[[^\]]*\]\s*$/, '')
-            .replace(/^Scenario:\s*/i, '')
-            .trim();
-    } while (stripped !== prev);
+    const stripped = stripAcWrappers(rowId);
     const ordinal = /^AC-(\d+)$/i.exec(stripped);
     if (ordinal !== null) {
         const n = Number(ordinal[1]);
