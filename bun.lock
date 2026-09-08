@@ -199,7 +199,7 @@
   },
   "catalog": {
     "@commander-js/extra-typings": "^14.0.0",
-    "@gobing-ai/ts-ai-runner": "^0.4.56",
+    "@gobing-ai/ts-ai-runner": "^0.4.57",
     "@gobing-ai/ts-db": "^0.4.57",
     "@gobing-ai/ts-dual-workflow-engine": "^0.4.57",
     "@gobing-ai/ts-infra": "^0.4.57",
