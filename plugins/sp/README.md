@@ -215,6 +215,7 @@ plugins/sp/
 │   │   └── references/routing-table.md
 │   ├── parallel-execution/          # Fan-out decision framework + patterns
 │   │   └── references/{fan-out-patterns, result-synthesis}.md
+│   ├── pr-reviewing/                # GitHub PR review loop backing /sp:dev-pr-review
 │   ├── source-driven-development/   # Source-first API/contract verification (SKILL.md only)
 │   ├── spec-decomposition/          # Feature/spec → task-batch competency
 │   │   └── references/decomposition.md
@@ -255,6 +256,8 @@ plugins/sp/
 ├── agents/                          # 4 specialist subagents (expert-spur, super-coder, super-planner, super-reviewer)
 ├── hooks/                           # hooks.json + task-write-guard.{ts,test.ts} + context-{session-start,post-tool,session-stop}.ts
 │                                    # + careful-guard.{ts,test.ts} + context-hooks.test.ts + token-estimate.test.ts
+│                                    # + shared policy modules: agent-hint.ts, destructive-policy.{ts,test.ts}, task-file-policy.{ts,test.ts}
+│                                    # + pi/guard-extension.{ts,test.ts} (plugin.json `extensions.pi` entry point)
 ├── scripts/                         # Executable helpers, split from prompts (ADR-031) — validate-commands.ts (thin-wrapper validator), batch-preflight.ts + scripts/<skill>/
 │                                    # (daily-summary: {daily-summary, logger}.ts; dogfood-testing: {detect-pipeline-driving, validate-report}.ts)
 ├── tests/                           # Plugin tests — command-contract.test.ts + skill-structure.test.ts + batch-preflight.test.ts + per-skill suites
@@ -318,13 +321,13 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `daily-summary`             | 1.0.0 | Daily summary report generator — orchestrates ccusage CLI + git history into structured markdown summaries                                                                                                                                 |
 | `doc-evolve`                | 1.0   | Key-document evolution per `docs/99_PROJECT_CONSTITUTION.md` — drift audits, same-commit sync checks, frontmatter-contract verification, machine-appended lessons                                                                          |
 | `reverse-engineering`       | 1.1   | Codebase analysis / HLD generation / audit — depth-driven reverse engineering with orthogonal mode, focus, and format controls; backs `/sp:dev-reverse`                                                                                    |
-| `issue-finding`             | 1.1   | Session-log forensics — multi-source discovery, bottleneck ranking, optional topic focus, CLI-gated fix task generation; **legacy path** — superseded by `history-anatomy` for indexed reporting; backs no current command; directly invocable as sp:issue-finding |
+| `issue-finding`             | 2.0   | Session-log forensics — multi-source discovery, bottleneck ranking, optional topic focus, CLI-gated fix task generation; **legacy path** — superseded by `history-anatomy` for indexed reporting; backs no current command; directly invocable as sp:issue-finding |
 | `conflict-finding`          | 1.0   | Authority-aware semantic audit — four-pillar (source/task/feature/authority) conflict discovery, claim-specific authority resolution, reproducible evidence, confirmed owner-routed remediation; backs `/sp:dev-find-conflict`             |
 | `next-feature`              | 1.0   | Prompt-first feature frontier prioritizer — sync-first precondition, B3 actionability gate (cited, never restated), tiered rubric over measured signals, D1–D4 defect proposals conforming to the restructure map schema; backs `/sp:dev-find-next` |
 | `pr-reviewing`              | 1.0   | GitHub Codex PR review — PR prepare/reuse, `@codex review` request with per-HEAD dedupe, bounded polling, findings normalization, validated fix + re-review; spine SSOT `pr-review.yaml` + `scripts/pr-reviewing.ts`; backs `/sp:dev-pr-review`     |
 | `indexed-context`           | 1.0   | Cross-agent project context — anatomy/learnings/pitfalls/buglog/memory in `.spur/context/`; hook-tracked token-ledger; graceful degradation on agents without hooks                                                                        |
 | `history-anatomy`           | 1.0   | Diagnostic interpretation owner over already-imported history — daily/ad-hoc mode contract, closed finding taxonomy, twelve-section report contract, `enrich`/`validate` rubrics; no workflow launch, no JSONL fallback, no corpus mutation                                                                   |
-| `session-review`            | 1.0   | Inline review of the active coding-agent session — compact outcomes, evidence-backed resolved/open issue classification, proposal-only improvements, and next actions; no workflow, import, delegation, or mutation                                                                                           |
+| `session-review`            | 1.1   | Inline review of the active coding-agent session — compact outcomes, evidence-backed resolved/open issue classification, proposal-only improvements, and next actions; no workflow, import, delegation, or mutation                                                                                           |
 | `redesign-web-ui`           | 1.0   | Existing-UI visual upgrade — audit generic AI fingerprints, apply in-stack polish against `DESIGN.md` / live tokens, verify behavior and viewports; does not migrate frameworks                                                                                                                            |
 
 #### Bounded coexistence and retirement gate — `sp:issue-finding` (HA-S1 0661)
@@ -418,7 +421,7 @@ the pipeline's Phase 7 review step.
 | ---------------- | ------------ | ----------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------- |
 | `expert-spur`    | expert       | `sp:spur-cli`                                                           | green   | "create tasks", "feature lifecycle", "add a rule", "author a workflow"          |
 | `super-coder`    | builder      | `sp:sys-architecture` + `sp:code-implementation` + `sp:code-testing` + `sp:sys-debugging` | blue    | "implement this", "write the code", "fix this bug", "design the architecture"   |
-| `super-planner`  | orchestrator | `sp:spur-dev` + `sp:dogfood-testing`                                    | green   | "run this task end to end", "run all tasks", "run the batch", "runall"          |
+| `super-planner`  | orchestrator | `sp:spur-dev` + `sp:parallel-execution` + `sp:dogfood-testing` + `sp:next-router` | green   | "run this task end to end", "run all tasks", "run the batch", "runall"          |
 | `super-reviewer` | reviewer     | `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` | crimson | "review this", "check the code", "SECUA review", "run task 0042 through review" |
 
 Each agent has:

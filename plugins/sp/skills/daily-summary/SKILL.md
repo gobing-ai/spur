@@ -166,6 +166,6 @@ Read the skill file and follow the workflow manually.
 ## Additional Resources
 
 - **Script source:** [scripts/daily-summary/daily-summary.ts](../../scripts/daily-summary/daily-summary.ts) — CLI implementation
-- **Tests:** [tests/daily-summary.test.ts](tests/daily-summary.test.ts) — unit coverage for parsing, date ranges, markdown output
+- **Tests:** [tests/daily-summary/daily-summary.test.ts](../../tests/daily-summary/daily-summary.test.ts) — unit coverage for parsing, date ranges, markdown output
 - **Related skills:** `sp:dev-handover` (blocker handoff), `sp:dev-changelog` (commit-based changelog), `sp:spur-cli` (task management)
 - **Upstream CLI:** [ccusage](https://github.com/ryoppippi/ccusage) — AI agent token usage reporter
