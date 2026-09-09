@@ -4,7 +4,7 @@ name: Align RunDao.traceRowById return type with queryFirst SQL-NULL semantics
 status: todo
 template: issue
 created_at: 2026-09-09T01:51:22.437Z
-updated_at: "2026-09-09T01:51:58.636Z"
+updated_at: "2026-09-09T05:27:09.862Z"
 
 ---
 
@@ -54,6 +54,13 @@ Scope: align the DAO contract (either type the return as including `null`, or no
 
 ### References
 
-<!-- Links to failing logs, related issues, tasks, docs, or external references. -->
+Durable parking spot for session-review residuals (2026-09-08 A21 batch session). Items 1–3 are host-approved deferrals whose original records live in done task files (0812/0813); this list is the going-forward owner surface. Item 4–6 are process/environment findings.
+
+1. **Deferred: importer timeout `Promise.race` fallback** — `packages/app/src/services/history-service.ts:432` wraps the import promise in a `Promise.race` timeout; A21 (0813) host-approved deferring the native-deadline replacement of this fallback. Direction: revisit once scheduler/history consumers fully run on shared native execution policies; verify no double-kill semantics.
+2. **Deferred: ts-db README queue-delivery statement** — ts-libs repo README lacks an explicit at-least-once (no exactly-once) delivery statement for the queue-job lease path (P3b residual from A21 0812/0813). Direction: one-paragraph semantics note in the ts-db README next time that package ships.
+3. **Deferred: P4 sweep-reason vocabulary** — user-facing sweep reason string retained deliberately at `apps/server/src/serve.ts:273` (asserted `apps/server/tests/serve.test.ts:1373`); only wrong code comments were fixed in 0813. Direction: rename alongside the next user-visible sweep-surface change, not standalone.
+4. **Environment: TS server stale module cache after dependency bumps** — after `bun install` version changes, the LSP keeps serving pre-bump types (this session: 6 false positives on `bounded-child-run*`, all ledger-dispositioned). Direction: restart the TS server (or session) after dependency sync before trusting diagnostics.
+5. **Process: cog rejects default merge-commit messages** — every merge needs the manual `chore: merge <branch> into main` rename (precedent `12c913716`, `f2265f4d7`). Direction: lefthook `prepare-commit-msg` rewrite or a documented convention in AGENTS.md.
+6. **Process: importer-schema drift after dependency bumps** — `importer-schema-check` fails with recorded-vs-installed version drift in gitignored `.spur/spur.db`; remedy is a manual `spur migrate` per checkout. Direction: fold the migrate into the check's remedy path or a postinstall hook.
 
 ### History
