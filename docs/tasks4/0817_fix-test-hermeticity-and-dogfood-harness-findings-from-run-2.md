@@ -4,9 +4,11 @@ name: Fix test hermeticity and dogfood-harness findings from run 20260908-2330-d
 status: done
 template: issue
 created_at: 2026-09-09T17:11:57.002Z
-updated_at: "2026-09-09T19:25:57.296Z"
+updated_at: "2026-09-09T20:39:54.069Z"
 
 priority: P2
+feature_id: D6
+ac_altitude: task-local
 ---
 
 ## 0817. Fix test hermeticity and dogfood-harness findings from run 20260908-2330-devrun-0815
@@ -181,7 +183,7 @@ Each entry cites the first changed line per file (`file:line`).
 | AC1 | MET | test | `packages/config/tests/loader.test.ts:918-975` — fresh `bun test packages/config/tests/loader.test.ts` → 73 pass / 0 fail; unpinned-call + explicit-cwd-fixture legs; flip demo without/with `SPUR_SKIP_PROJECT_CONFIG` → exit 0 (would-fail-before) vs exit 1 (passes-after); full suite green (7957/0) proves no fixture regressed. |
 | AC2 | MET | test | Fresh standalone runs: `task-write-guard.test.ts` 10 pass / 0 fail [853 ms], `eval-pipeline.test.ts` 20 pass / 0 fail [4.8 s]; loaded leg (8 busy loops, load avg 3.08): 10/0 [1.2 s] and 20/0 [6.6 s] — identical sets, no timeout failures. |
 | AC3 | MET | test | Fresh `bun test plugins/sp/tests/verify-answer-lint.test.ts` → 36 pass / 0 fail incl. `whole-line bold declares the id` (positive) and `two bold spans are not a declaration` (negative); guide lists the bold form among accepted id forms. |
-| AC4 | MET | command | `docs/04_DESIGN.md:2602-2612` names exclude globs + both section lists (anchors at `proof-input-fingerprint.ts:172,249,282` re-read at cited lines this run). Deterministic check fresh: grep chain over `docs/04_DESIGN.md` for `proof-input-fingerprint.ts:172` / `:249` / `:282`, `['docs/tasks*', 'docs/features*']`, the task-section and feature-section lists → all six match, exit 0. (Documentation AC — non-behavioral by nature.) |
+| AC4 | MET | command | `docs/04_DESIGN.md:2602-2612` names exclude globs + both section lists (anchors at `packages/app/src/workflow/proof-input-fingerprint.ts:172,249,282` re-read at cited lines this run). Deterministic check fresh: grep chain over `docs/04_DESIGN.md` for `proof-input-fingerprint.ts:172` / `:249` / `:282`, `['docs/tasks*', 'docs/features*']`, the task-section and feature-section lists → all six match, exit 0. (Documentation AC — non-behavioral by nature.) |
 | AC5 | MET | command | Six 0815 residuals in `### References` at `docs/tasks4/0817_fix-test-hermeticity-and-dogfood-harness-findings-from-run-2.md:187+`, 0815 named as origin. Fresh block diff (0815 References vs 0817 adoption block): 6/6 items present, items 1–3 + 6 byte-verbatim, item 4 de-contextualized only ("this session" → "in the A21 session"), item 5 additive only (+ precedent `1a0d3af5d`, backticked AGENTS.md) — Direction clauses identical on all six. (Bookkeeping AC — non-behavioral.) |
 | AC6 | MET | command | `bun run spur-check` exit 0 this run: link-check / transition-shim-check / script-contract-check (0 violations) / inline-pipeline-parity-check / dependency-drift-check / importer-schema-check / history-surface-freeze-check all OK; `bun run lint` + 8× typecheck clean; `bun run test` 7957 pass / 0 fail / 32029 expect calls / 439 files [163.8 s]; recommended-pre/post-check rule runs: 0 violations; zero suppression markers in the gate log. First attempt failed at importer-schema-check (env drift, residual #6): PATH `spur` 0.3.78 (ts-db 0.4.60) had down-stamped the gitignored worktree db; restored via the product's own 0033 sync path (`migrate` re-provisioned + re-stamped 0.4.62) — no code change, disclosed here. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)

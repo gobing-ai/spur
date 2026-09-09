@@ -4,7 +4,7 @@ name: Align RunDao.traceRowById return type with queryFirst SQL-NULL semantics
 status: done
 template: issue
 created_at: 2026-09-09T01:51:22.437Z
-updated_at: "2026-09-09T20:09:36.964Z"
+updated_at: "2026-09-09T21:39:27.174Z"
 
 priority: P2
 feature_id: D6
@@ -340,14 +340,16 @@ Verdict: APPROVED
 
 ### References
 
-Durable parking spot for session-review residuals (2026-09-08 A21 batch session). Items 1–3 are host-approved deferrals whose original records live in done task files (0812/0813); this list is the going-forward owner surface. Item 4–6 are process/environment findings.
+Former parking spot for session-review residuals (2026-09-08 A21 batch session). **All six items closed 2026-09-09** (same change set; owner surface kept for history). Items 1–3 were host-approved deferrals whose original records live in done task files (0812/0813); items 4–6 were process/environment findings. Closure was host-directed ("get all the remainings done, including in ts-libs").
 
-1. **Deferred: importer timeout `Promise.race` fallback** — `packages/app/src/services/history-service.ts:432` wraps the import promise in a `Promise.race` timeout; A21 (0813) host-approved deferring the native-deadline replacement of this fallback. Direction: revisit once scheduler/history consumers fully run on shared native execution policies; verify no double-kill semantics.
-2. **Deferred: ts-db README queue-delivery statement** — ts-libs repo README lacks an explicit at-least-once (no exactly-once) delivery statement for the queue-job lease path (P3b residual from A21 0812/0813). Direction: one-paragraph semantics note in the ts-db README next time that package ships.
-3. **Deferred: P4 sweep-reason vocabulary** — user-facing sweep reason string retained deliberately at `apps/server/src/serve.ts:273` (asserted `apps/server/tests/serve.test.ts:1373`); only wrong code comments were fixed in 0813. Direction: rename alongside the next user-visible sweep-surface change, not standalone.
-4. **Environment: TS server stale module cache after dependency bumps** — after `bun install` version changes, the LSP keeps serving pre-bump types (this session: 6 false positives on `bounded-child-run*`, all ledger-dispositioned). Direction: restart the TS server (or session) after dependency sync before trusting diagnostics.
-5. **Process: cog rejects default merge-commit messages** — every merge needs the manual `chore: merge <branch> into main` rename (precedent `12c913716`, `f2265f4d7`). Direction: lefthook `prepare-commit-msg` rewrite or a documented convention in AGENTS.md.
-6. **Process: importer-schema drift after dependency bumps** — `importer-schema-check` fails with recorded-vs-installed version drift in gitignored `.spur/spur.db`; remedy is a manual `spur migrate` per checkout. Direction: fold the migrate into the check's remedy path or a postinstall hook.
+1. **CLOSED: importer timeout `Promise.race` fallback** — `packages/app/src/services/history-service.ts` `raceSourceImport` now uses the native deadline primitive `AbortSignal.timeout` (single abort source; hand-rolled controller + `setTimeout` pair removed → no double-kill window, no timer to leak). Documented boundary: the race still cannot truly cancel an in-flight import; real cancellation remains importer-owned. Verified: `packages/app` history-service suite 55/55 pass.
+2. **CLOSED: ts-db README queue-delivery statement** — at-least-once (never exactly-once) semantics paragraph added to the `QueueJobDao` lease-path section in `~/xprojects/ts-libs/packages/db/README.md`: token fences the ack, not execution; handlers must be idempotent.
+3. **CLOSED: P4 sweep-reason vocabulary** — user-facing reason renamed `watchdog: processing exceeded …` → `age-sweep: processing exceeded …` at `apps/server/src/serve.ts:274`; assertions updated (`apps/server/tests/serve.test.ts:1381,1400`). Targeted test pass.
+4. **CLOSED: TS server stale module cache after dependency bumps** — recorded as a convention in `.spur/context/pitfalls.md` (2026-09-09 entry): restart the TS server/session after any version bump before trusting LSP diagnostics.
+5. **CLOSED: cog rejects default merge-commit messages** — `.lefthook.yml` gained a `prepare-commit-msg` hook rewriting git's default `Merge branch …` message to `chore: merge <branch> into <target>` before `cog verify` runs (both quoted/unquoted shapes verified; cog accepts the rewrite). Hand-written messages pass through untouched.
+6. **CLOSED: importer-schema drift after dependency bumps** — `importer-schema-check` now folds the remedy in: on drift it runs `applyCliMigrations` (genuine older-schema drift) plus `repairImporterSchemaVersion` (re-provision + re-stamp; deletes stale shadow ledger rows unreachable by migrate's journaled fast path — the 0817 worktree buglog shape), then re-verifies. Un-healable schemas still exit 1 with the manual remedy. Tests: 5/5 in `scripts/commands/importer-schema-check.test.ts` incl. the shadow-row regression.
+
+**Also closed (0817 run residual, buglog 2026-09-09):** bare `spur` invoked from inside `bun run test` now resolves to a source-local shim — `scripts/test-shims/spur` prepended to PATH in `tests/setup.ts`, so a stale global `spur` binary can no longer be picked up mid-gate.
 
 ### History
 
