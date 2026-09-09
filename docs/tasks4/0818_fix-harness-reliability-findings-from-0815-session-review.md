@@ -4,53 +4,143 @@ name: Fix harness reliability findings from 0815 session review
 status: todo
 template: issue
 created_at: 2026-09-09T20:10:01.996Z
-updated_at: "2026-09-09T20:10:40.211Z"
+updated_at: "2026-09-09T22:24:54.483Z"
 
+feature_id: D6
+ac_altitude: task-local
+ac_numbering: task-local
+priority: P2
 ---
 
 ## 0818. Fix harness reliability findings from 0815 session review
 
 ### Background
 
-Session review of the 0815 pipeline run (8ab8448a) + standalone re-audit surfaced four actionable harness defects. Evidence is fresh from that session. Already resolved elsewhere and EXCLUDED: the run-artifact pointer-file mis-invocation was driver error (corrected in-session); 0817 R1 owns the main-repo CLI-test cwd-hermeticity fix (this task's R2 is the distinct worktree variant); importer_schema drift is environmental with a known remedy (spur migrate per checkout), not a code defect.
+Consolidated implementation specification for the session-review findings originally filed as 0818, 0819 and 0820. This task supersedes both removed tasks; it retains WBS 0818 and its original creation metadata. The original filename/title remains stable because the CLI has no rename operation. Scope: source-local test execution, review/verify handoff contracts, proof-input diagnostics, and task-local AC guidance.
 
-1. **omp executor auth failure had no preflight.** wrapup-pipeline doc-sync with agent=omp failed mid-run: `403 This authentication method does not have sufficient permissions to call Inference Providers`. The run died at the step instead of being rerouted before dispatch. Recovery required an operator-visible retry with a tier-resolved executor (pi-dsv4-flash-volc, elected coder per spur agent doctor).
-2. **Worktree .spur/config.yaml leaks into CLI tests via cwd discovery** (0815 review advisory). A gitignored worktree-local config is picked up by resolveConfigLayers when tests omit cwd; 0817 R1 fixed the main-repo case only.
-3. **Verify-answer status vocabulary reached children only by trial.** The first verify dispatch wrote "PASS" into per-row Status cells; verify-answer-lint (correctly) halted on 12 invalid rows. The driver's dispatch template does not carry the MET/PARTIAL/UNMET vocabulary.
-4. **run.artifact accepted a pointer file as taskFile.** Passing .spur/run/0815-taskpath.txt (whose CONTENT is the task path) hashed the pointer and produced a misleading stale-proofDigest refusal; the error named a digest mismatch, not the wrong input file. The engine should reject a taskFile that is not a task corpus file.
+The reports are hypotheses, not verified implementation evidence. Current source was inspected at `58cc87e27a47b4b9c659f79b8342827375d91751` on 2026-09-09. The Q&A disposition table accounts for every original requirement. No implementation or completion verdict is claimed by this consolidation.
+
+This is a D6 harness follow-up, following predecessor 0817. Its regression scenarios intentionally sit below feature ship criteria: `ac_altitude: task-local`; `ac_numbering: task-local` independently enforces Requirements-to-AC coverage. These settings do not waive readiness, evidence, or completion gates.
 
 ### Requirements
 
-**R1 — Executor preflight before workflow agent.run dispatch.** Before a workflow `agent.run` step dispatches, the engine consults the agent-doctor health surface (or an equivalent cached probe) for the resolved executor; an unusable/unauthenticated executor fails fast at run start (or tier-substitutes with a named warning per 0687 R3), never mid-run after earlier steps landed. The omp-403 wrap failure (run 60f855f1) is the reproduction.
+- [ ] **R1 — Restore the missing source-local test launcher (P2).** Supply the executable `scripts/test-shims/spur` expected by `tests/setup.ts`, using the checkout's `apps/cli/src/index.ts`. Resolve that entry relative to the launcher, quote paths/arguments, preserve the caller's cwd, propagate exit status, and commit executable mode. Do not depend on a prior bundle or the global Spur version. Retain the existing test-config skip precedence. Add a real child-process regression with a sentinel global `spur` later on PATH, a working directory different from the checkout root, and a checkout path containing spaces; prove the local entry runs, the sentinel does not, and cwd/arguments/status survive. Amend the inaccurate 0815 closure claim through `spur task update` after the fix is verified; append a dated correction to existing local buglog evidence if present, without deleting historical observations.
 
-**R2 — Worktree config leak closed.** The cwd-discovery fallback in `packages/config/src/loader.ts` (project layer join, :171) must not pick up a gitignored `.spur/config.yaml` from a *worktree* root when a test omits cwd; a regression check fails when it does. Distinct from 0817 R1 (main-repo case); coordinate with that hermeticity machinery.
+- [ ] **R2 — Make delegated execution provenance and verify artifacts explicit (P2).** Update the native dispatch contract in `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` to include the confirmed execution-tree cwd, the resolved absolute Spur invocation, the resolved output path, and the owning stage's artifact contract. Preserve the exact slash command and no-recursive-dispatch rule. Replace the conflicting "Send only" restriction deliberately. Delegates must use the supplied invocation for Spur commands; do not claim that `SPUR_BIN` alone changes bare-command resolution. Reuse the existing `resolveSpurBin`/`vars.spurBin`/plugin `--spur-bin` mechanisms for Spur-owned scripted calls. Verify handoffs must name the canonical answer-schema reference and carry this compact contract: top-level `Verdict: PASS|PARTIAL|FAIL`; requirement rows `MET|PARTIAL|UNMET`; AC rows additionally allow justified `N/A`; canonical evidence types `test|command|static-ref|manual-review|llm-judge|n/a`; exact AC identities; behavioral MET ACs require executable evidence. Keep `expectFile`, host lint, verdict derivation, proof checks and no-replay-on-started-failure intact. Review handoffs refer to R3, not the verify-answer schema. This is an explicit invocation/handoff fix, not a generic runtime PATH-injection subsystem or a guarantee over arbitrary host shells.
 
-**R3 — Dispatch template carries the answer-file vocabulary.** The inline driver's verify/review dispatch template (plugins/sp skill references) embeds the exact status vocabularies (Req/AC rows: MET|PARTIAL|UNMET|N/A; top line: Verdict: PASS|PARTIAL|FAIL; evidence types incl. executable-evidence rule for ACs) so a fresh child cannot invent "PASS" row statuses.
+- [ ] **R3 — Emit canonical review priorities at the authoring boundary (P2).** Correct the source coordinator template in `plugins/sp/agents/super-reviewer.md` and directly conflicting review examples so task Review findings carry `P1 (blocker)`, `P2 (major)`, `P3 (minor)`, or `P4 (advisory)` cells natively. Use one explicit mapping; preserve severity and disposition, evidence locations, aggregate verdict and functional traceability. Preserve a substantive no-findings row accepted by the existing checker; do not invent a defect merely to populate a table. Use section-relative headings when writing into `### Review` so report subheadings do not become new task sections. Keep `hasPopulatedPriorityTable` strict; do not accept word-only severity tables or add manual transcription to the driver. Author source capabilities through the Superskill lifecycle; generated adapters remain install-owned.
 
-**R4 — run.artifact validates taskFile is a task corpus file.** The proof-input read path refuses (with an error naming the offending path and the expected shape) when options.taskFile does not resolve to a task file under the configured tasks folders, instead of hashing whatever it was given.
+- [ ] **R4 — Reject non-task proof input at the shared read boundary (P2).** Add task-document shape validation to `readProofInputContents` in `packages/app/src/workflow/proof-input-fingerprint.ts`, shared by `proof.fingerprint` and proof-bound `run.artifact`. After the existing type/readability/regular-file/workdir checks, a supplied nonempty `taskFile` must contain task markdown: a nonempty canonical `## <WBS>. <title>` heading and at least one recognized task specification section (Background, Requirements, Acceptance Criteria, Design or Plan), parsed using the existing MarkdownDocument machinery. Reject a path-pointer file, arbitrary text, or a feature document with an error naming `taskFile`, the supplied/resolved path and the expected task-document shape before digest computation or artifact writes. Do not auto-dereference pointer contents. Do not require a `wbs` frontmatter field (normal CLI-created tasks omit it), full lifecycle readiness, or hardcoded/configured corpus-folder membership: valid supplied task specs can live under custom in-workdir paths. Preserve omitted/empty optional spec compatibility for `proof.fingerprint`, bound registration's mandatory taskFile rule, existing featureFile behavior, and all proof/run identity checks. Keep genuine changed-spec failures distinguishable as digest mismatches.
+
+- [ ] **R5 — Document the existing AC-altitude choice without weakening gates (P3).** Update `plugins/sp/skills/spur-cli/references/tasks.md` and its owning detailed task reference to document the standing pattern: link an issue/fix-batch to a substantively relevant feature; choose `--ac-altitude task-local` only when its regression scenarios intentionally do not represent feature ship criteria, and record that rationale. Explain that this differs from `--ac-numbering task-local` (R-to-AC coverage). Keep graduating as the default and retain DD-09 enforcement for graduating tasks. Include a source-local CLI example and retain ordinary orphan warnings; no checker-policy change is needed. Task 0816 already owns the individual 0587 ruling; do not reopen it or relink unrelated corpus to silence diagnostics.
 
 ### Acceptance Criteria
 
-- [ ] AC1 (R1) — a workflow agent.run against a deliberately broken executor fails at run start (or substitutes with warning), never after earlier steps landed; test green
-- [ ] AC2 (R2) — a CLI test running inside a worktree with a gitignored .spur/config.yaml does not observe it; regression check green
-- [ ] AC3 (R3) — a fresh verify dispatch using the template produces a lint-clean answer file on first attempt (verify-answer-lint exit 0 without a repair pass)
-- [ ] AC4 (R4) — run.artifact with taskFile pointing at a non-task file refuses with an error naming the path; test green
+```gherkin
+Feature: Correct and reproducible harness follow-ups
+
+  Scenario: R1 — Bare Spur resolves to the checkout under the test preload
+    Given an isolated checkout path containing spaces and a sentinel global spur later on PATH
+    When a test child invokes bare spur from a fixture cwd through the normal preload environment
+    Then the checkout source entry runs and the global sentinel is untouched
+    And the caller cwd, a spaced argument and the underlying exit status are preserved
+    And the launcher is tracked executable and works without a built bundle
+
+  Scenario: R1 — Config isolation and historical correction remain truthful
+    Given the repaired launcher and existing project-config skip behavior
+    When focused hermeticity checks run for unpinned and explicitly pinned cwd calls
+    Then unpinned calls skip project config and pinned fixture calls retain it
+    And the 0815 closure text and any existing local buglog correction describe the verified launcher behavior
+
+  Scenario: R2 — A delegated stage receives its execution and output contract
+    Given a native-eligible verify action in an isolated execution tree
+    When the host prepares the handoff using the updated dispatch contract
+    Then it supplies the exact slash command, absolute cwd, resolved Spur invocation and output path
+    And the child is told to use that invocation without recursively dispatching the stage
+    And a controlled child command uses the supplied checkout invocation despite a competing PATH Spur
+    And the host still applies expectFile, lint, verdict and proof gates after join
+
+  Scenario: R2 — Verify examples round-trip through the real validators
+    Given an answer fixture authored from the handoff contract for a fixture task
+    When verify-answer-lint and task verdict parse the answer
+    Then valid requirement and AC status rows are accepted without a repair pass
+    And PASS in a requirement Status cell and N/A in a requirement Status cell are rejected
+    And behavioral MET ACs with only static evidence cannot yield a passing verdict
+
+  Scenario: R3 — Review output satisfies the existing priority and section contracts
+    Given coordinator examples covering P1 through P4 and a substantive no-findings case
+    When their emitted task Review bodies are checked by the existing parser and priority checker
+    Then every valid example passes without severity transcription or phantom task sections
+    And word-only severity rows and empty priority scaffolds still fail
+
+  Scenario: R4 — Both proof actions reject a pointer before proof capture
+    Given a readable taskFile containing only the path to a real task
+    When proof.fingerprint or proof-bound run.artifact consumes it
+    Then the action fails with the supplied path and expected task-document shape
+    And no digest is captured and no artifact ledger row is written
+    And arbitrary text and feature-document inputs are rejected by the same shared validation
+
+  Scenario: R4 — Valid and optional proof inputs retain their contracts
+    Given valid task markdown in a custom in-workdir path without wbs frontmatter
+    When either proof action consumes it with its other required inputs
+    Then the document-shape check accepts it and normal proof identity validation still applies
+    And proof.fingerprint still allows an omitted or empty taskFile while bound registration refuses it
+    And a changed valid task produces the existing digest mismatch rather than a document-shape error
+
+  Scenario: R5 — Fix-batch guidance uses the existing independent altitude controls
+    Given an isolated feature and a linked task whose regression scenario is not a feature ship scenario
+    When the documented task-local altitude command is applied through the CLI
+    Then the DD-09 subset finding is absent and the rationale is recorded
+    And the same task at graduating altitude still reports the unmatched scenario
+    And R-to-AC coverage remains independently controlled by ac_numbering
+```
 
 ### Q&A
 
-<!-- Clarifications and triage decisions. Keep empty if none. -->
+#### Consolidation decisions — 2026-09-09
+
+| Original item | Disposition | Evidence and corrected direction |
+| --- | --- | --- |
+| 0818 R1: executor auth preflight | Rejected as contrary to the current design | `AgentService.checkUsable` already probes liveness before dispatch; auth is deliberately not consulted. `docs/design/agent-doctor-inspection-surface.md` section 4 removes auth probes. An omp HTTP 403 is not evidence of a missing liveness check. Do not add mandatory inference probes, guarantee that later steps cannot fail, or silently substitute an explicitly pinned executor. Runtime authentication failure remains an agent/operator remediation. |
+| 0818 R2: distinct worktree config leak | Duplicate of completed 0817 R1; no new loader fix | `resolveConfigLayers` bases suppression on omitted cwd and the skip flag, independent of main checkout versus worktree. Four existing focused hermeticity tests passed during refinement. R1 retains this behavior. A separately reproduced explicit-cwd caller defect would need its own evidence; the reports provide none. |
+| 0818 R3: verify vocabulary | Retained and corrected in R2 | Req rows cannot use N/A; only AC rows can. The owning verification skill already specifies the contract; the handoff omits it and restricts its payload. A deterministic fixture can prove schema compatibility; one model run cannot guarantee all future first attempts succeed. |
+| 0818 R4: taskFile pointer | Retained in R4, shared boundary and narrower validation | A readable pointer currently passes `readProofInputContents`; both actions call it. Enforce task-document shape there. Folder membership is not a reliable document-shape check and would reject supported custom input locations. Do not change digest normalization or dereference the pointer. |
+| 0819 R1: review severity friction | Retained in R3 | Source coordinator examples emit blocker/major/minor while the task checker requires P1-P4 cells. Correct the producer; preserve the checker and semantic severity. |
+| 0819 R2: all subagent shells are hermetic | Narrowed to R1/R2 | The test shim was never present, so the original claim that test children were already pinned was false. Source-local workflow commands already receive `vars.spurBin`; native host shells are a different boundary. Bind the handoff to an explicit invocation and repair the test launcher. Neither importer auto-remedy nor rebuilding a global CLI proves prevention. No guarantee is made over arbitrary agent-generated bare commands or external interactive shells. |
+| 0819 R3: orphan/altitude tension | Retained as documentation-only R5 | The existing flag expresses a legitimate distinction, not a gate escape hatch. 0816 owns the particular 0587 decision; this task owns missing reusable guidance. No duplicate corpus campaign or blanket orphan relinking. |
+| 0820 R1: missing launcher | Merged into R1 | `tests/setup.ts` prepends a directory whose `spur` executable is absent from disk and tracked files. Pointing PATH at `apps/cli` cannot make `spur.js` resolve as bare `spur`; setting SPUR_BIN alone also cannot. Use the small actual launcher and test the child boundary. |
+| 0820 R2: delete/recreate 0818 to prove CLI provenance | Rejected; bookkeeping resolved by this CLI-gated refinement | Commit wording and empty History do not prove how a file was created. CLI-created issue tasks can have empty History; history is transition-oriented, not creation attestation. Recreating changes allocation/timestamps and cannot rewrite the original Git history. Preserve WBS and original metadata, record this consolidation honestly, and validate current structure. No fabricated creation event or required commit-message evidence. |
+
+No new public nouns/verbs, new dependencies, workflow policy edits, authentication design reversal, global installation changes, or live importer/database mutations are required. The user authorized consolidation and deletion of 0819/0820, not implementation of this future task.
 
 ### Design
 
-<!-- Fix approach and tradeoffs. Keep this short unless the issue changes architecture. -->
+Implement at existing ownership boundaries: launcher/preload for R1; native handoff and existing invocation facilities for R2; coordinator output for R3; shared proof reader for R4; task CLI reference for R5. Reuse the existing validators and Bun test setup. Do not introduce a generic subprocess wrapper service, a second verdict parser, a second review vocabulary, or a new corpus provenance subsystem.
+
+R2's contract belongs in the source driver and verification reference; generated installed skills are not edited by hand. R3 uses Superskill's agent/skill authoring lifecycle. R4 is an input diagnostic improvement, not a new proof identity policy; it leaves normalized digest fields, feature input semantics and run-binding rules intact. Add the validation to file-path reads, not to the pure fingerprint function's optional content API.
+
+Document the changed proof-input surface and test launcher behavior in `docs/04_DESIGN.md` alongside their existing contracts, and run the doc-evolve sync check during implementation. Workflow YAML changes are not planned. Execution is sequential in one owned clean worktree; independent future agents need isolated worktrees and integration review.
 
 ### Plan
 
-<!-- Ordered debugging/fix checklist. Fill before moving to todo/wip. -->
+1. Recheck this specification against the current tree, load applicable instructions, and reproduce the missing launcher, producer schema mismatch and pointer acceptance in isolated fixtures. Existing config suppression is a preservation check, not a new worktree fix.
+2. Implement R1 and run the child-launcher and config hermeticity checks. Repair 0815's historical closure through its CLI-owned References section with a dated correction. Never mutate a live importer DB for the reproduction.
+3. Implement R2 and R3 together because they touch the handoff/output boundary. Validate real answer examples with verify-answer-lint and task verdict; validate review examples with the existing priority/section checker. Use a fake child process for deterministic invocation evidence; report any real model smoke run separately.
+4. Implement R4 in the shared reader. Exercise both actions with pointer/non-task inputs, valid custom paths, optional inputs and genuine digest drift. Assert failure precedes process/digest work and ledger writes.
+5. Implement R5 using the existing CLI flags; exercise both altitude choices in a fixture corpus. Update owning surface docs, run Superskill checks for changed source capabilities and doc-evolve sync checks, then inspect the combined diff.
+6. Run focused workspace tests, affected task/feature checks and the repository's required final code gates once on the final implementation. Record real review/verify results through the pipeline and commit only this task's authorized changes. Do not mark implementation complete on the strength of this refinement's structural checks.
 
 ### Root Cause
 
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
+Source-confirmed findings at refinement time:
+
+- `tests/setup.ts:71` prepends `scripts/test-shims`; no tracked or on-disk `scripts/test-shims/spur` exists. The claimed protection is not executable.
+- `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:244` restricts the handoff to stage id, slash command and no-recursion notice even though output paths and execution context are resolved at that boundary. It does not carry a compact verifier contract or pinned CLI invocation.
+- `plugins/sp/agents/super-reviewer.md:132` emits word-only Severity cells; `packages/app/src/services/task-check.ts:113` requires populated P1-P4 cells. The producer and consumer disagree.
+- `packages/app/src/workflow/proof-input-fingerprint.ts:102` checks types, lexical workdir confinement and file readability/regularity, then returns arbitrary file content without task-shape validation. Both proof actions consume it.
+- `plugins/sp/skills/spur-cli/references/tasks/verbs.md:185` describes feature-AC subset matching without the task-local altitude distinction available in live update help.
+
+Counterevidence: `packages/config/src/loader.ts:180` already suppresses unpinned project config irrespective of checkout layout; `packages/app/src/services/agent-service.ts:2185` explicitly defines a liveness-only readiness gate. Original session failures were not replayed against live providers/databases.
 
 ### Solution
 
@@ -66,6 +156,24 @@ Session review of the 0815 pipeline run (8ab8448a) + standalone re-audit surface
 
 ### References
 
-<!-- Links to failing logs, related issues, tasks, docs, or external references. -->
+- Original specifications are preserved in Git at `58cc87e27a47b4b9c659f79b8342827375d91751`: this task's original path, `docs/tasks4/0819_align-review-verify-contract-friction-and-close-subprocess-s.md`, and `docs/tasks4/0820_repair-0817-path-shadow-fix-and-convert-0818-to-cli-gated-co.md`. The latter two paths are historical, intentionally removed by this consolidation.
+- Original reports cite task 0815 run `8ab8448a`, omp wrap failure `60f855f1`, and the 0817 residual sweep. These are reported provenance, not independently replayed evidence.
+- `7f4cb94`: PATH prepend change; `6f04e0f00`: commit that first added 0818. A commit title is not CLI creation attestation.
+- `apps/cli/src/workflow/resolve-spur-bin.ts:35`: existing launch-provenance resolver; `apps/cli/src/commands/workflow.ts:704`: workflow invocation default.
+- `plugins/sp/skills/code-verification/SKILL.md:286` and its `references/verdict-schema.md`: answer and aggregation contracts; `plugins/sp/scripts/verify-answer-lint.ts:109`: distinct requirement/AC status normalization.
+- `packages/app/src/workflow/actions/proof-fingerprint.ts:59` and `packages/app/src/workflow/actions/run-artifact.ts:188`: shared proof-reader callers.
+- `docs/design/agent-doctor-inspection-surface.md:119`: removal of auth probes; `packages/app/src/services/task-service.ts:1126`: History is not creation attestation.
+- Pre-refinement checks: 0818, 0819 and 0820 each passed structural check with one orphan-feature warning; feature D6 passed with no findings. Focused config tests from `packages/config`: `bun test tests/loader.test.ts --test-name-pattern 'SPUR_SKIP_PROJECT_CONFIG hermeticity'` — 4 pass, 0 fail. These establish triage evidence only.
+
+#### Consolidation validation (not implementation verification)
+
+- Controlled local pointer probe: `readProofInputContents` returned `ok: true` for a file containing only this task's path; `extractTaskProofData` returned `{ sections: {} }`. No live database or provider call was made.
+- Source-local `task check 0818 --strict --json`: PASS, zero findings; five requirements and eight R-numbered scenarios. `rule run --preset recommended-pre-check --json`: 45 rules, zero findings. `bun run link-check`: PASS.
+- After the operator-authorized removal, source-local `task show 0819 --json` and `task show 0820 --json` both exit 1 with task-not-found; `task refresh --json` reports 816 tasks across four folders. The CLI has no task-delete verb; only those two exact superseded files were removed directly.
+- Linked feature D6 still passes its check with an expected `L4.verifying-incomplete-tasks` warning naming this todo follow-up. Feature status was not changed.
+- `git diff --check` reports one extra blank line at this file's EOF: the section writer's `MarkdownDocument.replaceSection` always appends two newlines, including for History. A no-trailing-newline input reproduces the same output. Left as harness serialization behavior rather than bypassing CLI-gated corpus writes. No runtime implementation suite or pipeline verify was run for this specification-only change.
 
 ### History
+
+- 2026-09-09: Operator requested consolidation of 0818/0819/0820 into 0818 and removal of 0819/0820. Requirements, AC, Q&A, Design, Plan, Root Cause and References refined through the source-local `spur task update --section --from-file` surface. Original WBS/created_at retained; status remains todo. This is a refinement entry, not a retroactive creation or implementation-verification claim.
+
