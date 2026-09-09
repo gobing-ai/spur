@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.78] - 2026-09-08
+
+### Added
+
+- feat: move dev workflow isolation and visible planning ahead (0814) (5808c5e50)
+- a21: adopt shared native execution deadlines across scheduler and history (0810-0813) (6e9788522)
+
+### Fixed
+
+- cli: classify serve startup SQLITE_BUSY with holder remediation (b007e902e)
+- inline-run: atomic identity insert, module-level imports, quote charset restore (0809) (2979e6816)
+
+### Other
+
+- docs: accept ADR-112 execution-deadline design and add feature A21 (24056230c)
+- docs(tasks): add new tasks (bd3f818f5)
+- docs(tasks): update task status after implementation (527d47e40)
+- docs(tasks): add new tasks (122534840)
+- chore: merge 0814 implementation branch sp/run-0814-A8D778 into main (12c913716)
+- docs(tasks): update task status after verification (5614d29f0)
+- chore: merge A21 batch branch sp/runall-a21-50e6 into main (f2265f4d7)
+- chore(memory): update memory (aa2aeb116)
+- docs(tasks): park session-review residuals in 0815 references (f5cdf67cd)
+
 ## [0.3.77] - 2026-09-08
 
 ### Added
