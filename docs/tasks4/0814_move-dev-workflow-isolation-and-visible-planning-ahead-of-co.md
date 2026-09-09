@@ -4,7 +4,7 @@ name: Move dev workflow isolation and visible planning ahead of comprehensive ch
 status: done
 template: standard
 created_at: 2026-09-08T23:49:06.040Z
-updated_at: "2026-09-09T02:57:40.286Z"
+updated_at: "2026-09-09T03:33:07.232Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
@@ -255,8 +255,6 @@ Execution budget: one sequential task, target one engineering day; checkpoint af
 - [x] 7. Run focused behavioral regressions and matched after-change startup/progress checks; report measured changes and unavailable evidence without invented performance claims.
 - [x] 8. Run final applicable project gates once, review the scoped diff, record requirement-level verify PASS through the harness, and commit the completed implementation task atomically.
 
-#### Solution
-
 ### Solution
 
 | File | Change | Why |
@@ -286,27 +284,27 @@ Execution budget: one sequential task, target one engineering day; checkpoint af
 
 | Requirement | Status | Evidence |
 | ------------- | -------- | ---------- |
-| R1 | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md` shared startup contract SSOT (bootstrap→readiness→isolation→inventory order); `inline-pipeline-driver.md:82-101` Run setup reordered; four command wrappers declare the contract; ordering pinned by `plugins/sp/tests/dogfood-testing/startup-contract.test.ts` (R1 spec pins). |
-| R2 | MET | `plugins/sp/scripts/batch-preflight.ts` `quickReadiness()` (runnable/needs-refinement/blocked/skipped/invalid) + `runPreflightCli --operation`; `--force`, negative-count→invalid, presentSections gap detection. `plugins/sp/tests/batch-preflight.test.ts` 24+ pass. |
-| R3 | MET | `execution-batch.md` wiring contract (quickReadiness before WT-1/WT-2; invalid/empty cut no tree); WT lifecycle pinned by `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` (11 pass) + `startup-contract.test.ts` (R3 pins). |
-| R4 | MET | `packages/app/src/workflow/workflow-inventory.ts` `parseWorkflowInventory`/`assertInventoryIdentity` (fail-closed, digest binding); wired into `apps/cli/src/commands/workflow.ts` `workflow show --format todo --json`. `workflow-inventory.test.ts` + `workflow.test.ts` green. |
-| R5 | MET | `packages/app/src/workflow/step-reporter.ts` `buildStepLabels`/`columnLabel`/`labelChild` wired into `renderWorkflowTodo`/`renderRunPlan`/`formatWorkflowStepLine` + `renderWorkflowActiveDetail` (two levels, child restart per parent). `step-reporter.test.ts` green. |
-| R6 | MET | `renderProgressMarkdown` truthful fallback — only observed `completed` renders `[x]`; failed/skipped/blocked/unattempted stay `[ ]`; capability note; no fabricated native invocation. |
-| R7 | MET | Deterministic-first rule + comprehensive gates at owning boundaries (`cross-cutting.md`, `inline-pipeline-driver.md` R7 section); pinned by `startup-contract.test.ts` (R7 retention spec pins). Semantic model work only for named unresolved questions. |
-| R8 | MET | `renderEventTrace` + `.spur/run/0814-implement-pass-{2,3}-trace.md`: event ordering, invocation counts, explicitly-marked-unknown latency measurements (no invented savings). Quick readiness + projection dispatch zero models (pure functions). |
-| R9 | MET | Focused regressions for R1/R2/R3/R4/R5/R6/R7/R8; `bun run build:scripts` (twin regen), `spur workflow validate`, `build:bundle`, `script-contract-check`; full `bun run spur-check` green (7893 tests). `## Testing` verification evidence is recorded by the pipeline `record` step. |
+| R1 | MET | `plugins/sp/skills/spur-dev/references/cross-cutting.md` shared startup contract SSOT; `inline-pipeline-driver.md` Run setup reordered; four command wrappers (dev-run/runall/refineall/verifyall.md) declare the contract; order pinned green this run by `plugins/sp/tests/dogfood-testing/startup-contract.test.ts` (R1 spec pins, 47 pass / 0 fail across 3 plugin files). |
+| R2 | MET | `plugins/sp/scripts/batch-preflight.ts:70` `quickReadiness()` (runnable/needs-refinement/blocked/skipped/invalid) wired via `runPreflightCli --operation`; `plugins/sp/tests/batch-preflight.test.ts` green this run (part of 47 pass). |
+| R3 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md` wiring contract (quickReadiness before WT-1/WT-2; invalid/empty cut no tree; failure retains); pinned green this run by `execution-batch-contract.test.ts` + `startup-contract.test.ts` R3 pins. |
+| R4 | MET | `packages/app/src/workflow/workflow-inventory.ts` `parseWorkflowInventory`/`assertInventoryIdentity` (fail-closed, digest binding); wired into `apps/cli/src/commands/workflow.ts` `workflow show --format todo --json`; `workflow-inventory.test.ts` 38 pass + `workflow.test.ts --test-name-pattern 'workflow show'` 11 pass, green this run. |
+| R5 | MET | `packages/app/src/workflow/step-reporter.ts:237-258` `columnLabel`/`buildStepLabels`/`labelChild` wired into renderWorkflowTodo/renderRunPlan/renderWorkflowActiveDetail; `step-reporter.test.ts` green this run (part of 38 pass). |
+| R6 | MET | `packages/app/src/workflow/step-reporter.ts:390` `renderProgressMarkdown` truthful fallback (only observed completed renders [x]; failed/skipped/blocked stay [ ] with capability note); tests at `packages/app/tests/workflow/step-reporter.test.ts:395,412` green this run. |
+| R7 | MET | Deterministic-first rule + comprehensive gates at owning boundaries (`cross-cutting.md`, `inline-pipeline-driver.md` R7 section); retention pins green this run in `startup-contract.test.ts`. |
+| R8 | MET | `packages/app/src/workflow/workflow-inventory.ts:138` `renderEventTrace` + tests at `packages/app/tests/workflow/workflow-inventory.test.ts:91` green this run; quick readiness + projection are pure functions dispatching zero models. Note: implement-pass trace scratch `.spur/run/0814-implement-pass-*-trace.md` was gitignored and cleaned; the pipeline verdict artifact survived at `.spur/run/worktree-A8D778-verdicts/0814-verdict.json`. |
+| R9 | MET | Merge commit `12c913716` contains the full scoped diff (19 files, 1438 insertions) including regenerated `batch-preflight.mjs` twin via build:scripts; focused regressions re-run green this run (47 + 38 + 11 pass, 0 fail); `spur feature check D6` pass=true this run. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 | --------------------- | -------- | --------------- | ---------- |
-| R1 — Startup exposes preparation and defers expensive work | MET | test | `plugins/sp/tests/dogfood-testing/startup-contract.test.ts` (R1 order pins: bootstrap→readiness→isolation→inventory-before-YAML) |
-| R2 — Quick readiness respects operation and matrix semantics | MET | test | `plugins/sp/tests/batch-preflight.test.ts` (24+ pass) — invalid/skip/block/refine/verify/force paths |
-| R3 — Worktree isolation is early and preserves safety | MET | test | `execution-batch-contract.test.ts` (11 pass, WT pins) + `startup-contract.test.ts` (R3 pins) |
-| R4 — The plan is a projection of the execution definition | MET | test | `workflow-inventory.test.ts` — fail-closed parse + digest identity |
-| R5 — Labels remain readable and stable | MET | test | `step-reporter.test.ts` — A..Z/AA, child restart, two-level bound |
-| R6 — Progress follows observed outcomes | MET | test | `renderProgressMarkdown` — truthful completion, no false checkoff |
-| R7 — Faster admission preserves comprehensive gates | MET | test | `startup-contract.test.ts` (R7 retention pins: owning boundaries, deterministic first) |
-| R8 — Performance claims have comparable evidence | MET | command | traces `.spur/run/0814-implement-pass-*.md` — order, counts, unknown-marked latencies |
-| R9 — Canonical surfaces and execution evidence agree | MET | command | `bun run spur-check` (7893/0), `workflow validate`, `build:bundle` all green |
+| R1 — Startup exposes preparation and defers expensive work | MET | test | `plugins/sp/tests/dogfood-testing/startup-contract.test.ts` R1 order pins, green this run |
+| R2 — Quick readiness respects operation and matrix semantics | MET | test | `plugins/sp/tests/batch-preflight.test.ts` green this run |
+| R3 — Worktree isolation is early and preserves safety | MET | test | `execution-batch-contract.test.ts` + `startup-contract.test.ts` R3 pins, green this run |
+| R4 — The plan is a projection of the execution definition | MET | test | `packages/app/tests/workflow/workflow-inventory.test.ts` green this run |
+| R5 — Labels remain readable and stable | MET | test | `packages/app/tests/workflow/step-reporter.test.ts` green this run |
+| R6 — Progress follows observed outcomes | MET | test | `renderProgressMarkdown` tests at step-reporter.test.ts:395,412 green this run |
+| R7 — Faster admission preserves comprehensive gates | MET | test | `startup-contract.test.ts` R7 retention pins, green this run |
+| R8 — Performance claims have comparable evidence | MET | test | `renderEventTrace` tests at workflow-inventory.test.ts:91 green this run; latencies recorded as unknown (no invented savings) |
+| R9 — Canonical surfaces and execution evidence agree | MET | command | merge `12c913716` in main; `spur feature check D6 --json` pass=true this run |
 
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
