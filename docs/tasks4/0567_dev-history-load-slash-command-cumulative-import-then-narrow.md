@@ -13,7 +13,7 @@ tags: ["plugin", "history", "command"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T06:48:02.602Z"
-updated_at: "2026-08-16T16:42:27.067Z"
+updated_at: "2026-09-09T06:46:52.311Z"
 ---
 
 ## 0567. dev-history-load slash command: cumulative import then narrowed analyze
@@ -193,15 +193,18 @@ Feature: dev-history-load command: on-demand cumulative import + analyze
 - [x] Register the command: add it to the `scribe` row in `plugins/sp/references/roles.md`, bump both `37` literals to `38` in `plugins/sp/tests/command-contract.test.ts`, add the canonical `--source` entry to `flag-glossary.md`, index it in `plugins/sp/README.md` (R1)
 - [x] Verify and dogfood: `bun test plugins/sp` green — specifically `command-contract`, `command-flag-parity`, `roles`, and the new `history-load` suite — then `bun run lint` and `bun run check`; dogfood once against real data: run `/sp:dev-history-load --dry-run`, then a real run, then a second run to confirm the repeat adds only new rows and never double-counts (R1, R2, R3, R4, R5)
 ### Solution
+
+> **Stale-anchor note (conflict audit, 2026-09-08):** commit `9187db346` (task 0661) removed the `dev-history-load` surface and repointed `/sp:dev-find-issue` from `sp:issue-finding` to `sp:history-anatomy`. The citations below are historical evidence for that superseded surface; their line numbers no longer resolve and have been dropped from the anchors.
+
 **WHAT shipped.** One long-tail `/sp:dev-*` command, `/sp:dev-history-load`, backed by a deterministic script. It runs `spur history import` then `spur history analyze` (analyze only after import exits 0), routes narrowing flags to the verb that accepts them, and optionally renders the forensics report. Owns no import logic, no state, no cadence.
 
 **Change map (7 paths).**
 
 | Path | Change |
 | --- | --- |
-| `plugins/sp/commands/dev-history-load.md` | new — frozen dev-* contract: `role: scribe`, `allowed-tools: ["Bash","Read"]` (no `Skill`), exactly `## Argument Flags` / `## Usage` / `## Implementation` in order, no `###`, flag table matching the argument-hint exactly, one glossary footer link (`plugins/sp/commands/dev-history-load.md:4-5`, `:15`, `:30`, `:47`) |
+| `plugins/sp/commands/dev-history-load.md` | new — frozen dev-* contract: `role: scribe`, `allowed-tools: ["Bash","Read"]` (no `Skill`), exactly `## Argument Flags` / `## Usage` / `## Implementation` in order, no `###`, flag table matching the argument-hint exactly, one glossary footer link (`plugins/sp/commands/dev-history-load.md`, `:15`, `:30`, `:47`) |
 | `plugins/sp/scripts/history-load.ts` | new — the sequence: frozen flag parse with `FLAG_KEY` mapping (`:83-102`), unknown → exit 2; import argv = `spur history import --json` + `--source` + `--dry-run` (`:184-186`); non-zero import exit surfaces non-clean source(s) + first warning detail and propagates the child's code (`:193-216`, R9); `--dry-run` prints would-run sequence and exits 0 (`:218-235`, R4/R6); analyze argv carries `--source`/`--session`/`--task`/`--since`/`--until` (`:150-162`); zero-row window exits 1 with explicit empty-window message (`:265-284`, R10); artifact path resolved via the `latest.json` pointer (`:131-137`, `:262`); `--report` renders `spur history report --mode forensics` (`:302-321`); `--json` emits one object `{import, artifact, reported, status}` on stdout with no interleaved banner (`:323-338`, R7) |
-| `plugins/sp/tests/history-load.test.ts` | new — 8 tests against a stubbed spur binary (`plugins/sp/tests/history-load.test.ts:88-211`): narrowing flags never reach import / `--source` reaches both, import-then-analyze ordering, non-zero import exit skips analyze + propagates code, zero-row window exits non-zero, unknown flag exits 2, dry-run writes no artifact + prints sequence, `--json` single-object contract, `--report` renders against the artifact |
+| `plugins/sp/tests/history-load.test.ts` | new — 8 tests against a stubbed spur binary (`plugins/sp/tests/history-load.test.ts`): narrowing flags never reach import / `--source` reaches both, import-then-analyze ordering, non-zero import exit skips analyze + propagates code, zero-row window exits non-zero, unknown flag exits 2, dry-run writes no artifact + prints sequence, `--json` single-object contract, `--report` renders against the artifact |
 | `plugins/sp/references/roles.md` | `dev-history-load` added to the `scribe` `commands: [...]` row (`plugins/sp/references/roles.md:44`) — closed command→role mapping |
 | `plugins/sp/tests/command-contract.test.ts` | both hard-coded `37` command-count literals bumped to `38` (`plugins/sp/tests/command-contract.test.ts:305-310`, `:390-393`) |
 | `plugins/sp/skills/spur-dev/references/flag-glossary.md` | new canonical `--source` entry (`plugins/sp/skills/spur-dev/references/flag-glossary.md:249-256`, `**Anchor:** \`#flag-source\``) — the flag is now declared by 2 dev commands; `--task` entry extended with the `dev-history-load` declarer + narrowing meaning (`:207-226`, C1 exact-set parity) |
@@ -210,7 +213,11 @@ Feature: dev-history-load command: on-demand cumulative import + analyze
 **Deliberate non-implementations (per Design anti-patterns).** No `spur history daily` shell-out / prune / retention (R3/R8 — delegated, documented); no `--mode` flag (checkpoint resume already provides cumulative behavior); no `--run`/`--top`/`--out` analyze passthroughs; no `--agent` (runs no model-bearing step — R5 parity count stays 23); no numbered `dev-operations.md` row (long-tail two-way parity deliberately avoided).
 
 **Dogfood (real data, `--source omp`, monorepo-local CLI per R4 provenance).** Dry-run printed the sequence and wrote no artifact; first real run imported 14,684 records and wrote `.spur/reports/history/2026-08-16/analyze-5648c805.json`; repeat run imported 4 newly-appended records with identical artifact totals (241,373) — cumulative, no double-count (R3). `--json` emitted one object carrying `provenance` (`binary: apps/cli/src/index.ts`, `importer: 0.4.32`). `--report` rendered the forensics view. An empty `--since/--until` window exited 1 with the explicit zero-messages message (R10). A bare run surfaces the machine's real `agy` degraded source (203 parse errors) and exits 2 — correct fail-loud (R9).
+
 ### Testing
+
+> **Stale-anchor note (conflict audit, 2026-09-08):** commit `9187db346` (task 0661) removed the `dev-history-load` surface and repointed `/sp:dev-find-issue` from `sp:issue-finding` to `sp:history-anatomy`. The citations below are historical evidence for that superseded surface; their line numbers no longer resolve and have been dropped from the anchors.
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
@@ -220,41 +227,43 @@ Feature: dev-history-load command: on-demand cumulative import + analyze
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | `plugins/sp/commands/dev-history-load.md:2-5,15,30,47` (frozen contract: frontmatter sans Skill, 3 ordered headings, glossary footer); `plugins/sp/tests/command-contract.test.ts:348-352`, `plugins/sp/tests/command-contract.test.ts:433-435` (38-counts, corrected anchors); `plugins/sp/references/roles.md:44` (scribe row); `plugins/sp/skills/spur-dev/references/flag-glossary.md:207-226,249-256` (--task extension, --source entry); `plugins/sp/README.md:129`; `bun test plugins/sp` 1006 pass 0 fail |
-| R2 | MET | `plugins/sp/scripts/history-load.ts:161-169` (analyze argv), `:184-188` (import argv), `:238` (analyze only after import 0); `plugins/sp/tests/history-load.test.ts:97-135` (routing + ordering); fresh dogfood `--source claude --json`: 11 new messages → `.spur/reports/history/2026-08-16/analyze-448403cb.json`, exit 0 |
-| R3 | MET | `plugins/sp/commands/dev-history-load.md:41-45` (delegates cadence to `spur history daily`; no prune, no daily shell-out in script); pipeline dogfood repeat: 4 new records, totals 241,373 identical (no double-count); re-audit real run imported only 11 new claude messages (cumulative) |
-| R4 | MET | `plugins/sp/scripts/history-load.ts:217-235` (dry-run), `:301-320` (report), `:322-337` (json single object); `plugins/sp/tests/history-load.test.ts:176-211` — 205 tests across 5 suites pass |
-| R5 | MET | `plugins/sp/scripts/history-load.ts:193-214` (import non-zero → skip analyze + propagate), `:263-279` (empty-window exit 1); `plugins/sp/tests/history-load.test.ts:146-164`; re-audit dogfood: bare run surfaces agy degradation (203 parse errors) and exits 2 before analyze — fail-hard path exercised on real data |
+| R2 | MET | `plugins/sp/scripts/history-load.ts` (analyze argv), `:184-188` (import argv), `:238` (analyze only after import 0); `plugins/sp/tests/history-load.test.ts` (routing + ordering); fresh dogfood `--source claude --json`: 11 new messages → `.spur/reports/history/2026-08-16/analyze-448403cb.json`, exit 0 |
+| R3 | MET | `plugins/sp/commands/dev-history-load.md` (delegates cadence to `spur history daily`; no prune, no daily shell-out in script); pipeline dogfood repeat: 4 new records, totals 241,373 identical (no double-count); re-audit real run imported only 11 new claude messages (cumulative) |
+| R4 | MET | `plugins/sp/scripts/history-load.ts` (dry-run), `:301-320` (report), `:322-337` (json single object); `plugins/sp/tests/history-load.test.ts` — 205 tests across 5 suites pass |
+| R5 | MET | `plugins/sp/scripts/history-load.ts` (import non-zero → skip analyze + propagate), `:263-279` (empty-window exit 1); `plugins/sp/tests/history-load.test.ts`; re-audit dogfood: bare run surfaces agy degradation (203 parse errors) and exits 2 before analyze — fail-hard path exercised on real data |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | Scenario: R1 — The command file ships with the /sp:dev-* family contract | MET | test | validate-commands 38/38 zero violations (`plugins/sp/tests/command-contract.test.ts:433-435`); roles closure includes dev-history-load (`plugins/sp/references/roles.md:44`) |
-| Scenario: R2 — A bare invocation loads history then analyzes it, in that order | MET | test | `plugins/sp/tests/history-load.test.ts:127-134` (ordering); success path re-proven live: `--source claude` import(11) → analyze → artifact, exit 0 |
+| Scenario: R2 — A bare invocation loads history then analyzes it, in that order | MET | test | `plugins/sp/tests/history-load.test.ts` (ordering); success path re-proven live: `--source claude` import(11) → analyze → artifact, exit 0 |
 | Scenario: R3 — Re-running is cumulative and never double-counts | MET | command | repeat real runs import only newly appended messages (11 on re-audit; pipeline: 4, totals identical) — checkpoint resume |
-| Scenario: R4 — Narrowing flags reach the verb that actually accepts them | MET | test | `plugins/sp/tests/history-load.test.ts:97-125`: narrowing never in import argv, all present in analyze argv, --source in both |
-| Scenario: R5 — --report renders the forensics view after analyze | MET | test | `plugins/sp/tests/history-load.test.ts:205-210`; `plugins/sp/scripts/history-load.ts:301-320` |
-| Scenario: R6 — --dry-run previews the sequence without persisting | MET | test | `plugins/sp/tests/history-load.test.ts:176-185` (no analyze call, no artifact pointer); re-audit `--dry-run` printed sequence |
+| Scenario: R4 — Narrowing flags reach the verb that actually accepts them | MET | test | `plugins/sp/tests/history-load.test.ts`: narrowing never in import argv, all present in analyze argv, --source in both |
+| Scenario: R5 — --report renders the forensics view after analyze | MET | test | `plugins/sp/tests/history-load.test.ts`; `plugins/sp/scripts/history-load.ts` |
+| Scenario: R6 — --dry-run previews the sequence without persisting | MET | test | `plugins/sp/tests/history-load.test.ts` (no analyze call, no artifact pointer); re-audit `--dry-run` printed sequence |
 | Scenario: R7 — --json emits a machine-readable result | MET | command | re-audit `--json` success + error runs each emitted exactly one parseable object (verified with python json.load) |
-| Scenario: R8 — The command delegates the periodic cadence instead of duplicating it | MET | command | `plugins/sp/commands/dev-history-load.md:41-45`; no prune/retention/daily re-implementation in `plugins/sp/scripts/history-load.ts` (grep: only the doc comment references daily) |
-| Scenario: R9 — A failing import aborts before analyze and propagates the exit code | MET | command | `plugins/sp/tests/history-load.test.ts:146-151` + live: bare run exit 2 naming agy, analyze never invoked |
-| Scenario: R10 — Narrowing to a window with no imported rows fails loudly | MET | test | `plugins/sp/tests/history-load.test.ts:153-159`: zero-message window exits 1 naming the window |
+| Scenario: R8 — The command delegates the periodic cadence instead of duplicating it | MET | command | `plugins/sp/commands/dev-history-load.md`; no prune/retention/daily re-implementation in `plugins/sp/scripts/history-load.ts` (grep: only the doc comment references daily) |
+| Scenario: R9 — A failing import aborts before analyze and propagates the exit code | MET | command | `plugins/sp/tests/history-load.test.ts` + live: bare run exit 2 naming agy, analyze never invoked |
+| Scenario: R10 — Narrowing to a window with no imported rows fails loudly | MET | test | `plugins/sp/tests/history-load.test.ts`: zero-message window exits 1 naming the window |
 
 **SECUA / design findings (re-audit, --focus all)**
 
-- P2 usability (resolved-by-decision): a bare `--source all` run aborts permanently wherever a source is steady-state degraded (agy: 203 parse errors in Antigravity-owned chunks). Diverges from the daily pipeline's "never an abort" fan-out policy (`packages/app/src/services/history-refresh-service.ts:130-136`). Operator decision 2026-08-16: **keep fail-hard**; workaround documented in `plugins/sp/commands/dev-history-load.md:47-51` (Usage note); deferred tolerance alternative filed as task 0569 under I5.
+- P2 usability (resolved-by-decision): a bare `--source all` run aborts permanently wherever a source is steady-state degraded (agy: 203 parse errors in Antigravity-owned chunks). Diverges from the daily pipeline's "never an abort" fan-out policy (`packages/app/src/services/history-refresh-service.ts:130-136`). Operator decision 2026-08-16: **keep fail-hard**; workaround documented in `plugins/sp/commands/dev-history-load.md` (Usage note); deferred tolerance alternative filed as task 0569 under I5.
 - P3: `git diff` noise — the degraded-source dry-run/real runs from this re-audit wrote `.spur/reports/history/2026-08-16/*.json` artifacts (gitignored, disclosed here per the fix-pass disclosure rule).
 
 Coverage: N/A (plugin script verified via stubbed-binary unit tests + live dogfood; no monorepo runtime code path added).
 
 **Shippable: FAIL** — feature I5 has one incomplete linked task: 0569 (todo), the deferred degraded-tolerance follow-up filed by this re-audit. All 10 feature scenarios are covered and verified via 0567 (done, PASS). The FAIL is the gate correctly seeing the open follow-up, not undelivered core scope.
+
 ### Review
+
 **Disposition: PASS** — no P1–P3 findings against the task's own diff (functional traceability, SECUA, architecture all clean). See findings table + notes below.
 
 **Findings (P1–P4)**
 
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
-| P4 | Correctness | `plugins/sp/scripts/history-load.ts:200-206` | Blank abort message risk when the import child exits non-zero with empty stderr — `??` on a trimmed-empty string yields `''`, not the fallback. Fixed during verification (now `||` with warning-detail fallback); covered by the non-zero-import test. |
-| P4 | Usability | `plugins/sp/commands/dev-history-load.md:36-39` | Bare `--source all` runs surface a real degraded source (agy: 203 parse errors) and exit 2 — correct fail-loud per R9, but an operational expectation until upstream data is repaired. Documented in Solution, not a defect. |
+| P4 | Correctness | `plugins/sp/scripts/history-load.ts` | Blank abort message risk when the import child exits non-zero with empty stderr — `??` on a trimmed-empty string yields `''`, not the fallback. Fixed during verification (now `||` with warning-detail fallback); covered by the non-zero-import test. |
+| P4 | Usability | `plugins/sp/commands/dev-history-load.md` | Bare `--source all` runs surface a real degraded source (agy: 203 parse errors) and exit 2 — correct fail-loud per R9, but an operational expectation until upstream data is repaired. Documented in Solution, not a defect. |
 | P4 | Process | working tree | Concurrent writer's changes (dev-feature-change rename, validate-commands.ts real-YAML-parse hardening, next-feature skill edits, docs/04_DESIGN.md etc.) appeared mid-run. Outside 0567's declared paths, not part of this diff, not reviewed here; the quality gate passed with them present. |
 
 **Functional traceability.** R1: `plugins/sp/commands/dev-history-load.md` passes all 5 thin-wrapper gates (`validate-commands.ts` reports 38/38 pass); frontmatter/heading/table/glossary contract exact. R2: import-before-analyze ordering + per-verb flag routing covered by `history-load.test.ts:97-145` and real dogfood. R3: cumulative behavior verified with real data — first run imported 14,684 omp records, repeat run imported 4 newly-appended with identical artifact totals (241,373), no double-count; cadence delegation documented in `dev-history-load.md:36-39`. R4: `--report` renders forensics against the artifact (real run); `--dry-run` writes no artifact and prints the sequence (test `:176-186`); `--json` emits one object with no banner (test `:187-204`). R5: non-zero import exit skips analyze and propagates the child's code (test `:146-152`; real: agy degraded → exit 2); zero-row window exits 1 with explicit message (test `:153-160`; real: empty `--since/--until` window).
@@ -264,6 +273,7 @@ Coverage: N/A (plugin script verified via stubbed-binary unit tests + live dogfo
 **Architecture.** Single thin wrapper script following the `dev-daily` precedent — a deterministic CLI sequence, correctly not a skill (matches eight existing script-backed commands). Frozen contract honored: no `--mode`, no `--run`/`--top`/`--out` passthroughs, no `--agent`, no numbered `dev-operations.md` row. No new CLI noun/verb — ADR-051 consent gate not implicated.
 
 **Residual risk.** None for this task's surface. The only non-zero-exit realities on this machine (degraded `agy` source; empty narrowing windows) are verified fail-loud behavior, not silent degradation.
+
 ### References
 
 L

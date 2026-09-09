@@ -4,7 +4,7 @@ name: "Repoint /sp:dev-find-issue, remove /sp:dev-history-load, and land the coe
 status: done
 template: feature-impl
 created_at: 2026-08-25T04:06:58.604Z
-updated_at: "2026-08-25T17:07:54.070Z"
+updated_at: "2026-09-09T06:47:13.516Z"
 feature_id: I8
 priority: P2
 tags: ["plugin", "command", "docs", "migration"]
@@ -311,7 +311,7 @@ invocable with no shared logic. Feature I5's disposition is deferred to wrap-up.
 
 No P1/P2/P3.
 
-- R1 (thin forwarder, reduced surface): `plugins/sp/commands/dev-find-issue.md:1` — one `Skill(skill="sp:history-anatomy", …)` invocation; `--mode/--date/--since/--until/--recompute/--agent/--output` kept; the fourteen dropped flags absent; glossary linked. Plugin structure tests pass (185 across the four contract suites).
+- R1 (thin forwarder, reduced surface): `plugins/sp/commands/dev-find-issue.md` — one `Skill(skill="sp:history-anatomy", …)` invocation; `--mode/--date/--since/--until/--recompute/--agent/--output` kept; the fourteen dropped flags absent; glossary linked. Plugin structure tests pass (185 across the four contract suites).
 - R2 (full removal): dev-history-load.md, history-load.{ts,mjs}, history-load.test.ts deleted; manifest entry + build chain entry removed; `script-contract-check` PASS (15 scripts). Blast-radius grep shows only historical prose references remain.
 - R3 (import owners preserved): `package.json:93` load-history byte-unchanged; History UI Import & Analyze untouched; the new command never triggers an import.
 - R4 (coexistence): `sp:issue-finding` remains packaged + directly invocable, marked legacy in README; no logic shared.

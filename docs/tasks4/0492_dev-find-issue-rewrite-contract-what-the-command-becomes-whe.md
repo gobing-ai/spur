@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0491"]
 ac_numbering: task-local
 created_at: "2026-08-10T00:03:55.207Z"
-updated_at: "2026-08-18T04:42:48.644Z"
+updated_at: "2026-09-09T06:47:12.230Z"
 done_forced: "true"
 done_reason: "Exit ticket for map E2. Operator ruled report-first (R3). Contract specifies rewritten flow (R1), command/skill/CLI split (R2), omp-sample walkthrough (R4), downstream batch order (R6), primacy inversion argument (R7), session-formats ownership edit (R8). R5: implementation tasks deferred to decomposition per map recipe (decisions and specs, not diffs). All claims HIGH/MEDIUM confidence per Testing table."
 ---
@@ -202,6 +202,8 @@ R6; those tasks own the code, this one owns none of it.
 
 ### Solution
 
+> **Stale-anchor note (conflict audit, 2026-09-08):** commit `9187db346` (task 0661) removed the `dev-history-load` surface and repointed `/sp:dev-find-issue` from `sp:issue-finding` to `sp:history-anatomy`. The citations below are historical evidence for that superseded surface; their line numbers no longer resolve and have been dropped from the anchors. The live replacement wrapper is `plugins/sp/commands/dev-find-issue.md:50`.
+
 ## R1 — The rewritten flow against the CLI contract
 
 **Settled upstream:**
@@ -359,9 +361,11 @@ Deleted: the per-source fidelity ratings ("High"/"Medium") — the coverage matr
 
 **The edit is a task** in the downstream batch (R6 order 9), not an inline fix here. This ticket specifies it; the task executes it.
 
-**Pre-existing `--template` default contradiction:** `plugins/sp/commands/dev-find-issue.md:21` (Argument Flags) says default `standard`; `:55` (Arguments) says default `meta`. Both tables are collapsed in the rewrite (R2), which resolves it structurally — but the contradiction is noted here, not fixed inline, per the map's anti-patterns. The command-rewrite task (R6 order 8) owns the fix.
+**Pre-existing `--template` default contradiction:** `plugins/sp/commands/dev-find-issue.md` (Argument Flags) says default `standard`; `:55` (Arguments) says default `meta`. Both tables are collapsed in the rewrite (R2), which resolves it structurally — but the contradiction is noted here, not fixed inline, per the map's anti-patterns. The command-rewrite task (R6 order 8) owns the fix.
 
 ### Testing
+
+> **Stale-anchor note (conflict audit, 2026-09-08):** commit `9187db346` (task 0661) removed the `dev-history-load` surface and repointed `/sp:dev-find-issue` from `sp:issue-finding` to `sp:history-anatomy`. The citations below are historical evidence for that superseded surface; their line numbers no longer resolve and have been dropped from the anchors. The live replacement wrapper is `plugins/sp/commands/dev-find-issue.md:50`.
 
 **N/A — no code shipped.** This is a wayfinder research ticket (exit ticket for map E2). Verification is per-claim reproducibility against the cited source files, not a test suite.
 
@@ -369,7 +373,7 @@ Deleted: the per-source fidelity ratings ("High"/"Medium") — the coverage matr
 
 | Claim                                                           | Evidence                                                                                                                                                    | Confidence                                                          | Reproducible by                                     |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------- |
-| Command is a thin wrapper around the skill                      | `plugins/sp/commands/dev-find-issue.md:74-75` (`Skill(skill="sp:issue-finding", args="$ARGUMENTS")`)                                                        | **HIGH** — read from source                                         | Open the command file                               |
+| Command is a thin wrapper around the skill                      | `plugins/sp/commands/dev-find-issue.md` (`Skill(skill="sp:issue-finding", args="$ARGUMENTS")`)                                                        | **HIGH** — read from source                                         | Open the command file                               |
 | Skill Phase 2 extraction table is CLI-computable                | `SKILL.md:150-176` lists tool calls, compactions, test runs, spur calls, guard failures, errors, loop candidates — all present in typed tables or derivable | **HIGH** — read from source                                         | Open `SKILL.md:150`                                 |
 | `--use-history` ships today and is subordinate                  | `dev-find-issue.md:30,63` (flag defined), `SKILL.md:343` (optional), `SKILL.md:150-176` (raw-evidence stance)                                               | **HIGH** — read from source                                         | Grep `--use-history` in both files                  |
 | Report-first ruling is operator-settled                         | Operator ruling recorded this session (2026-08-09), R3 above                                                                                                | **HIGH** — operator ruled in conversation                           | See R3 section                                      |
@@ -379,7 +383,7 @@ Deleted: the per-source fidelity ratings ("High"/"Medium") — the coverage matr
 | `args_digest` preserves loop detection but not content          | `packages/domain/src/analytics/forensic-query.ts:275` (Q4 uses digest), `mappers.ts:189` (argsDigest hashes)                                                | **HIGH** — read from source                                         | Open both files                                     |
 | Import-retention task blocks phase detection                    | 0489 coverage matrix: `history_tool_call.args_digest` is a hash; phase detection needs todo contents (`schema-sql.ts:120`)                                  | **HIGH** — measured                                                 | Read 0489 Solution                                  |
 | TTFT/Generation split is a deliberate loss                      | 0491 R-deferred: artifact has no intra-call latency fields                                                                                                  | **HIGH** — read from artifact schema                                | Inspect `packages/domain/src/analytics/artifact.ts` |
-| `--template` default contradicts across two tables              | `plugins/sp/commands/dev-find-issue.md:21` says `standard`, `:55` says `meta`                                                                                                   | **HIGH** — read from source                                         | Open both lines                                     |
+| `--template` default contradicts across two tables              | `plugins/sp/commands/dev-find-issue.md` says `standard`, `:55` says `meta`                                                                                                   | **HIGH** — read from source                                         | Open both lines                                     |
 | session-formats.md ownership verdict                            | 0489 R1 verdict (mappers own code authority, prose retains root table + bridge)                                                                             | **HIGH** — read from 0489 Solution                                  | Read 0489 `:371-382`                                |
 | Implementation tasks not emitted here (decomposition owns them) | E2 map close recipe: wayfinder tickets carry "decisions and specs, not diffs"                                                                               | **HIGH** — read from map                                            | Read E2 `### Notes`                                 |
 

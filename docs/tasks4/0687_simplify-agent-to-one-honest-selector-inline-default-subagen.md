@@ -4,7 +4,7 @@ name: "Simplify --agent to one honest selector: inline default, subagent-first, 
 status: done
 template: issue
 created_at: 2026-08-27T04:45:22.880Z
-updated_at: "2026-08-28T16:58:07.821Z"
+updated_at: "2026-09-09T06:47:14.203Z"
 feature_id: B
 done_forced: "true"
 done_reason: "Selector/telemetry/classifier contract is MET (R1-R7, R9-R12). Residual AC3 write-path / AC4 published-report / AC9 Performance-section publication are covering tasks 0689 (agy expectFile shim) and 0690 (history-anatomy structure-gate reliability), not this diff. PARTIAL verdict retained as the honest record."
@@ -37,7 +37,7 @@ rejected fail-loud at the first `agent.run` stage:
 The rejection is working exactly as designed — ADR-047's G5 amendment (2026-08-15, task
 0565) made explicit `inline` a hard error on every headless surface. The operator's ruling
 is that the design itself is wrong: a selector that the wrapper advertises
-(`plugins/sp/commands/dev-find-issue.md:28`) and the operator explicitly typed must not be
+(`plugins/sp/commands/dev-find-issue.md`) and the operator explicitly typed must not be
 refused. The G5 debugging-trap concern (an `inline` request silently executing in another
 session) is legitimate; refusing the request is the wrong remedy — signalling is.
 
@@ -181,7 +181,7 @@ plainly rather than advertising a host-session guarantee it does not provide.
 **R6 — Purge the stale contract prose.** The rejection is documented across many surfaces;
 all must land in the same commit as the code (constitution T3). Known surfaces:
 
-- `plugins/sp/commands/dev-find-issue.md:28`, `plugins/sp/commands/dev-wrap.md`,
+- `plugins/sp/commands/dev-find-issue.md`, `plugins/sp/commands/dev-wrap.md`,
   `plugins/sp/commands/dev-wrapall.md`
 - `plugins/sp/skills/spur-dev/references/cross-cutting.md:43-69, 84-90, 119-137, 153-157`
   (the "hard host-session guarantee" block, the four-row value table, the executor
@@ -709,7 +709,7 @@ task 0689. Operator-approved machine-config fix applied: agy-opus model pin
 - `plugins/sp/skills/spur-dev/references/cross-cutting.md:43-69,84-90,119-137,153-157`
 - `plugins/sp/skills/spur-dev/references/flag-glossary.md:38-53`
 - `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` (the `dev-run` precedent)
-- `plugins/sp/commands/dev-find-issue.md:28`; `dev-wrap.md`; `dev-wrapall.md`
+- `plugins/sp/commands/dev-find-issue.md`; `dev-wrap.md`; `dev-wrapall.md`
 - `config/workflows/history-anatomy.yaml:71` (`agent: "claude"` literal), `:99-106`
   (`resolve-scope` agent.run), `:183-190` (`enrich`), `:217-224` (`validate`)
 - `plugins/sp/skills/history-anatomy/references/operations.md:48-50` (run-cost note that

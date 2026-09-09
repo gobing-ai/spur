@@ -4,7 +4,7 @@ name: "S2: Give the inline pipeline driver a single owner and an executable pari
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:38.616Z
-updated_at: "2026-09-05T00:57:41.093Z"
+updated_at: "2026-09-09T06:46:29.458Z"
 feature_id: D9
 dependencies: ["0751", "0752", "0753"]
 ac_altitude: task-local
@@ -98,7 +98,7 @@ Feature: Inline pipeline driver ownership and parity
 | Owner + retirement criterion in doc body | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:14-16` |
 | Documented action/guard set | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:24-28` |
 | Parity check script | `plugins/sp/scripts/inline-pipeline-parity-check.ts:1-180` |
-| Parity check test | `plugins/sp/tests/inline-pipeline-parity-check.test.ts:1-60` |
+| Parity check test | `plugins/sp/tests/inline-pipeline-parity-check.test.ts:1-55` |
 | spur-check wiring | `package.json:80-94` |
 
 **R1 — named owner in the reference doc.** `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:1-10` frontmatter gains `owner: spur-dev-maintainers` and `retirement-criterion: ...`. The doc body also names the owner at the top, after the frontmatter, so it's discoverable without reading this task.

@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0555"]
 ac_numbering: task-local
 created_at: "2026-08-14T01:01:43.828Z"
-updated_at: "2026-08-14T19:20:49.734Z"
+updated_at: "2026-09-09T06:47:12.441Z"
 ---
 
 ## 0556. Rewrite dev-find-issue as report-first over the data plane
@@ -266,14 +266,17 @@ raw-JSONL fallback under exactly three conditions.
 - Pre-existing session-formats `--source` enum asymmetry (grok/agy rows) — out of scope.
 - `fmtDur`, cache-hit ratio formula, report-mode registry — 0555 surface, untouched.
 ### Testing
+
+> **Stale-anchor note (conflict audit, 2026-09-08):** commit `9187db346` (task 0661) removed the `dev-history-load` surface and repointed `/sp:dev-find-issue` from `sp:issue-finding` to `sp:history-anatomy`. The citations below are historical evidence for that superseded surface; their line numbers no longer resolve and have been dropped from the anchors. The live replacement wrapper is `plugins/sp/commands/dev-find-issue.md:50`.
+
 Independent re-audit 2026-08-14 (`/sp:dev-verifyall feature E5 --auto --next --force --focus all --fix all`). `--fix all` flipped 13 leftover `[ ]` boxes in Requirements + Plan and remapped verdict AC ids to feature scenario titles R6/R7 (shippable id match). Artifacts: `.spur/run/0556-verdict.json` (AC ids rewritten), `.spur/run/0556-verify-answer.txt`.
 
 **Per-Requirement Traceability**
 
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | MET | `plugins/sp/commands/dev-find-issue.md:10-13` report-first; `plugins/sp/commands/dev-find-issue.md:49-53` task creation only behind `--create-task`; removed flags named. `plugins/sp/skills/issue-finding/SKILL.md:33-37`, `plugins/sp/skills/issue-finding/SKILL.md:117-125` |
-| R2 | MET | Command is a thin `Skill()` wrapper (`plugins/sp/commands/dev-find-issue.md:63`). SKILL.md 423 lines; REPORT uses `spur history report --mode forensics` (`plugins/sp/skills/issue-finding/SKILL.md:139-147`); GENERATE gated (`plugins/sp/skills/issue-finding/SKILL.md:239-242`) |
+| R1 | MET | `plugins/sp/commands/dev-find-issue.md` report-first; `plugins/sp/commands/dev-find-issue.md` task creation only behind `--create-task`; removed flags named. `plugins/sp/skills/issue-finding/SKILL.md:33-37`, `plugins/sp/skills/issue-finding/SKILL.md:117-125` |
+| R2 | MET | Command is a thin `Skill()` wrapper (`plugins/sp/commands/dev-find-issue.md`). SKILL.md 423 lines; REPORT uses `spur history report --mode forensics` (`plugins/sp/skills/issue-finding/SKILL.md:139-147`); GENERATE gated (`plugins/sp/skills/issue-finding/SKILL.md:239-242`) |
 | R3 | MET | `plugins/sp/skills/issue-finding/SKILL.md:155-165` enumerates exactly three fallback conditions (no typed mapper / explicit `--sessions` / primitive not retained). Typed-mapper source must not wholesale-parse |
 | R4 | MET | `plugins/sp/tests/issue-finding-fallback.test.ts` R4 block this run: fixture categories match `expected-findings.json` |
 | R5 | MET | Same file R5 block: argument-hint carries `--create-task` not removed flags; live `history report` exposes `--mode` |
@@ -282,7 +285,7 @@ Independent re-audit 2026-08-14 (`/sp:dev-verifyall feature E5 --auto --next --f
 
 | AC | Status | Evidence Type | Evidence |
 | --- | --- | --- | --- |
-| Scenario: R6 — find-issue is report-first | MET | test | `plugins/sp/tests/issue-finding-fallback.test.ts` smoke + argument-hint this run: report-only default, `--create-task` present, `--use-history`/`--no-task` absent; `plugins/sp/commands/dev-find-issue.md:49-53` |
+| Scenario: R6 — find-issue is report-first | MET | test | `plugins/sp/tests/issue-finding-fallback.test.ts` smoke + argument-hint this run: report-only default, `--create-task` present, `--use-history`/`--no-task` absent; `plugins/sp/commands/dev-find-issue.md` |
 | Scenario: R7 — The data plane is primary and raw JSONL is the named fallback | MET | test | `plugins/sp/skills/issue-finding/SKILL.md:155-165` + `plugins/sp/tests/issue-finding-fallback.test.ts` asserts `no typed mapper` / `do not retain` / `0492 R7`; `plugins/sp/skills/issue-finding/references/session-formats.md:10-13` fallback intro |
 
 **SECUA Review**
@@ -292,6 +295,7 @@ Independent re-audit 2026-08-14 (`/sp:dev-verifyall feature E5 --auto --next --f
 | P4 | — | — | No P1–P3 findings; verify verdict PASS. `--fix all` also dropped the leftover `--use-history` heading on the history-bridge section of `plugins/sp/skills/issue-finding/references/session-formats.md` |
 
 This run: `bun test plugins/sp/tests/issue-finding-fallback.test.ts plugins/sp/tests/skill-structure.test.ts plugins/sp/tests/command-contract.test.ts` → 126 pass / 0 fail (1153 expects). Isolated-suite coverage exit 1 is not a product failure.
+
 ### Review
 # Review — 0556 (L3 self-review, report-first rewrite)
 

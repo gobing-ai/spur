@@ -13,7 +13,7 @@ tags: ["meta"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T16:37:16.435Z"
-updated_at: "2026-08-18T04:42:48.771Z"
+updated_at: "2026-09-09T06:47:13.292Z"
 ---
 
 ## 0568. Fix 0567-run process bottlenecks: plan-time size gate, verdict/record contract docs, stale spur PATH, dogfood discipline
@@ -274,7 +274,7 @@ the artifact, not from any warning. Fix: R2 (union parse or loud warning). Evide
 segment G (verify, 4.4 min, $0.272 — includes three answer regenerations).
 
 **RC3 — Stale file:line anchors cited at authoring (S2, ~$0.04–0.06).** Solution/Testing/Review
-sections cited `plugins/sp/tests/history-load.test.ts:176-219`, `:205-219`, `:88-225` — the file is
+sections cited `plugins/sp/tests/history-load.test.ts`, `:205-219`, `:88-225` — the file is
 211 lines. The L4 gate caught them at `spur task check` (record time), requiring three fix passes:
 the Testing section was corrected, then `spur task record` re-transcribed Testing from the verdict
 artifact (which still had stale anchors), forcing a second fix in the answer file + re-derivation.

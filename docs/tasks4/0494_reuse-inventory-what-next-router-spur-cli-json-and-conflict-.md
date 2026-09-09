@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T00:45:45.534Z"
-updated_at: "2026-08-10T05:13:09.446Z"
+updated_at: "2026-09-09T06:47:14.634Z"
 done_forced: "true"
 done_reason: "Wayfinder research ticket (reuse inventory): corpus-only investigation, no code diff — same class as siblings 0493/0495. Structural gate PASS; Review L3 findings table populated; verdict .spur/run/0494-verdict.json PASS (R1-R5 MET). Provenance override recorded per CLI guidance."
 ---
@@ -186,6 +186,7 @@ this ticket must not pre-empt it.
 repo-relative `file:line` or a runnable `spur` verb; every `must-build` row additionally states which
 surfaces were checked and did not provide it. A row justified by prose alone fails R5.
 ### Solution
+
 **Inventory resolved 2026-08-10** — wayfinder research ticket, branch `wayfind/0495-structure-defect`. Read-only across next-router, conflict-finding, and the spur CLI help surface. No code ships; the deliverable is the build-vs-reuse ledger that bounds the graduated implement ticket. OQ1 (dispatch vs report) is unresolved — the ledger enumerates both readings and marks dispatch-only rows conditional, per the Q&A.
 
 ---
@@ -230,7 +231,7 @@ Reuse ladder applied in order: (1) existing `spur` verb → (2) existing skill r
 | Authority pull signal | **must-build** | 4 | `rg <feature-id> docs/02_ROADMAP.md docs/00_ADR.md`. Authority docs are markdown; no verb indexes mentions |
 | Tiered ranking + evidence-per-candidate report | **must-build** | 4 | The rubric itself — 0493's deliverable (Eisenhower-style ordinal tiers, no numeric scores). This is the command's payload; nothing existing produces an ordering (routing-table B3 falls back to WBS-ascending, `plugins/sp/skills/next-router/references/routing-table.md:83`) |
 | Structure-defect proposals (D1–D4) | **compose** | 2+3 | Contract authored by 0495 (Artifacts A/C); schema reused from `docs/plans/feature-tree-restructure-map.md:10`; inputs from `spur feature list --json` + task rosters. No new detection machinery beyond the contract |
-| Proposal handoff to `/sp:dev-featurechange` | **reuse-as-is** | 2 | 0495 Artifact C: emit rows conforming to the map schema (inline print or `docs/plans/` append per OQ1); featurechange `--dry-run` → confirm → apply is the sole mutation path (`plugins/sp/commands/dev-featurechange.md:87`) |
+| Proposal handoff to `/sp:dev-featurechange` | **reuse-as-is** | 2 | 0495 Artifact C: emit rows conforming to the map schema (inline print or `docs/plans/` append per OQ1); featurechange `--dry-run` → confirm → apply is the sole mutation path (`plugins/sp/commands/dev-feature-change.md:85`) |
 | Dispatch into `/sp:dev-next` on the winner | **reuse-as-is — CONDITIONAL on OQ1** | 2 | next-router owns within-target routing (`plugins/sp/skills/next-router/references/routing-table.md:25-40`, §0 step 1). Only exists in the dispatch reading of OQ1; the report reading omits this row entirely |
 | Feature-tree structure (parent/child) | **reuse-as-is** | 1 | DD-14 id hierarchy in `spur feature list --json` ids; child-count derivable by id prefix. No traversal code needed |
 
@@ -253,7 +254,9 @@ Every `must-build` row names the surfaces checked and found wanting (`spur featu
 **Proposed `plugins/sp/skills/next-feature/` file list:** `SKILL.md` + `references/signal-derivation.md`, `references/ranking-rubric.md`, `references/proposal-contract.md`, `references/handoff-routing.md`. Four references mirroring conflict-finding's split: derivation / rubric / contract / routing. (`ranking-rubric.md` has no single conflict-finding analog — it carries 0493's tiered rubric, the command's payload.) Plus the thin wrapper `plugins/sp/commands/dev-find-next.md` forwarding `$ARGUMENTS`, mirroring `dev-find-conflict.md`'s single `Skill()` forward.
 
 **Handoff:** this ledger + file list bound the graduated implement ticket (map "Not yet specified" → now specified). The implement ticket composes: it writes 5 markdown files + 1 command + README/04_DESIGN entries and no TypeScript.
+
 ### Testing
+
 **Evidential verification — no code ships from this ticket (per Design).** Every ledger row cites a verb run this session or a `file:line` re-read this session (2026-08-10, branch `wayfind/0495-structure-defect`).
 
 | Claim | Verification | Result |
@@ -268,13 +271,14 @@ Every `must-build` row names the surfaces checked and found wanting (`spur featu
 | conflict-finding = 1411 lines (254/258/277/346/276) | `wc -l` on SKILL.md + 4 references | Exact |
 | `dev-find-conflict.md` is a thin wrapper | read in full — single `Skill(skill="sp:conflict-finding", args="$ARGUMENTS")` forward | Exact |
 | Mapping schema for the compose rows | `docs/plans/feature-tree-restructure-map.md:10` (`## Schema`), `:15` dispositions | Re-read exact (0495 re-audit, same session) |
-| featurechange is sole mutation path | `plugins/sp/commands/dev-featurechange.md:87` "Apply (CLI only)", `:89` forbidden raw writes | Re-read exact |
+| featurechange is sole mutation path | `plugins/sp/commands/dev-feature-change.md:85` "Apply (CLI only)", `:89` forbidden raw writes | Re-read exact |
 
 **0493 dependency note:** R3's ledger uses the map's candidate-signal list per the Q&A (independence), cross-checked against 0493's *measured* results this session: 0493's edge-count correction (verifyall re-audit) does not touch the ledger — the rejected fan-out signal has no ledger row, and the four surviving signals map to rows exactly.
 
 Coverage: N/A (research inventory; no runtime code path added).
 
-**Second re-audit (`/sp:dev-verifyall --feature H12 --auto --next --force --focus all --fix all`, 2026-08-10).** Anchors re-read at their cited lines: `plugins/sp/skills/next-router/references/routing-table.md:83` (B3 predicate + WBS-ascending fallback) and `plugins/sp/skills/next-router/references/routing-table.md:84-87` (B4–B7, all firing on `frontier tasks == 0`) exact; conflict-finding template **254/258/277/346/276 = 1411** exact; `plugins/sp/commands/dev-featurechange.md:87` / `:89` exact; `docs/plans/feature-tree-restructure-map.md:10` / `:15` exact; `spur feature list/sync --all --dry-run/check --json` all re-run. **One anchor falsified and repaired under `--fix all`:** the target-omitted non-route cited at `plugins/sp/skills/next-router/references/routing-table.md` line 32 now sits at **line 33** ("Omitted → NOT v1 (see Non-routes); stop with usage"); corrected in `### References` and `### Q&A`. The R1 seam ruling is unaffected — only the line number moved. `spur task check 0494` → pass, 0 findings.
+**Second re-audit (`/sp:dev-verifyall --feature H12 --auto --next --force --focus all --fix all`, 2026-08-10).** Anchors re-read at their cited lines: `plugins/sp/skills/next-router/references/routing-table.md:83` (B3 predicate + WBS-ascending fallback) and `plugins/sp/skills/next-router/references/routing-table.md:84-87` (B4–B7, all firing on `frontier tasks == 0`) exact; conflict-finding template **254/258/277/346/276 = 1411** exact; `plugins/sp/commands/dev-feature-change.md:85` / `:89` exact; `docs/plans/feature-tree-restructure-map.md:10` / `:15` exact; `spur feature list/sync --all --dry-run/check --json` all re-run. **One anchor falsified and repaired under `--fix all`:** the target-omitted non-route cited at `plugins/sp/skills/next-router/references/routing-table.md` line 32 now sits at **line 33** ("Omitted → NOT v1 (see Non-routes); stop with usage"); corrected in `### References` and `### Q&A`. The R1 seam ruling is unaffected — only the line number moved. `spur task check 0494` → pass, 0 findings.
+
 ### Review
 | Priority | Severity | File | Finding | Recommendation |
 |---|---|---|---|---|
