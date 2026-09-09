@@ -10,9 +10,11 @@ import {
     enqueueHistoryRefresh,
     HISTORY_REFRESH_CONTEXT_ENV,
     HISTORY_REFRESH_JOB,
+    HISTORY_SOURCE_TIMEOUT_ENV,
     type HistoryRefreshEnqueueResult,
     handleHistoryRefreshJob,
     parseHistoryRefreshContext,
+    resolveHistoryRefreshTimeoutMs,
     validateHistoryRefreshPayload,
 } from '../../src/services/history-refresh-service';
 import {
@@ -73,7 +75,7 @@ interface RecordedRun {
     cwd?: string;
     env?: Record<string, string>;
     maxOutput?: number;
-    timeout?: number;
+    timeout?: number | null;
     signal?: AbortSignal;
     onSpawn?: (pid: number) => void;
 }
@@ -216,7 +218,12 @@ describe('enqueueHistoryRefresh single-flight producers (task 0716)', () => {
             const t0 = 1_000_000;
             await db.run(
                 `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, next_retry_at)
-                 VALUES ('job-live', '${HISTORY_REFRESH_JOB}', '{"trigger":"manual","triggerId":null,"windowStart":${t0},"windowEnd":${t0}}', 'processing', 1, 0, ${t0}, ${t0}, NULL)`,
+                 VALUES (?, ?, ?, 'processing', 1, 0, ?, ?, NULL)`,
+                'job-live',
+                HISTORY_REFRESH_JOB,
+                JSON.stringify({ trigger: 'manual', triggerId: null, windowStart: t0, windowEnd: t0 }),
+                t0,
+                t0,
             );
             const result = await enqueueHistoryRefresh(db, {
                 config: config(false),
@@ -442,25 +449,21 @@ describe('handleHistoryRefreshJob watchdog timeout (task 0803 R1)', () => {
     });
 
     test('a deadline kill is labelled as a timeout, not a generic termination', async () => {
-        // Real abort contract: the fake child hangs until the abort signal, then reports SIGKILL —
-        // so runBoundedChild's own 20ms deadline (not a simulated duration) produces timedOut.
+        // Native contract (task 0813 R1): the executor owns the deadline. The fake reports
+        // an `outcome: 'timeout'` result — as the real NodeProcessExecutor does after its
+        // own group SIGTERM/SIGKILL — instead of waiting for a caller abort signal that
+        // no longer exists.
         const executor = {
             run: (options: RecordedRun) =>
-                new Promise((resolve) => {
-                    options.signal?.addEventListener(
-                        'abort',
-                        () =>
-                            resolve({
-                                command: options.command,
-                                args: options.args ?? [],
-                                exitCode: null,
-                                signal: 'SIGKILL',
-                                stdout: '',
-                                stderr: 'partial',
-                                durationMs: options.timeout ?? 0,
-                            }),
-                        { once: true },
-                    );
+                Promise.resolve({
+                    command: options.command,
+                    args: options.args ?? [],
+                    exitCode: null,
+                    signal: 'SIGTERM',
+                    stdout: '',
+                    stderr: 'partial',
+                    durationMs: options.timeout ?? 0,
+                    outcome: 'timeout',
                 }),
         } as unknown as ProcessExecutor;
         await expect(
@@ -497,5 +500,146 @@ describe('handler-level exclusive-key wiring (task 0807 R2)', () => {
         } finally {
             releaseExclusiveJob(HISTORY_PRODUCER_EXCLUSIVE_KEY, 'scheduler job "history-daily-report"');
         }
+    });
+});
+
+describe('handleHistoryRefreshJob execution policy (task 0813 R2/R3)', () => {
+    const validPayload = { trigger: 'task-done', triggerId: '0813', windowStart: 1, windowEnd: 2 };
+
+    test('a canonical payload policy beats the legacy env-resolved deps value', async () => {
+        const { executor, runs } = fakeExecutor({});
+        await handleHistoryRefreshJob(
+            { cwd: '/p', invocation: 'bun', executor, timeoutMs: 4_321 },
+            jobOf({ ...validPayload, timeoutMs: 7_777 }),
+        );
+        expect(runs[0]?.timeout).toBe(7_777);
+    });
+
+    test('an explicit unlimited payload policy propagates to the child source env — no hidden timer', async () => {
+        const { executor, runs } = fakeExecutor({});
+        await handleHistoryRefreshJob(
+            { cwd: '/p', invocation: 'bun', executor, timeoutMs: 4_321 },
+            jobOf({ ...validPayload, timeoutMs: null }),
+        );
+        expect(runs[0]?.timeout).toBeNull();
+        expect(runs[0]?.env?.[HISTORY_SOURCE_TIMEOUT_ENV]).toBe('none');
+    });
+
+    test('a finite non-default policy propagates its value to the child source env', async () => {
+        const { executor, runs } = fakeExecutor({});
+        await handleHistoryRefreshJob(
+            { cwd: '/p', invocation: 'bun', executor },
+            jobOf({ ...validPayload, timeoutMs: 7_777 }),
+        );
+        expect(runs[0]?.timeout).toBe(7_777);
+        expect(runs[0]?.env?.[HISTORY_SOURCE_TIMEOUT_ENV]).toBe('7777');
+    });
+
+    test('the silent default propagates no env channel — the child default is the same ten minutes', async () => {
+        const { executor, runs } = fakeExecutor({});
+        await handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor }, jobOf(validPayload));
+        expect(runs[0]?.timeout).toBe(SCHEDULER_CUSTOM_TIMEOUT_MS);
+        expect(runs[0]?.env?.[HISTORY_SOURCE_TIMEOUT_ENV]).toBeUndefined();
+    });
+
+    test('a legacy env none resolves the job to unlimited and propagates none downstream', async () => {
+        const { executor, runs } = fakeExecutor({});
+        await handleHistoryRefreshJob({ cwd: '/p', invocation: 'bun', executor, timeoutMs: null }, jobOf(validPayload));
+        expect(runs[0]?.timeout).toBeNull();
+        expect(runs[0]?.env?.[HISTORY_SOURCE_TIMEOUT_ENV]).toBe('none');
+    });
+
+    test('a malformed canonical payload policy fails the attempt loudly (never a silent fallback)', async () => {
+        const { executor, runs } = fakeExecutor({});
+        await expect(
+            handleHistoryRefreshJob(
+                { cwd: '/p', invocation: 'bun', executor },
+                jobOf({ ...validPayload, timeoutMs: -5 }),
+            ),
+        ).rejects.toThrow(/invalid canonical timeout/);
+        expect(runs).toHaveLength(0);
+    });
+});
+
+describe('enqueueHistoryRefresh explicit policy (task 0813 R2/R3)', () => {
+    test('a malformed timeoutMs is rejected at the trigger, before anything is queued', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await expect(
+                enqueueHistoryRefresh(db, {
+                    config: config(false),
+                    trigger: 'task-done',
+                    timeoutMs: 0,
+                }),
+            ).rejects.toThrow(/invalid canonical timeout/);
+            expect((await refreshRows(db)).length).toBe(0);
+        } finally {
+            db.close();
+        }
+    });
+
+    test('merge keeps the first explicit policy; a later absent default never overrides it', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const t0 = 1_000_000;
+            await enqueueHistoryRefresh(db, {
+                config: config(true, 600_000),
+                trigger: 'task-done',
+                timeoutMs: 5_000,
+                now: () => t0,
+            });
+            const manual = await enqueueHistoryRefresh(db, {
+                config: config(false),
+                trigger: 'manual',
+                now: () => t0 + 30_000,
+            });
+            expect(manual.status).toBe('coalesced');
+            if (manual.status !== 'disabled') {
+                expect(manual.payload).toMatchObject({ timeoutMs: 5_000 });
+            }
+        } finally {
+            db.close();
+        }
+    });
+
+    test('merge adopts the first explicit policy even when it is unlimited', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const t0 = 1_000_000;
+            await enqueueHistoryRefresh(db, {
+                config: config(true, 600_000),
+                trigger: 'task-done',
+                now: () => t0,
+            });
+            const manual = await enqueueHistoryRefresh(db, {
+                config: config(false),
+                trigger: 'manual',
+                timeoutMs: null,
+                now: () => t0 + 30_000,
+            });
+            expect(manual.status).toBe('coalesced');
+            if (manual.status !== 'disabled') {
+                expect(manual.payload).toMatchObject({ timeoutMs: null });
+            }
+        } finally {
+            db.close();
+        }
+    });
+});
+
+describe('resolveHistoryRefreshTimeoutMs canonical precedence (task 0813 R3)', () => {
+    test('a canonical value (finite or null) beats the legacy env chain', () => {
+        expect(resolveHistoryRefreshTimeoutMs({ SPUR_HISTORY_REFRESH_TIMEOUT_MS: '777' }, 5_000)).toBe(5_000);
+        expect(resolveHistoryRefreshTimeoutMs({ SPUR_HISTORY_REFRESH_TIMEOUT_MS: '777' }, null)).toBeNull();
+    });
+
+    test('absent canonical falls through to the legacy env chain and the ten-minute default', () => {
+        expect(resolveHistoryRefreshTimeoutMs({ SPUR_HISTORY_REFRESH_TIMEOUT_MS: '777' })).toBe(777);
+        expect(resolveHistoryRefreshTimeoutMs({ SPUR_HISTORY_REFRESH_TIMEOUT_MS: 'none' })).toBeNull();
+        expect(resolveHistoryRefreshTimeoutMs({})).toBe(SCHEDULER_CUSTOM_TIMEOUT_MS);
+    });
+
+    test('a malformed canonical value throws instead of falling back', () => {
+        expect(() => resolveHistoryRefreshTimeoutMs({}, -1)).toThrow(/invalid canonical timeout/);
     });
 });

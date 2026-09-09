@@ -5,6 +5,7 @@ import { HISTORY_PRODUCER_EXCLUSIVE_KEY, isExclusiveJobActive } from '../../src/
 import {
     handleSchedulerCustomJob,
     resolveSchedulerCustomTimeoutMs,
+    resolveSchedulerJobTimeoutMs,
     SCHEDULER_CUSTOM_JOB,
     SCHEDULER_CUSTOM_TIMEOUT_MS,
     validateSchedulerCustomJobPayload,
@@ -32,7 +33,7 @@ interface RecordedRun {
     command: string;
     args: string[];
     cwd?: string;
-    timeout?: number;
+    timeout?: number | null;
     maxOutput?: number;
     forceBuffered?: boolean;
     rejectOnError?: boolean;
@@ -105,9 +106,10 @@ describe('handleSchedulerCustomJob (task 0734 R6)', () => {
         expect(run.timeout).toBe(SCHEDULER_CUSTOM_TIMEOUT_MS);
         expect(run.maxOutput).toBe(1_000_000);
         expect(run.forceBuffered).toBe(true);
-        // Containment seam (task 0806 R1): the abort signal and spawn hook ride along.
-        expect(run.signal).toBeInstanceOf(AbortSignal);
-        expect(typeof run.onSpawn).toBe('function');
+        // Task 0813 R1: containment is native — the finite timeout arms the executor's
+        // own group cleanup, and the caller races no competing watchdog signal.
+        expect(run.signal).toBeUndefined();
+        expect(run.onSpawn).toBeUndefined();
     });
 
     test('an explicit timeoutMs overrides the ten-minute default', async () => {
@@ -117,6 +119,25 @@ describe('handleSchedulerCustomJob (task 0734 R6)', () => {
             jobOf({ name: 'n', command: 'x' }),
         );
         expect(runs[0]?.timeout).toBe(5_000);
+    });
+
+    test('task 0813 R2: an explicit unlimited policy forwards null — no hidden ten-minute timer', async () => {
+        const { executor, runs } = fakeExecutor({});
+        await handleSchedulerCustomJob({ cwd: '/proj', executor, timeoutMs: null }, jobOf({ name: 'n', command: 'x' }));
+        expect(runs[0]?.timeout).toBeNull();
+    });
+
+    test('task 0813 R2: a per-job resolver may resolve a single job to explicit unlimited', async () => {
+        const { executor, runs } = fakeExecutor({});
+        await handleSchedulerCustomJob(
+            {
+                cwd: '/proj',
+                executor,
+                resolveTimeoutMs: (name) => (name === 'endless' ? null : 1_000),
+            },
+            jobOf({ name: 'endless', command: 'x' }),
+        );
+        expect(runs[0]?.timeout).toBeNull();
     });
 
     test('exit 0 resolves and emits nothing from successful output', async () => {
@@ -195,7 +216,7 @@ describe('handleSchedulerCustomJob (task 0734 R6)', () => {
     });
 });
 
-describe('resolveSchedulerCustomTimeoutMs (task 0803 R1)', () => {
+describe('resolveSchedulerCustomTimeoutMs (task 0803 R1 / 0813 R2)', () => {
     test('defaults to 600000ms — ten minutes, not the one-hour default that wedged the daemon', () => {
         expect(SCHEDULER_CUSTOM_TIMEOUT_MS).toBe(600_000);
         expect(resolveSchedulerCustomTimeoutMs({})).toBe(600_000);
@@ -203,6 +224,11 @@ describe('resolveSchedulerCustomTimeoutMs (task 0803 R1)', () => {
 
     test('parses a positive integer SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS override', () => {
         expect(resolveSchedulerCustomTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: '5000' })).toBe(5_000);
+    });
+
+    test("an explicit 'none' resolves to unlimited (null)", () => {
+        expect(resolveSchedulerCustomTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: 'none' })).toBeNull();
+        expect(resolveSchedulerCustomTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: ' NONE ' })).toBeNull();
     });
 
     test('falls back to the default for empty, non-numeric, zero, negative, or fractional values', () => {
@@ -215,28 +241,48 @@ describe('resolveSchedulerCustomTimeoutMs (task 0803 R1)', () => {
     });
 });
 
-describe('bounded-child timeout containment (task 0803 R1 / 0806 R1)', () => {
-    // Small real deadline: runBoundedChild owns a real abort timer, so this fake
-    // must hang until the abort fires before returning the killed result —
-    // resolving early would race the timer and miss the containment verdict.
+describe('resolveSchedulerJobTimeoutMs (task 0806 R3 / 0813 R2)', () => {
+    const globalEnv = { SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: '600000' };
+
+    test("a per-job 'none' overrides a finite global default with explicit unlimited", () => {
+        expect(
+            resolveSchedulerJobTimeoutMs(
+                'nightly',
+                { ...globalEnv, SPUR_SCHEDULER_TIMEOUT_NIGHTLY_MS: 'none' },
+                600_000,
+            ),
+        ).toBeNull();
+    });
+
+    test('an unlimited global default flows through when the per-job override is absent or invalid', () => {
+        expect(resolveSchedulerJobTimeoutMs('n', {}, null)).toBeNull();
+        expect(resolveSchedulerJobTimeoutMs('n', { SPUR_SCHEDULER_TIMEOUT_N_MS: 'nope' }, null)).toBeNull();
+    });
+
+    test('a valid per-job override beats the global default; invalid keeps it', () => {
+        expect(resolveSchedulerJobTimeoutMs('n', { SPUR_SCHEDULER_TIMEOUT_N_MS: '250' }, 600_000)).toBe(250);
+        expect(resolveSchedulerJobTimeoutMs('n', { SPUR_SCHEDULER_TIMEOUT_N_MS: '0' }, 600_000)).toBe(600_000);
+    });
+});
+
+describe('bounded-child timeout containment (task 0803 R1 / 0806 R1 / 0813 R1)', () => {
+    // Native contract (task 0813 R1): the executor owns the deadline — this fake
+    // simulates that by reporting an `outcome: 'timeout'` result once it observes the
+    // forwarded policy, the way the real NodeProcessExecutor reports a deadline kill.
     test('the handler labels the deadline kill in the error and keeps the detail tail', async () => {
         const runs: RecordedRun[] = [];
         const executor = {
             run: async (options: RecordedRun) => {
                 runs.push(options);
-                const signal = (options as { signal?: AbortSignal }).signal;
-                await new Promise<void>((resolve) => {
-                    if (signal?.aborted) resolve();
-                    else signal?.addEventListener('abort', () => resolve(), { once: true });
-                });
                 return {
                     command: options.command,
                     args: options.args ?? [],
                     exitCode: null,
                     stdout: '',
                     stderr: 'partial output',
-                    signal: 'SIGKILL' as const,
+                    signal: 'SIGTERM' as const,
                     durationMs: 20,
+                    outcome: 'timeout' as const,
                 };
             },
         } as unknown as ProcessExecutor;
@@ -248,6 +294,9 @@ describe('bounded-child timeout containment (task 0803 R1 / 0806 R1)', () => {
         ).rejects.toThrow(
             /scheduler job "n" timed out after 20ms \(killed after \d+ms elapsed; termination timeout\); shell chain did not complete, so later configured stages did not run and any exit_code in the tail is a subcommand result, not the chain verdict: partial output/,
         );
+        // The policy, not a caller watchdog signal, is what the executor received.
+        expect(runs[0]?.timeout).toBe(20);
+        expect(runs[0]?.signal).toBeUndefined();
     });
 
     test('a sub-deadline kill keeps the generic terminated message (not a timeout)', async () => {

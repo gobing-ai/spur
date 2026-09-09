@@ -6,8 +6,18 @@ import type { Job } from '@gobing-ai/ts-infra';
 import type { ProcessExecutor } from '@gobing-ai/ts-runtime';
 import { splitLaunchCommand } from '../workflow/split-launch-command';
 import { type BoundedChildResult, describeBoundedFailure, runBoundedChild } from './bounded-child-run';
+import { assertCanonicalTimeoutMs, normalizeLegacyTimeoutMs, type TimeoutPolicyMs } from './execution-policy';
 import { acquireExclusiveJob, HISTORY_PRODUCER_EXCLUSIVE_KEY, releaseExclusiveJob } from './job-exclusion-guard';
 import { SCHEDULER_CUSTOM_TIMEOUT_MS } from './scheduler-custom-job-service';
+
+/**
+ * Child env channel carrying the propagated history job policy (task 0813 R2).
+ * When the refresh job's policy is explicit, the handler passes it to the
+ * `history daily` child so omitted source limits inherit the job policy instead
+ * of silently restoring the ten-minute standalone default. Value is a positive
+ * integer string or `none`.
+ */
+export const HISTORY_SOURCE_TIMEOUT_ENV = 'SPUR_HISTORY_SOURCE_TIMEOUT_MS';
 
 /**
  * Completion-triggered history refresh (task 0549).
@@ -42,6 +52,13 @@ export interface HistoryRefreshPayload {
     windowEnd: number;
     /** Manual board refresh mode; completion-triggered refreshes default to incremental. */
     importMode?: 'full' | 'incremental';
+    /**
+     * Explicit execution policy persisted with the queued work (task 0813 R2/R3):
+     * a finite deadline or `null` for unlimited. Canonical — it beats the legacy
+     * env chain at consume time, so a restart or environment change cannot
+     * reinterpret the in-flight attempt. Absent inherits the configured default.
+     */
+    timeoutMs?: TimeoutPolicyMs;
 }
 
 /** Outcome of {@link enqueueHistoryRefresh}. */
@@ -61,12 +78,19 @@ export interface HistoryRefreshEnqueueOptions {
     triggerId?: string;
     /** Explicit import mode for manual/schedule refreshes; omitted → job default (incremental). */
     importMode?: 'full' | 'incremental';
+    /**
+     * Explicit execution policy persisted with the queued work (task 0813 R2/R3);
+     * omitted → no canonical policy on the payload (legacy chain applies at
+     * consume time). Validated before enqueue.
+     */
+    timeoutMs?: TimeoutPolicyMs;
     /** Clock seam for deterministic tests (default `Date.now`). */
     now?: () => number;
 }
 
 function parsePayload(raw: unknown): HistoryRefreshPayload {
     const candidate = (typeof raw === 'string' ? safeJsonParse(raw) : raw) as Partial<HistoryRefreshPayload> | null;
+    const candidateTimeoutMs = candidate?.timeoutMs;
     const trigger: HistoryRefreshTriggerPoint =
         candidate?.trigger === 'task-done' ||
         candidate?.trigger === 'pipeline-run' ||
@@ -81,6 +105,12 @@ function parsePayload(raw: unknown): HistoryRefreshPayload {
         windowEnd: typeof candidate?.windowEnd === 'number' ? candidate.windowEnd : 0,
         ...(candidate?.importMode === 'full' || candidate?.importMode === 'incremental'
             ? { importMode: candidate.importMode }
+            : {}),
+        // Lenient enqueue-side join: keep an explicit policy that is well-formed,
+        // drop drifted values rather than failing the burst join.
+        ...(candidateTimeoutMs === null ||
+        (typeof candidateTimeoutMs === 'number' && Number.isInteger(candidateTimeoutMs) && candidateTimeoutMs > 0)
+            ? { timeoutMs: candidateTimeoutMs }
             : {}),
     };
 }
@@ -139,12 +169,16 @@ export function validateHistoryRefreshPayload(raw: unknown): HistoryRefreshPaylo
     if (importMode !== undefined && importMode !== 'full' && importMode !== 'incremental') {
         throw new Error(`history refresh payload has invalid importMode: ${JSON.stringify(importMode)}`);
     }
+    // Canonical policy at the consumer boundary: absent inherits, null is explicit
+    // unlimited, and malformed values fail the attempt loudly (never fall back).
+    const timeoutMs = assertCanonicalTimeoutMs(candidate.timeoutMs);
     return {
         trigger,
         triggerId,
         windowStart,
         windowEnd,
         ...(importMode !== undefined ? { importMode } : {}),
+        ...(timeoutMs !== undefined ? { timeoutMs } : {}),
     };
 }
 
@@ -177,6 +211,10 @@ export async function enqueueHistoryRefresh(
     options: HistoryRefreshEnqueueOptions,
 ): Promise<HistoryRefreshEnqueueResult> {
     const triggerConfig = resolveHistoryRefreshTrigger(options.config);
+    // Task 0813 R3: explicit canonical input is validated at the trigger boundary —
+    // BEFORE the disabled gate, so malformed operator input is a usage error even
+    // when refresh is off (nothing is queued, but garbage is never accepted).
+    const explicitTimeoutMs = assertCanonicalTimeoutMs(options.timeoutMs);
     // Manual refreshes are explicit user intent — never gated; completion triggers
     // stay behind the on_completion opt-in. One gate, before any DB access. Periodic
     // refreshes are no longer a trigger here (task 0750): they are declared as a
@@ -198,6 +236,7 @@ export async function enqueueHistoryRefresh(
         windowStart: now,
         windowEnd: now,
         ...(options.importMode !== undefined ? { importMode: options.importMode } : {}),
+        ...(explicitTimeoutMs !== undefined ? { timeoutMs: explicitTimeoutMs } : {}),
     };
     const result = await enqueueCoalesced(db, {
         type: HISTORY_REFRESH_JOB,
@@ -222,6 +261,11 @@ export async function enqueueHistoryRefresh(
                 windowStart: Math.min(prev.windowStart, curr.windowStart),
                 windowEnd: Math.max(prev.windowEnd, curr.windowEnd),
                 ...(importMode !== undefined ? { importMode } : {}),
+                // First explicit policy wins (task 0813 R3), matching the
+                // first-producer identity rule: the earliest canonical choice
+                // persists; a later default (absent) never overrides it.
+                ...(prev.timeoutMs !== undefined ? { timeoutMs: prev.timeoutMs } : {}),
+                ...(prev.timeoutMs === undefined && curr.timeoutMs !== undefined ? { timeoutMs: curr.timeoutMs } : {}),
             };
         },
     });
@@ -243,25 +287,31 @@ export interface HistoryRefreshJobDeps {
     /** Process seam — the real server wires `NodeProcessExecutor`. */
     executor: ProcessExecutor;
     /**
-     * Child wall-clock timeout in ms (task 0803 R1). Defaults to
-     * `SCHEDULER_CUSTOM_TIMEOUT_MS`; the server resolves it once from
-     * `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` and threads the same value into both child handlers.
+     * Legacy env-resolved execution policy (task 0803 R1; `null` = explicit
+     * unlimited since task 0813 R2). Defaults to `SCHEDULER_CUSTOM_TIMEOUT_MS`;
+     * the server resolves it once from `SPUR_HISTORY_REFRESH_TIMEOUT_MS` and
+     * threads the same value into the child handler. A canonical policy on the
+     * job payload takes precedence over this legacy value (R3).
      */
-    timeoutMs?: number;
+    timeoutMs?: TimeoutPolicyMs;
 }
 
 /**
- * Resolve the history-refresh child watchdog from the environment (task 0806 R3).
- * Decoupled from the scheduler.custom global: raising
- * `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` to bound a long configured chain must NOT
- * lengthen this short completion-triggered watchdog. Default stays the short
- * ten-minute watchdog (task 0803 R1); invalid values fall back to it.
+ * Resolve the history-refresh child policy from the environment (task 0806 R3;
+ * `none` → explicit unlimited since task 0813 R2). Decoupled from the
+ * scheduler.custom global: raising `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` to bound a
+ * long configured chain must NOT lengthen this short completion-triggered
+ * deadline. Default stays the ten-minute application default (task 0803 R1);
+ * invalid values fall back to it. A canonical `timeoutMs` (e.g. persisted on
+ * the queued payload) beats the legacy env chain; a malformed canonical value
+ * throws instead of falling back.
  */
-export function resolveHistoryRefreshTimeoutMs(env: Record<string, string | undefined>): number {
-    const raw = env.SPUR_HISTORY_REFRESH_TIMEOUT_MS;
-    if (raw === undefined || raw.trim() === '') return SCHEDULER_CUSTOM_TIMEOUT_MS;
-    const parsed = Number(raw);
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : SCHEDULER_CUSTOM_TIMEOUT_MS;
+export function resolveHistoryRefreshTimeoutMs(
+    env: Record<string, string | undefined>,
+    canonical?: TimeoutPolicyMs,
+): TimeoutPolicyMs {
+    if (canonical !== undefined) return assertCanonicalTimeoutMs(canonical);
+    return normalizeLegacyTimeoutMs(env.SPUR_HISTORY_REFRESH_TIMEOUT_MS, SCHEDULER_CUSTOM_TIMEOUT_MS);
 }
 
 /**
@@ -277,12 +327,14 @@ export function resolveHistoryRefreshTimeoutMs(env: Record<string, string | unde
  * `queue.job.*` truthfully. The child's exit code is the verdict; its stdout is failure
  * detail only, never a payload the parent parses.
  *
- * Task 0806: the child is contained by {@link runBoundedChild} (deadline abort → group
- * SIGTERM → group SIGKILL after the termination grace) so a wedged `history daily` can
- * neither outlive the watchdog through descendants nor outwait it, and the failure
- * message separates the configured deadline from the measured elapsed time (R5). The
- * short watchdog is preserved (R3) — decouple budgets via
- * {@link resolveHistoryRefreshTimeoutMs}, never by widening this handler's default.
+ * Task 0813: the child is contained by the native execution policy — a finite
+ * deadline arms the executor's owned process-group cleanup (SIGTERM, then
+ * group SIGKILL after the termination grace) with no competing caller
+ * watchdog, and the failure message separates the configured deadline from the
+ * measured elapsed time (R5). The ten-minute default is preserved (R3); an
+ * explicit unlimited job policy propagates to the child's source imports via
+ * {@link HISTORY_SOURCE_TIMEOUT_ENV} instead of restoring a hidden default
+ * (R2), decoupled via {@link resolveHistoryRefreshTimeoutMs}.
  */
 export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, job: Job<unknown>): Promise<void> {
     // Strict payload validation at the boundary: envelope/payload drift must fail the
@@ -291,9 +343,29 @@ export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, job: 
     const payload = validateHistoryRefreshPayload(job.payload);
     const split = splitLaunchCommand(deps.invocation, 'history refresh "invocation"');
     if ('error' in split) throw new Error(split.error);
-    // Task 0803 R1: bound the child the same way scheduler.custom children are bounded —
-    // a wedged `history daily` holds the shared WAL write lock until killed.
-    const timeoutMs = deps.timeoutMs ?? SCHEDULER_CUSTOM_TIMEOUT_MS;
+    // Task 0813 R3: the canonical payload policy (persisted with the queued work)
+    // beats the legacy env-resolved deps value; both fall back to the ten-minute
+    // application default. ABSENT (undefined) falls through the chain; EXPLICIT
+    // UNLIMITED (null) must survive it — `??` would silently restore the hidden
+    // ten-minute timer the operator turned off.
+    const resolvedCanonical = payload.timeoutMs;
+    const timeoutMs: TimeoutPolicyMs =
+        resolvedCanonical !== undefined
+            ? resolvedCanonical
+            : deps.timeoutMs !== undefined
+              ? deps.timeoutMs
+              : SCHEDULER_CUSTOM_TIMEOUT_MS;
+    // Task 0813 R2: propagate an explicit job policy to the child's source
+    // imports. The silent default needs no channel (the child's standalone
+    // default is the same ten minutes), so only a policy that differs from it
+    // is injected — `none` for unlimited, the value for a distinct finite
+    // deadline.
+    let propagatedSourceTimeout: string | undefined;
+    if (timeoutMs === null) {
+        propagatedSourceTimeout = 'none';
+    } else if (timeoutMs !== SCHEDULER_CUSTOM_TIMEOUT_MS) {
+        propagatedSourceTimeout = String(timeoutMs);
+    }
     // Task 0806 R6: the refresh IS a history producer — never overlap the configured
     // history chain's importer in the same daemon process.
     acquireExclusiveJob(HISTORY_PRODUCER_EXCLUSIVE_KEY, 'history.refresh');
@@ -308,9 +380,15 @@ export async function handleHistoryRefreshJob(deps: HistoryRefreshJobDeps, job: 
             args: [...split.leadingArgs, '--no-logo', 'history', 'daily'],
             cwd: deps.cwd,
             timeoutMs,
-            ...(deps.databaseUrl !== undefined
-                ? { env: { [HISTORY_REFRESH_CONTEXT_ENV]: JSON.stringify(payload), DATABASE_URL: deps.databaseUrl } }
-                : { env: { [HISTORY_REFRESH_CONTEXT_ENV]: JSON.stringify(payload) } }),
+            env: {
+                [HISTORY_REFRESH_CONTEXT_ENV]: JSON.stringify(payload),
+                // Task 0813 R2: carry the explicit job policy into the child's
+                // source imports (see propagatedSourceTimeout above).
+                ...(propagatedSourceTimeout !== undefined
+                    ? { [HISTORY_SOURCE_TIMEOUT_ENV]: propagatedSourceTimeout }
+                    : {}),
+                ...(deps.databaseUrl !== undefined ? { DATABASE_URL: deps.databaseUrl } : {}),
+            },
             maxOutput: HISTORY_REFRESH_MAX_OUTPUT,
         });
     } finally {

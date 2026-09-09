@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { NodeProcessExecutor, type ProcessExecutor, type ProcessResult } from '@gobing-ai/ts-runtime';
+import {
+    NodeProcessExecutor,
+    type ProcessExecutor,
+    type ProcessOptions,
+    type ProcessResult,
+} from '@gobing-ai/ts-runtime';
 import {
     type BoundedChildResult,
     CHILD_KILL_GRACE_MS,
@@ -8,66 +13,109 @@ import {
     runBoundedChild,
 } from '../../src/services/bounded-child-run';
 
-function fakeExecutor(
-    run: (options: { signal: AbortSignal; onSpawn?: (pid: number) => void }) => Promise<ProcessResult>,
-): ProcessExecutor {
-    return {
-        run: (options: { signal: AbortSignal }) => run(options),
+interface RecordedRun {
+    timeout: number | null | undefined;
+    killGraceMs: number | undefined;
+    signal: AbortSignal | undefined;
+    forceBuffered: boolean | undefined;
+}
+
+function fakeExecutor(run: (options: ProcessOptions, recorded: RecordedRun) => Promise<ProcessResult>): {
+    executor: ProcessExecutor;
+    runs: RecordedRun[];
+    requireRun: (index: number) => RecordedRun;
+} {
+    const runs: RecordedRun[] = [];
+    const executor = {
+        run: (options: ProcessOptions) => {
+            const recorded: RecordedRun = {
+                timeout: options.timeout,
+                killGraceMs: options.killGraceMs,
+                signal: options.signal,
+                forceBuffered: options.forceBuffered,
+            };
+            runs.push(recorded);
+            return run(options, recorded);
+        },
     } as unknown as ProcessExecutor;
+    return {
+        executor,
+        runs,
+        // Typed accessor: noUncheckedIndexedAccess keeps runs[i] possibly undefined;
+        // tests want a loud failure, not a non-null assertion.
+        requireRun(index: number): RecordedRun {
+            const run = runs[index];
+            if (run === undefined) throw new Error(`expected a recorded run at index ${index}`);
+            return run;
+        },
+    };
 }
 
 function result(overrides: Partial<ProcessResult> = {}): ProcessResult {
     return {
+        command: 'true',
+        args: [],
         exitCode: 0,
-        signal: null,
         stdout: '',
         stderr: '',
         durationMs: 5,
+        outcome: 'exit',
         ...overrides,
     } as ProcessResult;
 }
 
-describe('runBoundedChild (task 0806 R1)', () => {
-    test('normal exit reports exit termination with the promised deadline', async () => {
-        const outcome = await runBoundedChild(
-            fakeExecutor((options) => {
-                expect(options.signal.aborted).toBe(false);
-                return Promise.resolve(result({ durationMs: 4 }));
-            }),
-            { command: 'true', timeoutMs: 500, killGraceMs: 5 },
-        );
+describe('runBoundedChild native policy forwarding (task 0813 R1)', () => {
+    test('forwards the configured policy to the executor and never arms a caller signal', async () => {
+        const { executor, runs, requireRun } = fakeExecutor(() => Promise.resolve(result({ durationMs: 4 })));
+        const outcome = await runBoundedChild(executor, {
+            command: 'true',
+            timeoutMs: 500,
+            killGraceMs: 5,
+        });
+        expect(runs).toHaveLength(1);
+        expect(requireRun(0).timeout).toBe(500);
+        expect(requireRun(0).killGraceMs).toBe(5);
+        expect(requireRun(0).forceBuffered).toBe(true);
+        // The caller watchdog is gone: no AbortSignal is raced against the native timer.
+        expect(requireRun(0).signal).toBeUndefined();
         expect(outcome.timedOut).toBe(false);
         expect(outcome.terminationReason).toBe('exit');
         expect(outcome.deadlineMs).toBe(500);
         expect(outcome.elapsedMs).toBe(4);
     });
 
-    test('deadline abort fires the signal and classifies the run as a timeout', async () => {
-        const outcome = await runBoundedChild(
-            fakeExecutor(
-                (options) =>
-                    new Promise<ProcessResult>((resolve) => {
-                        const t0 = Date.now();
-                        options.signal.addEventListener(
-                            'abort',
-                            () => resolve(result({ exitCode: null, signal: 'SIGTERM', durationMs: Date.now() - t0 })),
-                            { once: true },
-                        );
-                    }),
-            ),
-            { command: 'sleep', args: ['30'], timeoutMs: 20, killGraceMs: 5 },
-        );
+    test('an explicit unlimited policy forwards timeout null — never an inherited default', async () => {
+        const { executor, requireRun } = fakeExecutor(() => Promise.resolve(result()));
+        const outcome = await runBoundedChild(executor, { command: 'true', timeoutMs: null });
+        // Explicit null (not undefined) so the executor runs without a deadline instead of
+        // inheriting ProcessExecutorConfig.defaultTimeout — the hidden-timer regression.
+        expect(requireRun(0).timeout).toBeNull();
+        // killGraceMs omitted → the executor's own 5000ms default applies.
+        expect(requireRun(0).killGraceMs).toBeUndefined();
+        expect(outcome.timedOut).toBe(false);
+        expect(outcome.deadlineMs).toBeNull();
+        expect(outcome.terminationReason).toBe('exit');
+    });
+
+    test('classifies an outcome-timeout result as a timeout without any caller timing', async () => {
+        const { executor } = fakeExecutor(() => Promise.resolve(result({ outcome: 'timeout', durationMs: 25 })));
+        const outcome = await runBoundedChild(executor, {
+            command: 'sleep',
+            args: ['30'],
+            timeoutMs: 20,
+            killGraceMs: 5,
+        });
         expect(outcome.timedOut).toBe(true);
         expect(outcome.terminationReason).toBe('timeout');
         expect(outcome.deadlineMs).toBe(20);
-        expect(outcome.elapsedMs).toBeGreaterThanOrEqual(20);
+        expect(outcome.elapsedMs).toBe(25);
     });
 
-    test('a child killed by an external signal is reported as signal, not timeout', async () => {
-        const outcome = await runBoundedChild(
-            fakeExecutor(() => Promise.resolve(result({ exitCode: null, signal: 'SIGKILL' }))),
-            { command: 'sleep', args: ['30'], timeoutMs: 500, killGraceMs: 5 },
+    test('classifies a legacy-shaped signal result (no outcome field) as signal, not timeout', async () => {
+        const { executor } = fakeExecutor(() =>
+            Promise.resolve(result({ exitCode: null, signal: 'SIGKILL', outcome: undefined })),
         );
+        const outcome = await runBoundedChild(executor, { command: 'sleep', args: ['30'], timeoutMs: 500 });
         expect(outcome.timedOut).toBe(false);
         expect(outcome.terminationReason).toBe('signal');
     });
@@ -98,9 +146,11 @@ describe('resolveKillGraceMs (task 0806 R1)', () => {
     });
 });
 
-describe('runBoundedChild escalation (task 0806 R1)', () => {
-    test('SIGTERM-resistant descendant is reaped by the group SIGKILL escalation', async () => {
-        // Real child that ignores SIGTERM: only the negative-pid escalation can stop it.
+describe('runBoundedChild native containment (task 0806 R1 / 0813 R1)', () => {
+    test('SIGTERM-resistant descendant is reaped by the executor-owned group SIGKILL escalation', async () => {
+        // Real child that ignores SIGTERM: only the executor's negative-pid escalation
+        // (armed by its own finite timeout) can stop it — the native replacement for the
+        // removed caller watchdog.
         const resistant = ['-e', "process.on('SIGTERM', () => {}); setTimeout(() => {}, 60_000);"];
         const outcome = await runBoundedChild(new NodeProcessExecutor(), {
             command: process.execPath,

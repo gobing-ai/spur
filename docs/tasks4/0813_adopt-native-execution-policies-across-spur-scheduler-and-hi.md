@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Adopt native execution policies across Spur scheduler and history jobs
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-08T22:33:10.236Z
-updated_at: "2026-09-08T22:35:57.291Z"
+updated_at: "2026-09-09T04:45:07.089Z"
 feature_id: A21
 priority: P1
 tags:
@@ -109,18 +109,65 @@ All three upstream deliverables and a compatible published release are execution
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Native execution policies (feature A21; ts-libs 0.4.59 released contracts) are adopted across the scheduler, history services, and history CLI. New module `packages/app/src/services/execution-policy.ts` owns the shared primitives: `TimeoutPolicyMs` (`number | null`; `null` = explicit unlimited), `MAX_TIMEOUT_INPUT_MS` timer-overflow guard, `parseTimeoutInput` (`packages/app/src/services/execution-policy.ts:39` — strict explicit-input parser accepting `'none'` or a positive integer; rejects partial numbers, signs, zero, negatives, fractions, and overflow BEFORE any work launches), `normalizeLegacyTimeoutMs` (`:65` — legacy env values normalize against a safe fallback), and `assertCanonicalTimeoutMs` (`:80/:86/:91` — canonical persisted values fail loudly on drift). Precedence: explicit canonical options beat legacy environment controls; Spur's ten-minute application default (`DEFAULT_SOURCE_TIMEOUT_MS = 600_000`, consumed at `apps/cli/src/commands/history.ts:44,116,426`) is the terminal fallback.
+
+Adoption points:
+
+- `packages/app/src/services/scheduler-custom-job-service.ts:9,59-66,88,120-121,197` — canonical `timeoutMs` on job payloads; `resolveSchedulerCustomTimeoutMs` env resolution via `normalizeLegacyTimeoutMs`.
+- `packages/app/src/services/history-refresh-service.ts:9,61,86` — persisted refresh payloads validated with `assertCanonicalTimeoutMs`; legacy env normalized.
+- `packages/app/src/services/history-service.ts:85,176,193,887,1053` — `sourceTimeout` flows through import/daily fan-out options and per-source deadlines.
+- `apps/server/src/serve.ts:2,156` — `TimeoutPolicyMs` typed into the section matrix for server-side configuration.
+- `apps/cli/src/commands/history.ts:39,149,437` — `resolveCliSourceTimeout` validates `--source-timeout` (import `:149`, daily `:437`) before any service construction; malformed values are usage errors (exit 1, envelope `cliCode: 'usage'`); `none` explicitly disables the per-source deadline.
+- `packages/app/src/services/bounded-child-run.ts:12-14,85-102` — released-surface caller watchdog removed; native containment (`timeout` + `killGraceMs` escalation) owns the deadline and process-tree cleanup; callers must not race a second watchdog.
+
+Catalog: root `package.json` bumps all eight `@gobing-ai/*` entries to `^0.4.59` (R1 — adopt the approved upstream release; `bun.lock` regenerated). Task 0813 consumes exactly the released 0.4.59 surface.
+
+Named deferrals (host-approved; consistent with R10 because the replacements are not yet released):
+
+1. Legacy age-sweep recovery for queue jobs is retained — the lease/attempt-token ownership recovery that replaces it lives on the unreleased 0812 ts-libs branch (0.4.59 lacks the lease/token contracts).
+2. Importer-level `AbortSignal` cancellation (0811 ts-libs branch) is unreleased — the child-side `Promise.race` deadline remains the hard fallback for history imports.
+
+Tests: `packages/app/tests/services/execution-policy.test.ts` (new — parse/normalize/precedence/overflow); extended suites for bounded-child-run, history-refresh-service, history-service, scheduler-custom-job-service; `apps/cli/tests/commands/history.test.ts` usage-error coverage (0813 R3): `--file`+`--source all` rejection, malformed `--source-timeout` on import/daily (text + enveloped JSON), malformed refresh context, report failure path — lifting `history.ts` per-file line coverage to 94.28% (≥ 90% gate).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Single translation owner: packages/app/src/services/execution-policy.ts (parseTimeoutInput 'none'/int; normalizeLegacyTimeoutMs legacy 0→null; MAX_TIMEOUT_INPUT_MS=2^31-1; DEFAULT_SOURCE_TIMEOUT_MS=600_000), exported from packages/app/src/index.ts:213/238/412-413. Native containment, no caller watchdog: bounded-child-run.ts forwards timeout+killGraceMs to the ts-runtime executor; scheduler-custom-job-service.ts:109-112 asserts no signal/onSpawn armed; :268-272 outcome:'timeout' labeling. |
+| R2 | MET | Explicit null survives: serve.ts:188-190 `!== undefined` ternary (no `??` on policy chains); tick sweep null → no age-out (serve.ts:251-252); startup sweep exemptJobNames (db.ts:725-737); scheduler handler forwards null (scheduler-custom-job-service.test.ts:124-128); per-job 'none' beats finite global (:247-255); unlimited reaches inherited source (history-service.test.ts:1445-1479 no timer under null); propagation env channel (history-refresh-service.test.ts R2 suite). |
+| R3 | MET | Malformed rejected before work: execution-policy.test.ts rejects '0','-1','1.2','1e3','12x',2^31; precedence canonical > legacy env > default; CLI usage errors: history.ts:39-45 resolveCliSourceTimeout + tests history.test.ts:1180-1248 ('none' accepted, '500' accepted, malformed → cliCode 'usage', no import). |
+| R4 | MET | Real SIGTERM-resistant descendant reaped: bounded-child-run.test.ts:68+ (pid liveness); serve.test.ts:1563-1593 boots real server, child holding SQLite write txn ignored SIGTERM, killed by 300 ms, message reports deadline kill not completion; SQLite recovery: db.test.ts:936-962 second connection writes immediately after cleanup. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+- Review dispatched as `sp:super-reviewer` (fresh session, read-only, worktree diff vs main, R1–R4 + ADR-112/execution-deadlines contract, compareExecutorWith implement run). Verdict round 1: **FAIL** — findings: P1 docs cluster (04_DESIGN stale caller-watchdog text + missing `none` + §5.2 "pending"; 03_ARCHITECTURE §11/§26 "pending"; ADR-112 Detail "pending"; execution-deadlines.md `accepted-design`), P2a `??` clobbers explicit-null `timeoutMs` in `registerSchedulerEntries`, P2b startup sweep fails legitimately-running unlimited rows (asymmetric with the periodic sweep), P3a missing unlimited-no-sweep test, P3b two R4 evidence clauses without dedicated tests, P3c task record gaps, P4 stale watchdog vocabulary. Reviewer confirmed R1–R3 code/tests otherwise sound: single-sourced translation layer, null-survival via `!== undefined` everywhere else, precedence preserved, native containment proven on real processes (SIGTERM-resistant descendant reaped; server boot kills a real child at 300 ms), named deferrals correctly reflected.
+- Host applied review fixes (same change set): P2a, P2b, P3a, P1 docs cluster, one stale comment; P3c was already satisfied (Solution filled with the two named deferrals before the reviewer snapshot); P3b recorded as residual in Testing; P4 minimal (sweep reason string retained deliberately). Gate re-run PASS (see Testing).
+- Review round 2 (same reviewer, resumed with fix delta): PASS — see below.
+
+#### Priority findings table
+
+| Priority | Finding | Resolution |
+|----------|---------|------------|
+| P1 | Stale docs cluster: caller-watchdog text + missing `none` + "pending" status in 04_DESIGN §5.2/§11-area, 03_ARCHITECTURE §11/§26, ADR-112 Detail, execution-deadlines.md frontmatter | Fixed — native-enforcement wording, `<ms|none>` surfaces, shipped-on-0.4.59 status across all four docs (same commit as code fixes, T3). |
+| P2a | `??` default clobbered explicit-null `timeoutMs` in `registerSchedulerEntries` (serve.ts) | Fixed — `options.timeoutMs !== undefined ? … : resolveSchedulerCustomTimeoutMs(env)` ternary preserves explicit null. |
+| P2b | Startup sweep failed legitimately-running unlimited rows (asymmetric with periodic sweep) | Fixed — `failOrphanedProcessingJobs` gained `exemptJobNames`; startup sweep passes unlimited job names. |
+| P3a | Missing regression test: unlimited rows survive startup sweep | Fixed — db.test.ts + serve.test.ts unlimited-no-sweep tests added. |
+| P3b | Two R4 evidence clauses relied on pre-existing containment/checkpoint tests | Recorded as named residual in Testing (ts-runtime containment + history-service checkpoint coverage); no dedicated tests added. |
+| P3c | Task record gaps (Testing/Review/Solution sections) | Satisfied — Solution predated reviewer snapshot; Testing/Review filled from verdict. |
+| P4 | Stale "watchdog" vocabulary in comments/labels | Minimal fix — wrong code comments corrected; user-facing sweep reason string retained deliberately (age sweep remains as backstop). |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-09T03:24:42.836Z todo → wip (system)
+- 2026-09-09T04:32:28.934Z wip → testing (system)
+- 2026-09-09T04:45:07.089Z testing → done (system)
+

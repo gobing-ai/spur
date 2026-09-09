@@ -722,11 +722,28 @@ export async function failStaleSchedulerCustomJob(
  * always resolves its claim), so failing them at server start unblocks retry of
  * the underlying work and clears the conceptual lock on shared resources.
  *
+ * `exemptJobNames` (task 0813 R2) skips `scheduler.custom` rows whose payload
+ * name matches an explicit-unlimited job: the row is legitimately in flight (no
+ * deadline), and failing it while the detached child keeps running would
+ * re-enqueue on the next tick and execute the job twice — the same `null`
+ * exemption the periodic sweep applies.
+ *
  * @returns the number of rows swept.
  */
-export async function failOrphanedProcessingJobs(db: DbAdapter, now: number): Promise<number> {
+export async function failOrphanedProcessingJobs(
+    db: DbAdapter,
+    now: number,
+    exemptJobNames: readonly string[] = [],
+): Promise<number> {
+    const exemptFilter =
+        exemptJobNames.length === 0
+            ? ''
+            : ` AND NOT (type = 'scheduler.custom' AND json_extract(payload, '$.name') IN (${exemptJobNames
+                  .map(() => '?')
+                  .join(', ')}))`;
     const orphan = await db.queryFirst<{ cnt: number }>(
-        `SELECT count(*) AS cnt FROM queue_jobs WHERE status = 'processing'`,
+        `SELECT count(*) AS cnt FROM queue_jobs WHERE status = 'processing'${exemptFilter}`,
+        ...exemptJobNames,
     );
     const count = orphan?.cnt ?? 0;
     if (count > 0) {
@@ -736,8 +753,9 @@ export async function failOrphanedProcessingJobs(db: DbAdapter, now: number): Pr
                  last_error = 'Process terminated: server restarted while job was in flight',
                  processing_at = NULL,
                  updated_at = ?
-             WHERE status = 'processing'`,
+             WHERE status = 'processing'${exemptFilter}`,
             now,
+            ...exemptJobNames,
         );
     }
     return count;

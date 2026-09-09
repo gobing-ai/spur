@@ -1,15 +1,15 @@
 ---
 feature: A21
-status: accepted-design
+status: shipped
 updated_at: 2026-09-08
 derived_from: [ADR-112, 01_PRD]
 ---
 
 # Execution deadlines and unlimited jobs
 
-This is the accepted target contract. Installed `ts-infra`, `ts-runtime`, and importer version
-0.4.57 do not yet implement the complete contract. Public API additions below are design targets,
-not callable APIs until the upstream tasks implement and verify them.
+Adopted in Spur (task 0813) on released ts-libs 0.4.59: the `ts-infra` execution policies,
+`ts-runtime` process containment, and importer deadlines described below are callable. The `ts-db`
+durable lease/claim ownership half is not in 0.4.59 and remains an upstream target.
 
 ## Ownership
 

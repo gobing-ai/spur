@@ -2358,8 +2358,10 @@ of execution duration and is renewed/fenced per attempt; cancellation settlement
 execution from becoming duplicate execution after a visibility interval. This binds scheduler,
 history, and queue persistence consumers while preserving ADR-004's published-package boundary.
 
-**Detail:** `03 §26`; [execution deadline design](design/execution-deadlines.md). Implementation and
-upstream release remain pending; no claim of eliminating all database-lock causes is made.
+**Detail:** `03 §26`; [execution deadline design](design/execution-deadlines.md). Adopted 2026-09-08
+(task 0813) on released ts-libs 0.4.59: native execution deadlines replaced Spur's local caller
+watchdog; durable lease/claim ownership (`ts-db`) remains pending upstream. No claim of eliminating
+all database-lock causes is made.
 
 **Approval (2026-09-08).** Robin requested upstream reuse and an unlimited mode, then approved the
 revised proposal with “okay, go ahead.”

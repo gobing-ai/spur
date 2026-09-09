@@ -54,7 +54,7 @@ When collaborating with the design team:
 | [`lifecycle-projection-integrity.md`](design/lifecycle-projection-integrity.md)                         | Feature sync/roster convergence, explicit refresh breadth, wrap-up corpus observation, and task/feature projection-content findings (0625; 0688 widened the subject-match window)                                                                                                                                         | implemented (0625, 0688)                                                                                                                                        |                                                                                                                               |             |
 | [`history-data-processing.md`](design/history-data-processing.md)                                       | History data plane — importer vs Board catalogs, checkpoint/ledger truth, Q1–Q10 query map, single rollup-refresh choke point, five-tab/eight-path latency matrix, canonical skill allocation, stale fallback, accounting boundary (E9/0632–0633)                                                                         | implemented (0632–0633)                                                                                                                                         |                                                                                                                               |             |
 | [`history-importer-arguments-provenance.md`](design/history-importer-arguments-provenance.md)           | Tool call arguments extraction, source JSONL transcript mapping matrix, missing-payload root cause taxonomy, 5-step diagnostic procedure, and config-driven syntax highlighting contract (E9/History Forensics)                                                                                                             | accepted design (2026-09-01)                                                                                                                                    |                                                                                                                               |             |
-| [`history-refresh-process-isolation.md`](design/history-refresh-process-isolation.md)                   | History refresh — child-process execution, shared producer path, pending-or-processing SQLite single-flight, queue payload and Board outcome contracts, daemon-resolved child watchdog + PASSIVE retention checkpoint (ADR-101, feature E31; task 0803)                                                                                                                                             | accepted; built (tasks 0716–0717, 0803)                                                                                                                                  |                                                                                                                               |             |
+| [`history-refresh-process-isolation.md`](design/history-refresh-process-isolation.md)                   | History refresh — child-process execution, shared producer path, pending-or-processing SQLite single-flight, queue payload and Board outcome contracts, native execution-policy deadline + PASSIVE retention checkpoint (ADR-101, feature E31; task 0803)                                                                                                                                             | accepted; built (tasks 0716–0717, 0803)                                                                                                                                  |                                                                                                                               |             |
 | [`history-incremental-materialization.md`](design/history-incremental-materialization.md)             | History incremental materialization — refresh watermark vs turn watermark, bucket-scoped rollup refresh, append-only dedup invariant, per-table freshness, day-grain dimension/KPI tables, persisted `effective_tool_name`, UI-unchanged diff gate, bounded loop-findings/ranked-steps/source-stats derivations and v4 re-audit corrections (ADR-103, feature E91; 0741 + 0763)                        | implemented (0741, 0763; definition v4)                                                                                                                           |                                                                                                                               |             |
 | [`project-switcher.md`](design/project-switcher.md)                                                     | Multi-project Spur Board switcher — registry, serve lifecycle, switcher UI (K1)                                                                                                                                                                                                                                           | design                                                                                                                                                          |                                                                                                                               |             |
 | [`inbox-board-module.md`](design/inbox-board-module.md)                                                 | Inbox Board module — shipped unified timeline (M4/0422); accepted message-only boundary under G3 (ADR-052)                                                                                                                                                                                                                | transition design                                                                                                                                               |                                                                                                                               |             |
@@ -684,7 +684,7 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   `packages/domain/src/analytics/run-cost.ts`.
   Backed by `ts-dual-workflow-engine` (`WorkflowService` + `DbWorkflowPersistenceAdapter`).
 
-#### `spur history import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--dry-run] [--source-timeout <ms>] [--json]`
+#### `spur history import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--dry-run] [--source-timeout <ms|none>] [--json]`
 
 Import agent conversation JSONL. `--source` ∈ {pi, claude, codex, gemini, opencode, antigravity,
 openclaw, omp, grok, agy, **all**} (default `all`). `--mode` ∈ {full, incremental, force-file}
@@ -717,8 +717,9 @@ exit 1. Dry-run previews and append-scoped modes (`incremental`, `force-file`) a
 own `try` with its own transaction — a throwing or timing-out source is caught, recorded
 `status: 'failed'` with its error, and the loop continues; one source can never abort another. A
 source that discovers zero files is `status: 'empty'`, never `ok`; a source with checkpoint rows but
-zero files now emits a `source-was-nonempty` warning. `--source-timeout <ms>` bounds each source
-(default **600000** = 10 min); a source exceeding it is abandoned at its deadline and recorded
+zero files now emits a `source-was-nonempty` warning. `--source-timeout <ms|none>` bounds each source
+(default **600000** = 10 min; `none` removes the deadline and the source runs to completion); a
+source exceeding it is abandoned at its deadline and recorded
 `failed`. A single `--source <x>` is the n=1 case of the same contract — there is never a second
 import path.
 
@@ -791,7 +792,7 @@ which is which. Nothing may present the two as the same measurement.
 next `history import`, not through a one-time migration pass; until then they render as unmeasured
 (never as zero).
 
-#### `spur history daily [--since <iso>] [--until <iso>] [--root <path>] [--source-timeout <ms>] [--mode <name>] [--json]`
+#### `spur history daily [--since <iso>] [--until <iso>] [--root <path>] [--source-timeout <ms|none>] [--mode <name>] [--json]`
 
 Run-once daily pipeline (task 0470 R6): **import-all → analyze → write artifact → prune** reports
 older than 90 days (`REPORT_RETENTION_DAYS`), in a single process that exits when done — never stays
@@ -1225,30 +1226,35 @@ standalone server resolves the source-local CLI or its sibling compiled `dist/cl
 refresh producers share `max_retries = 3`; this intentionally replaces the old scheduler-only value of 1.
 The server queue visibility timeout is two hours because `history daily` can spend ten minutes on each
 of six sequential sources before analysis; the generic 30-second default would duplicate a live child.
-A watchdog additionally bounds each child at the daemon-resolved `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS`
-(default 600,000 ms, shared with the `scheduler.custom` handler; task 0803 R1) — a kill at the
-deadline is labeled `timed out after <n>ms (killed)` — so a wedged child can no longer hold the
-queue row, and the WAL write lock its imports take, for the full visibility window.
+A native execution deadline additionally bounds each child (task 0813, ADR-112): the daemon resolves
+the policy once at boot — `SPUR_HISTORY_REFRESH_TIMEOUT_MS` for `history.refresh`,
+`SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` / `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` (default 600,000 ms) for
+`scheduler.custom`, explicit `none` for unlimited — and forwards `timeout`/`killGraceMs` to the
+`ProcessExecutor`, which owns containment and reports a truthful timed-out outcome. A wedged child
+can no longer hold the queue row, and the WAL write lock its imports take, for the full visibility
+window; explicit-unlimited jobs impose no deadline and are exempt from age sweeping.
 
 **Containment hardening (task 0806).** Four bounded knobs close the residual gaps:
 
-- **Group kill (R1).** `runBoundedChild` arms SIGTERM→SIGKILL escalation on the detached process
-  group (`kill(-pid)`, grace `SPUR_SCHEDULER_KILL_GRACE_MS`, default 5,000 ms) so descendants that
-  ignore SIGTERM cannot outlive the watchdog. The per-source import deadline is a caller-side race:
-  the loser is abandoned mid-flight (checkpoint resume, R7) and the whole `history daily` run aborts
-  when a source exceeds its budget — a timed-out writer may still hold the write lock, so later
-  sources are not started and the queue run fails (distinct `source-timeout` warning code).
+- **Group kill (R1; task 0813).** Containment is native: Spur forwards the resolved deadline and
+  `killGraceMs` (`SPUR_SCHEDULER_KILL_GRACE_MS`, default 5,000 ms) to the `ProcessExecutor`, which
+  runs each child in an isolated process group and escalates SIGTERM→SIGKILL so descendants that
+  ignore SIGTERM cannot outlive the deadline — no caller-side watchdog races the executor. The
+  per-source import deadline is enforced by the same native policy: the loser is abandoned
+  mid-flight (checkpoint resume, R7) and the whole `history daily` run aborts when a source exceeds
+  its budget — a timed-out writer may still hold the write lock, so later sources are not started
+  and the queue run fails (distinct `source-timeout` warning code).
 - **Per-job budgets (R3).** Configured scheduler jobs resolve an effective deadline via
   `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` (upper-snake of the configured name), falling back to the
   global `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` on absent/invalid values; the `history.refresh`
-  watchdog is decoupled via `SPUR_HISTORY_REFRESH_TIMEOUT_MS` so raising the chain budget cannot
-  lengthen the completion-triggered watchdog.
+  deadline is decoupled via `SPUR_HISTORY_REFRESH_TIMEOUT_MS` so raising the chain budget cannot
+  lengthen the completion-triggered refresh.
 - **Single history producer (R6).** The completion-triggered `history.refresh` job holds an
   in-process exclusive key (`history-daily`); a configured `scheduler.custom` job whose command
   runs `history daily`/`history import` is stamped with the same key at enqueue (word-boundary
   match), so an overlapping start fails its own attempt cleanly instead of racing the scheduled
   importer into `SQLITE_BUSY`. Same-process advisory scope: the daemon is the only handler host;
-  manual CLI runs are bounded by per-source busy-abort + the watchdog.
+  manual CLI runs are bounded by per-source busy-abort + the native per-source deadline.
 - **Maintenance ordering (R7).** Preserved chain semantics: success-path order is import → report →
   maintenance (prune/smoke last); a failed or timed-out import marks maintenance skipped in the run
   outcome (recorded, not silently dropped) rather than pruning under contention; manual deep
@@ -1991,7 +1997,7 @@ initialized on first `fetch`. Its static asset directory is `../../dist/web`, re
 
 | Planned surface | Status | Detail |
 | --- | --- | --- |
-| Shared execution deadlines, explicit unlimited mode and renewable job ownership (A21) | Accepted design; upstream delivery pending | [Execution deadlines](design/execution-deadlines.md) |
+| Shared execution deadlines, explicit unlimited mode and renewable job ownership (A21) | Shipped: deadlines + unlimited mode in ts-libs 0.4.59 (task 0813); lease/claim ownership pending upstream | [Execution deadlines](design/execution-deadlines.md) |
 
 Recurring commands are declared in **one** place: the `bootstrap.scheduler` object that
 `runNodeApplication` already owns. There is no top-level Spur `scheduler` section and no second
@@ -2046,10 +2052,12 @@ or a log line — only the job `name` is. Spur adds no per-job `cwd`, `env`, `en
 concurrency knob; a job that needs those wraps them in the script it invokes.
 
 **Execution bounds** (`handleSchedulerCustomJob`): buffered output capped at 1,000,000 bytes, a
-watchdog timeout of 600,000 ms — overridable per environment via `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS`
-(positive-integer milliseconds; anything else falls back to the default), deliberately under the
-server queue's two-hour visibility timeout so the queue never reclaims a still-running command —
-and the child's exit code as the only success verdict. A non-zero exit, signal, or spawn failure
+native execution deadline of 600,000 ms (task 0813) — overridable per job/environment via
+`SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` and `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` (positive-integer
+milliseconds; `'none'` removes the deadline; anything else falls back to the default), deliberately
+under the server queue's two-hour visibility timeout so the queue never reclaims a still-running
+command — and the child's exit outcome as the only success verdict (a deadline kill yields a
+truthful timed-out failure). A non-zero exit, signal, or spawn failure
 throws an error naming the job plus at most the final 400 characters of stderr (stdout only when
 stderr is empty), so retry and failure records carry bounded, non-secret detail. A kill at or
 beyond the resolved deadline (`exitCode === null` with `durationMs >= timeoutMs`, the shared
