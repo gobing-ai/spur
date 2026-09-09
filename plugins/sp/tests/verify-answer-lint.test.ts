@@ -53,10 +53,14 @@ interface Sandbox {
 }
 
 /** Sandbox with a fake spur serving the fixture task + feature from JSON payload files. */
-function makeSandbox(taskContent: string = TASK_CONTENT, wbs = '0726'): Sandbox {
+function makeSandbox(
+    taskContent: string = TASK_CONTENT,
+    wbs = '0726',
+    featureContent: string = FEATURE_CONTENT,
+): Sandbox {
     const dir = mkdtempSync(join(tmpdir(), 'spur-0726-lint-'));
     writeFileSync(join(dir, `task-${wbs}.json`), JSON.stringify({ wbs, feature_id: 'F9', content: taskContent }));
-    writeFileSync(join(dir, 'feature-F9.json'), JSON.stringify({ id: 'F9', content: FEATURE_CONTENT }));
+    writeFileSync(join(dir, 'feature-F9.json'), JSON.stringify({ id: 'F9', content: featureContent }));
     const bin = join(dir, 'spur-fake');
     writeFileSync(bin, FAKE_SPUR_BODY);
     chmodSync(bin, 0o755);
@@ -513,5 +517,44 @@ describe('canonical AC identity resolution (task 0804 R4)', () => {
         );
         const sb = makeSandbox(task);
         expect(sb.exec(acRow('AC-1')).code).toBe(0);
+    });
+});
+
+// ─── Quote normalization (task 0809 R5) ────────────────────────────────────────
+// The pre-refactor removal set is exactly ASCII U+0027 + the four curly quotes
+// (U+2018/U+2019/U+201C/U+201D). U+02BC is a meaningful character and must NOT be
+// treated as removable punctuation.
+
+describe('quote normalization (task 0809 R5)', () => {
+    // Declared scenario title carries an ASCII apostrophe (U+0027).
+    const APOSTROPHE_TITLE = "R1 — the guard rejects unsafe user's input versions";
+    const apostropheFeature = `Scenarios:\n\nScenario: ${APOSTROPHE_TITLE}\n`;
+    const acRowWith = (title: string): string =>
+        completeAnswer().replace(
+            '| AC1 | MET | test | `tests/a.test.ts:9` |',
+            `| ${title} | MET | test | \`tests/a.test.ts:9\` |`,
+        );
+
+    test('the quote-normalized alias of an ASCII-apostrophe title passes (U+2019 answer vs U+0027 declared)', () => {
+        const sb = makeSandbox(TASK_CONTENT, '0726', apostropheFeature);
+        expect(sb.exec(acRowWith(APOSTROPHE_TITLE.replace("'", '\u2019'))).code).toBe(0);
+    });
+
+    test('quote-equivalent spellings of one identity are still duplicates', () => {
+        const sb = makeSandbox(TASK_CONTENT, '0726', apostropheFeature);
+        const answer = completeAnswer().replace(
+            '| AC1 | MET | test | `tests/a.test.ts:9` |',
+            `| ${APOSTROPHE_TITLE} | MET | test | \`tests/a.test.ts:9\` |\n| ${APOSTROPHE_TITLE.replace("'", '\u2019')} | MET | test | \`tests/a.test.ts:9\` |`,
+        );
+        const r = sb.exec(answer);
+        expect(r.code).not.toBe(0);
+        expect(r.stderr).toContain('alias-equivalent');
+    });
+
+    test('U+02BC is not treated as removable punctuation (negative case)', () => {
+        const sb = makeSandbox(TASK_CONTENT, '0726', apostropheFeature);
+        const r = sb.exec(acRowWith(APOSTROPHE_TITLE.replace("'", '\u02bc')));
+        expect(r.code).not.toBe(0);
+        expect(r.stderr).toContain('matches no task AC checklist label or scenario title');
     });
 });

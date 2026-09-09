@@ -24,7 +24,14 @@
  * verify against.
  */
 
-import { resolve } from 'node:path';
+// Hoisted to module scope per task 0809 R5 ("replace the shadowed dynamic path/fs imports
+// with module-level imports"): the binding lives at module scope, not inside
+// `openInlineRunProjectDb`. The top-level-await dynamic form is deliberate — the standing
+// runtime-boundaries fs rule (recommended pre-check preset) forbids a static node:fs
+// import in application sources.
+const { mkdirSync } = await import('node:fs');
+
+import { join, resolve } from 'node:path';
 import type { DbAdapter, RunDefinitionSource } from '@gobing-ai/spur-domain';
 import { createMigratedDb, RunDao } from '@gobing-ai/spur-domain';
 import {
@@ -112,8 +119,6 @@ export interface InlineRunProjectDb {
  * reimplementing any persistence policy.
  */
 export async function openInlineRunProjectDb(workdir: string): Promise<InlineRunProjectDb> {
-    const { join, resolve } = await import('node:path');
-    const { mkdirSync } = await import('node:fs');
     const url = join(resolve(workdir), '.spur', 'spur.db');
     mkdirSync(join(url, '..'), { recursive: true });
     const adapter = await createMigratedDb({ url });
@@ -237,9 +242,14 @@ export async function createOrAttachInlineRun(input: InlineRunSetupInput): Promi
     }
 
     // Create the row with the exact record shape the engine's RunLifecycle.runRecord uses
-    // for state-machine runs (`running`, never a synthetic terminal status), then stamp the
-    // same identity the subprocess engine stamps at creation (0768/0784). Persistence is
-    // not best-effort: a failed insert or identity stamp fails the setup fail-closed.
+    // for state-machine runs (`running`, never a synthetic terminal status). The full launch
+    // identity — canonical definition digest, workflow version (explicit null when the
+    // definition is unversioned) and the resolved definition source — is persisted in THIS
+    // initial insert (0809 R1), the same identity the engine stamps at creation (0768/0784):
+    // an interruption right after the insert leaves a fully identified row, never an
+    // empty-metadata window. Persistence is not best-effort: a failed insert fails the setup
+    // fail-closed with no row; the call passes no external_key, so the engine rejects a
+    // colliding id instead of adopting a foreign row.
     const engine = new EngineWorkflowService(createDefaultWorkflowEngineHost(), new DbWorkflowPersistenceAdapter(db));
     await engine.createOrAttachRun({
         id: runId,
@@ -248,9 +258,12 @@ export async function createOrAttachInlineRun(input: InlineRunSetupInput): Promi
         status: 'running',
         started_at: new Date().toISOString(),
         completed_at: null,
-        metadata_json: '{}',
+        metadata_json: JSON.stringify({
+            definitionDigest: digest,
+            workflowVersion: version,
+            definitionSource: source,
+        }),
     });
-    await runDao.stampRunIdentity(runId, digest, version, source);
 
     return {
         ok: true,

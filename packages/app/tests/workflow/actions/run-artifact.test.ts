@@ -620,4 +620,24 @@ describe('RunArtifactActionRunner bound verify-verdict registration (task 0785 R
             f.cleanup();
         }
     });
+
+    test('a missing authoritative run row refuses as missing — never mislabeled malformed metadata (0809 R3)', async () => {
+        const f = await setup();
+        try {
+            // Remove ONLY the run row; the fixture keeps ownership of its own database and
+            // never touches any other DB (the historical incident's cause stays unverified).
+            await f.adapter.run('DELETE FROM runs WHERE id = ?', [RUN_ID]);
+            const runner = new RunArtifactActionRunner(async () => f.adapter, createNodeFileSystem(), f.dao);
+            const res = await runner.execute(boundOptions(f), ctxWith(f.workdir, { proofDigest: f.digest, wbs: WBS }));
+            expect(res.ok).toBe(false);
+            if (res.ok) return;
+            // The exact refusal class: missing authoritative row, not the JSON-parse catch.
+            expect(res.error).toContain(`run ${RUN_ID} has no authoritative row — refusing binding`);
+            expect(res.error).not.toContain('malformed');
+            expect(await f.dao.artifactsByRunId(RUN_ID)).toHaveLength(0);
+        } finally {
+            f.adapter.close();
+            f.cleanup();
+        }
+    });
 });

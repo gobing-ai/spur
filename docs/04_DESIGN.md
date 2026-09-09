@@ -2884,6 +2884,18 @@ native platform subagent when the host exposes one with shared-worktree read/wri
 capability; host fallback covers every ineligible stage, and post-dispatch failures follow the
 stage error policy without host replay (ADR-047 amendment, task 0508). Operator confirmation
 actions and approve/taste/ask decisions stay host-owned.
+The inline driver's run identity is frozen at invocation (task 0809 R4): setup persists the
+authoritative run row with the complete launch identity — canonical `definitionDigest`,
+`workflowVersion` including explicit null, and `definitionSource` path/layer/workdir — in the
+initial insert, and the driver keeps one invocation-time parsed definition for the entire run.
+`proof.digest` is the fresh current-input fingerprint while `proof.definitionDigest` identifies
+the workflow actually interpreted; a tracked YAML source edit before capture lands in current
+input proof, post-capture input edits invalidate it, and switching the executed definition stops
+the run in favor of a fresh inline run — never a history repair or resume stamp at record (0784
+owns paused-engine consent). The inline record is 0808's registration-equivalent run-log line
+with run/definition identity agreement checked from authoritative setup/run evidence; there is
+no inline artifact-ledger write. Owner:
+[`inline-pipeline-driver.md`](../plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md).
 The SSOT is
 [`cross-cutting.md`](../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 The `review` operation resolves to deterministic modes: WBS mode runs functional traceability (`sp:functional-review`), SECUA framework (`sp:code-verification`), and architectural depth (`sp:code-improvement`), writing findings to the task's `## Review` section; Path mode runs advisory SECUA and architecture with no task mutation. `--fix` is deprecated (no-op + warning; route remediation → `/sp:dev-verify --fix`). `--next` was **removed** from `dev-review` (feature H8, task 0401 R3): it had been a deprecated no-op, and once `--next` was redefined as chain-to-completion with propagation (ADR-039) keeping a no-op spelling of a now-meaningful flag would have been the fourth contradictory meaning. Route progression through `/sp:dev-next`.

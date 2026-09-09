@@ -64,7 +64,26 @@ command, skill, script, or second workflow.
    and writes `.spur/run/<run-id>-inline-setup.json`. Seed `__runId` and `__definitionDigest`
    from that file so proof capture and bound registration verify against the persisted identity.
    A non-zero exit (missing row identity, changed definition, bundle-only install) stops the run —
-   never continue unbound and never fabricate a PASS.
+   never continue unbound and never fabricate a PASS. (The delegate persists the authoritative
+   RUN row only — the 0808 inline record is the registration-equivalent convention below, not a
+   setup-time artifact-ledger insert.)
+
+   **Frozen invocation identity (task 0809 R4).** The definition parsed and hashed at setup is
+   the definition for the ENTIRE run: keep one invocation-time parsed definition and never
+   re-resolve or reseed `__definitionDigest` at record because a workflow YAML changed. Two
+   digests serve different purposes: `proof.digest` is the freshly captured current-input
+   fingerprint; `proof.definitionDigest` identifies the workflow actually interpreted (the setup
+   identity). A source-only edit of a TRACKED workflow YAML before capture is part of current
+   input proof — the Git fingerprint covers tracked working-tree files, and ignored/external
+   workflow files are NOT part of it (their executed identity remains the setup digest).
+   Post-capture changes to fingerprinted inputs invalidate that proof and take the normal
+   certification loop — stale post-capture evidence is refused, never reconciled. If execution
+   must switch to a different definition, or the executed identity cannot be established: stop
+   before record, preserve the run log and evidence, and start a FRESH inline run with a fresh
+   run id and fresh gate/review/verify certification. Never mutate old run/proof identities,
+   manufacture a paused engine snapshot, or call `continuePaused` for a running inline row;
+   task text, Git attribution and `--auto` are not consent to stamp `resumeDefinitionDigest` —
+   explicit consent for actual paused engine runs stays owned by task 0784.
 4. Resolve the host session id from `.spur/context/.session.json`, accepting the normalized hook key
    `session` and the Codex key `session_id` (in that order). If neither is available, allocate
    `host-session-<run-id>` and record that fallback in the log; provenance must never be blank or
@@ -127,7 +146,13 @@ Action semantics come from the YAML and the workflow action contract:
   line to `.spur/run/<run-id>.log` naming the equivalence (artifact kind, path, verdict, digest) and
   proceeds to `spur task record`. A failed validation stops at the state and follows the failure
   contract; the step is never silently skipped. Artifact-provenance consumers read that run-log
-  line on the inline path — there is no ledger row.
+  line on the inline path — there is no ledger row. The validation also includes **run/definition
+  identity agreement from authoritative evidence** (task 0809 R4): the verdict's `proof.runId` and
+  `proof.definitionDigest` must agree with the setup artifact `.spur/run/<run-id>-inline-setup.json`
+  and the persisted run row; if that identity is absent or conflicts, STOP — recreating a row is
+  not a diagnostic operation. The app-service bound-artifact fixture (which writes a real engine
+  ledger row) is service-level test evidence for this identity mechanics, not evidence that the
+  inline host writes a ledger.
 
 **Native-subagent dispatch (R2 eligibility, evaluated before each action):**
 

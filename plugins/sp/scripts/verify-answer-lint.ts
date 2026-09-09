@@ -288,12 +288,17 @@ function stripAcWrappers(title: string): string {
  * and still fails.
  */
 function normalizeAcTitle(title: string): string {
-    return stripAcWrappers(title)
-        .replace(/^R\d+\s*[:\-—]?\s*/, '')
-        .toLowerCase()
-        .replace(/[ʼ‘’“”]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+    return (
+        stripAcWrappers(title)
+            .replace(/^R\d+\s*[:\-—]?\s*/, '')
+            .toLowerCase()
+            // Exact pre-refactor removal set (0809 R5): ASCII apostrophe + the four curly
+            // quotes. Escaped form keeps U+0027 visible next to lookalike curly glyphs;
+            // U+02BC stays a meaningful character, never removable punctuation.
+            .replace(/[\u0027\u2018\u2019\u201c\u201d]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+    );
 }
 
 /**
