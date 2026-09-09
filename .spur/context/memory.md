@@ -1,5 +1,5 @@
 | HH:MM | description | file(s) | outcome | ~tokens |
-|--------|-------------|---------|---------|---------|
+| -------- | ------------- | --------- | --------- | --------- |
 | 00:00 | task 0192 A17 corpus cutover: hardened migrator, applied to live docs/tasks2, retired kanban.md | packages/app corpus-migrator.ts, task-service.ts; apps/cli task.ts; docs | committed by operator | ~30k |
 | 00:30 | G1 inbox IPC (0193): 0204 events+POST API+SSE, 0205 watch verb, 0206 live Inbox tab | packages/app team-service.ts; apps/server messages+events; apps/cli message.ts; apps/web InboxTab.tsx | committed by operator, gate green | ~55k |
 | 01:10 | recorded 0207 HITL decision (option c) in 0195 Q&A | docs/tasks2/0195 Q&A | operator confirmed option (c) | ~1k |
@@ -40,7 +40,7 @@
 ## Session: 2026-07-05 00:10
 
 | Time | Action | File(s) | Outcome | ~Tokens |
-|------|--------|---------|---------|--------|
+| ------ | -------- | --------- | --------- | -------- |
 | 00:12 | Edited apps/server/src/bootstrap.ts | modified serverBootstrapConfig() | ~248 |
 | 00:12 | Edited apps/server/src/serve.ts | added error handling | ~388 |
 | 00:12 | Edited apps/server/src/serve.ts | added error handling | ~176 |
@@ -87,7 +87,7 @@
 ## Session: 2026-07-06 22:30
 
 | Time | Action | File(s) | Outcome | ~Tokens |
-|------|--------|---------|---------|--------|
+| ------ | -------- | --------- | --------- | -------- |
 | 22:59 | Created plugins/sp/skills/code-simplification/SKILL.md | — | ~2564 |
 | 23:01 | Edited plugins/sp/README.md | 1→2 lines | ~63 |
 | 23:01 | Edited plugins/sp/README.md | 16 → 17 | ~23 |
@@ -108,7 +108,7 @@
 ## Session: 2026-07-06 05:34
 
 | Time | Action | File(s) | Outcome | ~Tokens |
-|------|--------|---------|---------|--------|
+| ------ | -------- | --------- | --------- | -------- |
 | 05:49 | Created docs/tasks2/0216_absorb-wayfinder-into-sp-wayfinder-skill-plus-brainstorm-phase-2.md | — | ~3448 |
 | 05:49 | Session end: 1 writes across 1 files (0216_absorb-wayfinder-into-sp-wayfinder-skill-plus-brainstorm-phase-2.md) | 3 reads | ~10014 tok |
 | 05:58 | Edited plugins/sp/hooks/hooks.json | removed 11 lines | ~4 |
@@ -125,13 +125,13 @@
 ## Session: 2026-07-06 06:12
 
 | Time | Action | File(s) | Outcome | ~Tokens |
-|------|--------|---------|---------|--------|
+| ------ | -------- | --------- | --------- | -------- |
 | 06:15 | Created plugins/sp/skills/wayfinder/SKILL.md | — | ~4636 |
 | 06:15 | Edited plugins/sp/skills/brainstorm/SKILL.md | 3→4 lines | ~20 |
 | 06:15 | Edited plugins/sp/skills/brainstorm/SKILL.md | 5→6 lines | ~116 |
 | 06:15 | Edited plugins/sp/skills/brainstorm/SKILL.md | 7→9 lines | ~149 |
 | 06:16 | Edited plugins/sp/skills/brainstorm/SKILL.md | expanded (+47 lines) | ~809 |
-| 06:16 | Edited plugins/sp/commands/dev-brainstorm.md | "<topic> [--depth <basic|d" → "<topic> [--depth <basic|d" | ~52 |
+| 06:16 | Edited plugins/sp/commands/dev-brainstorm.md | "<topic> [--depth <basic | d" → "<topic> [--depth <basic | d" | ~52 |
 | 06:16 | Edited plugins/sp/commands/dev-brainstorm.md | 2→3 lines | ~149 |
 | 06:16 | Edited plugins/sp/commands/dev-brainstorm.md | expanded (+26 lines) | ~593 |
 | 06:16 | Edited plugins/sp/commands/dev-brainstorm.md | 1→3 lines | ~132 |
@@ -161,7 +161,7 @@
 ## Session: 2026-07-06 16:40
 
 | Time | Action | File(s) | Outcome | ~Tokens |
-|------|--------|---------|---------|--------|
+| ------ | -------- | --------- | --------- | -------- |
 | 23:45 | Investigated System Events capture contract | packages/app/src/services/event-names.ts; system-event-tap.ts; apps/server/src/modules/events/index.ts; apps/web/src/modules/observability/SystemEventsTab.tsx | Found fixed allowlist + server EventBus scope; missing events are expected outside that path | ~9000 |
 | 23:46 | Created task 0220 via tasks CLI | docs/tasks2/0220_System_Events_completeness_real-time_stream_filters_and_extensible_details.md | Backlog task created with requirements, design, and plan; `tasks check 0220` passed | ~3000 |
 | 23:47 | Logged observability issue | .wolf/buglog.json; .wolf/cerebrum.md; .wolf/anatomy.md | Added bug-763 and project learning metadata | ~1000 |
@@ -255,7 +255,10 @@
 ## Session: 2026-07-08 23:06
 
 | Time | Action | File(s) | Outcome | ~Tokens |
+
 | 12:10 | Completed task 0226: all 7 findings (F1-F7) implemented, coverage fix to 97.14%, tsdoc-export rule enhanced | apps/server/src/context.ts, serve.ts, middleware/error-handler.ts; apps/server/tests/upstream-system-events-wiring.test.ts, error-handler.test.ts; packages/app/src/services/system-event-tap.ts; docs/inventory/0221-emit-sites.md | lint clean, 2499 tests pass, build exit 0, CF tests pass, task 0226 done | ~85k |
 |------|--------|---------|---------|--------|
 
 | 09:48 | Created task 0500: ship plugins/sp + marketplace.json in npm tarball for superskill install | docs/tasks4/0500_*.md | PASS (feature_id warn only) | ~n/a |
+
+| 22:00 | A21 batch wrap: 0813 done; feature A21 done (4 Scenario-keyed AC rows repaired guard); batch commit 6e9788522 on sp/runall-a21-50e6; merged into main f2265f4d7 (gate PASS incl. spur migrate for ts-libs 0.4.59 importer schema); ts-libs A21 merged a0aa9a0 + released 0.4.59; all trees clean | docs/tasks4/081{0-3}, docs/features/A21_*, packages/app execution-policy.ts, bounded-child-run.ts, serve.ts, db.ts | PASS — full gate exit 0, feature A21 done, merge f2265f4d7 two parents | ~180k |
