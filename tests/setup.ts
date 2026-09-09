@@ -57,6 +57,12 @@ await configure({
 // ensuring they hit the direct (no-config) code path.
 process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
 
+// Task 0817 R1: same hermeticity for the project layer — a test that omits `cwd`
+// must not bind the CLI to this repository's own live `.spur/config.yaml` through
+// `process.cwd()`. The loader honours this only for unpinned calls; fixture tests
+// that pass an explicit `cwd` are unaffected.
+process.env.SPUR_SKIP_PROJECT_CONFIG = 'true';
+
 // A pipeline's `test`/`test-recheck` gate runs as a child of the workflow run process,
 // inheriting its SPUR_WORKFLOW_RUN_ACTIVE=1 marker (task 0610 R4 nested-run refusal).
 // Tests are legitimate top-level processes, not nested pipelines, so drop the leaked

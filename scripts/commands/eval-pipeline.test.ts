@@ -19,6 +19,11 @@ import {
     workflowKeyForPipeline,
 } from './eval-pipeline';
 
+// task 0817 R2: createEvalRun/removeEvalRun shell out to `git worktree` and copy the
+// fixture floor — hundreds of ms (and well over bun's 5 s default) under load. One named
+// timeout replaces the previous ad-hoc `20000` literal; all spawn-heavy cases share it.
+const SPAWN_TIMEOUT_MS = 30_000;
+
 describe('isolated eval project', () => {
     const runs: EvalRun[] = [];
 
@@ -26,40 +31,51 @@ describe('isolated eval project', () => {
         for (const run of runs) await removeEvalRun(run);
     });
 
-    test('uses real, isolated worktrees with a run-local fixture floor', async () => {
-        const first = await createEvalRun();
-        const second = await createEvalRun();
-        runs.push(first, second);
+    test(
+        'uses real, isolated worktrees with a run-local fixture floor',
+        async () => {
+            const first = await createEvalRun();
+            const second = await createEvalRun();
+            runs.push(first, second);
 
-        expect(first.projectDir).not.toBe(second.projectDir);
-        expect(first.tasksDir).not.toBe(second.tasksDir);
-        expect(first.tasksDir).toContain(`${first.projectDir}/tests/fixtures/pipeline-eval/tasks`);
+            expect(first.projectDir).not.toBe(second.projectDir);
+            expect(first.tasksDir).not.toBe(second.tasksDir);
+            expect(first.tasksDir).toContain(`${first.projectDir}/tests/fixtures/pipeline-eval/tasks`);
 
-        const localConfig = await Bun.file(join(first.projectDir, '.spur/config.yaml')).text();
-        const repositoryConfig = await Bun.file('.spur/config.yaml').text();
-        expect(localConfig).toContain('tests/fixtures/pipeline-eval/tasks:');
-        expect(localConfig).toContain('baseCounter: 9499');
-        expect(repositoryConfig).not.toContain('tests/fixtures/pipeline-eval/tasks:');
+            const localConfig = await Bun.file(join(first.projectDir, '.spur/config.yaml')).text();
+            const repositoryConfig = await Bun.file('.spur/config.yaml').text();
+            expect(localConfig).toContain('tests/fixtures/pipeline-eval/tasks:');
+            expect(localConfig).toContain('baseCounter: 9499');
+            expect(repositoryConfig).not.toContain('tests/fixtures/pipeline-eval/tasks:');
 
-        await writeFile(join(first.tasksDir, '9500_fixture.md'), 'first\n');
-        expect(await Bun.file(join(second.tasksDir, '9500_fixture.md')).exists()).toBeFalse();
+            await writeFile(join(first.tasksDir, '9500_fixture.md'), 'first\n');
+            expect(await Bun.file(join(second.tasksDir, '9500_fixture.md')).exists()).toBeFalse();
 
-        await writeFile(join(first.projectDir, 'tests/fixtures/pipeline-eval/scratch/9500.md'), 'fixture 9500 ok\n');
-        const status = Bun.spawnSync(['git', 'status', '--porcelain'], { cwd: first.projectDir });
-        expect(status.exitCode).toBe(0);
-        expect(status.stdout.toString()).toContain('tests/fixtures/pipeline-eval/scratch/');
-    });
+            await writeFile(
+                join(first.projectDir, 'tests/fixtures/pipeline-eval/scratch/9500.md'),
+                'fixture 9500 ok\n',
+            );
+            const status = Bun.spawnSync(['git', 'status', '--porcelain'], { cwd: first.projectDir });
+            expect(status.exitCode).toBe(0);
+            expect(status.stdout.toString()).toContain('tests/fixtures/pipeline-eval/scratch/');
+        },
+        SPAWN_TIMEOUT_MS,
+    );
 
-    test('removeEvalRun is idempotent: a vanished worktree does not throw and the temp parent is still removed', async () => {
-        const run = await createEvalRun();
-        // Simulate the process-kill/partial-cleanup case: the worktree dir is already gone (stale
-        // registration) but the temp parent survives. removeEvalRun must prune the stale ref and
-        // still remove the temp parent, never throwing (cleanup runs from finally/afterAll and must
-        // not abort the primary outcome).
-        Bun.spawnSync(['git', 'worktree', 'remove', '--force', run.projectDir]);
-        await expect(removeEvalRun(run)).resolves.toBeUndefined();
-        await expect(stat(run.tempParent)).rejects.toThrow();
-    });
+    test(
+        'removeEvalRun is idempotent: a vanished worktree does not throw and the temp parent is still removed',
+        async () => {
+            const run = await createEvalRun();
+            // Simulate the process-kill/partial-cleanup case: the worktree dir is already gone (stale
+            // registration) but the temp parent survives. removeEvalRun must prune the stale ref and
+            // still remove the temp parent, never throwing (cleanup runs from finally/afterAll and must
+            // not abort the primary outcome).
+            Bun.spawnSync(['git', 'worktree', 'remove', '--force', run.projectDir]);
+            await expect(removeEvalRun(run)).resolves.toBeUndefined();
+            await expect(stat(run.tempParent)).rejects.toThrow();
+        },
+        SPAWN_TIMEOUT_MS,
+    );
 });
 
 describe('diffSnapshot', () => {
@@ -272,14 +288,18 @@ describe('fixture worktree can run the quality gate', () => {
         for (const run of created) await removeEvalRun(run);
     });
 
-    test('is created outside the repository and resolves the toolchain', async () => {
-        const run = await createEvalRun();
-        created.push(run);
-        expect(run.projectDir.startsWith(repoRoot)).toBeFalse();
-        // Bun.file().exists() is false for directories — stat the linked trees instead.
-        expect(await Bun.file(join(run.projectDir, 'node_modules/.bin/tsc')).exists()).toBeTrue();
-        expect((await stat(join(run.projectDir, 'apps/cli/node_modules'))).isDirectory()).toBeTrue();
-    });
+    test(
+        'is created outside the repository and resolves the toolchain',
+        async () => {
+            const run = await createEvalRun();
+            created.push(run);
+            expect(run.projectDir.startsWith(repoRoot)).toBeFalse();
+            // Bun.file().exists() is false for directories — stat the linked trees instead.
+            expect(await Bun.file(join(run.projectDir, 'node_modules/.bin/tsc')).exists()).toBeTrue();
+            expect((await stat(join(run.projectDir, 'apps/cli/node_modules'))).isDirectory()).toBeTrue();
+        },
+        SPAWN_TIMEOUT_MS,
+    );
 });
 
 // 0596 P3: eval-pipeline spawns a task-pipeline run whose implement agent may itself be told (by a
@@ -326,15 +346,19 @@ describe('nesting guard', () => {
 
     // Drives a real `--dry` evalPipeline (worktree spawn + report write) — ~4.5s on this
     // machine, over bun's 5s default under load. The test asserts flag inheritance, not speed.
-    test('a first-level run sets the flag so children inherit it', async () => {
-        const prior = process.env.SPUR_EVAL_PIPELINE_ACTIVE;
-        delete process.env.SPUR_EVAL_PIPELINE_ACTIVE;
-        try {
-            await evalPipeline(['--dry', '--label', 'nesting-guard-sets-flag']);
-            expect(process.env.SPUR_EVAL_PIPELINE_ACTIVE).toBe('1');
-        } finally {
-            if (prior === undefined) delete process.env.SPUR_EVAL_PIPELINE_ACTIVE;
-            else process.env.SPUR_EVAL_PIPELINE_ACTIVE = prior;
-        }
-    }, 20000);
+    test(
+        'a first-level run sets the flag so children inherit it',
+        async () => {
+            const prior = process.env.SPUR_EVAL_PIPELINE_ACTIVE;
+            delete process.env.SPUR_EVAL_PIPELINE_ACTIVE;
+            try {
+                await evalPipeline(['--dry', '--label', 'nesting-guard-sets-flag']);
+                expect(process.env.SPUR_EVAL_PIPELINE_ACTIVE).toBe('1');
+            } finally {
+                if (prior === undefined) delete process.env.SPUR_EVAL_PIPELINE_ACTIVE;
+                else process.env.SPUR_EVAL_PIPELINE_ACTIVE = prior;
+            }
+        },
+        SPAWN_TIMEOUT_MS,
+    );
 });

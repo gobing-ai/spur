@@ -56,7 +56,10 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
 
     const cwd = options.cwd ?? process.cwd();
     const env = options.env ?? process.env;
-    const configFile = resolveConfigFile(cwd);
+    // Task 0817 R1: forward `options.cwd` verbatim — which may be undefined — so the
+    // loader's `SPUR_SKIP_PROJECT_CONFIG` gate can suppress the project layer for
+    // unpinned programmatic runs. `cwd` stays materialized for the DB and context seams.
+    const configFile = resolveConfigFile(options.cwd);
     const db = options.db ?? (await createMigratedDbAdapter(cwd, env, options.dbUrl));
 
     // Load the merged global+project config ONCE at the composition root (A5 /
@@ -68,7 +71,7 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
     try {
         // Pass the embedded schemas so the `$schema` ref resolves without
         // node_modules (dev tree and --compile binary alike).
-        spurConfig = await loadSpurConfig(cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
+        spurConfig = await loadSpurConfig(options.cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
     } catch (err) {
         const message = errorMessage(err);
         if (argv.includes('--json')) {

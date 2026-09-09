@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Fix test hermeticity and dogfood-harness findings from run 20260908-2330-devrun-0815
-status: todo
+status: done
 template: issue
 created_at: 2026-09-09T17:11:57.002Z
-updated_at: "2026-09-09T17:39:53.448Z"
+updated_at: "2026-09-09T19:25:57.296Z"
 
 priority: P2
 ---
@@ -41,12 +41,12 @@ The reproducible, tree-verifiable defect behind the P1 class is therefore **cwd 
 
 ### Acceptance Criteria
 
-- [ ] AC1 (R1) — a CLI invocation with no explicit `cwd` under `bun run test` does not resolve the repository's own `.spur/config.yaml`; the check added in `packages/config/tests/loader.test.ts` fails before the fix and passes after, and every fixture test that passes an explicit `cwd` still passes
-- [ ] AC2 (R2) — `plugins/sp/hooks/task-write-guard.test.ts` and `scripts/commands/eval-pipeline.test.ts` pass standalone and inside `bun run test` on a deliberately loaded machine, with no timeout failures and no varying failure set
-- [ ] AC3 (R3) — an AC declared as `**AC1 (R1) — <title>**` resolves through `verify-answer-lint` exactly as the checklist spelling does, and `ac-style-guide.md` lists the bold-paragraph form among the accepted AC id forms
-- [ ] AC4 (R4) — `docs/04_DESIGN.md` names what the proof fingerprint binds (exclude globs, task section list, feature section list) and what it deliberately omits, citing `proof-input-fingerprint.ts` by `path:line`, in the same commit as any related code change
-- [ ] AC5 (R5) — the six 0815 residuals appear verbatim in this task's `### References` with 0815 named as their origin, and task 0815 has no remaining orphan blocker
-- [ ] AC6 (gate) — `bun run spur-check` exits 0 on the final change with no suppressions, no weakened assertions, and no `--no-verify`
+- [x] AC1 (R1) — a CLI invocation with no explicit `cwd` under `bun run test` does not resolve the repository's own `.spur/config.yaml`; the check added in `packages/config/tests/loader.test.ts` fails before the fix and passes after, and every fixture test that passes an explicit `cwd` still passes
+- [x] AC2 (R2) — `plugins/sp/hooks/task-write-guard.test.ts` and `scripts/commands/eval-pipeline.test.ts` pass standalone and inside `bun run test` on a deliberately loaded machine, with no timeout failures and no varying failure set
+- [x] AC3 (R3) — an AC declared as `**AC1 (R1) — <title>**` resolves through `verify-answer-lint` exactly as the checklist spelling does, and `ac-style-guide.md` lists the bold-paragraph form among the accepted AC id forms
+- [x] AC4 (R4) — `docs/04_DESIGN.md` names what the proof fingerprint binds (exclude globs, task section list, feature section list) and what it deliberately omits, citing `proof-input-fingerprint.ts` by `path:line`, in the same commit as any related code change
+- [x] AC5 (R5) — the six 0815 residuals appear verbatim in this task's `### References` with 0815 named as their origin, and task 0815 has no remaining orphan blocker
+- [x] AC6 (gate) — `bun run spur-check` exits 0 on the final change with no suppressions, no weakened assertions, and no `--no-verify`
 
 ### Q&A
 
@@ -127,15 +127,98 @@ One paragraph in the existing proof-chain prose near the `proofDigest` / complet
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/index.ts:59` |
+| `apps/cli/src/index.ts:74` |
+| `apps/cli/tests/helpers.ts:69` |
+| `apps/cli/tests/helpers.ts:79` |
+| `packages/config/src/loader.ts:152` |
+| `packages/config/src/loader.ts:161` |
+| `packages/config/src/loader.ts:170` |
+| `packages/config/src/loader.ts:180` |
+| `packages/config/src/loader.ts:245` |
+| `packages/config/src/loader.ts:257` |
+| `packages/config/src/loader.ts:262` |
+| `packages/config/tests/loader.test.ts:25` |
+| `packages/config/tests/loader.test.ts:889` |
+| `plugins/sp/hooks/task-write-guard.test.ts:123` |
+| `plugins/sp/hooks/task-write-guard.test.ts:153` |
+| `plugins/sp/hooks/task-write-guard.test.ts:30` |
+| `plugins/sp/hooks/task-write-guard.test.ts:99` |
+| `plugins/sp/scripts/verify-answer-lint.ts:285` |
+| `plugins/sp/scripts/verify-answer-lint.ts:311` |
+| `plugins/sp/scripts/verify-answer-lint.ts:335` |
+| `plugins/sp/scripts/verify-answer-lint.ts:365` |
+| `plugins/sp/scripts/verify-answer-lint.ts:386` |
+| `plugins/sp/tests/verify-answer-lint.test.ts:241` |
+| `plugins/sp/tests/verify-answer-lint.test.ts:418` |
+| `scripts/commands/eval-pipeline.test.ts:22` |
+| `scripts/commands/eval-pipeline.test.ts:291` |
+| `scripts/commands/eval-pipeline.test.ts:34` |
+| `scripts/commands/eval-pipeline.test.ts:349` |
+| `tests/setup.ts:60` |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/config/src/loader.ts:180` — `skipProject = cwd === undefined && SPUR_SKIP_PROJECT_CONFIG === 'true'` (explicit cwd > env skip > process.cwd()); `apps/cli/src/index.ts:62,74` forwards unpinned `options.cwd`; `tests/setup.ts:64` sets the var harness-wide; `apps/cli/tests/helpers.ts:74` un-leaks it across subprocess spawns. Repro check `packages/config/tests/loader.test.ts:918-975` → `bun test packages/config/tests/loader.test.ts` fresh: 73 pass / 0 fail. Flip demonstration fresh: without the env (pre-fix-equivalent) unpinned `main(['agent','doctor','pi-zai','--json'])` exits 0 (resolves the repo's own `.spur/config.yaml` → pi-zai known → the check's exit-1 assertion would FAIL); with the env set, exit 1 / "Unknown agent: pi-zai". |
+| R2 | MET | Named `SPAWN_TIMEOUT_MS = 30_000` at `plugins/sp/hooks/task-write-guard.test.ts:33` and `scripts/commands/eval-pipeline.test.ts:25`, applied per-test on every spawn-heavy case; no `timeout` key in either `bunfig.toml`; assertions untouched. Fresh standalone: task-write-guard 10 pass / 0 fail; eval-pipeline 20 pass / 0 fail. Loaded-machine leg fresh: 8 busy loops on 10 cores (load avg 3.08) → identical outputs, zero timeout failures. |
+| R3 | MET | `plugins/sp/scripts/verify-answer-lint.ts:335-347` — whole-line `**AC id**` pass in `buildAcIdentityIndex` reusing `declareIdentity` + head-split; `:386` failure hint names the form; positive + negative unit tests `plugins/sp/tests/verify-answer-lint.test.ts:419-431` (fresh run of the file: 36 pass / 0 fail, both new tests included); guide's fifth form at `plugins/sp/skills/spur-dev/references/ac-style-guide.md:116-129`. Fresh two-span probe: matchAll on `**AC-ONE** is met, **AC-TWO** is not met.` → `[]`. |
+| R4 | MET | `docs/04_DESIGN.md:2602-2612` fingerprint-scope paragraph; all three cited anchors re-read at the cited lines this run: `packages/app/src/workflow/proof-input-fingerprint.ts:172` (`DEFAULT_EXCLUDE_GLOBS = ['docs/tasks*', 'docs/features*']`), `:249` (task sections incl. Design/Plan), `:282` (feature sections Goal/Scope/AC). Layering surface documented beside the global skip at `docs/04_DESIGN.md:1632-1639` (same working tree as the R1 code change; committed together at record-time commit). |
+| R5 | MET | Residuals adopted under "Residuals adopted from task 0815 References (R5 — this is now their owner surface)" at `docs/tasks4/0817_fix-test-hermeticity-and-dogfood-harness-findings-from-run-2.md:187`, 0815 named as origin; 0815 carries the same six and its own `todo → done` transition is out of scope here (owned by 0815), so no orphan remains: adoption programmatic diff — items 1–3 and 6 byte-verbatim; items 4–5 carry only additive clarifications ("this session" → "in the A21 session"; precedent list + `1a0d3af5d`), substance and Direction text intact. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/config/tests/loader.test.ts:918-975` — fresh `bun test packages/config/tests/loader.test.ts` → 73 pass / 0 fail; unpinned-call + explicit-cwd-fixture legs; flip demo without/with `SPUR_SKIP_PROJECT_CONFIG` → exit 0 (would-fail-before) vs exit 1 (passes-after); full suite green (7957/0) proves no fixture regressed. |
+| AC2 | MET | test | Fresh standalone runs: `task-write-guard.test.ts` 10 pass / 0 fail [853 ms], `eval-pipeline.test.ts` 20 pass / 0 fail [4.8 s]; loaded leg (8 busy loops, load avg 3.08): 10/0 [1.2 s] and 20/0 [6.6 s] — identical sets, no timeout failures. |
+| AC3 | MET | test | Fresh `bun test plugins/sp/tests/verify-answer-lint.test.ts` → 36 pass / 0 fail incl. `whole-line bold declares the id` (positive) and `two bold spans are not a declaration` (negative); guide lists the bold form among accepted id forms. |
+| AC4 | MET | command | `docs/04_DESIGN.md:2602-2612` names exclude globs + both section lists (anchors at `proof-input-fingerprint.ts:172,249,282` re-read at cited lines this run). Deterministic check fresh: grep chain over `docs/04_DESIGN.md` for `proof-input-fingerprint.ts:172` / `:249` / `:282`, `['docs/tasks*', 'docs/features*']`, the task-section and feature-section lists → all six match, exit 0. (Documentation AC — non-behavioral by nature.) |
+| AC5 | MET | command | Six 0815 residuals in `### References` at `docs/tasks4/0817_fix-test-hermeticity-and-dogfood-harness-findings-from-run-2.md:187+`, 0815 named as origin. Fresh block diff (0815 References vs 0817 adoption block): 6/6 items present, items 1–3 + 6 byte-verbatim, item 4 de-contextualized only ("this session" → "in the A21 session"), item 5 additive only (+ precedent `1a0d3af5d`, backticked AGENTS.md) — Direction clauses identical on all six. (Bookkeeping AC — non-behavioral.) |
+| AC6 | MET | command | `bun run spur-check` exit 0 this run: link-check / transition-shim-check / script-contract-check (0 violations) / inline-pipeline-parity-check / dependency-drift-check / importer-schema-check / history-surface-freeze-check all OK; `bun run lint` + 8× typecheck clean; `bun run test` 7957 pass / 0 fail / 32029 expect calls / 439 files [163.8 s]; recommended-pre/post-check rule runs: 0 violations; zero suppression markers in the gate log. First attempt failed at importer-schema-check (env drift, residual #6): PATH `spur` 0.3.78 (ts-db 0.4.60) had down-stamped the gitignored worktree db; restored via the product's own 0033 sync path (`migrate` re-provisioned + re-stamped 0.4.62) — no code change, disclosed here. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Findings (ranked)
+
+None at blocker/major severity.
+
+| # | Severity | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P3 (minor) | functional | Task sections `### Solution` / `### Testing` (and `Root Cause`) still hold template placeholders; the implementation evidence lives only in `.spur/run/0817-test-gate.log`. Fill them at `spur task record` so the task file is self-evidencing. | `docs/tasks4/0817_fix-test-hermeticity…md:124-132` |
+| 2 | P3 (minor) | correctness | AC2's "on a deliberately loaded machine" leg is not evidenced in the gate record — the log shows an unloaded full-suite pass only (`7957 pass / 0 fail`, 160 s). The named 30 s `SPAWN_TIMEOUT_MS` budgets make this low-risk, but record it as residual risk, not proven. | `plugins/sp/hooks/task-write-guard.test.ts:31`, `scripts/commands/eval-pipeline.test.ts:23` |
+| 3 | P4 (advisory) | architecture | `runCli` helper now reaches into a plugin-task env var by name (`SPUR_SKIP_PROJECT_CONFIG` string hardcoded in `apps/cli/tests/helpers.ts:71`). Acceptable seam (one mirror of the setup.ts knob); rename-safe by define-once only. | `apps/cli/tests/helpers.ts:71` |
+
+#### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 (AC1) | MET | `packages/config/src/loader.ts:177-183` — `SPUR_SKIP_PROJECT_CONFIG` gates the project layer only when `cwd === undefined`; precedence explicit cwd > env skip > process.cwd(). `apps/cli/src/index.ts:60,74` forwards `options.cwd` (possibly undefined) through `resolveConfigFile`/`loadSpurConfig`. Repro check in `packages/config/tests/loader.test.ts:918-975` (`pi-zai` unknown-exit 1 via real `main()`, plus unpinned/explicit-cwd layer assertions). `tests/setup.ts:61-66` sets the env harness-wide; `helpers.ts:71` un-leaks it across subprocess spawns. |
+| R2 (AC2) | MET-ish | `SPAWN_TIMEOUT_MS = 30_000` per-test timeouts on all spawn-heavy cases in `task-write-guard.test.ts` and `eval-pipeline.test.ts` (named constant, no bunfig change, assertions untouched). Standalone gate pass verified (below); loaded-machine leg minor#2. |
+| R3 (AC3) | MET | `verify-answer-lint.ts:335-345` — whole-line `**AC id**` paragraph pass into `buildAcIdentityIndex`, reusing `declareIdentity`/head-split; double-bold-span guard; new unit tests `plugins/sp/tests/verify-answer-lint.test.ts:418-431` (positive + negative); guide lists the fifth form at `ac-style-guide.md:116-129`. |
+| R4 (AC4) | MET | `docs/04_DESIGN.md:1602-1611` (skip-env layering + held-off topic? no—layering) and `docs/04_DESIGN.md:2602-2613` — fingerprint scope paragraph cites `proof-input-fingerprint.ts:172` (`DEFAULT_EXCLUDE_GLOBS` verified at :172), `:249` (task sections, verified), `:282` (feature sections, verified). |
+| R5 (AC5) | MET | Six 0815 residuals appear verbatim in 0817 `References` under "Residuals adopted from task 0815 References (R5 — this is now their owner surface)", 0815 named as origin. |
+| AC6 (gate) | MET | Fresh raw gate evidence: biome+typecheck rc=0 across 8 packages; link-check, transition-shim-check, script-contract, pipeline-parity, dependency-drift, importer-schema, history-surface-freeze all PASS; `bun run test` **7957 pass / 0 fail / 32030 expect calls** (160 s, 439 files); rule run recommended-post-check: 0 violations; coverage thresholds hold; proof digest `sha256:ed80176b…`. No suppressions, no weakened assertions, no `--no-verify`. |
+| AC5 note | — | AC checkboxes themselves are still unchecked in the task file — expected for a wip task; `spur task record` checks them off with this Review as evidence. |
+
+#### Architecture (sp-code-improvement digest)
+
+- The R1 fix rides the existing layer-resolution seam; no new abstraction, no parallel env plumbing. `loadSpurConfig(cwd?: string)` widening to optional is honest: the skip only fires for unpinned calls, so the parameter's meaning is preserved.
+- R3 reuses `declareIdentity` rather than adding a second normalizer — diff stays +24/-3 in the linter.
+- Anti-pattern compliance: no bunfig timeout widening, no `.spur/config.yaml` mutation, no `process.chdir()`.
+
+**Verdict:** PASS
+
+**Next:** proceed to `spur task record 0817` — fill `Solution`/`Testing` at record time, check AC boxes, then `done` (--auto authorizes the HITL approve; findings #1–#3 are P3/P4 (minor/advisory) and do not block).
 
 ### References
 
@@ -166,3 +249,8 @@ One paragraph in the existing proof-chain prose near the `proofDigest` / complet
 None of the six is in this task's Acceptance Criteria beyond AC5 (adoption). They are parked here as the durable owner surface, not scheduled work.
 
 ### History
+
+- 2026-09-09T18:40:08.644Z todo → wip (system)
+- 2026-09-09T19:25:27.270Z wip → testing (system)
+- 2026-09-09T19:25:57.296Z testing → done (system)
+

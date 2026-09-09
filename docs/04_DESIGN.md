@@ -1629,7 +1629,14 @@ dependency graph stays Workers-safe:
 - `loadSpurConfig(cwd, opts?)` returns a fully-typed, validated `SpurConfig`. Missing file → schema
   defaults; invalid YAML/schema → throws (fail fast). `validateJsonSchema` defaults on outside tests;
   pass `embeddedSchemas` so the `$schema` ref resolves inside a `bun --compile` binary (the CLI passes
-  `EMBEDDED_SPUR_SCHEMAS`).
+  `EMBEDDED_SPUR_SCHEMAS`). Layer resolution honors skip env vars alongside the explicit `cwd`
+  (task 0817 R1): precedence is **explicit `cwd` > the skip env > `process.cwd()`**. With
+  `SPUR_SKIP_GLOBAL_CONFIG=true` the global layer is skipped; with `SPUR_SKIP_PROJECT_CONFIG=true`
+  AND no explicit `cwd`, the project layer is skipped too — so a programmatic no-`cwd` invocation
+  (in-process `main()`, spawned helpers, tests) never resolves the checkout's own
+  `.spur/config.yaml`. A caller that passes an explicit `cwd` always keeps its config regardless
+  of the env (fixture projects are unaffected); `tests/setup.ts` sets both vars so `bun run test`
+  is hermetic.
 - `resolvePlanningFolders(fs)` derives the active + registered task/feature folders, degrading to
   defaults on any error (a broken config must not wedge folder resolution). `@gobing-ai/spur-app`
   re-exports it so app/CLI consumers import from the application layer, not the config package.
@@ -2592,6 +2599,18 @@ run's declared digest, validates the raw proof block against the authoritative R
 then writes the artifact ledger row — before any `task record` or status mutation, so an unbound or forged
 completion can never cross the lifecycle boundary. This is the spur-native replacement for rd3's default-on
 `--postflight-verify`.
+**Proof-input fingerprint scope (task 0817 R4):** `computeProofInputFingerprint` binds exactly three
+components and deliberately nothing more, so an operator can tell a safe task-file edit from a
+digest-breaking one. The git-tree half hashes the working tree minus
+`DEFAULT_EXCLUDE_GLOBS = ['docs/tasks*', 'docs/features*']`
+(`packages/app/src/workflow/proof-input-fingerprint.ts:172`) — the corpus and ephemeral trees the proof
+documents never contribute, which is why record-time evidence writes (ledger rows under `Solution` /
+`Testing` / `Review`, new run artifacts) leave the digest unchanged. The task-spec half folds the task
+sections `['Background', 'Requirements', 'Acceptance Criteria', 'Design', 'Plan']`
+(`proof-input-fingerprint.ts:249`) via `taskSpecPath`, and the linked-feature half folds
+`['Goal', 'Scope', 'Acceptance Criteria']` (`proof-input-fingerprint.ts:282`) via `featureSpecPath`.
+`Solution` / `Testing` / `Review` are out of the input set by design, so post-verification prose does not
+re-open the gate; editing a `Requirements`, `Design`, or `Plan` section after capture does.
 **Canonical verdict contract (task 0592, F92):** the verify artifact is validated and aggregated
 by one runtime contract — `packages/app/src/services/verify-verdict.ts` owns the Zod schema
 (`verifyVerdictSchema`), the parser (`parseVerifyVerdict` / `readVerifyVerdict`, distinguishing

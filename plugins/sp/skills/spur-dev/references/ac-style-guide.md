@@ -113,6 +113,20 @@ Any of the four may additionally carry a **bracket tag** in any position — `[d
 `Scenario: [advisory] Foo`. Tags are stripped before matching (0398 R7), so tagging never breaks
 the linkage.
 
+Task-side, `verify-answer-lint` additionally accepts a fifth declared id source — a **bold-trajectory
+paragraph**: a whole-line `**AC id…**` paragraph inside the task's `### Acceptance Criteria`
+block (task 0817 R3). The id up to its first `:` and the paragraph's full spelling are both
+declared; two bold spans on one line are not a declaration (an interpolated bold id stays
+unmatchable):
+
+```markdown
+### Acceptance Criteria
+
+**AC-0817-HERM-SKIP: unpinned project-config resolution is suppressed.**
+
+| AC-0817-HERM-SKIP | MET | test | `tests/loader.test.ts:962` |        ← declared
+```
+
 ### The id is exactly the scenario title — no Gherkin body appended
 
 An AC row id must be **exactly** the scenario title (plus any of the four forms above), with the

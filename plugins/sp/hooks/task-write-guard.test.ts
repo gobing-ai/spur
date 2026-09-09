@@ -27,6 +27,11 @@ const UNOWNED_SRC = join(REPO_ROOT, 'packages', 'app', 'src', 'services', 'task-
 // spur binary) override SPUR_BIN or PATH in the per-test env.
 const LOCAL_SPUR = `bun run ${join(REPO_ROOT, 'apps', 'cli', 'src', 'index.ts')}`;
 
+// task 0817 R2: spawn-heavy cases below boot the nested CLI (`bun run`, ~ hundreds of ms and
+// PATH probing under load). A per-test timeout an order of magnitude above the healthy runtime
+// keeps a loaded machine from turning them into flakes without weakening assertions.
+const SPAWN_TIMEOUT_MS = 30_000;
+
 interface Decision {
     permissionDecision: 'allow' | 'deny';
     systemMessage?: string;
@@ -91,46 +96,66 @@ describe('task-write-guard — fail-open contract', () => {
         expect(d.permissionDecision).toBe('allow');
     });
 
-    test('fails open (allow) when spur is not on PATH — a broken runtime never wedges a tool call', async () => {
-        const bunDir = join(process.execPath, '..'); // dir holding the `bun` binary
-        const proc = Bun.spawn([process.execPath, HOOK], {
-            cwd: REPO_ROOT,
-            stdin: new TextEncoder().encode(
-                JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: OWNED_TASK } }),
-            ),
-            stdout: 'pipe',
-            stderr: 'pipe',
-            // PATH = only the bun dir → `bun` works, but `spur` is not found → fail open.
-            env: { CLAUDE_PROJECT_DIR: REPO_ROOT, PATH: bunDir, HOME: process.env.HOME ?? '' },
-        });
-        const out = await new Response(proc.stdout).text();
-        await proc.exited;
-        // Even for an owned task file, an absent spur binary yields allow.
-        expect(JSON.parse(out).hookSpecificOutput.permissionDecision).toBe('allow');
-    });
+    test(
+        'fails open (allow) when spur is not on PATH — a broken runtime never wedges a tool call',
+        async () => {
+            const bunDir = join(process.execPath, '..'); // dir holding the `bun` binary
+            const proc = Bun.spawn([process.execPath, HOOK], {
+                cwd: REPO_ROOT,
+                stdin: new TextEncoder().encode(
+                    JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: OWNED_TASK } }),
+                ),
+                stdout: 'pipe',
+                stderr: 'pipe',
+                // PATH = only the bun dir → `bun` works, but `spur` is not found → fail open.
+                env: { CLAUDE_PROJECT_DIR: REPO_ROOT, PATH: bunDir, HOME: process.env.HOME ?? '' },
+            });
+            const out = await new Response(proc.stdout).text();
+            await proc.exited;
+            // Even for an owned task file, an absent spur binary yields allow.
+            expect(JSON.parse(out).hookSpecificOutput.permissionDecision).toBe('allow');
+        },
+        SPAWN_TIMEOUT_MS,
+    );
 });
 
 describe.if(HAS_OWNED_TASK)('task-write-guard — decision logic', () => {
-    test('denies a raw Edit to a task file so the corpus is only mutated through the CLI', async () => {
-        const d = await runGuard({ tool_name: 'Edit', tool_input: { file_path: OWNED_TASK } });
-        expect(d.permissionDecision).toBe('deny');
-        expect(d.systemMessage).toContain('spur task update');
-    });
+    test(
+        'denies a raw Edit to a task file so the corpus is only mutated through the CLI',
+        async () => {
+            const d = await runGuard({ tool_name: 'Edit', tool_input: { file_path: OWNED_TASK } });
+            expect(d.permissionDecision).toBe('deny');
+            expect(d.systemMessage).toContain('spur task update');
+        },
+        SPAWN_TIMEOUT_MS,
+    );
 
-    test('denies a raw Write to a task file (Write is as dangerous as Edit for the corpus)', async () => {
-        const d = await runGuard({ tool_name: 'Write', tool_input: { file_path: OWNED_TASK } });
-        expect(d.permissionDecision).toBe('deny');
-    });
+    test(
+        'denies a raw Write to a task file (Write is as dangerous as Edit for the corpus)',
+        async () => {
+            const d = await runGuard({ tool_name: 'Write', tool_input: { file_path: OWNED_TASK } });
+            expect(d.permissionDecision).toBe('deny');
+        },
+        SPAWN_TIMEOUT_MS,
+    );
 
-    test('allows edits to non-task source files so the guard never blocks normal work', async () => {
-        const d = await runGuard({ tool_name: 'Write', tool_input: { file_path: UNOWNED_SRC } });
-        expect(d.permissionDecision).toBe('allow');
-    });
+    test(
+        'allows edits to non-task source files so the guard never blocks normal work',
+        async () => {
+            const d = await runGuard({ tool_name: 'Write', tool_input: { file_path: UNOWNED_SRC } });
+            expect(d.permissionDecision).toBe('allow');
+        },
+        SPAWN_TIMEOUT_MS,
+    );
 
     // Regression: a /tmp scratch file that merely SHARES a `NNNN_` prefix with a real corpus task is
     // NOT the corpus file — `--strict` resolution must allow it.
-    test('allows a /tmp scratch file that only shares a WBS prefix with a real task', async () => {
-        const d = await runGuard({ tool_name: 'Write', tool_input: { file_path: '/tmp/0181_design.md' } });
-        expect(d.permissionDecision).toBe('allow');
-    });
+    test(
+        'allows a /tmp scratch file that only shares a WBS prefix with a real task',
+        async () => {
+            const d = await runGuard({ tool_name: 'Write', tool_input: { file_path: '/tmp/0181_design.md' } });
+            expect(d.permissionDecision).toBe('allow');
+        },
+        SPAWN_TIMEOUT_MS,
+    );
 });

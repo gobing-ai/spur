@@ -66,11 +66,17 @@ export async function runCli(
     cwd?: string,
     env?: Record<string, string | undefined>,
 ): Promise<CliResult> {
+    const mergedEnv: Record<string, string | undefined> = { ...process.env, ...env };
+    // tests/setup.ts sets SPUR_SKIP_PROJECT_CONFIG for in-process loads; a subprocess
+    // CLI run against a fixture cwd is exactly where reading the project layer is the
+    // behavior under test (config layering, early config failure), so the inherited
+    // skip must not leak across the spawn boundary. An explicit caller value wins.
+    if (env?.SPUR_SKIP_PROJECT_CONFIG === undefined) delete mergedEnv.SPUR_SKIP_PROJECT_CONFIG;
     const entryPath = join(import.meta.dir, '..', 'src', 'index.ts');
     const proc = Bun.spawn({
         cmd: ['bun', 'run', entryPath, ...args],
         cwd,
-        env: { ...process.env, ...env },
+        env: mergedEnv,
         stdout: 'pipe',
         stderr: 'pipe',
     });

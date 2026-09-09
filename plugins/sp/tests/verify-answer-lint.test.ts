@@ -238,6 +238,26 @@ const TASK_0727 = `## 0727. Fixture task
 - AC3: Given a transition, when it is logged, then the log line carries a timestamp.
 `;
 
+// task 0817 R3: bold-trajectory AC id paragraphs — whole-line `**…**` is a
+// declared identity (spelling + leading token); interpolated bold is not.
+const TASK_BOLD = `## Bold. Fixture task
+
+### Requirements
+
+- R1. Guard the thing.
+
+### Acceptance Criteria
+
+**AC-0817-HERM-SKIP: gains the full spelling.**
+`;
+
+const TASK_BOLD_DOUBLE = `## Bold two. Fixture task
+
+### Acceptance Criteria
+
+**AC-ONE** is met, **AC-TWO** is not met.
+`;
+
 const TASK_MIXED = `## Mixed. Fixture task
 
 ### Requirements
@@ -394,6 +414,20 @@ describe('corpus-form extraction (0728 R1–R3)', () => {
         expect(r.code).toBe(0);
         expect(r.stderr).toContain('PASS');
         expect(r.stderr).toContain('4 requirement row(s)');
+    });
+
+    test('whole-line bold `**AC id**` paragraph declares the id (task 0817 R3)', () => {
+        const sb = makeSandbox(TASK_BOLD, 'bold');
+        const r = sb.exec(answerWith(['R1'], ['AC-0817-HERM-SKIP']));
+        expect(r.code).toBe(0);
+        expect(r.stderr).toContain('PASS');
+    });
+
+    test('two bold spans on one line are not a bold-trajectory declaration (task 0817 R3)', () => {
+        const sb = makeSandbox(TASK_BOLD_DOUBLE, 'bold-double');
+        const r = sb.exec(answerWith([], ['AC-TWO']));
+        expect(r.code).not.toBe(0);
+        expect(r.stderr).toContain('matches no task AC checklist label or scenario title');
     });
 });
 

@@ -282,7 +282,8 @@ function stripAcWrappers(title: string): string {
  * Normalize an AC identity to its canonical key, mirroring the documented
  * matching behavior of feature-check `rowMatchesScenario` + ac-style-guide
  * "Four accepted id forms" (exact/bare title, `Scenario:` prefix, bracket
- * tags, `AC-N` ordinal) without importing that private matcher or adopting
+ * tags, `AC-N` ordinal) plus the task-side bold-trajectory paragraph
+ * (0817 R3), without importing that private matcher or adopting
  * its permissive trailing-Gherkin fallback (0804 R4). Comparison is
  * case/quote/whitespace-insensitive. A paraphrase normalizes differently
  * and still fails.
@@ -307,7 +308,7 @@ function normalizeAcTitle(title: string): string {
  * A checklist-declared spelling always wins over the positional alias.
  */
 interface AcIdentityIndex {
-    /** normalized canonical title → a declared spelling (label, token, or title). */
+    /** normalized canonical title → a declared spelling (label, token, title, or bold trajectory). */
     readonly byTitle: Map<string, string>;
     /** AC-N → task scenario title at that 1-based ordinal. */
     readonly taskScenarios: string[];
@@ -331,6 +332,19 @@ function buildAcIdentityIndex(taskContent: string, featureContent: string | null
         const leading = label.split(/\s+/)[0] ?? '';
         if (leading && leading !== label) declareIdentity(leading);
     }
+    // Bold-trajectory form (task 0817 R3): answers may cite an AC by a bare
+    // `**AC id**` paragraph (house style for long/complex ids). Only whole-line
+    // bold spans count — the line-anchored lazy regex rejects lines with two
+    // spans, keeping interpolated bold text out of the index. The head (text
+    // before the first colon) is declared like a checklist label, mirroring
+    // the `(?::|$)` label extraction above.
+    for (const m of section.matchAll(/^\*\*(.+?)\*\*\s*$/gm)) {
+        const inner = (m[1] ?? '').trim();
+        if (!inner) continue;
+        declareIdentity(inner);
+        const head = inner.split(':')[0]?.trim() ?? '';
+        if (head && head !== inner) declareIdentity(head);
+    }
     const scenarioTitles = (content: string): string[] =>
         [...content.matchAll(/^[ \t]*Scenario:\s*(.+)\s*$/gm)].map((m) => (m[1] ?? '').trim()).filter((t) => t !== '');
     const taskScenarios = scenarioTitles(sectionBetween(taskContent, 'Acceptance Criteria'));
@@ -348,6 +362,10 @@ type AcIdentityResolution = { ok: true; canonical: string } | { ok: false; error
  * alias — accepted only against a real scenario ordinal, and refused with an
  * actionable diagnostic when task and feature ordinals disagree. Undeclared
  * `ACn` tokens, paraphrases and invented ordinals never resolve.
+ * `ACn` tokens, paraphrases and invented ordinals never resolve.
+ *
+ * Declared forms recognized in the index include the bold-trajectory
+ * `**AC id**` paragraph (task 0817 R3); the AC-N failure hint names it.
  */
 function resolveAcIdentity(rowId: string, index: AcIdentityIndex): AcIdentityResolution {
     const canonical = index.byTitle.get(normalizeAcTitle(rowId));
@@ -365,7 +383,7 @@ function resolveAcIdentity(rowId: string, index: AcIdentityIndex): AcIdentityRes
                 ok: false,
                 error:
                     `AC id "${rowId}" uses the AC-${n} positional alias but no scenario exists at that ordinal ` +
-                    '(task scenario list and linked-feature scenario list) — cite the exact scenario title or checklist label',
+                    '(task scenario list and linked-feature scenario list) — cite the exact scenario title, checklist label, or a bare `**AC id**` paragraph',
             };
         }
         if (candidates.length > 1) {

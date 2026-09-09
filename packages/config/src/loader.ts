@@ -149,6 +149,8 @@ function resolveSchemaSpecifier(specifier: string, manifestSpecifier: string): s
  * - Project layer: `<cwd>/.spur/config.yaml`.
  * - Global layer: `~/.config/spur/config.yaml` (skipped when `SPUR_SKIP_GLOBAL_CONFIG=true`,
  *   which under layering means *project layer only*).
+ * - Project layer: additionally suppressed when `SPUR_SKIP_PROJECT_CONFIG=true` and the
+ *   caller did not pass `cwd` (task 0817) — an explicit `cwd` always wins.
  *
  * Both keys are present when both files exist; a missing file leaves the key `undefined`.
  * When neither exists (pre-`spur init`), both are `undefined`.
@@ -156,7 +158,7 @@ function resolveSchemaSpecifier(specifier: string, manifestSpecifier: string): s
 export interface ResolvedConfigLayers {
     /** `~/.config/spur/config.yaml` when it exists (and the skip env is unset). */
     global?: string;
-    /** `<cwd>/.spur/config.yaml` when it exists. */
+    /** `<cwd>/.spur/config.yaml` when it exists (and the project-skip env did not fire). */
     project?: string;
 }
 
@@ -165,11 +167,21 @@ export interface ResolvedConfigLayers {
  * (`<cwd>/.spur/config.yaml`) and the global layer (`~/.config/spur/config.yaml`).
  * Each layer is included only when its file exists; `SPUR_SKIP_GLOBAL_CONFIG=true`
  * suppresses the global layer (tests and hermetic environments).
+ *
+ * `SPUR_SKIP_PROJECT_CONFIG=true` suppresses the project layer, but only when the
+ * caller did not pin `cwd` (task 0817): the precedence is explicit `cwd` > env skip
+ * > `process.cwd()`. An explicitly-passed `cwd` names the project the caller asked
+ * for and is never skipped; an unpinned call would otherwise bind the loader to
+ * whatever `process.cwd()` happens to be — including a test harness's repository
+ * root and its live `.spur/config.yaml`.
  */
 export function resolveConfigLayers(cwd?: string): ResolvedConfigLayers {
     const layers: ResolvedConfigLayers = {};
-    const projectConfig = join(cwd ?? process.cwd(), SPUR_CONFIG_DIR, SPUR_CONFIG_FILE);
-    if (existsSync(projectConfig)) layers.project = projectConfig;
+    const skipProject = cwd === undefined && process.env.SPUR_SKIP_PROJECT_CONFIG === 'true';
+    if (!skipProject) {
+        const projectConfig = join(cwd ?? process.cwd(), SPUR_CONFIG_DIR, SPUR_CONFIG_FILE);
+        if (existsSync(projectConfig)) layers.project = projectConfig;
+    }
     if (process.env.SPUR_SKIP_GLOBAL_CONFIG !== 'true' && existsSync(GLOBAL_CONFIG_FILE)) {
         layers.global = GLOBAL_CONFIG_FILE;
     }
@@ -230,6 +242,7 @@ function makeEmbeddedReader(embeddedSchemas: ReadonlyMap<string, string>) {
  *
  * - Neither layer → returns schema defaults (all-optional config).
  * - `SPUR_SKIP_GLOBAL_CONFIG=true` → project layer only.
+ * - `SPUR_SKIP_PROJECT_CONFIG=true` without an explicit `cwd` → global layer only (task 0817).
  * - Invalid YAML / schema → throws (fail loud at startup); errors name the layer
  *   each offending key came from (R7).
  *
@@ -241,10 +254,12 @@ function makeEmbeddedReader(embeddedSchemas: ReadonlyMap<string, string>) {
  * For `bun --compile` binaries, pass `embeddedSchemas` so schema refs resolve without
  * `node_modules`.
  *
- * @param cwd - Project root directory (defaults to `process.cwd()`).
+ * @param cwd - Project root directory. When omitted, `process.cwd()` is used unless
+ *   `SPUR_SKIP_PROJECT_CONFIG=true` suppresses the project layer for the unpinned
+ *   call (task 0817); pass an explicit `cwd` to keep that layer.
  * @param opts - Validation + embedded-schema options.
  */
-export async function loadSpurConfig(cwd: string = process.cwd(), opts?: LoadSpurConfigOptions): Promise<SpurConfig> {
+export async function loadSpurConfig(cwd?: string, opts?: LoadSpurConfigOptions): Promise<SpurConfig> {
     const layers = resolveConfigLayers(cwd);
     if (layers.global === undefined && layers.project === undefined) {
         return spurConfigSchema.parse({});
