@@ -5,10 +5,18 @@ import { basename, join } from 'node:path';
 import { handleSchedulerCustomJob, registerSystemEventTap } from '@gobing-ai/spur-app';
 import { AgentExecutorUpdateDao, applyCliMigrations, SystemEventDao } from '@gobing-ai/spur-domain';
 import { createDbAdapter } from '@gobing-ai/ts-db';
-import { EventBus } from '@gobing-ai/ts-infra';
+import { EventBus, type ExecutionContext, type ScheduledAction } from '@gobing-ai/ts-infra';
 import type { ApplicationRuntime, ApplicationStopReason, SchedulerJobConfig } from '@gobing-ai/ts-infra/application';
 import { createNodeFileSystem, type FileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { serverBootstrapConfig } from '../src/bootstrap';
+
+// Unlimited execution context stub for invoking registered ScheduledActions in tests.
+const tickCtx: ExecutionContext = {
+    signal: new AbortController().signal,
+    deadlineMs: null,
+    cancellationReason: undefined,
+};
+
 import type { CreateServerContextOptions, ServerContext, ServerScheduler } from '../src/context';
 import { createServerContext } from '../src/context';
 import {
@@ -87,11 +95,11 @@ function capturingRuntime(
 
 /** Recording scheduler adapter; `register` captures cron + action per entry. */
 function recordingScheduler(order?: string[]) {
-    const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+    const registered: Array<{ cron: string; action: ScheduledAction }> = [];
     return {
         registered,
         adapter: {
-            register: (cron: string, action: () => Promise<void>) => {
+            register: (cron: string, action: ScheduledAction) => {
                 registered.push({ cron, action });
             },
             start: async () => {
@@ -1100,11 +1108,11 @@ describe('startServer', () => {
     });
 
     test('registerSchedulerEntries enqueues built-in prune and smoke jobs and emits scheduler events', async () => {
-        const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+        const registered: Array<{ cron: string; action: ScheduledAction }> = [];
         const enqueued: Array<{ type: string; payload: unknown }> = [];
         const emitted: Array<{ name: string; payload: unknown }> = [];
         const scheduler = {
-            register: (cron: string, action: () => Promise<void>) => {
+            register: (cron: string, action: ScheduledAction) => {
                 registered.push({ cron, action });
             },
             start: async () => {},
@@ -1126,8 +1134,8 @@ describe('startServer', () => {
 
         registerSchedulerEntries(scheduler, ctx);
         expect(registered).toHaveLength(2);
-        await registered[0]?.action();
-        await registered[1]?.action();
+        await registered[0]?.action(tickCtx);
+        await registered[1]?.action(tickCtx);
 
         expect(enqueued.map((job) => job.type)).toEqual(['system-events-prune', 'smoke']);
         expect(emitted).toHaveLength(2);
@@ -1184,11 +1192,11 @@ describe('startServer', () => {
     });
 
     test('registerSchedulerEntries registers configured jobs with exact schedules, names and payloads (task 0734)', async () => {
-        const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+        const registered: Array<{ cron: string; action: ScheduledAction }> = [];
         const enqueued: Array<{ type: string; payload: unknown }> = [];
         const emitted: Array<{ name: string; payload: unknown }> = [];
         const scheduler = {
-            register: (cron: string, action: () => Promise<void>) => {
+            register: (cron: string, action: ScheduledAction) => {
                 registered.push({ cron, action });
             },
             start: async () => {},
@@ -1220,8 +1228,8 @@ describe('startServer', () => {
         // Cron passes through verbatim; the interval form converts to milliseconds.
         expect(registered.map((r) => r.cron)).toEqual(['300000', '600000', '30 2 * * *', '3600000']);
 
-        await registered[2]?.action();
-        await registered[3]?.action();
+        await registered[2]?.action(tickCtx);
+        await registered[3]?.action(tickCtx);
 
         // The tick only enqueues — the command itself never runs in the scheduler.
         expect(enqueued).toEqual([
@@ -1237,7 +1245,7 @@ describe('startServer', () => {
 
     test('registerSchedulerEntries captures error on failure and re-throws after emitting', async () => {
         const emitted: Array<{ name: string; payload: unknown }> = [];
-        const handlers: Array<() => Promise<void>> = [];
+        const handlers: Array<ScheduledAction> = [];
         const ctxFailing = {
             jobQueue: async () => ({
                 enqueue: async () => {
@@ -1252,7 +1260,7 @@ describe('startServer', () => {
         } as unknown as ServerContext;
         registerSchedulerEntries(
             {
-                register: (_cron: string, action: () => Promise<void>) => handlers.push(action),
+                register: (_cron: string, action: ScheduledAction) => handlers.push(action),
                 start: async () => {},
                 stop: async () => {},
             } as never,
@@ -1260,7 +1268,7 @@ describe('startServer', () => {
         );
 
         // The first registered handler is the prune job; it enqueues, which throws.
-        await expect(handlers[0]?.()).rejects.toThrow('timeout');
+        await expect(handlers[0]?.(tickCtx)).rejects.toThrow('timeout');
         expect(emitted).toHaveLength(1);
         const failPayload = emitted[0]?.payload as Record<string, unknown>;
         expect(failPayload.name).toBe('system-events-prune');
@@ -1269,11 +1277,11 @@ describe('startServer', () => {
     });
 
     test('registerSchedulerEntries skips enqueue when a same-named job is still active (single-flight)', async () => {
-        const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+        const registered: Array<{ cron: string; action: ScheduledAction }> = [];
         const enqueued: Array<{ type: string; payload: unknown }> = [];
         const emitted: Array<{ name: string; payload: unknown }> = [];
         const scheduler = {
-            register: (cron: string, action: () => Promise<void>) => {
+            register: (cron: string, action: ScheduledAction) => {
                 registered.push({ cron, action });
             },
             start: async () => {},
@@ -1308,8 +1316,8 @@ describe('startServer', () => {
 
         registerSchedulerEntries(scheduler, ctx, jobs);
         // Registered after the two built-ins.
-        await registered[2]?.action(); // history-refresh → skipped
-        await registered[3]?.action(); // nightly-import → enqueued
+        await registered[2]?.action(tickCtx); // history-refresh → skipped
+        await registered[3]?.action(tickCtx); // nightly-import → enqueued
 
         expect(enqueued).toEqual([
             { type: SCHEDULER_CUSTOM_JOB, payload: { name: 'nightly-import', command: 'bun run load-history' } },
@@ -1320,12 +1328,12 @@ describe('startServer', () => {
     });
 
     test('registerSchedulerEntries sweeps a stale processing row and re-enqueues with maxRetries 1 (task 0803 R3/R4)', async () => {
-        const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+        const registered: Array<{ cron: string; action: ScheduledAction }> = [];
         const enqueued: Array<{ type: string; payload: unknown; options?: unknown }> = [];
         const emitted: Array<{ name: string; payload: unknown }> = [];
         const updates: Array<{ sql: string; params: unknown[] }> = [];
         const scheduler = {
-            register: (cron: string, action: () => Promise<void>) => {
+            register: (cron: string, action: ScheduledAction) => {
                 registered.push({ cron, action });
             },
             start: async () => {},
@@ -1364,7 +1372,7 @@ describe('startServer', () => {
             [{ name: 'history-refresh', cron: '*/15 7-23 * * *', command: 'bun apps/cli/src/index.ts history daily' }],
             { timeoutMs: 60_000 },
         );
-        await registered[2]?.action();
+        await registered[2]?.action(tickCtx);
 
         // The stale row was failed in place with the watchdog reason. The sweep threshold is the
         // job's 60000ms budget plus the 5000ms default kill grace (task 0806 R3), so a watchdog
@@ -1393,12 +1401,12 @@ describe('startServer', () => {
     });
 
     test('registerSchedulerEntries never age-sweeps an explicit-unlimited job (task 0813 R2)', async () => {
-        const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+        const registered: Array<{ cron: string; action: ScheduledAction }> = [];
         const enqueued: Array<{ type: string; payload: unknown; options?: unknown }> = [];
         const emitted: Array<{ name: string; payload: unknown }> = [];
         const updates: Array<{ sql: string; params: unknown[] }> = [];
         const scheduler = {
-            register: (cron: string, action: () => Promise<void>) => {
+            register: (cron: string, action: ScheduledAction) => {
                 registered.push({ cron, action });
             },
             start: async () => {},
@@ -1439,7 +1447,7 @@ describe('startServer', () => {
             // (`!== undefined`, never `??`) and disable age sweeping entirely.
             { timeoutMs: null },
         );
-        await registered[2]?.action();
+        await registered[2]?.action(tickCtx);
 
         // No sweep update, no re-enqueue — the unlimited row keeps the single-flight skip.
         expect(updates).toEqual([]);
@@ -1449,12 +1457,12 @@ describe('startServer', () => {
     });
 
     test('registerSchedulerEntries keeps the single-flight skip for a young processing row (task 0803 R4)', async () => {
-        const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+        const registered: Array<{ cron: string; action: ScheduledAction }> = [];
         const enqueued: Array<{ type: string; payload: unknown }> = [];
         const emitted: Array<{ name: string; payload: unknown }> = [];
         const updates: Array<{ sql: string; params: unknown[] }> = [];
         const scheduler = {
-            register: (cron: string, action: () => Promise<void>) => {
+            register: (cron: string, action: ScheduledAction) => {
                 registered.push({ cron, action });
             },
             start: async () => {},
@@ -1493,7 +1501,7 @@ describe('startServer', () => {
             [{ name: 'history-refresh', cron: '*/15 7-23 * * *', command: 'bun apps/cli/src/index.ts history daily' }],
             { timeoutMs: 60_000 },
         );
-        await registered[2]?.action();
+        await registered[2]?.action(tickCtx);
 
         expect(updates).toEqual([]); // no sweep — the row is younger than the threshold
         expect(enqueued).toEqual([]); // and single-flight still suppresses the enqueue
@@ -2010,9 +2018,9 @@ describe('configured scheduler jobs round-trip through the real queue (task 0734
             },
         );
 
-        const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+        const registered: Array<{ cron: string; action: ScheduledAction }> = [];
         const scheduler = {
-            register: (cron: string, action: () => Promise<void>) => {
+            register: (cron: string, action: ScheduledAction) => {
                 registered.push({ cron, action });
             },
             start: async () => {},
@@ -2025,8 +2033,8 @@ describe('configured scheduler jobs round-trip through the real queue (task 0734
                 { name: 'bad-job', command: 'exit 3', intervalMinutes: 5 },
             ]);
             // Built-ins occupy 0 and 1; the configured jobs follow in order.
-            await registered[2]?.action();
-            await registered[3]?.action();
+            await registered[2]?.action(tickCtx);
+            await registered[3]?.action(tickCtx);
 
             const consumer = await ctx.queueConsumer();
             const executor = new NodeProcessExecutor();

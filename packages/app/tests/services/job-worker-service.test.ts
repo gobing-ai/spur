@@ -50,6 +50,7 @@ describe('JobWorkerService', () => {
             start: async () => {
                 startCalls += 1;
             },
+            cancel: async () => false,
             stop: async () => {
                 stopCalls += 1;
             },

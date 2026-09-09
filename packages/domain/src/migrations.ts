@@ -46,8 +46,9 @@ CREATE INDEX IF NOT EXISTS idx_inbox_messages_to_status ON inbox_messages (to_id
  * `@gobing-ai/ts-infra` `DBJobQueue`/`DBQueueConsumer`). ts-db ships the Drizzle table +
  * embedded migrations but no SQL constant, so the DDL is mirrored here and kept
  * byte-compatible with ts-db's embedded migrations `0000_init` + `0001` (ready index) +
- * `0002` (`expires_at`). Column types and the `(status, next_retry_at, created_at)`
- * ready-lookup index must match the package or the DAO's claim query breaks.
+ * `0002` (`expires_at`) + `0005` (A21 execution-deadline/lease columns). Column types and
+ * the `(status, next_retry_at, created_at)` ready-lookup index must match the package or
+ * the DAO's claim query breaks.
  */
 export const QUEUE_JOBS_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS queue_jobs (
@@ -62,7 +63,11 @@ CREATE TABLE IF NOT EXISTS queue_jobs (
     next_retry_at INTEGER,
     last_error TEXT,
     processing_at INTEGER,
-    expires_at INTEGER
+    expires_at INTEGER,
+    timeout_ms INTEGER,
+    timeout_unlimited INTEGER NOT NULL DEFAULT 0,
+    attempt_token TEXT,
+    lease_expires_at INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS queue_jobs_ready_idx ON queue_jobs (status, next_retry_at, created_at);
