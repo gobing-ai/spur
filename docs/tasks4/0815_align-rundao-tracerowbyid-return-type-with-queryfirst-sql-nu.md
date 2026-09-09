@@ -281,6 +281,7 @@ facade fix" that `AGENTS.md` (Stack & layout) forbids.
 Inline review (run 20260908-2330-devrun-0815-52b8babf, FSM `review`, /sp:dev-review dimensions; fresh-session deviation logged — executed inline per dispatch-eligibility condition 4).
 
 **Functional traceability — PASS.**
+
 - R1 (adapter no-row → undefined): shipped in ts-libs `db77d8a`, published as @gobing-ai/ts-db@0.4.62; worktree lockfile resolves ts-db@0.4.62.
 - R3 (bump + gate): catalog `@gobing-ai/ts-*` ^0.4.60→^0.4.62 in full lockstep (ts-db-only bump was tried first and correctly rejected — it split the lockstep and produced dual EventBus identity, TS2345). Quality gate: environment-blocked, documented pre-existing flake (true-BASE fails identically; sets vary per run; standalone all green; CI green on pushed HEAD); proceed-on-evidence per operator decision 7. Task-scoped suites 100% green (run-dao 20/20, run-artifact+inline-run-setup 40/40, db.test 39/39).
 - R4 (delete exactly two `?? undefined` workarounds): run-artifact.ts and inline-run-setup.ts — both deleted with their now-stale comments; surrounding refusal/attach branches byte-identical; 0809 R3 refusal contract intact (`runRow === undefined` branch unchanged and now correct as written).
@@ -292,6 +293,7 @@ Inline review (run 20260908-2330-devrun-0815-52b8babf, FSM `review`, /sp:dev-rev
 **Architecture — PASS.** Normalization lives at the adapter (the layer that lies), deleting per-call-site compensation — deepening, not widening.
 
 **Findings (informational, non-blocking):**
+
 1. `bun install` synced BASE-stale bun.lock workspace versions 0.3.77→0.3.78 to the true HEAD manifests (pre-existing drift, benign).
 2. Test-hermeticity candidate: worktree `.spur/config.yaml` (gitignored, absent in CI) leaks into CLI tests via cwd-discovery fallback — workflow-list tests fail in worktrees, pass in CI. Out of 0815 scope; candidate lesson/issue.
 
