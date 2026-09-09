@@ -542,7 +542,7 @@ describe('createOrAttachInlineRun (task 0804 R1)', () => {
         const row = await projectDb.adapter.queryFirst<{ id: string }>(`SELECT id FROM runs WHERE id = ?`, [
             'run-inline-0804-missing',
         ]);
-        // queryFirst surfaces a missing row as null (despite its `T | undefined` type).
-        expect(row == null).toBe(true);
+        // queryFirst returns undefined for no row (SQLite null → undefined, @gobing-ai/ts-db 0.4.62).
+        expect(row).toBeUndefined();
     });
 });

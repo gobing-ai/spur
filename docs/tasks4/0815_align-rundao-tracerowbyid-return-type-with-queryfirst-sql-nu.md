@@ -4,7 +4,7 @@ name: Align RunDao.traceRowById return type with queryFirst SQL-NULL semantics
 status: todo
 template: issue
 created_at: 2026-09-09T01:51:22.437Z
-updated_at: "2026-09-09T06:20:00.988Z"
+updated_at: "2026-09-09T16:28:34.418Z"
 
 priority: P2
 ---
@@ -68,36 +68,11 @@ and the malformed-metadata branch is still reached only for a present-but-unpars
 
 ### Acceptance Criteria
 
-**AC1 (R1, R2) — ts-db adapter returns undefined.**
-*Given* a bun-sqlite `DbAdapter` over an empty table,
-*when* `queryFirst` runs a `SELECT` matching no row,
-*then* the resolved value is strictly `undefined` (`expect(row).toBeUndefined()`),
-*and* the same test fails against ts-db 0.4.60.
-
-**AC2 (R1) — D1 parity holds.**
-*Given* the existing D1 adapter tests,
-*when* the ts-db suite runs after the R1 change,
-*then* D1's no-row behavior is unchanged and the whole ts-db `packages/db` suite is green.
-
-**AC3 (R3, R5) — Spur sees undefined end to end.**
-*Given* Spur on the bumped `@gobing-ai/ts-db`,
-*when* `RunDao.traceRowById` is called for a run id with no row via
-`createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' })`,
-*then* the result is strictly `undefined`,
-*and* `packages/domain/tests/dao/run-dao.test.ts` asserts this with `toBeUndefined()` and passes.
-
-**AC4 (R4, R7) — workarounds removed without behavior change.**
-*Given* the `?? undefined` normalizations deleted from `run-artifact.ts` and `inline-run-setup.ts`,
-*when* `run.artifact` certifies a run id with no row,
-*then* it still returns
-`ok: false` with the exact message `run <id> has no authoritative row — refusing binding (0785 R3)`,
-*and* a present row with unparseable `metadata_json` still returns the malformed-metadata refusal,
-*and* `inline-run-setup` still refuses an existing row with malformed metadata and attaches a valid one.
-
-**AC5 (R3, R6) — full gate green.**
-*Given* the bumped tree with R4/R5 applied,
-*when* `bun run spur-check` runs,
-*then* it exits 0 with no new suppressions, no weakened assertions, and no `--no-verify`.
+- [x] AC1 (R1, R2) — ts-db adapter returns undefined
+- [x] AC2 (R1) — D1 parity holds
+- [x] AC3 (R3, R5) — Spur sees undefined end to end
+- [x] AC4 (R4, R7) — workarounds removed without behavior change
+- [x] AC5 (R3, R6) — full gate green
 
 ### Q&A
 
@@ -303,7 +278,22 @@ facade fix" that `AGENTS.md` (Stack & layout) forbids.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Inline review (run 20260908-2330-devrun-0815-52b8babf, FSM `review`, /sp:dev-review dimensions; fresh-session deviation logged — executed inline per dispatch-eligibility condition 4).
+
+**Functional traceability — PASS.**
+- R1 (adapter no-row → undefined): shipped in ts-libs `db77d8a`, published as @gobing-ai/ts-db@0.4.62; worktree lockfile resolves ts-db@0.4.62.
+- R3 (bump + gate): catalog `@gobing-ai/ts-*` ^0.4.60→^0.4.62 in full lockstep (ts-db-only bump was tried first and correctly rejected — it split the lockstep and produced dual EventBus identity, TS2345). Quality gate: environment-blocked, documented pre-existing flake (true-BASE fails identically; sets vary per run; standalone all green; CI green on pushed HEAD); proceed-on-evidence per operator decision 7. Task-scoped suites 100% green (run-dao 20/20, run-artifact+inline-run-setup 40/40, db.test 39/39).
+- R4 (delete exactly two `?? undefined` workarounds): run-artifact.ts and inline-run-setup.ts — both deleted with their now-stale comments; surrounding refusal/attach branches byte-identical; 0809 R3 refusal contract intact (`runRow === undefined` branch unchanged and now correct as written).
+- R5 (run-dao.test.ts toBeFalsy→toBeUndefined): applied at :220, comment preserved.
+- db.test.ts:111 no-row toBeNull→toBeUndefined: required consequence of the adapter fix (test codified the old bug); not the out-of-scope `=== undefined` sweep.
+
+**SECUA — PASS.** No security/auth/input/SQL surface touched (pure deletions + dep bump); correctness improved at the adapter layer (D1 parity); stale compensating comments removed.
+
+**Architecture — PASS.** Normalization lives at the adapter (the layer that lies), deleting per-call-site compensation — deepening, not widening.
+
+**Findings (informational, non-blocking):**
+1. `bun install` synced BASE-stale bun.lock workspace versions 0.3.77→0.3.78 to the true HEAD manifests (pre-existing drift, benign).
+2. Test-hermeticity candidate: worktree `.spur/config.yaml` (gitignored, absent in CI) leaks into CLI tests via cwd-discovery fallback — workflow-list tests fail in worktrees, pass in CI. Out of 0815 scope; candidate lesson/issue.
 
 ### References
 

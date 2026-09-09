@@ -155,9 +155,7 @@ export async function createOrAttachInlineRun(input: InlineRunSetupInput): Promi
 
     const db = await input.getDb();
     const runDao = new RunDao(db);
-    // traceRowById's type says `undefined`, but the underlying queryFirst surfaces a SQL
-    // NULL row as `null`; treat both as "no existing row".
-    const existing = (await runDao.traceRowById(runId)) ?? undefined;
+    const existing = await runDao.traceRowById(runId);
 
     if (existing !== undefined) {
         const metadata = parseIdentityMetadata(existing.metadata_json);

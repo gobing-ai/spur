@@ -320,11 +320,7 @@ export class RunArtifactActionRunner implements ActionRunner {
 
         // Authoritative run identity from the DB row — never from caller vars.
         const db = await this.getDb();
-        // traceRowById's type says `undefined`, but the underlying queryFirst surfaces a SQL
-        // NULL row as `null`; normalize both to "no authoritative row" — a property access on
-        // the raw null would otherwise throw inside the JSON-parse catch below and mislabel a
-        // missing run as malformed metadata (0809 R3).
-        const runRow = (await new RunDao(db).traceRowById(context.runId)) ?? undefined;
+        const runRow = await new RunDao(db).traceRowById(context.runId);
         if (runRow === undefined) {
             return {
                 ok: false,

@@ -108,7 +108,7 @@ describe('migration 0016: history_message ts nullable', () => {
                 await db.queryFirst<{ name: string }>(
                     "SELECT name FROM sqlite_master WHERE type='table' AND name='history_message_rebuild'",
                 ),
-            ).toBeNull();
+            ).toBeUndefined();
         } finally {
             db.close();
         }

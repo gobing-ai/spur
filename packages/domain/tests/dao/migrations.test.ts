@@ -491,7 +491,7 @@ describe('db migrations', () => {
 
             expect(
                 await adapter.queryFirst("SELECT name FROM sqlite_master WHERE name = 'history_message'"),
-            ).toBeNull();
+            ).toBeUndefined();
 
             // 0009 (history index, provisions importer tables first) + 0010 coordination-runs
             // + 0011 system-events-sequence-idx + 0012 args_raw + 0013 history-run-session
