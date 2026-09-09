@@ -58,6 +58,7 @@ rules:
     exclude:
       - "**/.env.example"
       - "**/node_modules/**"
+      - ".spur/run/bootstrap-0816.env"
 
 # NOTE: the ts-libs `no-github-workflows` rule (asserting .github/workflows must be
 # ABSENT) was intentionally NOT absorbed — ts-libs is a library repo with no CI,
