@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Align RunDao.traceRowById return type with queryFirst SQL-NULL semantics
-status: todo
+status: done
 template: issue
 created_at: 2026-09-09T01:51:22.437Z
-updated_at: "2026-09-09T16:28:34.418Z"
+updated_at: "2026-09-09T18:34:06.743Z"
 
 priority: P2
 ---
@@ -270,32 +270,72 @@ facade fix" that `AGENTS.md` (Stack & layout) forbids.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map for the shipped state (this worktree is zero non-corpus delta; implementation landed via prior run 20260908-2330-devrun-0815-52b8babf — Spur merge `39563d002`, ts-libs `db77d8a`, released `@gobing-ai/ts-db@0.4.62`). Verified-already-present disposition recorded at implement stage.
+
+| Change (`file:line`) | Note |
+| --- | --- |
+| `packages/app/src/workflow/actions/run-artifact.ts:322` | Deleted the `?? undefined` no-row normalization; refusal branch (`runRow === undefined` :324, string :327) is now the contract as-written |
+| `packages/app/src/services/inline-run-setup.ts:156` | Same workaround deletion at the second site (:156-160); surrounding attach logic byte-identical |
+| `packages/domain/tests/dao/run-dao.test.ts:215` | `traceRowById` missing-run assertion strengthened to `toBeUndefined()` (:220); comment preserved |
+| `packages/app/src/services/workflow-service.ts:213` | `existing === undefined` stamp guard — no edit needed; semantically correct on 0.4.62 |
+| `package.json:33` | Catalog `@gobing-ai/ts-db` `^0.4.60` → `^0.4.62` (consumer `catalog:` at `package.json:102`); lock + node_modules resolve 0.4.62 |
+| Cross-repo (ts-libs `db77d8a`) | `packages/db/src/adapters/bun-sqlite.ts:99-104` no-row `queryFirst` → `undefined` (inner `T \| null` cast); D1 parity `d1.ts:72-75`; regression test `bun-sqlite.test.ts:82-91` `toBeUndefined()` |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | ts-libs commit db77d8a, published @gobing-ai/ts-db@0.4.62 — `packages/db/src/adapters/bun-sqlite.ts:99-104` queryFirst: inner cast T-null + `?? undefined`; fresh probe this session through installed package's createDbAdapter(bun-sqlite) on a temp DB: no-row queryFirst resolved `===undefined: true, ===null: false` |
+| R2 | MET | ts-libs `packages/db/tests/adapters/bun-sqlite.test.ts:82-89` — test 'queryFirst returns undefined for no match' asserts `expect(row).toBeUndefined()`; suite re-run fresh: 14 pass / 0 fail |
+| R3 | MET | `package.json:33` catalog `"@gobing-ai/ts-db": "^0.4.62"`, `package.json:102` `catalog:` consumer, bun.lock resolves 0.4.62, node_modules symlink -> @gobing-ai+ts-db@0.4.62; fresh `bun run spur-check` exit 0 (7951 pass / 0 fail / 439 files, post-check 2/2 rules) |
+| R4 | MET | `packages/app/src/workflow/actions/run-artifact.ts:322-329` and `packages/app/src/services/inline-run-setup.ts:156-160` re-read: no `?? undefined` normalization remains at either former workaround site (grep: 0 hits); attach/refusal guards read as-written |
+| R5 | MET | `packages/domain/tests/dao/run-dao.test.ts:215-220` — test 'traceRowById returns undefined for missing run' asserts `expect(row).toBeUndefined()` at :220; suite re-run fresh: 20 pass / 0 fail |
+| R6 | MET | `packages/app/src/services/workflow-service.ts:213` — `if (existing === undefined) await stamp(result.id)` intact, now semantically correct on 0.4.62; `packages/domain/src/analytics/run-cost.ts:100-111` bare-aggregate query and its `row === undefined` guard untouched as documented |
+| R7 | MET | `packages/app/src/workflow/actions/run-artifact.ts:324` trigger `runRow === undefined`, `:327` exact refusal string `no authoritative row — refusing binding (0785 R3)`, `:331-334` malformed-metadata branch reached only after a present row (JSON.parse of runRow.metadata_json); run-artifact + inline-run-setup suites 40/40 fresh incl. the 0809 R3 'missing row refuses as missing — never mislabeled malformed metadata' case |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | ts-libs `packages/db/tests/adapters/bun-sqlite.test.ts` 'queryFirst returns undefined for no match' (`toBeUndefined()` :89) — 14/14 fresh; plus runtime probe on installed 0.4.62: no-row queryFirst `===undefined: true, ===null: false` |
+| AC2 | MET | test | fresh `bun test tests/adapters/d1.test.ts` in /Users/robin/xprojects/ts-libs/packages/db — 18 pass / 0 fail; plus ts-libs `packages/db/src/adapters/d1.ts:72-75` `?? undefined` re-read; both adapters honor the same DbAdapter.queryFirst contract |
+| AC3 | MET | test | `cd packages/domain && bun test tests/dao/run-dao.test.ts` — 20 pass / 0 fail fresh on the bumped tree (catalog ^0.4.62, node_modules 0.4.62); repaired `toBeUndefined()` assertion at run-dao.test.ts:220 |
+| AC4 | MET | test | `cd packages/app && bun test tests/workflow/actions/run-artifact.test.ts tests/services/inline-run-setup.test.ts` — 40 pass / 0 fail fresh; refusal-contract case green; both `?? undefined` workarounds deleted |
+| AC5 | MET | command | fresh `bun run spur-check` this session: exit 0 — lint + 7951 tests pass / 0 fail across 439 files; recommended-post-check 2/2 rules |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-Inline review (run 20260908-2330-devrun-0815-52b8babf, FSM `review`, /sp:dev-review dimensions; fresh-session deviation logged — executed inline per dispatch-eligibility condition 4).
+Phase-7 multi-dimensional review (sp-super-reviewer, run sp/run-0815-8ab8, `--auto` non-interactive; supersedes the implement run's inline review). Scope: the shipped R-sites merged into base 4a98984 by 20260908-2330-devrun-0815-52b8babf. This worktree carries zero non-corpus diff, so the review targets the shipped state — every R-site re-read and every scoped suite re-run fresh this session.
 
-**Functional traceability — PASS.**
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | — | — | No P1–P3 findings; functional 7/7 MET, SECUA PASS, architecture PASS |
 
-- R1 (adapter no-row → undefined): shipped in ts-libs `db77d8a`, published as @gobing-ai/ts-db@0.4.62; worktree lockfile resolves ts-db@0.4.62.
-- R3 (bump + gate): catalog `@gobing-ai/ts-*` ^0.4.60→^0.4.62 in full lockstep (ts-db-only bump was tried first and correctly rejected — it split the lockstep and produced dual EventBus identity, TS2345). Quality gate: environment-blocked, documented pre-existing flake (true-BASE fails identically; sets vary per run; standalone all green; CI green on pushed HEAD); proceed-on-evidence per operator decision 7. Task-scoped suites 100% green (run-dao 20/20, run-artifact+inline-run-setup 40/40, db.test 39/39).
-- R4 (delete exactly two `?? undefined` workarounds): run-artifact.ts and inline-run-setup.ts — both deleted with their now-stale comments; surrounding refusal/attach branches byte-identical; 0809 R3 refusal contract intact (`runRow === undefined` branch unchanged and now correct as written).
-- R5 (run-dao.test.ts toBeFalsy→toBeUndefined): applied at :220, comment preserved.
-- db.test.ts:111 no-row toBeNull→toBeUndefined: required consequence of the adapter fix (test codified the old bug); not the out-of-scope `=== undefined` sweep.
+Informational (non-blocking):
 
-**SECUA — PASS.** No security/auth/input/SQL surface touched (pure deletions + dep bump); correctness improved at the adapter layer (D1 parity); stale compensating comments removed.
+1. Fresh evidence this session: runtime probe of the installed `@gobing-ai/ts-db@0.4.62` — `no-row queryFirst ===undefined: true, ===null: false`; scoped suites green (run-dao + db.test 59/59, run-artifact + inline-run-setup 40/40 incl. the 0809 R3 "missing row refuses as missing — never mislabeled malformed metadata" case, ts-libs bun-sqlite adapter suite 14/14); full gate log `.spur/run/0815-test-gate.log` — 7951 pass / 0 fail / 439 files, recommended-post-check 2/2 rules.
+2. Out-of-scope residual carried from the prior run (not an 0815 defect): a gitignored worktree `.spur/config.yaml` can leak into CLI tests via cwd-discovery fallback; candidate issue for a separate ticket.
 
-**Architecture — PASS.** Normalization lives at the adapter (the layer that lies), deleting per-call-site compensation — deepening, not widening.
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | ts-libs commit `db77d8a`, published @gobing-ai/ts-db@0.4.62 — `packages/db/src/adapters/bun-sqlite.ts` lines 99-104: inner cast `T \| null` + `?? undefined`; runtime probe on the installed 0.4.62 resolves no-row to `undefined` |
+| R2 | MET | ts-libs `packages/db/tests/adapters/bun-sqlite.test.ts` lines 82-91 — `queryFirst returns undefined for no match` asserts `toBeUndefined()`; suite 14/14 fresh green (assertion falsifiable only without R1: the pre-fix cast returned `null`) |
+| R3 | MET | `package.json:33` catalog `"^0.4.62"`, `package.json:102` `catalog:`, `bun.lock` resolves `@gobing-ai/ts-db@0.4.62`, `node_modules` symlink 0.4.62; full gate green (informational 1) |
+| R4 | MET | `packages/app/src/workflow/actions/run-artifact.ts:322-329` and `packages/app/src/services/inline-run-setup.ts:158-160` — both `?? undefined` workarounds deleted; attach/refusal branches read as-written and behavior-proven by the 40/40 suite |
+| R5 | MET | `packages/domain/tests/dao/run-dao.test.ts:215-221` — `toBeUndefined()` at :220 (explanatory comment preserved); fresh green on the bumped tree |
+| R6 | MET | `packages/app/src/services/workflow-service.ts:213` — `if (existing === undefined) await stamp(result.id)` intact, now semantically correct; `packages/domain/src/analytics/run-cost.ts:106-111` aggregate path untouched as documented |
+| R7 | MET | refusal string `no authoritative row — refusing binding (0785 R3)` at `run-artifact.ts:327`, trigger `runRow === undefined` at :324, malformed-metadata branch :331-334 reachable only for a present row; grep shows zero new row-presence `=== null` guards (all null hits are pre-existing JSON/stat handling) |
 
-**Findings (informational, non-blocking):**
+AC rollup: AC1/AC2 MET — adapter returns undefined and D1 parity holds (ts-libs `packages/db/src/adapters/d1.ts:72-78` ends `?? undefined`; both adapters now honor the same `DbAdapter.queryFirst` contract); AC3/AC5 MET — bump + repaired assertion + full gate green; AC4 MET — workarounds gone, refusal contract proven by the passing 0809 R3 test.
 
-1. `bun install` synced BASE-stale bun.lock workspace versions 0.3.77→0.3.78 to the true HEAD manifests (pre-existing drift, benign).
-2. Test-hermeticity candidate: worktree `.spur/config.yaml` (gitignored, absent in CI) leaks into CLI tests via cwd-discovery fallback — workflow-list tests fail in worktrees, pass in CI. Out of 0815 scope; candidate lesson/issue.
+SECUA (security / efficiency / correctness / usability): PASS. The Spur-side diff is pure deletion + dep bump + assertion strengthening — no new input, SQL, auth, or IO surface; correctness improved at the single point where the declared type lied (D1 parity restored); stale compensating comments that misdocumented the contract removed.
+
+Architecture: PASS. Normalization placed at the adapter — the layer whose runtime contradicted its declared contract — deleting per-call-site compensation (the exact AGENTS.md-forbidden workaround pattern). Deepening, not widening; the cross-repo release coordination cost is the documented, accepted tradeoff.
+
+Verdict: APPROVED
 
 ### References
 
@@ -309,3 +349,8 @@ Durable parking spot for session-review residuals (2026-09-08 A21 batch session)
 6. **Process: importer-schema drift after dependency bumps** — `importer-schema-check` fails with recorded-vs-installed version drift in gitignored `.spur/spur.db`; remedy is a manual `spur migrate` per checkout. Direction: fold the migrate into the check's remedy path or a postinstall hook.
 
 ### History
+
+- 2026-09-09T17:51:06.537Z todo → wip (system)
+- 2026-09-09T18:33:44.294Z wip → testing (system)
+- 2026-09-09T18:34:06.743Z testing → done (system)
+
