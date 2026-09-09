@@ -9,10 +9,11 @@ Surface index row: [`04_DESIGN.md §0`](../04_DESIGN.md).
 portable first-session contract for any Spur-managed project; project-specific stack, command, and
 boundary slots remain explicit customization stubs.
 
-The seed names the numbered documents but does not hard-code constitution section numbers. The
-bundled bootstrap constitution is intentionally abbreviated before customization, while a mature
-project carries the full canonical constitution; stable concepts survive both shapes, section
-numbers do not.
+The seed carries the same responsibility map as the repository entry guide. The bundled
+constitution shares this project's governance body and stable section IDs; only initialization
+metadata differs. ADRs record architectural choices; tasks own execution evidence, existing
+learning storage owns lessons, and the constitution changes only for authorized governance
+corrections. Indexes and entry guidance change only when their own facts change.
 
 ## Harness ownership
 
@@ -44,7 +45,7 @@ explicitly disjoint from `docs/04_DESIGN.md`, which owns command, config, schema
   anchors in `apps/cli/tests/fixtures/agents-md-portable-contract.ts`.
 - `apps/cli/tests/agents-md-portable-alignment.test.ts` rejects root/seed drift.
 - `apps/cli/tests/init-templates.test.ts` verifies a fresh scaffold contains the Superskill and
-  conditional-design contracts after token substitution.
+  conditional-design contracts after token substitution, and checks constitution-body parity.
 - `spur init --force` preserves an existing root `AGENTS.md`; the enhanced contract applies when a
   fresh file is scaffolded and does not overwrite project customization.
 

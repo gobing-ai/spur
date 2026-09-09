@@ -90,35 +90,39 @@ Invoke CLI: `spur <noun> <verb> … --json` (or the project’s documented dev e
 
 ## Documentation
 
-**Process SSOT:** `docs/99_PROJECT_CONSTITUTION.md`. Operate with **`sp:doc-evolve`**
-(`drift-audit`, `sync-check`, `contract-verify`, `lesson-append`).
-
-**Conflict rule:** lower number wins on content (`00` decisions, `01` scope, `99` process). Fix
-authority first, then derived docs, then this file.
+Read [the constitution](docs/99_PROJECT_CONSTITUTION.md) before key-document edits.
+It owns document responsibilities and maintenance; `00` owns architectural choices,
+`01` product scope, and root `DESIGN.md` UI/UX. Use **`sp:doc-evolve`** for drift,
+sync and contract checks. Follow host/operator precedence.
 
 ### Doc map
 
-| Doc | Owns | Authority | When |
-| ------ | ------ | ----------- | ------ |
-| `docs/00_ADR.md` | **WHY** | Authoritative (content) | Structural change; dated entry before diverging |
-| `docs/01_PRD.md` | **WHAT** | Authoritative on scope | New feature/command |
-| `docs/02_ROADMAP.md` | **WHEN** | Derived | Phase placement |
-| `docs/03_ARCHITECTURE.md` | **HOW** | Derived (ADR wins) | Cross-module / seam / schema |
-| `docs/04_DESIGN.md` | **SURFACE** (+ `docs/design/`) | Derived | Same commit as surface code (T3) |
-| `docs/05_FEATURES.md` | **STATUS** (+ `docs/features/`) | Derived | Feature status (T4) |
-| `docs/99_PROJECT_CONSTITUTION.md` | **PROCESS** | Authoritative on process | Before editing numbered docs |
-| `AGENTS.md` (this file) | **ENTRY** | Derived | First every session |
+| File | Owns | Update when |
+| --- | --- | --- |
+| `AGENTS.md` | ENTRY: orientation, commands, constraints, owner links | Essential repo facts or routing change |
+| `DESIGN.md` | UI/UX: tokens, components, layout, interaction, accessibility | Shared UI design changes |
+| `docs/00_ADR.md` | WHY: lasting architectural choices and tradeoffs | A meaningful cross-module boundary or invariant changes |
+| `docs/01_PRD.md` | WHAT: vision, users, capability scope | Scope changes |
+| `docs/02_ROADMAP.md` | WHEN: phases, dependencies, exits | Phase commitments or sequencing change |
+| `docs/03_ARCHITECTURE.md` | HOW: current topology, data flow, runtime, invariants | Mechanisms or boundaries change |
+| `docs/04_DESIGN.md` + `docs/design/` | SURFACE: index and non-UI contracts | CLI/API/config/schema or boundary behavior changes |
+| `docs/05_FEATURES.md` + `docs/features/` | STATUS: entry to tool-owned feature records | Feature tool updates lifecycle/acceptance |
+| `docs/99_PROJECT_CONSTITUTION.md` | PROCESS: stable document-governance metadata | Authorized responsibility, authority or maintenance correction |
 
-**Routing:** decision → `00`; scope → `01`; mechanism → `03`; surface → `04`; phase → `02`;
-feature status → `05`. Working-layer, audit, and satellite rules live in the project constitution.
+**Placement guard:** feature approvals, task progress and test receipts do not belong in ADRs.
+Preserve ADR numbers and decision history when condensing. Tasks own execution evidence;
+existing context/learning storage owns lessons. Do not append either to the constitution.
+A constitution edit needs a specific governance defect and operator-authorized scope (§6.8).
+Update only owners whose facts changed; portable changes also update init templates.
+Keep `04` an index and `05` a pointer to the generated feature index, without duplicate ledgers.
 
 ---
 
 ## Design system
 
-**Conditional contract:** If repository-root `DESIGN.md` exists, leverage it dynamically as the industry-standard SSOT for UI design documentation — visual language, color tokens, typography, component specs, layout, micro-animations, accessibility, and responsive patterns. Read it before planning or implementing any UI changes, and keep affected work consistent with it. If `DESIGN.md` is absent, ignore it and continue with the project's established UI conventions.
-
-**Boundary distinction:** Root `DESIGN.md` owns UI/UX design guidance; `docs/04_DESIGN.md` owns non-UI surface design by default (command signatures, flags, config schemas, DTOs, and system boundaries). When working with design teams, choose `DESIGN.md` for UI/UX visual design and `docs/04_DESIGN.md` for non-UI API/schema surfaces.
+**Conditional contract:** Read root `DESIGN.md` before UI work when present; otherwise use
+established UI conventions. It owns visual and interaction design. Non-UI contracts belong in
+`docs/04_DESIGN.md` and its satellites; system mechanisms belong in `docs/03_ARCHITECTURE.md`.
 
 ---
 
@@ -183,8 +187,7 @@ catalog here or maintain generated per-platform capability copies in the project
   `BREAKING CHANGE:` footer.
 - Never commit secrets or `.env*`.
 - Surgical changes only — no drive-by refactors or speculative abstractions.
-- Surface changes keep `docs/04_DESIGN.md` in the **same commit** (T3); run `sp:doc-evolve`
-  sync-check when unsure.
+- Surface changes update their owning design satellite (T3); feature changes use the feature tool (T4).
 - **One writer per working tree.** Two agent sessions in one checkout overwrite each other silently
   — the symptom reads as a model regression. Parallel agent work uses git worktree isolation (one
   branch + one tree per agent).

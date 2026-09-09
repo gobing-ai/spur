@@ -136,6 +136,12 @@ describe('AGENTS portable harness sections stay aligned with init template', () 
         expect(root).not.toMatch(/spur task\s+create\s+<title>\s+\[--feature/);
     });
 
+    test('init seed shares the document responsibility and placement contract', () => {
+        const documentation = (content: string) =>
+            content.slice(content.indexOf('## Documentation\n'), content.indexOf('## Design system\n'));
+        expect(documentation(template)).toBe(documentation(root));
+    });
+
     test('both files stay within the always-loaded UTF-8 byte budget (0705 R1)', () => {
         assertAgentsGuideByteBudget(rootLabel, root);
         assertAgentsGuideByteBudget(seedLabel, template);

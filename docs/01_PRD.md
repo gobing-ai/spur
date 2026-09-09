@@ -2,9 +2,9 @@
 doc: 01_PRD
 owns: WHAT — product vision, users, scope (in / out / deferred)
 authority: authoritative-on-scope
-version: 1.10.0
+version: 1.11.0
 owner: Robin Min
-updated_at: 2026-09-08
+updated_at: 2026-09-09
 read_before: adding a command or feature
 edit_rules: 99 §6.2
 sync: [T1, T4, T6]
@@ -23,14 +23,9 @@ measurable, reproducible, constrained, and inspectable.
 
 Spur also owns the **planning layer** of that loop (ADR-020–023): markdown task and feature files
 as the single source of truth, a spec-driven pipeline from vague description to BDD-specified
-features and linked tasks, and — shape pending the server/web design task (ADR-021) — a local
-kanban board as the operator's review surface.
+features and linked tasks, and a local kanban board as the operator's review surface.
 
-Supported agents (canonical ids from `@gobing-ai/ts-ai-runner` `DISPLAY_ORDER`, 0.4.8+): **Claude
-Code (`claude`), Codex (`codex`), Gemini CLI (`gemini`), pi (`pi`), omp (`omp`), OpenCode
-(`opencode`), Antigravity (`antigravity-cli`), OpenClaw (`openclaw`), Hermes (`hermes`), Grok
-(`grok`).** Auto-selection uses Tier-1 priority (not a fixed default agent); configure
-`agent.default` / executors to pin a preferred runner (e.g. `omp` or `grok`).
+Agent compatibility and selection contracts are indexed in [04 Design](04_DESIGN.md).
 
 ## 2. Problem Statement
 
@@ -91,10 +86,11 @@ SQLite lock cause. Delivery depends on compatible released upstream capabilities
 
 | Capability                                                 | Command                                            | Backed by                                  |
 | ---------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------ |
+| Local planning Board and launcher | Existing Board/task/feature API | server/web contracts |
 | Project scaffold                                           | `spur init`                                        | local CLI + DAOs                           |
 | Agent detection / health                                   | `spur agent list\|doctor`                          | `ts-ai-runner`                             |
 | Agent run execution                                        | `spur agent run`                                   | `ts-ai-runner` (`AiRunner`)                |
-| Executor availability and quota-driven project updates      | Existing executor config, routing, and `spur agent doctor` | B5 (accepted scope; recovery detection and account-wide fan-out deferred) |
+| Executor availability and quota-driven project updates      | Existing executor config, routing, and `spur agent doctor` | B5 (recovery detection and account-wide fan-out deferred) |
 | Agent spec management                                      | `spur agent create\|edit\|delete`, `list --specs`  | `ts-ai-runner` spec helpers                |
 | Inter-agent durable messages                               | `spur message send\|inbox\|reply`                  | `MessageService` + ts-db                   |
 | Team coordination                                          | `spur team assign\|status\|up\|down\|start\|stop` | `TeamService` + `SupervisorService` (`spur serve`) |
@@ -104,7 +100,7 @@ SQLite lock cause. Delivery depends on compatible released upstream capabilities
 | Rule / workflow run history                                | `spur rule trace` / `spur workflow trace`          | engine persistence via ts-db               |
 | Actionable local observability context                     | Spur Board System Events + existing trace commands | system-event ledger + engine persistence   |
 | Workflow validate / run / list                             | `spur workflow ...`                                | `ts-dual-workflow-engine`                  |
-| Essential workflow checks, explicit corpus audits and visible plan/progress | existing `spur task check` / `feature check` / `workflow` surfaces | D61; ADR-108 (accepted scope) |
+| Essential workflow checks, explicit corpus audits and visible plan/progress | existing `spur task check` / `feature check` / `workflow` surfaces | ADR-108 |
 | History import (10 sources)                                | `spur history import`                              | `ts-llm-jsonl-importer`                    |
 | History cost analytics                                     | `spur history analyze`                             | local analytics consumer                   |
 | History report surface                                     | `spur history report`                              | pure artifact renderer (`--mode default\|forensics`, `--task`/`--top`; E5) |
@@ -122,8 +118,6 @@ SQLite lock cause. Delivery depends on compatible released upstream capabilities
 
 ### 5.3 Deferred (needs design before build)
 
-- **Local board + launcher** (kanban UI, task API, SSE) — settled by the server/web design task
-  (ADR-021 consequence b); until then the legacy board remains the operator surface.
 - **Rich run inspection** (events, gates, artifacts beyond the trace verbs) — depends on the
   Phase-2 run model. Distinct from ADR-057 coordination-facing run records (a path list another
   agent can address, not the inspector).

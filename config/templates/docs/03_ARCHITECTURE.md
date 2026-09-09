@@ -3,7 +3,7 @@ name: Architecture
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.0.0
+version: 1.1.0
 derived_from: [00_ADR, 01_PRD]
 owner: _(project owner)_
 updated_at: {{init-date}}
@@ -30,5 +30,5 @@ _(Describe the primary data path: input → processing → output. Name the seam
 
 <!--
 Describes the CURRENT architecture only. Future/accepted designs go in sections explicitly
-titled "(accepted design — ADR-NNN; not yet built)". On conflict with 00, the ADR wins; fix here.
+titled "(accepted design — ADR-NNN; not yet built)". Keep command/schema detail in 04 satellites and task delivery receipts in task records.
 -->

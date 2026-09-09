@@ -1,9 +1,9 @@
 ---
 name: Architecture Decision Records
 doc: 00_ADR
-owns: WHY — which cross-cutting decision was made, and the one-line reason
+owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.0.0
+version: 1.1.0
 owner: _(project owner)_
 updated_at: {{init-date}}
 read_before: any structural change
@@ -13,30 +13,20 @@ sync: [T1, T2]
 
 # Architecture Decision Records
 
-## ADR-001 — Adopt this doc structure
+Architectural choices only; admission and editorial rules: constitution §6.1.
+Record context, the chosen alternative, material tradeoffs/consequences and a detail link.
+Feature approvals, task updates and test receipts stay in their owning records.
+Preserve every issued ADR number, title and decision history.
 
-**Status:** Accepted · **Date:** {{init-date}}
+<!-- No decision is pre-accepted by scaffolding. Add a real founding decision when made.
 
-**Decision.** Adopt the Spur doc structure (`00`–`05` + `99` constitution).
+## ADR-NNN: <Architectural choice>
 
-**Why.** Separates WHY (`00`) from WHAT (`01`) from HOW (`03`/`04`) — one fact, one home.
+**Status:** Accepted | Accepted (design) · **Date:** YYYY-MM-DD
 
-**Detail:** `docs/99_PROJECT_CONSTITUTION.md` §4.1.
+**Decision.** <Lasting boundary or invariant selected among meaningful alternatives.>
 
-<!--
-Add new ADRs here. Entry shape (per 99 §6.1):
+**Why / tradeoff.** <Context, strongest reason, and material cost or consequence.>
 
-## ADR-NNN: <Decision title, outcome-shaped>
-
-**Status:** Accepted | Accepted (design) | Superseded by ADR-MMM | Skipped · **Date:** YYYY-MM-DD
-
-**Decision.** <What was decided — the smallest complete statement of the choice.>
-
-**Why.** <One line. The single strongest reason.>
-
-**Detail:** <pointer into 03/04/plans — depth never lives here.>
-
-A decision that reverses a prior ADR adds a new entry that says "supersedes ADR-NNN".
-An Amendment records the decision delta + one-line reason — not the mechanism. Implementation
-paths, detailed semantics, and multi-paragraph rationale belong in 03/04, not in the amendment.
+**Detail:** <Owning architecture/design reference.>
 -->

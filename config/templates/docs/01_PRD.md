@@ -3,7 +3,7 @@ name: Product Requirements Document
 doc: 01_PRD
 owns: WHAT — product vision, users, scope (in / out / deferred)
 authority: authoritative-on-scope
-version: 1.0.0
+version: 1.1.0
 owner: _(project owner)_
 updated_at: {{init-date}}
 read_before: adding a command or feature
@@ -40,3 +40,6 @@ _(One sentence: what this product is and who it is for.)_
 ### Out of scope
 
 - _(explicitly excluded capability — prevents scope creep)_
+
+<!-- Capability scope only. Delivery state belongs in feature records, sequencing in 02,
+and implementation in 03/04. Do not duplicate command catalogs or task updates. -->

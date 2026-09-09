@@ -36,10 +36,11 @@ function cap(m: RegExpExecArray): string {
 
 // Doc-heading contract this parser depends on: §1.1 nouns are `#### \`spur <noun> …\``
 // headings; multi-verb headings join verbs with `·`; §1.2 lists nouns in table rows as
-// `| \`spur <noun> …\` |`. If 04_DESIGN.md is reformatted away from these conventions,
+// `| \`spur <noun> …\` |`. The detailed owners are linked from the 04_DESIGN.md index. If
+// those contract satellites are reformatted away from these conventions,
 // the parser yields zero nouns and the parity tests below fail loudly rather than silently passing.
-async function parseDocSurface(docPath: string): Promise<NounSurface[]> {
-    const text = await readFile(docPath, 'utf-8');
+async function parseDocSurface(docPaths: string[]): Promise<NounSurface[]> {
+    const text = (await Promise.all(docPaths.map((path) => readFile(path, 'utf-8')))).join('\n');
 
     // Collect all #### `spur <noun> …` headings.
     const headingPattern = /^####\s+`spur\s+(\w+)\b/gm;
@@ -200,7 +201,12 @@ async function parseCodeSurface(cmdsDir: string): Promise<NounSurface[]> {
 
 describe('CLI surface consistency', () => {
     const cmdDir = join(import.meta.dir, '..', 'src', 'commands');
-    const docPath = join(import.meta.dir, '..', '..', '..', 'docs', '04_DESIGN.md');
+    const docPath = [
+        'cli-contracts.md',
+        'history-cli-contracts.md',
+        'planning-command-contracts.md',
+        'planning-record-contracts.md',
+    ].map((file) => join(import.meta.dir, '..', '..', '..', 'docs', 'design', file));
 
     test('every documented noun has a corresponding command file', async () => {
         const docNouns = await parseDocSurface(docPath);

@@ -634,9 +634,9 @@ CLI-gated corpus artifact. The `wrapup-pipeline.yaml` `learning-capture` step wr
 
 - **Not CLI-gated.** The file is written directly by the wrap-up pipeline's `learning-capture`
   agent.run step. It does not go through `spur task update` or `spur feature update`.
-- **Not a validated corpus.** The file is a working scratchpad. High-value learnings are promoted
-  to `docs/99_PROJECT_CONSTITUTION.md §8` (lessons) by the `doc-sync` step (via `sp:doc-evolve`),
-  not by the learning-capture step itself.
+- **Not a validated corpus.** The file is a working scratchpad. Deduplicate reusable lessons in
+  existing project learning/context storage. Constitution §8 routes lessons outside that file;
+  doc-sync does not promote lessons into governance without operator-authorized §6.8 scope.
 - **Append-only within a session.** New entries are appended; existing entries are not rewritten.
 - **Grouped by date and task.** Each entry has a date and task WBS header so the operator can
   trace a learning back to its source task.

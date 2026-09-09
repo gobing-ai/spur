@@ -130,8 +130,8 @@ describe('spur init template copy', () => {
         expect(existsSync(join(docsDir, '05_FEATURES.md'))).toBe(true);
 
         const designContent = readFileSync(join(docsDir, '04_DESIGN.md'), 'utf-8');
-        expect(designContent).toContain('Repository-root `DESIGN.md` owns all UI/UX design');
-        expect(designContent).toContain('focused on non-UI surface design');
+        expect(designContent).toContain('`DESIGN.md`, when present, owns UI/UX');
+        expect(designContent).toContain('Non-UI contract index');
     });
 
     test('docs scaffolds are preserved even under --force (R1 — never clobber customized docs)', async () => {
@@ -193,10 +193,10 @@ describe('spur init template copy', () => {
         expect(content).toContain('## Harness-first contract');
         expect(content).toContain('### Harness tool routing');
         expect(content).toContain('### Doc map');
-        expect(content).toContain('Working-layer, audit, and satellite rules live in the project constitution.');
+        expect(content).toContain('[the constitution](docs/99_PROJECT_CONSTITUTION.md)');
         expect(content).toContain('**Platform fallback:**');
         expect(content).toContain('## Design system');
-        expect(content).toContain('repository-root `DESIGN.md`');
+        expect(content).toContain('root `DESIGN.md`');
         expect(content).toContain('## Superskill CLI surface');
         expect(content).toContain('superskill install <plugin>');
     });
@@ -361,20 +361,18 @@ describe('init docs contract (task 0313)', () => {
         expect(await main(['init'], options)).toBe(0);
 
         const constContent = readFileSync(join(cwd, 'docs', '99_PROJECT_CONSTITUTION.md'), 'utf-8');
-        // §4.1 — Doc map
-        expect(constContent).toContain('§4.1');
-        // §4.4 — Satellite rules
-        expect(constContent).toContain('§4.4');
-        // §4.5 — Satellite conventions
-        expect(constContent).toContain('§4.5');
-        // §5 — Working layers
-        expect(constContent).toContain('§5');
-        // §6 — Edit rules
-        expect(constContent).toContain('§6');
-        // §8 — Lessons (empty)
-        expect(constContent).toContain('§8');
-        // Emphasis-flavor-agnostic (task 0705): formatters may rewrite _…_ as *…*.
-        expect(constContent).toContain('(empty — add lessons as the project evolves)');
+        // Check actual section destinations, not incidental prose mentions of section IDs.
+        for (const section of ['### 4.1 ', '### 4.4 ', '### 4.5 ', '## 5. ', '## 6. ', '## 8. ']) {
+            expect(
+                constContent.split('\n').some((line) => line.startsWith(section)),
+                section,
+            ).toBe(true);
+        }
+        // New projects receive the same governance body as this repository, without its dates.
+        const rootConstitution = readFileSync(join(REPO_ROOT, 'docs', '99_PROJECT_CONSTITUTION.md'), 'utf-8');
+        const body = (content: string) => content.replace(/^---\n[\s\S]*?\n---\n/, '');
+        expect(body(constContent)).toBe(body(rootConstitution));
+        expect(constContent).toContain('Do not automatically promote lessons into constitutional rules.');
     });
 
     test('scaffolded 04_DESIGN.md includes UI/UX boundary section', async () => {

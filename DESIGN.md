@@ -1,7 +1,7 @@
 ---
 version: alpha
-name: Linear-design-analysis
-description: "A near-black product-focused marketing canvas built around #010102 (the deepest dark surface of any tool in this collection), light gray text (#f7f8f8), and the signature Linear lavender-blue (#5e6ad2) used as the single chromatic accent. The system reads as software-craft documentation: dense, technical, and quietly luxurious. Display type is set in the Linear custom sans (SF Pro Display fallback) at 500–700 with measured negative tracking. Cards live as charcoal panels (#0f1011) with hairline borders. The accent lavender appears on the brand mark, focus rings, and a few intentional CTAs — never decoratively. Page rhythm leans on product UI screenshots framed in dark panels rather than atmospheric color."
+name: Spur UI Design
+description: "Spur visual and interaction design: dark surfaces, a restrained lavender accent, shared tokens, components and accessibility."
 
 colors:
   primary: "#5e6ad2"
@@ -257,55 +257,35 @@ components:
 
 ## Overview
 
-Linear's marketing canvas is the deepest dark surface in this collection — `{colors.canvas}` is #010102, essentially pure black with a faint blue tint. On top sits a four-step surface ladder (`{colors.surface-1}` through `{colors.surface-4}`) for cards, panels, and lifted tiles, with hairline borders running from `{colors.hairline}` (#23252a) up through `{colors.hairline-strong}` and `{colors.hairline-tertiary}`. Light gray text (`{colors.ink}` #f7f8f8) carries the body and headlines.
-
-The single chromatic accent is **Linear lavender-blue** `{colors.primary}` (#5e6ad2) — used on the brand mark, focus rings, and the primary CTA button. A lighter hover state (`{colors.primary-hover}` #828fff) and a focus-tinted variant (`{colors.primary-focus}` #5e69d1) extend the same hue. Linear avoids saturated greens, oranges, reds, etc. on the marketing canvas — the only semantic color is `{colors.semantic-success}` (#27a644) for status pills and the rare success indicator.
-
-Display type runs Linear's custom sans (with `SF Pro Display` fallback) at weight 500–700 with negative letter-spacing scaling from -3.0px at 80px down to 0 at body. The body family is Linear's text cut, and a Linear Mono is reserved for code snippets in product screenshots.
-
-The page rhythm is **dense product screenshots** — Linear's marketing leads with high-fidelity captures of the product UI (issue list, project view, dashboard) framed in `{colors.surface-1}` panels with `{rounded.xl}` 16px corners. The chrome is intentionally minimal so the app screenshots can do the heavy lifting.
-
-**Key Characteristics:**
-- **Dark-canvas marketing system** — `{colors.canvas}` (#010102) is the deepest dark in this collection.
-- **Lavender-blue brand accent** (`{colors.primary}` #5e6ad2) — used scarcely on brand mark, focus, and the primary CTA.
-- Four-step surface ladder (canvas → surface-1 → surface-2 → surface-3 → surface-4) carries hierarchy without shadow.
-- Display tracking pulls aggressively negative (-3.0px at 80px); body holds at -0.05px.
-- Cards use `{rounded.lg}` 12px corners with 1px hairline borders — never pill, rarely 16px.
-- **Product UI screenshots** dominate the page. The marketing chrome is a dark frame for the app.
-- No second chromatic color. No atmospheric gradients. No spotlight cards.
+Spur uses a near-black canvas, a four-step charcoal surface ladder, hairline borders and a
+restrained lavender accent. The frontmatter is the token and component-value reference;
+the sections below define usage and interaction. Non-UI contracts belong in
+[04 Design](docs/04_DESIGN.md), document maintenance in the constitution.
+The inherited marketing variants are a visual vocabulary, not a requirement to build marketing pages.
 
 ## Colors
 
 > Source pages: linear.app (home), /intake, /pricing, /contact/sales, /build.
 
 ### Brand & Accent
-- **Lavender-Blue** ({colors.primary}): The signature Linear accent — primary CTA, brand mark, link emphasis.
-- **Lavender Hover** ({colors.primary-hover}): Lighter lavender (#828fff) — hovered state of the primary CTA.
-- **Lavender Focus** ({colors.primary-focus}): Focus-ring tint (#5e69d1) — focused inputs, focused buttons.
-- **Brand Secure** ({colors.brand-secure}): Muted lavender-gray (#7a7fad) — used in "Linear Security" surfaces.
+
+Use primary for brand marks, primary actions, links and focus; primary-hover and primary-focus
+provide interaction states. Reserve brand-secure for muted security branding.
 
 ### Surface
-- **Canvas** ({colors.canvas}): Default page background — #010102, near-pure black with a faint blue tint.
-- **Surface 1** ({colors.surface-1}): One step above canvas — feature cards, pricing cards, product screenshot panels.
-- **Surface 2** ({colors.surface-2}): Two steps above — featured pricing card, hovered cards.
-- **Surface 3** ({colors.surface-3}): Three steps above — line-tertiary backgrounds, sub-nav.
-- **Surface 4** ({colors.surface-4}): Four steps above — bg-level-3, deepest lifted surface.
-- **Hairline** ({colors.hairline}): 1px borders on cards and dividers.
-- **Hairline Strong** ({colors.hairline-strong}): Stronger 1px borders — input focus rings.
-- **Hairline Tertiary** ({colors.hairline-tertiary}): Tertiary borders for nested surfaces.
-- **Inverse Canvas** ({colors.inverse-canvas}): Pure white — surface of the inverse pill CTA on a small set of section openers.
-- **Inverse Surface 1** ({colors.inverse-surface-1}): One step above inverse canvas.
-- **Inverse Surface 2** ({colors.inverse-surface-2}): Two steps above inverse canvas.
+
+Canvas is the base; surface-1 through surface-4 express increasing lift. Hairline variants
+separate nested regions. Inverse tokens are for isolated inverse controls, not an implied light theme.
 
 ### Text
-- **Ink** ({colors.ink}): All headlines and emphasized body type — light gray #f7f8f8.
-- **Ink Muted** ({colors.ink-muted}): Secondary type at #d0d6e0 — meta info on hero panels.
-- **Ink Subtle** ({colors.ink-subtle}): Tertiary type at #8a8f98 — deselected pricing tabs, footer columns.
-- **Ink Tertiary** ({colors.ink-tertiary}): Quaternary at #62666d — disabled, footnotes.
+
+Use ink for primary content, ink-muted for secondary information, ink-subtle for metadata,
+and ink-tertiary for disabled content. Validate readable contrast in the actual component.
 
 ### Semantic
-- **Success Green** ({colors.semantic-success}): Status pills, success indicators. The only semantic color on marketing.
-- **Overlay** ({colors.semantic-overlay}): Pure black overlay scrim for modals.
+
+Use semantic-success for success state and semantic-overlay for scrims. Pair state colors with
+text or icons; do not introduce competing decorative accents.
 
 ## Typography
 
@@ -319,21 +299,8 @@ The marketing surface treats Display and Text as one continuous voice; the famil
 
 ### Hierarchy
 
-| Token | Size | Weight | Line Height | Letter Spacing | Use |
-|---|---|---|---|---|---|
-| `{typography.display-xl}` | 80px | 600 | 1.05 | -3.0px | Largest hero headline |
-| `{typography.display-lg}` | 56px | 600 | 1.10 | -1.8px | Section opener headlines |
-| `{typography.display-md}` | 40px | 600 | 1.15 | -1.0px | Sub-section headlines |
-| `{typography.headline}` | 28px | 600 | 1.20 | -0.6px | Pricing tier titles, CTA banner heading |
-| `{typography.card-title}` | 22px | 500 | 1.25 | -0.4px | Feature card title |
-| `{typography.subhead}` | 20px | 400 | 1.40 | -0.2px | Lead body, intro paragraphs |
-| `{typography.body-lg}` | 18px | 400 | 1.50 | -0.1px | Hero subhead, lead paragraphs |
-| `{typography.body}` | 16px | 400 | 1.50 | -0.05px | Default body |
-| `{typography.body-sm}` | 14px | 400 | 1.50 | 0 | Card body, footer columns |
-| `{typography.caption}` | 12px | 400 | 1.40 | 0 | Captions, meta, status |
-| `{typography.button}` | 14px | 500 | 1.20 | 0 | All button labels |
-| `{typography.eyebrow}` | 13px | 500 | 1.30 | 0.4px | Section eyebrow (slight positive tracking) |
-| `{typography.mono}` | 13px | 400 | 1.50 | 0 | Linear Mono for code in product screenshots |
+Use the typography frontmatter: display tokens for headings, body tokens for prose,
+caption for metadata, eyebrow for taxonomy and mono for code or identifiers.
 
 ### Principles
 
@@ -344,7 +311,8 @@ The marketing surface treats Display and Text as one continuous voice; the famil
 
 ### Note on Font Substitutes
 
-Linear's custom typeface isn't publicly distributed; the documented fallback `SF Pro Display, -apple-system, system-ui` is the recommended substitute on macOS. For cross-platform implementation, **Inter** at weight 500 / 600 / 700 is the closest free substitute. **Geist Sans** is also viable. For mono, **JetBrains Mono** or **Geist Mono** at weight 400 closely approximates Linear Mono.
+Use the declared system fallback stacks when the named fonts are unavailable.
+A different font requires visual verification; the design does not require a new dependency.
 
 ## Layout
 
@@ -389,16 +357,8 @@ Linear's depth is carried by surface ladder + hairline borders. The brand resist
 
 ### Border Radius Scale
 
-| Token | Value | Use |
-|---|---|---|
-| `{rounded.xs}` | 4px | Small chips, status badges |
-| `{rounded.sm}` | 6px | Inline tags |
-| `{rounded.md}` | 8px | All buttons, form inputs |
-| `{rounded.lg}` | 12px | Pricing cards, feature cards, testimonial cards |
-| `{rounded.xl}` | 16px | Product screenshot panels |
-| `{rounded.xxl}` | 24px | Oversized CTA banners (rare) |
-| `{rounded.pill}` | 9999px | Pricing tab toggles, status pills |
-| `{rounded.full}` | 9999px | Avatar circles |
+Use the rounded frontmatter: xs/sm for chips and tags, md for controls, lg for cards,
+xl for screenshot panels, xxl for occasional banners, pill for toggles/status, full for avatars.
 
 ### Photography & Illustration Geometry
 
@@ -410,79 +370,46 @@ Linear's depth is carried by surface ladder + hairline borders. The brand resist
 
 ### Buttons
 
-**`button-primary`** — Lavender CTA. The default primary CTA across all pages.
-- Background `{colors.primary}`, text `{colors.on-primary}`, type `{typography.button}`, padding 8px 14px, rounded `{rounded.md}`.
-- Pressed state lives in `button-primary-pressed` (background shifts to `{colors.primary-focus}`).
-- Hover state lives in `button-primary-hover` (background shifts to `{colors.primary-hover}` lighter lavender).
-
-**`button-secondary`** — Charcoal button. Used for secondary CTAs ("Sign in", "Read changelog").
-- Background `{colors.surface-1}`, text `{colors.ink}`, type `{typography.button}`, padding 8px 14px, rounded `{rounded.md}`. 1px `{colors.hairline}` border.
-
-**`button-tertiary`** — Plain text button.
-- Background `{colors.canvas}`, text `{colors.ink}`, type `{typography.button}`, rounded `{rounded.md}`, padding 8px 14px.
-
-**`button-inverse`** — White-on-dark inverse CTA.
-- Background `{colors.inverse-canvas}`, text `{colors.inverse-ink}`, type `{typography.button}`, rounded `{rounded.md}`, padding 8px 14px.
+Use the frontmatter variants: primary for the main action, secondary for supporting actions,
+tertiary for plain text controls and inverse for isolated emphasis. Keep hover, pressed and
+keyboard-focus states distinct; use md corners rather than pills.
 
 ### Pricing Tabs
 
-**`pricing-tab-default`** + **`pricing-tab-selected`** — Pill-toggle on `/pricing`.
-- Default: `{colors.canvas}` background, `{colors.ink-subtle}` text, rounded `{rounded.pill}`, padding 6px 14px.
-- Selected: `{colors.surface-2}` background, `{colors.ink}` text — selected = surface lift.
+The optional pricing variants are pill toggles; selection uses a surface lift.
+They do not imply a pricing-page commitment.
 
 ### Cards & Containers
 
-**`pricing-card`** — Each tier on `/pricing`.
-- Background `{colors.surface-1}`, text `{colors.ink}`, type `{typography.body}`, rounded `{rounded.lg}`, padding 24px. 1px `{colors.hairline}` border.
-
-**`pricing-card-featured`** — Recommended tier — surface lift to surface-2.
-- Background `{colors.surface-2}`, otherwise identical structure.
-
-**`feature-card`** — Generic feature highlight tile.
-- Background `{colors.surface-1}`, text `{colors.ink}`, type `{typography.body}`, rounded `{rounded.lg}`, padding 24px.
-
-**`product-screenshot-card`** — The dominant card type — frames a high-fidelity Linear app UI screenshot.
-- Background `{colors.surface-1}`, text `{colors.ink}`, type `{typography.body}`, rounded `{rounded.xl}`, padding 24px.
-
-**`testimonial-card`** — Customer quote with avatar + name + role.
-- Background `{colors.surface-1}`, text `{colors.ink}`, type `{typography.body-lg}`, rounded `{rounded.lg}`, padding 32px.
-
-**`customer-logo-tile`** — Small tile in the customer marquee.
-- Background `{colors.canvas}`, text `{colors.ink-subtle}`, type `{typography.caption}`, rounded `{rounded.xs}`, padding 16px.
-
-**`cta-banner`** — Closing CTA panel near page bottom.
-- Background `{colors.surface-1}`, text `{colors.ink}`, type `{typography.headline}`, rounded `{rounded.lg}`, padding 48px.
+Use feature-card for general panels, product-screenshot-card for captures, testimonial-card
+for quotes and customer-logo-tile for logos. Optional pricing-card/featured and cta-banner
+variants use the same surface ladder. Values live in the component frontmatter.
 
 ### Inputs & Forms
 
-**`text-input`** + **`text-input-focused`** — Form fields on `/contact/sales` and signup overlays.
-- Background `{colors.surface-1}`, text `{colors.ink}`, type `{typography.body}`, rounded `{rounded.md}`, padding 8px 12px.
-- Focused state retains the same surface; the focus ring is a 2px `{colors.primary-focus}` outline at 50% opacity.
+Use text-input and text-input-focused values from the frontmatter. Focus retains the input
+surface and adds the focus outline. Provide labels and accessible error messages.
 
 ### Status & Build Page
 
-**`changelog-row`** — Each row in `/build` (changelog page) listing version, date, and changes.
-- Background `{colors.canvas}`, text `{colors.ink}`, type `{typography.body}`, rounded `{rounded.xs}`, padding 24px 0. 1px `{colors.hairline}` bottom rule.
-
-**`status-badge`** — Small status pill.
-- Background `{colors.surface-2}`, text `{colors.ink-muted}`, type `{typography.caption}`, rounded `{rounded.pill}`, padding 2px 8px.
+Use changelog-row for version/change lists and status-badge for concise state labels.
+These are component variants, not required product pages.
 
 ### Navigation
 
-**`top-nav`** — Sticky dark bar with the Linear wordmark left, primary nav links centered, and a `button-secondary` ("Sign in") + `button-primary` ("Get started") pair right.
-- Background `{colors.canvas}`, text `{colors.ink}`, type `{typography.body-sm}`, height 56px.
+Use the top-nav tokens for a compact navigation bar. Keep branding, navigation and actions
+visually distinct; responsive collapse follows the rules below.
 
 ### Footer
 
-**`footer`** — Dense link grid on `{colors.canvas}` with the Linear wordmark left.
-- Background `{colors.canvas}`, text `{colors.ink-subtle}`, type `{typography.caption}`, padding 64px 32px.
+Use footer tokens for a secondary link grid when a footer is needed.
 
 ## Product UI — System Events
 
 The System Events surface is a dense diagnostic table, not a marketing screenshot. It still uses
 the shared canvas/surface/hairline/type tokens above.
 
-- J92 (built, 0651–0654): desktop defaults are Time, Severity, Event, Summary, Correlation, and
+- Desktop defaults are Time, Severity, Event, Summary, Correlation, and
   Outcome. Agent, Producer, Action, and Actor are optional through the Columns disclosure; the
   ordered selection persists under `spur:observability:columns:v1`, invalid storage falls back to
   defaults, and at least one column stays visible. Producer shows only package / subsystem.
@@ -497,41 +424,31 @@ the shared canvas/surface/hairline/type tokens above.
 - Event-name tooltip uses `surface-3`, a strong hairline, mono value rows, a 400 px minimum when
   space permits, and a viewport-bounded maximum. Hover and keyboard focus open the same content;
   pinning makes it selectable for copy; Escape and outside activation close it.
-- J9 (built): the tooltip title is `eventName · correlator`, using the best available
+- The tooltip title is `eventName · correlator`, using the best available
   entity/run/execution/action/job identity and falling back to the persisted history-row id.
   Copy/pin instructions live in a muted footer; hover and pinned modes use their own guidance.
-- J91 (built, 0605): Agent remains a single truncated identity string; a missing executor is a blank
-  cell (not `-`). J92 makes it optional after Outcome in the canonical customizable column order.
+- Agent remains a single truncated identity string; a missing executor is a blank
+  cell (not `-`). It is optional after Outcome in the canonical customizable column order.
   Correlation, Action, and Agent truncate like Summary; complete values stay in the tooltip.
   Compact (≤639 px) stacks Summary, Correlation, Action, and Agent under the event name and still
   omits opaque ids from those stacked cells. Shapes: `docs/design/system-events-human-table.md`.
 - Expanded detail owns raw redacted JSON and lower-value catalog metadata. The tooltip owns what
   happened, why it matters, and the next safe action.
 - Below 640 px, collapse to Time + Event and stack summary, producer/correlation, outcome, and action
-  under the event name (J91 adds Agent to that stack). No horizontal information loss may require
+  under the event name and Agent. No horizontal information loss may require
   color interpretation.
 
 ## Do's and Don'ts
 
 ### Do
 
-- Reserve `{colors.canvas}` (#010102) as the system's anchor surface — the faint blue tint is intentional.
-- Use `{colors.primary}` lavender ONLY for: brand mark, primary CTA, focus ring, link emphasis.
-- Use the four-step surface ladder for hierarchy. Avoid skipping levels.
-- Pair display weight 600 with body weight 400 — Linear resists 700+ display weights.
-- Apply negative letter-spacing aggressively on display.
-- Use product UI screenshots as the protagonist of every section.
-- Compose CTAs as `{rounded.md}` 8px corners.
+Use the canvas and surface ladder, restrained accents, readable typography and visible
+keyboard focus. Product UI should prioritize diagnostic content.
 
 ### Don't
 
-- Don't ship a light-mode marketing page.
-- Don't use lavender as a section background or card fill.
-- Don't introduce a second chromatic accent (orange, pink, green for marketing).
-- Don't add atmospheric gradients or spotlight cards.
-- Don't pill-round CTAs.
-- Don't use `#000000` true black as the canvas.
-- Don't combine multiple bright accents in product screenshot mockups.
+Do not use lavender as decorative panel fill, atmospheric gradients, competing bright accents,
+pill-shaped primary CTAs or pure black in place of the canvas token.
 
 ## Responsive Behavior
 
@@ -565,18 +482,12 @@ the shared canvas/surface/hairline/type tokens above.
 
 ## Iteration Guide
 
-1. Focus on ONE component at a time and reference it by its `components:` token name.
-2. When introducing a section, decide first which surface lift it lives on.
-3. Default body to `{typography.body}` at weight 400.
-4. Run `npx @google/design.md lint DESIGN.md` after edits.
-5. Add new variants as separate component entries.
-6. Treat lavender as scarce: brand mark, primary CTA, focus, link emphasis.
-7. Lead every section with a product UI screenshot.
+Use an existing component/token before adding a variant. Verify affected viewports, keyboard
+interaction, focus, contrast and reduced-motion behavior with the project’s available UI checks.
+Update this file when the shared design contract changes; keep delivery receipts in task records.
 
 ## Known Gaps
 
-- The four-step surface ladder values are extracted directly from Linear's `--color-bg-level-3`, `--color-line-tint`, etc. CSS variables; they are Linear's canonical surface spec.
-- Form-field error and validation styling is not visible on the inspected pages.
-- Light mode is not documented because the marketing site does not ship a light theme.
-- Linear's actual product UI uses a richer color-tag palette (red, orange, yellow, green, blue, purple) for issue priorities and project labels — those colors live in the in-product surfaces shown in mockups.
-- The custom display, text, and mono families are proprietary; an open-source substitute is acceptable.
+The inherited token set does not fully specify form validation/error states or a complete
+light theme. Resolve those contracts when implementing the affected UI; do not infer them from
+inverse-control tokens. Use documented system font fallbacks when named fonts are unavailable.

@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.44.0
+version: 1.45.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-08
+updated_at: 2026-09-09
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -14,7 +14,8 @@ sync: [T1]
 # 03 Architecture — Spur
 
 This document describes the **current** architecture of Spur. It specifies module boundaries
-and invariants, not schemas or signatures (those live in code).
+and invariants. Exact non-UI contracts are indexed by [04 Design](04_DESIGN.md); visual
+and interaction rules live in root [DESIGN.md](../DESIGN.md). Task receipts stay in task records.
 
 ## 1. Topology
 
@@ -55,7 +56,7 @@ packages/domain ► @gobing-ai/ts-db (sole importer — §8.1)
 | ------- | ------ |
 | `ts-utils` | output, errors, api-response, cursor, date, access |
 | `ts-infra` | logger, EventBus, telemetry, scheduler, job-queue interfaces |
-| `ts-runtime` | runtime context, FileSystem, ProcessExecutor, config loader |
+| `ts-runtime` | runtime context, FileSystem, ProcessExecutor; Spur config loading is owned by `packages/config` |
 | `ts-db` | DbAdapter, BaseDao, migrations, QueueJobDao |
 | `ts-ai-runner` | `AgentDetector`, `DoctorRunner`, `AiRunner` |
 | `ts-rule-engine` | `RuleEngine`, evaluators, presets, formatters, rule types |
@@ -212,261 +213,62 @@ externally-triggered consumer (ADR-022).
 
 ### 6.1 Consolidated per-run run log (built — ADR-045 / feature D2)
 
-A single all-in-one per-run log at `.spur/run/<RUNID>.log` makes every `spur workflow run`
-observable from creation to terminal status. The consolidated sink is a **read-only subscriber**
-on the existing `WorkflowObservabilityBus` (which ADR-035 keeps a read-only projection) that appends
-the already-redacted, already-bounded event stream to the log file. It subsumes the former
-`RunOutputSink` (now `workflow-run-log-sink.ts`) — the same `observe`/`close` contract, byte/line
-bounds (default 1 MiB / unbounded,
-configurable), visible truncation marker, and best-effort-writes-never-fail-the-run semantics — but
-emits a richer event set: the run's foreground rendering (plan preview, per-step progress,
-transitions, final summary), child agent stdout/stderr chunks, consumed stdin (steering), and engine
-shell/HITL action lifecycle lines. Because the sink writes in-process to a file, the `--async`
-detached worker (which points its own std streams at `/dev/null`) still produces the log.
-
-Invariants (enforceable):
-
-1. No prompt body or shell command text ever enters the log; prompt bodies become `[prompt N chars]`,
-   shell commands `[shell command redacted]`, configured secrets `[REDACTED]` — the consolidated log
-   is not a redaction leak.
-2. The log never exceeds its configured byte/line bound; hitting a bound appends a visible truncation
-   marker, never a silent cut.
-3. An unwritable `.spur/run/` dir or failing disk degrades the log, never the run.
-4. `spur workflow clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30);
-   the log is retained by default and removed only by that policy.
-
-`spur workflow trace <RUNID> --follow --output` streams `.spur/run/<RUNID>.log` (tail -f equivalent)
-as a distinct source, exiting at terminal status; the structured DB timeline remains the default and
-`--output` does not interleave with it. Removed-and-repointed surfaces are compatibility changes:
-`<RUNID>-output.log` folds into `<RUNID>.log`, and the timed-out-implement runbook tails the new path;
-the `.spur/workflow/<RUNID>.jsonl` trace-file and `<RUNID>-STEP-partial.md` salvage stay distinct
-authorities. Surface shapes: `docs/design/workflow-run-log.md`; decision: `00 ADR-045`; feature `D2`.
+The workflow service subscribes a per-run sink to the bounded, redacted observability stream.
+Run logs are projections, not a second persistence authority; capture is failure-isolated from
+workflow execution. Lifecycle, retention and streaming contracts:
+[workflow run log](design/workflow-run-log.md).
 
 ### 6.2 Resume and guard vars contract
 
-This is the exact contract agents rely on when resuming a paused workflow or authoring guard
-commands — it is documented in-repo so no one has to reverse-engineer the engine (`node_modules`).
-Source of truth: `@gobing-ai/ts-dual-workflow-engine` `WorkflowService.resumeRun` /
-`evaluateAndCommit`, and spur's `EnvShellGuardRunner` (`packages/app/src/workflow/guards/shell.ts`).
-
-**`resumeRun` vars merge (caller wins).** When a paused run is resumed
-(`spur workflow continue <run-id>` / `WorkflowService.resumeRun`):
-
-1. The run must be `paused`; it is re-opened as `running`, and execution starts from the persisted
-   current state **skipping that state's on-enter**.
-2. The runtime vars are restored from the `effectiveVars` snapshot persisted in the last state
-   snapshot (e.g. `__hitlAnswer`, `profile`), so a resume continues with the same runtime variables.
-3. Caller-supplied `options.vars` are **merged over** that persisted snapshot — **caller wins** on a
-   key collision (`mergeVars(persistedVars, options.vars)`). Inject a resumed answer by passing it in
-   `vars`, not by mutating the snapshot.
-
-**Shell-guard vars resolution (two layers).** A guard command may reference workflow vars either way:
-
-1. **Template resolution (engine).** `${vars.*}` templates in guard options (e.g.
-   `spur task check ${vars.wbs}`) are resolved against `workflow.vars` _before_ the guard runs
-   (`resolveTemplates`), the same interpolation the driver's `firstPassingTransition` uses.
-2. **Subprocess env export (spur).** Spur's `EnvShellGuardRunner` replaces the engine's default shell
-   guard and spawns `/bin/sh -c <command>` with `context.vars` merged over `process.env` as the child
-   env — so a guard can also reference vars by bare name (`$wbs`, `$spurBin`). Because the value is
-   passed as environment data, a variable-expansion result is **never re-parsed as shell code** (no
-   backtick/`$(...)` injection — task 0435/0432). The lifecycle adapter binds the run's guard var
-   (e.g. `wbs`) and `spurBin` into `workflow.vars` before requesting a transition, which is why
-   `task-lifecycle.yaml` guards can run `$spurBin task check $wbs`.
-
-Guard evaluation is fail-closed: a non-zero shell exit denies the transition atomically with zero
-partial writes (see `LifecycleAdapter.requestTransition` in §12.2).
+Resume restores persisted variables and overlays caller variables before guard evaluation.
+Guard context carries action outcomes; shell interpolation must preserve literal values at the
+process boundary. Exact variable and resume contracts:
+[planning workflows](design/planning-workflow-contracts.md) and
+[workflow commands](design/cli-contracts.md).
 
 ### 6.3 Interactive task-pipeline control inversion (ADR-047 amendment)
 
-Interactive `dev-run --mode full` and sequential `dev-runall` invocations execute at the
-agent-command layer, which already owns the live host session. The driver reads
-`task-pipeline.yaml` at invocation time and interprets the same ordered actions and transition
-guards; it does not add an engine inline mode or define a second FSM. Explicit executors, parallel
-batches, and headless `spur workflow run` continue through `WorkflowService` and `agent.run`.
-
-**Native-subagent-first model stages (task 0508, amended by feature G5).** Interactive
-omitted-`--agent` keeps the controller in the host session and is **non-subprocess** — it never
-invokes `spur agent run` or `spur workflow run` — but eligible model-bearing `agent.run` stages may
-execute on a native platform subagent. Eligibility is decided by observable facts only: the action
-is a pure-slash `agent.run`, the state is not interactive (no operator-confirmation action,
-`pause: true`, or approve/taste/ask decision), and the host platform exposes a native subagent with
-shared-worktree read/write/shell capability. **Omitted and explicit `--agent inline` resolve identically (task 0687 / ADR-087):** 0508 eligibility (native subagent first, host-session fallback) applies to all inline resolutions, and headless surfaces (`spur agent run`, workflow `agent.run`, serve-side dispatch) substitute tier resolution with a single warning instead of rejecting. Dispatch
-happens **once**, sequentially (one writer at a time), and joins before the driver evaluates the
-next action or guard; a pre-dispatch eligibility failure falls back to one host execution, while a
-failure after dispatch follows the stage's error policy and is never replayed in the host. Operator
-confirmation actions, `pause: true`, and approve/taste/ask decisions remain host-owned — no subagent
-answers or continues them. The dispatched stage cannot recursively dispatch the same stage.
-
-The inline path records `task_run_links` provenance before entering the FSM and appends each model
-stage's state id plus host session id to a run-scoped log — for subagent-executed stages the log
-names the subagent id (`stage <id> executed via subagent <agent-id> (host session <session-id>)`),
-distinct from the inline provenance. It has no independent stage timeout/abort
-boundary or subprocess action record. Invariants: YAML remains the sole state/guard authority; every
-lifecycle guard still executes; inline failure never silently redirects to `agent.default`.
+Interactive task pipelines are controlled by the host session interpreting the canonical YAML.
+Deterministic nodes still call their existing application/CLI owners; eligible model stages use
+the host's supported execution surface. Operator decisions stay host-owned. Headless execution
+uses the workflow service and subprocess runner.
+See [execution selector contract](design/dev-agent-flag-and-dogfood-skill.md).
 
 ## 7. History Import & Analytics (`ts-llm-jsonl-importer`, `spur history`)
 
-Pipeline (ADR-008), one generic control function over a `SourceDefinition` union:
+The importer owns source-independent ingestion:
 
-```
-discover files → resume from (source, source_file) checkpoint → read line-by-line
-  → split (one-to-one | one-to-many | custom) → fieldMap (raw→canonical)
-  → transforms → Zod validate (gate before persist) → redact → SHA-256 dedup
-  → load to per-source ETL table → update checkpoint
-```
+~~~text
+discover → checkpoint resume → read → split/map/transform
+  → validate → redact → deduplicate → ETL load → checkpoint
+~~~
 
-Sources: pi, claude, codex, gemini, opencode, antigravity, openclaw, omp, grok, agy. Adding a source
-is one `SourceDefinition` variant; the pipeline never changes. `--source all` fans out with
-per-source failure isolation (E1/0470); ad-hoc `--file <path>` imports a single session (E1/0470).
+Raw agent JSONL is the history source of truth; normalized rows, checkpoints, ledgers and
+rollups are derived. A source extends SourceDefinition rather than the control flow. Full
+reconciliation removes stale derived rows and reports degraded sources explicitly.
 
-**Forensic ETL contract** (E1/0466, 0468): the importer normalizes records into a machine-readable
-output with `MAX_ERROR_SAMPLES` cap, `importOneIsolated` per-source isolation, `schemaVersion`
-tagging, and `assertArtifactVersion` gating — the artifact is a versioned contract, not ad-hoc JSON.
+Analysis owns SQL aggregation and versioned artifacts; reporting is a database-free artifact
+renderer. Missing evidence stays unavailable. The daily operation composes import, analysis
+and retention. Correlation, diagnostic interpretation and Board read models consume importer
+output; the generic importer does not own those interpretations. Board transport is SQL-free
+and can fall back to exact queries when projections are absent or stale.
 
-**Full-mode reconciliation** (0504/0505): `--mode full` revalidates the ETL against canonical raw
-files — the importer deletes stale target/ledger/checkpoint rows and returns per-source
-`{ staleTargetRows, staleLedgerRows, staleCheckpointRows }`, which `importOneIsolated` passes
-through `CoverageEntry` to `entries[].reconciliation` in `--json` output (optional, absent on
-incremental runs). Sources that skipped malformed records are `degraded`, never clean `ok` —
-shapes in `04 §1`.
-
-**Analyze → Report** (E1/0474, 0469): `spur history analyze` aggregates the ETL tables in SQL
-(`packages/domain/src/analytics/forensic-query.ts`) and writes a versioned JSON artifact
-(`schemaVersion` field). `spur history report` is a pure renderer — it reads the artifact, asserts
-the schema version, and renders to stdout + markdown sidecar without opening the database.
-Unavailable values render as `n/a`, never `0` (never-fabricate).
-
-**Daily pipeline** (E1/0470, 0471): `spur history daily` is a single run-once invocation:
-import-all → analyze → write artifact → prune reports older than 90 days. Scheduling is via an
-external launchd plist (`com.gobing-ai.spur.history.daily.plist`), not an embedded scheduler. The
-history system emits `history.*` events to the event ledger for observability.
-
-**Completion-triggered refresh** (E3/0549): a second trigger bound to **work completing**
-(`history.refresh.on_completion`, opt-in config, default off) enqueues one coalesced `history.refresh`
-job on the feature-A2 embedded job queue at task-done and pipeline-run completion — never inline on
-the firing operation. `enqueueCoalesced` (`packages/domain/src/db.ts`) makes the lookup-then-insert
-atomic under cross-process concurrency via a **partial unique index** on `queue_jobs`
-(`queue_jobs_history_refresh_active_unique`, scoped to `type='history.refresh' AND status IN
-('pending','processing')` so other job types keep multiple pending rows); a burst inside
-`debounce_ms` joins the pending job (earliest `windowStart`, latest `windowEnd`) instead of
-enqueuing a duplicate, and a producer arriving while a refresh is `processing` receives
-`already-running`. Consumption is server-side: `spur serve`'s job worker spawns the daily pipeline
-in an isolated child process (E31 below). Coalescing shapes in `04 §3`.
+Details: [history data processing](design/history-data-processing.md),
+[Board](design/history-board-module.md), [CLI contracts](design/history-cli-contracts.md).
 
 ### History refresh process isolation (ADR-101; built — 0716–0717, 0803)
 
-E31 moves only the expensive execution across an OS-process seam. Schedule, completion, and Board
-manual producers converge on the existing app-layer history enqueue function. A partial unique
-SQLite index covering `history.refresh` rows in either `pending` or `processing` state is the
-single-flight authority across every producer and server process; pending requests merge, while a
-request arriving during processing returns `already-running` without inserting a follow-up row.
+Schedule, completion and Board producers converge on one application enqueue function.
+A partial unique index allows at most one pending or processing history.refresh job across
+server processes: pending requests coalesce; processing requests report already-running.
 
-The server queue handler unwraps `Job.payload`, then awaits `ProcessExecutor.run` against the same
-PATH-independent Spur entrypoint that launched `serve`, invoking `--no-logo history daily` in the
-project root. The child's exit code is the verdict: its stdout is the human daily summary, kept as
-bounded failure detail and never parsed as a payload (the `--json` envelope embeds the whole analyze
-artifact, which outgrew the handler's output bound on 2026-08-30 and failed healthy refreshes).
-Awaiting preserves queue completion/retry truth while the child process isolates
-synchronous filesystem and `bun:sqlite` work from the Hono/oRPC event loop. The child and server
-share the WAL database; the 30-second SQLite busy timeout (`SQLITE_BUSY_TIMEOUT_MS`) bounds lock
-contention.
+The worker runs the source-local CLI in a child process, keeping importer filesystem/SQLite
+work outside Hono/oRPC. Bounded stdout is diagnostic text; child exit/timeout determines queue
+success or failure. Deadlines propagate to child cleanup, and lease recovery must not reclaim
+a live attempt. Persistence or child failures cannot become queue success.
 
-Task 0803 bounds the periodic child so a wedged run cannot pin the shared write lock; task 0813
-(ADR-112) moved enforcement native: both the `history.refresh` and `scheduler.custom` spawn sites
-forward the daemon-resolved deadline (`SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS`, default 600,000 ms, plus
-`SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` / `SPUR_HISTORY_REFRESH_TIMEOUT_MS` overrides; explicit `none`
-imposes none) to the `ProcessExecutor`, which kills the child at the deadline with a truthful
-timed-out outcome; the `importAll` fan-out aborts after two consecutive source failures
-classified as `SQLITE_BUSY` instead of burning each remaining source's 30s `busy_timeout`; and the
-daily retention pass checkpoints the WAL `PASSIVE` (exclusive TRUNCATE stays on the manual
-`spur self maintain` path). A `processing` row older than the timeout is failed in place by the next
-scheduler tick (`swept: true`) and a fresh job enqueued on that same tick, with the tick enqueue
-carrying `maxRetries: 1` so a failed attempt goes terminal instead of suppressing later ticks.
-
-Concrete
-payload, enqueue-result, process, and transport shapes live in
-`docs/design/history-refresh-process-isolation.md`.
-
-The server queue uses a two-hour visibility timeout. `history daily` imports six sources sequentially,
-with a ten-minute bound per source, before analysis; the generic 30-second queue default would let a
-second server reset and reclaim the same processing row while the first child was still running.
-
-Enforced invariants (E31 built — 0716–0717):
-
-1. No producer calls raw queue enqueue for `history.refresh`; all use the shared enqueue function.
-2. The database contains at most one `history.refresh` row whose state is `pending` or `processing`.
-3. History import/analyze filesystem and SQLite work never executes in the server process.
-4. A queue handler consumes `Job.payload`; it never interprets the queue envelope as business data.
-5. Child failure or malformed output fails the queue attempt; it is never converted to success.
-6. A live refresh remains leased beyond its supported import/analyze duration; another server cannot
-   reclaim it at the generic 30-second visibility boundary.
-
-**Watermark policy** (E3/0550): `analyze` bounds derived values to a still-appending session's **last
-complete turn** (`packages/domain/src/analytics/watermark.ts`), so a half-written session never
-contributes a partial turn's derived values; each `bySession[]` row carries additive
-`sessionState: 'in-progress' | 'complete'`. The daily result reports honest coverage
-(`RefreshCoverage { refreshed, skipped, window }`): full-fidelity sources refreshed, unsupported
-sources skipped (operator ruling 2026-08-06), and the MIN/MAX message `ts` analyzed.
-
-**Analytics** (`packages/domain/src/analytics`) is a domain consumer, not part of the generic
-importer. The analyze rollup estimates per-model cost for the artifact from `history_message` /
-`history_tool_call` (ADR-049). The workflow-trace cost path (ADR-060) joins the run→session
-mapping to `history_message`'s typed token columns — exact and estimated figures folded apart,
-never priced; the ETL `CostRecord` read path is retired on the read side.
-
-**History-anatomy diagnostic (HA-S1, ADR-079/080; 0657–0661).** `analyze` records an additive
-`population` block (`SelectionPopulation` — sessions, tools, loops, warnings, `appliedTop`) from
-unbounded `COUNT(DISTINCT …)` queries over the active selector, never from bounded leaderboard
-lengths; the forensics renderer presents bounded lists as `top N of M` (ADR-080). Diagnostic
-interpretation lives in the plugin space, not the CLI: `sp:history-anatomy` owns the mode/report
-contracts, `history-anatomy.yaml` owns the cache branch / bounded correction / atomic publication,
-and `history-anatomy-cache.ts` (+ committed `.mjs` twin, ADR-065 standard contract) computes the
-semantic artifact digest — the deterministic half always reruns, only model judgment is cacheable
-(ADR-079). Shapes: `docs/design/history-anatomy.md`. I9 environment-improvement projection
-(built — ADR-084/085): §22;
-`docs/design/environment-improvement-lens.md`.
-
-**History Board read plane (E8).** The six `history.*` oRPC procedures delegate through
-`HistoryBoardService`; `LiveHistoryBoardService` composes the existing forensic queries and keeps
-the server transport SQL-free. `HistoryService.analyze()` refreshes checkpoint-keyed SQLite read
-models after producing the forensic artifact. Board reads use those models only when their recorded
-history version matches the current projection version and import checkpoint; absent or stale models
-fall back to the exact indexed queries. Manual Board imports enqueue the existing `history.refresh`
-job, whose worker spawns `history daily` in an isolated child process (E31) with the requested
-import mode. Shapes: `docs/design/history-board-module.md`.
-
-**Run→session correlation (E6, ADR-059).** Every DB-backed `spur agent run` watermarks the
-agent's session root before dispatch and resolves the produced session after exit
-(`RunSessionObserver`, `packages/app/src/services/run-session-observer.ts`), writing an `exact`
-mapping row to `history_run_session` (`observed`, or `supplied` when `--session-id` is given).
-Resolution is conservative by contract: zero candidates, multiple candidates, a concurrent
-same-agent overlap, or an unreadable root records `unresolved` with a NULL `session_id` — never
-an exact row with a guessed session, and never a run failure. Imported history predating
-observation is correlated retroactively by `(source, cwd, ts)` span against `system_events`
-run windows (`RetroCorrelator`, `packages/domain/src/analytics/retro-correlation.ts`), writing
-`estimated`/`inferred` rows — the DAO write path blocks shadowing an `exact` row and duplicate
-`estimated` rows, so re-runs are idempotent and observation always wins. The mapping is the
-provenance authority: `history_message.provenance` (`spur-run` vs `ambient`) is aligned to it
-after import (`RunSessionDao.alignMessageProvenance`), replacing the cwd-substring
-`detectProvenance` heuristic deleted in `@gobing-ai/ts-llm-jsonl-importer@0.4.33`. Default import
-also scans run-owned session directories. When a workflow role names the directory (for example
-`coder`) rather than the importer source, the run's recorded source routes discovery; imported
-sessions from that directory promote its unresolved mapping to exact before provenance alignment.
-
-**Routing attribution & token aggregates (0545–0547).** The agent invoke bridge in
-`AgentService.executeRun` merges the resolution funnel's outcome — the only place that knows
-role, tier, executor, and source together — into the `agent.invoke.*` event payloads;
-escalations are separate `agent.invoke.escalated` records so a re-dispatch counts as its own
-serve. `routingSummary` (0546) aggregates those rows in SQL over `json_extract` of the routing
-envelope in one indexed round trip (composite `idx_system_events_name_occurred` + indexed
-`run_id`), never by sifting a client-side window. `roleTokenSummary` (0547) joins the same
-attributed rows through `history_run_session` (ADR-059) and folds `history_message`'s typed
-token columns per (role, exactness) — exact and estimated kept apart, never summed, never
-priced (ADR-060). Shapes: `04 §7.9`. Board render (0552): the observability server module
-exposes `GET /api/observability/routing-summary`, a thin transport (ADR-021) that forwards
-`since`/`until` to both domain surfaces and adds no query of its own; the Board's
-`observability` Routing tab renders the pair table and per-role token totals with the
-honest-state contract (unmeasured / estimated / exact / no-data-yet kept apart, never priced).
+Process and queue contract: [history refresh isolation](design/history-refresh-process-isolation.md).
+Execution/lease ownership: §26.
 
 ## 8. Data & Storage (ADR-007/008)
 
@@ -640,50 +442,18 @@ from structural validation and execution prerequisites. Concrete shapes live in 
 
 ### 12.5 Lifecycle projection and corpus-gate convergence (task 0625)
 
-Lifecycle state and its generated markdown projection converge at the application-service seam that
-applies the transition. `FeatureService.syncFeature` refreshes only the touched feature's `## Tasks`
-marker region after at least one lifecycle hop, including when a later hop rejects and the method
-rethrows; dry runs, refused confirmations, and no-op proposals perform no refresh. The global
-`INDEX.md` remains a deterministic derived view.
+Lifecycle state and generated markdown converge at the application service that applies the
+transition. A landed feature hop refreshes the touched feature's marker region, including when
+a later hop rejects and the service rethrows. Dry runs, refused confirmations and no-op proposals
+do not refresh projections. The global feature index remains derived.
 
-```text
-linked task edges
-  -> derive feature status
-  -> try apply lifecycle hop(s)
-  -> finally refresh({ featureId }) when any hop landed
-  -> return applied result or rethrow the later-hop failure
-  -> wrap-up runs the corpus-aware gate on applied result or non-zero sync exit
-```
+~~~text
+linked tasks → derive feature status → apply hops → refresh touched feature
+  → return outcome or rethrow later failure
+~~~
 
-The per-task quality gate deliberately remains the fast `spur-check` chain. The wrap-up
-`feature-transition` action reads the sync result and runs trusted project command `featureGateCmd`
-(default `$spurBin feature check "$feature"` — affected-feature integrity only)
-when either `applied` is true or sync exits non-zero (a
-conservative signal that an earlier hop may already have landed). The shell remains advisory: it
-emits an explicit feature-gate PASS or FAIL and exits 0 so the operator owns the recovery decision;
-a complete or partial feature transition cannot leave the feature gate unobserved.
-
-Content checks close the remaining projection gaps at read time. `TaskCheckService` flags the
-record-generated hollow Testing row and derives subject tokens from a bare Solution change-map
-path before checking its cited line. `FeatureCheckService` treats a dogfood artifact as proof only
-when the feature ID is a delimited filename segment. The corpus sweep covers the active task folder
-and reconciles new findings single-sided against the generated snapshot (ADR-090/092). That snapshot
-is the current gate-waiver exception and must migrate to ADR-093 before another waiver wave is
-accepted; it is temporary debt, not a permanent pass rule.
-
-Enforceable invariants:
-
-1. A feature sync that lands any hop refreshes the scoped roster before returning or rethrowing; it
-   never triggers the all-feature sweep.
-2. Broad refresh is opt-in at the CLI boundary; a bare `spur feature refresh` cannot mutate feature
-   projections.
-3. An applied or possibly-partial wrap-up feature transition executes and reports the corpus-aware
-   gate before the transition action returns.
-4. A lifecycle projection is not accepted as proof merely because it exists; the check layer
-   validates its content or identity.
-
-Concrete command, finding, and workflow-var shapes:
-`docs/design/lifecycle-projection-integrity.md`.
+Broad refresh is explicit at the CLI boundary. Projection checks validate content and identity,
+not merely file existence. See [projection integrity](design/lifecycle-projection-integrity.md).
 
 ## 13. Dev-Command Argument Contract (built — ADR-032 amendment)
 
@@ -758,15 +528,8 @@ HTTP route, or CLI noun. Until task 0197 lands, §14.1–14.2 describe the shipp
 
 ### 14.4 Module-scoped DESIGN.md palette (R10–R13)
 
-Each DESIGN.md-consistent Board module scopes its palette to its root rather than remapping the
-shared `@theme` `spur-*` values (consumed by 13+ files across Features/Teams/Observability — they
-must stay byte-identical). `global.css` carries a `.inbox { … }` block (and
-`[data-theme="light"] .inbox`) declaring the DESIGN.md ladder, hairline, ink, and the four daisyUI
-variables (`--color-primary/--color-primary-content/--color-accent/--color-accent-content` pinned to
-the DESIGN.md lavender `#5e6ad2` on `#ffffff`). The daisyUI pins exist because `@/ui` primitives map
-variants onto daisyUI's **own** `--color-primary`, which would otherwise place a second chromatic
-accent on screen (0420 finding F-01). Module code carries **no hex literals and no Tailwind palette
-classes** — every surface resolves a `spur-*` token.
+Board modules consume shared design tokens and may scope them locally. Visual values and
+interaction/accessibility rules are owned by root [DESIGN.md](../DESIGN.md).
 
 ### 14.5 Module shell convention (built — ADR-081; feature F72)
 
@@ -790,40 +553,13 @@ module's shell. Shapes: `docs/design/tasks-module-shell-parity.md`.
 
 ## 15. Agent-Facing Plugin Surface Parity (ADR-053/054)
 
-Implemented 2026-08-11 (tasks 0512–0517): the frozen capture helper
-`plugins/sp/tests/helpers/cli-surface.ts` (`captureCliSurface` / `parseCommanderHelp`) and the
-focused parity suite `plugins/sp/tests/cli-surface-parity.test.ts` (plus `skill-structure.test.ts`
-extensions) enforce the contract below against the live monorepo CLI.
+Hand-authored plugin commands and references own the agent-facing surface. The CLI facade
+owns verb/flag semantics, the lifecycle spine owns orchestration, and AGENTS.md provides
+navigation. Superskill generates platform adapters from those sources.
 
-The agent-facing surfaces in `plugins/sp/` are maintained under a mechanical parity contract with
-the monorepo CLI (ADR-053, extending ADR-038's `spur-cli`-reference coverage). Three surfaces are in
-contract — the `sp:spur-cli` facade inventories (noun routing table, Tier C exclusions, per-noun
-verb/flag references), the `sp:spur-dev` spine step-routing table, and the `AGENTS.md` noun table.
-The parity harness (bun:test + the monorepo CLI only; no new runtime/dependency/schema/transport)
-resolves the CLI via `bun run apps/cli/src/index.ts` and captures the surface `--help`-primary:
-`<noun> --help` is the universal capture surface; `--json` is used only where the noun actually
-exposes a machine-readable inventory. Human `--help` parsing is a narrow adapter with fixtures and
-explicit exclusions (ADR-053 amendment), never an assumed machine API. Diffs are bidirectional:
-documented-but-absent and live-but-undocumented are both findings. Exclusions are marker-driven,
-never silent — Tier C nouns the facade marks as outside its documentation scope, and spine rows
-whose target is a slash command or inline execution rather than a CLI verb, are ignored by explicit
-rule, never by absence of a match. The harness records the resolved binary's provenance;
-published-npm `spur` skew is a documented drift source the tests cannot catch on end-user installs.
-The spine/facade boundary is ownership-defined and asserted by the same tests, not redesigned
-(ADR-054): the facade owns CLI noun/verb/flag semantics — including status-transition verbs — and
-the spine owns multi-step lifecycle orchestration; the tests assert each surface documents its
-owned scope, not the absence of "lifecycle steps" in the facade. The harness extends the existing
-parity suite with at most one shared CLI-surface helper and at most one new focused parity test.
-Duplication assertions cover exact catalogs and structured inventories only, never arbitrary prose.
-Content surfaces (README index, cross-links) are pinned by the same harness.
-
-Invariant (enforceable): every CLI surface change keeps the three contract surfaces in parity —
-enforced mechanically by the parity harness (ADR-053), not by review discipline.
-
-Shapes: `docs/design/plugin-surface-parity.md`.
-
-Planning ownership follows ADR-055: B owns runtime agent execution; I owns the `sp` plugin harness
-described in this section; H is frozen mixed history, not an active destination for new work.
+A parity check compares source-local CLI help with each documented surface in both directions,
+including explicit exclusions. This is a build-time documentation boundary, not a runtime seam.
+See [plugin parity](design/plugin-surface-parity.md).
 
 ## 16. Actionable Observability Context (foundation current — ADR-056; task 0526)
 
@@ -864,93 +600,24 @@ Shapes: `docs/design/actionable-observability-context.md`.
 
 ### 16.1 J9 semantic presentation (built — ADR-066/067/068; tasks 0601/0602)
 
-J9 deepens the existing observability seam instead of adding a client or transport seam. Catalog membership and
-operational policy remain in `event-names.ts`; an exhaustive presenter registry owns event-specific description,
-retained fields, summary, and outcome support. `system-event-envelope.ts` remains the only composition boundary for
-redaction, bounds, correlation, remediation, and the canonical v2 envelope. The Board consumes that result and owns
-only generic table/tooltip chrome.
+The event catalog owns identity and operational policy. An envelope projector redacts and bounds
+producer facts before an exhaustive typed presenter registry derives description, fields,
+summary and outcome. Read-time history reprojection does not rewrite the ledger or correlation.
 
-| Module | Ownership |
-| --- | --- |
-| Event producers | Emit facts known at mutation/execution time; never presentation prose. |
-| `SYSTEM_EVENT_CATALOG` | Name, tier, payload policy, producer attribution, remediation policy, and resolved presenter metadata. |
-| `SYSTEM_EVENT_PRESENTERS` | One typed entry per catalog name: authored description, fields, summary function, and derived/unsupported outcome policy. |
-| Envelope projector | Redact and bound facts before invoking a presenter; compose one canonical `presentation`. |
-| History projector | Preserve stored v2 `data`/`context`; recompute only `presentation` without a ledger write. |
-| Board | Render canonical semantics; choose generic tooltip identity from correlation and row id without event-name switches. |
-
-```text
-fresh producer payload
-  → catalog payload policy → redacted/bounded data + correlation
-  → event-name presenter → canonical presentation
-  → same envelope shape → system_events and SSE
-
-stored legacy payload
-  → fresh projection path (response only)
-
-stored canonical v2 envelope
-  → preserve stored data + context
-  → current event-name presenter → replacement presentation (response only)
-```
-
-Producer enrichment stays at the narrowest owner:
-
-- `PlanningWriteService` copies the successful `updateSection` mutation's section name and bounded after-value or safe
-  diff into `task.updated` / `feature.updated`; transitions keep their existing `from` / `to` facts.
-- `WorkflowService` builds one run-scoped identity decorator from the loaded definition and uses it for engine-native
-  events, the persistence adapter, built-in action observability (`workflow.agent`), and steering acknowledgements.
-  It supplies `workflowName`, a definition-derived step label when a step exists, and action `kind` where known;
-  machine ids remain correlation fields, not primary summary text.
-- `@gobing-ai/ts-infra` adds an optional configured queue identity to `QueueConsumerConfig` and both consumer lifecycle
-  details. Spur supplies its real composition-root name and consumes a released dependency version; no local payload
-  cast or job-type substitution stands in for the upstream contract.
-
-Invariants (enforceable):
-
-- Every catalog name has exactly one presenter; unknown out-of-catalog names alone use the bounded generic fallback.
-- Presenters receive only bounded projected data and normalized correlation, never the raw producer payload.
-- A derived outcome is a pure function of carried data; unsupported or missing historical facts omit Outcome.
-- Reprojection never changes stored `data`, stored `context`, indexed correlation columns, or the ledger row.
-- React contains no event-specific summary, outcome, description, or field switch.
-- Catalog names and the `event-tracking.md` semantic matrix are checked in both directions.
-
-Shapes and the per-event matrix: `docs/design/actionable-observability-context.md` and
-`docs/design/event-tracking.md`.
+Producers emit facts; the Board renders canonical slots without event-specific interpretation.
+Every catalog event has one presenter. Unsupported outcomes remain omitted; presenters see only
+bounded projected data. Details: [event tracking](design/event-tracking.md) and
+[observability context](design/actionable-observability-context.md).
 
 ### 16.2 J91 human table projection (built — ADR-073/074; task 0605)
 
-J91 deepens the existing envelope projector; it does not add a client interpretation seam, an envelope
-v3, or a CLI noun. Event-name presenters keep owning description, tooltip fields, summary, and outcome.
-A single table projector, invoked after the presenter inside `system-event-envelope.ts`, owns the
-opaque-id policy for table cells.
+A table projector follows the semantic presenter, deriving correlators, actionLabel and agent
+from bounded data and optional row actor data. The Board maps those slots generically; no new
+client interpretation seam or envelope version is introduced.
 
-```text
-bounded data + correlation + optional persistence-row actor
-  → event-name presenter (summary, fields, outcome)
-  → table projector (correlators, actionLabel, agent)
-  → canonical presentation (tooltip action / fields unchanged)
-  → Board maps those slots; no payload-key switches
-```
-
-| Module | J91 ownership |
-| --- | --- |
-| Presenter helpers | `humanWorkflowTitle`, `humanStepLabel`, `looksLikeOpaqueId`; workflow summaries never fall back to `runId` / UUID `node` / `kind`-as-step. |
-| Presenter `retain` | Extra allow-list paths (`metadata.agent`, `metadata.role`, `routing.executor`) that are not tooltip fields. Catalog `metadataFields` = `fields` ∪ `retain`. |
-| Table projector | Compose `presentation.correlators`, `presentation.actionLabel`, `presentation.agent` from bounded data + optional row `actor`. |
-| Envelope `context` | Unchanged closed set. Actor is a projector input, never a context key. |
-| Producers | Stamp identity at existing Spur fan-ins (`withWorkflowIdentity` on every engine-native emit, `projectActionMetadata`, invoke routing). ts-libs only if those paths cannot emit the fact. |
-| Board | Render the new slots. Correlation is not `context.correlation` concatenation; Action is not the remediation command. |
-
-Invariants (enforceable):
-
-- Summary, `correlators`, `actionLabel`, and `agent` contain no UUID, no `live-` prefix, and no `eventId` / `runId` / `executionId` / `actionId` used as the cell value.
-- `presentation.action` (remediation) is not the Action column value when its `value` embeds a UUID.
-- `presentation.agent` is omitted when none of `data.routing.executor`, `data.agent`, `data.metadata.agent`, or an executor-shaped row `actor` is present.
-- `context.producer` is never copied into `presentation.agent`.
-- React contains no event-specific recovery of workflow name, step label, or agent identity.
-- Reprojection still never changes stored `data`, stored `context`, indexed correlation columns, or the ledger row.
-
-Shapes: `docs/design/system-events-human-table.md`.
+Human cells omit opaque IDs; remediation commands stay separate from Action; missing agent
+identity is omitted. Actor data is not persisted as envelope context. Data contracts:
+[human table projection](design/system-events-human-table.md). UI rules: root DESIGN.md.
 
 ## 17. Inter-Agent Control Plane (ADR-057 — waves 1–2 landed; wave 3 follow helper landed)
 
@@ -1018,33 +685,11 @@ Shapes: `docs/design/inter-agent-control-plane.md`.
 
 ## 18. Transition-Shim Gate (ADR-058 — task 0541, feature B2)
 
-The agent-role transition ships tracked compatibility: a compatibility path carries a source
-comment marker `@transition-shim(<id>)`, registered in `config/transition-shims.json` with id /
-owning WBS / file / what it keeps working / removal condition. The gate
-`plugins/sp/scripts/transition-shim-check.ts` reconciles markers against the manifest
-**two-sided**: a marker with no
-manifest entry fails as a **new unregistered shim** (id + file named); a manifest entry whose
-marker no longer appears fails as a **stale entry**; an incomplete entry fails naming the missing
-field. It scans the source roots `apps, packages, plugins, config, scripts, tooling`, skipping
-build output, `vendors`, and `tests`/`test` directories (a fixture mentioning a marker id is test
-data, not a shim) and `docs/` (prose examples do not trip the gate). Node-builtin only so it ships
-to arbitrary projects; `--manifest` / `--roots` overridable. Wired into the fast `spur-check`
-chain; `spur-check-new` now composes the identical chain (0775 retired the corpus sweep it used to
-add; §12.5). Exit 0 when every
-entry is present and every marker registered; 1 on any violation.
-
-**Invariants (enforceable)**
-
-1. Every `@transition-shim(<id>)` marker in a production source root has a manifest entry, and
-   every manifest entry has a live marker — both directions fail the gate.
-2. A manifest entry's `removalCondition` is checkable against the repository; a condition
-   resolvable only by human judgement is rejected in review.
-3. Emptying `config/transition-shims.json` is the definition of the agent-role transition being
-   complete; a shim is removed by its owning task when its condition holds.
-4. The gate runs inside the existing quality gate (`spur-check`), never as a separate opt-in
-   step.
-
-Shapes: `04 §2.5`; `config/transition-shims.json`.
+Production compatibility paths carry @transition-shim IDs registered in
+config/transition-shims.json. The gate reconciles code markers and manifest entries in both
+directions and rejects missing metadata. Tests, vendors, build output and docs are excluded.
+An empty manifest represents completed migration; each live shim has a removal condition.
+Gate contract: [configuration contracts](design/configuration-contracts.md).
 
 ## 19. Agent Executor Selection — Two-Layer Contract (features B2/B3, tasks 0535–0542, 0572)
 
@@ -1095,28 +740,16 @@ Shapes: `04 §2.1` (`agent.roles`); `packages/config/src/index.ts` (`DEFAULT_AGE
 
 D5 implemented an existing-seam, infrastructure-first migration. Workflow definitions remain the
 orchestration graph; they do not become a second application layer. Shared deterministic behavior
-is owned behind existing application and persistence interfaces. The remaining gap is proof
-finality in the canonical task/docs pipelines (ADR-071; tasks 0703/0704).
+is owned behind existing application and persistence interfaces. The canonical task and docs
+pipelines enforce the final-state proof invariant described in ADR-071 and §20.3.
 
 ### 20.1 Options and decision
 
-| Option | Coupling and blast radius | Reversibility and cost | Disposition |
-| --- | --- | --- | --- |
-| Clean up commands independently inside each YAML/extension | couples policy to callers; drift remains across graphs | cheap initially, expensive to keep aligned | rejected |
-| Add a generalized workflow DSL, progress store, and event-driven controller | duplicates engine, persistence, and replay authority | largest one-way change and migration surface | rejected |
-| Extend existing app capabilities, engine action seam, persistence rows, and read projection | localizes changes behind proven owners | incremental, fixtureable, and reversible per pipeline | recommended |
-
-The selected option has the smallest new interface: two narrowly
-owned deterministic action capabilities, a proof-input fingerprint, and a read projection. It adds
-no package, transport, data store, or public CLI surface.
-
-The rejected taste-gate details require three narrower decisions:
-
-| Seam | Candidates | Choice | Strongest reason |
-| --- | --- | --- | --- |
-| Proof establishment | trust a post-fix verdict; combine mutation and proof in one new capability; split remediation from observe-only proof | split remediation from the final `--fix none` verification | a PASS can name one state without trusting a capability that may edit it |
-| Gate execution | opaque shell string; structured executable/args; new gate DSL | literal executable/args invoking a named project script | it maps directly to `ProcessExecutor` and makes quoting and trust ownership explicit |
-| Definition binding | replace run metadata; add a digest table; merge at run creation | atomically merge into `runs.metadata_json` | it preserves one run authority and every pre-existing metadata key |
+Workflow YAML remains the orchestration authority. The chosen model extends existing application,
+engine action, persistence and read-projection seams with action-effect classification,
+input-bound proof, literal executable/argument gates and path-only artifact metadata.
+It adds no new DSL, controller, package, store or public command.
+Architectural choices and tradeoffs remain in ADR-069/071/072; proof invariants follow below.
 
 ### 20.2 Ownership topology
 
@@ -1203,32 +836,11 @@ Enforceable invariants:
 
 ### 20.4 Canonical topology and migration
 
-The canonical topology retains separate workflows where the lifecycle and rollback boundary is real:
-docs, wrap-up, idea/design review, task execution, and integration-HEAD PR review. Planning is a
-duplicate front half and was absorbed into the canonical idea/dev-plan path, resolving
-ADR-029's deferral (ADR-072 accepted 2026-08-20; `planning-pipeline.yaml` deleted).
-`task-pipeline.yaml` is the single canonical task pipeline. The parallel `task-pipeline2.yaml`
-candidate was **deleted rather than promoted** (ADR-076 accepted 2026-08-20): it had no live caller
-and declared a fifth model query against the canonical pipeline's four, so promoting it would have
-added cost against a goal of reducing it.
-
-The historical migration order kept rollback local; tasks 0703/0704 and the D61 rollout are
-delivered. This sequence records that migration, not an instruction to recreate retired baselines:
-
-1. Baseline every reviewed graph and freeze pipeline2 promotion.
-2. Build projection, gate, artifact, and proof-state prerequisites without migrating a pipeline.
-3. Migrate wrap-up, then docs, with parity and injected-failure fixtures for each.
-4. Absorb planning; remove it only after caller, scaffold, and bundle parity.
-5. Refactor task execution and redesign residual completeness around proof preservation.
-6. Promote the safe delta only after clean comparator, artifact, gate, query-count, and exit parity plus operator approval.
-7. Migrate idea last and invoke PR review once per stable integration HEAD after local gates.
-
-The 2026-09-06 audit (task 0781) tracks remaining execution defects in tasks 0782–0786;
-delivery of the migration does not certify those follow-up paths as defect-free.
-
-Role selection stays on `agent.run`. Identity-pinned wait/message operations continue to address an
-exact occupant; a role never becomes a mutable coordination address. PR-review pending/unavailable
-stays advisory unless a later policy decision explicitly makes it blocking.
+Separate definitions remain where lifecycle or rollback boundaries differ: docs, wrap-up,
+idea/design review, task execution and integration-HEAD PR review. The task pipeline is the
+canonical task graph; retired duplicate candidates have no active callers.
+Agent stages select roles; coordination targets exact occupants. See
+[workflow composition](design/workflow-composition-contract.md).
 
 ## 21. Workflow Progress Projection (built — ADR-070)
 
@@ -1290,136 +902,37 @@ Detailed DTO, source mapping, follower sequence, and fixture matrix:
 
 ## 22. Environment-Improvement Lens and Active Session Review (ADR-084/085/089)
 
-One plugin-level mapping projects vendor retro's seven-category environment-improvement taxonomy
-into two imported-history/testee report contracts. It does not create a standalone retro analyzer.
-ADR-089 adds a separate active-context reviewer whose broader job is immediate session outcome and
-issue-state synthesis; it consumes the mapping only for improvement placement.
-
-```text
-plugins/sp/references/environment-lens.md     mapping SSOT (seven categories + placement rule)
-        │
-        ├─► sp:dogfood-testing  references/report-template.md §6
-        │     optional finding class: environment | testee | waste
-        │     protocol stays sp:dogfood-testing@1.2
-        │
-        └─► sp:history-anatomy  references/report-contract.md
-              section 4: finding keys (closed category + retro <signal>)
-              section 9: operator-facing environment/process candidates
-              section 7: remediations stay proposals
-              closed categories unchanged
-
-active host conversation
-        │
-        └─► sp:session-review
-              compact outcome / resolved / open / improvements / next-actions report
-              inline, read-only, no history import or workflow
-```
-
-`sp:issue-finding` is a coexistence-window non-target (`/sp:dev-find-issue` already wraps
-history-anatomy). Wrap-up learnings and gitignored `.spur/context/` memory do not own the lens.
-
-**Build vs extend.** The mapping is a real seam: two report projections (dogfood §6, history-anatomy
-section 9) must not drift. A new `sp:retro` skill would be a third overlapping analysis owner and
-fails the deletion test relative to section 9 (Approach 2). Folding the scan into wrap-up
-(Approach 3) mixes task-lifecycle gitignored learnings with harness-file proposals. Extending the
-two existing reference files plus one plugin-level mapping is the smallest change that keeps a
-single category table. `sp:session-review` does not own another category table: it reviews the live
-conversation and applies the mapping's placement rule to at most three supported proposals.
-
-**Placement rule** (mapping content; both projections apply it):
-
-1. If an automated check can catch it, propose the check — not a new always-loaded sentence.
-2. If it is a coding standard, the owner surface is the review path (`sp:code-verification` /
-   `sp:code-review` / pipeline review), never the implementer skill.
-3. `AGENTS.md` / `CLAUDE.md` stay navigation pointers; depth lives in skills and numbered docs.
-
-**Present-don't-apply** (ADR-085): environment remediations are proposals. Dogfood fix-mode
-repairs testee-contract step failures only; it must not `Edit`/`Write` environment sources for
-an environment-tagged finding. History-anatomy already forbids applied changes.
-
-**BODY_BUDGET.** `dogfood-testing` and `issue-finding` `SKILL.md` bodies are two-sided baselines
-and must not grow. Dogfood driver-facing lens rules live in `report-template.md` (already linked
-from that skill). History-anatomy `SKILL.md` stays a dispatcher; it does not copy the seven names.
-
-**History-anatomy homes.** Environment-lens items that qualify as findings keep the closed
-`category` and put the retro name in `<signal>` or owner-surface (section 4). Section 9 is the
-I9 projection: each projected candidate names owner surface, expected impact, verification
-method, and reversibility, and may cite a section-4 `key`. Section 7 remediations remain
-proposals (existing contract). Existing section 9 prose that is not an I9 projection stays valid
-and does not gain required fields.
-
-**Structure gate.** `checkReportStructure` today matches pipe-rows whose first segment is already
-in the closed vocabulary, so a retro-as-category key is currently invisible to that regex. The
-I9 extension is an **additive reject**: a finding whose `category` or key first segment is a
-retro name fails. Retro names in `<signal>` or owner-surface must not fail. Closed-vocabulary
-fixtures that carry no retro signal must still pass.
-
-Invariants (enforceable):
-
-1. Exactly one file under `plugins/sp/references/` enumerates the seven retro category names.
-   Dogfood `report-template.md` and history-anatomy `report-contract.md` name that file and do
-   not redefine the seven names with different wording.
-2. History-anatomy finding `category` is one of `reliability | repetition | workflow |
-   performance | coverage | telemetry | positive`. A retro name (`navigation`, `automated checks`,
-   `coding standards`, `AGENTS.md placement`, `tool economy`, `no-ops`, `information access`,
-   and their kebab-case signal slugs) as `category` fails the structure gate.
-3. Dogfood protocol remains `sp:dogfood-testing@1.2`. Class tags are optional; `validate-report`
-   does not parse them; untagged reports and the cache-health P3 remain valid.
-4. An environment-tagged dogfood finding is never applied as a tree mutation in fix-mode.
-5. `plugins/sp/skills/issue-finding/` gains no category, flag, or lens projection.
-6. No public CLI noun/verb/flag and no `/sp:dev-retro` command (ADR-016 / ADR-051).
-7. `/sp:dev-review-session` stays inline and report-only; no workflow, delegation, import, baseline,
-   cache, task creation, or indexed-context append (ADR-089).
-
-Shapes: `docs/design/environment-improvement-lens.md`; `docs/design/session-review.md`.
+One plugin-owned mapping projects environment-improvement categories into existing dogfood
+and history-anatomy reports. It adds no analyzer, workflow, history owner or memory store.
+plugins/sp/references/environment-lens.md owns the mapping; active-session review applies it
+to live conversation evidence as a read-only placement aid. Environment changes remain proposals,
+including in fix mode. See [environment lens](design/environment-improvement-lens.md) and
+[session review](design/session-review.md).
 
 ## 23. Baseline Taxonomy and Waiver Lifecycle (accepted design — ADR-093; enforcement pending)
 
-Baseline files are classified by effect, not filename:
-
-| Class | Current artifact | Gate effect | Lifecycle |
-| --- | --- | --- | --- |
-| Gate waiver | ~~`config/corpus-baseline.json`~~ | — | **retired (task 0775)** — findings fail the gate directly; no snapshot to waive into |
-| Reference contract | ~~`config/workflow-composition-baseline.json`~~ | — | **retired (task 0775)** — composition facts read from the live definitions (`extractResolvedWorkflowFacts`) |
-| Regression budget | `config/pipeline-budgets.json` | measured regression beyond a numeric ceiling fails | durable; `null` means unenforced measurement debt, not an exemption |
-| Transition manifest | `config/transition-shims.json` | undeclared and stale shims both fail | temporary by construction; complete only when empty (ADR-058) |
-
-A gate-waiver record must identify bounded scope, owner, review date, and an objective remediation or
-removal condition. New findings never inherit an existing waiver, and regeneration may remove
-resolved debt but cannot silently accept new debt. Missing or expired governance metadata must fail
-closed once the ADR-093 enforcement lands. Until then, the current corpus snapshot is legacy debt;
-ADR-090/092 describe its present behavior, not permission to keep it indefinitely.
+Gate artifacts are classified by effect: numeric regression budgets, temporary transition
+manifests, live workflow composition and current corpus findings. A snapshot cannot silently
+accept new findings. Retired composition/corpus snapshots have no authority.
+Each artifact's gate owns exact validation and retention; temporary artifacts carry an owner,
+bounded scope and objective removal condition.
+See [essential workflow checks](design/essential-workflow-checks.md).
 
 ## 24. Production Autonomy Contracts (built — ADR-094–100, tasks 0703–0712)
 
-These controls are **built and live** as of tasks 0703-0712 (ADR-094-100). They extend existing owners;
-they add no agent runtime, workflow engine, event bus, analytics store, or memory authority:
+Production autonomy composes existing owners:
 
-```text
-agent.run requirement
-  -> executor resolution -> host capability attestation -> dispatch
-  -> typed usage at safe boundary -> budget/trip-wire decision
-  -> existing failure transition -> bounded escalation artifact
+~~~text
+agent.run → role/executor resolution → capability attestation
+  → typed usage/budget decision → failure transition → bounded escalation artifact
+repository state D → review(D) → read-only verify(D) → verified result(D)
+checkpoint/index → freshness check → resume or ignore → confined retention cleanup
+~~~
 
-repository state D -> fresh review(D) -> fresh verify(D) -> verified result(D)
-
-checkpoint/index -> freshness validation -> resume or ignore -> confined retention cleanup
-```
-
-| Concern | Existing owner reused | Current gap | Implementation |
-| --- | --- | --- | --- |
-| Capability enforcement | executor config + `agent.run` resolution | host enforcement is not attested | 0706 / ADR-094 |
-| Live budgets | action timeout + typed runner results | token/cost are nullable or retrospective | 0707 / ADR-095 |
-| Trip wires | workflow guards/failure edges + System Events | signals lack one deterministic stop mapping | 0708 / ADR-096 |
-| Independent judgment | reviewer/verifier roles + agent sessions | fresh context and executor separation are not enforced | 0710 / ADR-097 |
-| Escalation | run artifacts + event ledger + messages | evidence has no canonical handoff projection | 0709 / ADR-098 |
-| Memory lifecycle | checkpoints + `.spur/context` indexes + workflow cleanup | freshness and retention contracts are uneven | 0711 / ADR-099 |
-| Outcome accounting | verdicts + proof digest + history/run records | activity is measured; verified-result quality is not | 0712 / ADR-100 |
-
-Capability, budget, proof, and trip-wire failures are deterministic and fail closed at existing safe
-boundaries. Raw prompts, output, and logs remain bounded references rather than packet/event content.
-Unavailable measurement stays unavailable; it never becomes zero. The always-loaded guide byte gate
-is process enforcement owned by `99 §6.7` and task 0705, so it does not receive a project ADR.
+These controls add no agent runtime, workflow engine, event bus, analytics store or memory
+authority. Prompts/output/logs remain bounded references; unavailable measurements never become
+zero. Detailed trust, proof, checkpoint and attestation contracts:
+[planning workflows](design/planning-workflow-contracts.md).
 
 ## 25. Executor Availability
 
@@ -1454,12 +967,11 @@ in [executor availability](design/executor-availability.md).
 
 ## 26. Execution policy and renewable job ownership — shipped (A21, task 0813)
 
-ADR-112 places scheduler/queue execution deadlines and cancellation context in `ts-infra`, process
-cleanup in `ts-runtime`, safe import cancellation in the importer, and atomic attempt ownership in
-`ts-db`. Spur consumes these contracts and resolves application defaults. Lease renewal remains
-finite even when execution is unlimited; retry follows cancellation settlement. Adopted on released
-ts-libs 0.4.59: native `timeoutMs`/`killGraceMs` policies replaced the local caller watchdog across
-scheduler, history-refresh and bounded-child execution, and age sweeps exempt explicit-unlimited
-jobs. Remaining upstream: durable lease/claim ownership (`ts-db`, task 0812) — until then, age
-sweeps stay the finite-deadline recovery backstop. The target surface and delivery dependencies are
-in [execution deadlines](design/execution-deadlines.md).
+Scheduler/queue deadlines and cancellation context belong to ts-infra; process cleanup to
+ts-runtime; importer cancellation to the importer; attempt ownership and lease state to ts-db.
+Spur resolves application defaults and consumes truthful cancellation, retry and timeout outcomes.
+
+Lease renewal is finite even for execution without a deadline. Age-based recovery must not expire
+explicitly unlimited jobs. Durable claim ownership remains an upstream persistence concern;
+the finite-deadline sweep is the recovery backstop while that contract is pending.
+Details: [execution deadlines](design/execution-deadlines.md).

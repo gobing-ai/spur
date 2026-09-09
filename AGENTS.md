@@ -27,25 +27,25 @@ All product work goes through the harness unless the operator explicitly overrid
 
 ### Harness tool routing
 
-| Need                                                   | Route to                                                        | Avoid                                |
+| Need | Route to | Avoid |
 | ------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------ |
-| Plan a feature (intake → AC → tasks)                   | `/sp:dev-plan`, `/sp:dev-idea`                                  | Freeform feature files without gates |
-| Drive one task end-to-end                              | `/sp:dev-run <wbs>` or **`sp:super-planner`**                   | Implement with no task/pipeline      |
-| Batch or parallel task runs                            | `/sp:dev-runall`, `/sp:dev-parallel`, **`sp:super-planner`**    | Unordered multi-task work            |
-| Batch-refine tasks under a feature                     | `/sp:dev-refineall --feature <id> --auto`                       | Hand-looping task refinement         |
-| Multi-step corpus CLI (tasks/features/rules/workflows) | **`sp:expert-spur`**                                            | Raw corpus writes                    |
-| Look up `spur` verbs / flags / `--json`                | Skill **`sp:spur-cli`**                                         | Inventing flags                      |
-| Create/edit/list tasks or features                     | **`spur task` / `spur feature`**                                | Direct-writing corpus files          |
-| Verify requirements / AC                               | `/sp:dev-verify`                                                | Self-reported done                   |
-| Review (SECUA + traceability + architecture)           | `/sp:dev-review` or **`sp:super-reviewer`**                     | Unstructured LGTM                    |
-| Tests / coverage                                       | `/sp:dev-unit`                                                  | Untested production paths            |
-| Constraint gate / rule authoring                       | `spur rule`; `/sp:rule-scan`, `/sp:rule-add`, `/sp:rule-refine` | Skipping `spur rule run`             |
-| Workflow author / run                                  | `spur workflow`; `/sp:workflow-add`, `/sp:workflow-refine`      | Ad-hoc shell lifecycle               |
-| Docs drift / sync / lessons                            | **`sp:doc-evolve`** + `docs/99_PROJECT_CONSTITUTION.md`         | Patching derived docs over authority |
-| Wrap completed work                                    | `/sp:dev-wrap`, `/sp:dev-wrapall`                               | Skipping learnings/doc sync          |
-| Session index / memory                                 | **`sp:indexed-context`** + `.spur/context/`                     | Full-tree rereads                    |
-| Install / sync a plugin across coding agents           | `superskill install <plugin>`                                   | Hand-copying adapters                |
-| Capability authoring / quality lifecycle               | `superskill <noun> --help`                                      | Bypassing lifecycle gates            |
+| Plan a feature (intake → AC → tasks) | `/sp:dev-plan`, `/sp:dev-idea` | Freeform feature files without gates |
+| Drive one task end-to-end | `/sp:dev-run <wbs>` or **`sp:super-planner`** | Implement with no task/pipeline |
+| Batch or parallel task runs | `/sp:dev-runall`, `/sp:dev-parallel`, **`sp:super-planner`** | Unordered multi-task work |
+| Batch-refine tasks under a feature | `/sp:dev-refineall --feature <id> --auto` | Hand-looping task refinement |
+| Multi-step corpus CLI (tasks/features/rules/workflows) | **`sp:expert-spur`** | Raw corpus writes |
+| Look up `spur` verbs / flags / `--json` | Skill **`sp:spur-cli`** | Inventing flags |
+| Create/edit/list tasks or features | **`spur task` / `spur feature`** | Direct-writing corpus files |
+| Verify requirements / AC | `/sp:dev-verify` | Self-reported done |
+| Review (SECUA + traceability + architecture) | `/sp:dev-review` or **`sp:super-reviewer`** | Unstructured LGTM |
+| Tests / coverage | `/sp:dev-unit` | Untested production paths |
+| Constraint gate / rule authoring | `spur rule`; `/sp:rule-scan`, `/sp:rule-add`, `/sp:rule-refine` | Skipping `spur rule run` |
+| Workflow author / run | `spur workflow`; `/sp:workflow-add`, `/sp:workflow-refine` | Ad-hoc shell lifecycle |
+| Docs drift / sync / lessons | **`sp:doc-evolve`** + `docs/99_PROJECT_CONSTITUTION.md` | Patching derived docs over authority |
+| Wrap completed work | `/sp:dev-wrap`, `/sp:dev-wrapall` | Skipping learnings/doc sync |
+| Session index / memory | **`sp:indexed-context`** + `.spur/context/` | Full-tree rereads |
+| Install / sync a plugin across coding agents | `superskill install <plugin>` | Hand-copying adapters |
+| Capability authoring / quality lifecycle | `superskill <noun> --help` | Bypassing lifecycle gates |
 
 **Non-negotiable unless the operator overrides:**
 
@@ -78,38 +78,39 @@ bun run apps/cli/src/index.ts <noun> <verb> … --json
 
 ## Documentation
 
-**Process SSOT:** `docs/99_PROJECT_CONSTITUTION.md`. Use **`sp:doc-evolve`** for drift audits,
-sync checks, contract verification, and lessons.
-
-**Conflict rule:** `00` wins decisions, `01` wins scope, and `99` wins process. Repair authority
-first, then derived docs, then this file.
+Read [the constitution](docs/99_PROJECT_CONSTITUTION.md) before key-document edits.
+It owns document responsibilities and maintenance; `00` owns architectural choices,
+`01` product scope, and root `DESIGN.md` UI/UX. Use **`sp:doc-evolve`** for drift,
+sync and contract checks. Follow host/operator precedence.
 
 ### Doc map
 
-| Doc                                      | Owns        | Authority             | Read/edit when                                            |
-| ---------------------------------------- | ----------- | --------------------- | --------------------------------------------------------- |
-| `docs/00_ADR.md`                         | **WHY**     | Authoritative content | Real architectural decisions only (ADR-000 admission test); dated entry before divergence |
-| `docs/01_PRD.md`                         | **WHAT**    | Authoritative scope   | Scope changes                                             |
-| `docs/02_ROADMAP.md`                     | **WHEN**    | Derived               | Phase placement/status                                    |
-| `docs/03_ARCHITECTURE.md`                | **HOW**     | Derived; ADR wins     | Cross-module, seam, schema                                |
-| `docs/04_DESIGN.md` + `docs/design/`     | **SURFACE** | Derived               | Commands, flags, config, DTOs, system boundaries          |
-| `docs/05_FEATURES.md` + `docs/features/` | **STATUS**  | Derived/tool-owned    | Feature state                                             |
-| `docs/99_PROJECT_CONSTITUTION.md`        | **PROCESS** | Authoritative process | Before numbered-doc edits                                 |
-| `AGENTS.md`                              | **ENTRY**   | Derived               | First every session                                       |
+| File | Owns | Update when |
+| --- | --- | --- |
+| `AGENTS.md` | ENTRY: orientation, commands, constraints, owner links | Essential repo facts or routing change |
+| `DESIGN.md` | UI/UX: tokens, components, layout, interaction, accessibility | Shared UI design changes |
+| `docs/00_ADR.md` | WHY: lasting architectural choices and tradeoffs | A meaningful cross-module boundary or invariant changes |
+| `docs/01_PRD.md` | WHAT: vision, users, capability scope | Scope changes |
+| `docs/02_ROADMAP.md` | WHEN: phases, dependencies, exits | Phase commitments or sequencing change |
+| `docs/03_ARCHITECTURE.md` | HOW: current topology, data flow, runtime, invariants | Mechanisms or boundaries change |
+| `docs/04_DESIGN.md` + `docs/design/` | SURFACE: index and non-UI contracts | CLI/API/config/schema or boundary behavior changes |
+| `docs/05_FEATURES.md` + `docs/features/` | STATUS: entry to tool-owned feature records | Feature tool updates lifecycle/acceptance |
+| `docs/99_PROJECT_CONSTITUTION.md` | PROCESS: stable document-governance metadata | Authorized responsibility, authority or maintenance correction |
 
-Routing: decision → `00`; scope → `01`; mechanism → `03`; surface → `04`; phase → `02`; feature
-status → `05`. Working layers, satellites, edit rules, and audit protocol live in `99`.
+**Placement guard:** feature approvals, task progress and test receipts do not belong in ADRs.
+Preserve ADR numbers and decision history when condensing. Tasks own execution evidence;
+existing context/learning storage owns lessons. Do not append either to the constitution.
+A constitution edit needs a specific governance defect and operator-authorized scope (§6.8).
+Update only owners whose facts changed; portable changes also update init templates.
+Keep `04` an index and `05` a pointer to the generated feature index, without duplicate ledgers.
 
 ---
 
 ## Design system
 
-**Conditional contract:** If root `DESIGN.md` exists, it is the UI/UX SSOT for visual language,
-tokens, typography, components, layout, motion, accessibility, and responsive behavior. Read it
-before UI work; otherwise follow established project conventions.
-
-`DESIGN.md` owns visual design. `docs/04_DESIGN.md` owns non-UI surfaces such as command signatures,
-config schemas, DTOs, and system boundaries.
+**Conditional contract:** Read root `DESIGN.md` before UI work when present; otherwise use
+established UI conventions. It owns visual and interaction design. Non-UI contracts belong in
+`docs/04_DESIGN.md` and its satellites; system mechanisms belong in `docs/03_ARCHITECTURE.md`.
 
 ---
 
@@ -135,8 +136,8 @@ Apps are thin transports; application logic lives in `packages/app` (ADR-021). C
 imports use `@gobing-ai/*`, never deep relative paths. Reusable engines are released
 `@gobing-ai/ts-*` packages; fix their facades instead of adding Spur workarounds.
 
-- Runtime: Bun `1.3.14`; prefer `bun:*` over `node:*`.
-- Format/lint: Biome `2.4.16`; 4 spaces, 120 columns, single quotes, semicolons, trailing commas.
+- Runtime: Bun; versions come from `package.json`. Prefer `bun:*` over `node:*`.
+- Format/lint: Biome; 4 spaces, 120 columns, single quotes, semicolons, trailing commas.
 - Objects use `interface`; unions/intersections use `type`; `any` is an error.
 - Shared workspace dependencies use root `workspaces.catalog` + `"catalog:"`.
 - Workflow YAML SSOT is `config/workflows/`; `apps/cli/config/` is generated by `build:bundle`.
@@ -149,47 +150,32 @@ Architecture depth: `docs/03_ARCHITECTURE.md`. Concrete surfaces: `docs/04_DESIG
 
 ## Build & verification
 
+`package.json` owns gate commands. Run focused tests while iterating, then the required gate once:
+
 ```bash
-bun run autofix
-bun run spur-check       # fast comprehensive gate
-bun run lint
-bun run test
+bun run spur-check       # lint/typecheck, tests, pre/post rules and contract checks
 bun run test-cf
 bun run build
-bun run spur-check       # fast comprehensive gate; no corpus sweep
 git status --short
 ```
 
-`spur-check-new` is the identical chain. `bun run corpus-check` is an explicit unsuppressed audit
-for checker-policy changes (T10), not a routine step; ordinary corpus edits use affected-input checks (T11).
-Optional Git-comparison skips are explicit on stderr; audit JSON stdout remains one document.
-Iterate with targeted tests and `spur task check <wbs>`; run the full gate once, not per edit.
-Never use `--no-verify` or silent
-suppressions to force green.
+`spur-check-new` is the same chain. `bun run corpus-check` is the explicit unsuppressed
+audit for checker-policy changes (T10); ordinary corpus edits check affected inputs (T11).
+Do not bypass hooks or suppress findings to force green.
 
-Targeted-test loop — run from **inside the workspace**, never the repo root (task 0699 R4):
+Run targeted tests **inside their workspace**, whose `bunfig.toml` supplies the preload:
 
 ```bash
-cd apps/cli && bun test tests/output-envelope.test.ts --test-name-pattern "wraps a payload"  # exit 0 on pass
+cd apps/cli && bun test tests/output-envelope.test.ts
 ```
 
-The workspace's `bunfig.toml` supplies the test preload and carries no repo-wide coverage
-denominator; a single-file run from the repo root is scored against the whole-repo coverage
-threshold and exits 1 even when the test passes. Coverage is measured and enforced by the root
-`bunfig.toml` at the `bun run test` gate. Tests live under
-`<workspace>/tests/**/*.test.ts`; use in-memory SQLite for DAO tests. Test requirements, not getters
-or implementation details.
+Root test runs enforce the repository coverage denominator. Tests belong under
+`<workspace>/tests/**/*.test.ts`; use in-memory SQLite for DAO tests.
 
-For local CLI source changes, link and rebuild the bundled entry:
-
-```bash
-cd apps/cli && bun link
-bun run --filter @gobing-ai/spur build:bundle
-```
-
-Real-data history validation must use the source-local CLI (`bun run apps/cli/src/index.ts …` or
-`apps/cli/spur.js`), never a potentially stale global `spur`. Record the command's binary/importer
-provenance before dry-run and write validation. Details: `docs/04_DESIGN.md` history surfaces.
+After CLI source changes, link from `apps/cli` with `bun link`, then run
+`bun run --filter @gobing-ai/spur build:bundle`.
+Real-data history checks use the source-local CLI; record binary/importer provenance and follow
+the history design's backup/dry-run contract.
 
 ---
 
@@ -205,7 +191,7 @@ spur <noun> --help
 ```
 
 Noun/verb/flag semantics live only in **`sp:spur-cli`** — this guide deliberately carries no
-duplicate catalog (task 0705); the facade reference is the single parity authority.
+duplicate catalog ; the facade reference is the single parity authority.
 
 **Public-surface consent:** adding, changing, or removing a public `spur` noun/verb requires
 explicit operator consent with design context. Public commands live under existing nouns unless no
@@ -249,8 +235,7 @@ adapters.
   `docs/design/inter-agent-control-plane.md`.
 - oRPC contracts live in `packages/contracts`; server handlers use `implement(contract)` and clients
   use `OpenAPILink`. OpenAPI is generated; domain types do not enter transport contracts.
-- Surface code and `docs/04_DESIGN.md` change together (T3); feature status changes through the
-  feature tool (T4). Run `sp:doc-evolve` sync-check.
+- Surface changes update their owning design satellite (T3); feature changes use the feature tool (T4).
 - **One writer per working tree.** Parallel agents use isolated branches/worktrees.
 - **Commit per task.** Start implementation from a tree clean of other tasks' changes.
 - Surgical scope only: no drive-by refactors, speculative abstractions, or unfinished redesigns.

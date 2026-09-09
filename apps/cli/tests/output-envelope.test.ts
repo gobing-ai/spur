@@ -369,7 +369,10 @@ describe('jsonEnvelope registration sweep (0697 AC4)', () => {
     });
 
     test('delegated emitters carry a §4.1 inventory row', () => {
-        const design = readFileSync(join(import.meta.dir, '..', '..', '..', 'docs', '04_DESIGN.md'), 'utf8');
+        const design = readFileSync(
+            join(import.meta.dir, '..', '..', '..', 'docs', 'design', 'data-output-contracts.md'),
+            'utf8',
+        );
         const missing = Object.keys(DELEGATED_EMITTERS).filter((key) => {
             const sep = key.indexOf(':');
             const noun = key.slice(0, sep).replace('.ts', '');

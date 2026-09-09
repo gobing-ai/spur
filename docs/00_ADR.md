@@ -1,10 +1,10 @@
 ---
 doc: 00_ADR
-owns: WHY — cross-cutting decisions, one-line reasons
+owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.43.0
+version: 1.44.0
 owner: Robin Min
-updated_at: 2026-09-08
+updated_at: 2026-09-09
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -17,28 +17,21 @@ that change a repo-wide invariant. Single-feature design choices, however import
 feature's `docs/design/` satellite and feature file, not here (admission test: ADR-000). Mechanisms
 and surface details live in `03`/`04`.
 
-Historical entries were compacted in place on 2026-08-09 with operator approval. Numbers, dates,
-statuses, and decision outcomes remain stable; future changes follow the append-only rules in `99 §6.1`.
+Editorial condensation preserves issued IDs, original titles/dates, decision outcomes and
+meaningful amendments. Admission and maintenance rules: constitution §6.1. Legacy feature/task
+entries remain addressable but do not justify new nonarchitectural entries.
 
 ## ADR-000: Admission — This File Records Cross-Cutting Decisions Only
 
 **Status:** Accepted · **Date:** 2026-09-07
 
-**Decision.** An entry is admitted to this file only when the decision binds more than one feature,
-module, or pipeline, or changes a repo-wide invariant. A choice whose blast radius is one feature is
-recorded in that feature's `docs/design/` satellite and feature file instead — importance is not the
-test, blast radius is. The number 000 is reserved for this admission rule itself, outside the
-append sequence (`99 §6.1` rule 4). Feature-scoped entries already admitted (ADR-109, ADR-110,
-ADR-111) stay in place under the append-only rule (`99 §6.1` rule 3): their numbers, dates, and
-cross-references remain stable, and their decisions remain binding. No renumbering, no reclamation.
+**Decision.** Admit choices that establish or change lasting architectural boundaries or
+invariants across features/modules. Feature-scoped design belongs in its design/feature record.
+Keep every issued ADR number and decision history; older misplaced entries are not precedent.
 
-**Why.** If every approved feature design earns an ADR, this file stops being the cross-cutting
-decision register and becomes a second design index — readers can no longer find the decisions that
-bind everything. Placing the rule at entry zero puts it in front of every reader before the first
-numbered decision.
+**Why.** A feature/task ledger hides the architectural choices readers need.
 
-**Detail:** admission enforced by the `99 §6.1` admission test; feature design depth lives in
-`docs/design/` satellites.
+**Detail:** constitution §6.1. ADR-000 remains the reserved admission entry.
 
 ## ADR-001: Greenfield Re-Foundation
 
@@ -176,9 +169,6 @@ numbered decision.
 - **Why:** The heavily used planning stack belongs in Spur's validated application layer, not an agent-plugin tree.
 - **Detail:** `03 §12`; `04 §7.1`; `01 §5.1`.
 
-**Amendment (2026-08-29).** Status corrected to Accepted: the task/feature CLI, Markdown authority,
-derived SQLite state, and skill-owned planning pipeline are shipped. **Detail:** `03 §12`; `04 §7`.
-
 ## ADR-021: Functionality Lives in `packages/app`
 
 - **Status:** Accepted · **Date:** 2026-06-11
@@ -210,6 +200,9 @@ derived SQLite state, and skill-owned planning pipeline are shipped. **Detail:**
 ## ADR-025: Board Interaction Libraries
 
 - **Status:** Accepted · **Date:** 2026-06-22
+
+**Legacy record.** Feature/UI/operational guidance retained for existing references;
+its detailed contract belongs in the linked owner. It is not precedent for new task-level ADRs.
 - **Decision:** Use `@dnd-kit/core`/`sortable` for drag-and-drop and `@uiw/react-md-editor` for task-board Markdown editing, scoped to `apps/web` and its Astro-island shell.
 - **Why:** Both libraries provide maintained, accessible behavior without custom implementations.
 - **Detail:** `apps/web/package.json`; `apps/web/src/ui.ts`.
@@ -387,9 +380,6 @@ escalation test in `packages/app/tests/services/agent-service.test.ts`.
 - **Why:** Async runs discarded the exact narration operators need for live diagnosis and postmortems.
 - **Detail:** `docs/design/workflow-run-log.md`; `03 §6`; feature D2.
 
-**Amendment (2026-08-29).** Status corrected to Accepted: feature D2 is done and the retained run-log
-sink plus trace-follow surface are shipped. **Detail:** `03 §6`; `docs/design/workflow-run-log.md`.
-
 ## ADR-046: Workflow-Specific Rejection of `--agent inline`
 
 - **Status:** Superseded by ADR-047 · **Date:** 2026-08-04 · **Feature:** H82
@@ -444,9 +434,6 @@ is already crowded.
 
 **Detail:** `04 §7.8`; `docs/design/agent-inline-host-session.md`; task 0565.
 
-**Amendment (2026-08-29).** Status corrected to Accepted: H83 is done; current selector semantics are
-this entry as amended and ADR-087. **Detail:** `03 §19`; `04 §2.1`.
-
 ## ADR-048: `task record` Owns Done Walk and Run-Link
 
 - **Status:** Accepted · **Date:** 2026-08-05 · **Task:** 0436 R4
@@ -488,93 +475,25 @@ this entry as amended and ADR-087. **Detail:** `03 §19`; `04 §2.1`.
 ## ADR-051: Public CLI Surface vs Internal spur-dev Tooling — Ownership and Consent Gate
 
 - **Status:** Accepted · **Date:** 2026-08-10
-- **Decision:** Two command surfaces with a strict boundary. The `spur` CLI (`apps/cli/`) is the
-  **public, end-user harness surface** — it must stay simple and easy to use, and hosts anything a
-  Spur end user would run. `scripts/spur-dev.ts` is **internal, Spur self-dev tooling only** —
-  packaging/release (`publish`, `bump-ver`, `drop-tags`, `bundle-*`, `verify-pack`,
-  `check-marketplace-version`), building Spur itself (`build-cli`, `build-binaries`, `dev-all`), and
-  monorepo-specific gates (`link-check`). Adding, changing, or removing any CLI noun/verb requires
-  **explicit operator consent** with enough design context to evaluate the decision; agents must
-  present the surface choice before implementing, never land a CLI surface change unilaterally.
-  spur-dev commands are unconstrained by the consent gate but follow the one-module-per-command
-  pattern under `scripts/commands/` with `bundle-*`-style verb naming and a test sibling.
-  **First-layer noun discipline:** the first layer of the `spur` CLI (the nouns) is added
-  **extremely carefully** to keep the surface clean and neat — the first layer MUST be a noun so
-  that similar actions group under it (`task check`, `feature check`, `rule run`). Verbs and flags
-  are the preferred expansion mechanism; a new first-layer noun is justified only when no existing
-  noun can host the action. Consequence: `spur corpus check` is the wrong design for promoting
-  corpus-check — `corpus` would be a one-gate noun. The correct promotion hosts the sweep under the
-  existing `task` noun (`spur task check --corpus`), since `spur task check` with no WBS already
-  sweeps the full corpus and corpus-check's only delta is baseline reconciliation and fail
-  semantics.
-- **Why:** The CLI is a published, versioned contract to end users — every noun/verb is a public
-  API commitment (docs, `--help`, scripts, muscle memory). Unilateral growth erodes the
-  simple-harness design goal. spur-dev has no such contract; it is repo plumbing and may evolve
-  freely. Task 0500 surfaced the ambiguity (bundle-plugins added to spur-dev) and the boundary was
-  previously implicit.
-- **Detail:** routing rule operationalized in `AGENTS.md` § Spur CLI surface. Known misplacement:
-  `corpus-check` lives in spur-dev but operates on any Spur-managed project's task/feature corpus,
-  making it a user-facing gate in disguise — promotion target is `spur task check --corpus` (per
-  the noun discipline above), tracked in its own task. All twelve CLI nouns
-  (`init agent history rule workflow message team task feature status migrate serve`) are
-  legitimately public; all other spur-dev commands are correctly internal.
 
-  **Amendment (2026-08-10):** Task 0502 completed the recorded promotion: the public gate is now
-  `spur task check --corpus`; the spur-dev command was removed. **Detail:** `04 §7.1`.
+**Decision.** The public Spur CLI serves end users; internal commands serve repository development.
+New or changed public nouns/verbs require operator consent with design context. Prefer verbs
+under existing nouns; add a noun only when no existing noun owns the action.
 
-  **Amendment (2026-08-16):** Consent granted for the task 0575 authoring-time size warning — a
-  behavior-only surface change (new stderr line + `warnings[]` entry on `spur task update --section
-Requirements|Plan`; no noun, verb, or flag added; code confined to `packages/app`). Confirms the
-  consent gate covers observable output changes of existing verbs, not just noun/verb additions; the
-  granted application supersedes the earlier 2026-08-16 parked status. **Detail:** `04 §7.1`.
+**Why / tradeoff.** Public commands are versioned user contracts. Keeping internal plumbing
+separate limits public commitments while allowing repository tooling to evolve.
 
-  **Amendment (2026-08-20, feature A3 / task 0613):** Extends the two-surface rule to the complete
-  four-surface script placement table and records this feature's operator consent in one place.
-  - **R4 — four-surface placement table.** A new script lands on exactly one of four surfaces,
-    selected by a single condition:
+**Amendment (2026-08-10).** Corpus checking was placed under the existing task noun.
+**Amendment (2026-08-16).** Consent also covers changes to observable output of existing verbs.
+**Amendment (2026-08-20).** Extend placement to four owners: public CLI, internal command modules,
+package-script compositions, and portable plugin scripts (ADR-065).
 
-    | Surface                 | Hosts                           | Selection condition                                                                                                                                                                                                  |
-    | ----------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-    | `apps/cli/src/commands` | public `spur` verbs             | a Spur **end user** runs it on any Spur-managed project — and each addition needs the consent gate below                                                                                                             |
-    | `scripts/commands`      | internal spur-dev commands      | **Spur self-dev only** — packaging/release, building Spur, monorepo gates (one module per command, `bundle-*`-style naming, test sibling)                                                                            |
-    | `package.json` scripts  | repo-wide developer entrypoints | a **repo developer** invokes it by name (`bun run …`); it composes existing binaries, adds no logic, and its name is the contract                                                                                    |
-    | `plugins/sp/scripts`    | plugin-shipped scripts          | the action must run on **agent machines that only have the plugin**, not the monorepo — entrypoint contract owned by **ADR-065** (`.mjs` twins, declaration, no repo-relative paths), cross-referenced, not restated |
+**Consent provenance:** the 2026-08-20 A3 batch, 2026-08-21 feature-refresh breadth,
+2026-08-26 doctor options, and 2026-08-27 workflow-show options are recorded in the
+[surface governance contract](design/harness-surface-governance.md) and their linked tasks.
+These applications do not create additional architectural decisions.
 
-  - **R5 — consent record (feature A3).** Operator consent is granted for the feature's six
-    public-surface changes: the `spur self` noun (aggregating legacy standalone verbs, 0616), the
-    `spur builder` noun (spur-dev `bump-ver` / `drop-tags` promotion, 0617), `--fix` on
-    `spur task check` and `spur feature check` (0619), `spur workflow show` (mermaid FSM render,
-    0620), the `spur agent doctor` AUTH-column removal (0621), and the `workflow validate`
-    composition advisory output (0614, advisory-only per ADR-069 R3). Design context: the feature
-    intent (surface governance) and the A3 batch review of 2026-08-20; each landing task cites this
-    record instead of re-litigating the gate. **Operational view:**
-    `docs/design/harness-surface-governance.md`.
-
-  **Amendment (2026-08-21, task 0625):** Consent granted to make `spur feature refresh` scope
-  explicit: `--feature <id>` rewrites one feature, the new `--all` flag opts into the full sweep,
-  and a bare invocation refuses with exit 2. The explicit broad-write token prevents a scoped
-  lifecycle run from silently rewriting unrelated feature rosters. **Detail:**
-  `docs/design/harness-surface-governance.md` §4 and
-  `docs/design/lifecycle-projection-integrity.md`.
-
-  **Amendment (2026-08-26, feature B4 / task 0683):** Consent granted for two flags on the existing
-  `spur agent doctor` verb — `--probe-health` (opt into model health probing; without it no model
-  health request is issued) and `--force-refresh` (bypass the 60 s detection cache at
-  `.spur/run/agent-doctor.json`, re-run detection, rewrite the file). Both are flag expansions of an
-  existing verb, not a new noun or verb, and both change observable output of an existing verb — the
-  class the 2026-08-16 amendment brought under this gate. Consent was given by the operator in the B4
-  planning session of 2026-08-26 and is recorded here so landing tasks cite the record rather than
-  re-litigating the gate. **Detail:** `docs/design/agent-doctor-inspection-surface.md` §5.1–§5.2;
-  surface shape in `docs/04_DESIGN.md` § `spur agent doctor`.
-
-  **Amendment (2026-08-27, feature D7 / task 0695):** Consent granted for two options on the
-  existing `spur workflow show` verb — `--format <mermaid|todo>` (mermaid stays default; `todo`
-  renders a declared-step checklist projection) and `--json` (machine envelope for both formats).
-  Both are option expansions of an existing read-only verb, not a new noun or verb. Consent was
-  given at the D7 idea-evaluation gate, which also rejected the alternative shapes: a boolean
-  `--todo` flag and a separate `spur workflow todo` verb (flag-not-action), and output caching.
-  **Detail:** `docs/design/harness-surface-governance.md` §4; surface shape in `docs/04_DESIGN.md`
-  § `spur workflow show`.
+**Detail:** [harness surface governance](design/harness-surface-governance.md).
 
 ## ADR-052: Team-Scoped Board Composition with Separate Control and Message Planes
 
@@ -587,9 +506,6 @@ Requirements|Plan`; no noun, verb, or flag added; code confined to `packages/app
   viewer duplicate authority without a current requirement.
 - **Detail:** `docs/design/workspace-design.md`;
   `docs/plans/2026-08-11-g3-team-inbox-workspace-boundary-brainstorm.md`; task 0197.
-
-**Amendment (2026-08-29).** Status corrected to Accepted: feature G3 is done and the Workspace Board
-composition is shipped without a second workspace authority. **Detail:** `03 §14`; workspace design.
 
 ## ADR-053: Parity Harness Diffs Agent-Facing Surfaces Against the Live Monorepo CLI
 
@@ -617,13 +533,6 @@ proven.
 
 **Detail:** `03 §15`; `docs/design/plugin-surface-parity.md` §3/§7.
 
-**Amendment (2026-08-11, implementation).** The harness shipped: the frozen capture helper
-`captureCliSurface` / `parseCommanderHelp` at `plugins/sp/tests/helpers/cli-surface.ts`, the focused
-parity suite `plugins/sp/tests/cli-surface-parity.test.ts`, and `skill-structure.test.ts` extensions
-(tasks 0512–0517). Status: Accepted (design) → Accepted.
-
-**Detail:** `03 §15`; `docs/design/plugin-surface-parity.md`.
-
 ## ADR-054: Facade/Spine Boundary Is Test-Asserted; SSOT Consolidation Rejected
 
 - **Status:** Accepted · **Date:** 2026-08-11 · **Feature:** I2
@@ -645,13 +554,6 @@ inventories, never arbitrary prose.
 
 **Why.** Status-transition verbs are CLI semantics the facade must own, and prose-duplication
 detection is not mechanically reliable.
-
-**Detail:** `03 §15`; `docs/design/plugin-surface-parity.md` §5/§6.
-
-**Amendment (2026-08-11, implementation).** The boundary assertions shipped with the ADR-053 harness
-(plugins/sp/tests/cli-surface-parity.test.ts, tasks 0512–0517): the facade owns CLI noun/verb/flag
-semantics, the spine owns orchestration, and the tests fail on inversion. Status:
-Accepted (design) → Accepted.
 
 **Detail:** `03 §15`; `docs/design/plugin-surface-parity.md` §5/§6.
 
@@ -677,11 +579,6 @@ Accepted (design) → Accepted.
   the generic upstream EventBus or duplicating policy across emit sites.
 - **Detail:** `03 §16`; `docs/design/actionable-observability-context.md`; feature J5.
 
-> **Amendment (2026-08-15).** Built: the J5 envelope foundation (0526), routing attribution (0545),
-> and the role/token aggregates (0546/0547) all shipped; the Board render (0552) is the terminal
-> consumer. Status moves from `Accepted (design)` to `Accepted`. Shapes: `04 §7.9`; mechanism:
-> `03 §16` / `03 §7`.
-
 ## ADR-057: Inter-Agent Coordination Is a Runtime-Mediated Control Plane
 
 **Status:** Accepted · **Date:** 2026-08-12 · **Feature:** G4
@@ -691,17 +588,6 @@ Accepted (design) → Accepted.
 **Why.** Copying multiplexer I/O would collapse ADR-052’s two planes and fight a harness that does not own PTYs.
 
 **Detail:** `03 §17`; `docs/design/inter-agent-control-plane.md`; feature G4. Complements ADR-052 (does not change Board composition).
-
-**Amendment (2026-08-13).** Wave 1 (occupant pin, coordination-facing run row, caller env) shipped. Wave 2 (identity-pinned `agent wait`, atomic `message send --wait`, lifecycle projector) shipped with 0530. Wave 3 (snapshot-then-follow, first-class `blocked`) remains accepted design.
-
-**Detail:** tasks 0529/0530; `03 §17`; `docs/design/inter-agent-control-plane.md`.
-
-**Amendment (2026-08-13, 0531).** Wave 3 snapshot-then-follow shipped: `followSystemEventsAfter` over the existing `system_events` ledger (global monotonic `sequence` auto-assigned at persist; `idx_system_events_sequence`). First-class `blocked` / optional `agent report-state` remain accepted design.
-
-**Detail:** task 0531; `03 §17`; `docs/design/inter-agent-control-plane.md` §8.
-
-**Amendment (2026-08-29).** Status normalized to the canonical vocabulary; wave state remains in the
-dated amendments above. No decision changed.
 
 ## ADR-058: Tracked Transition Shims — Two-Sided Manifest Gate
 
@@ -773,167 +659,65 @@ shape was frozen by a test inside the plugin, i.e. the plugin tested the CLI's d
 **Detail:** `packages/config/src/index.ts` (`DEFAULT_AGENT_ROLES`, `AgentRoleConfigSchema`);
 `apps/cli/src/context.ts` (`resolveAgentRoles`); `04` `agent.roles`; task 0572.
 
-**Amendment (2026-08-29).** Status corrected to Superseded by ADR-078, which moved the SSOT from
-the code constant to layered config while retaining a byte-identical fallback.
-
 ## ADR-062: Corpus Gates Verify Evidence Content, and Every Severity Is Ratcheted
 
 **Status:** Accepted · **Date:** 2026-08-17 · **Amends:** ADR-050 · **Feature:** F91
 
-**Decision.** Four changes to the task-corpus gates, landing in dependency order:
+**Decision (historical policy).** Check all configured task folders and ratchet both errors and
+warnings against a two-sided, unique-key baseline. Evidence must name the requirement's subject,
+not merely resolve a path; support explicit repository and external citation forms. Scenario
+coverage respects declared task-versus-feature altitude.
 
-1. **The corpus sweep covers every configured task folder**, not just the active one. The
-   backlog it exposes (404 errors across 180 `done` tasks in `docs/tasks{,2,3}`) is reconciled
-   into `config/corpus-baseline.json` in the same commit, per constitution T10.
-2. **The two-sided ratchet extends to warning severity.** A warning outside the baseline fails
-   the gate, and a baseline entry that no longer reproduces fails it too — the same
-   cannot-rot property errors already have (ADR-050) and tracked shims already have (ADR-058).
-   **One key, one entry.** Reconciliation is key-addressed, so a second entry for a
-   `<kind>:<id>:<code>` key is unreachable: it can never be matched or reported stale on its
-   own, and the extras silently over-cover. A key emitting 33 findings that later emits 1 would
-   still reconcile clean, so the ratchet would see only total disappearance, never a partial
-   reduction. A duplicated key fails the gate outright. (Added 2026-08-17 during 0582's verify:
-   the first generated warning baseline held 2,541 entries over 903 keys and reintroduced exactly
-   the rot this ADR exists to end.)
-3. **An evidence anchor must name its requirement's subject, not merely resolve.** Existence +
-   line bounds stop being sufficient. Ships as a warning; promotes to error once the
-   qualification migration (below) has landed.
-4. **Two notations replace one.** Evidence inside this repository is cited as a repo-relative
-   backtick `path:line` anchor; evidence outside it (external package sources, gitignored
-   `.spur/run/**` artifacts) is cited in a documented external form the checker recognizes as
-   external instead of scoring it a stale repo-root anchor. A `spur task migrate` rule
-   qualifies the 810 historical anchors whose basename resolves to exactly one repository path;
-   the 178 ambiguous ones are left to authors.
+**Why / tradeoff.** Path-only checks accepted unrelated evidence; unratcheted warnings hid defects.
+The wider sweep exposed old debt but imposed a costly reconciliation burden.
 
-**Also:** DD-09's subset rule applies only to tasks that graduate their feature's scenarios. A
-task whose acceptance criteria sit at a finer altitude than the feature's ship contract declares
-that altitude rather than being held to a rule it cannot satisfy.
+**Later policy:** ADR-090 changed the ratchet, ADR-092 narrowed audit scope, and ADR-108 retired
+accepted-debt snapshots. Evidence-subject and citation requirements remain independently owned.
 
-**Why.** The anchor gate's own source called content matching "an agent re-verify
-responsibility" — so the gate passed the dangerous case (an anchor drifted onto unrelated code,
-which reads as verified) and flagged only the harmless one (a path that fails to resolve). The
-2026-08-17 E5 re-audit found 18 such anchors across tasks 0553/0554/0555 while `spur task check`
-reported zero warnings on all three. That was survivable only because warnings had no ratchet
-and 84% of the corpus sat outside the error gate: 2,291 warnings and 404 ungated errors had
-accumulated against a 2-entry baseline. A gate nobody must reconcile is not a gate, and a
-citation form with no legal spelling for a third of its use cases guarantees the noise that
-hides the real findings.
-
-**Detail:** `packages/app/src/services/corpus-check.ts` (sweep scope, warning ratchet);
-`packages/app/src/services/task-check.ts` (`checkLineAnchors` subject matching, external form);
-`packages/domain/src/bdd/coverage.ts` (DD-09 altitude); `04 §7.1`; feature F91.
+**Detail:** [planning records](design/planning-record-contracts.md); ADR-050/090/092/108.
 
 ## ADR-063: A New Top-Level Feature Node Requires Operator Consent
 
 **Status:** Accepted · **Date:** 2026-08-17 · **Complements:** ADR-051 · **Feature:** F91
 
-**Decision.** Feature IDs encode position (DD-14), so the single-letter root set is the project's
-coarsest and most durable map. Adding a letter to it is a structural claim about the shape of the
-product, not a filing convenience:
+**Decision.** Nest work under the feature owning its primary object. A new top-level root
+requires operator consent and reasons for rejecting candidate parents. Child-count limits never
+justify a new root; relocate misplaced work through the feature tool.
 
-1. **Nesting is the default.** New work is filed under the existing feature that already owns its
-   primary object — the module, surface, or contract the work changes. An agent must name that
-   owner, or state why no feature owns the object, before proposing a root node.
-2. **A new top-level node requires explicit operator consent**, requested with the candidate
-   parents that were considered and the reason each was rejected. This mirrors ADR-051's rule for
-   CLI nouns: the first layer is a small, stable vocabulary, and a new entry is justified only when
-   no existing entry can host the work.
-3. **The DD-14 nine-children cap is never a reason to add a root letter.** A full parent means
-   "nest one level deeper" or "you picked the wrong parent" — not "start a new tree". Reading the
-   cap as permission to go to the root inverts it: the cap exists to keep the tree legible, and
-   root sprawl is the exact illegibility it prevents.
-4. **Relocation is cheap; do not tolerate a bad placement.** `spur feature move <id> --parent <id>`
-   cascade-renames the node and its descendants and rewrites every task `feature_id` edge, with
-   `--dry-run` to preview. A misplaced feature is a two-command fix, so there is no cost argument
-   for leaving one where it landed.
+**Why / tradeoff.** Root IDs form the durable product map. Restricting root growth costs a placement
+decision but prevents an agent's filing convenience from redefining product structure.
 
-**Why.** On 2026-08-17 an agent created top-level feature `L` for corpus-gate-integrity work,
-reasoning that `F` (Planning) already held nine children and both semantically-adjacent parents
-(`F2` task-management CLI, `F6` corpus migration) were near-terminal. Every step of that was
-locally defensible and the conclusion was still wrong: `F9` — "make each task's Acceptance Criteria
-verifiable at the code level, and make the four-layer validation gate's severities tunable" —
-already owned `checkAcCoverage`, the stable finding codes, and the severity-override map, which are
-precisely the objects the new work changes. The feature was relocated to `F91`. The failure was not
-bad judgment about `F`; it was treating a root-node addition as a placement decision an agent makes
-alone, when it is the one placement decision that is effectively permanent.
-
-**Detail:** DD-14 ID rules and `spur feature move` in `04 §7.2`; ADR-051 noun discipline as the
-parallel rule for the CLI surface.
+**Detail:** 04 §7.2; ADR-051.
 
 ## ADR-064: Pin the Implement Executor Per-Hop via `implementAgent`
 
 **Status:** Accepted (design) · **Date:** 2026-08-18 · **Feature:** H1
 
-**Decision.** Model-hop wall-clock is the long pole of a `task-pipeline.yaml` task run — measured at
-91–97% of pipeline wall-clock across 3 real runs (task 0588, source artifacts
-`.spur/run/08d76749*/` `7831bfc8*/` `97e7a2a6*/`), with implement the dominant single hop
-(12–28 min, 40–95% of its 30-min budget). The practical latency lever is **pinning a faster
-executor/model for the implement hop through the existing `implementAgent` per-hop pin**
-(`config/workflows/task-pipeline.yaml:65`), not raising the `stepTimeoutMs`/`implementTimeoutMs`
-budgets and not narrowing the deterministic gate.
+**Legacy record — execution tuning.** Evaluate the existing implementAgent per-hop pin as the
+latency lever; retain the capability floor and require a same-task comparison before adoption.
+Raising timeouts or weakening gates does not address generation latency. Narrowing hop scope was
+rejected as a non-bottleneck; review/verify parallelism was deferred as a separate FSM change.
 
-**Why.** The 30-min timeouts are headroom, not measured latency — setting them higher without
-measurement is how they grew from 600s. The measured bottleneck is inside the implement hop's
-generation loop, so the lever belongs on the hop's executor, not on the budget or the gate.
+**Why.** The measured runs were dominated by implement generation.
 
-**Constraints (binding).** (1) Keep the size↔capability gate (task 0487 R3) authoritative: a pinned
-executor below the `reviewer`-role floor must never receive an oversized task — the pin is a
-per-task choice, not a blanket downgrade. (2) Confirm on a same-task A/B (default `omp` →
-`zai/glm-5.2` vs the pinned executor) before adopting; option (ii) narrow-hop-scope is rejected as
-optimizing a non-bottleneck; option (iii) review∥verify parallelization is deferred as a real FSM
-change with structurally-dependent hops.
-
-**Detail:** task 0588 `### Design` (full evidence table + attribution + option matrix);
-`config/workflows/task-pipeline.yaml:65` (`implementAgent`), `:269` (implement `agent.run`
-`agent: ${vars.implementAgent}`).
+**Detail:** task 0588 Design owns measurements and alternatives; task-pipeline owns the pin.
+This tuning approval is not precedent for new task-level ADRs.
 
 ## ADR-065: Align plugins/sp Scripts to the Superskill Entrypoint Contract
 
 **Status:** Accepted · **Date:** 2026-08-19 · **Feature:** I
 
-**Decision.** All scripts in `plugins/sp/scripts/` follow an explicit two-category contract recorded in
-`config/plugin-scripts.json`:
+**Decision.** Portable plugin shipping scripts use Node-compatible entrypoints, committed
+generated .mjs twins and the canonical Superskill script path. Repository-only gates may use Bun.
+A two-sided manifest/build gate checks category, roster, twins and invocation references.
 
-1. **Standard shipping scripts (7):** `batch-preflight.ts`, `feature-sync-bounded.ts`,
-   `history-load.ts`, `pr-reviewing.ts`, `daily-summary/daily-summary.ts`,
-   `dogfood-testing/detect-pipeline-driving.ts`, `dogfood-testing/validate-report.ts`.
-   - Each carries no Bun-specific globals (`Bun.argv` → `process.argv.slice(2)`, `Bun.file` → `node:fs`,
-     `Bun.spawn`/`Bun.spawnSync` → `node:child_process`).
-   - Each carries a committed, portable `.mjs` twin generated via `superskill script convert sp <rel>`,
-     executable under bare `node` on any install target (Claude Code, Codex, Pi, OpenCode, Antigravity, Hermes, Grok).
-   - All shipped surfaces (`plugins/sp/{commands,skills,agents}`, `README.md`) invoke these scripts exclusively
-     via the canonical substitution `node "$(superskill script path sp <rel>.mjs)" <args>`.
-   - The repo-relative form `bun plugins/sp/scripts/<rel>` is forbidden across all shipped surfaces.
-2. **Repo-only scripts (8):** `task-size-precheck.ts`, `transition-shim-check.ts`,
-   `script-contract-check.ts`, `validate-commands.ts`, `validate-flag-contracts.ts`,
-   `surface-drift-inventory.ts`, `stage-registry-adapter.ts`, `daily-summary/logger.ts`.
-   - Remain on `bun`, never generate `.mjs` twins, and are invoked only in monorepo workflows and quality gates.
-   - `task-size-precheck.ts` is guarded in `task-pipeline.yaml` so seeded external projects without `plugins/sp`
-     degrade cleanly with a skip notice rather than failing.
-3. **Continuous mechanical enforcement:** `bun run script-contract-check` runs in `spur-check` (third,
-   after `transition-shim-check` and before `lint`). The check is two-sided: missing/stale twins, unexpected twins
-   on repo-only scripts, unlisted disk scripts, and forbidden `bun plugins/sp/scripts/` references all fail the gate.
-4. **Build integration:** `npm run build:scripts` regenerates all twins and is chained into `npm run build`.
+**Why / tradeoff.** Plugin users need no monorepo/Bun environment; portable twins add a build-time
+parity obligation. Repository-only tooling retains its existing runtime.
 
-**Authority.** Superskill ADR-015 (plugin script layout) and ADR-022 (script entrypoint staging & version coupling)
-define the upstream standard contract.
+**Amendment (2026-08-24).** The history-anatomy cache helper joins the portable shipping category.
+The manifest owns the roster; this register does not duplicate it.
 
-**Detail:** task 0600; `config/plugin-scripts.json`; `plugins/sp/scripts/script-contract-check.ts`.
-
-**Amendment (2026-08-24).** The standard-shipping roster above grows from 7 to 8: add
-`history-anatomy-cache.ts` — the deterministic cache helper for the history-anatomy report
-(HA-S1 0659). It is a `standard` contract with a committed `history-anatomy-cache.mjs` twin,
-declared in `config/plugin-scripts.json`, and appended to `package.json` `build:scripts`. Task
-0661 amends the same entry for the `history-load.ts` removal; if both land in one commit, a single
-amendment block covers both.
-
-**Amendment (2026-08-24, second).** The standard-shipping roster drops from 8 to 7: remove
-`history-load.ts` (and its twin) — the on-demand load+analyze plugin script deleted with
-the `/sp:dev-history-load` command (HA-S1 0661). Its two supported import owners (`load-history`
-in `package.json`, the History UI Import & Analyze path) were verified independent of the plugin
-script and are preserved. `config/plugin-scripts.json` and `package.json` `build:scripts` no
-longer name it. (0659 added `history-anatomy-cache.ts`; both amendments to this entry land in the
-I8 change — see the first amendment.)
+**Detail:** config/plugin-scripts.json; Superskill ADR-015/022; 04 §2.6.
 
 ## ADR-066: Cataloged System Events Use Exhaustive Server-Side Presenters
 
@@ -945,9 +729,6 @@ I8 change — see the first amendment.)
 
 **Detail:** `03 §16.1`; `docs/design/event-tracking.md` §11; `docs/design/actionable-observability-context.md` §System Event semantic presentation.
 
-**Amendment (2026-08-29).** Status corrected to Accepted: J9's catalog presenters are shipped and
-exhaustively tested. **Detail:** `03 §16.1`; event-tracking design.
-
 ## ADR-067: Stored Event Facts Are Stable; Derived Presentation Reprojects on Read
 
 **Status:** Accepted · **Date:** 2026-08-19 · **Amends:** ADR-056 · **Feature:** J9
@@ -957,9 +738,6 @@ exhaustively tested. **Detail:** `03 §16.1`; event-tracking design.
 **Why.** Stored facts are evidence, while summary, description, fields, outcome, and action are view policy that can improve without mutating that evidence.
 
 **Detail:** `03 §16.1`; `docs/design/actionable-observability-context.md` §Projection paths.
-
-**Amendment (2026-08-29).** Status corrected to Accepted: history reads reproject presentation while
-preserving stored event facts. **Detail:** `03 §16.1`.
 
 ## ADR-068: Missing Event Semantics Are Captured at the Producing Boundary
 
@@ -971,64 +749,27 @@ preserving stored event facts. **Detail:** `03 §16.1`.
 
 **Detail:** `03 §16.1`; `docs/design/event-tracking.md` §§6–7/11.
 
-**Amendment (2026-08-29).** Status corrected to Accepted: producing-boundary enrichment is shipped
-for the J9 event set. **Detail:** `03 §16.1`; event-tracking design.
-
 ## ADR-069: Workflow YAML Orchestrates Owned Capabilities
 
 **Status:** Accepted · **Date:** 2026-08-19 · **Feature:** D5
 
-**Decision.** Workflow YAML selects and orders capabilities; reusable deterministic behavior lives
-in its owning application/CLI module or a capability-specific built-in, workflow extensions own
-only local policy, and `agent.run` remains the judgment boundary.
+**Decision.** Workflow YAML orders capabilities. Deterministic behavior remains in existing
+application/CLI modules or capability-specific built-ins; extensions own local policy and
+agent.run remains the judgment boundary.
 
-**Why.** Extending proven seams keeps one behavior owner without inventing a generalized workflow DSL.
+**Why.** Existing seams preserve one behavior owner without another workflow DSL.
 
-**Detail:** `03 §20`; `docs/design/workflow-composition-contract.md`.
+**Amendment (2026-08-20).** Add measurable shell/non-slash-prompt composition advisories.
+Findings recommend the existing ownership choices; they never change validation exit status,
+block execution or enter the quality gate.
+**Amendment (2026-08-21).** Freeze the shell threshold at more than five non-comment units;
+prompt length determines severity, not whether a non-slash input is reported. Exact severity
+bands and historical dispositions belong in the surface contract.
+**Amendment (2026-09-05).** ADR-108 retires disposition snapshots and exact-mirroring machinery.
+Measures and advisory-only behavior remain; live findings cannot be hidden by stored dispositions.
 
-**Amendment (2026-08-20, feature A3 / task 0613):** Adds the detectable composition measures and
-the advisory-only posture the principle previously lacked.
-
-- **R1 — shell composition measure.** The unit is the non-comment shell line (split on newline and
-  `;`) of a `shell` action's `command`. A program reported above the threshold is
-  to-be-enhanced, and the recommended fixes are drawn **only** from the five owner options already
-  recorded in `docs/design/workflow-shell-ownership.md` (public verb / application service /
-  least-privilege built-in / external extension / stays-shell exception) — no new vocabulary. The
-  threshold number is deliberately **not frozen here**: measured on this tree, all 58 classified
-  shell programs join a recorded disposition, and flag rates run >3→30, >4→25, >5→21, >6→18,
-  > 8→14 of the 58 — `>5` cleanly separates trivial glue (SIMPLE ≤ 2, GLUE
-  > median 2, never flagged at ≥3) from owned-capability candidates (POLICY 22–32, DUAL 43), and is
-  > the candidate this tree's evidence supports; the sibling advisory task (0614) freezes the number
-  > and this ADR records it once it survives contact.
-- **R2 — agent.run composition measure.** A **non-slash `input`** is the reporting trigger (per
-  ADR-043); raw prompt length sets **severity only**, never triggers a report; the recommended fix
-  is to move the operation behind a centralized agent skill or slash command.
-- **R3 — advisory posture.** Composition findings never change a `workflow validate` exit status,
-  never block a run, and are not added to `spur-check` / `spur-check-new`.
-
-**Operational view:** `docs/design/harness-surface-governance.md`. **Promotion:** Proposed →
-Accepted — the decision now carries detectable measures and a fix vocabulary, which is the
-acceptance case the Proposed status waited on.
-
-**Amendment (2026-08-21, feature A3 / task 0614):** Threshold frozen at **`>5`** (a program with
-≥6 non-comment shell units is flagged). The 2026-08-20 flag-rate table was measured over the 58
-pre-migration classified programs; on the live 57 shell actions the raw `>5` flag rate is 25.
-Steady state recorded 2026-08-21 across all 10 `config/workflows/*.yaml`: **0 shell findings,
-25 suppressed, 8 agent.run findings** — every shell action measuring ≥6 lines carries a recorded
-disposition in `config/workflow-composition-baseline.json` (8 workflow entries); the 33
-sub-threshold classified programs need no entry. agent.run severity bands are frozen at
-<200 low / ≤1000 medium / >1000 chars. The advisory appears in `workflow validate --json` as
-`composition {findings[], suppressed}` and on stderr in human mode; it never changes exit status.
-
-**Amendment (2026-09-05, D61 / task 0767):** the exact-mirroring portion of the 0614 amendment is
-**retired** (per ADR-108): the disposition store (`config/workflow-composition-baseline.json`),
-its snapshot equality/regeneration machinery, and the regenerator atomicity gate
-(`composition-entrypoint-check`) are removed. The ownership/advisory contracts remain: R1/R2
-measures, the frozen `>5` threshold, and the R3 advisory posture (warn-only, never blocks, not in
-`spur-check`) are unchanged; findings are computed from live resolved definitions and can no
-longer be hidden by a recorded disposition. Proof digest helpers
-(`canonicalJsonStringify`/`computeDefinitionDigest`/`extractResolvedWorkflowFacts`) remain in
-`packages/app/src/workflow/composition-baseline.ts` for import compatibility.
+**Detail:** [workflow composition](design/workflow-composition-contract.md) and
+[surface governance](design/harness-surface-governance.md).
 
 ## ADR-070: Workflow Progress Reprojects Persisted Execution Truth
 
@@ -1042,10 +783,6 @@ bounded polling remains the convergence fallback.
 
 **Detail:** `03 §21`; `docs/design/workflow-observability.md` §D5 detailed progress projection.
 
-**Amendment (2026-08-29).** Accepted after implementation: the persisted progress projection,
-definition-digest merge, event-wakeup follower, polling fallback, and record-only inline journal are
-shipped. **Why.** D5 now has one replay authority in code, not only in design. **Detail:** `03 §21`.
-
 ## ADR-071: Mutation After Verification Invalidates the Proof
 
 **Status:** Accepted (design) · **Date:** 2026-08-19 · **Feature:** D5
@@ -1057,21 +794,6 @@ quality, review, and observe-only verification evidence names one unchanged fina
 **Why.** A verdict cannot prove tree state that was allowed to change after the verdict was produced.
 
 **Detail:** `03 §20.3`; `docs/design/workflow-composition-contract.md` §Verification proof state.
-
-**Amendment (2026-08-29).** Accepted as the binding design. Digest capture/recheck shipped, but the
-canonical task pipeline still verifies with `--fix all`, and the docs pipeline still writes a
-synthetic PASS; neither may claim the final proof invariant until tasks 0703/0704 land. **Why.** A
-partial bracket detects only post-verdict mutation, not whether all evidence observed one state.
-**Detail:** `03 §20.3`; tasks 0703/0704.
-
-**Amendment (2026-08-29, task 0703).** Task pipeline half landed. `task-pipeline.yaml` now verifies
-with `--fix none` (observe-only; remediation routes once through the bounded `verify → test-fix`
-hop and re-enters quality → review → verify on a freshly captured digest), captures the canonical
-digest at quality-gate entry before any evidence stage, stamps one digest across quality/review/
-verification evidence in the verdict's proof block, and fails record/done closed on missing,
-malformed, or mismatched proof evidence. The docs pipeline (`--fix all` + synthetic PASS) remains
-open under task 0704. **Why.** Ordering, not new primitives: a verifier that repairs its own
-subject cannot certify an immutable state. **Detail:** `03 §20.3`; task 0704.
 
 ## ADR-072: One Canonical Pipeline per Lifecycle Boundary
 
@@ -1095,18 +817,21 @@ graph from init seeding) is removed as now-dead, together with the two tests ass
 
 **Status:** Accepted · **Date:** 2026-08-19 · **Feature:** J91
 
+**Legacy record.** Feature/UI/operational guidance retained for existing references;
+its detailed contract belongs in the linked owner. It is not precedent for new task-level ADRs.
+
 **Decision.** Observability System Events table columns display only human correlators; opaque event ids and remediation commands that embed those ids remain in the tooltip and expanded payload.
 
 **Why.** Operators diagnose from the table; substituting UUIDs and trace commands for workflow, step, and action names hides the facts they need.
 
 **Detail:** `03 §16.2`; `docs/design/system-events-human-table.md`.
 
-**Amendment (2026-08-29).** Status corrected to Accepted: J91's human-correlator table projection is
-shipped. **Detail:** `03 §16.2`.
-
 ## ADR-074: Coding-Agent Identity Is an Optional Presentation Projection
 
 **Status:** Accepted · **Date:** 2026-08-19 · **Feature:** J91
+
+**Legacy record.** Feature/UI/operational guidance retained for existing references;
+its detailed contract belongs in the linked owner. It is not precedent for new task-level ADRs.
 
 **Decision.** Coding-agent / executor identity is an optional `presentation.agent` string projected by the envelope from bounded payload facts in a fixed order; it is never `context.producer`, never inferred by the Board, and omitted when the event has no executor.
 
@@ -1114,68 +839,23 @@ shipped. **Detail:** `03 §16.2`.
 
 **Detail:** `03 §16.2`; `docs/design/system-events-human-table.md`.
 
-**Amendment (2026-08-29).** Status corrected to Accepted: optional agent identity is projected at
-the envelope boundary and rendered by the Board. **Detail:** `03 §16.2`.
-
 ## ADR-075: Wait and Message Stay Identity-Pinned — No Role Addressing
 
 **Status:** Accepted · **Date:** 2026-08-20 · **Feature:** D6 · **Task:** 0609
 
-**Decision.** `spur agent wait` and `spur message send` keep identity-pinned addressing (spec id /
-`--to`), and role addressing is **not** added to either verb. A role names an _executor selection_
-for `agent.run`; it is not an addressee for wait or message. This closes the D5 R6 deferral, which
-was previously recorded only inside D5's acceptance criteria.
+**Decision (original).** Wait/message addressing remains concrete-spec based. Roles select
+executors, not recipients; add role addressing only after a concrete caller demonstrates need.
 
-**Why.** The concrete-caller survey (task 0609 R1) found no caller that needs to address a role
-rather than a spec id:
+**Why / tradeoff.** An occupant pin prevents wait/re-resolution races. Adding role lookup without
+a caller would introduce zero/multiple-match ambiguity for no demonstrated benefit.
 
-- No shipped workflow in `config/workflows/*.yaml` invokes `agent wait` or `message send` at all
-  (`grep -rn "agent wait\|message send\|spur message"` → zero matches) — the pipeline surface has
-  no wait/message caller of any kind, let alone a role-addressed one.
-- The team/coordination surface (`spur team assign|status|up|down|start|stop`,
-  `apps/cli/src/commands/team.ts`) takes concrete `<task-id>`, `<agent-id>`, and `<team>` arguments
-  throughout — no verb accepts a role as an addressee.
-- No CLI command accepts `--role` (`rg '--role' apps/cli/src/commands/*.ts` → zero matches outside
-  `agent run`'s action option). The illustrative `--to reviewer` / `agent wait reviewer` examples in
-  `plugins/sp/skills/spur-cli/references/{message,agent}.md` are spec ids that happen to share role
-  names — the flag tables define them as "Recipient agent id" / "Agent spec id", and the
-  implementation (`apps/cli/src/commands/message.ts:29,50`, `agent.ts:96`) treats them as plain
-  recipient ids with no role resolution.
-- `--tags role:worker` (agent create, `agent.md:175`) is an identity _tag_ on a spec — searchable
-  metadata, not a role-resolved addressee.
+**Amendment (2026-08-26 · Task 0685).** Admit exact-one role/executor-name resolution to a spec ID.
+Zero or multiple matches fail with candidates; no fan-out. Existing --to addressing remains.
+**Amendment (2026-08-26 · Task 0685 verification correction).** Wait and send-with-wait snapshot
+the existing occupant pin after resolution. Unwaited send queues to the resolved spec ID without
+requiring a live occupant, matching the original --to path.
 
-Identity pinning stays authoritative because the occupant pin — `{ specId, runId, generation }`,
-snapshotted before wait or send (ADR-057 wave 2, task 0530) — is what actually binds a wait to a
-run. A role would need exact-one resolution to collapse to that same pin, and the survey shows no
-consumer that would benefit: the added surface would carry the ambiguity cost (zero/multi-occupant
-errors, re-resolution races) with no demonstrated caller. Under ADR-051's noun-first rule, adding
-`--role` to existing verbs without a concrete caller is surface without demand.
-
-**Evidence that would reopen this.** Any of: (1) a shipped pipeline or `spur team` workflow that
-genuinely needs to address "the reviewer"/"the planner" rather than a concrete spec; (2) a
-demonstrated multi-occupant team pattern where the operator needs one-role-one-recipient semantics
-and the concrete spec id is unknowable in advance; (3) an agent-to-agent protocol where messages
-must route by role for liveness (e.g. a dead occupant's role must be re-bound). If one appears,
-reopen with exact-one resolution: zero/multi-occupant are hard errors naming the role and count, the
-pin is written before proceed, and no fan-out is introduced (D6 R3/R4).
-
-**Detail:** `docs/design/spur-team-mode-design.md`; ADR-051 (public-surface consent),
-ADR-057 (identity-pinned control plane), ADR-061 (role→tier SSOT in `packages/config`).
-
-**Amendment (2026-08-26 · Task 0685):** Reopened exactly as this entry's evidence clause (2)+(3)
-anticipated: task 0685 demonstrated operator flow needing one-role-one-recipient addressing where
-the concrete spec id is not knowable in advance, landing `message send --role` / `agent wait
---role` as exactly-one resolution over the frozen instance shapes (`AgentInstanceStore.byRole` /
-`byExecutor`, vocabulary = AGENT_ROLE_NAMES ∪ executor names). The resolution collapses onto the
-SAME `{specId, runId, generation}` identity pin snapshotted before proceed — identity pinning stays
-authoritative; `--to` remains the default surface; zero/multi matches are hard errors naming the
-count and candidates; no fan-out (D6 R3/R4 preserved). This amendment does NOT weaken the wave-2
-pin semantics; it adds the resolution layer in front of them.
-
-**Amendment (2026-08-26 · Task 0685 verification correction):** Exact-one `--role` resolution
-first yields a concrete `specId`. `agent wait` and `message send --wait` then snapshot the existing
-occupant pin; an unwaited `message send` queues to that resolved id without requiring an occupant,
-matching the unchanged `--to` path. Detail: `docs/design/inter-agent-control-plane.md` §6.
+**Detail:** [inter-agent control plane](design/inter-agent-control-plane.md) §6; ADR-057.
 
 ## ADR-076: Retire the D5-N Promotion Bar — Delete task-pipeline2 Rather Than Promote It
 
@@ -1301,11 +981,6 @@ The cache is never validated from a filename, a modification time, or a `generat
 **Why.** A cache keyed on anything but re-derived evidence can present a stale conclusion as current
 evidence, which is the one failure a diagnostic report cannot survive.
 
-**Amendment (2026-08-24).** Decision shipped: the cache contract is built as the
-`history-anatomy-cache.ts` plugin script (+ `.mjs` twin) and the `history-anatomy.yaml` workflow
-cache branch (0659/0660). The deterministic half — semantic artifact digest, invalidation matrix,
-structure gate, atomic publication — is installed code, not a design.
-
 **Amendment (2026-08-25, task 0669).** Digest authority moved beside the type it canonicalizes:
 `semanticArtifactDigest`, its canonicalization, and the ranked-versus-set classification now live in
 `packages/domain/src/analytics/artifact-digest.ts` (`ARTIFACT_ARRAY_CLASSIFICATION` is derived from
@@ -1329,11 +1004,6 @@ figure renders `not available`; a bounded array length is never substituted for 
 **Why.** `render-forensics.ts:54` printed `bySession.length` as the total session count while
 `analyze --top` bounds that array to 20, so any day with more than 20 sessions rendered a coverage
 claim that was silently false.
-
-**Amendment (2026-08-24).** Decision shipped: `analyze` records the true selection population and
-applied depth per bounded leaderboard, the forensics renderer labels each leaderboard `top N of M`,
-and pre-addition artifacts render `not available` (0657). The backward-compatibility rule is
-installed code, not a design.
 
 **Detail:** `docs/design/history-anatomy.md` §HA-S1 — the additive artifact fields, the renderer
 change, and the backward-compatibility rule for pre-addition artifacts.
@@ -1369,9 +1039,6 @@ rule, and the embed rule written down once rather than re-derived per module.
 tab contract, controlled-prop seam, and card enrichment shapes; mechanism placement in
 `docs/03_ARCHITECTURE.md` §14.5.
 
-**Amendment (2026-08-29).** Status corrected to Accepted: F72's Tasks shell, URL-backed filters,
-append-only tabs, centered header rail, and full-bleed board body are shipped. **Detail:** `03 §14.5`.
-
 ## ADR-082: Merged Config Loads Once at the Composition Root — the Only App-Config Source
 
 **Status:** Accepted · **Date:** 2026-08-24 · **Feature:** A5
@@ -1394,89 +1061,24 @@ against 15 globally defined executors, reproduced 2026-08-24).
 `docs/design/universal-config-loading.md` (context shapes, consumer rewiring table, `--json`
 error-envelope codes, regression-test matrix).
 
-**Amendment (2026-08-29).** Status corrected to Accepted: A5 is done and CLI/server composition
-roots own the merged config load. **Detail:** `03 §1.2.1`.
-
 ## ADR-083: The Anchor-Citation Class Is a Dated Legacy Set — Frozen Pending F91's Matcher Decision
 
 **Status:** Superseded by ADR-090 (2026-08-27) · **Date:** 2026-08-25 · **Feature:** F61
 
-> **Superseded.** ADR-090 deletes the dated-legacy-set mechanism rather than re-using it: "the
-> dated-legacy-set mechanism (freeze, per-code diagnosis paragraphs, repair-campaign conditioning)
-> is deleted, not re-used. The frozen sets' entries do not migrate." The measured probe evidence
-> below remains the record of why a repair campaign was the wrong call; the mechanism it selected
-> is retired. Status corrected 2026-08-28 (task 0700) — it had read `Accepted (design)` since the
-> supersession.
+**Legacy record — historical reconciliation.** The 2026-08-25 citation findings were frozen as
+a dated legacy set without a repair campaign or matcher change. Probes showed the point-window
+matcher rejected otherwise valid citations; matcher changes were routed to F91 separately.
 
-**Decision.** The anchor-citation class — `L4.anchor-subject-mismatch` and `L4.stale-line-anchor` —
-is reconciled as a **dated legacy set**: the 2026-08-25 findings are accepted into the baseline
-under per-code diagnoses, and **no repair campaign and no matcher change runs under this
-reconciliation**. The matcher (`citedLinesNameSubject`, `extractSubjectTokens`, the cited-window
-slice in `checkLineAnchors`) stays byte-for-byte unchanged, because feature F61 puts it Out of
-Scope ("loosening it to excuse a bad citation is forbidden") and F61 AC R2 requires it unchanged
-from the shape feature F91 shipped. The measured matcher evidence is routed to feature F91 as a
-proposal (below), not applied here.
+**Why / tradeoff.** Re-authoring correct citations would hide the matcher defect. Freezing residue
+preserved the narrow reconciliation scope but did not solve matching quality.
 
-**Why this outcome.** Three probes measured in task 0670 (Background) make "repair the citations"
-the wrong campaign and "narrow/loosen the rule" unavailable:
-
-- **Probe 1 — multi-anchor union: real, negligible.** `extractSubjectTokens` excludes only the
-  anchor under test, so a sibling anchor's path becomes a subject token. It can never appear in the
-  cited source, and it defeats the "every token is a row id ⇒ nothing to assert" escape in
-  `citedLinesNameSubject` (`packages/app/src/services/task-check.ts:400-406`). A bare one-anchor
-  evidence row passes; the same row with a second anchor reports; excluding every anchor restores
-  the pass. Corpus fallout of the narrowing: 2 baseline entries stop reproducing (`task:0110`,
-  `task:0368`). Mechanism confirmed; explains ~0.5 % of the class.
-- **Probe 2 — point-window matching: the driver.** The matcher reads only the cited lines
-  (`packages/app/src/services/task-check.ts:1367-1372`). A single-line anchor pointing _inside_ a
-  symbol can never contain that symbol's name. Worked example (task 0665): a citation of
-  `apps/cli/src/context.ts:170` for subjects `createCliContext` / `AgentConfig` — line 170 is
-  `const cwd = resolve(options.cwd ?? process.cwd());`, inside `createCliContext` declared at line
-  151, `agentConfig` bound at line 176. The citation is correct and the window is too narrow.
-  Widening the cited window to ±20 lines moves new mismatches **42 → 10** and turns ~101 baselined
-  mismatch entries stale (5 → 106); total observed findings 4,873 → 3,976.
-- **Probe 3 — cap coupling.** `checkLineAnchors` caps findings at 5 per section, so per-code counts
-  are not independent: under probe 2, `L4.stale-line-anchor` rose 31 → 56 purely because suppressed
-  mismatches freed cap slots.
-
-Probe 2 says most citations are _correct_ and the matcher's point-window is what makes them
-"mismatch" — so a citation-repair campaign would be mass re-authoring of correct citations, which
-the two-sided gate would then re-flag under a different diagnosis. Freezing the dated legacy set is
-the honest reconciliation: the entries record that these findings were measured on 2026-08-25,
-diagnosed per code, and accepted while F91 decides the matcher's window. **Narrowing or widening
-the matcher is not an outcome of this ADR** (F61 Scope; F61 AC R2).
-
-**Detail.** Baseline reconciliation and the per-code dated diagnoses live in
-`config/corpus-baseline.json` `note` (`§ L4.anchor-subject-mismatch (2026-08-25)`,
-`§ L4.stale-line-anchor (2026-08-25)`). The residue codes are reconciled independently:
-`§ L3.unchecked-checklist (2026-08-25)` and `§ L3.ac-empty (2026-08-25)`. The F93-owned codes
-(`L4.scenario-unverified`, `L4.evidence-not-recoverable`, `L4.verifying-incomplete-tasks`) are
-out of scope and stay unlisted per their F93 ownership.
+**Supersession:** ADR-090 removed this mechanism; frozen entries did not migrate.
+Probe evidence and the proposal remain in task 0670 Background/Design.
 
 ## Routed proposal to feature F91 (task 0670 R2)
 
-Feature F91 owns the matcher (`task-check.ts` anchor subject-matching) and is `done`. The probe
-measurements below are **routed, not applied**: no matcher source file is modified by task 0670.
-
-- **Probe-1 result (per-row anchor exclusion):** excluding every anchor in an evidence row (not
-  just the anchor under test) from the subject-token extraction makes 2 baseline entries stale
-  (`task:0110`, `task:0368`) and moves new mismatches 42 → 43. Mechanism at
-  `packages/app/src/services/task-check.ts:1378` / `:400-406`.
-- **Probe-2 result (point-window matching):** widening the cited window to ±20 lines drops new
-  mismatches **42 → 10** and turns ~101 baselined mismatch entries stale (5 → 106); total observed
-  findings 4,873 → 3,976. The matcher reads only the cited lines
-  (`packages/app/src/services/task-check.ts:1367-1372`); a single-line anchor inside a symbol can
-  never name it.
-
-**Reproduction commands (frozen, for a future F91 task):**
-
-```bash
-# full sweep, machine-readable (measured 2026-08-25, ~60 s wall clock)
-bun run apps/cli/src/index.ts task check --corpus --json > /tmp/corpus.json
-
-# probe 2 (window widening): edit the cited-window slice in checkLineAnchors to ±20,
-# re-run the sweep, compare new-mismatch and stale-entry counts against the above.
-```
+Historical proposal/evidence belongs to task 0670 and feature F91. This heading is retained for
+existing references; it grants no current matcher-change or repair-campaign authorization.
 
 ## ADR-084: Environment-Improvement Lens Projects Into Existing Report Owners
 
@@ -1493,9 +1095,6 @@ that duplicates the two report owners. `/sp:dev-review-session` is a distinct cu
 review surface: it reviews the active conversation, uses this lens only to place supported
 improvement proposals, and performs no imported-history analysis.
 
-**Amendment (2026-08-29).** Status corrected to Accepted: I9's shared mapping is shipped in both
-report owners without a third analysis surface. **Detail:** `03 §22`.
-
 ## ADR-085: Environment Remediations Remain Operator Proposals
 
 **Status:** Accepted · **Date:** 2026-08-26 · **Feature:** I9
@@ -1509,9 +1108,6 @@ report owners without a third analysis surface. **Detail:** `03 §22`.
 **Amendment (2026-08-27 · ADR-089):** `sp:session-review` inherits present-don't-apply for process
 and environment improvements. Its complete report is read-only: no source/doc edit, corpus write,
 workflow launch, or indexed-context append.
-
-**Amendment (2026-08-29).** Status corrected to Accepted: I9 and session review enforce
-present-don't-apply. **Detail:** `03 §22`.
 
 ## ADR-086: Materialized Agent Instances Are Runtime State, Not Committed Spec Files
 
@@ -1622,9 +1218,6 @@ class) is baselined as a dated set. (4) 04_DESIGN §2.1 and
 
 **Detail:** task 0688; feature F91; `config/corpus-baseline.json` note § 2026-08-27.
 
-**Amendment (2026-08-29).** Status normalized to Accepted. ADR-090 supersedes only this entry's
-reconciliation practice; the warning-severity decision remains active.
-
 ## ADR-089: Active Session Review Is Inline and Separate from Imported-History Forensics
 
 **Status:** Accepted · **Date:** 2026-08-27
@@ -1644,291 +1237,63 @@ contracts; combining them would unfreeze history-anatomy's two-mode and twelve-s
 
 **Status:** Accepted · **Date:** 2026-08-27 · **Task:** 0691 · **Feature:** F94 (absorbs F96)
 
-**Decision.** The corpus gate stops reconciling dated residue and keeps one ratchet: **a finding
-not in the baseline fails; a baseline entry that stops reproducing no longer does.** The baseline
-collapses from a two-sided 1,916-entry dated ledger into a **committed snapshot of the previous
-sweep's observed findings** — regenerated by tooling from the sweep output, never hand-edited.
-This is option **A+C composed**: snapshot-diff for the new-findings side, single-sided for the
-vanished side.
+**Decision (intermediate policy).** Replace dated per-entry debt with a generated previous-sweep
+snapshot: new findings fail; vanished entries do not. This amends ADR-050/062, supersedes
+ADR-083's dated set and ADR-088's reconciliation practice, and preserves its severity ruling.
+Delete the F96 prose-proximity status-claim matcher rather than tune its false positives.
 
-- **Amends ADR-050:** the two-sided cannot-rot property is retired. Rationale below.
-- **Amends ADR-062:** the warning-severity ratchet stays two-sided _in effect_ on the active
-  folder's fresh findings (new warnings still fail), but warnings no longer mint dated per-entry
-  debt; the snapshot absorbs them mechanically.
-- **Supersedes ADR-083:** the dated-legacy-set mechanism (freeze, per-code diagnosis paragraphs,
-  repair-campaign conditioning) is deleted, not re-used. The frozen sets' entries do not migrate.
-- **Supersedes ADR-088's reconcile practice** (not its severity ruling): the anchor-subject check
-  stays at warning severity; the 435-entry re-key reconciliation it required is the last of its
-  kind.
-- **Constitution T10:** retained, narrowed. Same-commit obligation survives for **newly failing
-  findings** (fix them, or accept them into the regenerated snapshot with a dated wave note).
-  The "or add each to `config/corpus-baseline.json`" branch becomes "accept into the regenerated
-  snapshot" — mechanical, no per-entry authoring. The stale-entry removal obligation (the
-  "delete the moment its finding is fixed" half) is subsumed: the snapshot cannot hold a stale
-  entry because it is regenerated from what the sweep actually observed.
+**Why / tradeoff.** Snapshot regeneration removes manual ledger churn and its corruption risk.
+It loses per-entry diagnoses and can conceal a narrowed matcher; snapshot diffs and policy-change
+audits were the chosen mitigation. Class collapse retained the failure mode; an advisory-only
+sweep was rejected at this stage. Operator approved the composed snapshot/single-sided option
+on 2026-08-27 in task 0691 R2.
 
-**Why.** The measured cost curve (2026-08-27, `config/corpus-baseline.json`):
+**Later policy:** ADR-093 limited pass waivers; ADR-092 narrowed sweep scope; ADR-108 removed
+accepted-debt snapshots and made unsuppressed audits explicit. This entry's snapshot mechanism
+is historical, not current policy.
 
-- 1,916 entries over 37 distinct codes; 1,797 task-kind, 119 feature-kind.
-- **1,580 of 1,797 task entries (88%) sit on archived folders** (`docs/tasks{,2,3}`, ids ≤0488) —
-  closed work the repo has declined to repair across three waves (2026-08-17: 1,037 archived;
-  2026-08-21: 278; 2026-08-27: 264).
-- Nine reconcile waves in 20 days (08-07 → 08-27); the 2026-08-27 wave alone minted 423 entries
-  (325 `L4.anchor-subject-mismatch` re-keyed by ADR-088's severity demotion — 228 archived, 97
-  active).
-- Three reconcile incidents in the 0688 session (2026-08-27): an inverted jq filter dropped the
-  baseline 1907 → 18 (caught only by a 408-new-error blowup), and object-construction key loss
-  truncated the file. All were hand-rolled jq on a policy file.
-
-The two-sided dated ledger's failure mode is structural, not incidental: it converts every
-matcher change into a mandatory same-commit rewrite of a 1,900-entry file whose only safe edit
-path (per-entry diagnosis, dated) is manual. The incidents are what that cost curve looks like at
-the limit. Meanwhile the property it buys — cannot-rot on 1,580 archived entries the corpus has
-already declined to repair — is ratchet debt with no exit: each wave mints more, none is ever
-paid down.
-
-**Options evaluated** (option set per task 0691; precedence reliability > audit fidelity > diff
-size — an option that removes a whole failure mode beats one that only shrinks the file):
-
-| Option                                                                                                        | Verdict                         | Reasoning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **A. Snapshot-diff** (drop dated-residue baselining; gate new findings vs committed snapshot of previous run) | **Adopted — new-findings half** | Keeps gate force exactly where it has value: a genuinely new finding fails the commit that introduced it. Removes the per-entry diagnosis obligation and with it the hand-rolled-jq failure class. Loses the per-entry reason/date audit trail — accepted: the wave note and git history on the snapshot carry the same information at 1% of the maintenance cost.                                                                                                                                                                                                                                                                                                                                                                                |
-| **B. Class collapse** (keep two-sided; merge superseded classes into single keys)                             | Rejected                        | Smallest diff, but explicitly fails the precedence rule: reconcile churn stays per-wave, per-matcher-change. 37 codes → fewer keys shrinks the file, not the cost curve. The 0688 incidents were count-blind; they happen at any entry count >~0 with manual jq in the loop.                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| **C. Single-sided** (gate new findings only; vanished entries no longer fail)                                 | **Adopted — vanished half**     | Kills stale-entry reconcile, the dominant churn source (every matcher improvement strands entries; ADR-088 stranded 435 in one step). The ADR-050 silent-suppression concern is answered structurally: the snapshot is machine-regenerated from observed findings, so a suppression must be a deliberate code change to the matcher or the sweep, both reviewable in a diff — not an unexplained row rotting in a ledger nobody re-derives. Residual risk accepted: a _narrowed_ matcher silently stops flagging previously-flagged correct findings. Mitigation: the snapshot diff makes vanished findings _visible_ in the commit diff (count drops are seen in review), and any matcher change keeps its own T10 same-commit sweep obligation. |
-| **D. Retire the baseline entirely** (advisory-only sweep)                                                     | Rejected                        | Zero gate force. The corpus gate is the only mechanism that caught the eb93dfdaa class (verdict MET with unflipped checkboxes, found by `L3.status-claim-contradiction`) and the 404-error backlog ADR-062 exposed. The sweep's value is gating; reporting-only recreates the pre-ADR-050 world where 84% of the corpus sat outside the gate.                                                                                                                                                                                                                                                                                                                                                                                                     |
-
-**F96 disposition (absorbed — clause-window machinery): DELETE.** The claim-matcher
-clause-window machinery — `ANCHOR_WINDOW_LINES` widening and the row-subject tokenization of
-`L3.status-claim-contradiction` (ADR-088's replacement check: bare claim word within 80 chars, no
-sentence separator, not/never lookbehind negation) — is **deleted, not retained**. Evidence: the
-three dated residue entries **0607/0677/0670** (`L3.status-claim-contradiction: error`,
-`since: 2026-08-27`) are false positives on the _active_ folder, each reason recording
-"Clause-window ambiguity (task 0688 R7 ceiling)": 0607 quotes "not implemented" describing
-deferred residuals, 0677 a "todo" token in a MET table row, 0670 "Pending" inside the quoted
-ADR-083 title. A matcher whose own filing residue on fresh work is 100% false positives at error
-severity has a precision floor no window tuning fixes — the clause-proximity heuristic cannot
-see quotation or scope boundaries. The check itself is removed from
-`task-check.ts`, the `L3.status-claim-contradiction` code retires, and its 18 residue
-entries (7 archived / 11 active) go nowhere — under the single-sided snapshot they would
-be keys whose emitting check no longer exists, so the regenerated baseline carries zero
-status-claim entries. If status-claim verification is wanted again, it returns as a
-structurally different check (e.g. resolving checkbox state against recorded verdicts, not
-prose token proximity), as its own decision.
-
-**Consequences.** (1) `config/corpus-baseline.json` becomes a generated snapshot (entries keyed
-by observed finding; wave note preserved) — hand edits to it are prohibited; regeneration is a
-script with a round-trip assertion on entry count, replacing hand-rolled jq permanently. (2) The
-`packages/app/src/services/corpus-check.ts` reconciliation drops the stale half and the
-per-entry dated-diagnosis contract. (3) T10's stale-entry clause and the ADR-083 frozen-set
-notes in the baseline `note` field retire with the mechanism. (4) **Not in effect until operator
-approval recorded below — task 0691 R2. No gate code, baseline rewrite, or machinery removal
-lands before that approval.**
-
-**Operator approval.** **Approved: A+C compose** — recorded 2026-08-27 via the task 0691 R2 gate
-(inline dev-runall pipeline, option presented among A+C / A / C / B / D). Verbatim selection:
-"A+C compose". Direction evidence: the 2026-08-27 operator message ruling the two-sided
-dated-baseline direction wrong ("simplify the gate and baseline massively for reliability and
-efficiency"). Plan steps 5–7 (implementation, verification, anti-pattern confirmation) unblocked.
-
-**Detail:** task 0691; feature F94; feature F96 (cancelled into 0691); ADR-050 → ADR-062 →
-ADR-083 → ADR-088 chain; `99 §5 T10`; `config/corpus-baseline.json` (1,916 entries, measured
-2026-08-27).
-
-**Amendment (2026-08-29).** Status normalized to Accepted; the operator approval remains recorded
-above. ADR-093 now limits the snapshot's pass-waiver role to temporary debt.
+**Detail:** [essential workflow checks](design/essential-workflow-checks.md); ADR-108.
 
 ## ADR-091: The CLI `--json` Surface Adopts the Contracts Envelope Behind an Opt-In `--json-envelope` Flag
 
 **Status:** Accepted · **Date:** 2026-08-27 · **Task:** 0693 · **Feature:** F95
 
-**Decision.** Every `spur <noun> <verb> --json` emit migrates to the envelope already defined in
-`packages/contracts/src/shared.ts:24-39` — success `{ok: true, data}` (paginated lists
-`{ok: true, data[], meta}`), failure `{ok: false, error: {code, message, details?}}` with the
-frozen `API_ERROR_CODES` union — routed through **a single opt-in seam**: a `--json-envelope`
-flag on shared options (explicit flag > `SPUR_JSON_ENVELOPE=1` env, read in
-`apps/cli/src/output.ts`, the non-interactive opt-in for scripts that cannot add a flag per call),
-applied at the `toJson()` choke point in `apps/cli/src/output.ts` and
-adopted per noun in descending emit-count order (task 26, workflow 12, feature 11, projects 10,
-message 10, history 9, team 6, agent 6, builder 4, rule 3, init 2, status/serve/migrate 1 each —
-102 sites swept, `docs/04_DESIGN.md` §4.1). **The default stays the current unwrapped shape for
-the deprecation window**; `--json` and `--json-envelope` coexist until a follow-up F95 task flips
-the default after a documented window.
+**Decision.** Adopt the existing contracts envelope through one opt-in --json-envelope seam;
+the flag takes precedence over SPUR_JSON_ENVELOPE=1. Keep the raw default during migration and
+preserve command payloads, exit codes and human output. CLI-local error codes map to INTERNAL_ERROR
+with details.cliCode; no new shared error code without a demonstrated consumer.
 
-Migration of the deviation classes found in the §4.1 sweep:
+**Why / tradeoff.** One existing wire contract removes divergent CLI envelopes. Opt-in adoption
+avoids an immediate breaking change but temporarily retains two output modes. Immediate default
+replacement, a CLI-local envelope, the different ts-utils envelope and per-call-site wrapping
+were rejected. Artifact-backed raw outputs keep their documented exceptions.
 
-- **Bare-array lists** (`task list`, `task check`, `feature check`) become paginated envelope
-  responses: `{ok: true, data: [...], meta}`.
-- **Top-level `ok`-as-command-success** (~18 sites: projects verbs, task 431/715/754, agent
-  create, builder, init fresh) move their payload under `data`; the top-level `ok` becomes the
-  envelope discriminant. Command-level failure semantics move to the `ok: false` + `error`
-  branch; exit codes are unchanged (out of scope).
-- **Pseudo-envelope errors** (`{error: {code, message}}` without `ok`; `{ok: false, error:
-"<string>"}` with CLI-local codes) normalize to `apiErrorSchema` with frozen codes.
-- **Helper bypasses** (raw `JSON.stringify` at rule list, task verdict, task verifyall-aggregate)
-  route through the same seam; the task-verdict file artifact's _content_ is unchanged (out of
-  scope). Its console emit also stays raw (see `docs/04_DESIGN.md` §4.1 "Kept raw"), where the
-  artifact bytes double as the stdout payload — adopting the seam there would fork two renderings
-  of one artifact and is deferred to the consumers of that surface.
+**Approval provenance:** operator approval recorded 2026-08-27 in task 0693 R3/Q&A.
+Default flipping remains separate work after a documented migration window.
 
-**`API_ERROR_CODES` extension (closes the DEFERRED Q&A item).** **No seventh code now.** The two
-CLI-local error vocabularies (message/agent/task-collision; projects/builder) map to
-`INTERNAL_ERROR` with the CLI-local code carried in `error.details.cliCode`, so no consumer that
-strings-matches today loses information and no new vocabulary is minted without proven need. A
-new code is added only when a consumer can be shown to branch programmatically on it — and that
-extension amends this ADR rather than reopening it.
+**Amendment 2026-08-27 (task 0697) — the envelope seam moves to packages/app.** Share the helpers
+from the application layer and re-export them through CLI output. Service emitters cannot import
+the CLI without creating a cycle. Contracts remain DTO-only; duplicating helpers or adding a new
+package would introduce another owner. The raw default and public options remain unchanged.
 
-- **Operates under ADR-051:** the `spur` CLI is the public surface; this change is consent-gated
-  (see conditioning) and the flag name, migration table, and deprecation window are the consent
-  artifacts.
-
-**Why.** Task 0688 (2026-08-27) surfaced four live `--json` deviations in one session: a task
-update response with no `ok` field, two bare-array responses, and a flat-with-`ok` shape — each a
-different contract for the same flag. The 102-site sweep (`docs/04_DESIGN.md` §4.1) showed the
-divergence is structural: **zero sites emit the canonical envelope today**, with five recurring
-deviation classes across 14 noun modules. `packages/contracts` already defines and
-server-validates the exact shape; the CLI re-invented five approximations of it. Adopting rather
-than authoring gives one wire shape across oRPC server and CLI with one source of truth. The 0688
-incident is the cost of the status quo: an unannounced shape change broke consumers — which is
-also why adoption is opt-in with the raw default preserved, not a flag flip in this task.
-
-**Options evaluated:**
-
-| Option                                                                            | Verdict     | Reasoning                                                                                                                                                    |
-| --------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Adopt contracts envelope, opt-in `--json-envelope`, raw default during window** | **Adopted** | One source of truth, zero breaking change at merge, per-noun adoption reviewable incrementally.                                                              |
-| Flip `--json` to enveloped immediately                                            | Rejected    | Repeats the 0688 failure class: an unannounced shape change breaking consumers.                                                                              |
-| Author a new CLI-local envelope                                                   | Rejected    | Second convention beside an existing canonical one; server and CLI shapes drift again.                                                                       |
-| Adopt `@gobing-ai/ts-utils` `ApiEnvelope`                                         | Rejected    | Different shape (`{code, message, result, data}`), zero call sites under `apps/`/`packages/`. Recorded as rejected alternative; retiring it is out of scope. |
-| Per-call-site wrapping (no seam)                                                  | Rejected    | 102 sites × two shapes to keep in sync; the seam makes the flag a one-line concern per noun.                                                                 |
-
-**Consequences.** (1) `apps/cli/src/output.ts` gains `CliEnvelope<T>` types re-exported from
-`packages/contracts`; `--json-envelope` registers in
-`apps/cli/src/commands/shared-options.ts`. (2) Migration is per-noun and mechanical: each site's
-existing payload moves under `data` verbatim — **no payload field, exit code, or human-output
-change** (out of scope). (3) The oRPC/server surface is not migrated; `packages/contracts` is the
-source being adopted, not a target. (4) The default-shape flip and the `--json-envelope`-default
-deprecation window are follow-up F95 work carrying this ADR id. (5) **Not in effect until
-operator consent is recorded — task 0693 R3, per the ADR-051 amendment for public CLI surface
-changes. No `apps/cli/src/` or `packages/app/src` edit lands before that consent.**
-
-**Operator approval.** **Approved** — recorded 2026-08-27 (operator Robin Min) via the task 0693
-R3 gate. The operator approves ADR-091 as presented: contracts envelope adopted as the standard
-`--json` shape, opt-in only via `--json-envelope` / `SPUR_JSON_ENVELOPE=1` (flag > env) at the
-single `toJson()` seam, raw default preserved during the deprecation window (default flip =
-follow-up F95 work), bare-array list verbs paginate to `{ok, data[], meta}`, and **no seventh
-`API_ERROR_CODES` code** (CLI-local codes collapse to `INTERNAL_ERROR` with `details.cliCode`).
-Mirrored in task 0693 `### Q&A`. R4 unblocked.
-
-**Detail:** task 0693; feature F95; `docs/04_DESIGN.md` §4.1 (102-site shape inventory);
-`packages/contracts/src/shared.ts:24-39`; `apps/cli/src/output.ts:22`; incident evidence: task
-0688 (2026-08-27, four observed `--json` deviations).
-
-**Amendment 2026-08-27 (task 0697) — the envelope seam moves to `packages/app`.** The helpers
-(`envelopeEnabled`, `toEnvelopeJson`, `toEnvelopeError`, `writeJsonError`, and the `CliEnvelope` /
-`EnvelopeErrorPayload` / `EnvelopeOptions` types) now live in
-**`packages/app/src/output/envelope.ts`**, exported from `@gobing-ai/spur-app`.
-`apps/cli/src/output.ts` re-exports them, so all 99 call sites adopted at 0693 resolve unchanged
-and keep `import { toEnvelopeJson } from '../output'`. `CommandOutput`, `consoleOutput`, and
-`toJson` stay CLI-local; `writeJsonError` now accepts the structural `EnvelopeCapableOutput`
-(`{write, error}`), which both `CommandOutput` and the service output sinks already satisfy.
-
-_Why the move is forced, not chosen._ The 0693 sweep was scoped to `apps/cli/src/commands/**`, but
-five verbs emit their `--json` from a service in `packages/app` and so never saw
-`options.jsonEnvelope`: `agent list`, `agent doctor`, `rule run`, `rule validate` (the four filed
-on 0697) plus `agent run`, which AC4's inventory scan surfaced as the same defect class. The naive
-fix — importing the helpers from `apps/cli` into `packages/app` — is not merely discouraged, it is
-**circular against the workspace graph**: `apps/cli/package.json` already depends on
-`@gobing-ai/spur-app`, and five CLI modules import it at runtime. Moving the helpers down and
-re-exporting up is the only direction that adds no dependency edge. ADR-021 ("Functionality Lives
-in `packages/app`") independently points the same way, but the binding constraint is the graph.
-
-_Rejected alternatives._ (1) **`packages/contracts`** — that package is transport DTOs only
-(AGENTS.md § oRPC), and `envelopeEnabled` reads `process.env`, which is runtime behavior, not a
-DTO. (2) **Duplicating the helpers into `packages/app`** — a second envelope implementation inside
-the very task meant to finish adopting the first; ADR-091 exists to stop the repo growing another
-envelope. (A third, a new shared package for four functions, was rejected as ceremony.)
-
-_No consent gate._ This is an internal module relocation: no CLI noun, verb, or flag changes.
-`--json-envelope` already exists and was already consent-approved above, so the ADR-051 gate that
-governed 0693 does not apply here. The amendment exists so the next reader knows why
-`apps/cli/src/output.ts` became a re-export. The raw default and the deferred default-flip are
-unchanged.
-
-_Detail:_ task 0697; `packages/app/src/output/envelope.ts`; `apps/cli/src/output.ts`;
-`docs/04_DESIGN.md` §4.1 (closed inventory); AC4 guard
-`apps/cli/tests/json-envelope-inventory.test.ts`
+**Detail:** [data/output contracts](design/data-output-contracts.md), 04 §4.1.
 
 ## ADR-092: The Corpus Sweep Scopes to Open Work — Archived Folders Are Read-Only History
 
 **Status:** Accepted · **Date:** 2026-08-28 · **Task:** 0700 · **Amends:** ADR-062 §1, ADR-050
 
-**Decision.** `spur task check --corpus` sweeps the **active task folder only**. The archived
-corpora (`docs/tasks`, `docs/tasks2`, `docs/tasks3`) remain fully resolvable — the task locator and
-every feature check still read them, so cross-folder `feature_id`, `parent_wbs`, and `dependencies`
-edges resolve exactly as before — but they are no longer re-derived as findings. Only the check loop
-narrows.
+**Decision.** Explicit corpus audits derive findings from the active task folder only, including
+its freshly terminal records. Archived folders remain resolvable for identity, feature and
+dependency references but are not re-derived as findings. No check or severity changes here.
 
-The narrowing is **folder-scoped, not status-scoped**, deliberately: terminal-status rules
-(`L3.unchecked-checklist`, `L4.testing-verdict-stub`) exist to validate completion records and must
-keep running on freshly-closed work in the active folder.
+**Why / tradeoff.** Archived closed work dominated recurring findings without an active repair
+consumer. Folder scope reduces that burden while retaining checks on newly completed records;
+archival evidence remains readable rather than continuously re-audited.
 
-**No rule is retired and no severity changes.** Every finding code keeps firing at its declared
-severity on the swept scope.
+**Later policy:** ADR-108 retires the snapshot/waiver mechanism and preserves explicit,
+unsuppressed audits. Ordinary changes check affected records.
 
-- **Amends ADR-062 §1** ("the corpus sweep covers every configured task folder, not just the active
-  one"). That clause is replaced by the active-folder scope above.
-- **Amends ADR-050.** Its "continuous, unbypassable" framing described a gate that, measured on
-  2026-08-28, suppressed 99.24% of what it observed. The gate is continuous over open work; it is
-  not, and was never, unbypassable over the whole corpus.
-- **Constitution T10 is unaffected.** The same-commit obligation for newly-failing findings stands;
-  it simply applies to a scope where the findings have a consumer.
-
-**Why.** Measured on 2026-08-28. The _before_ column is `HEAD` `dad078ad5`; the _after_ column is
-`HEAD` `4748fa566`, after tasks 0699–0701 landed concurrently and added rules of their own — so the
-absolute counts shift slightly while the scope ratio does not:
-
-| Measure                     | Before (`dad078ad5`) | After (`4748fa566`) |
-| --------------------------- | -------------------- | ------------------- |
-| Observed findings per sweep | 5,264                | 1,554               |
-| Suppressed by baseline      | 5,224 (99.24%)       | —                   |
-| Baseline snapshot entries   | 1,949                | 405                 |
-| Sweep wall-clock            | 57.4 s               | 24.8 s              |
-
-Three independent measurements make the archived scope indefensible:
-
-1. **71.4% of all observed findings came from `docs/tasks{,2,3}`** — 487 tasks of which 482 (99%)
-   are `done` or `cancelled`. A drift finding on a task closed two months ago has no consumer, and
-   no wave has ever repaired one.
-2. **The baseline was never a curated exception list.** Mining the `since` field of the pre-ADR-090
-   snapshot: 1,858 of 1,917 entries (96.9%) arrived in exactly three mass-acceptance events
-   (2026-08-17: 1,127; 2026-08-21: 307; 2026-08-27: 424). Fifty-nine entries accreted incrementally
-   across the other 17 days. Each wave was a snapshot of whatever the rules were saying that day.
-3. **Key granularity amplifies acceptance without bound.** Keys are `kind:id:code`, so one entry
-   blanket-accepts every present and future finding of that code on that entity —
-   `L4.stale-line-anchor` absorbs 2,463 findings under 474 keys (5.2×); `L4.scenario-unverified`
-   absorbs 350 under 39 (9×).
-
-ADR-090 named this exact pathology in its own text — _"1,580 of 1,797 task entries (88%) sit on
-archived folders — closed work the repo has declined to repair across three waves"_ and _"ratchet
-debt with no exit: each wave mints more, none is ever paid down"_ — and then fixed the wrong layer.
-Snapshot regeneration made **carrying** the debt cheap; it did not stop **generating** it. ADR-062
-§1's own landing commit is the proof: it widened the scope and minted 1,127 entries in the same
-change.
-
-**What the accumulated baseline is for now.** Suppression was the temporary use. With the scope
-narrowed, the snapshot's remaining value is as a **repair queue**, not an exemption list: 387 keys
-over open work is small enough to pay down, where 1,949 over closed work was not. The historical
-`since`-annotated copy retains one further use — identifying which codes mint debt in waves (a
-retire-or-narrow signal) versus which accrete slowly (real signal).
-
-**Consequences.** (1) `config/corpus-baseline.json` is regenerated at the new scope: 1,949 → 387
-entries, round-trip verified. (2) `packages/app/tests/services/corpus-check.test.ts` inverts its
-scope assertion — the active folder is swept, an archived folder is not. (3) The stale untracked
-`apps/cli/config/corpus-baseline.json` (604 KB, pre-ADR-090 two-sided schema with per-entry
-`reason`/`since`) is deleted; it is a build artifact that outlived its mechanism.
-
-**Detail:** `packages/app/src/services/corpus-check.ts` `structuralSweep`;
-`scripts/commands/regen-corpus-baseline.ts`; `99 §5 T10`; `docs/04_DESIGN.md` corpus-gate section.
+**Detail:** [essential workflow checks](design/essential-workflow-checks.md); ADR-062/108.
 
 ## ADR-093: Gate-Waiver Baselines Are Temporary Debt Registers
 
@@ -1943,8 +1308,8 @@ not waivers.
 **Why.** A permanent or self-renewing waiver silently redefines failure as success and destroys the
 sensor's value.
 
-**Detail:** `03 §23`; ADR-058 (temporary compatibility manifest); ADR-090/092 (current corpus
-snapshot, pending migration to this contract).
+**Detail:** `03 §23`; ADR-058 (temporary compatibility manifest). ADR-108 retired the corpus
+snapshot application; this entry does not authorize recreating it.
 
 ## ADR-094: Constrained Agent Stages Require Host-Enforced Capability Attestation
 
@@ -1959,6 +1324,8 @@ hard refusal.
 constraints.
 
 **Detail:** `03 §24`; task 0706; ADR-012.
+
+**Clarification (task 0754).** ADR-102 refines capability-attestation enforcement; it does not supersede the host-enforcement principle.
 
 ## ADR-095: Runtime Budgets Use Measured Usage; Unknown Is Never Zero
 
@@ -2010,6 +1377,8 @@ states the exact operator decision required; it copies no logs and adds no persi
 
 **Detail:** `03 §24`; task 0709; ADR-044/056.
 
+**Clarification (task 0754).** Dry-run probes do not emit escalation packets.
+
 ## ADR-099: Checkpoints and Indexed Context Are Freshness-Bound Derived State
 
 **Status:** Accepted (design) · **Date:** 2026-08-29
@@ -2021,6 +1390,8 @@ only expired, unreferenced, regenerable state within its confined owner path.
 **Why.** Derived memory without freshness and retention rules becomes a stale competing authority.
 
 **Detail:** `03 §24`; task 0711; ADR-044/079.
+
+**Clarification (task 0754).** Freshness is checked again at resume against version and definition changes.
 
 ## ADR-100: Verified-Outcome Metrics Require Digest-Bound PASS Evidence
 
@@ -2034,6 +1405,8 @@ metrics derive from existing records and report missing attribution as null with
 
 **Detail:** `03 §24`; task 0712; ADR-071.
 
+**Clarification (task 0754).** Completion requires the certifying run’s current proof binding; missing or stale binding is refused.
+
 ## ADR-101: History Refresh Uses Process Isolation and Database Single-Flight
 
 **Status:** Accepted · **Date:** 2026-08-29
@@ -2046,11 +1419,6 @@ child process, and one database constraint admits at most one pending-or-process
 without adding another worker runtime or coordination plane.
 
 **Detail:** `03 §7`; `docs/design/history-refresh-process-isolation.md`; feature E31.
-
-> **Amendment (2026-08-29).** Built: database single-flight (task 0716, unique index
-> `queue_jobs_history_refresh_active_unique`) and isolated child-process execution (task 0717, via
-> `SPUR_HISTORY_REFRESH_CONTEXT`) shipped; status moves from `Accepted (design)` to `Accepted`.
-> Mechanism: `03 §7`; shapes: `docs/design/history-refresh-process-isolation.md`.
 
 ## ADR-102: Constrained Agent Stages Attest Executor Capabilities Before Spawn
 
@@ -2074,161 +1442,54 @@ to `unknown`, never permissive.
 
 **Status:** Accepted (design) · **Date:** 2026-09-03
 
-**Decision.** The History rollup refresh becomes incremental: a **refresh watermark** over
-`imported_at` — a concept distinct from the existing turn-completeness watermark, which the pass
-still composes with — selects newly imported rows; their distinct `bucket_start` values define the
-buckets to delete and re-derive. Freshness moves from one global checkpoint hash to per-table
-watermark plus materialized bucket range plus a rollup **definition version**, so an import degrades
-only the buckets it touched while a change to the derivation logic still forces a rebuild. A bucket's
-delete and re-derive commit as one unit, so a concurrent reader never observes an emptied bucket. The
-skill rollup keeps `history_skill_call` as its source — the table's DDL is owned by the importer
-package (`@gobing-ai/ts-llm-jsonl-importer`), not by Spur migrations, and its absence is dependency
-version skew rather than a schema gap; tool identity is persisted as **two** columns on
-`history_tool_call` — `effective_tool_name` (extraction, replacing the per-row JSON `CASE`) and
-`tool_name_alias` (cross-agent canonicalization, defaulting to `effective_tool_name`) — so tool
-identity is consistent and filterable across the Summary and tool-sequence paths and groupable
-across coding agents. Read-path aggregation over `history_message` / `history_tool_call` is prohibited;
-point lookups by `record_hash` remain permitted. The History UI and `packages/contracts/src/history.ts`
-are enforced unchanged by diff assertion.
+**Decision.** Incrementally refresh rollups from an imported-at watermark by atomically
+rederiving touched buckets. Track per-table watermark/range/definition version separately from
+turn completeness. Persist tool identity on fact rows and avoid read-path full-table aggregation;
+the History transport contract stays unchanged.
 
-**Why.** The current refresh rebuilds all twelve rollup tables from the whole corpus on every
-import (43.9 s measured at 1.79 M messages) and its freshness key inverts on any new line, so the
-board falls back to full-corpus scans measured at 2.3–4.2 s per analyzer. Cost must track imported
-delta, not corpus size. Bucket-scoped recomputation is sound because dedup keeps the lowest-rowid
-row per `request_id` and imports only append, so a late duplicate is always the loser and can never
-change an already materialized bucket.
+**Why / tradeoff.** Refresh cost should follow imported delta rather than corpus size. Correct
+bucket replacement requires explicit progress/version metadata instead of a full rebuild.
 
-Rollup source tables are additionally asserted against the _importer-applied_ schema, and installed
-`@gobing-ai/ts-*` versions against the lockfile, so an upstream table or a stale `node_modules`
-fails a check rather than a production refresh.
-
-**Detail:** `docs/design/history-incremental-materialization.md`; feature E91; ADR-101;
-E9/0632–0633; E9/0735–0737.
-
----
+**Detail:** [incremental materialization](design/history-incremental-materialization.md); ADR-101.
 
 ## ADR-104: The History Schema Has One DDL Authority — Spur's Migration Ledger
 
 **Status:** Accepted (design) · **Date:** 2026-09-03
 
-**Decision.** Spur's migration ledger becomes the single DDL authority and single ordering for the
-`history_*` schema. `@gobing-ai/ts-llm-jsonl-importer` keeps its `HISTORY_IMPORT_SCHEMA_SQL` so the
-library remains usable standalone, but inside Spur that SQL is applied as an **input to a versioned
-migration step**, not as an implicit side-effect of the next import. Alongside it, the three
-importer-populated tables are named as the project's **core fact tables**: `history_message`,
-`history_tool_call`, and `history_skill_call`. `history_etl_*` is raw landing/staging; every
-`history_board_*` and `history_daily_stats` table is a derived mart, rebuildable from the facts and
-therefore disposable. New insight work adds marts; it never adds a second source of truth.
+**Decision.** Within Spur, its migration ledger is the single DDL authority and ordering.
+Importer SQL remains usable standalone but enters Spur only as a versioned migration step.
+Keep core facts, raw landing tables and derived marts distinct.
 
-**Why.** DDL authority is currently split across two repositories. The importer owns
-`history_message`, `history_tool_call`, `history_skill_call`, `history_import_checkpoint`, and
-`history_import_ledger`, plus all `history_etl_*` created dynamically at run time; Spur owns the
-twelve `history_board_*` tables, `history_daily_stats`, `history_run_session`, and
-`history_task_session`. Spur nonetheless already behaves as owner for everything except
-`CREATE TABLE`: eight migrations mutate importer-owned tables (`ALTER TABLE` in 0024, 0025, 0026;
-`CREATE INDEX` in 0009, 0020, 0022, 0029, 0030), and `request_id` is defined twice — inline in the
-upstream `CREATE` (`schema-sql.ts:52`) and as migration `0018`'s `ALTER TABLE`. The two coexist only
-because Spur carries an `addColumnIfMissing` guard, a drift-tolerance mechanism that exists
-precisely because authority is split.
+**Why / tradeoff.** Split DDL execution lets released importer changes diverge from existing
+databases. A single ledger requires coordinated migration adoption instead of implicit upstream DDL.
 
-The failure mode is structural, not incidental: `CREATE TABLE IF NOT EXISTS` against an existing
-database silently never applies new upstream columns, because the table already exists and the
-statement no-ops. A missing table is the loud version of this (the `history_skill_call` incident,
-ADR-103/D1); a missing column is the quiet one. Neither is visible to Spur, because an upstream
-schema change writes no ledger entry and carries no version Spur can compare against. One authority
-with one ordering and one recorded version closes the class rather than the instance.
-
-**Detail:** `docs/design/history-incremental-materialization.md` §9 (D9); feature E91; ADR-103.
-
----
+**Detail:** [incremental materialization](design/history-incremental-materialization.md) §9; ADR-103.
 
 ## ADR-105: History Schema Ownership Splits on Three Axes — Table, Column, Index
 
 **Status:** Accepted (design) · **Date:** 2026-09-03
 
-**Decision.** Ownership of the `history_*` schema is decided per element, on three axes rather than
-one:
+**Decision.** Assign history schema ownership by element: table DDL to its owning layer,
+fact columns to the value producer, and indexes to the query consumer. Keep the existing packages.
 
-| Axis                        | Owner                                                                                                               | Rationale                                                                                                           |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| **Table DDL**               | By layer — raw landing and core facts to `@gobing-ai/ts-llm-jsonl-importer`; marts and Spur-specific tables to Spur | A table has one creator, one `CREATE`, one ledger entry                                                             |
-| **Columns on a fact table** | Whoever **produces the value**                                                                                      | A column nobody upstream populates is a downstream column living in the wrong house                                 |
-| **Indexes**                 | Whoever **runs the query**                                                                                          | An index is a consumer optimization, not schema semantics; the importer cannot know a consumer's query shapes exist |
+**Why / tradeoff.** Producer facts and consumer indexes need different knowledge; a single
+table-owner rule misplaces one of them. The split requires an enforced schema compatibility contract.
 
-Concretely: the importer owns `history_message`, `history_tool_call`, `history_skill_call`,
-`history_import_checkpoint`, `history_import_ledger`, and the `history_etl_*` raw landing tables
-(uniform six-column payload tables created lazily on first accepted row). Spur owns the twelve
-`history_board_*` tables, `history_daily_stats`, `history_run_session`, and `history_task_session`.
-
-**No third package is created.** A `ts-llm-history-etl`-style package would hold nothing:
-`history_board_*` has zero references in `ts-libs` and its tables are Spur-shaped — they encode this
-UI's bucket sizes, `RANK_DEPTH`, and `history_task_session`'s link to Spur's own task corpus — while
-`history_etl_*` is raw landing the importer itself creates and writes. Extracting either would be
-speculative reuse for a second consumer that does not exist.
-
-**Why three axes rather than one.** A single "one owner per table" rule produces the wrong answer
-twice. It would force Spur's twelve board-query indexes (migrations 0009, 0020, 0022, 0029, 0030 —
-`idx_history_message_duration_rank`, `idx_history_message_token_rank`, and similar) upstream into a
-package that has no knowledge of the board, and it would leave columns like
-`history_import_checkpoint.source_size` downstream even though the migration adding them states
-outright that they back the importer's own incremental short-circuit. Splitting the axes assigns
-each element to the party that can actually reason about it: the producer of a value knows when to
-write it, and the consumer of a query knows what it must scan.
-
-The corollary is that fact-row identity is computed at import. `duration_source`,
-`effective_tool_name`, and `tool_name_alias` are all properties of the fact row, so all three are
-written by the importer — recomputing them per query is the read-path work ADR-103 exists to remove.
-
-**Why ownership needs enforcement, not documentation.** The importer exports no schema version, so
-an installed package older than the lockfile applies an older `CREATE TABLE IF NOT EXISTS` set and
-the divergence is invisible until a query hits a missing table (ADR-103/D1). Documentation cannot
-catch this; a version constant recorded in the migration ledger and compared at check time can.
-
-**Detail:** feature E92; ADR-104 (application protocol); ADR-103 (the incident that surfaced it).
-
----
+**Detail:** [incremental materialization](design/history-incremental-materialization.md); ADR-104/103.
 
 ## ADR-106: History Aggregates Store One Additive Measure Vector and No Derived Ratios
 
 **Status:** Accepted (design) · **Date:** 2026-09-03
 
-**Decision.** Every history aggregate that serves a KPI surface carries the same nine-member measure
-vector: `messages`, `tool_calls`, `skill_calls`, `fresh_input_tokens`, `cache_read_tokens`,
-`cache_write_tokens`, `output_tokens`, `duration_ms`, `duration_samples`. Every member is a count or
-a sum, and therefore additive across any bucket, dimension, or window.
+**Decision.** KPI aggregates store a shared additive measure vector: counts, token sums,
+duration sums and duration samples. Derive ratios/means on read, retain denominators and keep
+attributed measures distinct. Cache reads and writes remain separate measures; writes are not
+cache hits. Do not change the transport contract.
 
-**No rate, ratio, percentage, or mean is ever materialized.** `cache_hit_rate`, `gain_rate`, mean
-duration, and error rate are computed from the vector at read time:
+**Why / tradeoff.** Additive values compose across buckets; stored ratios do not. Read projections
+must compute derived metrics consistently from the retained sums and sample counts.
 
-```
-cache_hit_rate = cache_read / (fresh + cache_read + cache_write)
-gain_rate      = output     / (fresh + cache_read + cache_write + output)
-```
-
-Two corollaries follow. **Every sum ships with its denominator** — a mean is not additive, so a sum
-without its sample count cannot be averaged across buckets correctly. **Cache write is its own
-measure**, never folded into cache read: it is the premium-billed cost of populating the cache, not a
-hit, and merging them makes a session that wrote a large cache and never reused it score as high
-cache-hit. **Attributed measures are named distinctly from measured ones** (`_alloc` suffix), because
-tool-grain token columns hold message tokens allocated across calls and summing them with
-message-grain measures double counts.
-
-The vector lands on the dimension-grain tables. Per-row ranking tables, findings tables, and rollup
-metadata do not carry it; top-N breakdown tables carry only what is well defined at their grain.
-
-**Why.** The twelve existing rollup tables each chose an ad-hoc measure subset, so what is answerable
-depends on which table happens to hold the dimension — `cache_write_tokens` appears in none of them
-despite `run-cost.ts` and `role-tokens.ts` using it, and `duration_samples` is missing from three
-tables that carry `duration_ms`, making a correct mean uncomputable there. A fixed additive vector
-turns each new question into a `GROUP BY` over an existing table instead of a new rollup table, which
-is the property that keeps the aggregate layer from growing one table per question. Storing a ratio
-would destroy it: a materialized rate invites `AVG()` across buckets, which is wrong and looks
-plausible.
-
-This is a storage-layer decision. No History response gains a field, so the transport contract is
-unchanged (ADR-103, E91/R11).
-
-**Detail:** `docs/design/history-incremental-materialization.md` §12 (D10); feature E91 R21–R25.
+**Detail:** [incremental materialization](design/history-incremental-materialization.md) §12.
 
 ## ADR-107: Proportional Workflow Routing on Surrounding Pilots
 
@@ -2267,60 +1528,35 @@ runs solely to satisfy the rollout branch.
 
 **Status:** Accepted · **Date:** 2026-09-05 · **Feature:** D61
 
-**Decision.** Preserve essential integrity and evidence checks at affected write/completion boundaries;
-move whole-corpus checks to explicit audits and retire suppression snapshots and exact workflow
-composition mirrors after migrating their useful consumers. Complete the existing plan/version
-surfaces across all eleven workflows using the existing engine and identity/progress owners.
+**Decision.** Preserve essential integrity/evidence checks at affected write/completion
+boundaries. Make corpus checks explicit audits; retire accepted-debt snapshots, regenerators and
+exact composition mirrors. Keep plan/version/progress behavior in existing owners.
 
-**Why.** Repeated document checks and acceptance snapshots consume work without proving a better
-outcome; direct behavioral evidence and truthful progress provide the useful guarantees.
+**Why.** Behavioral evidence and truthful progress are more useful than repeated document sweeps
+and self-maintaining acceptance snapshots.
 
-**Migration.** D61 implementation supersedes the routine sweep/snapshot policies in ADR-050/062/090/092
-and the corpus application of ADR-093, and the exact composition-mirroring portion of ADR-069.
-Existing enforcement remains until replacements land; each owning task reconciles authority and
-derived contracts in the same change. ADR-107's Option B closure and fast-mode evidence bar remain.
+**Migration:** supersedes routine sweep/snapshot policies in ADR-050/062/090/092, their ADR-093
+waiver application and the exact-mirroring portion of ADR-069. ADR-107's safety closure and
+activation evidence bar remain unchanged.
 
-**Detail:** `docs/design/essential-workflow-checks.md`; approved proposal
-`docs/plans/2026-09-04-workflow-upgrade-brainstorm.md`.
+**Correction (2026-09-06, operator clarification).** Removing the opt-in audit was an incorrect
+implementation, not the accepted decision. Retain visible, unsuppressed audits; ordinary task
+and wrap-up gates check affected inputs. No replacement snapshot or policy DSL.
 
-**Correction (2026-09-06, operator clarification).** The original decision at
-`f85094a7f16e24a9ac9b5a36b1a76b1525b2d5e5` remains authoritative: simplify corpus checking by
-removing automatic sweeps, suppression baselines and regenerators, not the explicit audit itself.
-The 0775 implementation and derived-doc retirement of that audit were incorrect. Restore the
-existing opt-in audit with visible errors/warnings and no accepted-debt filtering; ordinary task
-and wrapup gates check affected inputs. This correction adds no replacement snapshot or policy DSL.
-
-**Delivery correction (2026-09-06, task 0781).** D61's essential-check and snapshot-retirement
-implementation shipped; the design-only status was stale. Subsequent workflow audit findings remain
-separate repair work, not evidence that every surrounding workflow is defect-free. ADR-107's
-Option B activation boundary is unchanged.
+**Detail:** [essential workflow checks](design/essential-workflow-checks.md).
 
 ## Amendments (task 0754, D8 Decision 8 closure)
 
-Each ADR below is amended to reflect work that shipped between the original acceptance and the 0754
-sweep. The amendment note records the concrete change; the ADR's body is unchanged. The 0754 verify
-stage cites these notes (not the original body) when scoring authority/derived-doc drift.
-
-| ADR | Amendment (0754)                                                                                                                                                                                                                                                                   |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 051 | Mechanical placement check widened: `scripts/commands/` and the package.json composition entrypoints (`regen-corpus-baseline`, `regen-composition-baseline`) are now covered alongside the plugins/sp script surface. See `scripts/commands/composition-entrypoint-check.ts`.      |
-| 069 | The composition baseline advisories were re-baselined against the current snapshot (R4); the gate stays advisory per the original decision. No advisory count change in policy; the new snapshot just re-anchors the warning threshold.                                            |
-| 071 | Proof-chain repairs from task 0751 (workflow-proof fail-closed) are recorded as the first concrete application of this ADR. The same shape applies to docs-pipeline per task 0760 R1.                                                                                              |
-| 093 | Corpus baseline migrated to the waiver fields this ADR mandates — owner, review date, removal criterion — closing D8 Decision 8. The new fields are present in the regenerated snapshot.                                                                                           |
-| 094 | Refines to: ADR-102 (the concrete contract below). The principle is "host enforces capability attestation"; the contract is the typed-args boundary and the dispatch-side denylist. Neither supersedes the other; ADR-102 refines ADR-094's principle into an executable contract. |
-| 098 | Dry-probe exclusion: escalation packets no longer fire on dry-run probes (task 0753 R4). The escalation channel that fires on probes is one nobody reads; the fix gates emission at the event boundary, not downstream filtering.                                                  |
-| 099 | Resume-side freshness: the digest comparison introduced by task 0752 catches a version or definition edit between run and resume. This ADR's freshness contract is now exercised by the engine, not just documented.                                                               |
-| 100 | Verified-outcome binding: the prove-digest stamped into `.spur/run/<wbs>-verdict.json` binds the certifying run to its verdict (task 0751 R4). The `proofBinding: current` guard refuses missing or stale binding.                                                                 |
-| 102 | Docs anchor: the capability-attestation section in `docs/04_DESIGN.md:2451` is now labeled with this ADR (was mislabeled as ADR-101 — a history-refresh ADR — and corrected in 0754 R2).                                                                                           |
+Historical implementation sweep; delivery evidence remains in task 0754. The architectural
+clarifications are retained with ADR-094/098/099/100/102; retired baseline receipts have no
+current policy authority. This heading remains for existing references.
 
 ## ADR-109: Task Creation Prepares Specifications by Default
 
 - **Status:** Accepted · **Date:** 2026-09-06 · **Feature:** F21 · **Amends:** ADR-020
 - **Decision:** Default task CLI creation invokes the existing ready-preparation competency, with an explicit capture opt-out. Shared task writers remain deterministic; host planning prepares content inline and avoids a second model pass. Structural validity, specification readiness and execution prerequisites remain distinct.
 - **Why:** A newly created task should not require a separate manual refinement action, and shared writers must not acquire hidden agent execution.
-- **Detail:** `03 §12.4`; [task creation surface](design/task-creation-readiness.md). Delivered by task 0788: `create`/`batch-create` prepare to ready depth by default (`preparation-failed` JSON error branch carries the stage and recovery command), `--skip-ready` captures without model execution, and the idea pipeline gained the `ready-prepare` stage writing the ready-evidence sidecar.
-
-**Amendment (2026-09-07).** Status vocabulary corrected to **Accepted** per `99 §6.1` rule 5 (shipped; task 0788 verify PASS): the previous `Implemented (F21 task 0788)` is outside the §6.1 template vocabulary (`Accepted | Accepted (design) | Superseded by ADR-MMM | Skipped`). Per `99 §6.1` rule 3 only the status vocabulary aligns; entry number, date, decision text, and every repo-wide cross-reference are unchanged.
+- **Detail:** `03 §12.4`; [task creation surface](design/task-creation-readiness.md).
 
 ## ADR-110: System-Event Ingestion Is Catalog-Open, Presentation Stays Cataloged
 
@@ -2328,8 +1564,6 @@ stage cites these notes (not the original body) when scoring authority/derived-d
 - **Decision:** Both `system_events` persistence paths (server tap, CLI emitter) persist every emitted event name, synthesizing a generic catalog entry for names absent from `BASE_CATALOG` (derived prefix, generic renderer, default tier, standard redaction, per-prefix quota bound at the persist site (the resolver enumerates catalog prefixes only)). The catalog stops being an ingestion gate and remains the presentation/promotion layer: cataloged names keep their presenters, tiers, and payload policies.
 - **Why:** Catalog-closed ingestion silently drops any event nobody registered — including upstream ts-libs emissions (e.g. ts-infra `db.*`) and future drift — making the observability board incomplete by construction. The ts-infra EventBus has no wildcard subscription, so the catch-all intercepts at the emit seam (idempotent `emit` wrap at the tap/ledger attach points) rather than subscribing.
 - **Detail:** [observabilities module polish](design/observabilities-module-polish.md). Accepted limitation: uncataloged events are history-visible on refresh, not live-streamed, until ts-infra grows an `onAny`/wildcard seam (upstream follow-up).
-
-**Amendment (2026-09-07).** Status vocabulary corrected to **Accepted (design)** per `99 §6.1` rule 5 (decided, unbuilt): the previous `Proposed` is outside the §6.1 template vocabulary. Per `99 §6.1` rule 3 only the status vocabulary aligns; entry number, date, decision text, and every repo-wide cross-reference are unchanged.
 
 ## ADR-111: Quota-Driven Config Updates Survive Event-History Retention
 
@@ -2341,8 +1575,6 @@ record per project/executor; retain YAML as the execution-availability authority
 **Why.** A prunable observability ledger cannot guarantee delivery of a pending configuration update.
 
 **Detail:** [executor availability](design/executor-availability.md); `03 §25`.
-
-**Approval (2026-09-07).** Robin approved the proposed design and continuation to task decomposition.
 
 ## ADR-112: Execution Deadlines Are Upstream Policy; Unlimited Jobs Retain Renewable Ownership
 
@@ -2358,10 +1590,4 @@ of execution duration and is renewed/fenced per attempt; cancellation settlement
 execution from becoming duplicate execution after a visibility interval. This binds scheduler,
 history, and queue persistence consumers while preserving ADR-004's published-package boundary.
 
-**Detail:** `03 §26`; [execution deadline design](design/execution-deadlines.md). Adopted 2026-09-08
-(task 0813) on released ts-libs 0.4.59: native execution deadlines replaced Spur's local caller
-watchdog; durable lease/claim ownership (`ts-db`) remains pending upstream. No claim of eliminating
-all database-lock causes is made.
-
-**Approval (2026-09-08).** Robin requested upstream reuse and an unlimited mode, then approved the
-revised proposal with “okay, go ahead.”
+**Detail:** `03 §26`; [execution deadline design](design/execution-deadlines.md).
