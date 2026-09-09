@@ -62,5 +62,6 @@ thread `--depth` into each per-task refine.
 ## Implementation
 
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
+- Apply the [shared startup contract](../skills/spur-dev/references/cross-cutting.md#shared-startup-contract-task-0814-r1r3r4r6r7r8) — bootstrap checklist, quick readiness before isolation, workflow inventory before YAML, comprehensive checks at owning boundaries (task 0814 R1/R3/R4/R7/R8).
 - Batch orchestration: `Skill(skill="sp:spur-dev", args="refineall $ARGUMENTS")`
 - Per-task refine (inner): `Skill(skill="sp:spur-dev", args="refine <wbs> $SHARED_FLAGS")`

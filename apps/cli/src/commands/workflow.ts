@@ -10,6 +10,7 @@ import {
     createWorkflowEventIdentity,
     decorateWorkflowEvent,
     EscalationPacketSink,
+    parseWorkflowInventory,
     type ResolvedWorkflowDefinition,
     redactAndBound,
     renderActionHeartbeat,
@@ -1249,18 +1250,32 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             const def = resolvedDefinition.workflow;
             if (options.json) {
                 if (options.format === 'todo') {
-                    context.output.write(
-                        toJson({
-                            name: def.name,
-                            kind: def.kind ?? 'state-machine',
-                            format: 'todo',
-                            // 0768 R1 identity: declared version literal or null
-                            // (known-unversioned); canonical definition digest.
-                            version: resolvedDefinition.workflow.version ?? null,
-                            definitionDigest: resolvedDefinition.digest,
-                            steps: buildWorkflowSteps(def),
-                        }),
-                    );
+                    // 0814 R4: validate the projection before publishing. Fail closed on a
+                    // malformed/unresolved projection (never publish a misleading plan); the
+                    // public JSON schema is unchanged for a valid definition (unversioned
+                    // `null` is a supported known-unversioned projection).
+                    const projection = {
+                        name: def.name,
+                        kind: def.kind ?? 'state-machine',
+                        format: 'todo',
+                        // 0768 R1 identity: declared version literal or null
+                        // (known-unversioned); canonical definition digest.
+                        version: resolvedDefinition.workflow.version ?? null,
+                        definitionDigest: resolvedDefinition.digest,
+                        steps: buildWorkflowSteps(def),
+                    };
+                    const parsed = parseWorkflowInventory(projection);
+                    if (!parsed.ok) {
+                        writeJsonError(
+                            context.output,
+                            options,
+                            `workflow show: invalid todo projection — ${parsed.error}`,
+                            'VALIDATION_FAILED',
+                        );
+                        context.setExitCode(1);
+                        return;
+                    }
+                    context.output.write(toJson(projection));
                 } else {
                     context.output.write(
                         toJson({

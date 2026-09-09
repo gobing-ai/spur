@@ -209,6 +209,39 @@ executor is the current coding agent. Interactive pipelines retain a run log and
 through the inline driver; task pipelines additionally record a task run-link. If process isolation or an independently killable
 stage is required, select the subprocess path (`--agent auto` or `--agent <name>`).
 
+## Shared startup contract (task 0814 R1/R3/R4/R6/R7/R8)
+
+The workflow-backed dev commands (`dev-run`, `dev-runall`, `dev-refineall`, `dev-verifyall`) share one
+startup order. The order is load-bearing and applies on both the inline driver and the subprocess
+path; skill-only operations (refine/verify batches with no nested workflow) display their owned
+procedure and do not fabricate a workflow YAML.
+
+1. **Publish a compact bootstrap checklist immediately** (host-preparation rows, never copied
+   workflow states): `A, Quick readiness` · `B, Prepare Git` · `C, Publish workflow plan` ·
+   `D, Comprehensive checking`.
+2. **Quick deterministic readiness (R2), before isolation.** Evaluate `quickReadiness`
+   (`plugins/sp/scripts/batch-preflight.ts`) with the operation, status, filtered-set size, and the
+   selected matrix required/present sections + content-policy findings. This is an admission decision
+   (runnable / needs-refinement / blocked / skipped / invalid), never an implementation certificate.
+3. **Isolation (R3), only when `--worktree` is valid.** After quick readiness and the required Git
+   safety checks, create/adopt and switch to the execution tree; confirm absolute cwd, branch, base
+   SHA, and ownership. An invalid/empty target, unsupported mode, ambiguous ownership, or stale target
+   stops without creating a tree or discarding work. All subsequent tools, agents, corpus writes, and
+   run artifacts use the confirmed execution tree.
+4. **Publish the workflow inventory (R4), before reading the YAML.** `spur workflow show
+   <resolved-file> --no-logo --format todo --json`; validate with `parseWorkflowInventory` and bind to
+   the run's `__definitionDigest` with `assertInventoryIdentity`. Drift or projection failure stops the
+   run before any comprehensive/model work — never execute with a misleading plan.
+5. **Load execution detail and run comprehensive checks (R7).** Only after the plan is visible (and
+   after isolation when requested) load the full YAML for the active stage and run the owning
+   comprehensive gates at their boundaries. Prefer deterministic checks; invoke semantic model work
+   only for an identified unresolved requirement/design/evidence question and record its reason.
+
+Quick readiness and plan projection dispatch zero models and execute zero workflow actions. Record a
+timestamped event trace under `.spur/run/<run-id>-event-trace.md` (R8) — event ordering,
+time-to-first-visible-checklist, time-to-workflow-inventory, confirmed cwd, invocation counts — and
+record unavailable measurements as `unknown`, never as invented savings.
+
 ## Every write is CLI-gated
 
 Never edit a task or feature file directly. Every mutation goes through:

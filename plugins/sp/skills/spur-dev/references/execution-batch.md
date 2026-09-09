@@ -446,6 +446,23 @@ isolated git worktree instead of the operator's working directory. This section 
 lifecycle for the sequential batch loop. Per-task worktrees and `--mode parallel` isolation stay out
 of scope (task 0142 Slice A); `--worktree --mode parallel` is rejected.
 
+**Startup ordering (task 0814 R3).** Resolve the selector/status filter and run the quick
+command-aware readiness (the `quickReadiness` contract in `batch-preflight.ts`) **before** creating
+or adopting the tree. The admission decision is what determines whether a tree should be cut at all;
+all subsequent tools, agents, task/feature writes, and run artifacts use the confirmed execution
+tree's cwd. A stale or empty selector, an unsupported mode, or an invalid target creates no tree and
+no marker (WT-2/WT-7), and the required Git safety checks (WT-1) still precede creation.
+
+> **Command wiring (task 0814 R3).** The four worktree-capable commands (`dev-run`, `dev-runall`,
+> `dev-refineall`, `dev-verifyall`) each call `quickReadiness` with their operation (`run`/`refine`/
+> `verify`), the resolved selector/status, and the filtered-set size **before** WT-1/WT-2. The
+> admission outcome gates the tree: an invalid/empty selector, unsupported mode, or a target that
+> quickReadiness marks `blocked`/`invalid` creates no tree and no marker (WT-2/WT-7); a
+> `needs-refinement` refine batch is still work to do (the tree is created, the gaps are the work).
+> The required Git safety checks (WT-1) still precede creation, and ownership/identity is confirmed
+> before any tool, agent, corpus write, or run artifact. A later failure retains the tree with
+> recovery information (WT-5).
+
 **Single-task `dev-run` (batch of one).** `/sp:dev-run <wbs> --worktree [<name>]` runs this same
 lifecycle with a one-task loop: WT-1…WT-6 apply unchanged, the marker's `command` is `dev-run` and
 its `selector` is the `<wbs>` (so WT-6's command+selector fallback resolves the resume), and the

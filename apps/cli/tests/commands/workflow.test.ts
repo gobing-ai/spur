@@ -2433,10 +2433,10 @@ transitions:
                 '',
                 'Declared step inventory in declaration order, not a predicted execution path.',
                 '',
-                '- [ ] start — initial',
-                '- [ ] work — pause · loop-back',
-                '- [ ] done — terminal · conditional',
-                '- [ ] failed — terminal · failure · conditional',
+                '- [ ] A. start — initial',
+                '- [ ] B. work — pause · loop-back',
+                '- [ ] C. done — terminal · conditional',
+                '- [ ] D. failed — terminal · failure · conditional',
             ].join('\n'),
         ]);
         await rm(dir, { recursive: true, force: true });

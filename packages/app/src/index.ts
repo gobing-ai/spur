@@ -719,3 +719,10 @@ export {
     type WorkflowStep,
 } from './workflow/step-reporter';
 export { WorkflowTraceWriter } from './workflow/trace-writer';
+export {
+    assertInventoryIdentity,
+    type InventoryStep,
+    parseWorkflowInventory,
+    renderEventTrace,
+    type WorkflowInventory,
+} from './workflow/workflow-inventory';
