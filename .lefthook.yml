@@ -3,6 +3,30 @@ commit-msg:
     cog:
       run: cog verify --file {0}
 
+# Rewrite git's default merge-commit message ("Merge branch 'x' into main")
+# into the conventional form BEFORE cog verify runs, so `git merge --no-edit`
+# passes the commit-msg hook without a manual reword (precedents 12c913716,
+# f2265f4d7). Only fires on the literal default prefix; hand-written messages
+# pass through untouched.
+prepare-commit-msg:
+  commands:
+    rewrite-default-merge-message:
+      run: |
+        msg_file="{1}"
+        first="$(head -n1 "$msg_file")"
+        case "$first" in
+          "Merge branch '*"*)
+            merged="$(printf '%s' "$first" | sed -E "s/^Merge branch '([^']+)'.*/\1/")"
+            into="$(git rev-parse --abbrev-ref HEAD)"
+            printf 'chore: merge %s into %s\n' "$merged" "$into" > "$msg_file"
+            ;;
+          "Merge branch "*)
+            merged="${first#Merge branch }"
+            into="$(git rev-parse --abbrev-ref HEAD)"
+            printf 'chore: merge %s into %s\n' "$merged" "$into" > "$msg_file"
+            ;;
+        esac
+
 pre-commit:
   parallel: true
   commands:
