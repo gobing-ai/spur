@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0491"]
 ac_numbering: task-local
 created_at: "2026-08-10T00:03:55.207Z"
-updated_at: "2026-09-09T06:47:12.230Z"
+updated_at: "2026-09-09T19:33:37.727Z"
 done_forced: "true"
 done_reason: "Exit ticket for map E2. Operator ruled report-first (R3). Contract specifies rewritten flow (R1), command/skill/CLI split (R2), omp-sample walkthrough (R4), downstream batch order (R6), primacy inversion argument (R7), session-formats ownership edit (R8). R5: implementation tasks deferred to decomposition per map recipe (decisions and specs, not diffs). All claims HIGH/MEDIUM confidence per Testing table."
 ---
@@ -44,8 +44,10 @@ rather than assumed.
 
 **Also verified:**
 
-- The skill runs a 5-phase protocol — DISCOVER, ANALYZE, IDENTIFY, PROPOSE, GENERATE
-  (`SKILL.md:116-306`). Phase 2's extraction table (tool calls, compactions, test runs, spur calls,
+- At audit time the skill ran a 5-phase protocol — DISCOVER, ANALYZE, IDENTIFY, PROPOSE, GENERATE
+  (`SKILL.md` lines 116-306 in the audit-era tree; superseded by this task's rewrite). The landed
+  protocol is 4-phase REPORT / IDENTIFY / PROPOSE / GENERATE (`plugins/sp/skills/issue-finding/SKILL.md:127`).
+  Phase 2's extraction table (tool calls, compactions, test runs, spur calls,
   guard failures, errors, loop candidates) is precisely what a CLI can compute; Phase 3's ranking and
   Phase 4's fix design are precisely what it cannot. The seam is already visible in the skill's own
   structure.
@@ -63,14 +65,14 @@ has not improved anything.
 
 ### Requirements
 
-- [ ] R1 — Specify the rewritten flow against the CLI contract the preceding tickets settled: which `spur history` invocations it makes, in what order, and what it does with the output.
-- [ ] R2 — Draw the command / skill / CLI split explicitly, naming what shrinks in the thin command wrapper, what shrinks or disappears in the 424-line skill and its session-formats reference, and why the survivor is the right owner of what remains.
-- [ ] R3 — Resolve, with the operator, whether the command still writes a task file or becomes report-first with task creation optional, and record the ruling rather than assuming it.
-- [ ] R4 — Show the rewrite reproduces the capability that prompted this map by walking the omp sample through the proposed flow and naming which step produces each of its sections.
-- [ ] R5 — Emit the implementation-ready task files that are this map's destination, covering the import, analyze, report and command work the map settled, each passing `spur task check --json` with zero errors.
-- [ ] R6 — State the sequencing and dependencies between those task files so the downstream batch runs in a correct order rather than being re-derived later.
-- [ ] R7 — Argue the inversion of the skill's written stance that history ETL is not a substitute for raw tool-loop evidence, stating what is gained, what is lost, and under which conditions raw JSONL parsing remains the fallback.
-- [ ] R8 — Carry forward the `session-formats.md` ownership verdict from the coverage matrix and specify the edit, and note the pre-existing `--template` default contradiction without fixing it inline.
+- [x] R1 — Specify the rewritten flow against the CLI contract the preceding tickets settled: which `spur history` invocations it makes, in what order, and what it does with the output.
+- [x] R2 — Draw the command / skill / CLI split explicitly, naming what shrinks in the thin command wrapper, what shrinks or disappears in the 424-line skill and its session-formats reference, and why the survivor is the right owner of what remains.
+- [x] R3 — Resolve, with the operator, whether the command still writes a task file or becomes report-first with task creation optional, and record the ruling rather than assuming it.
+- [x] R4 — Show the rewrite reproduces the capability that prompted this map by walking the omp sample through the proposed flow and naming which step produces each of its sections.
+- [x] R5 — Emit the implementation-ready task files that are this map's destination, covering the import, analyze, report and command work the map settled, each passing `spur task check --json` with zero errors.
+- [x] R6 — State the sequencing and dependencies between those task files so the downstream batch runs in a correct order rather than being re-derived later.
+- [x] R7 — Argue the inversion of the skill's written stance that history ETL is not a substitute for raw tool-loop evidence, stating what is gained, what is lost, and under which conditions raw JSONL parsing remains the fallback.
+- [x] R8 — Carry forward the `session-formats.md` ownership verdict from the coverage matrix and specify the edit, and note the pre-existing `--template` default contradiction without fixing it inline.
 
 ### Acceptance Criteria
 
@@ -263,7 +265,7 @@ Net: three flags removed (`--use-history`, `--no-task`, and the contradiction), 
 **What shrinks in the skill (SKILL.md):**
 
 - Phase 1 DISCOVER: the manual glob-walking shrinks to "resolve source, run `import`." The source root table points at `sources.ts`.
-- Phase 2 ANALYZE: the manual JSONL parsing (the extraction table at `SKILL.md:150-176`) is **deleted**. The phase becomes "run `analyze --derive`, load artifact." The raw-evidence stance paragraph (`:150-176`) is rewritten per R7.
+- Phase 2 ANALYZE: the manual JSONL parsing (the extraction table at `plugins/sp/skills/issue-finding/SKILL.md:181-192`) is **deleted**. The phase becomes "run `analyze --derive`, load artifact." The raw-evidence stance paragraph (`SKILL.md` lines 150-176 in the audit-era tree) is rewritten per R7.
 - Phase 3 IDENTIFY, Phase 4 PROPOSE: **unchanged in substance**, but they now read the artifact instead of manually-parsed lines. The category taxonomy stays.
 - Phase 5 GENERATE: unchanged, but gated behind `--create-task`.
 - Shipped-command block (`:373-386`): updated examples; `--no-task` examples become the default behavior.
@@ -329,7 +331,7 @@ Order 7→8→9 can parallelize once 5 lands (they touch different files). Order
 
 ## R7 — Arguing the inversion
 
-**The skill's current stance** (`SKILL.md:150-176`): _"Do not treat history ETL as a substitute for raw tool-loop evidence."_ Written when the data plane carried token/cost aggregates only.
+**The skill's stance at audit time** (`SKILL.md` lines 150-176 in the audit-era tree): _"Do not treat history ETL as a substitute for raw tool-loop evidence."_ Written when the data plane carried token/cost aggregates only. The stance paragraph was rewritten by this task's R7; the current data-plane stance lives in the Phase 1 REPORT section (`plugins/sp/skills/issue-finding/SKILL.md:137`).
 
 **What is gained by inverting:**
 
@@ -339,7 +341,7 @@ Order 7→8→9 can parallelize once 5 lands (they touch different files). Order
 
 **What is lost:**
 
-- **Tool-loop evidence the typed tables do not retain.** Today the skill reads raw tool-call arguments to detect loops (e.g., repeated `Read` of the same file). `args_digest` is a hash (`mappers.ts:189`); the digest preserves loop detection (Q4, `packages/domain/src/analytics/forensic-query.ts:275`) but not the _content_ needed for issue categorization. **This is exactly what the import-retention task (R6 order 1) restores.** Until it lands, the inversion is lossy for issue categorization on sources where raw args are discarded.
+- **Tool-loop evidence the typed tables do not retain.** Today the skill reads raw tool-call arguments to detect loops (e.g., repeated `Read` of the same file). `args_digest` is a hash (@gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 347); the digest preserves loop detection (Q4, `packages/domain/src/analytics/forensic-query.ts:275`) but not the _content_ needed for issue categorization. **This is exactly what the import-retention task (R6 order 1) restores.** Until it lands, the inversion is lossy for issue categorization on sources where raw args are discarded.
 - **Source-specific JSONL quirks** the mappers flatten away. The skill's manual parsing tolerates malformed lines; `analyze` rejects them at import.
 
 **Fallback conditions — when raw JSONL parsing remains:**
@@ -374,14 +376,14 @@ Deleted: the per-source fidelity ratings ("High"/"Medium") — the coverage matr
 | Claim                                                           | Evidence                                                                                                                                                    | Confidence                                                          | Reproducible by                                     |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------- |
 | Command is a thin wrapper around the skill                      | `plugins/sp/commands/dev-find-issue.md` (`Skill(skill="sp:issue-finding", args="$ARGUMENTS")`)                                                        | **HIGH** — read from source                                         | Open the command file                               |
-| Skill Phase 2 extraction table is CLI-computable                | `SKILL.md:150-176` lists tool calls, compactions, test runs, spur calls, guard failures, errors, loop candidates — all present in typed tables or derivable | **HIGH** — read from source                                         | Open `SKILL.md:150`                                 |
-| `--use-history` ships today and is subordinate                  | `dev-find-issue.md:30,63` (flag defined), `SKILL.md:343` (optional), `SKILL.md:150-176` (raw-evidence stance)                                               | **HIGH** — read from source                                         | Grep `--use-history` in both files                  |
+| Skill Phase 2 extraction table is CLI-computable                | `plugins/sp/skills/issue-finding/SKILL.md:181-192` lists tool calls, compactions, test runs, spur calls, guard failures, errors, loop candidates — all present in typed tables or derivable | **HIGH** — read from source                                         | Open `plugins/sp/skills/issue-finding/SKILL.md:181`                                 |
+| `--use-history` ships today and is subordinate                  | `dev-find-issue.md:30,63` (flag defined), `plugins/sp/skills/issue-finding/SKILL.md:121` (optional), `plugins/sp/skills/issue-finding/SKILL.md:181-192` (raw-evidence stance)                                               | **HIGH** — read from source                                         | Grep `--use-history` in both files                  |
 | Report-first ruling is operator-settled                         | Operator ruling recorded this session (2026-08-09), R3 above                                                                                                | **HIGH** — operator ruled in conversation                           | See R3 section                                      |
 | 8 derivable / 2 partial / 6 model-authored classification       | 0491 R2 classification table (16-section sample breakdown)                                                                                                  | **HIGH** — validated by spike (`.spur/run/0491-spike/run-diff.ts`)  | Re-run the spike diff                               |
 | Mechanism B is the analyze recommendation                       | 0490 recommendation (in-analyze metric registry)                                                                                                            | **MEDIUM** — spike recommendation, not shipped                      | Read 0490 Solution                                  |
 | Mode registry subsumes renderReport + renderMarkdown            | 0491 R6 renderer verdict                                                                                                                                    | **MEDIUM** — spike conclusion, validated against synthetic artifact | Read 0491 Solution                                  |
-| `args_digest` preserves loop detection but not content          | `packages/domain/src/analytics/forensic-query.ts:275` (Q4 uses digest), `mappers.ts:189` (argsDigest hashes)                                                | **HIGH** — read from source                                         | Open both files                                     |
-| Import-retention task blocks phase detection                    | 0489 coverage matrix: `history_tool_call.args_digest` is a hash; phase detection needs todo contents (`schema-sql.ts:120`)                                  | **HIGH** — measured                                                 | Read 0489 Solution                                  |
+| `args_digest` preserves loop detection but not content          | `packages/domain/src/analytics/forensic-query.ts:275` (Q4 uses digest), @gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 347 (argsDigest hashes)                                                | **HIGH** — read from source                                         | Open both files                                     |
+| Import-retention task blocks phase detection                    | 0489 coverage matrix: `history_tool_call.args_digest` is a hash; phase detection needs todo contents (`packages/domain/src/migrations.ts:578`)                                  | **HIGH** — measured                                                 | Read 0489 Solution                                  |
 | TTFT/Generation split is a deliberate loss                      | 0491 R-deferred: artifact has no intra-call latency fields                                                                                                  | **HIGH** — read from artifact schema                                | Inspect `packages/domain/src/analytics/artifact.ts` |
 | `--template` default contradicts across two tables              | `plugins/sp/commands/dev-find-issue.md` says `standard`, `:55` says `meta`                                                                                                   | **HIGH** — read from source                                         | Open both lines                                     |
 | session-formats.md ownership verdict                            | 0489 R1 verdict (mappers own code authority, prose retains root table + bridge)                                                                             | **HIGH** — read from 0489 Solution                                  | Read 0489 `:371-382`                                |

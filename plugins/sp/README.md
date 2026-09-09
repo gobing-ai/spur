@@ -171,10 +171,12 @@ Commands above are thin wrappers; the actual logic lives in `skills/`. The spine
 dispatches five competency skills by function — design (`sp:sys-architecture`), decomposition
 (`sp:spec-decomposition`), implementation (`sp:code-implementation`), testing (`sp:code-testing`),
 and verification (`sp:code-verification`) — plus a CLI facade (`sp:spur-cli`, one reference per
-`spur` noun) and standalone technique skills (`sp:next-router`, `sp:test-driven-development`, `sp:brainstorm`,
-`sp:wayfinder`, `sp:sys-debugging`, `sp:code-review`, `sp:code-simplification`, `sp:code-improvement`,
-`sp:parallel-execution`, `sp:branch-workflow`, `sp:doc-evolve`, `sp:dogfood-testing`,
-`sp:daily-summary`, `sp:reverse-engineering`, `sp:issue-finding`, `sp:conflict-finding`,
+`spur` noun) and standalone technique skills (`sp:next-router`, `sp:next-feature`,
+`sp:test-driven-development`, `sp:source-driven-development`, `sp:doubt-driven-development`,
+`sp:brainstorm`, `sp:wayfinder`, `sp:sys-debugging`, `sp:code-review`, `sp:pr-reviewing`,
+`sp:functional-review`, `sp:code-simplification`, `sp:code-improvement`, `sp:parallel-execution`,
+`sp:branch-workflow`, `sp:doc-evolve`, `sp:dogfood-testing`, `sp:daily-summary`,
+`sp:reverse-engineering`, `sp:history-anatomy`, `sp:issue-finding`, `sp:conflict-finding`,
 `sp:indexed-context`, `sp:session-review`, `sp:redesign-web-ui`). See
 [skills/spur-dev/SKILL.md](skills/spur-dev/SKILL.md)'s Step routing table for which skill owns which
 pipeline step.

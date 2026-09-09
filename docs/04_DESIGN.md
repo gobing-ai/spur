@@ -1384,6 +1384,10 @@ Thin wrapper over the `sp:conflict-finding` skill. Standalone audit, not a spine
     [--json]                                            # default off
 ```
 
+Enum flags are validated at Step 1 (`--pillar` ∈ `source|tasks|features|authority|all`, `--mode` ∈
+`adaptive|full`, `--agent` ∈ `inline|auto|name`); an out-of-domain value refuses the audit naming
+the valid set — no silent coercion. `<scope>` remains free-form.
+
 Behavior: audits the four pillars (source code, task files, feature files, project authority files)
 for within-pillar and cross-pillar semantic conflicts. Authority is resolved per **subject + claim
 type** — never by a global `docs > features > tasks > code` ranking; incomparable or missing

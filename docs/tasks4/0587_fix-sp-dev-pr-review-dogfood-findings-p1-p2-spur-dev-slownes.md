@@ -13,7 +13,8 @@ tags: ["review"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-18T07:06:36.802Z"
-updated_at: "2026-08-19T22:55:39.631Z"
+updated_at: "2026-09-09T18:29:10.775Z"
+ac_altitude: task-local
 ---
 
 ## 0587. Fix sp-dev-pr-review dogfood findings (P1/P2) + spur-dev slowness levers (P3)
@@ -135,6 +136,7 @@ Fix in priority order (P1 → P2 → …); re-review after.
 - [x] AC7. R4's decision is recorded with both measurements pasted: the controlled pair (`coverage = false` 64.68s vs `coverage = true` 65.77s on the same suite/session) and the isolated flag-precedence probe (Bun 1.3.14: `coverage = false` + `--coverage` produces no reporter output and no `.coverage/lcov.info`; `coverage = true` produces both). `bunfig.toml` reads `coverage = true`, `package.json` carries no `test:coverage` script, and `git diff` shows no coverage-related edit to `package.json`, `AGENTS.md`, `config/rules/quality/coverage-gate.yaml`, or the `recommended-post-check` line of `docs/04_DESIGN.md`.
 - [x] AC8. `spur task check 0587` green.
 ### Q&A
+
 - **R5 split out to task `0588` (2026-08-18).** The model-hop latency lever is a measurement whose
   done-condition is a judgment call; bundling it made this task un-delegable and pinned it at the
   pipeline's 5-R-item size cap (`config/workflows/task-pipeline.yaml:103`). 0588 carries the dogfood
@@ -189,6 +191,12 @@ Fix in priority order (P1 → P2 → …); re-review after.
 - **Measured baseline (dogfood run `20260817-235410`, for regression comparison):** lint 6.1s; full
   suite with coverage 81.1s (5766 tests / 304 files); corpus-check 44.9s; rule engine 3.9s × 2; CLI
   ops ≤ 0.3s; composed quality gate ≈ 110–140s per run, 1–3 runs per task.
+
+#### Q&A entry — 2026-09-09T18:29:10.774Z
+
+**Q: R1 ruling — 0587's AC altitude (task 0816): `task-local` or promote into H1's AC?**
+A: **`ac_altitude: task-local`**, set 2026-09-09 via `spur task update 0587 --ac-altitude task-local`. Cost, stated plainly: the subset rule (DD-09) now exempts **all eight** scenarios, including the five that were graduating and are now exempt — AC2 (no push reachable from the refusal), AC3 (divergence output asserted), AC6 (gate-probe behaviour), AC7 (R4 decision recorded with both measurements), AC8 (`spur task check 0587` green). Rationale: the promote-the-three option was measured against an audit-time state of 3 uncovered findings; on this tree the checker reports **eight** uncovered scenarios because H1's AC contains none of 0587's scenario titles verbatim, so promoting only AC1/AC4/AC5 leaves five errors standing and the "zero findings" bar unreached. Promoting all eight into H1's AC was rejected: H1 is an umbrella feature whose AC is the ship contract for the whole dev-* family; five of these rows are task-local verification mechanics (lint green, fixture exits, self-check green) that would never be re-verified at feature altitude, so the flag's declared purpose (0584 R3 / ADR-062) fits better than a noisy AC transplant. Residual risk is recorded, not hidden: the five graduating rows are now exempt from DD-09, so feature-level verification of the preflight refusal contract rides on H1's existing scenarios rather than 0587's rows.
+
 ### Design
 **D1 — P1/P2 (`pr-reviewing.ts` preflight).** Move the base-branch refusal from `cmdEnsurePr`
 (post-push) into `cmdPreflight` (pre-push, the earliest spine state), keyed on the same resolved base

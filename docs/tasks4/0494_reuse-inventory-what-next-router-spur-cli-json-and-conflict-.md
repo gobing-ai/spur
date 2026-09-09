@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-10T00:45:45.534Z"
-updated_at: "2026-09-09T06:47:14.634Z"
+updated_at: "2026-09-09T19:18:52.618Z"
 done_forced: "true"
 done_reason: "Wayfinder research ticket (reuse inventory): corpus-only investigation, no code diff — same class as siblings 0493/0495. Structural gate PASS; Review L3 findings table populated; verdict .spur/run/0494-verdict.json PASS (R1-R5 MET). Provenance override recorded per CLI guidance."
 ---
@@ -21,6 +21,7 @@ done_reason: "Wayfinder research ticket (reuse inventory): corpus-only investiga
 ## 0494. Reuse inventory: what next-router, spur CLI --json, and conflict-finding already provide that dev-find-next must compose rather than rebuild
 
 ### Background
+
 **Type:** `wayfinder:research` · **Map:** H12
 
 The most likely way this command fails is by rebuilding traversal, filtering, and reporting the
@@ -50,8 +51,9 @@ harness already has — and then drifting out of sync with it.
 The output of this ticket is a build-vs-reuse ledger, not a design. It bounds the implement tickets
 before they are written — which is cheaper than discovering the overlap during review.
 
-Scope note: `/sp:dev-featurechange`'s protocol and the restructure mapping-file schema belong to
+Scope note: `/sp:dev-feature-change`'s protocol and the restructure mapping-file schema belong to
 **0495**, not here. This ticket stops at what the *ranking and reporting* half composes.
+
 ### Requirements
 - [ ] R1 — Rule on the frontier predicate (`routing-table.md:83`, row B3): can dev-find-next reference it as the SSOT, or must it restate it? If restated, name the mechanism that keeps the two from drifting, since two disagreeing definitions of "actionable" is worse than one imperfect one.
 - [ ] R2 — Map every TABLE B feature-level row (B4–B7, `routing-table.md:84-87`) against what a "which feature next" answer would say about the same feature, and state per row whether dev-find-next defers to next-router, restates it, or genuinely differs.
@@ -120,6 +122,7 @@ Feature: 0494 wayfinder investigation
 - **OQ2 — skill name.** The ledger and the proposed file list use `sp:next-feature` as a placeholder;
   a rename is a find-and-replace, not a re-derivation. Not blocking.
 ### Design
+
 **WHAT** — A build-vs-reuse ledger. Deliverable is three artifacts written into `### Solution`: a
 **frontier-predicate ruling**, a **TABLE B boundary table**, and the **capability ledger**. No
 production code ships from this ticket.
@@ -160,7 +163,7 @@ surfaces produce it? Only then (4) must-build. Record which rung answered.
 - Proposing that `sp:next-feature` copy routing-table's frontier predicate without naming what stops
   the copies from diverging.
 - Designing the ranking rubric here — that is 0493's, and duplicating it creates two rubrics.
-- Ruling on `/sp:dev-featurechange` or the restructure mapping schema — that is 0495's.
+- Ruling on `/sp:dev-feature-change` or the restructure mapping schema — that is 0495's.
 - Extracting the conflict-finding template as prose admiration rather than a concrete proposed file
   list for `plugins/sp/skills/next-feature/`.
 
@@ -174,6 +177,7 @@ pattern R4 must map onto `sp:next-feature`.
 **Handoff to dependents** — none consume this ticket directly. Its output bounds the graduated
 implement tickets (currently fog on the map). **0495** independently owns the featurechange handoff;
 this ticket must not pre-empt it.
+
 ### Plan
 - [x] Read `routing-table.md` §0 and rows B3–B7 in full; extract the frontier predicate verbatim and rule on cite-vs-restate with a named drift-control mechanism; write Artifact A (R1)
 - [x] Compare each of rows B4–B7 against what a which-feature-next answer would say for the same feature; assign defer / restate / differs with a reason; write Artifact B (R2)
@@ -231,7 +235,7 @@ Reuse ladder applied in order: (1) existing `spur` verb → (2) existing skill r
 | Authority pull signal | **must-build** | 4 | `rg <feature-id> docs/02_ROADMAP.md docs/00_ADR.md`. Authority docs are markdown; no verb indexes mentions |
 | Tiered ranking + evidence-per-candidate report | **must-build** | 4 | The rubric itself — 0493's deliverable (Eisenhower-style ordinal tiers, no numeric scores). This is the command's payload; nothing existing produces an ordering (routing-table B3 falls back to WBS-ascending, `plugins/sp/skills/next-router/references/routing-table.md:83`) |
 | Structure-defect proposals (D1–D4) | **compose** | 2+3 | Contract authored by 0495 (Artifacts A/C); schema reused from `docs/plans/feature-tree-restructure-map.md:10`; inputs from `spur feature list --json` + task rosters. No new detection machinery beyond the contract |
-| Proposal handoff to `/sp:dev-featurechange` | **reuse-as-is** | 2 | 0495 Artifact C: emit rows conforming to the map schema (inline print or `docs/plans/` append per OQ1); featurechange `--dry-run` → confirm → apply is the sole mutation path (`plugins/sp/commands/dev-feature-change.md:85`) |
+| Proposal handoff to `/sp:dev-feature-change` | **reuse-as-is** | 2 | 0495 Artifact C: emit rows conforming to the map schema (inline print or `docs/plans/` append per OQ1); featurechange `--dry-run` → confirm → apply is the sole mutation path (`plugins/sp/commands/dev-feature-change.md:85`) |
 | Dispatch into `/sp:dev-next` on the winner | **reuse-as-is — CONDITIONAL on OQ1** | 2 | next-router owns within-target routing (`plugins/sp/skills/next-router/references/routing-table.md:25-40`, §0 step 1). Only exists in the dispatch reading of OQ1; the report reading omits this row entirely |
 | Feature-tree structure (parent/child) | **reuse-as-is** | 1 | DD-14 id hierarchy in `spur feature list --json` ids; child-count derivable by id prefix. No traversal code needed |
 
@@ -286,6 +290,7 @@ Coverage: N/A (research inventory; no runtime code path added).
 | P3 | minor | `docs/tasks4/0494_*.md` Artifact C | OQ1 (dispatch vs report) unresolved: the ledger's dispatch row is conditional; the implement ticket must not build argv-shaping until the operator rules. | Implement ticket builds the report reading first; dispatch row activates only on operator decision. |
 | P4 | advisory | `docs/tasks4/0494_*.md` Artifact C | Three must-build rows are prompt-side `git`/`rg` derivations; spread thresholds (e.g. churn window 40d) are 0493's measured defaults, not validated constants. | Ship with 0493's values; tune on dogfood. |
 ### References
+
 - Map: [H12 Feature frontier prioritizer](../features/H12_feature-frontier-prioritizer-derived-importance-urgency-ranking-and-structure-defect-proposals.md)
 - `plugins/sp/skills/next-router/references/routing-table.md:33` — the target-omitted non-route (the seam)
 - `plugins/sp/skills/next-router/references/routing-table.md:83` — row B3, frontier predicate + WBS-ascending fallback (R1)
@@ -295,7 +300,8 @@ Coverage: N/A (research inventory; no runtime code path added).
 - `plugins/sp/commands/dev-find-conflict.md` — the thin-wrapper command shape (R4)
 - `plugins/sp/commands/dev-next.md` — the sibling command surface and its flag table
 - Sibling ticket: **0493** ranking-model spike — independent, no shared evidence
-- Sibling ticket: **0495** owns `/sp:dev-featurechange` and the restructure mapping schema — out of scope here
+- Sibling ticket: **0495** owns `/sp:dev-feature-change` and the restructure mapping schema — out of scope here
+
 ### History
 - 2026-08-10T04:24:57.203Z todo → wip (system)
 - 2026-08-10T04:24:57.631Z wip → testing (system)

@@ -4,7 +4,7 @@ name: "S0c: Repair action options, run-id confinement, nested composition, and d
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:31.022Z
-updated_at: "2026-09-05T00:57:40.399Z"
+updated_at: "2026-09-09T18:53:05.373Z"
 feature_id: D9
 priority: P1
 ac_altitude: task-local
@@ -117,13 +117,14 @@ Feature: Effective workflow action options, confinement, and composition
 `docs/04_DESIGN.md` already requires "non-dry-run" for live evidence (`:2370`). `docs/inventory/d8-0729-workflow-contract-inventory.md:112` and `docs/inventory/d8-0731-workflow-fit-classification.md:27` already label dry-run/validate as smoke. Frozen plans `docs/plans/2026-09-02-d8-proportional-workflow-upgrade-strategy.md` already record "remove as evidence (smoke only)". No active design doc asserts the claim. Historical task citations in `docs/tasks2/`/`docs/tasks4/` describe what prior tasks did at the time and are records, not active policy — they stand.
 
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/workflow/actions/command-gate.ts:155` — `...(timeoutMs !== undefined ? { timeout: timeoutMs } : {})` spreads under the executor's declared `timeout`; sibling sweep clean (`http-request.ts:233` already used `timeout`, `agent-run.ts:275` forwards a CLI flag, not ProcessOptions) |
+| R1 | MET | `packages/app/src/workflow/actions/command-gate.ts:155` — `...(timeoutMs !== undefined ? { timeout: timeoutMs } : {})` spreads under the executor's declared `timeout`; sibling sweep clean (`packages/app/src/workflow/actions/http-request.ts:233` already used `timeout`, `packages/app/src/workflow/actions/agent-run.ts:275` forwards a CLI flag, not ProcessOptions) |
 | R2 | MET | `apps/cli/src/commands/workflow.ts:129-136` `InvalidRunIdError` (code `INVALID_RUN_ID`), `:151` `validateRunId`, wired at both parse sites `:487` and `:591` before any path construction |
 | R3 | MET | `config/workflows/feature-dev.yaml:161-175` shell action invokes `pr-reviewing.ts request` directly (no nested `spur workflow run`), writes PASS/FAIL to a status file; `softFail` removed; `:255` blocking edge consumes the FAIL when `requireCleanReview=true` |
 | R4 | MET | `packages/app/src/observability/escalation-packet-sink.ts:47` `parseDryRunProbeMetadata`, `:269` `isDryRunProbe`, gated at both emission handlers `:98` (tripwire.fired) and `:105` (run.finalized) |
@@ -138,6 +139,7 @@ Feature: Effective workflow action options, confinement, and composition
 | Scenario: R4 — Dry probes emit no human-inspect escalation | MET | test | `packages/app/tests/observability/escalation-packet-sink.test.ts` — `parseDryRunProbeMetadata` true on `dryRun:true`, false on missing/malformed |
 | Scenario: R5 — Dry-run is described as smoke, not run-readiness | MET | command | `rg -n -i "(workflow validate |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
 | Priority | Count | Notes |
 | --- | --- | --- |

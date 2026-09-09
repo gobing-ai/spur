@@ -94,6 +94,12 @@ Resolve `<scope>` and `--pillar`; confirm the repository root; establish **audit
 numbered-document mutation of any kind. With `--resolve`, no write happens until a repair set is
 presented, explicitly confirmed, and freshness-revalidated.
 
+Validate every enum flag against the domain declared by the command surface
+(`plugins/sp/commands/dev-find-conflict.md`): `--pillar` ∈ `source|tasks|features|authority|all`,
+`--mode` ∈ `adaptive|full`, `--agent` ∈ `inline|auto|name`. An out-of-domain value **refuses** the
+audit before any discovery work — report the received value, the flag's valid domain, and stop;
+never silently coerce or ignore it. Only `<scope>` is free-form and exempt from this check.
+
 ### Step 2 — Discover local authority
 
 Read entry/process rules (`AGENTS.md`, `docs/99_PROJECT_CONSTITUTION.md`) before interpreting any
