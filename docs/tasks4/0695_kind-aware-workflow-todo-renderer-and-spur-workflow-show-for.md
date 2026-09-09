@@ -4,7 +4,7 @@ name: "Kind-aware workflow todo renderer and spur workflow show --format/--json"
 status: done
 template: feature-impl
 created_at: 2026-08-27T23:57:38.268Z
-updated_at: "2026-08-28T04:28:15.108Z"
+updated_at: "2026-09-09T18:53:05.361Z"
 feature_id: D7
 priority: P2
 tags: ["workflow", "cli-surface"]
@@ -310,6 +310,7 @@ the `spur workflow show      <file>` synopsis line — extend it too.
 - Anti-patterns respected: no topo sort, no cache, no `todo` verb, `renderWorkflowMermaid` untouched in `apps/cli/src/workflow/mermaid-render.ts`, no `--vars` prediction.
 
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
@@ -320,7 +321,7 @@ the `spur workflow show      <file>` synopsis line — extend it too.
 | R2 | MET | `packages/app/src/workflow/step-reporter.ts:232` — `renderWorkflowTodo(def)`: `- [ ] <id>` checklist, markers after ` — ` joined by ` · ` in frozen order, state-machine-only declared-inventory disclaimer, no topological reordering; frozen-shape tests for both kinds `packages/app/tests/workflow/step-reporter.test.ts:346,385`; live render of the real consumer config matches a hand-computation of the marker algorithm (loop-back on test-fix only, pause on approve, failure on failed/cancelled). |
 | R3 | MET | `apps/cli/src/commands/workflow.ts:823` — `--format <name>` default `mermaid`; default-path byte-identity (2936 bytes, diff empty this run); docs synced same change-set: `docs/04_DESIGN.md:556` (show synopsis gains `[--format <mermaid |
 | R4 | MET | `apps/cli/src/commands/workflow.ts:846-871` — `--json` envelopes via `toJson`: `{name, kind, format:'todo', steps: buildWorkflowSteps(def)}` and `{name, kind, format:'mermaid', diagram}` (exact fenced block); bare `--json` returns the mermaid envelope; tests `apps/cli/tests/commands/workflow.test.ts:2304,2358`; live smoke this run: todo JSON parses, 12 steps, step[3] `test-fix` loopBack=true; bare JSON parses, 2733-byte diagram. |
-| R5 | MET | Unknown format fails fast BEFORE file resolution: `apps/cli/src/commands/workflow.ts:825-831` — exit 1, stderr names both values (live smoke: `workflow show: unknown --format 'outline' — expected mermaid or todo`, exit=1); not-found and schema-invalid branches untouched and shared by both formats (tests `apps/cli/tests/commands/workflow.test.ts:2385,2403` — identical errors, exit 1). Single-builder rule: `renderRunPlan` derives from `buildWorkflowSteps` at `step-reporter.ts:261`, todo renderer iterates the builder at `step-reporter.ts:240`, no independent derivation (`packages/app/tests/workflow/step-reporter.test.ts:433`; CLI equivalence test `workflow.test.ts:2418`). |
+| R5 | MET | Unknown format fails fast BEFORE file resolution: `apps/cli/src/commands/workflow.ts:825-831` — exit 1, stderr names both values (live smoke: `workflow show: unknown --format 'outline' — expected mermaid or todo`, exit=1); not-found and schema-invalid branches untouched and shared by both formats (tests `apps/cli/tests/commands/workflow.test.ts:2385,2403` — identical errors, exit 1). Single-builder rule: `renderRunPlan` derives from `buildWorkflowSteps` at `packages/app/src/workflow/step-reporter.ts:261`, todo renderer iterates the builder at `packages/app/src/workflow/step-reporter.ts:240`, no independent derivation (`packages/app/tests/workflow/step-reporter.test.ts:433`; CLI equivalence test `apps/cli/tests/commands/workflow.test.ts:2418`). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
@@ -332,6 +333,7 @@ the `spur workflow show      <file>` synopsis line — extend it too.
 | Scenario: R7 — an unrecognised --format value fails with a non-zero exit naming the accepted values | MET | test | `apps/cli/tests/commands/workflow.test.ts:2373` (exit 1, message names mermaid and todo); live smoke exit=1 with identical stderr |
 | Scenario: R8 — an unresolvable or invalid definition fails identically for every format | MET | test | `apps/cli/tests/commands/workflow.test.ts:2385` (unresolvable path, identical errors both formats) and `:2403` (schema-invalid, exit 1, same mermaid-path message) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)
 

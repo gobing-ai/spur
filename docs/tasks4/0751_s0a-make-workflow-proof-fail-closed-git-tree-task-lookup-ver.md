@@ -4,7 +4,7 @@ name: "S0a: Make workflow proof fail-closed — git-tree, task lookup, verifier 
 status: done
 template: feature-impl
 created_at: 2026-09-03T20:27:30.404Z
-updated_at: "2026-09-05T00:57:39.706Z"
+updated_at: "2026-09-09T18:53:05.372Z"
 feature_id: D9
 priority: P1
 ac_altitude: task-local
@@ -129,6 +129,7 @@ Implemented fail-closed proof capture (R1-R4, R6); all four fail-open paths now 
 **Not done (out of scope per Design)**: F-10 whole-tree attribution; resolve/resume seam (0752); action-option/confinement (0753). R1/R2 will surface latent failures in previously-"passing" runs — accepted tradeoff per Design, re-measured at 0757.
 
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
@@ -140,7 +141,7 @@ Implemented fail-closed proof capture (R1-R4, R6); all four fail-open paths now 
 | R3 | MET | `packages/app/src/workflow/actions/agent-run.ts:339-352` deletes `expectFile` before dispatch and fails if it cannot; `:576-606` fails after a zero exit when the file is absent. `bun test tests/workflow/actions/agent-run.test.ts --test-name-pattern "0751 R3"` → 2 pass / 0 fail. |
 | R4 | MET | `packages/app/src/workflow/actions/run-artifact.ts:28` narrows `proofBinding`; `:86-103` rejects an unsupported value and rejects `current` when the run carries no current proof input, before any artifact record is persisted. `bun test tests/workflow/actions/run-artifact.test.ts --test-name-pattern "proofBinding enforcement"` → 5 pass / 0 fail. |
 | R5 | MET | All four failure-path suites run green together: `cd packages/app && bun test tests/workflow/proof-input-fingerprint.test.ts tests/workflow/task-pipeline-proof-chain.test.ts tests/workflow/actions/run-artifact.test.ts tests/workflow/actions/agent-run.test.ts` → 166 pass / 0 fail / 485 expect() calls. Each suite asserts the thrown error or failed result, not only the happy path. |
-| R6 | MET | `git show c838f89f4 -U0 -- packages/app/src config/workflows \| grep '^+' \| grep -icE 'softfail\|continueonerror\|bypass\|allowmissing\|SPUR_.*=\|process\.env\.[A-Z]'` → `0`. The only `process.env` reads in the touched files (`proof-input-fingerprint.ts:109`, `agent-run.ts:1094`) are pre-existing child-process env inheritance, not proof overrides. |
+| R6 | MET | `git show c838f89f4 -U0 -- packages/app/src config/workflows \| grep '^+' \| grep -icE 'softfail\|continueonerror\|bypass\|allowmissing\|SPUR_.*=\|process\.env\.[A-Z]'` → `0`. The only `process.env` reads in the touched files (`packages/app/src/workflow/proof-input-fingerprint.ts:109`, `packages/app/src/workflow/actions/agent-run.ts:1094`) are pre-existing child-process env inheritance, not proof overrides. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
@@ -152,6 +153,7 @@ Implemented fail-closed proof capture (R1-R4, R6); all four fail-open paths now 
 | The done-state verdict artifact declares the enforced proof binding | MET | test | (D9 ship-contract alias of this task's R4; see task AC checklist `AC-D9a`.) `config/workflows/task-pipeline.yaml:743` declares `proofBinding: current` on the done-state `run.artifact`; `cd packages/app && bun test tests/workflow/actions/run-artifact.test.ts --test-name-pattern "proofBinding enforcement"` -> 5 pass / 0 fail / 12 expect(): unsupported and unheld bindings both fail before persistence, so a missing or stale binding cannot reach `dao.record`. |
 | No new bypass is introduced in the pipeline composition | MET | command | (D9 ship-contract alias of this task's R6; see task AC checklist `AC-D9b`.) `git show c838f89f4 -U0 -- packages/app/src config/workflows \| grep '^+' \| grep -icE 'softfail\|continueonerror\|bypass\|allowmissing\|SPUR_.*=\|process\.env\.[A-Z]'` -> `0` added bypass-shaped lines across the task-pipeline and docs-pipeline surfaces. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |

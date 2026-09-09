@@ -13,7 +13,7 @@ tags: []
 dependencies: ["0493"]
 ac_numbering: task-local
 created_at: "2026-08-10T00:45:45.751Z"
-updated_at: "2026-09-09T06:47:15.510Z"
+updated_at: "2026-09-09T19:23:47.057Z"
 done_forced: "true"
 ---
 
@@ -29,7 +29,7 @@ boundary concrete enough to implement.
 
 **Verified terrain (re-verified 2026-08-10 against this tree):**
 
-- **The apply half is built and dogfooded.** `plugins/sp/commands/dev-featurechange.md` executes
+- **The apply half is built and dogfooded.** `plugins/sp/commands/dev-feature-change.md` executes
   dispositions from a mapping file: free-digit preflight → `spur feature move <old> --parent <new>
   --dry-run --json` walked in apply order → confirm → apply, with task `feature_id` edges cascading
   (`plugins/sp/commands/dev-feature-change.md:45-102`). It explicitly "does not invent hierarchy" (`:12`).
@@ -71,13 +71,16 @@ untidy? Untidiness that does not move a rank is not this command's business — 
 that trains the operator to ignore the output.
 
 ### Requirements
+
 - [ ] R1 — Define the detection set: which feature-tree structural defects measurably distort a ranking produced by 0493's rubric. Each entry states the defect, the signal it corrupts, and the direction of the error. A defect that does not move a rank is excluded by construction.
 - [ ] R2 — Draw the line against `plugins/sp/skills/next-router/references/routing-table.md:84-87` (rows B4–B7): state per defect class whether it is an existing next-router hygiene route (defer), a ranking-distorting structural defect (own it), or both — and how the command avoids reporting the same feature twice through two mouths.
 - [ ] R3 — Confirm the handoff artifact conforms to the existing `docs/plans/feature-tree-restructure-map.md` schema (`## Schema`, `## Completeness inventory`, `## Rejected merges`, `## Recommended apply order`) rather than a new format, or state with evidence why that schema cannot carry ranking-derived proposals.
-- [ ] R4 — Establish the confirmation boundary end to end: what dev-find-next writes (if anything), what it hands over, and where `/sp:dev-featurechange --dry-run` picks it up — such that no path exists from dev-find-next to a mutated feature tree without the operator passing through featurechange's confirm step.
+- [ ] R4 — Establish the confirmation boundary end to end: what dev-find-next writes (if anything), what it hands over, and where `/sp:dev-feature-change --dry-run` picks it up — such that no path exists from dev-find-next to a mutated feature tree without the operator passing through featurechange's confirm step.
 - [ ] R5 — Specify the false-positive discipline: what evidence a proposed defect must carry to be emitted at all, mirroring the reproducible-evidence contract in `sp:conflict-finding`'s `finding-contract.md`. State what the command does when it finds nothing — silence is a valid and expected outcome.
 - [ ] R6 — Rule on whether F31's already-applied dispositions (ticket 0356, dogfooded 2026-07-28) are re-derived on each run or read as settled, so the command does not re-propose merges the operator already rejected.
+
 ### Acceptance Criteria
+
 ```gherkin
 Feature: 0495 wayfinder investigation
 
@@ -101,7 +104,7 @@ Feature: 0495 wayfinder investigation
     Or the task body states with evidence why that schema cannot carry ranking-derived proposals
 
   Scenario: R4 — no path to a mutated tree bypasses confirmation
-    Given the handoff contract between dev-find-next and /sp:dev-featurechange
+    Given the handoff contract between dev-find-next and /sp:dev-feature-change
     When the boundary is traced end to end
     Then every write to docs/features routes through featurechange's dry-run and confirm step
     And dev-find-next itself performs no spur feature move
@@ -119,10 +122,12 @@ Feature: 0495 wayfinder investigation
     Then it does not re-propose those rejected merges
     And it resolves candidates against live features rather than historical old_id values
 ```
+
 ### Q&A
+
 **Closed during charting (2026-08-09) — map `### Decisions so far`:**
 
-- *Does `/sp:dev-find-next` apply tree changes?* **No.** Propose only; `/sp:dev-featurechange` + F31
+- *Does `/sp:dev-find-next` apply tree changes?* **No.** Propose only; `/sp:dev-feature-change` + F31
   own dry-run → confirm → apply. One writer per surface. This is the ticket's central constraint.
 - *Does it re-audit root structure?* **No.** F31 ticket 0356 did that. This ticket is bounded to
   defects that distort ranking.
@@ -148,9 +153,11 @@ Feature: 0495 wayfinder investigation
 
 **Assumption stated for the record:** the K/F8 overlap is recorded as a *detected candidate defect*,
 not as an accepted disposition. Whether K and F8 actually merge is F31's call through
-`/sp:dev-featurechange`, not this ticket's — consistent with the propose-never-apply boundary. This
+`/sp:dev-feature-change`, not this ticket's — consistent with the propose-never-apply boundary. This
 ticket must not "fix" it in passing.
+
 ### Design
+
 **WHAT** — A detection-and-handoff contract. Deliverable is three artifacts in `### Solution`: the
 **defect set**, the **boundary table** against routing-table B4–B7, and the **handoff contract**
 (what is emitted, in what schema, consumed where). No production code ships from this ticket.
@@ -160,7 +167,7 @@ answerable: a defect qualifies only if it measurably moves a rank. Without that 
 emits tidiness findings, and an operator who learns to skim the output has lost the ranking too.
 
 **WHERE** — Read-only across `docs/features/**`, `docs/plans/feature-tree-restructure-map.md`,
-`plugins/sp/commands/dev-featurechange.md`, `plugins/sp/skills/next-router/references/routing-table.md`,
+`plugins/sp/commands/dev-feature-change.md`, `plugins/sp/skills/next-router/references/routing-table.md`,
 and `plugins/sp/skills/conflict-finding/references/finding-contract.md`. Writes go **only** to this
 task's `### Solution` / `### Testing` sections.
 
@@ -178,7 +185,7 @@ The de-duplication rule is the load-bearing column: when both surfaces have some
 one feature, exactly one says it.
 
 *Artifact C — handoff contract.* States: what `/sp:dev-find-next` writes (if anything), the emitted
-proposal's conformance to the existing mapping-file schema, where `/sp:dev-featurechange --dry-run`
+proposal's conformance to the existing mapping-file schema, where `/sp:dev-feature-change --dry-run`
 picks it up, and the evidence bar each proposed defect must clear to be emitted at all.
 
 **Detection method — bounded, in this order:**
@@ -199,21 +206,23 @@ picks it up, and the evidence bar each proposed defect must clear to be emitted 
 - Inventing a second proposal schema when `docs/plans/feature-tree-restructure-map.md` already
   defines `## Schema` / `## Rejected merges` / `## Recommended apply order`.
 - Any `spur feature move` from this command, in this ticket or the graduated implement work.
-  Detection proposes; `/sp:dev-featurechange` applies. That is the whole boundary.
+  Detection proposes; `/sp:dev-feature-change` applies. That is the whole boundary.
 - Treating "no defects found" as a failed run. Silence is the expected steady state.
 
 **Handoff from dependency** — consumes **0493** Artifact B (surviving-signal list). If 0493 rejects a
 signal, every defect row justified only by that signal is dropped, not rewritten.
 
 **Handoff to dependents** — the graduated implement tickets (currently fog) build the detector to this
-contract. `/sp:dev-featurechange` is an existing consumer whose input schema is fixed; this ticket
+contract. `/sp:dev-feature-change` is an existing consumer whose input schema is fixed; this ticket
 conforms to it and must not propose changing it.
+
 ### Plan
+
 - [x] Read 0493's Artifact B and take the surviving-signal list as the bound; drop any candidate defect with no corrupting path to a surviving signal (R1)
 - [x] For each surviving signal, name the tree property it reads and the malformation that corrupts it, with the direction of the error; write Artifact A seeded with the three verified live cases (R1)
 - [x] Compare each defect class against routing-table rows B4–B7 and assign defer / own / both, with an explicit de-duplication rule so one feature is never reported twice; write Artifact B (R2)
 - [x] Confirm the emitted proposal conforms to the existing `docs/plans/feature-tree-restructure-map.md` schema, or state with evidence why that schema cannot carry ranking-derived proposals (R3)
-- [x] Trace the confirmation boundary end to end and state what dev-find-next writes, what it hands over, and where `/sp:dev-featurechange --dry-run` picks it up; write Artifact C (R4)
+- [x] Trace the confirmation boundary end to end and state what dev-find-next writes, what it hands over, and where `/sp:dev-feature-change --dry-run` picks it up; write Artifact C (R4)
 - [x] Specify the evidence bar per emitted defect against `conflict-finding/references/finding-contract.md`, and state the no-findings behaviour explicitly (R5)
 - [x] Rule on re-derivation vs settled-reading of F31's dispositions, accounting for recycled letters so historical `old_id` values are never matched against live features (R6)
 - [x] Write Artifacts A/B/C into `### Solution` and verification notes into `### Testing` via `spur task update --section`
@@ -223,6 +232,7 @@ signal it corrupts and a live instance (or an explicit "none in this tree"); eve
 its routing-table row. The K/F8 near-duplicate, the recycled-letter trap, and the inconsistent `group`
 tagging are the three regression cases the contract must handle — a contract that misses any of them
 fails R1.
+
 ### Solution
 
 **Spike resolved 2026-08-10** — wayfinder session (operator override: one-ticket rule waived), branch `wayfind/0495-structure-defect`. Consumes **0493** Artifact B (surviving-signal list). No code ships; this is a detection-and-handoff contract.
@@ -287,9 +297,9 @@ One row per existing hygiene route. The **de-duplication rule** is the load-bear
 |---|---|---|
 | 1. `/sp:dev-find-next` (future detector) runs | Computes Artifacts A/B; for each confirmed/candidate defect, emits a proposal **row** conforming to the map schema. | **No.** |
 | 2. Proposal handoff | The proposal is written to `docs/plans/feature-tree-restructure-map.md` as new rows under `## Completeness inventory` (or a new `## Detected defects` section using the same schema) — **or** printed inline for the operator to paste. OQ1 (dispatch vs report) decides which; both conform. | **No** (writes to `docs/plans/`, not `docs/features/`). |
-| 3. `/sp:dev-featurechange --dry-run` | Reads the map; runs `spur feature move <old> --parent <new> --dry-run --json` per row (`plugins/sp/commands/dev-feature-change.md:61`); emits blast-radius table. | **No.** |
+| 3. `/sp:dev-feature-change --dry-run` | Reads the map; runs `spur feature move <old> --parent <new> --dry-run --json` per row (`plugins/sp/commands/dev-feature-change.md:61`); emits blast-radius table. | **No.** |
 | 4. Operator confirms | `AskUserQuestion` or explicit "apply" (`plugins/sp/commands/dev-feature-change.md:83`). Abort on no. | — |
-| 5. `/sp:dev-featurechange --apply` | Runs `spur feature move <old> --parent <new> --json` (`:94`) — the **only** path that mutates `docs/features`. CLI-gated; raw Write/Edit forbidden (`:89`). | **Yes — this step only.** |
+| 5. `/sp:dev-feature-change --apply` | Runs `spur feature move <old> --parent <new> --json` (`:94`) — the **only** path that mutates `docs/features`. CLI-gated; raw Write/Edit forbidden (`:89`). | **Yes — this step only.** |
 
 **Invariant:** there is **no path** from the detector to a mutated feature tree that bypasses step 4 (featurechange's confirm). The detector (step 1–2) cannot call `spur feature move`; featurechange (step 5) is the sole writer. One writer per surface — the central constraint of the ticket.
 

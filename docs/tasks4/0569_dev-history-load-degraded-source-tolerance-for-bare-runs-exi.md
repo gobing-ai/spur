@@ -13,7 +13,8 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T16:38:40.715Z"
-updated_at: "2026-09-09T06:47:11.803Z"
+updated_at: "2026-09-09T19:51:10.248Z"
+ac_altitude: task-local
 ---
 
 ## 0569. dev-history-load: degraded-source tolerance for bare runs (exit 2 proceeds with warning)

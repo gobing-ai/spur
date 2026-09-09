@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-08-17T22:15:08.187Z"
-updated_at: "2026-08-31T17:06:03.698Z"
+updated_at: "2026-09-09T18:30:36.537Z"
 ---
 
 # F91: Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet
@@ -145,6 +145,28 @@ campaign (ADR-083 chose against it), collapsing `L4.stale-line-anchor` or `L3.so
 RC-3 — this feature's own diagnosis — and the AC-altitude carve-out covers it. Warnings only; the
 feature and task gates both pass. Add a slice-2 scenario to `## Acceptance Criteria` if the
 carve-out is later judged insufficient.
+
+**R8 features-pillar disposition (task 0816, ruled 2026-09-09).** `spur feature check --json` on
+2026-09-09: 132 features, 95 with findings, 568 findings — **379 errors, all on `done` features**
+(scenario-unverified 248, evidence-not-recoverable 60, dogfood-missing 41, verdict-rows-match-no-scenario 28,
+misc 2) and **189 warnings on in-flight features** (active/verifying/backlog: scenario-unverified 102,
+uncovered-feature-scenario 26, evidence-not-recoverable 21, dogfood-missing 17, misc 23). Ruling:
+
+1. **Check reclassification — rejected.** The done-feature errors are the evidence ratchet working as
+   designed (RC-4); changing severities or rules is a T10 checker-policy change needing its own task.
+2. **The 379 done-feature errors — accepted into the baseline with this dated reason.** These features
+   completed under earlier evidence rules; retrofitting dogfood/verdict evidence onto 90 closed features
+   re-runs verification on shipped work for no product delta. This entry is the baseline; future audits
+   cite it instead of re-listing the class as unresolved.
+3. **The 189 in-flight warnings — follow-on campaign owned by feature F91** (this feature; RC-4 owns the
+   warning ratchet). Scenario-unverified and uncovered-feature-scenario close naturally as each feature's
+   verify stage records evidence; evidence-not-recoverable is the corpus-wide anchor-repair campaign
+   (R2's audited-task slice is task 0816; the remaining ~1100 ambiguous anchors and sibling evidence
+   classes are the campaign's backlog). Campaign tasks are to be spawned under F91 once slice 2 (0688)
+   lands, so the class is owned rather than re-reported.
+
+No `docs/features` bulk edit accompanies this ruling (task 0816 AC8); only this Notes entry and, if the
+R3 rename lands, F31's name field are feature-file writes from that task.
 
 ## History
 

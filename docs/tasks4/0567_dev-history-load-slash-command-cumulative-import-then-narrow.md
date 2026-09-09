@@ -13,7 +13,7 @@ tags: ["plugin", "history", "command"]
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-16T06:48:02.602Z"
-updated_at: "2026-09-09T06:46:52.311Z"
+updated_at: "2026-09-09T19:39:53.813Z"
 ---
 
 ## 0567. dev-history-load slash command: cumulative import then narrowed analyze
@@ -38,6 +38,7 @@ Premise verification at `--depth ready` (2026-08-15, against the current tree) t
 - [x] R4. Support the three output/preview flags: `--report` renders `spur history report --mode forensics` against the artifact just written; `--dry-run` runs `spur history import --dry-run`, writes no analyze artifact, prints the sequence it would have run, and leaves the data still importable by a later real run; `--json` emits a single machine-readable object carrying the import summary, artifact path and status with no banner text interleaved. (feature I5 R5, R6, R7)
 - [x] R5. Fail loudly rather than degrading: when the import step exits non-zero, skip analyze, surface the failing source and error, and exit with the import step's exit code; when a `--since`/`--until` or `--session` narrowing matches zero imported messages, report the empty window explicitly instead of presenting an empty artifact as a successful analysis. (feature I5 R9, R10)
 ### Acceptance Criteria
+
 ```gherkin
 Feature: dev-history-load command: on-demand cumulative import + analyze
 
@@ -109,7 +110,7 @@ Feature: dev-history-load command: on-demand cumulative import + analyze
     And the command is not a bare forwarder of "spur history daily" (ADR-016)
 
   @edge
-  Scenario: R9 — A failing import aborts before analyze and propagates the exit code
+  Scenario: R9 — A fully failed import aborts before analyze and propagates the exit code
     Given the import step exits non-zero after per-source failure isolation reports a fatal error
     When the operator runs "/sp:dev-history-load"
     Then the analyze step is not run
@@ -123,6 +124,7 @@ Feature: dev-history-load command: on-demand cumulative import + analyze
     Then the command reports that the window matched zero messages
     And it does not present an empty artifact as a successful analysis
 ```
+
 ### Q&A
 **Closed at the idea-eval gate (2026-08-15, operator-approved).** The idea as first stated — one command covering both ad-hoc investigation and periodic import+analyze — was reshaped to the ad-hoc case only. `spur history daily` already ships the periodic pipeline (import-all with per-source isolation, analyze, artifact, 90-day prune) and checkpoint resume already makes imports cumulative, so the literal idea would have been an ADR-016 CLI-forwarding wrapper. The command earns its surface on the narrowed post-conversation investigation path, which nothing covers today. Rejected alternatives: a bare forwarder to `daily` (fails ADR-016, cannot narrow by session); and shipping nothing while adding an import preflight to `/sp:dev-find-issue` (zero new surface, but does not deliver the requested command).
 
@@ -242,7 +244,7 @@ Feature: dev-history-load command: on-demand cumulative import + analyze
 | Scenario: R6 — --dry-run previews the sequence without persisting | MET | test | `plugins/sp/tests/history-load.test.ts` (no analyze call, no artifact pointer); re-audit `--dry-run` printed sequence |
 | Scenario: R7 — --json emits a machine-readable result | MET | command | re-audit `--json` success + error runs each emitted exactly one parseable object (verified with python json.load) |
 | Scenario: R8 — The command delegates the periodic cadence instead of duplicating it | MET | command | `plugins/sp/commands/dev-history-load.md`; no prune/retention/daily re-implementation in `plugins/sp/scripts/history-load.ts` (grep: only the doc comment references daily) |
-| Scenario: R9 — A failing import aborts before analyze and propagates the exit code | MET | command | `plugins/sp/tests/history-load.test.ts` + live: bare run exit 2 naming agy, analyze never invoked |
+| Scenario: R9 — A fully failed import aborts before analyze and propagates the exit code | MET | command | `plugins/sp/tests/history-load.test.ts` + live: bare run exit 2 naming agy, analyze never invoked |
 | Scenario: R10 — Narrowing to a window with no imported rows fails loudly | MET | test | `plugins/sp/tests/history-load.test.ts`: zero-message window exits 1 naming the window |
 
 **SECUA / design findings (re-audit, --focus all)**

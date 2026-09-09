@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Close the plugins conflict-audit residuals: 0587 AC-altitude ruling, bare-basename anchor re-authoring, and the six surface/gate drifts left open"
-status: todo
+status: done
 template: standard
 created_at: 2026-09-09T07:12:32.313Z
-updated_at: "2026-09-09T07:18:15.483Z"
+updated_at: "2026-09-09T20:19:32.000Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -222,6 +222,47 @@ corpus-wide `L3.unchecked-checklist` and 20 `L4.missing-feature-id` findings bey
 audit rewrote; and any change to `checkLineAnchors`' five-per-section cap, which is a checker-policy
 change (T10) needing its own task.
 
+#### Q&A entry — 2026-09-09T19:55:45.114Z
+
+#### Q&A entry — 2026-09-09T12:55:00.000Z (implementation dispositions, host-fallback session)
+
+**Q: 0568's missing feature_id — which feature owns it?**
+A: `I5`, set 2026-09-09 via `spur task update 0568 --feature I5`. J8 was the wrong read — it only
+*mentions* 0568 inside a removed-scenario note ("R4 removed 2026-08-16 (task 0568 planning sweep)");
+it never owned the task. I5 is the birth family: 0568's name is "Fix 0567-run process bottlenecks"
+and its siblings 0567/0569 are I5 edges. F93/F92 were considered and rejected: no corpus task
+carries either id, and both describe adjacent streams (verification evidence, completion contract),
+not this ticket. Because 0568 is a cross-cutting process-fix ticket whose five scenarios are
+verification mechanics rather than a subset of any feature ship contract, the DD-09 subset rule was
+skipped with `ac_altitude: task-local` (0584 R3 / ADR-062 carve-out), following the same precedent
+as 0587's R1 ruling above. Dated reason for the baseline acceptance: the subset findings were an
+artifact of attaching a cross-cutting ticket to a single-stream feature, not a coverage gap.
+
+**Q: 0567's R9 drift — rename, alias, or accept?**
+A: Renamed 2026-09-09: task scenario "R9 — A failing import aborts…" → "R9 — A fully failed import
+aborts before analyze and propagates the exit code", matching feature I5's R9 verbatim; the Testing
+verdict row was updated in the same write so verdict-row matching stays intact. The rename is
+semantically correct post-0569: partial failures now proceed (I5 R11), only fully failed imports
+abort. The residual `L3.ac-requirement-coverage` warning (AC scenarios cite R6–R10 that the task's
+Requirements section does not define) is **accepted 2026-09-09** with this reason: the task's AC
+scenarios deliberately mirror feature I5's AC numbering while Requirements R1–R5 are the task-local
+implementation requirements, each citing its feature ACs inline; renaming the AC numbering would
+desynchronize the task AC from the feature AC it documents. Warning-side, non-blocking.
+
+**Q: 0569 flagged after the I5 context — why?**
+A: Its scenario "R3 — The command doc and feature scenario R9 pin the split" is a doc/scenario
+co-pin assertion with no runtime-behavior counterpart in I5's AC. `ac_altitude: task-local` set
+2026-09-09, same carve-out rationale as 0568. `task check 0569` → pass=True.
+
+**Q: Why does migrate-anchors still report 6 qualified candidates on the post-run tree?**
+A: They live on `docs/tasks/0026`, `0045`, `0068` — old-folder tasks outside this run's scope paths
+and outside R2's enumerated 13 anchors. Recorded in Testing, left untouched (scope discipline).
+
+**Q: Did R7 need a coverage edit?**
+A: No. Measured 2026-09-09: root `bun run test` → 7951 pass / 0 fail, `apps/server/src/context.ts`
+at 96.52% lines (threshold 0.90). The audit's 89.80% did not reproduce; the acceptance condition
+"the coverage gate is green" holds without touching the gate or any test.
+
 ### Design
 
 **Shape: three decisions, then five bounded edits.** R1, R7 and R8 are rulings — answer them first and
@@ -340,15 +381,66 @@ and R8 touch nothing this task edits.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+#### Change map
+
+| Residual | Files | Change |
+| --- | --- | --- |
+| R1 — 0587 AC-altitude | `docs/tasks4/0587_*.md` (Acceptance Criteria, Q&A) | `ac_altitude: task-local` + dated Q&A ruling naming the five exempt ACs (AC2/AC3/AC6/AC7/AC8) with the stated cost |
+| R2 — stale anchors | `docs/tasks4/{0492,0568,0661,0755}_*.md` (Testing) | 13 bare/ambiguous anchors qualified or re-authored; 0492's external citation moved to package-scoped notation (`@gobing-ai/ts-llm-jsonl-importer` + `src/mappers.ts:347`); corpus stale-line-anchor 156 → 120 |
+| R3 — rename spellings | `docs/tasks4/*` (26 scenario/verdict rows) + 6 identity artifacts (`docs/features/INDEX.md`, `docs/features/F31/F92/F93`, `docs/05_FEATURES.md`, F91 Notes) | 26/32 `dev-featurechange` spellings renamed; identity artifacts refreshed with reasons; 16 residual `rg` hits classified |
+| R4 — README roster | `plugins/sp/README.md:169-174` | standalone technique-skill roster completed to 32 + completeness sentence |
+| R5 — enum validation | `plugins/sp/skills/conflict-finding/SKILL.md` Step 1, `docs/04_DESIGN.md` §dev-find-conflict | out-of-domain `--pillar`/`--mode`/`--agent` refuses the audit; `<scope>` exempt; design doc mirrored (same commit) |
+| R6 — checklist hygiene | `docs/tasks4/{0492,0568,0567,0569}_*.md` | 0492 (8) + 0568 (10) boxes flipped with command evidence; 0568 `feature_id: I5` + task-local altitude; 0567 R9 aligned in scenario + verdict row; 0569 task-local; dated acceptance reasons in Q&A |
+| R8 — F91 disposition | `docs/features/*F91*` Notes | scoped disposition entry for the external mappers notation |
+
+#### Rationale
+
+The audit's residual defects were stale provenance (anchors that no longer point at their subjects),
+drift between the plugin surface and its docs, and checklist boxes that stayed unchecked after the
+underlying work landed. Every anchor repair points at the live subject line (verified on disk), every
+status flip carries command evidence, and every non-mechanical judgment (0587/0568/0569 altitude,
+0567 R9 wording, accepted warnings) carries a dated reason in the task Q&A. `bun run spur-check`
+re-ran green after an isolated worktree-db ledger drift was cleared (Testing: R7); no test was
+weakened or suppressed.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+> **Provenance.** Implemented 2026-09-09 in worktree `spur-new-run-0816-68654e6e` (branch `sp/run-0816-68654e6e`, base `4a98984`), host session `mtueu7bz-77yn4wjq`, run `68654e6e`. The dispatched implement worker timed out at the 30-minute platform limit after completing R1, R8 and the R2 `migrate-anchors` pass; the remaining stages executed exactly once in the host session per the driver's host-fallback contract.
+
+**Pipeline verify results**
+
+| Scenario | Verdict | Evidence |
+| --- | --- | --- |
+| R1 — 0587's AC altitude is ruled on | MET | `ac_altitude: task-local` set via `spur task update 0587` 2026-09-09; Q&A ruling entry dated 2026-09-09T18:29:10.774Z names the five formerly-graduating ACs (AC2/AC3/AC6/AC7/AC8) and states the cost; `spur task check 0587` → pass=True with zero `L4.uncovered-task-scenario` findings (remaining finding: one pre-existing `L3.unchecked-checklist` warning on AC4, outside R6's enumerated scope, left as-is). |
+| R2 — residual bare-basename anchors qualified or re-authored | MET | The six auto-qualifiable anchors (0661 ×4, 0755 ×2) were qualified through `spur task migrate-anchors` (47 anchors qualified corpus-wide in that pass); the six ambiguous anchors on 0492/0568/0755 were hand-reauthored to unique repo-relative paths; 0492's external citation adopts F91's package-scoped notation (`@gobing-ai/ts-llm-jsonl-importer `src/mappers.ts``). `spur task check` on 0492/0568/0661/0755 → zero `L4.stale-line-anchor` findings on all four. No anchor was deleted. |
+| R3 — dev-featurechange rename complete in the corpus | MET | 26 of the 32 audit-listed spellings renamed across 0494/0495/F31/H12 and related files; 6 identity artifacts left in place with recorded reasons (immutable task names/H1s, markdown-link slugs kept for link integrity, tool-derived roster quotes regenerated by `feature refresh`). Final `rg "sp:dev-featurechange"` over docs/ + plugins/ returns 16 hits, each classified historical or identity; `feature refresh --feature F31` and `--feature H12` rebuilt rosters/INDEX. |
+| R4 — README skills paragraph declares completeness | MET | `plugins/sp/README.md:169-174` extended with the six missing skills and now lists all 32 surfaces (25 standalone + 5 build competencies + facade + spine) with a completeness sentence; programmatic cross-check → missing=[], extra=[]. |
+| R5 — invalid --mode rejected, not coerced | MET | `plugins/sp/skills/conflict-finding/SKILL.md` Step 1 validates `--pillar` ∈ {source, tasks, features, authority, all}, `--mode` ∈ {adaptive, full}, `--agent` ∈ {inline, auto, name}; an out-of-domain value refuses the audit before discovery; free-form `<scope>` exempt. `docs/04_DESIGN.md` §1.3.1 mirrored. |
+| R6 — task-hygiene findings cleared or baselined | MET | 0492: 8 boxes flipped 2026-09-09 (justified by its recorded per-claim reproducibility table and 2026-08-16 forced re-verify PASS); 0568: 10 boxes flipped + `feature_id=I5` + `ac_altitude: task-local` (cross-cutting 0567-run process-fix ticket; scenarios finer-grained than any feature ship contract — 0584 R3 / ADR-062 carve-out); 0567: R9 scenario title aligned to feature I5's R9 wording ("fully failed import") in AC and Testing row together; 0569: `ac_altitude: task-local` (R3 is a doc/scenario co-pin scenario, not a runtime behavior). `spur task check` 0492/0567/0568/0569 → all pass=True (0567/0569 were pass=False at task start). 0567's residual `L3.ac-requirement-coverage` warning is accepted with the dated reason in Q&A below. |
+| R7 — coverage gate green or shortfall accepted | MET | Root `bun run test` on this tree 2026-09-09: **7951 pass / 0 fail**; `apps/server/src/context.ts` measures **96.52% lines** against the 0.90 threshold in `bunfig.toml:11` — the gate is green with no coverage edit and no test weakened, skipped, or suppressed. The audit-time 89.80% figure did not reproduce on the base tree; the acceptance condition "gate is green" holds on current evidence. `bun run spur-check` re-run 2026-09-09 after clearing a worktree-local, gitignored `.spur/spur.db` ledger drift (out-of-order `importer_schema@0.4.60` stamp; main tree verified clean before the fix) → **exit 0**: full chain (link/transition-shim/script-contract/parity/dependency-drift/importer-schema/history-freeze/lint/test-pre/7951 tests with coverage/test-post) green. |
+| R8 — features pillar gets a scoped disposition | MET | F91's Notes section gained the dated disposition entry for the bare-basename ambiguity class 2026-09-09; no bulk edit to other feature files. |
+
+**Corpus anchor ledger (R2 acceptance: before/after count).** Corpus-wide `L4.stale-line-anchor` count via `bun apps/cli/src/index.ts task check --corpus --json`: **156 before** this task (audit-era floor recorded in Background, itself down from 189) → **120 after** (2026-09-09). The 120 residuals are confined to tasks outside this run's scope (largest: 0812 ×10, 0489 ×10, 0691 ×8); none fall on 0492/0568/0661/0755. `spur task migrate-anchors --dry-run` on the post-run tree reports 6 further qualified candidates, all on old-folder tasks `docs/tasks/0026`, `0045`, `0068` — outside this task's scope paths and outside R2's enumerated anchor list; left untouched and recorded here.
+
+**Commands run.** `spur task check` on 0492/0568/0569/0587/0661/0755 (all pass=True), `spur feature check` F31/H12, `spur feature refresh --feature F31/H12`, `spur task migrate-anchors --dry-run --json`, `task check --corpus --json` (rc=1: 446 observed corpus errors against an empty baseline file — the corpus gate's long-standing steady state, untouched by this run), root `bun run test` (7951/0), `bun run spur-check` (rc=0), `rg "sp:dev-featurechange"` residual classification, `git diff` review against the pre-implement snapshot.
+
+**Accepted warnings (dated).** 2026-09-09: `task check 0816` passes with two `L4.anchor-subject-mismatch` warnings on this section's own citations — the README skills-paragraph citation (README lines 169-174) and the bunfig threshold citation (coverageThreshold line 11). Both citations are line-accurate; the subject heuristic keys on the row label tokens ("README", "R4") that cannot appear in cited source lines. Warning-side, non-blocking; accepted rather than distorting the citations.
+
+**Verify verdict (pipeline stage H): PASS** — 2026-09-09, host session `mtueu7bz-77yn4wjq`. Per-requirement: R1 PASS (0587 task-local + dated Q&A ruling naming the five exempt ACs; check green), R2 PASS (13/13 anchors qualified/re-authored/external-notation; 4/4 tasks zero stale-line-anchor; corpus 156→120), R3 PASS (26/32 renamed, 6 identity artifacts reasoned; 16 residual rg hits classified), R4 PASS (README 169-174: 32 skills, missing=[] extra=[]), R5 PASS (enum refusal consistent across command doc, SKILL.md Step 1, design doc), R6 PASS (0492/0568 boxes flipped; 0568 I5+task-local; 0567 R9 renamed in AC+Testing row; 0569 task-local; all four check green; dated acceptance reasons in Q&A), R7 PASS (spur-check rc=0; 96.52% vs 0.90; no test weakened, skipped, or suppressed), R8 PASS (F91 Notes disposition entry). No PARTIAL/FAIL residuals.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review — 2026-09-09 (pipeline stage F, inline)
+
+Functional traceability (R1–R8 vs diff), SECUA quality, and architectural-depth pass over the 25-file change set. Verdict basis: every corpus write CLI-gated; enum domains consistent across `plugins/sp/commands/dev-find-conflict.md` argument-hint, SKILL.md Step 1, and `docs/04_DESIGN.md`; 0567's R9 rename applied to scenario and verdict row together; README roster programmatically cross-checked (missing=[] extra=[]).
+
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P1 | — | None. No correctness, security, or data-integrity defects found; no code seams touched. |
+| P2 | — | None. No behavioral drift between skill text, command surface, and design doc (enum domains identical). |
+| P3 | `bunfig.toml:11` coverage-citation subject-mismatch warning is structural to the checker's row-label heuristic | Accepted with dated reason in Testing; citation kept verbatim per AC; heuristic distortion avoided |
+| P4 | `plugins/sp/README.md:169-174` subject-mismatch warning (same heuristic class) | Accepted with dated reason in Testing; lines verified on disk to carry the roster |
+| P4 | Worktree-local `.spur/spur.db` ledger drift blocked stage C (out-of-order `importer_schema@` stamps) | Environmental, zero tracked change; main tree verified clean before the fix; migration fast-path/read-model skew noted for a future rule/ADR candidate |
 
 ### References
 
@@ -413,4 +505,7 @@ and R8 touch nothing this task edits.
 ### History
 
 - 2026-09-09T07:18:15.483Z backlog → todo (system)
+- 2026-09-09T20:01:03.889Z todo → wip (system)
+- 2026-09-09T20:17:06.506Z wip → testing (system)
+- 2026-09-09T20:19:32.000Z testing → done (system)
 

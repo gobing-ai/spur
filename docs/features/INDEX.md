@@ -49,7 +49,7 @@
     ├── [done] **F2**: Task management CLI ([F2_task-management-cli.md](./F2_task-management-cli.md))
         └── [verifying] **F21**: Consistent task creation and default implementation readiness ([F21_consistent-task-creation-and-default-implementation-readiness.md](./F21_consistent-task-creation-and-default-implementation-readiness.md))
     ├── [verifying] **F3**: Feature management CLI ([F3_feature-management-cli.md](./F3_feature-management-cli.md))
-        └── [verifying] **F31**: Feature tree restructure kit: audit, hierarchy guide, and /sp:dev-featurechange ([F31_feature-tree-restructure-kit-audit-hierarchy-guide-and-sp-dev-featurechange.md](./F31_feature-tree-restructure-kit-audit-hierarchy-guide-and-sp-dev-featurechange.md))
+        └── [verifying] **F31**: Feature tree restructure kit: audit, hierarchy guide, and /sp:dev-feature-change ([F31_feature-tree-restructure-kit-audit-hierarchy-guide-and-sp-dev-featurechange.md](./F31_feature-tree-restructure-kit-audit-hierarchy-guide-and-sp-dev-featurechange.md))
     ├── [done] **F4**: Lifecycle and events ([F4_lifecycle-and-events.md](./F4_lifecycle-and-events.md))
     ├── [done] **F5**: Execution pipeline ([F5_execution-pipeline.md](./F5_execution-pipeline.md))
     ├── [verifying] **F6**: Corpus migration ([F6_corpus-migration.md](./F6_corpus-migration.md))

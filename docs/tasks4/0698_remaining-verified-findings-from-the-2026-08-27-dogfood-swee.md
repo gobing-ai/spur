@@ -4,7 +4,7 @@ name: "Remaining verified findings from the 2026-08-27 dogfood sweep and history
 status: done
 template: issue
 created_at: 2026-08-28T22:05:05.989Z
-updated_at: "2026-08-29T05:22:56.839Z"
+updated_at: "2026-09-09T18:53:05.364Z"
 feature_id: F95
 ac_altitude: task-local
 dependencies: ["0699", "0700", "0701", "0702"]
@@ -570,6 +570,7 @@ is overwritten. (d) `execution-batch.md:414` lists `aborted (cycle or selector e
 No code change in this run — 0698 is the tracking parent for the F95 decomposition (operator decision, 2026-08-28), so its Solution is by delegation, not edit. The file:line anchors below are the surfaces verified during this run's requirements traceability, owned by the children: envelope failure fall-through `apps/cli/src/commands/task.ts:1266-1326` and `packages/app/src/output/envelope.ts:99-109` (child 0699), checkbox flip `packages/domain/src/bdd/checklist.ts:49` and `packages/app/src/services/structural-repair.ts:22` (child 0700), worktree lifecycle `plugins/sp/skills/spur-dev/references/execution-batch.md` §WT-1…WT-7 (child 0701), analytics fold `packages/domain/src/analytics/pairings.ts:43,344` (child 0702). Verification evidence: `.spur/run/0698-verify-answer.txt:1`. Per Plan, 0698 closes when children 0699–0702 are done and its own warnings clear without 0698 being edited.
 
 ### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
@@ -615,8 +616,9 @@ No code change in this run — 0698 is the tracking parent for the F95 decomposi
 | AC15 — Dogfood gates cover batch mutators and the prescribed drift row | MET | command | Post-rebuild this run: `node plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.mjs --testee "/sp:dev-verifyall --feature F95 --fix all" --json` → `refuse: true`, `exitCode: 2`; negative control `"spur task show 0693"` → `refuse: false`, exit 0. `plugins/sp/scripts/dogfood-testing/validate-report.ts:42` excludes the code-span `drift:` form; `cd plugins/sp && bun test tests/dogfood-testing/` → **83 pass / 0 fail**. |
 | AC16 — Section sub-headings survive a section write | MET | command | Scratch-task probe: a Design body with `### Sub A` / `### Sub B` was stored as `'Body text.\n\n#### Sub A\n\nalpha\n\n#### Sub B\n\nbeta\n'` — present as `####`, not deleted. |
 | AC17 — Requirements format and gate-language advisories stop misfiring | MET | command | Task 0699 (four contiguous R-items + a non-goals block) draws no `L3.requirements-format`; this task, carrying `dependencies: [0699, 0700, 0701, 0702]`, draws **0** `L4.gate-language` findings where it previously drew three. |
-| AC18 — The four small corpus and config truths are restored | MET | command | B lists 0687/0689/0690 after `spur feature refresh --feature B` (`tasksUpdated: 1`); the dead `correctionCount` var is gone (`grep -c` → 1, the prose line naming the live run-scoped bound) with `workflow validate` → `valid: true`; `### Q&A` appends (two successive writes, first entry intact); the zero-task abort rule is specified at `execution-batch.md:416-423` and pinned by a 7-pass contract test. |
+| AC18 — The four small corpus and config truths are restored | MET | command | B lists 0687/0689/0690 after `spur feature refresh --feature B` (`tasksUpdated: 1`); the dead `correctionCount` var is gone (`grep -c` → 1, the prose line naming the live run-scoped bound) with `workflow validate` → `valid: true`; `### Q&A` appends (two successive writes, first entry intact); the zero-task abort rule is specified at `plugins/sp/skills/spur-dev/references/execution-batch.md:416-423` and pinned by a 7-pass contract test. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
 <!-- spur:record-review -->
 
